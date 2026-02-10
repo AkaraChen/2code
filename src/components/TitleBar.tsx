@@ -5,16 +5,16 @@ const appWindow = getCurrentWindow();
 export default function TitleBar() {
   return (
     <div
-      className="titlebar"
+      className="h-[38px] flex items-center px-3 bg-[var(--cds-layer)] select-none [-webkit-app-region:drag]"
       data-tauri-drag-region
       onDoubleClick={() => appWindow.toggleMaximize()}
     >
-      <div className="titlebar-buttons">
+      <div className="group flex gap-2 [-webkit-app-region:no-drag]">
         <button
-          className="titlebar-button close"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#ff5f57]"
           onClick={() => appWindow.close()}
         >
-          <svg width="8" height="8" viewBox="0 0 8 8">
+          <svg className="size-1.5" viewBox="0 0 8 8">
             <path
               d="M1 1L7 7M7 1L1 7"
               stroke="currentColor"
@@ -24,10 +24,10 @@ export default function TitleBar() {
           </svg>
         </button>
         <button
-          className="titlebar-button minimize"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#febc2e]"
           onClick={() => appWindow.minimize()}
         >
-          <svg width="8" height="2" viewBox="0 0 8 2">
+          <svg className="size-1.5" viewBox="0 0 8 2">
             <path
               d="M1 1H7"
               stroke="currentColor"
@@ -37,10 +37,10 @@ export default function TitleBar() {
           </svg>
         </button>
         <button
-          className="titlebar-button maximize"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#28c840]"
           onClick={() => appWindow.toggleMaximize()}
         >
-          <svg width="8" height="8" viewBox="0 0 8 8">
+          <svg className="size-1.5" viewBox="0 0 8 8">
             <path
               d="M1 1L4 4L7 1M1 7L4 4L7 7"
               stroke="currentColor"

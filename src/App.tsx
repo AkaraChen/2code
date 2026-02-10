@@ -4,15 +4,16 @@ import TitleBar from "./components/TitleBar";
 import HomePage from "./pages/HomePage";
 import ProjectsPage from "./pages/ProjectsPage";
 import SettingsPage from "./pages/SettingsPage";
+import "./app.css";
 import "./styles.scss";
 
 export default function App() {
   return (
-    <div className="app-container">
+    <div className="flex flex-col h-full">
       <TitleBar />
-      <div className="app-layout">
+      <div className="flex flex-1 min-h-0">
         <AppSidebar />
-        <main className="app-content">
+        <main className="flex-1 p-8 overflow-y-auto">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />

@@ -29,7 +29,7 @@ export default function AppSidebar() {
         >
           {m.projects()}
         </Link>
-        <div style={{ flexGrow: 1 }} />
+        <div className="grow" />
         <Link
           element={NavLink}
           to="/settings"
