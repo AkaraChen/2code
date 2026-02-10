@@ -149,7 +149,7 @@ pub fn delete_pty(
 }
 
 #[tauri::command]
-pub fn resume_stream(
+pub async fn resume_stream(
     session_id: String,
     channel: Channel<PtyOutput>,
     state: State<'_, PtySessionRegistry>,
