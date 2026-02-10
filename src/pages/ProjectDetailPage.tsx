@@ -13,7 +13,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="-m-8 h-[calc(100%+4rem)]">
+    <div className="absolute inset-0">
       <TerminalTabs />
     </div>
   );

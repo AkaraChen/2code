@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabList, Tab } from "@carbon/react";
-import { Add, Close } from "@carbon/react/icons";
+import { Add, Close, Terminal as TerminalIcon } from "@carbon/react/icons";
 import Terminal from "./Terminal";
 
 interface TerminalTab {
-  id: string; // PTY session ID
+  id: string;
   title: string;
 }
 
@@ -63,40 +63,36 @@ export default function TerminalTabs() {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="flex items-center shrink-0">
-        <Tabs
-          selectedIndex={activeIndex >= 0 ? activeIndex : 0}
-          onChange={({ selectedIndex }) => {
-            if (selectedIndex < tabs.length) {
-              setActiveId(tabs[selectedIndex].id);
-            }
-          }}
-        >
-          <TabList contained>
-            {tabs.map((tab) => (
-              <Tab key={tab.id}>
-                <span className="flex items-center gap-2">
-                  {tab.title}
-                  <Close
-                    size={16}
-                    className="opacity-60 hover:opacity-100"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(tab.id);
-                    }}
-                  />
-                </span>
-              </Tab>
-            ))}
-          </TabList>
-        </Tabs>
-        <button
-          className="px-3 h-full text-[var(--cds-text-secondary)] hover:bg-[var(--cds-layer-hover)]"
-          onClick={createTab}
-        >
-          <Add size={16} />
-        </button>
-      </div>
+      <Tabs
+        selectedIndex={activeIndex >= 0 ? activeIndex : 0}
+        onChange={({ selectedIndex }) => {
+          // Ignore clicks on the "+" tab (last one)
+          if (selectedIndex < tabs.length) {
+            setActiveId(tabs[selectedIndex].id);
+          }
+        }}
+      >
+        <TabList contained>
+          {tabs.map((tab) => (
+            <Tab key={tab.id} renderIcon={TerminalIcon}>
+              <span className="flex items-center gap-2">
+                {tab.title}
+                <Close
+                  size={16}
+                  className="opacity-60 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                />
+              </span>
+            </Tab>
+          ))}
+          <Tab renderIcon={Add} onClick={createTab}>
+            New
+          </Tab>
+        </TabList>
+      </Tabs>
 
       {/* Terminal area — all terminals stay mounted, hidden via CSS */}
       <div className="flex-1 min-h-0 relative">

@@ -14,7 +14,7 @@ export default function App() {
       <TitleBar />
       <div className="flex flex-1 min-h-0">
         <AppSidebar />
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-8 overflow-y-auto relative">
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
