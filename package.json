@@ -24,7 +24,8 @@
 		"react-dom": "^19.1.0",
 		"react-icons": "^5.5.0",
 		"react-router": "^7.13.0",
-		"tailwindcss": "^4.1.18"
+		"tailwindcss": "^4.1.18",
+		"zustand": "^5.0.11"
 	},
 	"devDependencies": {
 		"@inlang/paraglide-js": "^2.10.0",

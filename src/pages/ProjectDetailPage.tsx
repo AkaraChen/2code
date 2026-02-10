@@ -1,10 +1,17 @@
 import { useParams, Navigate } from "react-router";
-import TerminalTabs from "@/components/TerminalTabs";
+import { Button, Center, EmptyState, VStack } from "@chakra-ui/react";
+import { LuPlus, LuTerminal } from "react-icons/lu";
 import { useProjects } from "@/contexts/ProjectContext";
+import { useTerminalStore } from "@/stores/terminalStore";
+import * as m from "@/paraglide/messages.js";
 
 export default function ProjectDetailPage() {
 	const { id } = useParams<{ id: string }>();
 	const { projects } = useProjects();
+	const hasTabs = useTerminalStore(
+		(s) => (id && s.projects[id]?.tabs.length > 0) ?? false,
+	);
+	const createTab = useTerminalStore((s) => s.createTab);
 
 	const project = projects.find((p) => p.id === id);
 
@@ -12,9 +19,28 @@ export default function ProjectDetailPage() {
 		return <Navigate to="/projects" replace />;
 	}
 
+	// Terminal overlay handles rendering when tabs exist
+	if (hasTabs) return null;
+
 	return (
-		<div className="absolute inset-0">
-			<TerminalTabs cwd={project.folder} />
-		</div>
+		<Center h="full">
+			<EmptyState.Root>
+				<EmptyState.Content>
+					<EmptyState.Indicator>
+						<LuTerminal />
+					</EmptyState.Indicator>
+					<VStack textAlign="center">
+						<EmptyState.Title>{m.noTerminalsOpen()}</EmptyState.Title>
+						<EmptyState.Description>
+							{m.noTerminalsOpenDescription()}
+						</EmptyState.Description>
+					</VStack>
+					<Button onClick={() => createTab(project.id)}>
+						<LuPlus />
+						{m.newTerminal()}
+					</Button>
+				</EmptyState.Content>
+			</EmptyState.Root>
+		</Center>
 	);
 }
