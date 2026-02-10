@@ -1,119 +1,123 @@
-use portable_pty::{Child, MasterPty, PtySize};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
-use tokio::task::AbortHandle;
 
-pub const OUTPUT_BUFFER_CAPACITY: usize = 1000;
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PtyConfig {
-    pub shell: Option<String>,
-    pub cwd: Option<String>,
-    pub env: Option<HashMap<String, String>>,
-    pub rows: Option<u16>,
-    pub cols: Option<u16>,
-}
-
-impl Default for PtyConfig {
-    fn default() -> Self {
-        Self {
-            shell: None,
-            cwd: None,
-            env: None,
-            rows: Some(24),
-            cols: Some(80),
-        }
-    }
-}
-
-impl PtyConfig {
-    pub fn rows(&self) -> u16 {
-        self.rows.unwrap_or(24)
-    }
-
-    pub fn cols(&self) -> u16 {
-        self.cols.unwrap_or(80)
-    }
-
-    pub fn shell_or_default(&self) -> String {
-        self.shell.clone().unwrap_or_else(|| {
-            std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
-        })
-    }
-
-    pub fn cwd_or_default(&self) -> String {
-        self.cwd.clone().unwrap_or_else(|| {
-            dirs::home_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| "/".to_string())
-        })
-    }
-
-    pub fn pty_size(&self) -> PtySize {
-        PtySize {
-            rows: self.rows(),
-            cols: self.cols(),
-            pixel_width: 0,
-            pixel_height: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PtySessionInfo {
-    pub id: String,
-    pub shell: String,
-    pub cwd: String,
-    pub rows: u16,
-    pub cols: u16,
-    pub created_at: u64,
-}
+use crate::error::{AppError, AppResult};
 
 pub struct PtySession {
-    pub id: String,
-    pub master: Box<dyn MasterPty + Send>,
-    pub child: Box<dyn Child + Send + Sync>,
-    pub writer: Box<dyn Write + Send>,
-    pub shell: String,
-    pub cwd: String,
-    pub rows: u16,
-    pub cols: u16,
-    pub created_at: SystemTime,
-    pub output_buffer: VecDeque<Vec<u8>>,
-    pub stream_abort: Option<AbortHandle>,
+	pub master: Box<dyn MasterPty + Send>,
+	pub writer: Box<dyn Write + Send>,
+	pub child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
-impl PtySession {
-    pub fn info(&self) -> PtySessionInfo {
-        let created_at = self
-            .created_at
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+pub type PtySessionMap = Arc<Mutex<HashMap<String, PtySession>>>;
 
-        PtySessionInfo {
-            id: self.id.clone(),
-            shell: self.shell.clone(),
-            cwd: self.cwd.clone(),
-            rows: self.rows,
-            cols: self.cols,
-            created_at,
-        }
-    }
-
-    pub fn push_output(&mut self, data: Vec<u8>) {
-        if self.output_buffer.len() >= OUTPUT_BUFFER_CAPACITY {
-            self.output_buffer.pop_front();
-        }
-        self.output_buffer.push_back(data);
-    }
+pub fn create_session_map() -> PtySessionMap {
+	Arc::new(Mutex::new(HashMap::new()))
 }
 
-pub type PtySessionRegistry = Arc<Mutex<HashMap<String, PtySession>>>;
+pub fn create_session(
+	sessions: &PtySessionMap,
+	shell: &str,
+	rows: u16,
+	cols: u16,
+) -> AppResult<(String, Box<dyn std::io::Read + Send>)> {
+	let pty_system = native_pty_system();
 
-pub fn new_registry() -> PtySessionRegistry {
-    Arc::new(Mutex::new(HashMap::new()))
+	let pair = pty_system
+		.openpty(PtySize {
+			rows,
+			cols,
+			pixel_width: 0,
+			pixel_height: 0,
+		})
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	let mut cmd = CommandBuilder::new(shell);
+	cmd.env("TERM", "xterm-256color");
+
+	let child = pair
+		.slave
+		.spawn_command(cmd)
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	let reader = pair
+		.master
+		.try_clone_reader()
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	let writer = pair
+		.master
+		.take_writer()
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	let session_id = uuid::Uuid::new_v4().to_string();
+
+	let session = PtySession {
+		master: pair.master,
+		writer,
+		child,
+	};
+
+	sessions
+		.lock()
+		.map_err(|_| AppError::LockError)?
+		.insert(session_id.clone(), session);
+
+	// Drop the slave to avoid blocking
+	drop(pair.slave);
+
+	Ok((session_id, reader))
+}
+
+pub fn write_to_pty(sessions: &PtySessionMap, session_id: &str, data: &[u8]) -> AppResult<()> {
+	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
+	let session = map
+		.get_mut(session_id)
+		.ok_or_else(|| AppError::PtyError(format!("Session not found: {}", session_id)))?;
+
+	session
+		.writer
+		.write_all(data)
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+	session
+		.writer
+		.flush()
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	Ok(())
+}
+
+pub fn resize_pty(
+	sessions: &PtySessionMap,
+	session_id: &str,
+	rows: u16,
+	cols: u16,
+) -> AppResult<()> {
+	let map = sessions.lock().map_err(|_| AppError::LockError)?;
+	let session = map
+		.get(session_id)
+		.ok_or_else(|| AppError::PtyError(format!("Session not found: {}", session_id)))?;
+
+	session
+		.master
+		.resize(PtySize {
+			rows,
+			cols,
+			pixel_width: 0,
+			pixel_height: 0,
+		})
+		.map_err(|e| AppError::PtyError(e.to_string()))?;
+
+	Ok(())
+}
+
+pub fn close_session(sessions: &PtySessionMap, session_id: &str) -> AppResult<()> {
+	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
+	if let Some(mut session) = map.remove(session_id) {
+		let _ = session.child.kill();
+	}
+	Ok(())
 }

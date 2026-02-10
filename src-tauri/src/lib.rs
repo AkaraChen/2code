@@ -1,4 +1,5 @@
 mod db;
+mod error;
 mod project;
 mod pty;
 
@@ -12,7 +13,7 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(pty::session::new_registry())
+        .manage(pty::session::create_session_map())
         .setup(|app| {
             use tauri::Manager;
             let app_data_dir = app.path().app_data_dir().expect("failed to resolve app data dir");
@@ -22,13 +23,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            pty::commands::create_pty,
-            pty::commands::get_pty,
-            pty::commands::list_pty,
-            pty::commands::resize_pty,
-            pty::commands::delete_pty,
-            pty::commands::resume_stream,
+            pty::commands::create_pty_session,
             pty::commands::write_to_pty,
+            pty::commands::resize_pty,
+            pty::commands::close_pty_session,
             project::commands::create_project_temporary,
             project::commands::create_project_from_folder,
             project::commands::list_projects,

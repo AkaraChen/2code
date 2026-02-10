@@ -1,22 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabList, Tab } from "@carbon/react";
 import { Add, Close, Terminal as TerminalIcon } from "@carbon/react/icons";
-import Terminal from "./Terminal";
+import { Terminal } from "./Terminal";
 
 interface TerminalTab {
   id: string;
   title: string;
 }
 
-interface PtySessionInfo {
-  id: string;
-  shell: string;
-  cwd: string;
-  rows: number;
-  cols: number;
-  created_at: number;
-}
+const DEFAULT_SHELL =
+  typeof window !== "undefined" ? "/bin/zsh" : "/bin/sh";
 
 export default function TerminalTabs() {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
@@ -25,17 +18,16 @@ export default function TerminalTabs() {
 
   const activeIndex = tabs.findIndex((t) => t.id === activeId);
 
-  const createTab = useCallback(async () => {
-    const info = await invoke<PtySessionInfo>("create_pty");
+  const createTab = useCallback(() => {
     counterRef.current += 1;
-    const tab: TerminalTab = { id: info.id, title: `Terminal ${counterRef.current}` };
+    const id = crypto.randomUUID();
+    const tab: TerminalTab = { id, title: `Terminal ${counterRef.current}` };
     setTabs((prev) => [...prev, tab]);
     setActiveId(tab.id);
   }, []);
 
   const closeTab = useCallback(
-    async (tabId: string) => {
-      await invoke("delete_pty", { sessionId: tabId });
+    (tabId: string) => {
       setTabs((prev) => {
         const idx = prev.findIndex((t) => t.id === tabId);
         const next = prev.filter((t) => t.id !== tabId);
@@ -102,7 +94,7 @@ export default function TerminalTabs() {
             className="absolute inset-0"
             style={{ display: tab.id === activeId ? "block" : "none" }}
           >
-            <Terminal sessionId={tab.id} visible={tab.id === activeId} />
+            <Terminal shell={DEFAULT_SHELL} className="h-full" />
           </div>
         ))}
       </div>

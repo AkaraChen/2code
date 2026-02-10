@@ -1,89 +1,139 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { ptyApi } from "@/api/pty";
 import "@xterm/xterm/css/xterm.css";
 
+export interface TerminalHandle {
+  runCode: (code: string) => void;
+}
+
 interface TerminalProps {
-  sessionId: string;
-  visible: boolean;
+  shell: string;
+  className?: string;
 }
 
-export default function Terminal({ sessionId, visible }: TerminalProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<XTerm | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
+export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
+  ({ shell, className }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const termRef = useRef<XTerm | null>(null);
+    const fitAddonRef = useRef<FitAddon | null>(null);
+    const sessionIdRef = useRef<string | null>(null);
+    const unlistenersRef = useRef<UnlistenFn[]>([]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const runCode = useCallback((code: string) => {
+      if (sessionIdRef.current) {
+        ptyApi.write(sessionIdRef.current, code + "\n");
+      }
+    }, []);
 
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-    });
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
+    useImperativeHandle(ref, () => ({ runCode }), [runCode]);
 
-    termRef.current = term;
-    fitAddonRef.current = fitAddon;
+    useEffect(() => {
+      if (!containerRef.current) return;
 
-    // Fit after opening
-    fitAddon.fit();
-
-    // Stream PTY output into xterm
-    const channel = new Channel<{ data: number[] }>();
-    channel.onmessage = (msg) => {
-      term.write(new Uint8Array(msg.data));
-    };
-    invoke("resume_stream", { sessionId, channel });
-
-    // Forward keyboard input to PTY
-    const dataDisposable = term.onData((data) => {
-      const encoder = new TextEncoder();
-      invoke("write_to_pty", {
-        sessionId,
-        data: Array.from(encoder.encode(data)),
+      const term = new XTerm({
+        fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
+        fontSize: 13,
+        theme: {
+          background: "#0a0a0a",
+          foreground: "#f5f5f5",
+          cursor: "#4ade80",
+          selectionBackground: "#333333",
+        },
+        cursorBlink: true,
+        convertEol: true,
       });
-    });
 
-    // Sync resize to PTY backend
-    const resizeDisposable = term.onResize(({ cols, rows }) => {
-      invoke("resize_pty", { sessionId, rows, cols });
-    });
-
-    // Auto-resize on container size change
-    const observer = new ResizeObserver(() => {
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(containerRef.current);
       fitAddon.fit();
-    });
-    observer.observe(container);
-    observerRef.current = observer;
 
-    return () => {
-      observer.disconnect();
-      dataDisposable.dispose();
-      resizeDisposable.dispose();
-      term.dispose();
-      termRef.current = null;
-      fitAddonRef.current = null;
-      observerRef.current = null;
-    };
-  }, [sessionId]);
+      termRef.current = term;
+      fitAddonRef.current = fitAddon;
 
-  // Re-fit when visibility changes so dimensions are correct
-  useEffect(() => {
-    if (visible) {
-      fitAddonRef.current?.fit();
-    }
-  }, [visible]);
+      // Start PTY session
+      const rows = term.rows;
+      const cols = term.cols;
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ display: visible ? "block" : "none", width: "100%", height: "100%" }}
-    />
-  );
-}
+      ptyApi
+        .createSession(shell, rows, cols)
+        .then(async (sessionId) => {
+          sessionIdRef.current = sessionId;
+
+          // Listen for PTY output
+          const unlistenOutput = await listen<string>(
+            `pty-output-${sessionId}`,
+            (event) => {
+              term.write(event.payload);
+            },
+          );
+
+          // Listen for PTY exit
+          const unlistenExit = await listen(
+            `pty-exit-${sessionId}`,
+            () => {
+              term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+            },
+          );
+
+          unlistenersRef.current.push(unlistenOutput, unlistenExit);
+        })
+        .catch((err) => {
+          term.write(`\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`);
+        });
+
+      // Forward user input to PTY
+      const onDataDisposable = term.onData((data) => {
+        if (sessionIdRef.current) {
+          ptyApi.write(sessionIdRef.current, data);
+        }
+      });
+
+      // Handle terminal resize
+      const onResizeDisposable = term.onResize(({ rows, cols }) => {
+        if (sessionIdRef.current) {
+          ptyApi.resize(sessionIdRef.current, rows, cols);
+        }
+      });
+
+      // Handle container resize
+      const resizeObserver = new ResizeObserver(() => {
+        fitAddon.fit();
+      });
+      resizeObserver.observe(containerRef.current);
+
+      return () => {
+        resizeObserver.disconnect();
+        onDataDisposable.dispose();
+        onResizeDisposable.dispose();
+
+        for (const unlisten of unlistenersRef.current) {
+          unlisten();
+        }
+        unlistenersRef.current = [];
+
+        if (sessionIdRef.current) {
+          ptyApi.close(sessionIdRef.current);
+          sessionIdRef.current = null;
+        }
+
+        term.dispose();
+        termRef.current = null;
+        fitAddonRef.current = null;
+      };
+    }, [shell]);
+
+    return (
+      <div
+        ref={containerRef}
+        className={className}
+        style={{ width: "100%", height: "100%" }}
+      />
+    );
+  },
+);
+
+Terminal.displayName = "Terminal";
