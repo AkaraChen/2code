@@ -20,5 +20,8 @@
 	"projectNamePlaceholder": "Enter project name",
 	"chooseFolder": "Choose Folder",
 	"create": "Create",
-	"cancel": "Cancel"
+	"cancel": "Cancel",
+	"noTerminalsOpen": "No terminals open",
+	"noTerminalsOpenDescription": "Open a terminal to start working in this project.",
+	"newTerminal": "New Terminal"
 }

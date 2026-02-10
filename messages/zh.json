@@ -20,5 +20,8 @@
 	"projectNamePlaceholder": "输入项目名称",
 	"chooseFolder": "选择文件夹",
 	"create": "创建",
-	"cancel": "取消"
+	"cancel": "取消",
+	"noTerminalsOpen": "暂无终端",
+	"noTerminalsOpenDescription": "打开一个终端以开始在此项目中工作。",
+	"newTerminal": "新建终端"
 }

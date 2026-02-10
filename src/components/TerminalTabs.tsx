@@ -1,7 +1,8 @@
-import { Button, CloseButton, Tabs } from "@chakra-ui/react";
+import { Button, Center, CloseButton, EmptyState, Tabs, VStack } from "@chakra-ui/react";
 import { LuPlus, LuTerminal } from "react-icons/lu";
 import { useCallback, useRef, useState } from "react";
 import { Terminal } from "./Terminal";
+import * as m from "@/paraglide/messages.js";
 
 interface TerminalTab {
 	id: string;
@@ -54,13 +55,25 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 
 	if (tabs.length === 0) {
 		return (
-			<div className="flex flex-col items-center justify-center h-full gap-4">
-				<p className="text-muted">No terminals open</p>
-				<Button onClick={createTab}>
-					<LuPlus />
-					New Terminal
-				</Button>
-			</div>
+			<Center h="full">
+				<EmptyState.Root>
+					<EmptyState.Content>
+						<EmptyState.Indicator>
+							<LuTerminal />
+						</EmptyState.Indicator>
+						<VStack textAlign="center">
+							<EmptyState.Title>{m.noTerminalsOpen()}</EmptyState.Title>
+							<EmptyState.Description>
+								{m.noTerminalsOpenDescription()}
+							</EmptyState.Description>
+						</VStack>
+						<Button onClick={createTab}>
+							<LuPlus />
+							{m.newTerminal()}
+						</Button>
+					</EmptyState.Content>
+				</EmptyState.Root>
+			</Center>
 		);
 	}
 
@@ -97,7 +110,7 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 						variant="ghost"
 						onClick={createTab}
 					>
-						<LuPlus /> New
+						<LuPlus /> {m.newTerminal()}
 					</Button>
 				</Tabs.List>
 			</Tabs.Root>
