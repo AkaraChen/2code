@@ -1,0 +1,91 @@
+@use '@carbon/react';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+// Custom titlebar
+.titlebar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--cds-layer);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-buttons {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-button {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: transparent;
+  transition: color 0.1s;
+
+  &.close {
+    background: #ff5f57;
+  }
+
+  &.minimize {
+    background: #febc2e;
+  }
+
+  &.maximize {
+    background: #28c840;
+  }
+
+  svg {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+.titlebar-buttons:hover .titlebar-button {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.cds--side-nav {
+  position: static;
+  top: auto;
+  height: 100%;
+}
+
+.cds--side-nav__items {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
