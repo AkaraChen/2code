@@ -11,7 +11,7 @@ export default function TitleBar() {
     >
       <div className="group flex gap-2 [-webkit-app-region:no-drag]">
         <button
-          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#ff5f57]"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 dark:group-hover:text-white/50 bg-[#ff5f57]"
           onClick={() => appWindow.close()}
         >
           <svg className="size-1.5" viewBox="0 0 8 8">
@@ -24,7 +24,7 @@ export default function TitleBar() {
           </svg>
         </button>
         <button
-          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#febc2e]"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 dark:group-hover:text-white/50 bg-[#febc2e]"
           onClick={() => appWindow.minimize()}
         >
           <svg className="size-1.5" viewBox="0 0 8 2">
@@ -37,7 +37,7 @@ export default function TitleBar() {
           </svg>
         </button>
         <button
-          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 bg-[#28c840]"
+          className="size-3 rounded-full border-none p-0 flex items-center justify-center cursor-pointer text-transparent transition-colors duration-100 group-hover:text-black/50 dark:group-hover:text-white/50 bg-[#28c840]"
           onClick={() => appWindow.toggleMaximize()}
         >
           <svg className="size-1.5" viewBox="0 0 8 8">
