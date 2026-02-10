@@ -17,7 +17,7 @@
 				"height": 900,
 				"center": true,
 				"maximizable": true,
-				"decorations": false
+				"decorations": true
 			}
 		],
 		"security": {

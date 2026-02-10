@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate } from "react-router";
 import AppSidebar from "./components/AppSidebar";
-import TitleBar from "./components/TitleBar";
 import HomePage from "./pages/HomePage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -10,7 +9,6 @@ import "./app.css";
 export default function App() {
 	return (
 		<div className="flex flex-col h-full">
-			<TitleBar />
 			<div className="flex flex-1 min-h-0">
 				<AppSidebar />
 				<main className="flex-1 p-8 overflow-y-auto relative">
