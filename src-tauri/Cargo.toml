@@ -26,4 +26,6 @@ portable-pty = "0.9"
 tokio = { version = "1", features = ["rt", "sync", "macros"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
+diesel = { version = "2", features = ["sqlite"] }
+diesel_migrations = "2"
 
