@@ -7,6 +7,7 @@ We need to add a persistence layer for Project records. The new `project` module
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Embed SQLite via Diesel ORM for persistent Project storage.
 - Provide full CRUD Tauri commands for projects.
 - Support two project creation modes: temporary (auto `/tmp` + `git init`) and from existing folder.
@@ -14,6 +15,7 @@ We need to add a persistence layer for Project records. The new `project` module
 - Follow the same module conventions established by the PTY module.
 
 **Non-Goals:**
+
 - Frontend UI for project management (separate change).
 - Filesystem watching or syncing project folder contents.
 - Project-scoped PTY sessions (future work).
@@ -28,6 +30,7 @@ We need to add a persistence layer for Project records. The new `project` module
 **Rationale**: Diesel is the most mature Rust ORM with strong compile-time query validation and a powerful schema DSL. Its synchronous API is fine for this use case — SQLite operations are fast local I/O, and Tauri commands can be async while running Diesel calls on a blocking thread via `tokio::task::spawn_blocking` (same pattern already used for PTY I/O). The `diesel_migrations` crate embeds SQL migrations in the binary for auto-run at startup.
 
 **Alternatives considered**:
+
 - **SeaORM**: Async-native but heavier dependency tree, more boilerplate for entity definitions. Less mature ecosystem.
 - **rusqlite (raw)**: Lightweight but no migration system, no query builder, manual SQL strings. More error-prone as the schema grows.
 

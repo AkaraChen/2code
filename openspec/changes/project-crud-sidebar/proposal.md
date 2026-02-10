@@ -14,10 +14,12 @@ The backend Project CRUD commands are fully implemented but have no frontend int
 ## Capabilities
 
 ### New Capabilities
+
 - `project-sidebar`: Expandable sidebar menu for projects — lists projects inline, provides create button, supports navigation to individual projects
 - `project-management-ui`: Frontend pages/views for managing projects — create, view, delete operations using the existing backend commands
 
 ### Modified Capabilities
+
 _None — existing `project-crud` and `project-storage` specs cover the backend which is unchanged._
 
 ## Impact

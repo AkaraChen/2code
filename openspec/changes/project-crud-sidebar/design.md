@@ -7,6 +7,7 @@ Carbon React v1.100.0 is installed and provides `SideNavMenu` / `SideNavMenuItem
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Replace the flat "Projects" sidebar link with an expandable `SideNavMenu` containing a create action and project list
 - Load projects from backend on app startup and keep the list in sync after mutations
 - Allow creating a new project (temporary) directly from the sidebar
@@ -14,6 +15,7 @@ Carbon React v1.100.0 is installed and provides `SideNavMenu` / `SideNavMenuItem
 - Support i18n (en + zh) for all new UI strings
 
 **Non-Goals:**
+
 - Project editing/renaming UI (out of scope for this change — future work)
 - "Create from folder" flow with native file picker (deferred — only temporary project creation for now)
 - Drag-and-drop reordering of projects
@@ -34,6 +36,7 @@ Carbon React v1.100.0 is installed and provides `SideNavMenu` / `SideNavMenuItem
 **Rationale**: Both the sidebar (project list) and project pages need access to the same project data. A shared context avoids prop-drilling and keeps state in sync — when a project is created in the sidebar, the project page reflects it immediately. No external state library needed for this scope.
 
 **Alternatives considered**:
+
 - Props/lifting state to App: Gets messy quickly with sidebar + pages both needing data
 - Zustand/Redux: Overkill for a single entity with simple CRUD
 

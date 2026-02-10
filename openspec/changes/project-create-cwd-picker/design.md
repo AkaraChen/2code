@@ -7,12 +7,14 @@ The UI uses Carbon Design System (React) and the app runs on Tauri 2. No dialog 
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Let users name their project and optionally select an existing folder at creation time
 - Use the OS-native folder picker via the Tauri dialog plugin
 - Keep the "quick create" path: if the user provides nothing, the existing temp-folder flow still works
 - Auto-fill the project name from the selected folder's basename when the name field is empty
 
 **Non-Goals:**
+
 - Project templates or scaffolding
 - Validating the folder contents (e.g., checking for `package.json`)
 - Git initialization for user-selected folders (only temp projects get `git init`)
@@ -27,6 +29,7 @@ The UI uses Carbon Design System (React) and the app runs on Tauri 2. No dialog 
 **Rationale**: The app already uses Carbon for all UI. `ComposedModal` gives full control over body content (unlike the simpler `Modal` which is for confirmation-style dialogs). This keeps the UI consistent.
 
 **Alternatives considered**:
+
 - Carbon `Modal` — too opinionated for custom form content
 - Custom dialog — unnecessary when Carbon provides a fitting component
 
@@ -37,6 +40,7 @@ The UI uses Carbon Design System (React) and the app runs on Tauri 2. No dialog 
 **Rationale**: This is Tauri 2's official way to open OS-native file/folder dialogs. It runs via IPC — the frontend calls the JS API, Tauri routes it to the native dialog on the Rust side. No custom Rust command needed.
 
 **Alternatives considered**:
+
 - Custom Rust command wrapping `rfd` — redundant since the Tauri plugin does exactly this
 - HTML `<input type="file">` — doesn't support folder selection reliably and doesn't feel native
 

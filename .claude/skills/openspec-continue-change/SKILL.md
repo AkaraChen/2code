@@ -85,6 +85,7 @@ Continue working on a change by creating the next artifact.
 **Output**
 
 After each invocation, show:
+
 - Which artifact was created
 - Schema workflow being used
 - Current progress (N/M complete)
@@ -98,6 +99,7 @@ The artifact types and their purpose depend on the schema. Use the `instruction`
 Common artifact patterns:
 
 **spec-driven schema** (proposal → specs → design → tasks):
+
 - **proposal.md**: Ask user about the change if not clear. Fill in Why, What Changes, Capabilities, Impact.
   - The Capabilities section is critical - each capability listed will need a spec file.
 - **specs/<capability>/spec.md**: Create one spec per capability listed in the proposal's Capabilities section (use the capability name, not the change name).
@@ -107,6 +109,7 @@ Common artifact patterns:
 For other schemas, follow the `instruction` field from the CLI output.
 
 **Guardrails**
+
 - Create ONE artifact per invocation
 - Always read dependency artifacts before creating a new one
 - Never skip artifacts or create out of order

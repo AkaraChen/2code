@@ -1,23 +1,23 @@
-@use '@carbon/react';
-@use '@carbon/styles/scss/theme';
-@use '@carbon/styles/scss/themes';
+@use "@carbon/react";
+@use "@carbon/styles/scss/theme";
+@use "@carbon/styles/scss/themes";
 
-:root[data-carbon-theme='g10'] {
-  @include theme.theme(themes.$g10);
+:root[data-carbon-theme="g10"] {
+	@include theme.theme(themes.$g10);
 }
 
-:root[data-carbon-theme='g100'] {
-  @include theme.theme(themes.$g100);
+:root[data-carbon-theme="g100"] {
+	@include theme.theme(themes.$g100);
 }
 
 .cds--side-nav {
-  position: static;
-  top: auto;
-  height: 100%;
+	position: static;
+	top: auto;
+	height: 100%;
 }
 
 .cds--side-nav__items {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
 }

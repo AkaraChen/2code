@@ -27,6 +27,7 @@ The app currently has a minimal Tauri 2 backend (just a `greet` command). We nee
 Use `portable-pty` (from the WezTerm project) for cross-platform PTY spawning.
 
 **Why over alternatives:**
+
 - **vs `rust-pty`**: `portable-pty` is battle-tested in WezTerm (a production terminal). `rust-pty` is newer with less ecosystem validation.
 - **vs `tauri-plugin-pty`**: The plugin is alpha-stage and doesn't expose CRUD/session management. Building on `portable-pty` gives full control over session lifecycle, buffering, and the IPC contract.
 
@@ -37,6 +38,7 @@ Use `portable-pty` (from the WezTerm project) for cross-platform PTY spawning.
 Store all active sessions in a `HashMap` behind `Arc<Mutex<>>`, managed as Tauri state.
 
 Each `PtySession` holds:
+
 - `id: String` — UUID v4
 - `master: Box<dyn MasterPty + Send>` — for writing input and cloning readers
 - `child: Box<dyn Child + Send>` — the spawned process handle

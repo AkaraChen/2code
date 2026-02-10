@@ -3,6 +3,7 @@
 The Rust backend has a complete PTY service (`src-tauri/src/pty/`) with session lifecycle management and streaming output via Tauri channels. The frontend has no terminal UI. The current ProjectsPage is a project list that will be entirely replaced by a tabbed terminal interface.
 
 Key backend API surface:
+
 - `create_pty(config?) → PtySessionInfo` — spawns a shell, returns `{ id, shell, cwd, rows, cols }`
 - `write_to_pty(session_id, data)` — sends keyboard input as `Vec<u8>`
 - `resume_stream(session_id, channel)` — opens a Tauri `Channel<PtyOutput>` that replays buffered output then streams live output
@@ -14,12 +15,14 @@ The frontend uses `@tauri-apps/api/core` `invoke()` for commands and `Channel` f
 ## Goals / Non-Goals
 
 **Goals:**
+
 - Render a fully functional terminal (xterm.js) inside each tab
 - Support multiple concurrent tabs, each with its own PTY session
 - Handle terminal resize when the container or window size changes
 - Preserve terminal output when switching between tabs (backend already buffers; `resume_stream` replays)
 
 **Non-Goals:**
+
 - Tab persistence across app restarts (sessions are ephemeral)
 - Tab renaming, reordering, or drag-and-drop
 - Split panes or tiling layout

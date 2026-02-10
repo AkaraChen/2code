@@ -29,10 +29,10 @@ Rust side: functions annotated with `#[tauri::command]` and registered in the in
 
 ## Key Config Files
 
-| File | Purpose |
-|---|---|
+| File                        | Purpose                                       |
+| --------------------------- | --------------------------------------------- |
 | `src-tauri/tauri.conf.json` | Tauri app config (window, bundle, dev server) |
-| `src-tauri/Cargo.toml` | Rust dependencies |
-| `package.json` | Frontend dependencies, scripts |
-| `vite.config.ts` | Vite/React config |
-| `tsconfig.json` | TypeScript config |
+| `src-tauri/Cargo.toml`      | Rust dependencies                             |
+| `package.json`              | Frontend dependencies, scripts                |
+| `vite.config.ts`            | Vite/React config                             |
+| `tsconfig.json`             | TypeScript config                             |

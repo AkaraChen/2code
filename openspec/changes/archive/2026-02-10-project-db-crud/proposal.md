@@ -18,10 +18,12 @@ The app needs persistent project management — the ability to create, list, and
 ## Capabilities
 
 ### New Capabilities
+
 - `project-storage`: SQLite database setup, ORM integration, migrations, and the `projects` table schema.
 - `project-crud`: Tauri commands for creating (temporary + from folder), listing, getting, updating, and deleting projects.
 
 ### Modified Capabilities
+
 _(none — no existing specs are affected)_
 
 ## Impact

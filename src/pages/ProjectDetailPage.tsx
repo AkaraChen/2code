@@ -1,20 +1,20 @@
 import { useParams, Navigate } from "react-router";
-import { useProjects } from "@/contexts/ProjectContext";
 import TerminalTabs from "@/components/TerminalTabs";
+import { useProjects } from "@/contexts/ProjectContext";
 
 export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { projects } = useProjects();
+	const { id } = useParams<{ id: string }>();
+	const { projects } = useProjects();
 
-  const project = projects.find((p) => p.id === id);
+	const project = projects.find((p) => p.id === id);
 
-  if (!project) {
-    return <Navigate to="/projects" replace />;
-  }
+	if (!project) {
+		return <Navigate to="/projects" replace />;
+	}
 
-  return (
-    <div className="absolute inset-0">
-      <TerminalTabs cwd={project.folder} />
-    </div>
-  );
+	return (
+		<div className="absolute inset-0">
+			<TerminalTabs cwd={project.folder} />
+		</div>
+	);
 }

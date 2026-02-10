@@ -1,6 +1,7 @@
 ## Context
 
 The app uses a **Tailwind CSS v4 + Carbon Design System** hybrid:
+
 - Tailwind handles layout/spacing via `@tailwindcss/vite` (no separate config file; Tailwind v4 uses CSS-based config in `app.css`)
 - Carbon provides UI components (`SideNav`, `Select`) and CSS custom properties (`--cds-layer`, etc.)
 - SCSS (`styles.scss`) imports Carbon via `@use '@carbon/react'` and adds sidebar overrides
@@ -13,6 +14,7 @@ Tailwind v4 supports `@variant dark (&:where([data-carbon-theme="g90"], [data-ca
 ## Goals / Non-Goals
 
 **Goals:**
+
 - OS-aware theme on first launch (via `usePrefersDarkScheme` / `prefers-color-scheme`)
 - User-selectable override: System / Light / Dark in Settings page
 - Preference persisted to `localStorage` (simple, no extra dependency)
@@ -20,6 +22,7 @@ Tailwind v4 supports `@variant dark (&:where([data-carbon-theme="g90"], [data-ca
 - TitleBar adapts (background via Carbon token already works; traffic light hover text adapts)
 
 **Non-Goals:**
+
 - Per-page or per-component theme zones (Carbon's `<Theme>` supports this, but not needed now)
 - Custom color palette or brand tokens beyond Carbon defaults
 - Backend/Rust involvement (purely frontend)
@@ -36,6 +39,7 @@ Use `white` for light mode and `g100` for dark mode. These are the highest-contr
 ### 2. Theme state: React context + `localStorage`
 
 Create a `ThemeProvider` component that:
+
 1. Reads stored preference from `localStorage` key `theme-preference` (values: `"system"`, `"light"`, `"dark"`, default `"system"`)
 2. Calls `usePrefersDarkScheme()` from `@carbon/react` to detect OS preference when set to `"system"`
 3. Resolves to the effective Carbon theme string (`"white"` or `"g100"`)

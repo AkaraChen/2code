@@ -105,6 +105,7 @@ All artifacts complete. All tasks complete.
 ```
 
 **Guardrails**
+
 - Always prompt for change selection if not provided
 - Use artifact graph (openspec status --json) for completion checking
 - Don't block archive on warnings - just inform and confirm

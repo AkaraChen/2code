@@ -12,6 +12,7 @@ The app currently has no dark mode support — it renders in Carbon's default li
 ## Capabilities
 
 ### New Capabilities
+
 - `theme-switching`: OS-aware theme detection, manual override (System/Light/Dark), persistence, and runtime switching of Carbon + Tailwind color tokens
 
 ### Modified Capabilities

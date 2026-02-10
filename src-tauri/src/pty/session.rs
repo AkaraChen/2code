@@ -76,11 +76,15 @@ pub fn create_session(
 	Ok((session_id, reader))
 }
 
-pub fn write_to_pty(sessions: &PtySessionMap, session_id: &str, data: &[u8]) -> AppResult<()> {
+pub fn write_to_pty(
+	sessions: &PtySessionMap,
+	session_id: &str,
+	data: &[u8],
+) -> AppResult<()> {
 	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
-	let session = map
-		.get_mut(session_id)
-		.ok_or_else(|| AppError::PtyError(format!("Session not found: {}", session_id)))?;
+	let session = map.get_mut(session_id).ok_or_else(|| {
+		AppError::PtyError(format!("Session not found: {}", session_id))
+	})?;
 
 	session
 		.writer
@@ -101,9 +105,9 @@ pub fn resize_pty(
 	cols: u16,
 ) -> AppResult<()> {
 	let map = sessions.lock().map_err(|_| AppError::LockError)?;
-	let session = map
-		.get(session_id)
-		.ok_or_else(|| AppError::PtyError(format!("Session not found: {}", session_id)))?;
+	let session = map.get(session_id).ok_or_else(|| {
+		AppError::PtyError(format!("Session not found: {}", session_id))
+	})?;
 
 	session
 		.master
@@ -118,7 +122,10 @@ pub fn resize_pty(
 	Ok(())
 }
 
-pub fn close_session(sessions: &PtySessionMap, session_id: &str) -> AppResult<()> {
+pub fn close_session(
+	sessions: &PtySessionMap,
+	session_id: &str,
+) -> AppResult<()> {
 	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
 	if let Some(mut session) = map.remove(session_id) {
 		let _ = session.child.kill();

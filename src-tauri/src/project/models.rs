@@ -1,21 +1,21 @@
+use super::schema::projects;
 use diesel::prelude::*;
 use serde::Serialize;
-use super::schema::projects;
 
 #[derive(Queryable, Selectable, Serialize)]
 #[diesel(table_name = projects)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Project {
-    pub id: String,
-    pub name: String,
-    pub folder: String,
-    pub created_at: String,
+	pub id: String,
+	pub name: String,
+	pub folder: String,
+	pub created_at: String,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = projects)]
 pub struct NewProject<'a> {
-    pub id: &'a str,
-    pub name: &'a str,
-    pub folder: &'a str,
+	pub id: &'a str,
+	pub name: &'a str,
+	pub folder: &'a str,
 }

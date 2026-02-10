@@ -2,8 +2,8 @@ use std::io::Read;
 
 use tauri::{AppHandle, Emitter, State};
 
-use crate::error::AppResult;
 use super::session::{self, PtySessionMap};
+use crate::error::AppResult;
 
 #[tauri::command]
 pub fn create_pty_session(
@@ -14,7 +14,8 @@ pub fn create_pty_session(
 	rows: u16,
 	cols: u16,
 ) -> AppResult<String> {
-	let (session_id, reader) = session::create_session(&sessions, &shell, &cwd, rows, cols)?;
+	let (session_id, reader) =
+		session::create_session(&sessions, &shell, &cwd, rows, cols)?;
 
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
@@ -26,7 +27,11 @@ pub fn create_pty_session(
 	Ok(session_id)
 }
 
-fn read_pty_output(app: AppHandle, session_id: String, mut reader: Box<dyn Read + Send>) {
+fn read_pty_output(
+	app: AppHandle,
+	session_id: String,
+	mut reader: Box<dyn Read + Send>,
+) {
 	let event_name = format!("pty-output-{}", session_id);
 	let exit_event = format!("pty-exit-{}", session_id);
 	let mut buf = [0u8; 4096];

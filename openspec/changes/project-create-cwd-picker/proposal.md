@@ -14,9 +14,11 @@ Currently, clicking "New Project" in the sidebar immediately creates a temporary
 ## Capabilities
 
 ### New Capabilities
+
 - `project-create-dialog`: The modal UI component for creating a project, including the name input, CWD folder picker button, and the conditional creation logic (temporary vs. from-folder).
 
 ### Modified Capabilities
+
 - `project-crud`: The `createProject` function in `ProjectContext` currently calls `create_project_temporary` unconditionally. It needs to accept optional `name` and `folder` parameters and route to the correct backend command accordingly.
 
 ## Impact

@@ -15,10 +15,12 @@ The PTY backend is fully implemented but has no frontend UI. The Projects page c
 ## Capabilities
 
 ### New Capabilities
+
 - `terminal-tabs`: Tab management UI — create, close, switch between terminal tabs on the Projects page
 - `terminal-view`: xterm.js terminal component connected to PTY backend via Tauri IPC (input, output streaming, resize)
 
 ### Modified Capabilities
+
 _(none — existing `pty-management` and `pty-streaming` specs are unchanged; this change only adds frontend consumption)_
 
 ## Impact
