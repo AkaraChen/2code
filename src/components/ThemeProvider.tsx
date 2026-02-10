@@ -6,11 +6,13 @@ type Preference = "system" | "light" | "dark";
 interface ThemeContextValue {
   preference: Preference;
   setPreference: (p: Preference) => void;
+  isDark: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   preference: "system",
   setPreference: () => {},
+  isDark: true,
 });
 
 const STORAGE_KEY = "theme-preference";
@@ -39,10 +41,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreferenceState] = useState<Preference>(readStoredPreference);
   const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
 
-  const resolvedTheme =
-    preference === "dark" || (preference === "system" && prefersDark)
-      ? "g100"
-      : "white";
+  const isDark = preference === "dark" || (preference === "system" && prefersDark);
+  const resolvedTheme = isDark ? "g100" : "white";
 
   const setPreference = useCallback((p: Preference) => {
     localStorage.setItem(STORAGE_KEY, p);
@@ -54,7 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [resolvedTheme]);
 
   return (
-    <ThemeContext value={{ preference, setPreference }}>
+    <ThemeContext value={{ preference, setPreference, isDark }}>
       <GlobalTheme theme={resolvedTheme}>{children}</GlobalTheme>
     </ThemeContext>
   );

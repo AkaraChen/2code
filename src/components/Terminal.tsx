@@ -1,9 +1,57 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { ptyApi } from "@/api/pty";
+import { useThemePreference } from "@/components/ThemeProvider";
 import "@xterm/xterm/css/xterm.css";
+
+const darkTheme: ITheme = {
+  background: "#161616",
+  foreground: "#BFD4E1",
+  cursor: "#f0f3bd",
+  selectionBackground: "#353535",
+  black: "#353535",
+  red: "#d97397",
+  green: "#CEE397",
+  yellow: "#E9CA5C",
+  blue: "#63B0C6",
+  magenta: "#E9AEBA",
+  cyan: "#70C1B3",
+  white: "#BFD4E1",
+  brightBlack: "#729098",
+  brightRed: "#ffadad",
+  brightGreen: "#caffbf",
+  brightYellow: "#f0f3bd",
+  brightBlue: "#9bf6ff",
+  brightMagenta: "#ffc6ff",
+  brightCyan: "#a8dadc",
+  brightWhite: "#ffffff",
+};
+
+const lightTheme: ITheme = {
+  background: "#ffffff",
+  foreground: "#24292f",
+  cursor: "#0969da",
+  selectionBackground: "#bbd6f0",
+  black: "#24292f",
+  red: "#cf222e",
+  green: "#116329",
+  yellow: "#4d2d00",
+  blue: "#0969da",
+  magenta: "#8250df",
+  cyan: "#1b7c83",
+  white: "#6e7781",
+  brightBlack: "#57606a",
+  brightRed: "#a40e26",
+  brightGreen: "#1a7f37",
+  brightYellow: "#633c01",
+  brightBlue: "#218bff",
+  brightMagenta: "#a475f9",
+  brightCyan: "#3192aa",
+  brightWhite: "#8c959f",
+};
 
 export interface TerminalHandle {
   runCode: (code: string) => void;
@@ -22,6 +70,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
     const fitAddonRef = useRef<FitAddon | null>(null);
     const sessionIdRef = useRef<string | null>(null);
     const unlistenersRef = useRef<UnlistenFn[]>([]);
+    const { isDark } = useThemePreference();
+    const theme = isDark ? darkTheme : lightTheme;
+
+    if (termRef.current) {
+      termRef.current.options.theme = theme;
+    }
 
     const runCode = useCallback((code: string) => {
       if (sessionIdRef.current) {
@@ -37,12 +91,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       const term = new XTerm({
         fontFamily: '"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
         fontSize: 13,
-        theme: {
-          background: "#0a0a0a",
-          foreground: "#f5f5f5",
-          cursor: "#4ade80",
-          selectionBackground: "#333333",
-        },
+        theme,
         cursorBlink: true,
         convertEol: true,
       });
@@ -131,7 +180,14 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       <div
         ref={containerRef}
         className={className}
-        style={{ width: "100%", height: "100%" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          padding: "8px 0 0 8px",
+          background: theme.background,
+          border: "0.5px solid var(--cds-border-subtle)",
+          boxSizing: "border-box",
+        }}
       />
     );
   },
