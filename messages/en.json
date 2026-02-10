@@ -3,5 +3,9 @@
   "projects": "Projects",
   "settings": "Settings",
   "sideNavLabel": "Side navigation",
-  "language": "Language"
+  "language": "Language",
+  "theme": "Theme",
+  "themeSystem": "System",
+  "themeLight": "Light",
+  "themeDark": "Dark"
 }

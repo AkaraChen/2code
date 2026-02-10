@@ -8,14 +8,14 @@ const localeNames: Record<Locale, string> = {
   zh: "中文",
 };
 
-const themeOptions = [
-  { value: "system", text: "System" },
-  { value: "light", text: "Light" },
-  { value: "dark", text: "Dark" },
-] as const;
-
 export default function SettingsPage() {
   const { preference, setPreference } = useThemePreference();
+
+  const themeOptions = [
+    { value: "system", text: m.themeSystem() },
+    { value: "light", text: m.themeLight() },
+    { value: "dark", text: m.themeDark() },
+  ] as const;
 
   return (
     <div>
@@ -32,7 +32,7 @@ export default function SettingsPage() {
       </Select>
       <Select
         id="theme-select"
-        labelText="Theme"
+        labelText={m.theme()}
         value={preference}
         onChange={(e) =>
           setPreference(e.target.value as "system" | "light" | "dark")
