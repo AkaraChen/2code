@@ -8,8 +8,7 @@ interface TerminalTab {
   title: string;
 }
 
-const DEFAULT_SHELL =
-  typeof window !== "undefined" ? "/bin/zsh" : "/bin/sh";
+const DEFAULT_SHELL = "/bin/zsh";
 
 interface TerminalTabsProps {
   cwd: string;
