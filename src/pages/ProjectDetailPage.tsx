@@ -14,7 +14,7 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="absolute inset-0">
-      <TerminalTabs />
+      <TerminalTabs cwd={project.folder} />
     </div>
   );
 }

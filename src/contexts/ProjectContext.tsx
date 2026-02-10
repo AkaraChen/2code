@@ -8,10 +8,15 @@ export interface Project {
   created_at: string;
 }
 
+interface CreateProjectOpts {
+  name?: string;
+  folder?: string;
+}
+
 interface ProjectContextValue {
   projects: Project[];
   refresh: () => Promise<void>;
-  createProject: () => Promise<Project>;
+  createProject: (opts?: CreateProjectOpts) => Promise<Project>;
   deleteProject: (id: string) => Promise<void>;
 }
 
@@ -29,8 +34,18 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const createProject = useCallback(async () => {
-    const project = await invoke<Project>("create_project_temporary");
+  const createProject = useCallback(async (opts?: CreateProjectOpts) => {
+    let project: Project;
+    if (opts?.folder) {
+      project = await invoke<Project>("create_project_from_folder", {
+        name: opts.name || opts.folder.split("/").pop() || "Untitled",
+        folder: opts.folder,
+      });
+    } else {
+      project = await invoke<Project>("create_project_temporary", {
+        name: opts?.name || null,
+      });
+    }
     await refresh();
     return project;
   }, [refresh]);

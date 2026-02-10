@@ -21,6 +21,7 @@ pub fn create_session_map() -> PtySessionMap {
 pub fn create_session(
 	sessions: &PtySessionMap,
 	shell: &str,
+	cwd: &str,
 	rows: u16,
 	cols: u16,
 ) -> AppResult<(String, Box<dyn std::io::Read + Send>)> {
@@ -37,6 +38,9 @@ pub fn create_session(
 
 	let mut cmd = CommandBuilder::new(shell);
 	cmd.env("TERM", "xterm-256color");
+	if !cwd.is_empty() {
+		cmd.cwd(cwd);
+	}
 
 	let child = pair
 		.slave

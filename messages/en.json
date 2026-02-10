@@ -14,5 +14,11 @@
   "confirmDeleteProject": "Are you sure you want to delete this project? This action cannot be undone.",
   "noProjectsYet": "No projects yet. Create one to get started.",
   "folder": "Folder",
-  "createdAt": "Created at"
+  "createdAt": "Created at",
+  "createProject": "Create Project",
+  "projectName": "Project Name",
+  "projectNamePlaceholder": "Enter project name",
+  "chooseFolder": "Choose Folder",
+  "create": "Create",
+  "cancel": "Cancel"
 }

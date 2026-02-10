@@ -10,10 +10,11 @@ pub fn create_pty_session(
 	app: AppHandle,
 	sessions: State<'_, PtySessionMap>,
 	shell: String,
+	cwd: String,
 	rows: u16,
 	cols: u16,
 ) -> AppResult<String> {
-	let (session_id, reader) = session::create_session(&sessions, &shell, rows, cols)?;
+	let (session_id, reader) = session::create_session(&sessions, &shell, &cwd, rows, cols)?;
 
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();

@@ -11,11 +11,12 @@ export interface TerminalHandle {
 
 interface TerminalProps {
   shell: string;
+  cwd: string;
   className?: string;
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-  ({ shell, className }, ref) => {
+  ({ shell, cwd, className }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
@@ -59,7 +60,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
       const cols = term.cols;
 
       ptyApi
-        .createSession(shell, rows, cols)
+        .createSession(shell, cwd, rows, cols)
         .then(async (sessionId) => {
           sessionIdRef.current = sessionId;
 
@@ -124,7 +125,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
         termRef.current = null;
         fitAddonRef.current = null;
       };
-    }, [shell]);
+    }, [shell, cwd]);
 
     return (
       <div

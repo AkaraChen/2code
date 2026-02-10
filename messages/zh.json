@@ -14,5 +14,11 @@
   "confirmDeleteProject": "确定要删除此项目吗？此操作无法撤消。",
   "noProjectsYet": "暂无项目，创建一个开始吧。",
   "folder": "文件夹",
-  "createdAt": "创建时间"
+  "createdAt": "创建时间",
+  "createProject": "创建项目",
+  "projectName": "项目名称",
+  "projectNamePlaceholder": "输入项目名称",
+  "chooseFolder": "选择文件夹",
+  "create": "创建",
+  "cancel": "取消"
 }

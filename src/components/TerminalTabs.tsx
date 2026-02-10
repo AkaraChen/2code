@@ -11,7 +11,11 @@ interface TerminalTab {
 const DEFAULT_SHELL =
   typeof window !== "undefined" ? "/bin/zsh" : "/bin/sh";
 
-export default function TerminalTabs() {
+interface TerminalTabsProps {
+  cwd: string;
+}
+
+export default function TerminalTabs({ cwd }: TerminalTabsProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const counterRef = useRef(0);
@@ -94,7 +98,7 @@ export default function TerminalTabs() {
             className="absolute inset-0"
             style={{ display: tab.id === activeId ? "block" : "none" }}
           >
-            <Terminal shell={DEFAULT_SHELL} className="h-full" />
+            <Terminal shell={DEFAULT_SHELL} cwd={cwd} className="h-full" />
           </div>
         ))}
       </div>

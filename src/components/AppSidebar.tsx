@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   SideNav, SideNavItems, SideNavLink, SideNavMenu, SideNavMenuItem,
   Menu, MenuItem as CarbonMenuItem, useContextMenu,
@@ -7,6 +7,7 @@ import { Home, FolderOpen, Settings } from "@carbon/react/icons";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { useProjects } from "@/contexts/ProjectContext";
 import * as m from "@/paraglide/messages.js";
+import CreateProjectDialog from "@/components/CreateProjectDialog";
 
 const Link = SideNavLink as React.ComponentType<
   React.ComponentProps<typeof SideNavLink> & { element: typeof NavLink; to: string }
@@ -45,52 +46,50 @@ function ProjectMenuItem({ project, isActive }: { project: { id: string; name: s
 
 export default function AppSidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { projects, createProject } = useProjects();
-
-  const handleCreateProject = async () => {
-    const project = await createProject();
-    navigate(`/projects/${project.id}`);
-  };
+  const { projects } = useProjects();
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <SideNav isFixedNav expanded isChildOfHeader={false} aria-label={m.sideNavLabel()}>
-      <SideNavItems>
-        <Link
-          element={NavLink}
-          to="/"
-          renderIcon={Home}
-          isActive={location.pathname === "/"}
-        >
-          {m.home()}
-        </Link>
-        <SideNavMenu
-          title={m.projects()}
-          renderIcon={FolderOpen}
-          isActive={location.pathname.startsWith("/projects")}
-          defaultExpanded={location.pathname.startsWith("/projects")}
-        >
-          <SideNavMenuItem onClick={handleCreateProject}>
-            {m.newProject()}
-          </SideNavMenuItem>
-          {projects.map((project) => (
-            <ProjectMenuItem
-              key={project.id}
-              project={project}
-              isActive={location.pathname === `/projects/${project.id}`}
-            />
-          ))}
-        </SideNavMenu>
-        <div className="grow" />
-        <Link
-          element={NavLink}
-          to="/settings"
-          renderIcon={Settings}
-          isActive={location.pathname === "/settings"}
-        >
-          {m.settings()}
-        </Link>
-      </SideNavItems>
-    </SideNav>
+    <>
+      <SideNav isFixedNav expanded isChildOfHeader={false} aria-label={m.sideNavLabel()}>
+        <SideNavItems>
+          <Link
+            element={NavLink}
+            to="/"
+            renderIcon={Home}
+            isActive={location.pathname === "/"}
+          >
+            {m.home()}
+          </Link>
+          <SideNavMenu
+            title={m.projects()}
+            renderIcon={FolderOpen}
+            isActive={location.pathname.startsWith("/projects")}
+            defaultExpanded={location.pathname.startsWith("/projects")}
+          >
+            <SideNavMenuItem onClick={() => setDialogOpen(true)}>
+              {m.newProject()}
+            </SideNavMenuItem>
+            {projects.map((project) => (
+              <ProjectMenuItem
+                key={project.id}
+                project={project}
+                isActive={location.pathname === `/projects/${project.id}`}
+              />
+            ))}
+          </SideNavMenu>
+          <div className="grow" />
+          <Link
+            element={NavLink}
+            to="/settings"
+            renderIcon={Settings}
+            isActive={location.pathname === "/settings"}
+          >
+            {m.settings()}
+          </Link>
+        </SideNavItems>
+      </SideNav>
+      <CreateProjectDialog isOpen={dialogOpen} onClose={() => setDialogOpen(false)} />
+    </>
   );
 }
