@@ -23,6 +23,7 @@ interface ProjectContextValue {
 	projects: Project[];
 	refresh: () => Promise<void>;
 	createProject: (opts?: CreateProjectOpts) => Promise<Project>;
+	renameProject: (id: string, name: string) => Promise<void>;
 	deleteProject: (id: string) => Promise<void>;
 }
 
@@ -60,6 +61,14 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 		[refresh],
 	);
 
+	const renameProject = useCallback(
+		async (id: string, name: string) => {
+			await invoke("update_project", { id, name });
+			await refresh();
+		},
+		[refresh],
+	);
+
 	const deleteProject = useCallback(
 		async (id: string) => {
 			await invoke("delete_project", { id });
@@ -74,7 +83,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
 	return (
 		<ProjectContext.Provider
-			value={{ projects, refresh, createProject, deleteProject }}
+			value={{ projects, refresh, createProject, renameProject, deleteProject }}
 		>
 			{children}
 		</ProjectContext.Provider>

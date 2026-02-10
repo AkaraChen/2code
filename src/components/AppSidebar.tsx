@@ -3,6 +3,7 @@ import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
+import RenameProjectDialog from "@/components/RenameProjectDialog";
 import { useProjects } from "@/contexts/ProjectContext";
 import * as m from "@/paraglide/messages.js";
 
@@ -45,6 +46,7 @@ function ProjectMenuItem({
 }) {
 	const { deleteProject } = useProjects();
 	const navigate = useNavigate();
+	const [renameOpen, setRenameOpen] = useState(false);
 
 	const handleDelete = async () => {
 		await deleteProject(project.id);
@@ -52,39 +54,53 @@ function ProjectMenuItem({
 	};
 
 	return (
-		<Menu.Root>
-			<Menu.ContextTrigger asChild>
-				<HStack
-					asChild
-					gap="3"
-					pl="10"
-					pr="4"
-					py="1.5"
-					fontSize="sm"
-					cursor="pointer"
-					bg={isActive ? "bg.emphasized" : "transparent"}
-					_hover={{ bg: "bg.muted" }}
-				>
-					<NavLink to={`/projects/${project.id}`}>
-						{project.name}
-					</NavLink>
-				</HStack>
-			</Menu.ContextTrigger>
-			<Portal>
-				<Menu.Positioner>
-					<Menu.Content>
-						<Menu.Item
-							value="delete"
-							color="fg.error"
-							_hover={{ bg: "bg.error", color: "fg.error" }}
-							onClick={handleDelete}
-						>
-							{m.deleteProject()}
-						</Menu.Item>
-					</Menu.Content>
-				</Menu.Positioner>
-			</Portal>
-		</Menu.Root>
+		<>
+			<Menu.Root>
+				<Menu.ContextTrigger asChild>
+					<HStack
+						asChild
+						gap="3"
+						pl="10"
+						pr="4"
+						py="1.5"
+						fontSize="sm"
+						cursor="pointer"
+						bg={isActive ? "bg.emphasized" : "transparent"}
+						_hover={{ bg: "bg.muted" }}
+					>
+						<NavLink to={`/projects/${project.id}`}>
+							{project.name}
+						</NavLink>
+					</HStack>
+				</Menu.ContextTrigger>
+				<Portal>
+					<Menu.Positioner>
+						<Menu.Content>
+							<Menu.Item
+								value="rename"
+								onClick={() => setRenameOpen(true)}
+							>
+								{m.renameProject()}
+							</Menu.Item>
+							<Menu.Separator />
+							<Menu.Item
+								value="delete"
+								color="fg.error"
+								_hover={{ bg: "bg.error", color: "fg.error" }}
+								onClick={handleDelete}
+							>
+								{m.deleteProject()}
+							</Menu.Item>
+						</Menu.Content>
+					</Menu.Positioner>
+				</Portal>
+			</Menu.Root>
+			<RenameProjectDialog
+				isOpen={renameOpen}
+				onClose={() => setRenameOpen(false)}
+				project={project}
+			/>
+		</>
 	);
 }
 

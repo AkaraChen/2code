@@ -23,5 +23,8 @@
 	"cancel": "取消",
 	"noTerminalsOpen": "暂无终端",
 	"noTerminalsOpenDescription": "打开一个终端以开始在此项目中工作。",
-	"newTerminal": "新建终端"
+	"newTerminal": "新建终端",
+	"renameProject": "重命名",
+	"rename": "重命名",
+	"newName": "新名称"
 }

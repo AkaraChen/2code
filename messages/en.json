@@ -23,5 +23,8 @@
 	"cancel": "Cancel",
 	"noTerminalsOpen": "No terminals open",
 	"noTerminalsOpenDescription": "Open a terminal to start working in this project.",
-	"newTerminal": "New Terminal"
+	"newTerminal": "New Terminal",
+	"renameProject": "Rename",
+	"rename": "Rename",
+	"newName": "New Name"
 }
