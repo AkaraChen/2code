@@ -16,7 +16,7 @@ export default function ProjectDetailPage() {
 	const project = projects.find((p) => p.id === id);
 
 	if (!project) {
-		return <Navigate to="/projects" replace />;
+		return <Navigate to="/" replace />;
 	}
 
 	// Terminal overlay handles rendering when tabs exist

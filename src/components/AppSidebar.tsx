@@ -48,7 +48,7 @@ function ProjectMenuItem({
 
 	const handleDelete = async () => {
 		await deleteProject(project.id);
-		navigate("/projects");
+		navigate("/");
 	};
 
 	return (

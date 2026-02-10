@@ -3,7 +3,6 @@ import AppSidebar from "./components/AppSidebar";
 import TerminalTabs from "./components/TerminalTabs";
 import HomePage from "./pages/HomePage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
-import ProjectsPage from "./pages/ProjectsPage";
 import SettingsPage from "./pages/SettingsPage";
 import { useProjects } from "./contexts/ProjectContext";
 import { useTerminalProjectIds, useTerminalSync } from "./stores/terminalStore";
@@ -23,10 +22,9 @@ export default function App() {
 		<div className="flex flex-col h-full">
 			<div className="flex flex-1 min-h-0">
 				<AppSidebar />
-				<main className="flex-1 p-8 overflow-y-auto relative">
+				<main className="flex-1 overflow-y-auto relative">
 					<Routes>
 						<Route path="/" element={<HomePage />} />
-						<Route path="/projects" element={<ProjectsPage />} />
 						<Route
 							path="/projects/:id"
 							element={<ProjectDetailPage />}

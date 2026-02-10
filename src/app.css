@@ -2,3 +2,7 @@
 @import "tailwindcss/utilities" layer(utilities);
 
 @custom-variant dark (&:where(.dark, [data-theme="dark"]) *);
+
+.page-padding {
+	@apply p-8;
+}

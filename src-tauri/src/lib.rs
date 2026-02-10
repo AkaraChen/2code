@@ -11,10 +11,13 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-	tauri::Builder::default()
+	let sessions = pty::session::create_session_map();
+	let sessions_for_exit = sessions.clone();
+
+	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_dialog::init())
-		.manage(pty::session::create_session_map())
+		.manage(sessions)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -39,6 +42,12 @@ pub fn run() {
 			project::commands::update_project,
 			project::commands::delete_project,
 		])
-		.run(tauri::generate_context!())
-		.expect("error while running tauri application");
+		.build(tauri::generate_context!())
+		.expect("error while building tauri application");
+
+	app.run(move |_app_handle, event| {
+		if let tauri::RunEvent::Exit = event {
+			pty::session::close_all_sessions(&sessions_for_exit);
+		}
+	});
 }

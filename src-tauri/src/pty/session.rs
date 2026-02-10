@@ -132,3 +132,11 @@ pub fn close_session(
 	}
 	Ok(())
 }
+
+pub fn close_all_sessions(sessions: &PtySessionMap) {
+	if let Ok(mut map) = sessions.lock() {
+		for (_, mut session) in map.drain() {
+			let _ = session.child.kill();
+		}
+	}
+}
