@@ -20,14 +20,6 @@ export default defineConfig(async () => ({
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
-			"~@ibm/plex": path.resolve(__dirname, "node_modules/@ibm/plex"),
-		},
-	},
-	css: {
-		preprocessorOptions: {
-			scss: {
-				loadPaths: ["node_modules"],
-			},
 		},
 	},
 

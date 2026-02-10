@@ -1,5 +1,5 @@
-import { Button, Tab, TabList, Tabs } from "@carbon/react";
-import { Add, Close, Terminal as TerminalIcon } from "@carbon/react/icons";
+import { Button, CloseButton, Tabs } from "@chakra-ui/react";
+import { LuPlus, LuTerminal } from "react-icons/lu";
 import { useCallback, useRef, useState } from "react";
 import { Terminal } from "./Terminal";
 
@@ -19,8 +19,6 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const counterRef = useRef(0);
 
-	const activeIndex = tabs.findIndex((t) => t.id === activeId);
-
 	const createTab = useCallback(() => {
 		counterRef.current += 1;
 		const id = crypto.randomUUID();
@@ -39,6 +37,7 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 				const next = prev.filter((t) => t.id !== tabId);
 
 				if (next.length === 0) {
+					setActiveId(null);
 					return next;
 				}
 
@@ -57,7 +56,8 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 		return (
 			<div className="flex flex-col items-center justify-center h-full gap-4">
 				<p className="text-muted">No terminals open</p>
-				<Button onClick={createTab} renderIcon={Add}>
+				<Button onClick={createTab}>
+					<LuPlus />
 					New Terminal
 				</Button>
 			</div>
@@ -66,36 +66,41 @@ export default function TerminalTabs({ cwd }: TerminalTabsProps) {
 
 	return (
 		<div className="flex flex-col h-full w-full">
-			<Tabs
-				selectedIndex={activeIndex >= 0 ? activeIndex : 0}
-				onChange={({ selectedIndex }) => {
-					// Ignore clicks on the "+" tab (last one)
-					if (selectedIndex < tabs.length) {
-						setActiveId(tabs[selectedIndex].id);
-					}
-				}}
+			<Tabs.Root
+				variant="outline"
+				size="sm"
+				value={activeId}
+				onValueChange={(e) => setActiveId(e.value)}
 			>
-				<TabList contained>
+				<Tabs.List>
 					{tabs.map((tab) => (
-						<Tab key={tab.id} renderIcon={TerminalIcon}>
+						<Tabs.Trigger key={tab.id} value={tab.id}>
+							<LuTerminal />
 							<span className="flex items-center gap-2">
 								{tab.title}
-								<Close
-									size={16}
-									className="opacity-60 hover:opacity-100"
+								<CloseButton
+									as="span"
+									role="button"
+									size="2xs"
 									onClick={(e) => {
 										e.stopPropagation();
 										closeTab(tab.id);
 									}}
 								/>
 							</span>
-						</Tab>
+						</Tabs.Trigger>
 					))}
-					<Tab renderIcon={Add} onClick={createTab}>
-						New
-					</Tab>
-				</TabList>
-			</Tabs>
+					<Button
+						alignSelf="center"
+						ms="2"
+						size="2xs"
+						variant="ghost"
+						onClick={createTab}
+					>
+						<LuPlus /> New
+					</Button>
+				</Tabs.List>
+			</Tabs.Root>
 
 			{/* Terminal area — all terminals stay mounted, hidden via CSS */}
 			<div className="flex-1 min-h-0 relative">

@@ -1,33 +1,40 @@
-import {
-	MenuItem as CarbonMenuItem,
-	Menu,
-	SideNav,
-	SideNavItems,
-	SideNavLink,
-	SideNavMenu,
-	SideNavMenuItem,
-	useContextMenu,
-} from "@carbon/react";
-import { FolderOpen, Home, Settings } from "@carbon/react/icons";
-import { useRef, useState } from "react";
+import { Box, Collapsible, Flex, HStack, Icon, Menu, Portal } from "@chakra-ui/react";
+import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import { useProjects } from "@/contexts/ProjectContext";
 import * as m from "@/paraglide/messages.js";
 
-const Link = SideNavLink as React.ComponentType<
-	React.ComponentProps<typeof SideNavLink> & {
-		element: typeof NavLink;
-		to: string;
-	}
->;
-
-const MenuItem = SideNavMenuItem as React.ComponentType<
-	React.ComponentProps<typeof SideNavMenuItem> & {
-		element: typeof NavLink;
-		to: string;
-	}
->;
+function SidebarLink({
+	to,
+	icon,
+	isActive,
+	children,
+}: {
+	to: string;
+	icon: React.ReactNode;
+	isActive: boolean;
+	children: React.ReactNode;
+}) {
+	return (
+		<HStack
+			asChild
+			gap="3"
+			px="4"
+			py="2"
+			fontSize="sm"
+			cursor="pointer"
+			bg={isActive ? "bg.emphasized" : "transparent"}
+			_hover={{ bg: "bg.muted" }}
+		>
+			<NavLink to={to}>
+				<Icon>{icon}</Icon>
+				{children}
+			</NavLink>
+		</HStack>
+	);
+}
 
 function ProjectMenuItem({
 	project,
@@ -36,8 +43,6 @@ function ProjectMenuItem({
 	project: { id: string; name: string };
 	isActive: boolean;
 }) {
-	const ref = useRef<HTMLDivElement>(null);
-	const menuProps = useContextMenu(ref);
 	const { deleteProject } = useProjects();
 	const navigate = useNavigate();
 
@@ -47,22 +52,39 @@ function ProjectMenuItem({
 	};
 
 	return (
-		<div ref={ref}>
-			<MenuItem
-				element={NavLink}
-				to={`/projects/${project.id}`}
-				isActive={isActive}
-			>
-				{project.name}
-			</MenuItem>
-			<Menu label="" {...menuProps}>
-				<CarbonMenuItem
-					label={m.deleteProject()}
-					kind="danger"
-					onClick={handleDelete}
-				/>
-			</Menu>
-		</div>
+		<Menu.Root>
+			<Menu.ContextTrigger asChild>
+				<HStack
+					asChild
+					gap="3"
+					pl="10"
+					pr="4"
+					py="1.5"
+					fontSize="sm"
+					cursor="pointer"
+					bg={isActive ? "bg.emphasized" : "transparent"}
+					_hover={{ bg: "bg.muted" }}
+				>
+					<NavLink to={`/projects/${project.id}`}>
+						{project.name}
+					</NavLink>
+				</HStack>
+			</Menu.ContextTrigger>
+			<Portal>
+				<Menu.Positioner>
+					<Menu.Content>
+						<Menu.Item
+							value="delete"
+							color="fg.error"
+							_hover={{ bg: "bg.error", color: "fg.error" }}
+							onClick={handleDelete}
+						>
+							{m.deleteProject()}
+						</Menu.Item>
+					</Menu.Content>
+				</Menu.Positioner>
+			</Portal>
+		</Menu.Root>
 	);
 }
 
@@ -71,56 +93,82 @@ export default function AppSidebar() {
 	const { projects } = useProjects();
 	const [dialogOpen, setDialogOpen] = useState(false);
 
+	const projectsActive = location.pathname.startsWith("/projects");
+
 	return (
 		<>
-			<SideNav
-				isFixedNav
-				expanded
-				isChildOfHeader={false}
+			<Box
+				as="nav"
 				aria-label={m.sideNavLabel()}
+				w="256px"
+				flexShrink={0}
+				bg="bg.subtle"
+				borderRight="1px solid"
+				borderColor="border.subtle"
 			>
-				<SideNavItems>
-					<Link
-						element={NavLink}
+				<Flex direction="column" h="full">
+					<SidebarLink
 						to="/"
-						renderIcon={Home}
+						icon={<LuHouse />}
 						isActive={location.pathname === "/"}
 					>
 						{m.home()}
-					</Link>
-					<SideNavMenu
-						title={m.projects()}
-						renderIcon={FolderOpen}
-						isActive={location.pathname.startsWith("/projects")}
-						defaultExpanded={location.pathname.startsWith(
-							"/projects",
-						)}
-					>
-						<SideNavMenuItem onClick={() => setDialogOpen(true)}>
-							{m.newProject()}
-						</SideNavMenuItem>
-						{projects.map((project) => (
-							<ProjectMenuItem
-								key={project.id}
-								project={project}
-								isActive={
-									location.pathname ===
-									`/projects/${project.id}`
-								}
-							/>
-						))}
-					</SideNavMenu>
+					</SidebarLink>
+
+					<Collapsible.Root defaultOpen={projectsActive}>
+						<Collapsible.Trigger asChild>
+							<HStack
+								gap="3"
+								px="4"
+								py="2"
+								fontSize="sm"
+								cursor="pointer"
+								fontWeight={projectsActive ? "semibold" : "normal"}
+								_hover={{ bg: "bg.muted" }}
+							>
+								<Icon><LuFolderOpen /></Icon>
+								{m.projects()}
+							</HStack>
+						</Collapsible.Trigger>
+						<Collapsible.Content>
+							<HStack
+								as="button"
+								gap="3"
+								pl="10"
+								pr="4"
+								py="1.5"
+								fontSize="sm"
+								cursor="pointer"
+								w="full"
+								_hover={{ bg: "bg.muted" }}
+								onClick={() => setDialogOpen(true)}
+							>
+								{m.newProject()}
+							</HStack>
+							{projects.map((project) => (
+								<ProjectMenuItem
+									key={project.id}
+									project={project}
+									isActive={
+										location.pathname ===
+										`/projects/${project.id}`
+									}
+								/>
+							))}
+						</Collapsible.Content>
+					</Collapsible.Root>
+
 					<div className="grow" />
-					<Link
-						element={NavLink}
+
+					<SidebarLink
 						to="/settings"
-						renderIcon={Settings}
+						icon={<LuSettings />}
 						isActive={location.pathname === "/settings"}
 					>
 						{m.settings()}
-					</Link>
-				</SideNavItems>
-			</SideNav>
+					</SidebarLink>
+				</Flex>
+			</Box>
 			<CreateProjectDialog
 				isOpen={dialogOpen}
 				onClose={() => setDialogOpen(false)}

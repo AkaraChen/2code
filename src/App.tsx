@@ -6,7 +6,6 @@ import ProjectDetailPage from "./pages/ProjectDetailPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import SettingsPage from "./pages/SettingsPage";
 import "./app.css";
-import "./styles.scss";
 
 export default function App() {
 	return (

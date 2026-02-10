@@ -5,7 +5,7 @@ const appWindow = getCurrentWindow();
 export default function TitleBar() {
 	return (
 		<div
-			className="h-[38px] flex items-center px-3 bg-[var(--cds-layer)] select-none [-webkit-app-region:drag]"
+			className="h-[38px] flex items-center px-3 bg-[var(--chakra-colors-bg-subtle)] select-none [-webkit-app-region:drag]"
 			data-tauri-drag-region
 			onDoubleClick={() => appWindow.toggleMaximize()}
 		>

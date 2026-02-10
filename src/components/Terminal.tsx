@@ -196,7 +196,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 					height: "100%",
 					padding: "8px 0 0 8px",
 					background: theme.background,
-					border: "0.5px solid var(--cds-border-subtle)",
+					border: "0.5px solid var(--chakra-colors-border-subtle)",
 					boxSizing: "border-box",
 				}}
 			/>

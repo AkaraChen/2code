@@ -1,3 +1,4 @@
+import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
@@ -7,12 +8,14 @@ import { ProjectProvider } from "./contexts/ProjectContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>
-		<ThemeProvider>
-			<BrowserRouter>
-				<ProjectProvider>
-					<App />
-				</ProjectProvider>
-			</BrowserRouter>
-		</ThemeProvider>
+		<ChakraProvider value={defaultSystem}>
+			<ThemeProvider>
+				<BrowserRouter>
+					<ProjectProvider>
+						<App />
+					</ProjectProvider>
+				</BrowserRouter>
+			</ThemeProvider>
+		</ChakraProvider>
 	</React.StrictMode>,
 );

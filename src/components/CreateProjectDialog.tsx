@@ -1,14 +1,14 @@
 import {
 	Button,
-	ComposedModal,
-	ModalBody,
-	ModalFooter,
-	ModalHeader,
-	TextInput,
-} from "@carbon/react";
-import { FolderOpen } from "@carbon/react/icons";
+	CloseButton,
+	Dialog,
+	Field,
+	Input,
+	Portal,
+} from "@chakra-ui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
+import { LuFolderOpen } from "react-icons/lu";
 import { useNavigate } from "react-router";
 import { useProjects } from "@/contexts/ProjectContext";
 import * as m from "@/paraglide/messages.js";
@@ -58,57 +58,62 @@ export default function CreateProjectDialog({
 		navigate(`/projects/${project.id}`);
 	};
 
-	if (!isOpen) return null;
-
 	return (
-		<ComposedModal open onClose={handleClose}>
-			<ModalHeader
-				title={m.createProject()}
-				buttonOnClick={handleClose}
-			/>
-			<ModalBody>
-				<TextInput
-					id="project-name"
-					labelText={m.projectName()}
-					placeholder={m.projectNamePlaceholder()}
-					value={name}
-					onChange={(e) => setName(e.target.value)}
-				/>
-				<div
-					style={{
-						marginTop: "1rem",
-						display: "flex",
-						alignItems: "center",
-						gap: "0.5rem",
-					}}
-				>
-					<Button
-						kind="tertiary"
-						size="sm"
-						renderIcon={FolderOpen}
-						onClick={handleChooseFolder}
-					>
-						{m.chooseFolder()}
-					</Button>
-					{folder && (
-						<span
-							style={{
-								fontSize: "0.875rem",
-								color: "var(--cds-text-secondary)",
-							}}
-						>
-							{folder}
-						</span>
-					)}
-				</div>
-			</ModalBody>
-			{/* @ts-expect-error Carbon ModalFooter types require children but renders buttons via props */}
-			<ModalFooter
-				primaryButtonText={m.create()}
-				secondaryButtonText={m.cancel()}
-				onRequestSubmit={handleCreate}
-				onRequestClose={handleClose}
-			/>
-		</ComposedModal>
+		<Dialog.Root
+			lazyMount
+			open={isOpen}
+			onOpenChange={(e) => {
+				if (!e.open) handleClose();
+			}}
+		>
+			<Portal>
+				<Dialog.Backdrop />
+				<Dialog.Positioner>
+					<Dialog.Content>
+						<Dialog.Header>
+							<Dialog.Title>{m.createProject()}</Dialog.Title>
+						</Dialog.Header>
+						<Dialog.Body>
+							<Field.Root>
+								<Field.Label>{m.projectName()}</Field.Label>
+								<Input
+									placeholder={m.projectNamePlaceholder()}
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+								/>
+							</Field.Root>
+							<div className="mt-4 flex items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={handleChooseFolder}
+								>
+									<LuFolderOpen />
+									{m.chooseFolder()}
+								</Button>
+								{folder && (
+									<span className="text-sm" style={{ color: "var(--chakra-colors-fg-muted)" }}>
+										{folder}
+									</span>
+								)}
+							</div>
+						</Dialog.Body>
+						<Dialog.Footer>
+							<Dialog.ActionTrigger asChild>
+								<Button variant="outline">
+									{m.cancel()}
+								</Button>
+							</Dialog.ActionTrigger>
+							<Button onClick={handleCreate}>
+								{m.create()}
+							</Button>
+						</Dialog.Footer>
+						<Dialog.CloseTrigger asChild>
+							<CloseButton size="sm" />
+						</Dialog.CloseTrigger>
+					</Dialog.Content>
+				</Dialog.Positioner>
+			</Portal>
+		</Dialog.Root>
 	);
 }
