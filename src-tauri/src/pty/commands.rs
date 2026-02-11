@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::sync::mpsc;
 
 use diesel::prelude::*;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -53,6 +54,59 @@ pub fn create_pty_session(
 	Ok(session_id)
 }
 
+/// Find the byte position up to which the data forms complete UTF-8 sequences.
+/// Any trailing incomplete multi-byte sequence is excluded from the boundary.
+fn find_utf8_boundary(bytes: &[u8]) -> usize {
+	let len = bytes.len();
+	if len == 0 {
+		return 0;
+	}
+
+	// Look at the last 1-3 bytes to find a potential incomplete sequence.
+	for i in 1..=std::cmp::min(3, len) {
+		let b = bytes[len - i];
+		// Skip continuation bytes (10xxxxxx)
+		if b & 0xC0 == 0x80 {
+			continue;
+		}
+		// Found a leading byte — determine expected sequence length
+		let seq_len = if b & 0x80 == 0 {
+			1
+		} else if b & 0xE0 == 0xC0 {
+			2
+		} else if b & 0xF0 == 0xE0 {
+			3
+		} else if b & 0xF8 == 0xF0 {
+			4
+		} else {
+			1 // Invalid leading byte, treat as single
+		};
+		return if i < seq_len { len - i } else { len };
+	}
+	len
+}
+
+/// Persistence thread: receives raw bytes from channel, buffers, and flushes to DB.
+fn persist_pty_output(
+	rx: mpsc::Receiver<Vec<u8>>,
+	db: DbPool,
+	session_id: &str,
+) {
+	let mut buffer: Vec<u8> = Vec::new();
+	let mut total_written: usize = 0;
+
+	while let Ok(data) = rx.recv() {
+		buffer.extend_from_slice(&data);
+		if buffer.len() >= FLUSH_THRESHOLD {
+			flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
+		}
+	}
+
+	if !buffer.is_empty() {
+		flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
+	}
+}
+
 fn read_pty_output(
 	app: AppHandle,
 	session_id: String,
@@ -62,47 +116,58 @@ fn read_pty_output(
 	let event_name = format!("pty-output-{}", session_id);
 	let exit_event = format!("pty-exit-{}", session_id);
 	let mut buf = [0u8; 4096];
-	let mut output_buffer: Vec<u8> = Vec::new();
-	let mut total_written: usize = 0;
+	let mut utf8_remainder: Vec<u8> = Vec::new();
+
+	// Decouple persistence into a separate thread via channel
+	let (tx, rx) = mpsc::channel::<Vec<u8>>();
+	let persist_db = db.clone();
+	let persist_id = session_id.clone();
+	let persist_thread = std::thread::spawn(move || {
+		persist_pty_output(rx, persist_db, &persist_id);
+	});
 
 	loop {
 		match reader.read(&mut buf) {
 			Ok(0) => break,
 			Ok(n) => {
-				let data = String::from_utf8_lossy(&buf[..n]).to_string();
-				if app.emit(&event_name, &data).is_err() {
-					break;
+				let raw = &buf[..n];
+
+				// Send raw bytes to persistence thread (non-blocking)
+				let _ = tx.send(raw.to_vec());
+
+				// Prepend any leftover bytes from incomplete UTF-8 sequence
+				let combined;
+				let to_decode: &[u8] = if utf8_remainder.is_empty() {
+					raw
+				} else {
+					utf8_remainder.extend_from_slice(raw);
+					combined = std::mem::take(&mut utf8_remainder);
+					&combined
+				};
+
+				// Split at valid UTF-8 boundary
+				let boundary = find_utf8_boundary(to_decode);
+				if boundary > 0 {
+					let text = String::from_utf8_lossy(&to_decode[..boundary]);
+					if app.emit(&event_name, text.as_ref()).is_err() {
+						break;
+					}
 				}
 
-				// Buffer output for DB persistence
-				output_buffer.extend_from_slice(&buf[..n]);
-
-				if output_buffer.len() >= FLUSH_THRESHOLD {
-					flush_output_buffer(
-						&db,
-						&session_id,
-						&mut output_buffer,
-						&mut total_written,
-					);
+				// Save trailing incomplete bytes for next iteration
+				if boundary < to_decode.len() {
+					utf8_remainder.extend_from_slice(&to_decode[boundary..]);
 				}
 			}
 			Err(_) => break,
 		}
 	}
 
-	// Flush remaining buffer on EOF
-	if !output_buffer.is_empty() {
-		flush_output_buffer(
-			&db,
-			&session_id,
-			&mut output_buffer,
-			&mut total_written,
-		);
-	}
+	// Signal persistence thread to finish and wait
+	drop(tx);
+	let _ = persist_thread.join();
 
-	// Mark session as closed
 	mark_session_closed(&db, &session_id);
-
 	let _ = app.emit(&exit_event, ());
 }
 
