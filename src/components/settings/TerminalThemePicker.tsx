@@ -1,15 +1,24 @@
 import {
 	Checkbox,
+	createListCollection,
 	Field,
 	Flex,
 	IconButton,
-	NativeSelect,
+	Portal,
+	Select,
 } from "@chakra-ui/react";
 import { RiEyeLine } from "react-icons/ri";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
 import { terminalThemeIds, terminalThemeNames } from "@/lib/terminalThemes";
 import * as m from "@/paraglide/messages.js";
 import { useFontStore } from "@/stores/fontStore";
+
+const themeCollection = createListCollection({
+	items: terminalThemeIds.map((id) => ({
+		value: id,
+		label: terminalThemeNames[id],
+	})),
+});
 
 function ThemeSelect({
 	value,
@@ -38,22 +47,37 @@ function ThemeSelect({
 					<RiEyeLine />
 				</IconButton>
 			</Flex>
-			<NativeSelect.Root>
-				<NativeSelect.Field
-					value={value}
-					onChange={(e) => {
-						onChange(e.target.value as TerminalThemeId);
-						onPreview(null);
-					}}
-				>
-					{terminalThemeIds.map((id) => (
-						<option key={id} value={id}>
-							{terminalThemeNames[id]}
-						</option>
-					))}
-				</NativeSelect.Field>
-				<NativeSelect.Indicator />
-			</NativeSelect.Root>
+			<Select.Root
+				collection={themeCollection}
+				value={[value]}
+				onValueChange={(e) => {
+					onChange(e.value[0] as TerminalThemeId);
+					onPreview(null);
+				}}
+				size="sm"
+			>
+				<Select.HiddenSelect />
+				<Select.Control>
+					<Select.Trigger>
+						<Select.ValueText />
+					</Select.Trigger>
+					<Select.IndicatorGroup>
+						<Select.Indicator />
+					</Select.IndicatorGroup>
+				</Select.Control>
+				<Portal>
+					<Select.Positioner>
+						<Select.Content>
+							{themeCollection.items.map((item) => (
+								<Select.Item item={item} key={item.value}>
+									{item.label}
+									<Select.ItemIndicator />
+								</Select.Item>
+							))}
+						</Select.Content>
+					</Select.Positioner>
+				</Portal>
+			</Select.Root>
 		</Field.Root>
 	);
 }

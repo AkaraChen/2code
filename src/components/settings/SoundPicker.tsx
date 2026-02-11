@@ -1,5 +1,12 @@
-import { Field, Flex, IconButton, NativeSelect } from "@chakra-ui/react";
-import { use } from "react";
+import {
+	createListCollection,
+	Field,
+	Flex,
+	IconButton,
+	Portal,
+	Select,
+} from "@chakra-ui/react";
+import { use, useMemo } from "react";
 import { RiVolumeUpLine } from "react-icons/ri";
 import { notificationApi } from "@/api/notification";
 import { createCachedPromise } from "@/lib/cachedPromise";
@@ -13,6 +20,17 @@ const getSoundsPromise = createCachedPromise<string[]>(() =>
 export function SoundPicker() {
 	const sounds = use(getSoundsPromise());
 	const { enabled, sound, setSound } = useNotificationStore();
+
+	const soundCollection = useMemo(
+		() =>
+			createListCollection({
+				items: [
+					{ value: "", label: m.notificationSoundNone() },
+					...sounds.map((s) => ({ value: s, label: s })),
+				],
+			}),
+		[sounds],
+	);
 
 	return (
 		<Field.Root>
@@ -33,20 +51,35 @@ export function SoundPicker() {
 					<RiVolumeUpLine />
 				</IconButton>
 			</Flex>
-			<NativeSelect.Root disabled={!enabled}>
-				<NativeSelect.Field
-					value={sound}
-					onChange={(e) => setSound(e.target.value)}
-				>
-					<option value="">{m.notificationSoundNone()}</option>
-					{sounds.map((s) => (
-						<option key={s} value={s}>
-							{s}
-						</option>
-					))}
-				</NativeSelect.Field>
-				<NativeSelect.Indicator />
-			</NativeSelect.Root>
+			<Select.Root
+				collection={soundCollection}
+				value={[sound]}
+				onValueChange={(e) => setSound(e.value[0])}
+				disabled={!enabled}
+				size="sm"
+			>
+				<Select.HiddenSelect />
+				<Select.Control>
+					<Select.Trigger>
+						<Select.ValueText />
+					</Select.Trigger>
+					<Select.IndicatorGroup>
+						<Select.Indicator />
+					</Select.IndicatorGroup>
+				</Select.Control>
+				<Portal>
+					<Select.Positioner>
+						<Select.Content>
+							{soundCollection.items.map((item) => (
+								<Select.Item item={item} key={item.value}>
+									{item.label}
+									<Select.ItemIndicator />
+								</Select.Item>
+							))}
+						</Select.Content>
+					</Select.Positioner>
+				</Portal>
+			</Select.Root>
 		</Field.Root>
 	);
 }

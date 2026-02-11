@@ -50,7 +50,12 @@ mod tests {
 		let sounds = list_system_sounds();
 		if sounds.len() >= 2 {
 			for pair in sounds.windows(2) {
-				assert!(pair[0] <= pair[1], "not sorted: {} > {}", pair[0], pair[1]);
+				assert!(
+					pair[0] <= pair[1],
+					"not sorted: {} > {}",
+					pair[0],
+					pair[1]
+				);
 			}
 		}
 	}

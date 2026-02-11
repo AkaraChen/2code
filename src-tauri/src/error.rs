@@ -92,10 +92,7 @@ mod tests {
 	fn serialize_lock_error() {
 		let err = AppError::LockError;
 		let val = serde_json::to_value(&err).unwrap();
-		assert_eq!(
-			val.as_str().unwrap(),
-			"Lock error: failed to acquire lock"
-		);
+		assert_eq!(val.as_str().unwrap(), "Lock error: failed to acquire lock");
 	}
 
 	// --- From conversions ---

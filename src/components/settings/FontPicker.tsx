@@ -1,4 +1,10 @@
-import { Checkbox, Field, NativeSelect } from "@chakra-ui/react";
+import {
+	Checkbox,
+	createListCollection,
+	Field,
+	Portal,
+	Select,
+} from "@chakra-ui/react";
 import { use, useMemo } from "react";
 import { fontsApi, type SystemFont } from "@/api/fonts";
 import { createCachedPromise } from "@/lib/cachedPromise";
@@ -19,23 +25,49 @@ export function FontPicker() {
 		[fonts, showAllFonts],
 	);
 
+	const fontCollection = useMemo(
+		() =>
+			createListCollection({
+				items: visibleFonts.map((f) => ({
+					value: f.family,
+					label: f.family,
+				})),
+			}),
+		[visibleFonts],
+	);
+
 	return (
 		<>
 			<Field.Root>
 				<Field.Label>{m.terminalFont()}</Field.Label>
-				<NativeSelect.Root>
-					<NativeSelect.Field
-						value={fontFamily}
-						onChange={(e) => setFontFamily(e.target.value)}
-					>
-						{visibleFonts.map((f) => (
-							<option key={f.family} value={f.family}>
-								{f.family}
-							</option>
-						))}
-					</NativeSelect.Field>
-					<NativeSelect.Indicator />
-				</NativeSelect.Root>
+				<Select.Root
+					collection={fontCollection}
+					value={[fontFamily]}
+					onValueChange={(e) => setFontFamily(e.value[0])}
+					size="sm"
+				>
+					<Select.HiddenSelect />
+					<Select.Control>
+						<Select.Trigger>
+							<Select.ValueText />
+						</Select.Trigger>
+						<Select.IndicatorGroup>
+							<Select.Indicator />
+						</Select.IndicatorGroup>
+					</Select.Control>
+					<Portal>
+						<Select.Positioner>
+							<Select.Content>
+								{fontCollection.items.map((item) => (
+									<Select.Item item={item} key={item.value}>
+										{item.label}
+										<Select.ItemIndicator />
+									</Select.Item>
+								))}
+							</Select.Content>
+						</Select.Positioner>
+					</Portal>
+				</Select.Root>
 			</Field.Root>
 			<Checkbox.Root
 				size="sm"

@@ -1,9 +1,11 @@
 import {
 	Box,
+	createListCollection,
 	Field,
 	Flex,
 	Heading,
-	NativeSelect,
+	Portal,
+	Select,
 	Skeleton,
 	Stack,
 	Tabs,
@@ -26,16 +28,25 @@ const localeNames: Record<Locale, string> = {
 
 const LOCALES = ["en", "zh"] as const;
 
+const localeCollection = createListCollection({
+	items: LOCALES.map((locale) => ({
+		value: locale,
+		label: localeNames[locale],
+	})),
+});
+
 export default function SettingsPage() {
 	const { preference, setPreference } = useThemePreference();
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
-	const themeOptions = [
-		{ value: "system", text: m.themeSystem() },
-		{ value: "light", text: m.themeLight() },
-		{ value: "dark", text: m.themeDark() },
-	] as const;
+	const themeCollection = createListCollection({
+		items: [
+			{ value: "system", label: m.themeSystem() },
+			{ value: "light", label: m.themeLight() },
+			{ value: "dark", label: m.themeDark() },
+		],
+	});
 
 	return (
 		<div className="page-padding">
@@ -61,54 +72,84 @@ export default function SettingsPage() {
 							<Stack gap="6" flex="1" minW="0" maxW="md">
 								<Field.Root>
 									<Field.Label>{m.language()}</Field.Label>
-									<NativeSelect.Root>
-										<NativeSelect.Field
-											defaultValue={getLocale()}
-											onChange={(e) =>
-												setLocale(
-													e.target.value as Locale,
-												)
-											}
-										>
-											{LOCALES.map(
-												(locale) => (
-													<option
-														key={locale}
-														value={locale}
-													>
-														{localeNames[locale]}
-													</option>
-												),
-											)}
-										</NativeSelect.Field>
-										<NativeSelect.Indicator />
-									</NativeSelect.Root>
+									<Select.Root
+										collection={localeCollection}
+										defaultValue={[getLocale()]}
+										onValueChange={(e) =>
+											setLocale(e.value[0] as Locale)
+										}
+										size="sm"
+									>
+										<Select.HiddenSelect />
+										<Select.Control>
+											<Select.Trigger>
+												<Select.ValueText />
+											</Select.Trigger>
+											<Select.IndicatorGroup>
+												<Select.Indicator />
+											</Select.IndicatorGroup>
+										</Select.Control>
+										<Portal>
+											<Select.Positioner>
+												<Select.Content>
+													{localeCollection.items.map(
+														(item) => (
+															<Select.Item
+																item={item}
+																key={item.value}
+															>
+																{item.label}
+																<Select.ItemIndicator />
+															</Select.Item>
+														),
+													)}
+												</Select.Content>
+											</Select.Positioner>
+										</Portal>
+									</Select.Root>
 								</Field.Root>
 								<Field.Root>
 									<Field.Label>{m.theme()}</Field.Label>
-									<NativeSelect.Root>
-										<NativeSelect.Field
-											value={preference}
-											onChange={(e) =>
-												setPreference(
-													e.target.value as
-														| "system"
-														| "light"
-														| "dark",
-												)
-											}
-										>
-											{themeOptions.map((opt) => (
-												<option
-													key={opt.value}
-													value={opt.value}
-												>
-													{opt.text}
-												</option>
-											))}
-										</NativeSelect.Field>
-										<NativeSelect.Indicator />
-									</NativeSelect.Root>
+									<Select.Root
+										collection={themeCollection}
+										value={[preference]}
+										onValueChange={(e) =>
+											setPreference(
+												e.value[0] as
+													| "system"
+													| "light"
+													| "dark",
+											)
+										}
+										size="sm"
+									>
+										<Select.HiddenSelect />
+										<Select.Control>
+											<Select.Trigger>
+												<Select.ValueText />
+											</Select.Trigger>
+											<Select.IndicatorGroup>
+												<Select.Indicator />
+											</Select.IndicatorGroup>
+										</Select.Control>
+										<Portal>
+											<Select.Positioner>
+												<Select.Content>
+													{themeCollection.items.map(
+														(item) => (
+															<Select.Item
+																item={item}
+																key={item.value}
+															>
+																{item.label}
+																<Select.ItemIndicator />
+															</Select.Item>
+														),
+													)}
+												</Select.Content>
+											</Select.Positioner>
+										</Portal>
+									</Select.Root>
 								</Field.Root>
 								<TerminalThemePicker
 									onPreview={setPreviewThemeId}
