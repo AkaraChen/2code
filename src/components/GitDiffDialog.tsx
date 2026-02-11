@@ -53,16 +53,14 @@ function getLineStats(file: FileDiffMetadata) {
 	return { additions, deletions };
 }
 
-const changeTypeBadge: Record<
-	string,
-	{ label: string; colorPalette: string }
-> = {
-	new: { label: "New", colorPalette: "green" },
-	deleted: { label: "Deleted", colorPalette: "red" },
-	change: { label: "Changed", colorPalette: "blue" },
-	"rename-pure": { label: "Renamed", colorPalette: "yellow" },
-	"rename-changed": { label: "Renamed", colorPalette: "yellow" },
-};
+const changeTypeBadge: Record<string, { label: string; colorPalette: string }> =
+	{
+		new: { label: "New", colorPalette: "green" },
+		deleted: { label: "Deleted", colorPalette: "red" },
+		change: { label: "Changed", colorPalette: "blue" },
+		"rename-pure": { label: "Renamed", colorPalette: "yellow" },
+		"rename-changed": { label: "Renamed", colorPalette: "yellow" },
+	};
 
 function FileDiffHeader({
 	file,
@@ -190,10 +188,15 @@ export default function GitDiffDialog({
 											<FileDiffHeader
 												file={file}
 												collapsed={collapsed.has(i)}
-												onToggle={() => toggleCollapse(i)}
+												onToggle={() =>
+													toggleCollapse(i)
+												}
 											/>
 											{!collapsed.has(i) && (
-												<FileDiff fileDiff={file} options={options} />
+												<FileDiff
+													fileDiff={file}
+													options={options}
+												/>
 											)}
 										</Box>
 									))}
