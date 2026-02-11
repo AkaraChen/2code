@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:where(.dark, [data-theme="dark"]) *);
 
+@font-face {
+	font-family: 'OPPO Sans';
+	src: url('/fonts/OPPO-Sans-4.0.ttf') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	font-family: "OPPO Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
 .page-padding {
 	@apply p-8;
 }
