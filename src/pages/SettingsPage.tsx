@@ -24,6 +24,8 @@ const localeNames: Record<Locale, string> = {
 	zh: "中文",
 };
 
+const LOCALES = ["en", "zh"] as const;
+
 export default function SettingsPage() {
 	const { preference, setPreference } = useThemePreference();
 	const [previewThemeId, setPreviewThemeId] =
@@ -68,7 +70,7 @@ export default function SettingsPage() {
 												)
 											}
 										>
-											{(["en", "zh"] as const).map(
+											{LOCALES.map(
 												(locale) => (
 													<option
 														key={locale}

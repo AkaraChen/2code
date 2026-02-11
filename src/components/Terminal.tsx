@@ -119,7 +119,7 @@ export function Terminal({
 			unlistenersRef.current.push(unlistenOutput, unlistenExit);
 		};
 
-		setup();
+		setup().catch(() => {});
 
 		// Forward user input to PTY
 		const onDataDisposable = term.onData((data) => {

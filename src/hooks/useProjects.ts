@@ -3,6 +3,7 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -15,7 +16,7 @@ export function useProjects() {
 
 export function useProject(id: string) {
 	const { data: projects } = useProjects();
-	return projects.find((p) => p.id === id);
+	return useMemo(() => projects.find((p) => p.id === id), [projects, id]);
 }
 
 export function useCreateProject() {
