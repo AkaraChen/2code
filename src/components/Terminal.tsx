@@ -1,59 +1,13 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
-import type { ITheme } from "@xterm/xterm";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 import { ptyApi } from "@/api/pty";
 import { useThemePreference } from "@/components/ThemeProvider";
+import { darkTheme, lightTheme } from "@/lib/terminalThemes";
 import { useFontStore } from "@/stores/fontStore";
 import { useTerminalStore } from "@/stores/terminalStore";
 import "@xterm/xterm/css/xterm.css";
-
-const darkTheme: ITheme = {
-	background: "#161616",
-	foreground: "#BFD4E1",
-	cursor: "#f0f3bd",
-	selectionBackground: "#353535",
-	black: "#353535",
-	red: "#d97397",
-	green: "#CEE397",
-	yellow: "#E9CA5C",
-	blue: "#63B0C6",
-	magenta: "#E9AEBA",
-	cyan: "#70C1B3",
-	white: "#BFD4E1",
-	brightBlack: "#729098",
-	brightRed: "#ffadad",
-	brightGreen: "#caffbf",
-	brightYellow: "#f0f3bd",
-	brightBlue: "#9bf6ff",
-	brightMagenta: "#ffc6ff",
-	brightCyan: "#a8dadc",
-	brightWhite: "#ffffff",
-};
-
-const lightTheme: ITheme = {
-	background: "#ffffff",
-	foreground: "#24292f",
-	cursor: "#0969da",
-	selectionBackground: "#bbd6f0",
-	black: "#24292f",
-	red: "#cf222e",
-	green: "#116329",
-	yellow: "#4d2d00",
-	blue: "#0969da",
-	magenta: "#8250df",
-	cyan: "#1b7c83",
-	white: "#6e7781",
-	brightBlack: "#57606a",
-	brightRed: "#a40e26",
-	brightGreen: "#1a7f37",
-	brightYellow: "#633c01",
-	brightBlue: "#218bff",
-	brightMagenta: "#a475f9",
-	brightCyan: "#3192aa",
-	brightWhite: "#8c959f",
-};
 
 interface TerminalProps {
 	projectId: string;
@@ -74,6 +28,7 @@ export function Terminal({
 	const unlistenersRef = useRef<UnlistenFn[]>([]);
 	const { isDark } = useThemePreference();
 	const fontFamily = useFontStore((s) => s.fontFamily);
+	const fontSize = useFontStore((s) => s.fontSize);
 	const theme = isDark ? darkTheme : lightTheme;
 
 	// Update theme without re-mounting the terminal
@@ -83,7 +38,7 @@ export function Terminal({
 		}
 	}, [theme]);
 
-	// Update font without re-mounting the terminal
+	// Update font family without re-mounting the terminal
 	useEffect(() => {
 		if (termRef.current) {
 			termRef.current.options.fontFamily = `"${fontFamily}", monospace`;
@@ -91,14 +46,23 @@ export function Terminal({
 		}
 	}, [fontFamily]);
 
+	// Update font size without re-mounting the terminal
+	useEffect(() => {
+		if (termRef.current) {
+			termRef.current.options.fontSize = fontSize;
+			fitAddonRef.current?.fit();
+		}
+	}, [fontSize]);
+
 	useEffect(() => {
 		if (!containerRef.current) return;
 
 		let disposed = false;
 
+		const state = useFontStore.getState();
 		const term = new XTerm({
-			fontFamily: `"${useFontStore.getState().fontFamily}", monospace`,
-			fontSize: 13,
+			fontFamily: `"${state.fontFamily}", monospace`,
+			fontSize: state.fontSize,
 			theme,
 			cursorBlink: true,
 			convertEol: true,

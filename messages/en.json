@@ -30,5 +30,8 @@
 	"somethingWentWrong": "Something went wrong",
 	"tryAgain": "Try again",
 	"terminalFont": "Terminal Font",
-	"showAllFonts": "Show all fonts"
+	"showAllFonts": "Show all fonts",
+	"fontSize": "Font Size",
+	"appearance": "Appearance",
+	"profile": "Profile"
 }

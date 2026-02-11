@@ -30,5 +30,8 @@
 	"somethingWentWrong": "出了点问题",
 	"tryAgain": "重试",
 	"terminalFont": "终端字体",
-	"showAllFonts": "显示所有字体"
+	"showAllFonts": "显示所有字体",
+	"fontSize": "字体大小",
+	"appearance": "外观",
+	"profile": "配置"
 }
