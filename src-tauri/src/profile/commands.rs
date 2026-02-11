@@ -540,12 +540,18 @@ mod tests {
 
 	#[test]
 	fn sanitize_chinese() {
-		assert_eq!(sanitize_branch_name("新功能/登录"), "xin-gong-neng/deng-lu");
+		assert_eq!(
+			sanitize_branch_name("新功能/登录"),
+			"xin-gong-neng/deng-lu"
+		);
 	}
 
 	#[test]
 	fn sanitize_mixed() {
-		assert_eq!(sanitize_branch_name("feat/用户认证"), "feat/yong-hu-ren-zheng");
+		assert_eq!(
+			sanitize_branch_name("feat/用户认证"),
+			"feat/yong-hu-ren-zheng"
+		);
 	}
 
 	#[test]
