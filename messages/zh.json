@@ -28,5 +28,7 @@
 	"rename": "重命名",
 	"newName": "新名称",
 	"somethingWentWrong": "出了点问题",
-	"tryAgain": "重试"
+	"tryAgain": "重试",
+	"terminalFont": "终端字体",
+	"showAllFonts": "显示所有字体"
 }

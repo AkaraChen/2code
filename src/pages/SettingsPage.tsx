@@ -1,12 +1,71 @@
-import { Field, NativeSelect, Stack } from "@chakra-ui/react";
+import {
+	Checkbox,
+	Field,
+	NativeSelect,
+	Skeleton,
+	Stack,
+} from "@chakra-ui/react";
+import { Suspense, use, useMemo } from "react";
+import { fontsApi, type SystemFont } from "@/api/fonts";
 import { useThemePreference } from "@/components/ThemeProvider";
 import * as m from "@/paraglide/messages.js";
 import { getLocale, type Locale, setLocale } from "@/paraglide/runtime.js";
+import { useFontStore } from "@/stores/fontStore";
 
 const localeNames: Record<Locale, string> = {
 	en: "English",
 	zh: "中文",
 };
+
+// Cached promise — created once, shared across renders
+let fontsPromise: Promise<SystemFont[]> | null = null;
+function getFontsPromise() {
+	if (!fontsPromise) {
+		fontsPromise = fontsApi.listSystemFonts();
+	}
+	return fontsPromise;
+}
+
+function FontPicker() {
+	const fonts = use(getFontsPromise());
+	const { fontFamily, showAllFonts, setFontFamily, setShowAllFonts } =
+		useFontStore();
+
+	const visibleFonts = useMemo(
+		() => (showAllFonts ? fonts : fonts.filter((f) => f.is_mono)),
+		[fonts, showAllFonts],
+	);
+
+	return (
+		<>
+			<Field.Root>
+				<Field.Label>{m.terminalFont()}</Field.Label>
+				<NativeSelect.Root>
+					<NativeSelect.Field
+						value={fontFamily}
+						onChange={(e) => setFontFamily(e.target.value)}
+					>
+						{visibleFonts.map((f) => (
+							<option key={f.family} value={f.family}>
+								{f.family}
+							</option>
+						))}
+					</NativeSelect.Field>
+					<NativeSelect.Indicator />
+				</NativeSelect.Root>
+			</Field.Root>
+			<Checkbox.Root
+				size="sm"
+				checked={showAllFonts}
+				onCheckedChange={(e) => setShowAllFonts(!!e.checked)}
+			>
+				<Checkbox.HiddenInput />
+				<Checkbox.Control />
+				<Checkbox.Label>{m.showAllFonts()}</Checkbox.Label>
+			</Checkbox.Root>
+		</>
+	);
+}
 
 export default function SettingsPage() {
 	const { preference, setPreference } = useThemePreference();
@@ -62,6 +121,9 @@ export default function SettingsPage() {
 						<NativeSelect.Indicator />
 					</NativeSelect.Root>
 				</Field.Root>
+				<Suspense fallback={<Skeleton height="70px" />}>
+					<FontPicker />
+				</Suspense>
 			</Stack>
 		</div>
 	);

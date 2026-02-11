@@ -5,6 +5,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 import { ptyApi } from "@/api/pty";
 import { useThemePreference } from "@/components/ThemeProvider";
+import { useFontStore } from "@/stores/fontStore";
 import { useTerminalStore } from "@/stores/terminalStore";
 import "@xterm/xterm/css/xterm.css";
 
@@ -72,6 +73,7 @@ export function Terminal({
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const unlistenersRef = useRef<UnlistenFn[]>([]);
 	const { isDark } = useThemePreference();
+	const fontFamily = useFontStore((s) => s.fontFamily);
 	const theme = isDark ? darkTheme : lightTheme;
 
 	// Update theme without re-mounting the terminal
@@ -81,14 +83,21 @@ export function Terminal({
 		}
 	}, [theme]);
 
+	// Update font without re-mounting the terminal
+	useEffect(() => {
+		if (termRef.current) {
+			termRef.current.options.fontFamily = `"${fontFamily}", monospace`;
+			fitAddonRef.current?.fit();
+		}
+	}, [fontFamily]);
+
 	useEffect(() => {
 		if (!containerRef.current) return;
 
 		let disposed = false;
 
 		const term = new XTerm({
-			fontFamily:
-				'"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
+			fontFamily: `"${useFontStore.getState().fontFamily}", monospace`,
 			fontSize: 13,
 			theme,
 			cursorBlink: true,

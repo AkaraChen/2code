@@ -28,5 +28,7 @@
 	"rename": "Rename",
 	"newName": "New Name",
 	"somethingWentWrong": "Something went wrong",
-	"tryAgain": "Try again"
+	"tryAgain": "Try again",
+	"terminalFont": "Terminal Font",
+	"showAllFonts": "Show all fonts"
 }
