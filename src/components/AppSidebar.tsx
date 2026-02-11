@@ -18,6 +18,7 @@ import {
 	RiGitBranchLine,
 	RiHome4Line,
 	RiSettings3Line,
+	RiTerminalBoxLine,
 } from "react-icons/ri";
 import { NavLink, useMatch } from "react-router";
 import CreateProfileDialog from "@/components/CreateProfileDialog";
@@ -268,7 +269,10 @@ function ProjectMenuItem({
 						_hover={{ bg: "bg.subtle" }}
 					>
 						<NavLink to={`/projects/${project.id}`}>
-							{m.defaultProfile()}
+							<Icon fontSize="xs" color="fg.muted">
+								<RiTerminalBoxLine />
+							</Icon>
+							<Text truncate>{m.defaultProfile()}</Text>
 						</NavLink>
 					</HStack>
 
