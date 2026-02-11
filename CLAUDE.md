@@ -7,170 +7,127 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions. It combines a React 19 frontend with a Rust backend, featuring:
 
 - Project management with folder selection and metadata
-- Persistent PTY (pseudo-terminal) sessions
+- Persistent PTY (pseudo-terminal) sessions with scrollback restoration
 - SQLite database for project/session storage
-- i18n support via Paraglide.js
+- i18n support via Paraglide.js (English + Chinese)
 
 ## Commands
 
-### Development
-
 ```bash
-# Run dev server (frontend + backend hot-reload)
-bun tauri dev
-
-# Or using just
-just start
+# Dev server (frontend + backend hot-reload)
+bun tauri dev          # or: just start
 
 # Frontend-only dev
 bun run dev
 
-# Production build (creates native binary)
+# Production build
 bun tauri build
 
-# Frontend-only build (TypeScript + Vite)
+# Frontend-only build (runs paraglide compile → tsc → vite build)
 bun run build
-```
 
-### Testing
-
-```bash
-# Run Rust tests
+# Rust tests
 cd src-tauri && cargo test
+cd src-tauri && cargo test test_name   # single test
 
-# Run specific test
-cd src-tauri && cargo test test_name
-```
-
-### Linting/Formatting
-
-```bash
-# Format using just (runs 'fama')
-just fmt
+# Format code
+just fmt               # runs 'fama'
 ```
 
 ## Architecture
 
 ### Frontend (`/src`)
 
-React 19 + TypeScript application bundled by Vite.
+React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ChakraProvider` → `ThemeProvider` → `BrowserRouter` → `App`.
+
+**Routing** (react-router v7): `/` → HomePage, `/projects/:id` → ProjectDetailPage, `/settings` → SettingsPage.
 
 **Key directories:**
-- `main.tsx` - Entry point, sets up providers (Chakra UI, theme, i18n)
-- `App.tsx` - Main layout with sidebar and routing
-- `components/` - Reusable UI components (terminal, project cards, etc.)
-- `pages/` - Route-level pages (Welcome, Project)
-- `stores/` - Zustand state management
-- `hooks/` - Custom React hooks
-- `paraglide/` - Generated i18n files (do not edit manually)
+- `api/` — Tauri IPC wrappers using `invoke<T>("command_name", { params })`
+- `stores/` — Zustand stores (terminalStore for per-project terminal tabs, fontStore with localStorage persistence)
+- `hooks/` — Custom hooks wrapping TanStack Query mutations and terminal lifecycle
+- `components/` — UI components (Terminal, TerminalTabs, TerminalLayer, AppSidebar, dialogs)
+- `pages/` — Route-level pages
+- `lib/` — Query client config (`staleTime: 30s`, `retry: 1`) and centralized query keys
+- `types.ts` — Shared TypeScript interfaces matching Rust models
 
 **State management:**
-- Zustand for global state (projects, active terminal sessions)
-- TanStack Query (React Query) for async data fetching
+- Zustand for client state (terminal tabs per project, font preferences)
+- TanStack Query for server state (projects, sessions)
+- Query keys centralized in `lib/queryKeys.ts` — always use `queryKeys.projects.all` pattern
 
 **UI Framework:**
-- Chakra UI v3 for component library
-- Tailwind CSS v4 for utility styling
-- `next-themes` for dark/light mode
+- Chakra UI v3 (not v2 — breaking API differences)
+- Tailwind CSS v4 (layer imports, not v3 directives)
+- `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
 
 ### Backend (`/src-tauri`)
 
-Rust application with Tauri 2.
+Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 
-**Entry:** `src/main.rs` → `src/lib.rs`
+**Modules:** `project/` (CRUD + slug generation), `pty/` (session lifecycle + output streaming), `db.rs` (SQLite setup), `font.rs` (macOS Core Text font listing), `error.rs` (AppError enum with thiserror).
 
-**Module structure:**
+**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `pty_sessions`, `pty_output_chunks`.
+
+**PTY output streaming:** Background thread reads 4KB chunks → emits Tauri events (`pty-output-{id}`, `pty-exit-{id}`). Separate persistence thread via mpsc channel with 32KB flush buffer. UTF-8 boundary detection prevents partial character output. 1MB cap per session with oldest-chunk pruning.
+
+### IPC Pattern (Frontend ↔ Backend)
+
+1. Define Rust command with `#[tauri::command]` in `*/commands.rs`
+2. Register in `lib.rs` via `tauri::generate_handler![]`
+3. Create TypeScript wrapper in `src/api/` using `invoke<T>("command_name", { params })`
+4. Consume via TanStack Query hook in `src/hooks/` with query invalidation on mutations
+
+Commands are organized by domain: PTY commands (create/write/resize/close/list/history/delete), project commands (create/list/get/update/delete), and `list_system_fonts`.
+
+## Key Patterns
+
+### Terminal Persistence
+
+Terminals never unmount — tab switches and route changes use CSS `display: none` to preserve xterm.js state. The `TerminalLayer` component renders as a persistent absolute-positioned overlay across all routes.
+
+**Session restoration on app start:**
+1. Fetch all sessions from DB (including closed ones with scrollback)
+2. Create new PTY session with same metadata
+3. Pass old `session.id` as `restoreFrom` prop
+4. Terminal component fetches history, writes to xterm, then deletes old record
+
+**Session cleanup:** `mark_all_open_sessions_closed()` runs both on startup (orphan cleanup) and on exit (graceful shutdown).
+
+### Zustand Store Convention
+
+```typescript
+// Direct access in mutations (outside React):
+useTerminalStore.getState().addTab(...)
+
+// Reactive subscriptions in components:
+const tabs = useTerminalStore(s => s.projects[id]?.tabs)
 ```
-src/
-├── lib.rs           # Main entry, Tauri builder, command registration
-├── main.rs          # Binary entry
-├── error.rs         # Custom error types (AppError)
-├── db.rs            # Database initialization, connection pool
-├── schema.rs        # Diesel table definitions
-├── font.rs          # System font listing
-├── project/         # Project management
-│   ├── mod.rs
-│   ├── models.rs    # Project, CreateProject, etc.
-│   └── commands.rs  # Tauri commands
-├── pty/             # PTY (terminal) management
-│   ├── mod.rs
-│   ├── models.rs    # Session, PtySize, etc.
-│   ├── session.rs   # Session map management
-│   └── commands.rs  # Tauri commands
-```
 
-**Database (SQLite):**
-- Diesel ORM for migrations and queries
-- Stored in app data dir: `app.path().app_data_dir()`
-- Tables: `projects`, `terminal_sessions`, `__diesel_schema_migrations`
-
-**PTY Sessions:**
-- `portable-pty` crate for cross-platform PTY
-- Sessions stored in managed state (Arc<Mutex<SessionMap>>)
-- Database persistence for session metadata and scrollback
-- Output streaming via async Rust
-
-### IPC (Frontend ↔ Backend)
-
-Commands are registered in `lib.rs` via `tauri::generate_handler![]`.
-
-**PTY Commands:**
-- `create_pty_session` - Create new terminal session
-- `write_to_pty` - Send input to terminal
-- `resize_pty` - Resize terminal
-- `close_pty_session` - Close session
-- `list_active_sessions` - List all sessions
-- `get_pty_session_history` - Get scrollback history
-- `delete_pty_session_record` - Delete from DB
-
-**Project Commands:**
-- `create_project_temporary` - Create empty project
-- `create_project_from_folder` - Import from folder
-- `list_projects` - List all projects
-- `get_project` - Get single project
-- `update_project` - Update metadata
-- `delete_project` - Remove project
-
-**Font Commands:**
-- `list_system_fonts` - List available system fonts
+Only `fontStore` uses persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
 
 ## Internationalization (i18n)
 
-Uses **Paraglide.js v2** with the inlang message format plugin.
+Paraglide.js v2 with inlang message format plugin. Source messages in `messages/{locale}.json`. Generated code in `src/paraglide/` (gitignored, do not edit).
 
-**Configuration:**
-- Settings: `project.inlang/settings.json`
-- Source messages: `messages/` directory
-- Generated code: `src/paraglide/` (gitignored)
+**Usage:** `import * as m from "@/paraglide/messages.js"` → `m.home()`
 
-**Important:** The `settings.json` **must** include a `modules` array with the message format plugin URL:
+**Critical:** `project.inlang/settings.json` **must** include the modules array:
 ```json
-"modules": [
-  "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"
-]
+"modules": ["https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"]
 ```
-
-Without this, paraglide compiles but generates empty message files.
-
-**Build notes:**
-- `allowJs: true` in `tsconfig.json` is required for TypeScript to read JSDoc types from generated `.js` files
-- Build script runs `paraglide-js compile` before `tsc` since Vite plugin only runs during vite build
-
-## Key Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `src-tauri/tauri.conf.json` | Tauri app config (window, bundle, dev server) |
-| `src-tauri/Cargo.toml` | Rust dependencies |
-| `package.json` | Frontend dependencies, scripts |
-| `vite.config.ts` | Vite/React config with path aliasing |
-| `tsconfig.json` | TypeScript config with path aliasing |
-| `project.inlang/settings.json` | Paraglide i18n configuration |
+Without this, paraglide compiles but generates empty message files. Also requires `allowJs: true` in tsconfig.json.
 
 ## Path Aliases
 
-The `@` alias is configured in both Vite and TypeScript:
-- **Vite:** `resolve.alias: { "@": path.resolve(__dirname, "./src") }`
-- **TypeScript:** `paths: { "@/*": ["./src/*"] }`
+`@/` maps to `src/` — configured in both `vite.config.ts` (resolve.alias) and `tsconfig.json` (paths). Keep them in sync.
 
-Use `@/` for imports from the `src` directory.
+## Gotchas
+
+- **Database is single-connection** (`Arc<Mutex<SqliteConnection>>`), not a pool — avoid long-held locks
+- **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
+- **PTY output has UTF-8 boundary detection** (`find_utf8_boundary`) — do not remove
+- **Font listing is macOS-only** (uses `core-text` crate) — needs platform guards for cross-platform
+- **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
+- **Tailwind v4** uses `@import` and `@custom-variant` syntax, not v3 `@tailwind` directives
+- **Directory name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
