@@ -32,3 +32,37 @@ pub fn play_system_sound(name: String) -> Result<(), String> {
 		.map_err(|e| format!("Failed to play sound: {e}"))?;
 	Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn play_nonexistent_sound_returns_error() {
+		let result = play_system_sound("definitely_not_a_real_sound".into());
+		assert!(result.is_err());
+		let err = result.unwrap_err();
+		assert!(err.contains("Sound not found"));
+	}
+
+	#[test]
+	fn list_system_sounds_is_sorted() {
+		let sounds = list_system_sounds();
+		if sounds.len() >= 2 {
+			for pair in sounds.windows(2) {
+				assert!(pair[0] <= pair[1], "not sorted: {} > {}", pair[0], pair[1]);
+			}
+		}
+	}
+
+	#[test]
+	fn list_system_sounds_no_aiff_extension() {
+		let sounds = list_system_sounds();
+		for name in &sounds {
+			assert!(
+				!name.ends_with(".aiff"),
+				"sound name should not have .aiff extension: {name}"
+			);
+		}
+	}
+}

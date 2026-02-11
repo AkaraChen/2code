@@ -140,3 +140,46 @@ pub fn close_all_sessions(sessions: &PtySessionMap) {
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn create_session_map_starts_empty() {
+		let map = create_session_map();
+		let inner = map.lock().unwrap();
+		assert!(inner.is_empty());
+	}
+
+	#[test]
+	fn write_to_nonexistent_session_returns_error() {
+		let sessions = create_session_map();
+		let result = write_to_pty(&sessions, "nonexistent", b"hello");
+		assert!(result.is_err());
+		let err = result.unwrap_err().to_string();
+		assert!(err.contains("Session not found"));
+	}
+
+	#[test]
+	fn resize_nonexistent_session_returns_error() {
+		let sessions = create_session_map();
+		let result = resize_pty(&sessions, "nonexistent", 24, 80);
+		assert!(result.is_err());
+		let err = result.unwrap_err().to_string();
+		assert!(err.contains("Session not found"));
+	}
+
+	#[test]
+	fn close_nonexistent_session_is_ok() {
+		let sessions = create_session_map();
+		let result = close_session(&sessions, "nonexistent");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn close_all_on_empty_map_no_panic() {
+		let sessions = create_session_map();
+		close_all_sessions(&sessions); // should not panic
+	}
+}

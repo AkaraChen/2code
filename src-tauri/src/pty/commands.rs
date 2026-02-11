@@ -331,3 +331,140 @@ pub fn mark_all_open_sessions_closed(db: &DbPool) {
 	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
 	.execute(&mut *conn);
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	// --- Empty / pure-ASCII ---
+
+	#[test]
+	fn boundary_empty() {
+		assert_eq!(find_utf8_boundary(&[]), 0);
+	}
+
+	#[test]
+	fn boundary_single_ascii() {
+		assert_eq!(find_utf8_boundary(b"A"), 1);
+	}
+
+	#[test]
+	fn boundary_all_ascii() {
+		assert_eq!(find_utf8_boundary(b"Hello, world!"), 13);
+	}
+
+	// --- Complete multi-byte sequences ---
+
+	#[test]
+	fn boundary_complete_2byte() {
+		// "é" = 0xC3 0xA9
+		let bytes = "é".as_bytes();
+		assert_eq!(find_utf8_boundary(bytes), bytes.len());
+	}
+
+	#[test]
+	fn boundary_complete_3byte() {
+		// "中" = 0xE4 0xB8 0xAD
+		let bytes = "中".as_bytes();
+		assert_eq!(find_utf8_boundary(bytes), bytes.len());
+	}
+
+	#[test]
+	fn boundary_complete_4byte() {
+		// "😀" = 0xF0 0x9F 0x98 0x80
+		let bytes = "😀".as_bytes();
+		assert_eq!(find_utf8_boundary(bytes), bytes.len());
+	}
+
+	// --- Incomplete sequences (leader only) ---
+
+	#[test]
+	fn boundary_incomplete_2byte_leader_only() {
+		// 0xC3 is a 2-byte leader, missing continuation
+		assert_eq!(find_utf8_boundary(&[0xC3]), 0);
+	}
+
+	#[test]
+	fn boundary_incomplete_3byte_leader_only() {
+		// 0xE4 is a 3-byte leader, missing 2 continuations
+		assert_eq!(find_utf8_boundary(&[0xE4]), 0);
+	}
+
+	#[test]
+	fn boundary_incomplete_4byte_leader_only() {
+		// 0xF0 is a 4-byte leader, missing 3 continuations
+		assert_eq!(find_utf8_boundary(&[0xF0]), 0);
+	}
+
+	// --- Incomplete sequences (leader + partial continuations) ---
+
+	#[test]
+	fn boundary_incomplete_3byte_one_continuation() {
+		// 0xE4 0xB8 — 3-byte leader + 1 continuation, missing 1 more
+		assert_eq!(find_utf8_boundary(&[0xE4, 0xB8]), 0);
+	}
+
+	#[test]
+	fn boundary_incomplete_4byte_one_continuation() {
+		// 0xF0 0x9F — 4-byte leader + 1 continuation, missing 2 more
+		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F]), 0);
+	}
+
+	#[test]
+	fn boundary_incomplete_4byte_two_continuations() {
+		// 0xF0 0x9F 0x98 — 4-byte leader + 2 continuations, missing 1 more
+		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F, 0x98]), 0);
+	}
+
+	// --- Mixed ASCII + incomplete trailing sequence ---
+
+	#[test]
+	fn boundary_ascii_then_incomplete_2byte() {
+		// "Hi" + incomplete 2-byte leader
+		let bytes = &[b'H', b'i', 0xC3];
+		assert_eq!(find_utf8_boundary(bytes), 2);
+	}
+
+	#[test]
+	fn boundary_ascii_then_incomplete_3byte() {
+		// "AB" + incomplete 3-byte (leader + 1 continuation)
+		let bytes = &[b'A', b'B', 0xE4, 0xB8];
+		assert_eq!(find_utf8_boundary(bytes), 2);
+	}
+
+	#[test]
+	fn boundary_ascii_then_incomplete_4byte() {
+		// "X" + incomplete 4-byte (leader + 2 continuations)
+		let bytes = &[b'X', 0xF0, 0x9F, 0x98];
+		assert_eq!(find_utf8_boundary(bytes), 1);
+	}
+
+	#[test]
+	fn boundary_multibyte_then_incomplete() {
+		// "中" (complete 3-byte) + incomplete 2-byte leader
+		let mut bytes = "中".as_bytes().to_vec();
+		bytes.push(0xC3);
+		assert_eq!(find_utf8_boundary(&bytes), 3);
+	}
+
+	// --- Edge cases ---
+
+	#[test]
+	fn boundary_only_continuation_bytes() {
+		// 3 continuation bytes with no leader — the scan finds no leading byte
+		// within the last 3 bytes, so returns len
+		assert_eq!(find_utf8_boundary(&[0x80, 0x80, 0x80]), 3);
+	}
+
+	#[test]
+	fn boundary_invalid_leading_byte_0xff() {
+		// 0xFF is invalid in UTF-8, treated as single-byte by the function
+		assert_eq!(find_utf8_boundary(&[0xFF]), 1);
+	}
+
+	#[test]
+	fn boundary_single_2byte_leader() {
+		// Single byte that's a 2-byte leader — sequence needs 2 bytes, only 1 present
+		assert_eq!(find_utf8_boundary(&[0xC0]), 0);
+	}
+}

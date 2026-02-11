@@ -170,8 +170,23 @@ pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::db::MIGRATIONS;
+	use crate::schema::pty_sessions;
+	use diesel::SqliteConnection;
+	use diesel_migrations::MigrationHarness;
 
 	const FAKE_UUID: &str = "a3f2b1c4-5678-9abc-def0-123456789abc";
+
+	fn setup_db() -> SqliteConnection {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		diesel::sql_query("PRAGMA foreign_keys=ON;")
+			.execute(&mut conn)
+			.ok();
+		conn.run_pending_migrations(MIGRATIONS)
+			.expect("run migrations");
+		conn
+	}
 
 	#[test]
 	fn dir_name_none() {
@@ -237,5 +252,178 @@ mod tests {
 	fn dir_name_mixed_chinese_english() {
 		let result = generate_dir_name(&Some("我的Project".into()), FAKE_UUID);
 		assert_eq!(result, "wo-de-project-a3f2");
+	}
+
+	// --- DB tests ---
+
+	#[test]
+	fn db_insert_and_fetch() {
+		let mut conn = setup_db();
+		let project = insert_and_fetch(&mut conn, "p1", "Test", "/tmp/test")
+			.expect("insert");
+		assert_eq!(project.id, "p1");
+		assert_eq!(project.name, "Test");
+		assert_eq!(project.folder, "/tmp/test");
+	}
+
+	#[test]
+	fn db_insert_duplicate_id() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "A", "/a").unwrap();
+		let err = insert_and_fetch(&mut conn, "p1", "B", "/b");
+		assert!(err.is_err());
+	}
+
+	#[test]
+	fn db_list_empty() {
+		let mut conn = setup_db();
+		let list: Vec<Project> = projects::table
+			.select(Project::as_select())
+			.load(&mut conn)
+			.unwrap();
+		assert!(list.is_empty());
+	}
+
+	#[test]
+	fn db_list_multiple() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "A", "/a").unwrap();
+		insert_and_fetch(&mut conn, "p2", "B", "/b").unwrap();
+		let list: Vec<Project> = projects::table
+			.select(Project::as_select())
+			.load(&mut conn)
+			.unwrap();
+		assert_eq!(list.len(), 2);
+	}
+
+	#[test]
+	fn db_get_found() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "Found", "/f").unwrap();
+		let result: Result<Project, _> = projects::table
+			.find("p1")
+			.select(Project::as_select())
+			.first(&mut conn);
+		assert!(result.is_ok());
+		assert_eq!(result.unwrap().name, "Found");
+	}
+
+	#[test]
+	fn db_get_not_found() {
+		let mut conn = setup_db();
+		let result: Result<Project, _> = projects::table
+			.find("nonexistent")
+			.select(Project::as_select())
+			.first(&mut conn);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn db_update_name() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "Old", "/f").unwrap();
+		let changeset = UpdateProject {
+			name: Some("New".into()),
+			folder: None,
+		};
+		diesel::update(projects::table.find("p1"))
+			.set(&changeset)
+			.execute(&mut conn)
+			.unwrap();
+		let project: Project = projects::table
+			.find("p1")
+			.select(Project::as_select())
+			.first(&mut conn)
+			.unwrap();
+		assert_eq!(project.name, "New");
+		assert_eq!(project.folder, "/f");
+	}
+
+	#[test]
+	fn db_update_folder() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "Name", "/old").unwrap();
+		let changeset = UpdateProject {
+			name: None,
+			folder: Some("/new".into()),
+		};
+		diesel::update(projects::table.find("p1"))
+			.set(&changeset)
+			.execute(&mut conn)
+			.unwrap();
+		let project: Project = projects::table
+			.find("p1")
+			.select(Project::as_select())
+			.first(&mut conn)
+			.unwrap();
+		assert_eq!(project.folder, "/new");
+	}
+
+	#[test]
+	fn db_update_nonexistent() {
+		let mut conn = setup_db();
+		let changeset = UpdateProject {
+			name: Some("X".into()),
+			folder: None,
+		};
+		let rows = diesel::update(projects::table.find("nope"))
+			.set(&changeset)
+			.execute(&mut conn)
+			.unwrap();
+		assert_eq!(rows, 0);
+	}
+
+	#[test]
+	fn db_delete_success() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "Del", "/d").unwrap();
+		let rows = diesel::delete(projects::table.find("p1"))
+			.execute(&mut conn)
+			.unwrap();
+		assert_eq!(rows, 1);
+		let list: Vec<Project> = projects::table
+			.select(Project::as_select())
+			.load(&mut conn)
+			.unwrap();
+		assert!(list.is_empty());
+	}
+
+	#[test]
+	fn db_delete_nonexistent() {
+		let mut conn = setup_db();
+		let rows = diesel::delete(projects::table.find("nope"))
+			.execute(&mut conn)
+			.unwrap();
+		assert_eq!(rows, 0);
+	}
+
+	#[test]
+	fn db_cascade_delete_removes_sessions() {
+		let mut conn = setup_db();
+		insert_and_fetch(&mut conn, "p1", "Cascade", "/c").unwrap();
+
+		// Insert a pty session referencing the project
+		use crate::pty::models::NewPtySessionRecord;
+		diesel::insert_into(pty_sessions::table)
+			.values(&NewPtySessionRecord {
+				id: "s1",
+				project_id: "p1",
+				title: "bash",
+				shell: "/bin/bash",
+				cwd: "/c",
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		// Delete the project — should cascade to pty_sessions
+		diesel::delete(projects::table.find("p1"))
+			.execute(&mut conn)
+			.unwrap();
+
+		let sessions: Vec<String> = pty_sessions::table
+			.select(pty_sessions::id)
+			.load(&mut conn)
+			.unwrap();
+		assert!(sessions.is_empty());
 	}
 }
