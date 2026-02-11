@@ -1,5 +1,5 @@
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, use, useMemo } from "react";
 
 type Preference = "system" | "light" | "dark";
 
@@ -43,5 +43,5 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useThemePreference() {
-	return useContext(ThemeContext);
+	return use(ThemeContext);
 }
