@@ -1,5 +1,5 @@
 import { CloseButton, Dialog, Portal, Spinner, Stack } from "@chakra-ui/react";
-import { parsePatchFiles } from "@pierre/diffs";
+import { FileDiffOptions, parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -48,13 +48,17 @@ export default function GitDiffDialog({
 		return parsePatchFiles(diff).flatMap((p) => p.files);
 	}, [diff]);
 
-	const options = useMemo(() => {
+	const options: FileDiffOptions<unknown> = useMemo(() => {
 		const termTheme = syncTerminalTheme
 			? darkTerminalTheme
 			: isDark
 				? darkTerminalTheme
 				: lightTerminalTheme;
-		return { theme: shikiThemeMap[termTheme] ?? "github-dark" };
+		return {
+			theme: shikiThemeMap[termTheme] ?? "github-dark",
+			diffStyle: "unified",
+			diffIndicators: "classic",
+		};
 	}, [isDark, darkTerminalTheme, lightTerminalTheme, syncTerminalTheme]);
 
 	return (
