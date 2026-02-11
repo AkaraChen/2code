@@ -26,5 +26,7 @@
 	"newTerminal": "New Terminal",
 	"renameProject": "Rename",
 	"rename": "Rename",
-	"newName": "New Name"
+	"newName": "New Name",
+	"somethingWentWrong": "Something went wrong",
+	"tryAgain": "Try again"
 }

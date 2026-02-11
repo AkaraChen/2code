@@ -11,29 +11,35 @@ export function useRestoreTerminals(projects: Project[] | undefined) {
 		didRestore.current = true;
 
 		const restore = async () => {
-			for (const project of projects) {
-				const sessions = await ptyApi.listActiveSessions(project.id);
-				if (sessions.length === 0) continue;
+			const projectSessions = await Promise.all(
+				projects.map(async (project) => ({
+					project,
+					sessions: await ptyApi.listActiveSessions(project.id),
+				})),
+			);
 
-				for (const session of sessions) {
-					const newSessionId = await ptyApi.createSession(
-						project.id,
-						session.title,
-						session.shell,
-						session.cwd,
-						24,
-						80,
-					);
-					useTerminalStore
-						.getState()
-						.addTab(
+			await Promise.all(
+				projectSessions.flatMap(({ project, sessions }) =>
+					sessions.map(async (session) => {
+						const newSessionId = await ptyApi.createSession(
 							project.id,
-							newSessionId,
 							session.title,
-							session.id,
+							session.shell,
+							session.cwd,
+							24,
+							80,
 						);
-				}
-			}
+						useTerminalStore
+							.getState()
+							.addTab(
+								project.id,
+								newSessionId,
+								session.title,
+								session.id,
+							);
+					}),
+				),
+			);
 		};
 
 		restore();

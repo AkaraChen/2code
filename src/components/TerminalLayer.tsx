@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
@@ -17,13 +18,18 @@ export default function TerminalLayer() {
 	useRestoreTerminals(projects);
 	const terminalProjectIds = useTerminalProjectIds();
 
+	const projectMap = useMemo(
+		() => new Map(projects?.map((p) => [p.id, p]) ?? []),
+		[projects],
+	);
+
 	const match = matchPath("/projects/:id", location.pathname);
 	const activeProjectId = match?.params.id ?? null;
 
 	return (
 		<>
 			{terminalProjectIds.map((id) => {
-				const project = projects?.find((p) => p.id === id);
+				const project = projectMap.get(id);
 				if (!project) return null;
 				return (
 					<div

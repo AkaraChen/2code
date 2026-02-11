@@ -1,4 +1,5 @@
 import { Box, Button, Center, Skeleton, Stack, VStack } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 
 export function SidebarSkeleton() {
 	return (
@@ -44,13 +45,13 @@ export function PageError({
 		<Center h="full">
 			<VStack gap="4">
 				<Box color="fg.error" fontWeight="semibold">
-					Something went wrong
+					{m.somethingWentWrong()}
 				</Box>
 				<Box fontSize="sm" color="fg.muted">
 					{error.message}
 				</Box>
 				<Button size="sm" onClick={onRetry}>
-					Try again
+					{m.tryAgain()}
 				</Button>
 			</VStack>
 		</Center>

@@ -74,12 +74,17 @@ export function Terminal({
 	const { isDark } = useThemePreference();
 	const theme = isDark ? darkTheme : lightTheme;
 
-	if (termRef.current) {
-		termRef.current.options.theme = theme;
-	}
+	// Update theme without re-mounting the terminal
+	useEffect(() => {
+		if (termRef.current) {
+			termRef.current.options.theme = theme;
+		}
+	}, [theme]);
 
 	useEffect(() => {
 		if (!containerRef.current) return;
+
+		let disposed = false;
 
 		const term = new XTerm({
 			fontFamily:
@@ -106,6 +111,7 @@ export function Terminal({
 			if (restoreFrom) {
 				try {
 					const history = await ptyApi.getHistory(restoreFrom);
+					if (disposed) return;
 					if (history.length > 0) {
 						const text = new TextDecoder().decode(
 							new Uint8Array(history),
@@ -115,6 +121,7 @@ export function Terminal({
 				} catch {
 					// Old session may already be deleted — ignore
 				}
+				if (disposed) return;
 				// Clean up old session record and store flag
 				ptyApi.deleteRecord(restoreFrom).catch(() => {});
 				useTerminalStore.getState().clearRestore(projectId, sessionId);
@@ -136,6 +143,12 @@ export function Terminal({
 					);
 				},
 			);
+
+			if (disposed) {
+				unlistenOutput();
+				unlistenExit();
+				return;
+			}
 
 			unlistenersRef.current.push(unlistenOutput, unlistenExit);
 		};
@@ -159,6 +172,7 @@ export function Terminal({
 		resizeObserver.observe(containerRef.current);
 
 		return () => {
+			disposed = true;
 			resizeObserver.disconnect();
 			onDataDisposable.dispose();
 			onResizeDisposable.dispose();

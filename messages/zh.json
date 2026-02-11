@@ -26,5 +26,7 @@
 	"newTerminal": "新建终端",
 	"renameProject": "重命名",
 	"rename": "重命名",
-	"newName": "新名称"
+	"newName": "新名称",
+	"somethingWentWrong": "出了点问题",
+	"tryAgain": "重试"
 }

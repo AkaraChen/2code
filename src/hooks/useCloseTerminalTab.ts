@@ -10,8 +10,10 @@ export function useCloseTerminalTab() {
 			projectId: string;
 			sessionId: string;
 		}) => {
-			await ptyApi.close(sessionId).catch(() => {});
-			await ptyApi.deleteRecord(sessionId).catch(() => {});
+			await Promise.all([
+				ptyApi.close(sessionId).catch(() => {}),
+				ptyApi.deleteRecord(sessionId).catch(() => {}),
+			]);
 		},
 		onSettled: (_data, _err, { projectId, sessionId }) => {
 			useTerminalStore.getState().closeTab(projectId, sessionId);
