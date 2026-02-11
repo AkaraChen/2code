@@ -1,0 +1,7 @@
+CREATE TABLE profiles (
+	id TEXT PRIMARY KEY NOT NULL,
+	project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+	branch_name TEXT NOT NULL,
+	worktree_path TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

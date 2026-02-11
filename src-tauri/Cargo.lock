@@ -454,6 +454,8 @@ dependencies = [
  "core-text",
  "diesel",
  "diesel_migrations",
+ "dirs",
+ "log",
  "pinyin",
  "portable-pty",
  "serde",
@@ -463,6 +465,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "tempfile",
  "thiserror 2.0.18",
  "uuid",
 ]

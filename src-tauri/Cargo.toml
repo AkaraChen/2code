@@ -31,3 +31,8 @@ tauri-plugin-dialog = "2"
 pinyin = "0.11"
 slug = "0.1"
 core-text = "20"
+dirs = "6"
+log = "0.4"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,6 +1,8 @@
+mod config;
 mod db;
 mod error;
 mod font;
+mod profile;
 mod project;
 mod pty;
 mod schema;
@@ -44,6 +46,11 @@ pub fn run() {
 			project::commands::update_project,
 			project::commands::delete_project,
 			font::list_system_fonts,
+			profile::commands::create_profile,
+			profile::commands::list_profiles,
+			profile::commands::get_profile,
+			profile::commands::update_profile,
+			profile::commands::delete_profile,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
