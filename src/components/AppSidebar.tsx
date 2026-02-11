@@ -10,7 +10,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { LuHouse, LuPlus, LuSettings } from "react-icons/lu";
+import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
 import { NavLink, useMatch } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import DeleteProjectDialog from "@/components/DeleteProjectDialog";
@@ -135,7 +135,7 @@ export default function AppSidebar() {
 				borderColor="border.subtle"
 			>
 				<Flex direction="column" h="full" py="2">
-					<SidebarLink to="/" icon={<LuHouse />}>
+					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
 
@@ -155,7 +155,7 @@ export default function AppSidebar() {
 							size="2xs"
 							onClick={() => setDialogOpen(true)}
 						>
-							<LuPlus />
+							<RiAddLine />
 						</IconButton>
 					</HStack>
 
@@ -166,7 +166,7 @@ export default function AppSidebar() {
 					<div className="grow" />
 
 					<Separator />
-					<SidebarLink to="/settings" icon={<LuSettings />}>
+					<SidebarLink to="/settings" icon={<RiSettings3Line />}>
 						{m.settings()}
 					</SidebarLink>
 				</Flex>

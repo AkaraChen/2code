@@ -1,5 +1,5 @@
 import { Button, Center, EmptyState, VStack } from "@chakra-ui/react";
-import { LuPlus, LuTerminal } from "react-icons/lu";
+import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import { useProject } from "@/hooks/useProjects";
@@ -26,7 +26,7 @@ export default function ProjectDetailPage() {
 			<EmptyState.Root>
 				<EmptyState.Content>
 					<EmptyState.Indicator>
-						<LuTerminal />
+						<RiTerminalBoxLine />
 					</EmptyState.Indicator>
 					<VStack textAlign="center">
 						<EmptyState.Title>
@@ -45,7 +45,7 @@ export default function ProjectDetailPage() {
 							})
 						}
 					>
-						<LuPlus />
+						<RiAddLine />
 						{m.newTerminal()}
 					</Button>
 				</EmptyState.Content>

@@ -15,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
-import { LuFolderOpen, LuPencil } from "react-icons/lu";
+import { RiFolderOpenLine, RiPencilLine } from "react-icons/ri";
 import { useNavigate } from "react-router";
 import { useCreateProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
@@ -106,7 +106,7 @@ export default function CreateProjectDialog({
 												fontSize="2xl"
 												color="fg.muted"
 											>
-												<LuFolderOpen />
+												<RiFolderOpenLine />
 											</Icon>
 											<Text
 												fontSize="sm"
@@ -134,7 +134,7 @@ export default function CreateProjectDialog({
 												size="xs"
 												onClick={handleChooseFolder}
 											>
-												<LuPencil />
+												<RiPencilLine />
 												{m.chooseFolder()}
 											</Button>
 										</HStack>

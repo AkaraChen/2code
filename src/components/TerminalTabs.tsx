@@ -1,5 +1,5 @@
 import { Button, CloseButton, Tabs } from "@chakra-ui/react";
-import { LuPlus, LuTerminal } from "react-icons/lu";
+import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { useShallow } from "zustand/react/shallow";
 import { useCloseTerminalTab } from "@/hooks/useCloseTerminalTab";
 import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
@@ -35,7 +35,7 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 				<Tabs.List>
 					{tabs.map((tab) => (
 						<Tabs.Trigger key={tab.id} value={tab.id}>
-							<LuTerminal />
+							<RiTerminalBoxLine />
 							<span className="flex items-center gap-2">
 								{tab.title}
 								<CloseButton
@@ -61,7 +61,7 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 						disabled={createTab.isPending}
 						onClick={() => createTab.mutate({ projectId, cwd })}
 					>
-						<LuPlus /> {m.newTerminal()}
+						<RiAddLine /> {m.newTerminal()}
 					</Button>
 				</Tabs.List>
 			</Tabs.Root>
