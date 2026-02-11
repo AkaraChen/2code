@@ -14,6 +14,11 @@ The `create_project_temporary` command SHALL generate a UUID, create a directory
 - **WHEN** `git init` fails in the created directory (e.g., git not installed)
 - **THEN** the command returns an error string and no project record is persisted
 
+#### Scenario: Frontend passes a name
+
+- **WHEN** `create_project_temporary` is invoked from the frontend with `{ name: "My Project" }`
+- **THEN** the created project record uses `"My Project"` as the name instead of `"Untitled"`
+
 ### Requirement: Create project from existing folder
 
 The `create_project_from_folder` command SHALL accept a `name` and `folder` path, validate the folder exists on disk, and create a project record.
@@ -88,6 +93,25 @@ The `delete_project` command SHALL remove the project record from the database. 
 
 - **WHEN** `delete_project` is invoked with an `id` that does not exist
 - **THEN** the command returns an error string indicating the project was not found
+
+### Requirement: Frontend createProject routes to correct backend command
+
+The `createProject` function in `ProjectContext` SHALL accept optional `name` and `folder` parameters and route to the correct backend command.
+
+#### Scenario: Called with folder
+
+- **WHEN** `createProject({ name: "foo", folder: "/path/to/dir" })` is called
+- **THEN** the function invokes `create_project_from_folder` with `name: "foo"` and `folder: "/path/to/dir"`
+
+#### Scenario: Called with name only
+
+- **WHEN** `createProject({ name: "foo" })` is called (no folder)
+- **THEN** the function invokes `create_project_temporary` with `name: "foo"`
+
+#### Scenario: Called with no arguments
+
+- **WHEN** `createProject()` is called with no arguments
+- **THEN** the function invokes `create_project_temporary` with no name, preserving the existing "Untitled" + `/tmp` behavior
 
 ### Requirement: All commands registered in invoke handler
 
