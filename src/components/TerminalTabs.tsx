@@ -27,7 +27,7 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 	return (
 		<div className="flex flex-col h-full w-full">
 			<Tabs.Root
-				variant="outline"
+				// variant="outline"
 				size="sm"
 				value={activeTabId}
 				onValueChange={(e) => setActiveTab(projectId, e.value)}
