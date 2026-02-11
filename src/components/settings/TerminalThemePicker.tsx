@@ -98,15 +98,6 @@ export function TerminalThemePicker({
 
 	return (
 		<>
-			<Checkbox.Root
-				size="sm"
-				checked={syncTerminalTheme}
-				onCheckedChange={(e) => setSyncTerminalTheme(!!e.checked)}
-			>
-				<Checkbox.HiddenInput />
-				<Checkbox.Control />
-				<Checkbox.Label>{m.syncTerminalTheme()}</Checkbox.Label>
-			</Checkbox.Root>
 			{syncTerminalTheme ? (
 				<ThemeSelect
 					value={darkTerminalTheme}
@@ -130,6 +121,21 @@ export function TerminalThemePicker({
 					/>
 				</>
 			)}
+			<Field.Root>
+				<Checkbox.Root
+					size="sm"
+					checked={syncTerminalTheme}
+					onCheckedChange={(e) =>
+						setSyncTerminalTheme(!!e.checked)
+					}
+				>
+					<Checkbox.HiddenInput />
+					<Checkbox.Control />
+					<Checkbox.Label>
+						{m.syncTerminalTheme()}
+					</Checkbox.Label>
+				</Checkbox.Root>
+			</Field.Root>
 		</>
 	);
 }

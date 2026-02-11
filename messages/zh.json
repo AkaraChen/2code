@@ -51,5 +51,14 @@
 	"notificationEnabled": "启用通知",
 	"notificationEnabledDescription": "允许此应用发送系统通知。",
 	"notificationSound": "提示音",
-	"notificationSoundNone": "无"
+	"notificationSoundNone": "无",
+	"general": "通用",
+	"terminal": "终端",
+	"accentColor": "主题色",
+	"borderRadius": "圆角",
+	"radiusNone": "无",
+	"radiusSmall": "小",
+	"radiusMedium": "中",
+	"radiusLarge": "大",
+	"radiusXLarge": "超大"
 }

@@ -51,5 +51,14 @@
 	"notificationEnabled": "Enable Notifications",
 	"notificationEnabledDescription": "Allow this app to send system notifications.",
 	"notificationSound": "Sound",
-	"notificationSoundNone": "None"
+	"notificationSoundNone": "None",
+	"general": "General",
+	"terminal": "Terminal",
+	"accentColor": "Accent Color",
+	"borderRadius": "Border Radius",
+	"radiusNone": "None",
+	"radiusSmall": "Small",
+	"radiusMedium": "Medium",
+	"radiusLarge": "Large",
+	"radiusXLarge": "Extra Large"
 }

@@ -1,5 +1,7 @@
+import { Box } from "@chakra-ui/react";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
-import { createContext, use, useMemo } from "react";
+import { createContext, use, useEffect, useMemo } from "react";
+import { BORDER_RADIUS_MAP, useThemeStore } from "@/stores/themeStore";
 
 type Preference = "system" | "light" | "dark";
 
@@ -17,6 +19,16 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
+	const accentColor = useThemeStore((s) => s.accentColor);
+	const borderRadius = useThemeStore((s) => s.borderRadius);
+
+	useEffect(() => {
+		const radii = BORDER_RADIUS_MAP[borderRadius];
+		const root = document.documentElement;
+		root.style.setProperty("--chakra-radii-l1", radii.l1);
+		root.style.setProperty("--chakra-radii-l2", radii.l2);
+		root.style.setProperty("--chakra-radii-l3", radii.l3);
+	}, [borderRadius]);
 
 	const value = useMemo<ThemeContextValue>(
 		() => ({
@@ -27,7 +39,13 @@ function ThemeBridge({ children }: { children: React.ReactNode }) {
 		[theme, setTheme, resolvedTheme],
 	);
 
-	return <ThemeContext value={value}>{children}</ThemeContext>;
+	return (
+		<ThemeContext value={value}>
+			<Box colorPalette={accentColor} css={{ display: "contents" }}>
+				{children}
+			</Box>
+		</ThemeContext>
+	);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

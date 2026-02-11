@@ -11,6 +11,8 @@ import {
 	Tabs,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
+import { AccentColorPicker } from "@/components/settings/AccentColorPicker";
+import { BorderRadiusPicker } from "@/components/settings/BorderRadiusPicker";
 import { FontPicker } from "@/components/settings/FontPicker";
 import { FontSizePicker } from "@/components/settings/FontSizePicker";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
@@ -21,18 +23,11 @@ import type { TerminalThemeId } from "@/lib/terminalThemes";
 import * as m from "@/paraglide/messages.js";
 import { getLocale, type Locale, setLocale } from "@/paraglide/runtime.js";
 
-const localeNames: Record<Locale, string> = {
-	en: "English",
-	zh: "中文",
-};
-
-const LOCALES = ["en", "zh"] as const;
-
 const localeCollection = createListCollection({
-	items: LOCALES.map((locale) => ({
-		value: locale,
-		label: localeNames[locale],
-	})),
+	items: [
+		{ value: "en", label: "English" },
+		{ value: "zh", label: "中文" },
+	],
 });
 
 export default function SettingsPage() {
@@ -54,10 +49,13 @@ export default function SettingsPage() {
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
 				</Heading>
-				<Tabs.Root defaultValue="appearance" variant="plain">
+				<Tabs.Root defaultValue="general" variant="plain">
 					<Tabs.List bg="bg.muted" rounded="l3" p="1">
-						<Tabs.Trigger value="appearance">
-							{m.appearance()}
+						<Tabs.Trigger value="general">
+							{m.general()}
+						</Tabs.Trigger>
+						<Tabs.Trigger value="terminal">
+							{m.terminal()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
 							{m.notification()}
@@ -67,94 +65,102 @@ export default function SettingsPage() {
 						</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
-					<Tabs.Content value="appearance">
+					<Tabs.Content value="general">
+						<Stack gap="6" maxW="md">
+							<Field.Root>
+								<Field.Label>{m.language()}</Field.Label>
+								<Select.Root
+									collection={localeCollection}
+									defaultValue={[getLocale()]}
+									onValueChange={(e) =>
+										setLocale(e.value[0] as Locale)
+									}
+									size="sm"
+								>
+									<Select.HiddenSelect />
+									<Select.Control>
+										<Select.Trigger>
+											<Select.ValueText />
+										</Select.Trigger>
+										<Select.IndicatorGroup>
+											<Select.Indicator />
+										</Select.IndicatorGroup>
+									</Select.Control>
+									<Portal>
+										<Select.Positioner>
+											<Select.Content>
+												{localeCollection.items.map(
+													(item) => (
+														<Select.Item
+															item={item}
+															key={item.value}
+														>
+															{item.label}
+															<Select.ItemIndicator />
+														</Select.Item>
+													),
+												)}
+											</Select.Content>
+										</Select.Positioner>
+									</Portal>
+								</Select.Root>
+							</Field.Root>
+							<Field.Root>
+								<Field.Label>{m.theme()}</Field.Label>
+								<Select.Root
+									collection={themeCollection}
+									value={[preference]}
+									onValueChange={(e) =>
+										setPreference(
+											e.value[0] as
+												| "system"
+												| "light"
+												| "dark",
+										)
+									}
+									size="sm"
+								>
+									<Select.HiddenSelect />
+									<Select.Control>
+										<Select.Trigger>
+											<Select.ValueText />
+										</Select.Trigger>
+										<Select.IndicatorGroup>
+											<Select.Indicator />
+										</Select.IndicatorGroup>
+									</Select.Control>
+									<Portal>
+										<Select.Positioner>
+											<Select.Content>
+												{themeCollection.items.map(
+													(item) => (
+														<Select.Item
+															item={item}
+															key={item.value}
+														>
+															{item.label}
+															<Select.ItemIndicator />
+														</Select.Item>
+													),
+												)}
+											</Select.Content>
+										</Select.Positioner>
+									</Portal>
+								</Select.Root>
+							</Field.Root>
+							<AccentColorPicker />
+							<BorderRadiusPicker />
+						</Stack>
+					</Tabs.Content>
+					<Tabs.Content value="terminal">
 						<Flex gap="8" align="flex-start">
 							<Stack gap="6" flex="1" minW="0" maxW="md">
-								<Field.Root>
-									<Field.Label>{m.language()}</Field.Label>
-									<Select.Root
-										collection={localeCollection}
-										defaultValue={[getLocale()]}
-										onValueChange={(e) =>
-											setLocale(e.value[0] as Locale)
-										}
-										size="sm"
-									>
-										<Select.HiddenSelect />
-										<Select.Control>
-											<Select.Trigger>
-												<Select.ValueText />
-											</Select.Trigger>
-											<Select.IndicatorGroup>
-												<Select.Indicator />
-											</Select.IndicatorGroup>
-										</Select.Control>
-										<Portal>
-											<Select.Positioner>
-												<Select.Content>
-													{localeCollection.items.map(
-														(item) => (
-															<Select.Item
-																item={item}
-																key={item.value}
-															>
-																{item.label}
-																<Select.ItemIndicator />
-															</Select.Item>
-														),
-													)}
-												</Select.Content>
-											</Select.Positioner>
-										</Portal>
-									</Select.Root>
-								</Field.Root>
-								<Field.Root>
-									<Field.Label>{m.theme()}</Field.Label>
-									<Select.Root
-										collection={themeCollection}
-										value={[preference]}
-										onValueChange={(e) =>
-											setPreference(
-												e.value[0] as
-													| "system"
-													| "light"
-													| "dark",
-											)
-										}
-										size="sm"
-									>
-										<Select.HiddenSelect />
-										<Select.Control>
-											<Select.Trigger>
-												<Select.ValueText />
-											</Select.Trigger>
-											<Select.IndicatorGroup>
-												<Select.Indicator />
-											</Select.IndicatorGroup>
-										</Select.Control>
-										<Portal>
-											<Select.Positioner>
-												<Select.Content>
-													{themeCollection.items.map(
-														(item) => (
-															<Select.Item
-																item={item}
-																key={item.value}
-															>
-																{item.label}
-																<Select.ItemIndicator />
-															</Select.Item>
-														),
-													)}
-												</Select.Content>
-											</Select.Positioner>
-										</Portal>
-									</Select.Root>
-								</Field.Root>
 								<TerminalThemePicker
 									onPreview={setPreviewThemeId}
 								/>
-								<Suspense fallback={<Skeleton height="70px" />}>
+								<Suspense
+									fallback={<Skeleton height="70px" />}
+								>
 									<FontPicker />
 								</Suspense>
 								<FontSizePicker />
