@@ -64,13 +64,15 @@ export interface TerminalHandle {
 }
 
 interface TerminalProps {
+	projectId: string;
+	title: string;
 	shell: string;
 	cwd: string;
 	className?: string;
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-	({ shell, cwd, className }, ref) => {
+	({ projectId, title, shell, cwd, className }, ref) => {
 		const containerRef = useRef<HTMLDivElement>(null);
 		const termRef = useRef<XTerm | null>(null);
 		const fitAddonRef = useRef<FitAddon | null>(null);
@@ -116,7 +118,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 			const cols = term.cols;
 
 			ptyApi
-				.createSession(shell, cwd, rows, cols)
+				.createSession(projectId, title, shell, cwd, rows, cols)
 				.then(async (sessionId) => {
 					sessionIdRef.current = sessionId;
 

@@ -1,4 +1,4 @@
-use super::schema::projects;
+use crate::schema::projects;
 use diesel::prelude::*;
 use serde::Serialize;
 

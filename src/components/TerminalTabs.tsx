@@ -71,6 +71,8 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 						}}
 					>
 						<Terminal
+							projectId={projectId}
+							title={tab.title}
 							shell={DEFAULT_SHELL}
 							cwd={cwd}
 							className="h-full"

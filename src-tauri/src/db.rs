@@ -19,6 +19,13 @@ pub fn init_db(app_data_dir: &std::path::Path) -> Result<DbPool, String> {
 	let mut conn = SqliteConnection::establish(&db_url)
 		.map_err(|e| format!("Failed to connect to database: {e}"))?;
 
+	diesel::sql_query("PRAGMA journal_mode=WAL;")
+		.execute(&mut conn)
+		.ok();
+	diesel::sql_query("PRAGMA foreign_keys=ON;")
+		.execute(&mut conn)
+		.ok();
+
 	conn.run_pending_migrations(MIGRATIONS)
 		.map_err(|e| format!("Failed to run migrations: {e}"))?;
 

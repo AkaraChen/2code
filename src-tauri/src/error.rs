@@ -11,6 +11,9 @@ pub enum AppError {
 
 	#[error("PTY error: {0}")]
 	PtyError(String),
+
+	#[error("Database error: {0}")]
+	DbError(String),
 }
 
 impl Serialize for AppError {

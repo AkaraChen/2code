@@ -1,8 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export const ptyApi = {
-	createSession: (shell: string, cwd: string, rows: number, cols: number) =>
-		invoke<string>("create_pty_session", { shell, cwd, rows, cols }),
+	createSession: (
+		projectId: string,
+		title: string,
+		shell: string,
+		cwd: string,
+		rows: number,
+		cols: number,
+	) =>
+		invoke<string>("create_pty_session", {
+			projectId,
+			title,
+			shell,
+			cwd,
+			rows,
+			cols,
+		}),
 
 	write: (sessionId: string, data: string) =>
 		invoke<void>("write_to_pty", { sessionId, data }),

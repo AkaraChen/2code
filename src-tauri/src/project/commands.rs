@@ -7,7 +7,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use super::models::{NewProject, Project};
-use super::schema::projects;
+use crate::schema::projects;
 use crate::db::DbPool;
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
