@@ -240,11 +240,7 @@ export default function GitDiffDialog({
 							display="flex"
 						>
 							{isLoading ? (
-								<Flex
-									align="center"
-									justify="center"
-									flex="1"
-								>
+								<Flex align="center" justify="center" flex="1">
 									<Spinner />
 								</Flex>
 							) : (
@@ -326,10 +322,7 @@ export default function GitDiffDialog({
 													</>
 												)}
 											</Tabs.Content>
-											<Tabs.Content
-												value="history"
-												p="0"
-											>
+											<Tabs.Content value="history" p="0">
 												<EmptyState message="No history available" />
 											</Tabs.Content>
 										</Tabs.Root>
