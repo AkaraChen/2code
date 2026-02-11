@@ -3,6 +3,7 @@ import { matchPath, useLocation } from "react-router";
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
 import { useTerminalProjectIds, useTerminalSync } from "@/stores/terminalStore";
+import { useRestoreTerminals } from "@/hooks/useRestoreTerminals";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -13,6 +14,7 @@ export default function TerminalLayer() {
 	});
 
 	useTerminalSync(projects ?? []);
+	useRestoreTerminals(projects);
 	const terminalProjectIds = useTerminalProjectIds();
 
 	const match = matchPath("/projects/:id", location.pathname);

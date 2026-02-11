@@ -31,6 +31,9 @@ export const ptyApi = {
 	listSessions: (projectId: string) =>
 		invoke<PtySessionRecord[]>("list_pty_sessions", { projectId }),
 
+	listActiveSessions: (projectId: string) =>
+		invoke<PtySessionRecord[]>("list_active_sessions", { projectId }),
+
 	getHistory: (sessionId: string) =>
 		invoke<number[]>("get_pty_session_history", { sessionId }),
 

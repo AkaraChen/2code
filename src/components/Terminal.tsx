@@ -11,6 +11,7 @@ import {
 } from "react";
 import { ptyApi } from "@/api/pty";
 import { useThemePreference } from "@/components/ThemeProvider";
+import { useTerminalStore } from "@/stores/terminalStore";
 import "@xterm/xterm/css/xterm.css";
 
 const darkTheme: ITheme = {
@@ -64,12 +65,14 @@ export interface TerminalHandle {
 }
 
 interface TerminalProps {
+	projectId: string;
 	sessionId: string;
+	restoreFrom?: string;
 	className?: string;
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-	({ sessionId, className }, ref) => {
+	({ projectId, sessionId, restoreFrom, className }, ref) => {
 		const containerRef = useRef<HTMLDivElement>(null);
 		const termRef = useRef<XTerm | null>(null);
 		const fitAddonRef = useRef<FitAddon | null>(null);
@@ -113,8 +116,26 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 			// Resize PTY to match xterm dimensions
 			ptyApi.resize(sessionId, term.rows, term.cols);
 
-			// Listen for PTY output
-			const setupListeners = async () => {
+			// Restore history from previous session before connecting live stream
+			const setup = async () => {
+				if (restoreFrom) {
+					try {
+						const history = await ptyApi.getHistory(restoreFrom);
+						if (history.length > 0) {
+							const text = new TextDecoder().decode(
+								new Uint8Array(history),
+							);
+							term.write(text);
+						}
+					} catch {
+						// Old session may already be deleted — ignore
+					}
+					// Clean up old session record and store flag
+					ptyApi.deleteRecord(restoreFrom).catch(() => {});
+					useTerminalStore.getState().clearRestore(projectId, sessionId);
+				}
+
+				// Listen for PTY output
 				const unlistenOutput = await listen<string>(
 					`pty-output-${sessionId}`,
 					(event) => {
@@ -134,7 +155,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 				unlistenersRef.current.push(unlistenOutput, unlistenExit);
 			};
 
-			setupListeners();
+			setup();
 
 			// Forward user input to PTY
 			const onDataDisposable = term.onData((data) => {
@@ -166,7 +187,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 				termRef.current = null;
 				fitAddonRef.current = null;
 			};
-		}, [sessionId]);
+		}, [projectId, sessionId, restoreFrom]);
 
 		return (
 			<div

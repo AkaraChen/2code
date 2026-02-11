@@ -5,6 +5,7 @@ import { useEffect, useMemo } from "react";
 interface TerminalTab {
 	id: string;
 	title: string;
+	restoreFrom?: string;
 }
 
 interface ProjectTerminalState {
@@ -15,9 +16,10 @@ interface ProjectTerminalState {
 
 interface TerminalStore {
 	projects: Record<string, ProjectTerminalState>;
-	addTab(projectId: string, sessionId: string, title: string): void;
+	addTab(projectId: string, sessionId: string, title: string, restoreFrom?: string): void;
 	closeTab(projectId: string, tabId: string): void;
 	setActiveTab(projectId: string, tabId: string): void;
+	clearRestore(projectId: string, tabId: string): void;
 	removeProject(projectId: string): void;
 	removeStaleProjects(validIds: Set<string>): void;
 }
@@ -25,14 +27,14 @@ interface TerminalStore {
 export const useTerminalStore = create<TerminalStore>((set) => ({
 	projects: {},
 
-	addTab(projectId, sessionId, title) {
+	addTab(projectId, sessionId, title, restoreFrom?) {
 		set((state) => {
 			const existing = state.projects[projectId] ?? {
 				tabs: [],
 				activeTabId: null,
 				counter: 0,
 			};
-			const tab: TerminalTab = { id: sessionId, title };
+			const tab: TerminalTab = { id: sessionId, title, restoreFrom };
 			return {
 				projects: {
 					...state.projects,
@@ -86,6 +88,22 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
 				projects: {
 					...state.projects,
 					[projectId]: { ...project, activeTabId: tabId },
+				},
+			};
+		});
+	},
+
+	clearRestore(projectId, tabId) {
+		set((state) => {
+			const project = state.projects[projectId];
+			if (!project) return state;
+			const tabs = project.tabs.map((t) =>
+				t.id === tabId ? { id: t.id, title: t.title } : t,
+			);
+			return {
+				projects: {
+					...state.projects,
+					[projectId]: { ...project, tabs },
 				},
 			};
 		});

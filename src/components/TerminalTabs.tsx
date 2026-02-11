@@ -75,7 +75,9 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 						}}
 					>
 						<Terminal
+							projectId={projectId}
 							sessionId={tab.id}
+							restoreFrom={tab.restoreFrom}
 							className="h-full"
 						/>
 					</div>

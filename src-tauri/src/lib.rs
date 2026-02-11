@@ -41,6 +41,7 @@ pub fn run() {
 			pty::commands::resize_pty,
 			pty::commands::close_pty_session,
 			pty::commands::list_pty_sessions,
+			pty::commands::list_active_sessions,
 			pty::commands::get_pty_session_history,
 			pty::commands::delete_pty_session_record,
 			project::commands::create_project_temporary,

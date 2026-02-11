@@ -222,6 +222,20 @@ pub fn list_pty_sessions(
 }
 
 #[tauri::command]
+pub fn list_active_sessions(
+	project_id: String,
+	state: State<'_, DbPool>,
+) -> AppResult<Vec<PtySessionRecord>> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	pty_sessions::table
+		.filter(pty_sessions::project_id.eq(&project_id))
+		.select(PtySessionRecord::as_select())
+		.order(pty_sessions::created_at.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+#[tauri::command]
 pub fn get_pty_session_history(
 	session_id: String,
 	state: State<'_, DbPool>,
