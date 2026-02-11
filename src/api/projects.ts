@@ -4,8 +4,6 @@ import type { Project } from "@/types";
 export const projectsApi = {
 	list: () => invoke<Project[]>("list_projects"),
 
-	get: (id: string) => invoke<Project>("get_project", { id }),
-
 	createTemporary: (name?: string | null) =>
 		invoke<Project>("create_project_temporary", { name: name ?? null }),
 

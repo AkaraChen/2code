@@ -19,3 +19,10 @@ pub struct NewProject<'a> {
 	pub name: &'a str,
 	pub folder: &'a str,
 }
+
+#[derive(AsChangeset)]
+#[diesel(table_name = projects)]
+pub struct UpdateProject {
+	pub name: Option<String>,
+	pub folder: Option<String>,
+}

@@ -2,13 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import type { ITheme } from "@xterm/xterm";
 import { Terminal as XTerm } from "@xterm/xterm";
-import {
-	forwardRef,
-	useCallback,
-	useEffect,
-	useImperativeHandle,
-	useRef,
-} from "react";
+import { useEffect, useRef } from "react";
 import { ptyApi } from "@/api/pty";
 import { useThemePreference } from "@/components/ThemeProvider";
 import { useTerminalStore } from "@/stores/terminalStore";
@@ -60,10 +54,6 @@ const lightTheme: ITheme = {
 	brightWhite: "#8c959f",
 };
 
-export interface TerminalHandle {
-	runCode: (code: string) => void;
-}
-
 interface TerminalProps {
 	projectId: string;
 	sessionId: string;
@@ -71,139 +61,131 @@ interface TerminalProps {
 	className?: string;
 }
 
-export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-	({ projectId, sessionId, restoreFrom, className }, ref) => {
-		const containerRef = useRef<HTMLDivElement>(null);
-		const termRef = useRef<XTerm | null>(null);
-		const fitAddonRef = useRef<FitAddon | null>(null);
-		const unlistenersRef = useRef<UnlistenFn[]>([]);
-		const { isDark } = useThemePreference();
-		const theme = isDark ? darkTheme : lightTheme;
+export function Terminal({
+	projectId,
+	sessionId,
+	restoreFrom,
+	className,
+}: TerminalProps) {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const termRef = useRef<XTerm | null>(null);
+	const fitAddonRef = useRef<FitAddon | null>(null);
+	const unlistenersRef = useRef<UnlistenFn[]>([]);
+	const { isDark } = useThemePreference();
+	const theme = isDark ? darkTheme : lightTheme;
 
-		if (termRef.current) {
-			termRef.current.options.theme = theme;
-		}
+	if (termRef.current) {
+		termRef.current.options.theme = theme;
+	}
 
-		const runCode = useCallback(
-			(code: string) => {
-				ptyApi.write(sessionId, code + "\n");
-			},
-			[sessionId],
-		);
+	useEffect(() => {
+		if (!containerRef.current) return;
 
-		useImperativeHandle(ref, () => ({ runCode }), [runCode]);
+		const term = new XTerm({
+			fontFamily:
+				'"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
+			fontSize: 13,
+			theme,
+			cursorBlink: true,
+			convertEol: true,
+		});
 
-		useEffect(() => {
-			if (!containerRef.current) return;
+		const fitAddon = new FitAddon();
+		term.loadAddon(fitAddon);
+		term.open(containerRef.current);
+		fitAddon.fit();
 
-			const term = new XTerm({
-				fontFamily:
-					'"JetBrains Mono", "Fira Code", "SF Mono", Consolas, monospace',
-				fontSize: 13,
-				theme,
-				cursorBlink: true,
-				convertEol: true,
-			});
+		termRef.current = term;
+		fitAddonRef.current = fitAddon;
 
-			const fitAddon = new FitAddon();
-			term.loadAddon(fitAddon);
-			term.open(containerRef.current);
-			fitAddon.fit();
+		// Resize PTY to match xterm dimensions
+		ptyApi.resize(sessionId, term.rows, term.cols);
 
-			termRef.current = term;
-			fitAddonRef.current = fitAddon;
-
-			// Resize PTY to match xterm dimensions
-			ptyApi.resize(sessionId, term.rows, term.cols);
-
-			// Restore history from previous session before connecting live stream
-			const setup = async () => {
-				if (restoreFrom) {
-					try {
-						const history = await ptyApi.getHistory(restoreFrom);
-						if (history.length > 0) {
-							const text = new TextDecoder().decode(
-								new Uint8Array(history),
-							);
-							term.write(text);
-						}
-					} catch {
-						// Old session may already be deleted — ignore
-					}
-					// Clean up old session record and store flag
-					ptyApi.deleteRecord(restoreFrom).catch(() => {});
-					useTerminalStore.getState().clearRestore(projectId, sessionId);
-				}
-
-				// Listen for PTY output
-				const unlistenOutput = await listen<string>(
-					`pty-output-${sessionId}`,
-					(event) => {
-						term.write(event.payload);
-					},
-				);
-
-				const unlistenExit = await listen(
-					`pty-exit-${sessionId}`,
-					() => {
-						term.write(
-							"\r\n\x1b[90m[Process exited]\x1b[0m\r\n",
+		// Restore history from previous session before connecting live stream
+		const setup = async () => {
+			if (restoreFrom) {
+				try {
+					const history = await ptyApi.getHistory(restoreFrom);
+					if (history.length > 0) {
+						const text = new TextDecoder().decode(
+							new Uint8Array(history),
 						);
-					},
-				);
-
-				unlistenersRef.current.push(unlistenOutput, unlistenExit);
-			};
-
-			setup();
-
-			// Forward user input to PTY
-			const onDataDisposable = term.onData((data) => {
-				ptyApi.write(sessionId, data);
-			});
-
-			// Handle terminal resize
-			const onResizeDisposable = term.onResize(({ rows, cols }) => {
-				ptyApi.resize(sessionId, rows, cols);
-			});
-
-			// Handle container resize
-			const resizeObserver = new ResizeObserver(() => {
-				fitAddon.fit();
-			});
-			resizeObserver.observe(containerRef.current);
-
-			return () => {
-				resizeObserver.disconnect();
-				onDataDisposable.dispose();
-				onResizeDisposable.dispose();
-
-				for (const unlisten of unlistenersRef.current) {
-					unlisten();
+						term.write(text);
+					}
+				} catch {
+					// Old session may already be deleted — ignore
 				}
-				unlistenersRef.current = [];
+				// Clean up old session record and store flag
+				ptyApi.deleteRecord(restoreFrom).catch(() => {});
+				useTerminalStore.getState().clearRestore(projectId, sessionId);
+			}
 
-				term.dispose();
-				termRef.current = null;
-				fitAddonRef.current = null;
-			};
-		}, [projectId, sessionId, restoreFrom]);
+			// Listen for PTY output
+			const unlistenOutput = await listen<string>(
+				`pty-output-${sessionId}`,
+				(event) => {
+					term.write(event.payload);
+				},
+			);
 
-		return (
-			<div
-				ref={containerRef}
-				className={className}
-				style={{
-					width: "100%",
-					height: "100%",
-					padding: "8px 0 0 8px",
-					background: theme.background,
-					border: "0.5px solid var(--chakra-colors-border-subtle)",
-					boxSizing: "border-box",
-				}}
-			/>
-		);
-	},
-);
+			const unlistenExit = await listen(
+				`pty-exit-${sessionId}`,
+				() => {
+					term.write(
+						"\r\n\x1b[90m[Process exited]\x1b[0m\r\n",
+					);
+				},
+			);
 
-Terminal.displayName = "Terminal";
+			unlistenersRef.current.push(unlistenOutput, unlistenExit);
+		};
+
+		setup();
+
+		// Forward user input to PTY
+		const onDataDisposable = term.onData((data) => {
+			ptyApi.write(sessionId, data);
+		});
+
+		// Handle terminal resize
+		const onResizeDisposable = term.onResize(({ rows, cols }) => {
+			ptyApi.resize(sessionId, rows, cols);
+		});
+
+		// Handle container resize
+		const resizeObserver = new ResizeObserver(() => {
+			fitAddon.fit();
+		});
+		resizeObserver.observe(containerRef.current);
+
+		return () => {
+			resizeObserver.disconnect();
+			onDataDisposable.dispose();
+			onResizeDisposable.dispose();
+
+			for (const unlisten of unlistenersRef.current) {
+				unlisten();
+			}
+			unlistenersRef.current = [];
+
+			term.dispose();
+			termRef.current = null;
+			fitAddonRef.current = null;
+		};
+	}, [projectId, sessionId, restoreFrom]);
+
+	return (
+		<div
+			ref={containerRef}
+			className={className}
+			style={{
+				width: "100%",
+				height: "100%",
+				padding: "8px 0 0 8px",
+				background: theme.background,
+				border: "0.5px solid var(--chakra-colors-border-subtle)",
+				boxSizing: "border-box",
+			}}
+		/>
+	);
+}

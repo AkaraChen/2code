@@ -6,7 +6,7 @@ use std::process::Command;
 use tauri::State;
 use uuid::Uuid;
 
-use super::models::{NewProject, Project};
+use super::models::{NewProject, Project, UpdateProject};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::schema::projects;
@@ -68,7 +68,7 @@ pub fn create_project_temporary(
 ) -> AppResult<Project> {
 	let id = Uuid::new_v4().to_string();
 	let dir_name = generate_dir_name(&name, &id);
-	let dir = format!("/tmp/{}", dir_name);
+	let dir = std::env::temp_dir().join(dir_name);
 
 	std::fs::create_dir_all(&dir)?;
 
@@ -85,8 +85,9 @@ pub fn create_project_temporary(
 
 	let project_name = name.unwrap_or_else(|| "Untitled".to_string());
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let dir_str = dir.to_string_lossy();
 
-	insert_and_fetch(conn, &id, &project_name, &dir)
+	insert_and_fetch(conn, &id, &project_name, &dir_str)
 }
 
 #[tauri::command]
@@ -134,24 +135,18 @@ pub fn update_project(
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	let target = projects::table.find(&id);
 
-	let rows = match (&name, &folder) {
-		(Some(n), Some(f)) => diesel::update(target)
-			.set((projects::name.eq(n), projects::folder.eq(f)))
-			.execute(conn),
-		(Some(n), None) => diesel::update(target)
-			.set(projects::name.eq(n))
-			.execute(conn),
-		(None, Some(f)) => diesel::update(target)
-			.set(projects::folder.eq(f))
-			.execute(conn),
-		(None, None) => {
-			return target
-				.select(Project::as_select())
-				.first(conn)
-				.map_err(|_| AppError::NotFound(format!("Project: {id}")));
-		}
+	if name.is_none() && folder.is_none() {
+		return target
+			.select(Project::as_select())
+			.first(conn)
+			.map_err(|_| AppError::NotFound(format!("Project: {id}")));
 	}
-	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let changeset = UpdateProject { name, folder };
+	let rows = diesel::update(target)
+		.set(&changeset)
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	if rows == 0 {
 		return Err(AppError::NotFound(format!("Project: {id}")));
