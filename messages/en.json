@@ -46,5 +46,10 @@
 	"branchName": "Branch Name",
 	"branchNamePlaceholder": "e.g. feature/auth",
 	"confirmDeleteProfile": "Are you sure you want to delete this profile? The git worktree will be removed.",
-	"noProfiles": "No profiles yet"
+	"noProfiles": "No profiles yet",
+	"notification": "Notification",
+	"notificationEnabled": "Enable Notifications",
+	"notificationEnabledDescription": "Allow this app to send system notifications.",
+	"notificationSound": "Sound",
+	"notificationSoundNone": "None"
 }

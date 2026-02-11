@@ -9,11 +9,18 @@ import {
 	NumberInput,
 	Skeleton,
 	Stack,
+	Switch,
 	Tabs,
+	Text,
 } from "@chakra-ui/react";
 import { Suspense, use, useMemo, useState } from "react";
-import { RiEyeLine } from "react-icons/ri";
+import { RiEyeLine, RiVolumeUpLine } from "react-icons/ri";
 import { fontsApi, type SystemFont } from "@/api/fonts";
+import {
+	isPermissionGranted,
+	notificationApi,
+	requestPermission,
+} from "@/api/notification";
 import { TerminalPreview } from "@/components/TerminalPreview";
 import { useThemePreference } from "@/components/ThemeProvider";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
@@ -21,6 +28,7 @@ import { terminalThemeIds, terminalThemeNames } from "@/lib/terminalThemes";
 import * as m from "@/paraglide/messages.js";
 import { getLocale, type Locale, setLocale } from "@/paraglide/runtime.js";
 import { useFontStore } from "@/stores/fontStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 const localeNames: Record<Locale, string> = {
 	en: "English",
@@ -74,6 +82,96 @@ function FontPicker() {
 				<Checkbox.Label>{m.showAllFonts()}</Checkbox.Label>
 			</Checkbox.Root>
 		</>
+	);
+}
+
+// Cached promise for system sounds
+let soundsPromise: Promise<string[]> | null = null;
+function getSoundsPromise() {
+	if (!soundsPromise) {
+		soundsPromise = notificationApi.listSystemSounds();
+	}
+	return soundsPromise;
+}
+
+function SoundPicker() {
+	const sounds = use(getSoundsPromise());
+	const { enabled, sound, setSound } = useNotificationStore();
+
+	return (
+		<Field.Root>
+			<Flex align="center">
+				<Field.Label mb="0">{m.notificationSound()}</Field.Label>
+				<IconButton
+					aria-label={m.preview()}
+					size="2xs"
+					variant="ghost"
+					ml="auto"
+					opacity={0.5}
+					_hover={{ opacity: 1 }}
+					disabled={!enabled || !sound}
+					onClick={() => {
+						if (sound) notificationApi.playSystemSound(sound);
+					}}
+				>
+					<RiVolumeUpLine />
+				</IconButton>
+			</Flex>
+			<NativeSelect.Root disabled={!enabled}>
+				<NativeSelect.Field
+					value={sound}
+					onChange={(e) => setSound(e.target.value)}
+				>
+					<option value="">{m.notificationSoundNone()}</option>
+					{sounds.map((s) => (
+						<option key={s} value={s}>
+							{s}
+						</option>
+					))}
+				</NativeSelect.Field>
+				<NativeSelect.Indicator />
+			</NativeSelect.Root>
+		</Field.Root>
+	);
+}
+
+function NotificationSettings() {
+	const { enabled, setEnabled } = useNotificationStore();
+
+	const handleToggle = async (checked: boolean) => {
+		if (checked) {
+			const granted = await isPermissionGranted();
+			if (!granted) {
+				const permission = await requestPermission();
+				if (permission !== "granted") {
+					return;
+				}
+			}
+		}
+		setEnabled(checked);
+	};
+
+	return (
+		<Stack gap="6" maxW="md">
+			<Field.Root>
+				<Field.Label>{m.notificationEnabled()}</Field.Label>
+				<Switch.Root
+					checked={enabled}
+					onCheckedChange={(e) => handleToggle(!!e.checked)}
+				>
+					<Switch.HiddenInput />
+					<Switch.Control />
+					<Switch.Label>
+						<Text fontSize="sm" color="fg.muted">
+							{m.notificationEnabledDescription()}
+						</Text>
+					</Switch.Label>
+				</Switch.Root>
+			</Field.Root>
+			<Suspense fallback={<Skeleton height="70px" />}>
+				<SoundPicker />
+			</Suspense>
+		</Stack>
 	);
 }
 
@@ -206,6 +304,9 @@ export default function SettingsPage() {
 						<Tabs.Trigger value="appearance">
 							{m.appearance()}
 						</Tabs.Trigger>
+						<Tabs.Trigger value="notification">
+							{m.notification()}
+						</Tabs.Trigger>
 						<Tabs.Trigger value="profile">
 							{m.profile()}
 						</Tabs.Trigger>
@@ -277,6 +378,9 @@ export default function SettingsPage() {
 								<TerminalPreview themeId={previewThemeId} />
 							</Box>
 						</Flex>
+					</Tabs.Content>
+					<Tabs.Content value="notification">
+						<NotificationSettings />
 					</Tabs.Content>
 					<Tabs.Content value="profile" />
 				</Tabs.Root>

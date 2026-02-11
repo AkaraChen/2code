@@ -46,5 +46,10 @@
 	"branchName": "分支名称",
 	"branchNamePlaceholder": "例如 feature/auth",
 	"confirmDeleteProfile": "确定要删除此配置吗？Git 工作树将被移除。",
-	"noProfiles": "暂无配置"
+	"noProfiles": "暂无配置",
+	"notification": "通知",
+	"notificationEnabled": "启用通知",
+	"notificationEnabledDescription": "允许此应用发送系统通知。",
+	"notificationSound": "提示音",
+	"notificationSoundNone": "无"
 }

@@ -6,6 +6,7 @@ mod profile;
 mod project;
 mod pty;
 mod schema;
+mod sound;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +16,7 @@ pub fn run() {
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_dialog::init())
+		.plugin(tauri_plugin_notification::init())
 		.manage(sessions)
 		.setup(|app| {
 			use tauri::Manager;
@@ -46,6 +48,8 @@ pub fn run() {
 			project::commands::update_project,
 			project::commands::delete_project,
 			font::list_system_fonts,
+			sound::list_system_sounds,
+			sound::play_system_sound,
 			profile::commands::create_profile,
 			profile::commands::list_profiles,
 			profile::commands::get_profile,
