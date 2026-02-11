@@ -65,7 +65,7 @@ function ProjectMenuItem({
 					<Box
 						asChild
 						display="block"
-						pl="2.5"
+						pl="3"
 						pr="3"
 						py="1"
 						fontSize="sm"
