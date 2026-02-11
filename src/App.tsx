@@ -34,6 +34,10 @@ export default function App() {
 									element={<ProjectDetailPage />}
 								/>
 								<Route
+									path="/projects/:id/profiles/:profileId"
+									element={<ProjectDetailPage />}
+								/>
+								<Route
 									path="/settings"
 									element={<SettingsPage />}
 								/>

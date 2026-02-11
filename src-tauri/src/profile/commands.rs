@@ -135,16 +135,32 @@ pub fn create_profile(
 	let worktree_path = worktree_base.join(&id);
 	let worktree_str = worktree_path.to_string_lossy().to_string();
 
+	// Try creating a new branch with -b first; if the branch already exists,
+	// fall back to checking out the existing branch.
 	let output = Command::new("git")
-		.args(["worktree", "add", &worktree_str, &branch_name])
+		.args(["worktree", "add", "-b", &branch_name, &worktree_str])
 		.current_dir(&project_folder)
 		.output()?;
 
 	if !output.status.success() {
 		let stderr = String::from_utf8_lossy(&output.stderr);
-		return Err(AppError::GitError(format!(
-			"git worktree add failed: {stderr}"
-		)));
+		if stderr.contains("already exists") {
+			// Branch exists — check it out into the worktree instead
+			let output2 = Command::new("git")
+				.args(["worktree", "add", &worktree_str, &branch_name])
+				.current_dir(&project_folder)
+				.output()?;
+			if !output2.status.success() {
+				let stderr2 = String::from_utf8_lossy(&output2.stderr);
+				return Err(AppError::GitError(format!(
+					"git worktree add failed: {stderr2}"
+				)));
+			}
+		} else {
+			return Err(AppError::GitError(format!(
+				"git worktree add failed: {stderr}"
+			)));
+		}
 	}
 
 	let profile =

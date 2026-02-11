@@ -7,7 +7,7 @@ export function useCloseTerminalTab() {
 		mutationFn: async ({
 			sessionId,
 		}: {
-			projectId: string;
+			contextId: string;
 			sessionId: string;
 		}) => {
 			await Promise.all([
@@ -15,8 +15,8 @@ export function useCloseTerminalTab() {
 				ptyApi.deleteRecord(sessionId).catch(() => {}),
 			]);
 		},
-		onSettled: (_data, _err, { projectId, sessionId }) => {
-			useTerminalStore.getState().closeTab(projectId, sessionId);
+		onSettled: (_data, _err, { contextId, sessionId }) => {
+			useTerminalStore.getState().closeTab(contextId, sessionId);
 		},
 	});
 }

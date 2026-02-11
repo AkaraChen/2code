@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 import { ptyApi } from "@/api/pty";
 import { useTerminalStore } from "@/stores/terminalStore";
-import type { Project } from "@/types";
+import type { Profile, Project } from "@/types";
 
-export function useRestoreTerminals(projects: Project[] | undefined) {
+export function useRestoreTerminals(
+	projects: Project[] | undefined,
+	profiles: Profile[],
+) {
 	const didRestore = useRef(false);
 
 	useEffect(() => {
@@ -11,6 +14,12 @@ export function useRestoreTerminals(projects: Project[] | undefined) {
 		didRestore.current = true;
 
 		const restore = async () => {
+			// Build a map from worktree_path → profileId for context resolution
+			const worktreeToProfile = new Map<string, string>();
+			for (const profile of profiles) {
+				worktreeToProfile.set(profile.worktree_path, profile.id);
+			}
+
 			const projectSessions = await Promise.all(
 				projects.map(async (project) => ({
 					project,
@@ -21,6 +30,10 @@ export function useRestoreTerminals(projects: Project[] | undefined) {
 			await Promise.all(
 				projectSessions.flatMap(({ project, sessions }) =>
 					sessions.map(async (session) => {
+						// Determine context ID: if cwd matches a profile worktree, use profile ID
+						const contextId =
+							worktreeToProfile.get(session.cwd) ?? project.id;
+
 						const newSessionId = await ptyApi.createSession(
 							project.id,
 							session.title,
@@ -32,7 +45,7 @@ export function useRestoreTerminals(projects: Project[] | undefined) {
 						useTerminalStore
 							.getState()
 							.addTab(
-								project.id,
+								contextId,
 								newSessionId,
 								session.title,
 								session.id,
@@ -43,5 +56,5 @@ export function useRestoreTerminals(projects: Project[] | undefined) {
 		};
 
 		restore();
-	}, [projects]);
+	}, [projects, profiles]);
 }

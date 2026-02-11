@@ -38,5 +38,13 @@
 	"terminalThemeDark": "Dark Mode Theme",
 	"terminalThemeLight": "Light Mode Theme",
 	"syncTerminalTheme": "Use same theme for both modes",
-	"preview": "Preview"
+	"preview": "Preview",
+	"defaultProfile": "Default",
+	"profiles": "Profiles",
+	"createProfile": "New Profile",
+	"deleteProfile": "Delete Profile",
+	"branchName": "Branch Name",
+	"branchNamePlaceholder": "e.g. feature/auth",
+	"confirmDeleteProfile": "Are you sure you want to delete this profile? The git worktree will be removed.",
+	"noProfiles": "No profiles yet"
 }

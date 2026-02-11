@@ -38,5 +38,13 @@
 	"terminalThemeDark": "深色模式主题",
 	"terminalThemeLight": "浅色模式主题",
 	"syncTerminalTheme": "两种模式使用相同主题",
-	"preview": "预览"
+	"preview": "预览",
+	"defaultProfile": "默认",
+	"profiles": "配置文件",
+	"createProfile": "新建配置",
+	"deleteProfile": "删除配置",
+	"branchName": "分支名称",
+	"branchNamePlaceholder": "例如 feature/auth",
+	"confirmDeleteProfile": "确定要删除此配置吗？Git 工作树将被移除。",
+	"noProfiles": "暂无配置"
 }

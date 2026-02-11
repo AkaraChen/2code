@@ -5,6 +5,14 @@ export interface Project {
 	created_at: string;
 }
 
+export interface Profile {
+	id: string;
+	project_id: string;
+	branch_name: string;
+	worktree_path: string;
+	created_at: string;
+}
+
 export interface PtySessionRecord {
 	id: string;
 	project_id: string;

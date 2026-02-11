@@ -7,14 +7,16 @@ const DEFAULT_SHELL = "/bin/zsh";
 export function useCreateTerminalTab() {
 	return useMutation({
 		mutationFn: async ({
+			contextId,
 			projectId,
 			cwd,
 		}: {
+			contextId: string;
 			projectId: string;
 			cwd: string;
 		}) => {
 			const counter =
-				useTerminalStore.getState().projects[projectId]?.counter ?? 0;
+				useTerminalStore.getState().projects[contextId]?.counter ?? 0;
 			const title = `Terminal ${counter + 1}`;
 			const sessionId = await ptyApi.createSession(
 				projectId,
@@ -24,10 +26,10 @@ export function useCreateTerminalTab() {
 				24,
 				80,
 			);
-			return { projectId, sessionId, title };
+			return { contextId, sessionId, title };
 		},
-		onSuccess: ({ projectId, sessionId, title }) => {
-			useTerminalStore.getState().addTab(projectId, sessionId, title);
+		onSuccess: ({ contextId, sessionId, title }) => {
+			useTerminalStore.getState().addTab(contextId, sessionId, title);
 		},
 	});
 }
