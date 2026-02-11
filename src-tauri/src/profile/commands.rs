@@ -1,4 +1,6 @@
 use diesel::prelude::*;
+use pinyin::ToPinyin;
+use slug::slugify;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::State;
@@ -9,6 +11,36 @@ use crate::config;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::schema::{profiles, projects};
+
+/// Sanitize user input into a valid git branch name.
+/// Splits on `/` to preserve namespace separators (e.g. "feature/auth"),
+/// slugifies each segment (handling CJK via pinyin), then rejoins.
+fn sanitize_branch_name(input: &str) -> String {
+	input
+		.split('/')
+		.map(|seg| {
+			let mut parts: Vec<String> = Vec::new();
+			let mut buf = String::new();
+			for c in seg.chars() {
+				if let Some(py) = c.to_pinyin() {
+					if !buf.is_empty() {
+						parts.push(buf.clone());
+						buf.clear();
+					}
+					parts.push(py.plain().to_string());
+				} else {
+					buf.push(c);
+				}
+			}
+			if !buf.is_empty() {
+				parts.push(buf);
+			}
+			slugify(&parts.join(" "))
+		})
+		.filter(|s| !s.is_empty())
+		.collect::<Vec<_>>()
+		.join("/")
+}
 
 fn resolve_worktree_base() -> AppResult<PathBuf> {
 	let home = dirs::home_dir().ok_or_else(|| {
@@ -118,6 +150,77 @@ fn do_delete_profile(
 	Ok((profile, project_folder))
 }
 
+/// Try `git worktree add -b <branch> <path>` (new branch).
+/// If the branch already exists, fall back to checking it out.
+/// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
+/// delete the conflicting branch and retry once.
+fn create_worktree(
+	branch_name: &str,
+	worktree_str: &str,
+	project_folder: &str,
+) -> AppResult<()> {
+	let output = Command::new("git")
+		.args(["worktree", "add", "-b", branch_name, worktree_str])
+		.current_dir(project_folder)
+		.output()?;
+
+	if output.status.success() {
+		return Ok(());
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr);
+
+	// Branch already exists — let the user know
+	if stderr.contains("already exists") {
+		return Err(AppError::GitError(format!(
+			"Branch '{branch_name}' already exists"
+		)));
+	}
+
+	// Ref conflict: e.g. 'refs/heads/feat' blocks 'refs/heads/feat/auth'.
+	// Try to delete the conflicting branch and retry once.
+	if stderr.contains("cannot lock ref") {
+		if let Some(conflicting) = extract_conflicting_ref(&stderr) {
+			let _ = Command::new("git")
+				.args(["branch", "-D", &conflicting])
+				.current_dir(project_folder)
+				.output();
+
+			// Retry
+			let retry = Command::new("git")
+				.args(["worktree", "add", "-b", branch_name, worktree_str])
+				.current_dir(project_folder)
+				.output()?;
+			if retry.status.success() {
+				return Ok(());
+			}
+			let retry_err = String::from_utf8_lossy(&retry.stderr);
+			return Err(AppError::GitError(format!(
+				"git worktree add failed: {retry_err}"
+			)));
+		}
+	}
+
+	Err(AppError::GitError(format!(
+		"git worktree add failed: {stderr}"
+	)))
+}
+
+/// Parse "'refs/heads/feat' exists" from git error to extract "feat".
+fn extract_conflicting_ref(stderr: &str) -> Option<String> {
+	// Look for: 'refs/heads/XXX' exists
+	let suffix = "' exists";
+	let exists_pos = stderr.find(suffix)?;
+	let before = &stderr[..exists_pos];
+	let marker = "refs/heads/";
+	let marker_pos = before.rfind(marker)? + marker.len();
+	let name = &before[marker_pos..];
+	if name.is_empty() {
+		return None;
+	}
+	Some(name.to_string())
+}
+
 // --- Tauri Commands ---
 
 #[tauri::command]
@@ -129,39 +232,18 @@ pub fn create_profile(
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	let project_folder = get_project_folder(conn, &project_id)?;
 
+	let branch_name = sanitize_branch_name(&branch_name);
+	if branch_name.is_empty() {
+		return Err(AppError::GitError("Invalid branch name".to_string()));
+	}
+
 	let id = Uuid::new_v4().to_string();
 	let worktree_base = resolve_worktree_base()?;
 	std::fs::create_dir_all(&worktree_base)?;
 	let worktree_path = worktree_base.join(&id);
 	let worktree_str = worktree_path.to_string_lossy().to_string();
 
-	// Try creating a new branch with -b first; if the branch already exists,
-	// fall back to checking out the existing branch.
-	let output = Command::new("git")
-		.args(["worktree", "add", "-b", &branch_name, &worktree_str])
-		.current_dir(&project_folder)
-		.output()?;
-
-	if !output.status.success() {
-		let stderr = String::from_utf8_lossy(&output.stderr);
-		if stderr.contains("already exists") {
-			// Branch exists — check it out into the worktree instead
-			let output2 = Command::new("git")
-				.args(["worktree", "add", &worktree_str, &branch_name])
-				.current_dir(&project_folder)
-				.output()?;
-			if !output2.status.success() {
-				let stderr2 = String::from_utf8_lossy(&output2.stderr);
-				return Err(AppError::GitError(format!(
-					"git worktree add failed: {stderr2}"
-				)));
-			}
-		} else {
-			return Err(AppError::GitError(format!(
-				"git worktree add failed: {stderr}"
-			)));
-		}
-	}
+	create_worktree(&branch_name, &worktree_str, &project_folder)?;
 
 	let profile =
 		insert_profile(conn, &id, &project_id, &branch_name, &worktree_str)?;
@@ -220,6 +302,24 @@ pub fn delete_profile(id: String, state: State<'_, DbPool>) -> AppResult<()> {
 		}
 		Err(e) => {
 			log::warn!("git worktree remove error: {e}");
+		}
+		_ => {}
+	}
+
+	// Clean up the branch that was created for this profile.
+	// Use -D (force) since the branch may not be fully merged.
+	let branch_output = Command::new("git")
+		.args(["branch", "-D", &profile.branch_name])
+		.current_dir(&project_folder)
+		.output();
+
+	match branch_output {
+		Ok(o) if !o.status.success() => {
+			let stderr = String::from_utf8_lossy(&o.stderr);
+			log::warn!("git branch delete failed: {stderr}");
+		}
+		Err(e) => {
+			log::warn!("git branch delete error: {e}");
 		}
 		_ => {}
 	}
@@ -424,5 +524,61 @@ mod tests {
 	fn resolve_worktree_base_returns_valid_path() {
 		let base = resolve_worktree_base().unwrap();
 		assert!(base.ends_with(".2code/workspace"));
+	}
+
+	// --- branch name sanitization ---
+
+	#[test]
+	fn sanitize_simple_english() {
+		assert_eq!(sanitize_branch_name("feature/auth"), "feature/auth");
+	}
+
+	#[test]
+	fn sanitize_with_spaces() {
+		assert_eq!(sanitize_branch_name("my feature"), "my-feature");
+	}
+
+	#[test]
+	fn sanitize_chinese() {
+		assert_eq!(sanitize_branch_name("新功能/登录"), "xin-gong-neng/deng-lu");
+	}
+
+	#[test]
+	fn sanitize_mixed() {
+		assert_eq!(sanitize_branch_name("feat/用户认证"), "feat/yong-hu-ren-zheng");
+	}
+
+	#[test]
+	fn sanitize_special_chars() {
+		assert_eq!(sanitize_branch_name("fix: bug #123"), "fix-bug-123");
+	}
+
+	#[test]
+	fn sanitize_empty_segments() {
+		assert_eq!(sanitize_branch_name("feature//auth"), "feature/auth");
+	}
+
+	#[test]
+	fn sanitize_empty_input() {
+		assert_eq!(sanitize_branch_name(""), "");
+	}
+
+	// --- conflicting ref extraction ---
+
+	#[test]
+	fn extract_ref_from_typical_error() {
+		let stderr = "fatal: cannot lock ref 'refs/heads/feat/auth': 'refs/heads/feat' exists; cannot create 'refs/heads/feat/auth'";
+		assert_eq!(extract_conflicting_ref(stderr), Some("feat".to_string()));
+	}
+
+	#[test]
+	fn extract_ref_nested() {
+		let stderr = "fatal: cannot lock ref 'refs/heads/a/b/c': 'refs/heads/a/b' exists;";
+		assert_eq!(extract_conflicting_ref(stderr), Some("a/b".to_string()));
+	}
+
+	#[test]
+	fn extract_ref_no_match() {
+		assert_eq!(extract_conflicting_ref("some other error"), None);
 	}
 }
