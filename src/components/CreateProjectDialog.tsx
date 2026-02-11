@@ -48,11 +48,8 @@ export default function CreateProjectDialog({
 	};
 
 	const handleCreate = async () => {
-		const opts: { name?: string; folder?: string } = {};
-		if (name) opts.name = name;
-		if (folder) opts.folder = folder;
 		const project = await createProject.mutateAsync(
-			Object.keys(opts).length > 0 ? opts : undefined,
+			name || folder ? { name: name || undefined, folder: folder ?? undefined } : undefined,
 		);
 		handleClose();
 		navigate(`/projects/${project.id}`);

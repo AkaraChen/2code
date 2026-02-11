@@ -14,6 +14,9 @@ pub enum AppError {
 
 	#[error("Database error: {0}")]
 	DbError(String),
+
+	#[error("Not found: {0}")]
+	NotFound(String),
 }
 
 impl Serialize for AppError {

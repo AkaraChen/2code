@@ -28,9 +28,6 @@ export const ptyApi = {
 	close: (sessionId: string) =>
 		invoke<void>("close_pty_session", { sessionId }),
 
-	listSessions: (projectId: string) =>
-		invoke<PtySessionRecord[]>("list_pty_sessions", { projectId }),
-
 	listActiveSessions: (projectId: string) =>
 		invoke<PtySessionRecord[]>("list_active_sessions", { projectId }),
 

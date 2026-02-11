@@ -7,8 +7,9 @@ use tauri::State;
 use uuid::Uuid;
 
 use super::models::{NewProject, Project};
-use crate::schema::projects;
 use crate::db::DbPool;
+use crate::error::{AppError, AppResult};
+use crate::schema::projects;
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -43,50 +44,49 @@ fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	}
 }
 
+fn insert_and_fetch(
+	conn: &mut SqliteConnection,
+	id: &str,
+	name: &str,
+	folder: &str,
+) -> AppResult<Project> {
+	diesel::insert_into(projects::table)
+		.values(&NewProject { id, name, folder })
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+	projects::table
+		.find(id)
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 #[tauri::command]
 pub fn create_project_temporary(
 	name: Option<String>,
 	state: State<'_, DbPool>,
-) -> Result<Project, String> {
+) -> AppResult<Project> {
 	let id = Uuid::new_v4().to_string();
 	let dir_name = generate_dir_name(&name, &id);
 	let dir = format!("/tmp/{}", dir_name);
 
-	std::fs::create_dir_all(&dir)
-		.map_err(|e| format!("Failed to create directory: {e}"))?;
+	std::fs::create_dir_all(&dir)?;
 
 	let output = Command::new("git")
 		.arg("init")
 		.current_dir(&dir)
-		.output()
-		.map_err(|e| format!("Failed to run git init: {e}"))?;
+		.output()?;
 
 	if !output.status.success() {
 		let _ = std::fs::remove_dir_all(&dir);
 		let stderr = String::from_utf8_lossy(&output.stderr);
-		return Err(format!("git init failed: {stderr}"));
+		return Err(AppError::PtyError(format!("git init failed: {stderr}")));
 	}
 
 	let project_name = name.unwrap_or_else(|| "Untitled".to_string());
-	let new_project = NewProject {
-		id: &id,
-		name: &project_name,
-		folder: &dir,
-	};
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
-
-	diesel::insert_into(projects::table)
-		.values(&new_project)
-		.execute(conn)
-		.map_err(|e| format!("Failed to insert project: {e}"))?;
-
-	projects::table
-		.find(&id)
-		.select(Project::as_select())
-		.first(conn)
-		.map_err(|e| format!("Failed to fetch project: {e}"))
+	insert_and_fetch(conn, &id, &project_name, &dir)
 }
 
 #[tauri::command]
@@ -94,57 +94,34 @@ pub fn create_project_from_folder(
 	name: String,
 	folder: String,
 	state: State<'_, DbPool>,
-) -> Result<Project, String> {
+) -> AppResult<Project> {
 	if !Path::new(&folder).exists() {
-		return Err(format!("Folder does not exist: {folder}"));
+		return Err(AppError::NotFound(format!("Folder: {folder}")));
 	}
 
 	let id = Uuid::new_v4().to_string();
-	let new_project = NewProject {
-		id: &id,
-		name: &name,
-		folder: &folder,
-	};
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
-
-	diesel::insert_into(projects::table)
-		.values(&new_project)
-		.execute(conn)
-		.map_err(|e| format!("Failed to insert project: {e}"))?;
-
-	projects::table
-		.find(&id)
-		.select(Project::as_select())
-		.first(conn)
-		.map_err(|e| format!("Failed to fetch project: {e}"))
+	insert_and_fetch(conn, &id, &name, &folder)
 }
 
 #[tauri::command]
-pub fn list_projects(state: State<'_, DbPool>) -> Result<Vec<Project>, String> {
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
-
+pub fn list_projects(state: State<'_, DbPool>) -> AppResult<Vec<Project>> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	projects::table
 		.select(Project::as_select())
 		.load(conn)
-		.map_err(|e| format!("Failed to list projects: {e}"))
+		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 #[tauri::command]
-pub fn get_project(
-	id: String,
-	state: State<'_, DbPool>,
-) -> Result<Project, String> {
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
-
+pub fn get_project(id: String, state: State<'_, DbPool>) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	projects::table
 		.find(&id)
 		.select(Project::as_select())
 		.first(conn)
-		.map_err(|_| format!("Project not found: {id}"))
+		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
 }
 
 #[tauri::command]
@@ -153,59 +130,48 @@ pub fn update_project(
 	name: Option<String>,
 	folder: Option<String>,
 	state: State<'_, DbPool>,
-) -> Result<Project, String> {
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
+) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let target = projects::table.find(&id);
 
-	// Check project exists
-	let existing: Project = projects::table
-		.find(&id)
+	let rows = match (&name, &folder) {
+		(Some(n), Some(f)) => diesel::update(target)
+			.set((projects::name.eq(n), projects::folder.eq(f)))
+			.execute(conn),
+		(Some(n), None) => diesel::update(target)
+			.set(projects::name.eq(n))
+			.execute(conn),
+		(None, Some(f)) => diesel::update(target)
+			.set(projects::folder.eq(f))
+			.execute(conn),
+		(None, None) => {
+			return target
+				.select(Project::as_select())
+				.first(conn)
+				.map_err(|_| AppError::NotFound(format!("Project: {id}")));
+		}
+	}
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if rows == 0 {
+		return Err(AppError::NotFound(format!("Project: {id}")));
+	}
+
+	target
 		.select(Project::as_select())
 		.first(conn)
-		.map_err(|_| format!("Project not found: {id}"))?;
-
-	if let Some(ref new_name) = name {
-		diesel::update(projects::table.find(&id))
-			.set(projects::name.eq(new_name))
-			.execute(conn)
-			.map_err(|e| format!("Failed to update name: {e}"))?;
-	}
-
-	if let Some(ref new_folder) = folder {
-		diesel::update(projects::table.find(&id))
-			.set(projects::folder.eq(new_folder))
-			.execute(conn)
-			.map_err(|e| format!("Failed to update folder: {e}"))?;
-	}
-
-	// If nothing was provided, return existing as-is
-	if name.is_none() && folder.is_none() {
-		return Ok(existing);
-	}
-
-	projects::table
-		.find(&id)
-		.select(Project::as_select())
-		.first(conn)
-		.map_err(|e| format!("Failed to fetch updated project: {e}"))
+		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 #[tauri::command]
-pub fn delete_project(
-	id: String,
-	state: State<'_, DbPool>,
-) -> Result<(), String> {
-	let conn =
-		&mut *state.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
-
+pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	let rows = diesel::delete(projects::table.find(&id))
 		.execute(conn)
-		.map_err(|e| format!("Failed to delete project: {e}"))?;
-
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 	if rows == 0 {
-		return Err(format!("Project not found: {id}"));
+		return Err(AppError::NotFound(format!("Project: {id}")));
 	}
-
 	Ok(())
 }
 
