@@ -1,10 +1,8 @@
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import { RiGitBranchLine, RiGitPullRequestLine } from "react-icons/ri";
-import { projectsApi } from "@/api/projects";
 import { useGitBranch } from "@/hooks/useProjects";
 import GitDiffDialog from "./GitDiffDialog";
-import { toaster } from "./Toaster";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -54,15 +52,7 @@ export default function ProjectTopBar({
 }: ProjectTopBarProps) {
 	const [diffOpen, setDiffOpen] = useState(false);
 
-	const handleDiffClick = async () => {
-		const diff = await projectsApi.getDiff(contextId);
-		if (!diff.trim()) {
-			toaster.create({
-				description: "No changes",
-				type: "info",
-			});
-			return;
-		}
+	const handleDiffClick = () => {
 		setDiffOpen(true);
 	};
 
