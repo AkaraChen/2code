@@ -1,14 +1,16 @@
 import {
 	Box,
-	Collapsible,
 	Flex,
 	HStack,
 	Icon,
+	IconButton,
 	Menu,
 	Portal,
+	Separator,
+	Text,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
+import { LuHouse, LuPlus, LuSettings } from "react-icons/lu";
 import { NavLink, useMatch } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import RenameProjectDialog from "@/components/RenameProjectDialog";
@@ -29,16 +31,18 @@ function SidebarLink({
 	return (
 		<HStack
 			asChild
-			gap="3"
-			px="4"
-			py="2"
+			gap="2"
+			px="3"
+			py="1.5"
 			fontSize="sm"
 			cursor="pointer"
-			bg={isActive ? "bg.emphasized" : "transparent"}
-			_hover={{ bg: "bg.muted" }}
+			borderLeft="3px solid"
+			borderColor={isActive ? "colorPalette.solid" : "transparent"}
+			bg={isActive ? "bg.subtle" : "transparent"}
+			_hover={{ bg: "bg.subtle" }}
 		>
 			<NavLink to={to}>
-				<Icon>{icon}</Icon>
+				<Icon fontSize="16px">{icon}</Icon>
 				{children}
 			</NavLink>
 		</HStack>
@@ -58,21 +62,26 @@ function ProjectMenuItem({
 		<>
 			<Menu.Root>
 				<Menu.ContextTrigger asChild>
-					<HStack
+					<Box
 						asChild
-						gap="3"
-						pl="10"
-						pr="4"
-						py="1.5"
+						display="block"
+						pl="5"
+						pr="3"
+						py="1"
 						fontSize="sm"
 						cursor="pointer"
-						bg={isActive ? "bg.emphasized" : "transparent"}
-						_hover={{ bg: "bg.muted" }}
+						truncate
+						borderLeft="3px solid"
+						borderColor={
+							isActive ? "colorPalette.solid" : "transparent"
+						}
+						bg={isActive ? "bg.subtle" : "transparent"}
+						_hover={{ bg: "bg.subtle" }}
 					>
 						<NavLink to={`/projects/${project.id}`}>
 							{project.name}
 						</NavLink>
-					</HStack>
+					</Box>
 				</Menu.ContextTrigger>
 				<Portal>
 					<Menu.Positioner>
@@ -111,7 +120,6 @@ function ProjectMenuItem({
 }
 
 export default function AppSidebar() {
-	const projectsActive = useMatch("/projects/*") !== null;
 	const { data: projects } = useProjects();
 	const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -120,62 +128,47 @@ export default function AppSidebar() {
 			<Box
 				as="nav"
 				aria-label={m.sideNavLabel()}
-				w="256px"
+				w="220px"
 				flexShrink={0}
 				bg="bg.subtle"
 				borderRight="1px solid"
 				borderColor="border.subtle"
 			>
-				<Flex direction="column" h="full">
+				<Flex direction="column" h="full" py="2">
 					<SidebarLink to="/" icon={<LuHouse />}>
 						{m.home()}
 					</SidebarLink>
 
-					<Collapsible.Root defaultOpen={projectsActive}>
-						<Collapsible.Trigger asChild>
-							<HStack
-								gap="3"
-								px="4"
-								py="2"
-								fontSize="sm"
-								cursor="pointer"
-								fontWeight={
-									projectsActive ? "semibold" : "normal"
-								}
-								_hover={{ bg: "bg.muted" }}
-							>
-								<Icon>
-									<LuFolderOpen />
-								</Icon>
-								{m.projects()}
-							</HStack>
-						</Collapsible.Trigger>
-						<Collapsible.Content>
-							<HStack
-								as="button"
-								gap="3"
-								pl="10"
-								pr="4"
-								py="1.5"
-								fontSize="sm"
-								cursor="pointer"
-								w="full"
-								_hover={{ bg: "bg.muted" }}
-								onClick={() => setDialogOpen(true)}
-							>
-								{m.newProject()}
-							</HStack>
-							{projects.map((project) => (
-								<ProjectMenuItem
-									key={project.id}
-									project={project}
-								/>
-							))}
-						</Collapsible.Content>
-					</Collapsible.Root>
+					<HStack px="3" pt="4" pb="1" justify="space-between">
+						<Text
+							fontSize="xs"
+							fontWeight="semibold"
+							color="fg.muted"
+							textTransform="uppercase"
+							letterSpacing="wider"
+						>
+							{m.projects()}
+						</Text>
+						<IconButton
+							aria-label={m.newProject()}
+							variant="ghost"
+							size="2xs"
+							onClick={() => setDialogOpen(true)}
+						>
+							<LuPlus />
+						</IconButton>
+					</HStack>
+
+					{projects.map((project) => (
+						<ProjectMenuItem
+							key={project.id}
+							project={project}
+						/>
+					))}
 
 					<div className="grow" />
 
+					<Separator />
 					<SidebarLink to="/settings" icon={<LuSettings />}>
 						{m.settings()}
 					</SidebarLink>

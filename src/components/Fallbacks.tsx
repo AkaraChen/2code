@@ -4,19 +4,19 @@ import * as m from "@/paraglide/messages.js";
 export function SidebarSkeleton() {
 	return (
 		<Box
-			w="256px"
+			w="220px"
 			flexShrink={0}
 			bg="bg.subtle"
 			borderRight="1px solid"
 			borderColor="border.subtle"
-			p="4"
+			p="3"
 		>
-			<Stack gap="3">
-				<Skeleton height="8" width="full" />
-				<Skeleton height="8" width="full" />
-				<Skeleton height="6" width="3/4" ms="6" />
-				<Skeleton height="6" width="3/4" ms="6" />
-				<Skeleton height="6" width="3/4" ms="6" />
+			<Stack gap="2">
+				<Skeleton height="6" width="full" />
+				<Skeleton height="3" width="1/2" mt="2" />
+				<Skeleton height="5" width="3/4" ms="5" />
+				<Skeleton height="5" width="3/4" ms="5" />
+				<Skeleton height="5" width="3/4" ms="5" />
 			</Stack>
 		</Box>
 	);
