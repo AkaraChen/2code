@@ -1,3 +1,4 @@
+import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { Suspense } from "react";
 import { RiGitBranchLine, RiGitPullRequestLine } from "react-icons/ri";
 import { useGitBranch } from "@/hooks/useProjects";
@@ -6,10 +7,10 @@ function GitBranch({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
 	if (!branch) return null;
 	return (
-		<span className="flex items-center gap-1 opacity-60">
+		<HStack gap="1">
 			<RiGitBranchLine />
-			{branch}
-		</span>
+			<Text as="span">{branch}</Text>
+		</HStack>
 	);
 }
 
@@ -25,26 +26,35 @@ export default function ProjectTopBar({
 	cwd,
 }: ProjectTopBarProps) {
 	return (
-		<div className="flex items-center justify-between px-3 py-1 text-xs">
-			<div className="flex items-center gap-2">
-				<span className="font-medium">{projectName}</span>
-				{profileBranchName ? (
-					<span className="flex items-center gap-1 opacity-60">
-						<RiGitBranchLine />
-						{profileBranchName}
-					</span>
-				) : (
-					<Suspense>
-						<GitBranch cwd={cwd} />
-					</Suspense>
-				)}
-			</div>
-			<button
-				type="button"
-				className="opacity-40 hover:opacity-80 transition-opacity"
-			>
+		<Flex
+			data-tauri-drag-region
+			align="flex-end"
+			justify="space-between"
+			pl="4"
+			pr="5"
+			pb="1.5"
+			pt="3"
+		>
+			<HStack gap="2">
+				<Text as="span" fontWeight="semibold">
+					{projectName}
+				</Text>
+				<Box color="fg.muted">
+					{profileBranchName ? (
+						<HStack gap="1">
+							<RiGitBranchLine />
+							<Text as="span">{profileBranchName}</Text>
+						</HStack>
+					) : (
+						<Suspense>
+							<GitBranch cwd={cwd} />
+						</Suspense>
+					)}
+				</Box>
+			</HStack>
+			<IconButton aria-label="Git diff" size="2xs">
 				<RiGitPullRequestLine />
-			</button>
-		</div>
+			</IconButton>
+		</Flex>
 	);
 }
