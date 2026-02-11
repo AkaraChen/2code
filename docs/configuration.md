@@ -9,6 +9,7 @@
 ### Build Configuration
 
 #### `package.json`
+
 **Location:** `package.json`
 
 Frontend dependencies and build scripts.
@@ -26,6 +27,7 @@ Frontend dependencies and build scripts.
 ```
 
 #### `vite.config.ts`
+
 **Location:** `vite.config.ts`
 
 Vite configuration with Tauri-specific settings.
@@ -61,6 +63,7 @@ export default defineConfig(async () => ({
 ### Tauri Configuration
 
 #### `tauri.conf.json`
+
 **Location:** `src-tauri/tauri.conf.json`
 
 Application window and bundle configuration.
@@ -109,6 +112,7 @@ Application window and bundle configuration.
 ### Rust Configuration
 
 #### `Cargo.toml`
+
 **Location:** `src-tauri/Cargo.toml`
 
 Rust dependencies and crate configuration.
@@ -158,6 +162,7 @@ core-text = "20"
 ### TypeScript Configuration
 
 #### `tsconfig.json`
+
 **Location:** `tsconfig.json`
 
 ```json
@@ -192,6 +197,7 @@ core-text = "20"
 ## Internationalization Configuration
 
 #### `project.inlang/settings.json`
+
 **Location:** `project.inlang/settings.json`
 
 ```json
@@ -214,6 +220,7 @@ core-text = "20"
 **Location:** `messages/en.json`, `messages/zh.json`
 
 Example structure:
+
 ```json
 {
   "home": "Home",
@@ -235,6 +242,7 @@ Example structure:
 **Location:** `src-tauri/src/db.rs`
 
 The database is stored in the app's data directory:
+
 - macOS: `~/Library/Application Support/com.akrc.code/app.db`
 - Windows: `%APPDATA%/com.akrc.code/app.db`
 - Linux: `~/.local/share/com.akrc.code/app.db`
@@ -310,8 +318,8 @@ Errors are serialized to strings and returned to the frontend via Tauri's error 
 
 ### Development
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
+| Variable         | Purpose                 | Example         |
+| ---------------- | ----------------------- | --------------- |
 | `TAURI_DEV_HOST` | Mobile development host | `192.168.1.100` |
 
 ### Build
@@ -357,6 +365,7 @@ export const queryClient = new QueryClient({
 ```
 
 For production, a strict CSP should be configured:
+
 ```json
 "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
 ```

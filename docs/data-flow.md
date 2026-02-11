@@ -166,12 +166,12 @@ pub struct PtySession {
 
 ## Caching Strategy
 
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| Server State | TanStack Query | Cache project list, invalidate on mutations |
-| Terminal Output | SQLite (chunks) | Persistent scrollback history per session |
-| Session State | Rust HashMap | In-memory PTY handles for active sessions |
-| Font Preferences | localStorage | User font selection persistence |
+| Layer            | Technology      | Purpose                                     |
+| ---------------- | --------------- | ------------------------------------------- |
+| Server State     | TanStack Query  | Cache project list, invalidate on mutations |
+| Terminal Output  | SQLite (chunks) | Persistent scrollback history per session   |
+| Session State    | Rust HashMap    | In-memory PTY handles for active sessions   |
+| Font Preferences | localStorage    | User font selection persistence             |
 
 ## Error Handling Flow
 
@@ -188,6 +188,7 @@ Display error toast or fallback UI
 ```
 
 Key error types:
+
 - `IoError`: Filesystem operations
 - `LockError`: Mutex poisoning
 - `PtyError`: PTY operations

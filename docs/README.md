@@ -7,26 +7,28 @@
 ## Tech Stack
 
 ### Frontend
-| Technology | Purpose |
-|------------|---------|
-| React 19 | UI framework with concurrent features |
-| TypeScript | Type-safe development |
-| Vite | Build tool and dev server |
-| Chakra UI v3 | Component library |
-| Tailwind CSS v4 | Utility-first styling |
-| TanStack Query | Server state management |
-| Zustand | Client state management |
-| XTerm.js | Terminal emulator |
-| Paraglide.js v2 | Internationalization |
+
+| Technology      | Purpose                               |
+| --------------- | ------------------------------------- |
+| React 19        | UI framework with concurrent features |
+| TypeScript      | Type-safe development                 |
+| Vite            | Build tool and dev server             |
+| Chakra UI v3    | Component library                     |
+| Tailwind CSS v4 | Utility-first styling                 |
+| TanStack Query  | Server state management               |
+| Zustand         | Client state management               |
+| XTerm.js        | Terminal emulator                     |
+| Paraglide.js v2 | Internationalization                  |
 
 ### Backend
-| Technology | Purpose |
-|------------|---------|
-| Rust | Systems programming |
-| Tauri 2 | Desktop framework |
-| Diesel ORM | Database access |
-| SQLite | Embedded database |
-| portable-pty | Cross-platform PTY |
+
+| Technology   | Purpose             |
+| ------------ | ------------------- |
+| Rust         | Systems programming |
+| Tauri 2      | Desktop framework   |
+| Diesel ORM   | Database access     |
+| SQLite       | Embedded database   |
+| portable-pty | Cross-platform PTY  |
 
 ## Module Structure
 
@@ -74,12 +76,12 @@ src-tauri/src/                # Backend source
 
 ## Documentation Index
 
-| Document | Description |
-|----------|-------------|
-| [architecture.md](./architecture.md) | System architecture, component relationships, design decisions |
-| [data-flow.md](./data-flow.md) | Data flow diagrams, request lifecycle, state management |
-| [api-reference.md](./api-reference.md) | Tauri commands, IPC interface, API patterns |
-| [configuration.md](./configuration.md) | Config files, environment variables, build options |
+| Document                               | Description                                                    |
+| -------------------------------------- | -------------------------------------------------------------- |
+| [architecture.md](./architecture.md)   | System architecture, component relationships, design decisions |
+| [data-flow.md](./data-flow.md)         | Data flow diagrams, request lifecycle, state management        |
+| [api-reference.md](./api-reference.md) | Tauri commands, IPC interface, API patterns                    |
+| [configuration.md](./configuration.md) | Config files, environment variables, build options             |
 
 ## Key Features
 

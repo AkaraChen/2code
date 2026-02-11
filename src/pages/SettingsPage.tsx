@@ -3,12 +3,12 @@ import {
 	Checkbox,
 	Field,
 	Flex,
+	Heading,
 	IconButton,
 	NativeSelect,
 	NumberInput,
 	Skeleton,
 	Stack,
-	Heading,
 	Tabs,
 } from "@chakra-ui/react";
 import { Suspense, use, useMemo, useState } from "react";
@@ -17,10 +17,7 @@ import { fontsApi, type SystemFont } from "@/api/fonts";
 import { TerminalPreview } from "@/components/TerminalPreview";
 import { useThemePreference } from "@/components/ThemeProvider";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
-import {
-	terminalThemeIds,
-	terminalThemeNames,
-} from "@/lib/terminalThemes";
+import { terminalThemeIds, terminalThemeNames } from "@/lib/terminalThemes";
 import * as m from "@/paraglide/messages.js";
 import { getLocale, type Locale, setLocale } from "@/paraglide/runtime.js";
 import { useFontStore } from "@/stores/fontStore";
@@ -163,33 +160,34 @@ function TerminalThemePicker({
 				<Checkbox.Control />
 				<Checkbox.Label>{m.syncTerminalTheme()}</Checkbox.Label>
 			</Checkbox.Root>
-			{syncTerminalTheme
-				? themeSelect(
+			{syncTerminalTheme ? (
+				themeSelect(
+					darkTerminalTheme,
+					setDarkTerminalTheme,
+					m.terminalTheme(),
+				)
+			) : (
+				<>
+					{themeSelect(
 						darkTerminalTheme,
 						setDarkTerminalTheme,
-						m.terminalTheme(),
-					)
-				: (
-						<>
-							{themeSelect(
-								darkTerminalTheme,
-								setDarkTerminalTheme,
-								m.terminalThemeDark(),
-							)}
-							{themeSelect(
-								lightTerminalTheme,
-								setLightTerminalTheme,
-								m.terminalThemeLight(),
-							)}
-						</>
+						m.terminalThemeDark(),
 					)}
+					{themeSelect(
+						lightTerminalTheme,
+						setLightTerminalTheme,
+						m.terminalThemeLight(),
+					)}
+				</>
+			)}
 		</>
 	);
 }
 
 export default function SettingsPage() {
 	const { preference, setPreference } = useThemePreference();
-	const [previewThemeId, setPreviewThemeId] = useState<TerminalThemeId | null>(null);
+	const [previewThemeId, setPreviewThemeId] =
+		useState<TerminalThemeId | null>(null);
 
 	const themeOptions = [
 		{ value: "system", text: m.themeSystem() },
@@ -217,37 +215,32 @@ export default function SettingsPage() {
 						<Flex gap="8" align="flex-start">
 							<Stack gap="6" flex="1" minW="0" maxW="md">
 								<Field.Root>
-									<Field.Label>
-										{m.language()}
-									</Field.Label>
+									<Field.Label>{m.language()}</Field.Label>
 									<NativeSelect.Root>
 										<NativeSelect.Field
 											defaultValue={getLocale()}
 											onChange={(e) =>
 												setLocale(
-													e.target
-														.value as Locale,
+													e.target.value as Locale,
 												)
 											}
 										>
-											{(
-												["en", "zh"] as const
-											).map((locale) => (
-												<option
-													key={locale}
-													value={locale}
-												>
-													{localeNames[locale]}
-												</option>
-											))}
+											{(["en", "zh"] as const).map(
+												(locale) => (
+													<option
+														key={locale}
+														value={locale}
+													>
+														{localeNames[locale]}
+													</option>
+												),
+											)}
 										</NativeSelect.Field>
 										<NativeSelect.Indicator />
 									</NativeSelect.Root>
 								</Field.Root>
 								<Field.Root>
-									<Field.Label>
-										{m.theme()}
-									</Field.Label>
+									<Field.Label>{m.theme()}</Field.Label>
 									<NativeSelect.Root>
 										<NativeSelect.Field
 											value={preference}
@@ -272,12 +265,10 @@ export default function SettingsPage() {
 										<NativeSelect.Indicator />
 									</NativeSelect.Root>
 								</Field.Root>
-								<TerminalThemePicker onPreview={setPreviewThemeId} />
-								<Suspense
-									fallback={
-										<Skeleton height="70px" />
-									}
-								>
+								<TerminalThemePicker
+									onPreview={setPreviewThemeId}
+								/>
+								<Suspense fallback={<Skeleton height="70px" />}>
 									<FontPicker />
 								</Suspense>
 								<FontSizePicker />

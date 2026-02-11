@@ -1,5 +1,5 @@
 import { useTerminalTheme } from "@/hooks/useTerminalTheme";
-import { terminalThemes, type TerminalThemeId } from "@/lib/terminalThemes";
+import { type TerminalThemeId, terminalThemes } from "@/lib/terminalThemes";
 import { useFontStore } from "@/stores/fontStore";
 
 const lines = [
@@ -15,7 +15,9 @@ const lines = [
 
 export function TerminalPreview({
 	themeId,
-}: { themeId?: TerminalThemeId | null }) {
+}: {
+	themeId?: TerminalThemeId | null;
+}) {
 	const fontFamily = useFontStore((s) => s.fontFamily);
 	const fontSize = useFontStore((s) => s.fontSize);
 	const autoTheme = useTerminalTheme();

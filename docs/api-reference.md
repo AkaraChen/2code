@@ -20,20 +20,24 @@ pub fn command_name(arg1: Type, arg2: Type) -> AppResult<ReturnType> {
 ## Project Commands
 
 ### `list_projects`
+
 Returns all projects from the database.
 
 **Frontend:**
+
 ```typescript
 projectsApi.list() -> Promise<Project[]>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn list_projects(state: State<'_, DbPool>) -> AppResult<Vec<Project>>
 ```
 
 **Returns:** `Project[]`
+
 - `id: string` - UUID
 - `name: string` - Project name
 - `folder: string` - Absolute path to project directory
@@ -42,14 +46,17 @@ pub fn list_projects(state: State<'_, DbPool>) -> AppResult<Vec<Project>>
 ---
 
 ### `create_project_temporary`
+
 Creates a new project in a temporary directory with `git init`.
 
 **Frontend:**
+
 ```typescript
 projectsApi.createTemporary(name?: string | null) -> Promise<Project>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn create_project_temporary(
@@ -59,6 +66,7 @@ pub fn create_project_temporary(
 ```
 
 **Behavior:**
+
 1. Generates UUID and folder name (pinyin transliteration for CJK)
 2. Creates directory in temp folder
 3. Runs `git init`
@@ -67,14 +75,17 @@ pub fn create_project_temporary(
 ---
 
 ### `create_project_from_folder`
+
 Imports an existing folder as a project.
 
 **Frontend:**
+
 ```typescript
 projectsApi.createFromFolder(name: string, folder: string) -> Promise<Project>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn create_project_from_folder(
@@ -89,15 +100,18 @@ pub fn create_project_from_folder(
 ---
 
 ### `get_project`
+
 Retrieves a single project by ID.
 
 **Frontend:**
+
 ```typescript
 // Via useProject hook
 useProject(id: string) -> Project | undefined
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn get_project(id: String, state: State<'_, DbPool>) -> AppResult<Project>
@@ -106,14 +120,17 @@ pub fn get_project(id: String, state: State<'_, DbPool>) -> AppResult<Project>
 ---
 
 ### `update_project`
+
 Updates project metadata.
 
 **Frontend:**
+
 ```typescript
 projectsApi.update(id: string, name: string) -> Promise<Project>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn update_project(
@@ -127,14 +144,17 @@ pub fn update_project(
 ---
 
 ### `delete_project`
+
 Deletes a project (database only, not folder).
 
 **Frontend:**
+
 ```typescript
 projectsApi.delete(id: string) -> Promise<void>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()>
@@ -143,9 +163,11 @@ pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()>
 ## PTY Commands
 
 ### `create_pty_session`
+
 Creates a new PTY session for a project.
 
 **Frontend:**
+
 ```typescript
 ptyApi.createSession(
   projectId: string,
@@ -158,6 +180,7 @@ ptyApi.createSession(
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn create_pty_session(
@@ -173,6 +196,7 @@ pub fn create_pty_session(
 ```
 
 **Side Effects:**
+
 1. Spawns shell process via `portable-pty`
 2. Inserts session record into database
 3. Starts background reader thread
@@ -181,14 +205,17 @@ pub fn create_pty_session(
 ---
 
 ### `write_to_pty`
+
 Sends input to a PTY session.
 
 **Frontend:**
+
 ```typescript
 ptyApi.write(sessionId: string, data: string) -> Promise<void>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn write_to_pty(
@@ -201,14 +228,17 @@ pub fn write_to_pty(
 ---
 
 ### `resize_pty`
+
 Resizes the PTY terminal dimensions.
 
 **Frontend:**
+
 ```typescript
 ptyApi.resize(sessionId: string, rows: number, cols: number) -> Promise<void>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn resize_pty(
@@ -224,14 +254,17 @@ pub fn resize_pty(
 ---
 
 ### `close_pty_session`
+
 Closes a PTY session.
 
 **Frontend:**
+
 ```typescript
 ptyApi.close(sessionId: string) -> Promise<void>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn close_pty_session(
@@ -242,6 +275,7 @@ pub fn close_pty_session(
 ```
 
 **Side Effects:**
+
 1. Kills child shell process
 2. Removes session from HashMap
 3. Marks session as closed in database
@@ -249,14 +283,17 @@ pub fn close_pty_session(
 ---
 
 ### `list_active_sessions`
+
 Lists all PTY sessions for a project.
 
 **Frontend:**
+
 ```typescript
 ptyApi.listActiveSessions(projectId: string) -> Promise<PtySessionRecord[]>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn list_active_sessions(
@@ -268,14 +305,17 @@ pub fn list_active_sessions(
 ---
 
 ### `get_pty_session_history`
+
 Retrieves scrollback history for a session.
 
 **Frontend:**
+
 ```typescript
 ptyApi.getHistory(sessionId: string) -> Promise<number[]>  // UTF-8 bytes
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn get_pty_session_history(
@@ -289,14 +329,17 @@ pub fn get_pty_session_history(
 ---
 
 ### `delete_pty_session_record`
+
 Deletes a session record from the database.
 
 **Frontend:**
+
 ```typescript
 ptyApi.deleteRecord(sessionId: string) -> Promise<void>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn delete_pty_session_record(
@@ -308,15 +351,18 @@ pub fn delete_pty_session_record(
 ## Font Commands
 
 ### `list_system_fonts`
+
 Returns a list of available system fonts for terminal selection.
 
 **Frontend:**
+
 ```typescript
 // Via font API
 listSystemFonts() -> Promise<string[]>
 ```
 
 **Backend:**
+
 ```rust
 #[tauri::command]
 pub fn list_system_fonts() -> AppResult<Vec<String>>
@@ -339,6 +385,7 @@ app.emit(&format!("pty-output-{}", session_id), data)?;
 ```
 
 **Events:**
+
 - `pty-output-{sessionId}`: Terminal output stream
 - `pty-exit-{sessionId}`: Process termination signal
 
@@ -365,6 +412,7 @@ pub enum AppError {
 ```
 
 Frontend error handling:
+
 ```typescript
 // TanStack Query handles errors
 const mutation = useMutation({

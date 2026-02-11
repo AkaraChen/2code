@@ -10,7 +10,9 @@ export function useTerminalTheme(): ITheme {
 	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
 
 	if (syncTerminalTheme) {
-		return terminalThemes[darkTerminalTheme] ?? terminalThemes["github-dark"];
+		return (
+			terminalThemes[darkTerminalTheme] ?? terminalThemes["github-dark"]
+		);
 	}
 
 	const id = isDark ? darkTerminalTheme : lightTerminalTheme;

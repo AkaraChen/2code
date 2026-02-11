@@ -98,7 +98,12 @@ fn persist_pty_output(
 	while let Ok(data) = rx.recv() {
 		buffer.extend_from_slice(&data);
 		if buffer.len() >= FLUSH_THRESHOLD {
-			flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
+			flush_output_buffer(
+				&db,
+				session_id,
+				&mut buffer,
+				&mut total_written,
+			);
 		}
 	}
 

@@ -43,6 +43,7 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 **Routing** (react-router v7): `/` → HomePage, `/projects/:id` → ProjectDetailPage, `/settings` → SettingsPage.
 
 **Key directories:**
+
 - `api/` — Tauri IPC wrappers using `invoke<T>("command_name", { params })`
 - `stores/` — Zustand stores (terminalStore for per-project terminal tabs, fontStore with localStorage persistence)
 - `hooks/` — Custom hooks wrapping TanStack Query mutations and terminal lifecycle
@@ -52,11 +53,13 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - `types.ts` — Shared TypeScript interfaces matching Rust models
 
 **State management:**
+
 - Zustand for client state (terminal tabs per project, font preferences)
 - TanStack Query for server state (projects, sessions)
 - Query keys centralized in `lib/queryKeys.ts` — always use `queryKeys.projects.all` pattern
 
 **UI Framework:**
+
 - Chakra UI v3 (not v2 — breaking API differences)
 - Tailwind CSS v4 (layer imports, not v3 directives)
 - `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
@@ -87,6 +90,7 @@ Commands are organized by domain: PTY commands (create/write/resize/close/list/h
 Terminals never unmount — tab switches and route changes use CSS `display: none` to preserve xterm.js state. The `TerminalLayer` component renders as a persistent absolute-positioned overlay across all routes.
 
 **Session restoration on app start:**
+
 1. Fetch all sessions from DB (including closed ones with scrollback)
 2. Create new PTY session with same metadata
 3. Pass old `session.id` as `restoreFrom` prop
@@ -113,9 +117,11 @@ Paraglide.js v2 with inlang message format plugin. Source messages in `messages/
 **Usage:** `import * as m from "@/paraglide/messages.js"` → `m.home()`
 
 **Critical:** `project.inlang/settings.json` **must** include the modules array:
+
 ```json
 "modules": ["https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"]
 ```
+
 Without this, paraglide compiles but generates empty message files. Also requires `allowJs: true` in tsconfig.json.
 
 ## Path Aliases
