@@ -9,7 +9,7 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
-import { NavLink, useLocation, useNavigate } from "react-router";
+import { NavLink, useMatch, useNavigate } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import RenameProjectDialog from "@/components/RenameProjectDialog";
 import { useDeleteProject, useProjects } from "@/hooks/useProjects";
@@ -18,14 +18,13 @@ import * as m from "@/paraglide/messages.js";
 function SidebarLink({
 	to,
 	icon,
-	isActive,
 	children,
 }: {
 	to: string;
 	icon: React.ReactNode;
-	isActive: boolean;
 	children: React.ReactNode;
 }) {
+	const isActive = useMatch(to) !== null;
 	return (
 		<HStack
 			asChild
@@ -47,11 +46,10 @@ function SidebarLink({
 
 function ProjectMenuItem({
 	project,
-	isActive,
 }: {
 	project: { id: string; name: string };
-	isActive: boolean;
 }) {
+	const isActive = useMatch(`/projects/${project.id}`) !== null;
 	const deleteProject = useDeleteProject();
 	const navigate = useNavigate();
 	const [renameOpen, setRenameOpen] = useState(false);
@@ -113,11 +111,9 @@ function ProjectMenuItem({
 }
 
 export default function AppSidebar() {
-	const location = useLocation();
+	const projectsActive = useMatch("/projects/*") !== null;
 	const { data: projects } = useProjects();
 	const [dialogOpen, setDialogOpen] = useState(false);
-
-	const projectsActive = location.pathname.startsWith("/projects");
 
 	return (
 		<>
@@ -131,11 +127,7 @@ export default function AppSidebar() {
 				borderColor="border.subtle"
 			>
 				<Flex direction="column" h="full">
-					<SidebarLink
-						to="/"
-						icon={<LuHouse />}
-						isActive={location.pathname === "/"}
-					>
+					<SidebarLink to="/" icon={<LuHouse />}>
 						{m.home()}
 					</SidebarLink>
 
@@ -177,10 +169,6 @@ export default function AppSidebar() {
 								<ProjectMenuItem
 									key={project.id}
 									project={project}
-									isActive={
-										location.pathname ===
-										`/projects/${project.id}`
-									}
 								/>
 							))}
 						</Collapsible.Content>
@@ -188,11 +176,7 @@ export default function AppSidebar() {
 
 					<div className="grow" />
 
-					<SidebarLink
-						to="/settings"
-						icon={<LuSettings />}
-						isActive={location.pathname === "/settings"}
-					>
+					<SidebarLink to="/settings" icon={<LuSettings />}>
 						{m.settings()}
 					</SidebarLink>
 				</Flex>
