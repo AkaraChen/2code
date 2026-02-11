@@ -125,15 +125,11 @@ export function TerminalThemePicker({
 				<Checkbox.Root
 					size="sm"
 					checked={syncTerminalTheme}
-					onCheckedChange={(e) =>
-						setSyncTerminalTheme(!!e.checked)
-					}
+					onCheckedChange={(e) => setSyncTerminalTheme(!!e.checked)}
 				>
 					<Checkbox.HiddenInput />
 					<Checkbox.Control />
-					<Checkbox.Label>
-						{m.syncTerminalTheme()}
-					</Checkbox.Label>
+					<Checkbox.Label>{m.syncTerminalTheme()}</Checkbox.Label>
 				</Checkbox.Root>
 			</Field.Root>
 		</>

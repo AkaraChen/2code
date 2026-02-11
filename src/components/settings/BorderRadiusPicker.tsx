@@ -1,6 +1,6 @@
 import { Field, SegmentGroup } from "@chakra-ui/react";
-import { useThemeStore, type BorderRadius } from "@/stores/themeStore";
 import * as m from "@/paraglide/messages.js";
+import { type BorderRadius, useThemeStore } from "@/stores/themeStore";
 
 const items: { value: BorderRadius; label: () => string }[] = [
 	{ value: "none", label: () => m.radiusNone() },

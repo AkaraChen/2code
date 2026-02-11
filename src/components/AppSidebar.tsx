@@ -60,7 +60,6 @@ export default function AppSidebar() {
 
 					<div className="grow" />
 
-					<Separator />
 					<SidebarLink to="/settings" icon={<RiSettings3Line />}>
 						{m.settings()}
 					</SidebarLink>

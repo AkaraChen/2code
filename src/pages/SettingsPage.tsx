@@ -158,9 +158,7 @@ export default function SettingsPage() {
 								<TerminalThemePicker
 									onPreview={setPreviewThemeId}
 								/>
-								<Suspense
-									fallback={<Skeleton height="70px" />}
-								>
+								<Suspense fallback={<Skeleton height="70px" />}>
 									<FontPicker />
 								</Suspense>
 								<FontSizePicker />

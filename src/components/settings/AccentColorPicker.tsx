@@ -1,10 +1,10 @@
 import { Circle, Field, Flex } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import {
 	ACCENT_COLORS,
-	useThemeStore,
 	type AccentColor,
+	useThemeStore,
 } from "@/stores/themeStore";
-import * as m from "@/paraglide/messages.js";
 
 export function AccentColorPicker() {
 	const accentColor = useThemeStore((s) => s.accentColor);
