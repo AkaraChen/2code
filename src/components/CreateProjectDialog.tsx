@@ -1,14 +1,21 @@
 import {
+	Box,
 	Button,
 	CloseButton,
+	Code,
 	Dialog,
 	Field,
+	Flex,
+	HStack,
+	Icon,
 	Input,
 	Portal,
+	Stack,
+	Text,
 } from "@chakra-ui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
-import { LuFolderOpen } from "react-icons/lu";
+import { LuFolderOpen, LuPencil } from "react-icons/lu";
 import { useNavigate } from "react-router";
 import { useCreateProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
@@ -73,34 +80,89 @@ export default function CreateProjectDialog({
 							<Dialog.Title>{m.createProject()}</Dialog.Title>
 						</Dialog.Header>
 						<Dialog.Body>
-							<Field.Root>
-								<Field.Label>{m.projectName()}</Field.Label>
-								<Input
-									placeholder={m.projectNamePlaceholder()}
-									value={name}
-									onChange={(e) => setName(e.target.value)}
-								/>
-							</Field.Root>
-							<div className="mt-4 flex items-center gap-2">
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={handleChooseFolder}
-								>
-									<LuFolderOpen />
-									{m.chooseFolder()}
-								</Button>
-								{folder && (
-									<span
-										className="text-sm"
-										style={{
-											color: "var(--chakra-colors-fg-muted)",
+							<Stack gap="5">
+								{!folder ? (
+									<Box
+										as="button"
+										onClick={handleChooseFolder}
+										borderWidth="thin"
+										borderStyle="dashed"
+										borderColor="border.emphasized"
+										rounded="lg"
+										px="4"
+										py="6"
+										cursor="pointer"
+										transition="colors"
+										_hover={{
+											bg: "bg.subtle",
 										}}
 									>
-										{folder}
-									</span>
+										<Flex
+											direction="column"
+											align="center"
+											gap="2"
+										>
+											<Icon
+												fontSize="2xl"
+												color="fg.muted"
+											>
+												<LuFolderOpen />
+											</Icon>
+											<Text
+												fontSize="sm"
+												color="fg.muted"
+											>
+												{m.chooseFolder()}
+											</Text>
+										</Flex>
+									</Box>
+								) : (
+									<Box>
+										<HStack
+											justify="space-between"
+											mb="1.5"
+										>
+											<Text
+												fontSize="xs"
+												fontWeight="medium"
+												color="fg.muted"
+											>
+												{m.folder()}
+											</Text>
+											<Button
+												variant="outline"
+												size="xs"
+												onClick={handleChooseFolder}
+											>
+												<LuPencil />
+												{m.chooseFolder()}
+											</Button>
+										</HStack>
+										<Code
+											variant="surface"
+											size="sm"
+											display="block"
+											px="3"
+											py="2"
+											rounded="md"
+											truncate
+										>
+											{folder}
+										</Code>
+									</Box>
 								)}
-							</div>
+
+								<Field.Root>
+									<Field.Label>{m.projectName()}</Field.Label>
+									<Input
+										placeholder={m.projectNamePlaceholder()}
+										value={name}
+										onChange={(e) =>
+											setName(e.target.value)
+										}
+									/>
+								</Field.Root>
+							</Stack>
 						</Dialog.Body>
 						<Dialog.Footer>
 							<Dialog.ActionTrigger asChild>

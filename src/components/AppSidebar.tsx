@@ -13,8 +13,8 @@ import { useState } from "react";
 import { LuHouse, LuPlus, LuSettings } from "react-icons/lu";
 import { NavLink, useMatch } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
-import RenameProjectDialog from "@/components/RenameProjectDialog";
 import DeleteProjectDialog from "@/components/DeleteProjectDialog";
+import RenameProjectDialog from "@/components/RenameProjectDialog";
 import { useProjects } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
@@ -160,10 +160,7 @@ export default function AppSidebar() {
 					</HStack>
 
 					{projects.map((project) => (
-						<ProjectMenuItem
-							key={project.id}
-							project={project}
-						/>
+						<ProjectMenuItem key={project.id} project={project} />
 					))}
 
 					<div className="grow" />
