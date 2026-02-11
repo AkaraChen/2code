@@ -6,6 +6,7 @@ import { projectsApi } from "@/api/projects";
 import { useRestoreTerminals } from "@/hooks/useRestoreTerminals";
 import { queryKeys } from "@/lib/queryKeys";
 import { useTerminalProjectIds, useTerminalSync } from "@/stores/terminalStore";
+import ProjectTopBar from "./ProjectTopBar";
 import TerminalTabs from "./TerminalTabs";
 
 interface ContextInfo {
@@ -72,20 +73,32 @@ export default function TerminalLayer() {
 			{terminalContextIds.map((ctxId) => {
 				const ctx = contextMap.get(ctxId);
 				if (!ctx) return null;
+				const project = projects?.find((p) => p.id === ctx.projectId);
+				const profile =
+					ctxId !== ctx.projectId
+						? allProfiles?.find((p) => p.id === ctxId)
+						: undefined;
 				return (
 					<div
 						key={ctxId}
-						className="absolute inset-0"
+						className="absolute inset-0 flex flex-col"
 						style={{
 							display:
-								ctxId === activeContextId ? "block" : "none",
+								ctxId === activeContextId ? "flex" : "none",
 						}}
 					>
-						<TerminalTabs
-							contextId={ctxId}
-							projectId={ctx.projectId}
+						<ProjectTopBar
+							projectName={project?.name ?? ""}
+							profileBranchName={profile?.branch_name}
 							cwd={ctx.cwd}
 						/>
+						<div className="flex-1 min-h-0">
+							<TerminalTabs
+								contextId={ctxId}
+								projectId={ctx.projectId}
+								cwd={ctx.cwd}
+							/>
+						</div>
 					</div>
 				);
 			})}

@@ -1,11 +1,4 @@
-import {
-	Box,
-	Flex,
-	HStack,
-	IconButton,
-	Separator,
-	Text,
-} from "@chakra-ui/react";
+import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
 import CreateProjectDialog from "@/components/CreateProjectDialog";

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import { profilesApi } from "@/api/profiles";
+import ProjectTopBar from "@/components/ProjectTopBar";
 import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import { useProject } from "@/hooks/useProjects";
 import { queryKeys } from "@/lib/queryKeys";
@@ -44,35 +45,42 @@ export default function ProjectDetailPage() {
 	if (hasTabs) return null;
 
 	return (
-		<Center h="full">
-			<EmptyState.Root>
-				<EmptyState.Content>
-					<EmptyState.Indicator>
-						<RiTerminalBoxLine />
-					</EmptyState.Indicator>
-					<VStack textAlign="center">
-						<EmptyState.Title>
-							{m.noTerminalsOpen()}
-						</EmptyState.Title>
-						<EmptyState.Description>
-							{m.noTerminalsOpenDescription()}
-						</EmptyState.Description>
-					</VStack>
-					<Button
-						disabled={createTab.isPending}
-						onClick={() =>
-							createTab.mutate({
-								contextId,
-								projectId: project.id,
-								cwd,
-							})
-						}
-					>
-						<RiAddLine />
-						{m.newTerminal()}
-					</Button>
-				</EmptyState.Content>
-			</EmptyState.Root>
-		</Center>
+		<div className="flex flex-col h-full">
+			<ProjectTopBar
+				projectName={project.name}
+				profileBranchName={profile?.branch_name}
+				cwd={cwd}
+			/>
+			<Center flex="1">
+				<EmptyState.Root>
+					<EmptyState.Content>
+						<EmptyState.Indicator>
+							<RiTerminalBoxLine />
+						</EmptyState.Indicator>
+						<VStack textAlign="center">
+							<EmptyState.Title>
+								{m.noTerminalsOpen()}
+							</EmptyState.Title>
+							<EmptyState.Description>
+								{m.noTerminalsOpenDescription()}
+							</EmptyState.Description>
+						</VStack>
+						<Button
+							disabled={createTab.isPending}
+							onClick={() =>
+								createTab.mutate({
+									contextId,
+									projectId: project.id,
+									cwd,
+								})
+							}
+						>
+							<RiAddLine />
+							{m.newTerminal()}
+						</Button>
+					</EmptyState.Content>
+				</EmptyState.Root>
+			</Center>
+		</div>
 	);
 }

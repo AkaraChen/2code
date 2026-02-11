@@ -156,6 +156,20 @@ pub fn update_project(
 }
 
 #[tauri::command]
+pub fn get_git_branch(folder: String) -> AppResult<String> {
+	let output = Command::new("git")
+		.args(["rev-parse", "--abbrev-ref", "HEAD"])
+		.current_dir(&folder)
+		.output()?;
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
 pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	let rows = diesel::delete(projects::table.find(&id))
@@ -395,6 +409,48 @@ mod tests {
 			.execute(&mut conn)
 			.unwrap();
 		assert_eq!(rows, 0);
+	}
+
+	#[test]
+	fn get_branch_in_git_repo() {
+		let dir = std::env::temp_dir()
+			.join(format!("git-branch-test-{}", uuid::Uuid::new_v4()));
+		std::fs::create_dir_all(&dir).unwrap();
+		Command::new("git")
+			.args(["init"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		// Need at least one commit for rev-parse HEAD to work
+		Command::new("git")
+			.args(["commit", "--allow-empty", "-m", "init"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		let result = get_git_branch(dir.to_string_lossy().to_string());
+		let _ = std::fs::remove_dir_all(&dir);
+		let branch = result.unwrap();
+		assert!(
+			branch == "main" || branch == "master",
+			"expected main or master, got: {branch}"
+		);
+	}
+
+	#[test]
+	fn get_branch_non_git_dir() {
+		let dir = std::env::temp_dir()
+			.join(format!("no-git-test-{}", uuid::Uuid::new_v4()));
+		std::fs::create_dir_all(&dir).unwrap();
+		let result = get_git_branch(dir.to_string_lossy().to_string());
+		let _ = std::fs::remove_dir_all(&dir);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn get_branch_nonexistent_dir() {
+		let result =
+			get_git_branch("/tmp/nonexistent-dir-xyz-12345".to_string());
+		assert!(result.is_err());
 	}
 
 	#[test]

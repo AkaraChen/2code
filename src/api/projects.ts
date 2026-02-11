@@ -14,4 +14,6 @@ export const projectsApi = {
 		invoke<Project>("update_project", { id, name }),
 
 	delete: (id: string) => invoke<void>("delete_project", { id }),
+
+	getBranch: (folder: string) => invoke<string>("get_git_branch", { folder }),
 };
