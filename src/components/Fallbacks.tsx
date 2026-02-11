@@ -4,14 +4,14 @@ import * as m from "@/paraglide/messages.js";
 export function SidebarSkeleton() {
 	return (
 		<Box
-			w="220px"
+			w="250px"
 			flexShrink={0}
 			bg="bg.subtle"
 			borderRight="1px solid"
 			borderColor="border.subtle"
-			p="3"
+			p="4"
 		>
-			<Stack gap="2">
+			<Stack gap="3">
 				<Skeleton height="6" width="full" />
 				<Skeleton height="3" width="1/2" mt="2" />
 				<Skeleton height="5" width="3/4" ms="5" />

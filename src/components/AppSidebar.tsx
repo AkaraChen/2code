@@ -31,10 +31,9 @@ function SidebarLink({
 	return (
 		<HStack
 			asChild
-			gap="2"
-			px="3"
-			py="1.5"
-			fontSize="sm"
+			gap="3"
+			px="4"
+			py="2"
 			cursor="pointer"
 			borderLeft="3px solid"
 			borderColor={isActive ? "colorPalette.solid" : "transparent"}
@@ -42,7 +41,7 @@ function SidebarLink({
 			_hover={{ bg: "bg.subtle" }}
 		>
 			<NavLink to={to}>
-				<Icon fontSize="16px">{icon}</Icon>
+				<Icon fontSize="md">{icon}</Icon>
 				{children}
 			</NavLink>
 		</HStack>
@@ -65,10 +64,8 @@ function ProjectMenuItem({
 					<Box
 						asChild
 						display="block"
-						pl="3"
-						pr="3"
-						py="1"
-						fontSize="sm"
+						px="4"
+						py="1.5"
 						cursor="pointer"
 						truncate
 						borderLeft="3px solid"
@@ -128,18 +125,18 @@ export default function AppSidebar() {
 			<Box
 				as="nav"
 				aria-label={m.sideNavLabel()}
-				w="220px"
+				w="250px"
 				flexShrink={0}
 				bg="bg.subtle"
 				borderRight="1px solid"
 				borderColor="border.subtle"
 			>
-				<Flex direction="column" h="full" py="2">
+				<Flex direction="column" h="full" py="3">
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
 
-					<HStack px="3" pt="4" pb="1" justify="space-between">
+					<HStack px="4" pt="5" pb="2" justify="space-between">
 						<Text
 							fontSize="xs"
 							fontWeight="semibold"
