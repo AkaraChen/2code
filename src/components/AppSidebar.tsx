@@ -1,10 +1,18 @@
-import { Box, Collapsible, Flex, HStack, Icon, Menu, Portal } from "@chakra-ui/react";
-import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
+import {
+	Box,
+	Collapsible,
+	Flex,
+	HStack,
+	Icon,
+	Menu,
+	Portal,
+} from "@chakra-ui/react";
 import { useState } from "react";
+import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import RenameProjectDialog from "@/components/RenameProjectDialog";
-import { useProjects, useDeleteProject } from "@/hooks/useProjects";
+import { useDeleteProject, useProjects } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
 function SidebarLink({
@@ -139,10 +147,14 @@ export default function AppSidebar() {
 								py="2"
 								fontSize="sm"
 								cursor="pointer"
-								fontWeight={projectsActive ? "semibold" : "normal"}
+								fontWeight={
+									projectsActive ? "semibold" : "normal"
+								}
 								_hover={{ bg: "bg.muted" }}
 							>
-								<Icon><LuFolderOpen /></Icon>
+								<Icon>
+									<LuFolderOpen />
+								</Icon>
 								{m.projects()}
 							</HStack>
 						</Collapsible.Trigger>

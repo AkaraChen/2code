@@ -135,14 +135,9 @@ export function Terminal({
 				},
 			);
 
-			const unlistenExit = await listen(
-				`pty-exit-${sessionId}`,
-				() => {
-					term.write(
-						"\r\n\x1b[90m[Process exited]\x1b[0m\r\n",
-					);
-				},
-			);
+			const unlistenExit = await listen(`pty-exit-${sessionId}`, () => {
+				term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+			});
 
 			if (disposed) {
 				unlistenOutput();

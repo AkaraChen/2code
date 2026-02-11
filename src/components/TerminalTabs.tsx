@@ -1,11 +1,11 @@
 import { Button, CloseButton, Tabs } from "@chakra-ui/react";
 import { LuPlus, LuTerminal } from "react-icons/lu";
-import { Terminal } from "./Terminal";
-import { useTerminalStore } from "@/stores/terminalStore";
 import { useShallow } from "zustand/react/shallow";
-import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import { useCloseTerminalTab } from "@/hooks/useCloseTerminalTab";
+import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import * as m from "@/paraglide/messages.js";
+import { useTerminalStore } from "@/stores/terminalStore";
+import { Terminal } from "./Terminal";
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -14,7 +14,9 @@ interface TerminalTabsProps {
 
 export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
-		useShallow((s) => s.projects[projectId] ?? { tabs: [], activeTabId: null }),
+		useShallow(
+			(s) => s.projects[projectId] ?? { tabs: [], activeTabId: null },
+		),
 	);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
 	const createTab = useCreateTerminalTab();

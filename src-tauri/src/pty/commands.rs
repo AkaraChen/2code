@@ -256,8 +256,7 @@ pub fn delete_pty_session_record(
 pub fn mark_all_open_sessions_closed(db: &DbPool) {
 	let Ok(mut conn) = db.lock() else { return };
 	let _ = diesel::update(
-		pty_sessions::table
-			.filter(pty_sessions::closed_at.is_null()),
+		pty_sessions::table.filter(pty_sessions::closed_at.is_null()),
 	)
 	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
 	.execute(&mut *conn);

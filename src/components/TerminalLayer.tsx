@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { projectsApi } from "@/api/projects";
+import { useRestoreTerminals } from "@/hooks/useRestoreTerminals";
 import { queryKeys } from "@/lib/queryKeys";
 import { useTerminalProjectIds, useTerminalSync } from "@/stores/terminalStore";
-import { useRestoreTerminals } from "@/hooks/useRestoreTerminals";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -36,14 +36,10 @@ export default function TerminalLayer() {
 						key={id}
 						className="absolute inset-0"
 						style={{
-							display:
-								id === activeProjectId ? "block" : "none",
+							display: id === activeProjectId ? "block" : "none",
 						}}
 					>
-						<TerminalTabs
-							projectId={id}
-							cwd={project.folder}
-						/>
+						<TerminalTabs projectId={id} cwd={project.folder} />
 					</div>
 				);
 			})}

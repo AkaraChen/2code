@@ -72,10 +72,7 @@ pub fn create_project_temporary(
 
 	std::fs::create_dir_all(&dir)?;
 
-	let output = Command::new("git")
-		.arg("init")
-		.current_dir(&dir)
-		.output()?;
+	let output = Command::new("git").arg("init").current_dir(&dir).output()?;
 
 	if !output.status.success() {
 		let _ = std::fs::remove_dir_all(&dir);

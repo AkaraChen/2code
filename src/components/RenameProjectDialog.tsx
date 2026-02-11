@@ -76,13 +76,13 @@ export default function RenameProjectDialog({
 						</Dialog.Body>
 						<Dialog.Footer>
 							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">
-									{m.cancel()}
-								</Button>
+								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
 							<Button
 								onClick={handleRename}
-								disabled={!name.trim() || name.trim() === project.name}
+								disabled={
+									!name.trim() || name.trim() === project.name
+								}
 							>
 								{m.rename()}
 							</Button>

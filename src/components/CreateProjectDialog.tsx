@@ -49,7 +49,9 @@ export default function CreateProjectDialog({
 
 	const handleCreate = async () => {
 		const project = await createProject.mutateAsync(
-			name || folder ? { name: name || undefined, folder: folder ?? undefined } : undefined,
+			name || folder
+				? { name: name || undefined, folder: folder ?? undefined }
+				: undefined,
 		);
 		handleClose();
 		navigate(`/projects/${project.id}`);
@@ -89,7 +91,12 @@ export default function CreateProjectDialog({
 									{m.chooseFolder()}
 								</Button>
 								{folder && (
-									<span className="text-sm" style={{ color: "var(--chakra-colors-fg-muted)" }}>
+									<span
+										className="text-sm"
+										style={{
+											color: "var(--chakra-colors-fg-muted)",
+										}}
+									>
 										{folder}
 									</span>
 								)}
@@ -97,13 +104,9 @@ export default function CreateProjectDialog({
 						</Dialog.Body>
 						<Dialog.Footer>
 							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">
-									{m.cancel()}
-								</Button>
+								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
-							<Button onClick={handleCreate}>
-								{m.create()}
-							</Button>
+							<Button onClick={handleCreate}>{m.create()}</Button>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />

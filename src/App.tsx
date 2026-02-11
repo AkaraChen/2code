@@ -1,8 +1,12 @@
 import { Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router";
+import { Navigate, Route, Routes } from "react-router";
 import AppSidebar from "./components/AppSidebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { SidebarSkeleton, PageSkeleton, PageError } from "./components/Fallbacks";
+import {
+	PageError,
+	PageSkeleton,
+	SidebarSkeleton,
+} from "./components/Fallbacks";
 import TerminalLayer from "./components/TerminalLayer";
 import HomePage from "./pages/HomePage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";

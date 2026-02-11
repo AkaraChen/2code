@@ -32,4 +32,8 @@ diesel::table! {
 diesel::joinable!(pty_output_chunks -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> projects (project_id));
 
-diesel::allow_tables_to_appear_in_same_query!(projects, pty_output_chunks, pty_sessions,);
+diesel::allow_tables_to_appear_in_same_query!(
+	projects,
+	pty_output_chunks,
+	pty_sessions,
+);

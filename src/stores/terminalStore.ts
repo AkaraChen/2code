@@ -1,6 +1,6 @@
+import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { useEffect, useMemo } from "react";
 
 interface TerminalTab {
 	id: string;
@@ -16,7 +16,12 @@ interface ProjectTerminalState {
 
 interface TerminalStore {
 	projects: Record<string, ProjectTerminalState>;
-	addTab(projectId: string, sessionId: string, title: string, restoreFrom?: string): void;
+	addTab(
+		projectId: string,
+		sessionId: string,
+		title: string,
+		restoreFrom?: string,
+	): void;
 	closeTab(projectId: string, tabId: string): void;
 	setActiveTab(projectId: string, tabId: string): void;
 	clearRestore(projectId: string, tabId: string): void;

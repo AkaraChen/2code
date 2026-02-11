@@ -1,10 +1,10 @@
-import { useParams, Navigate } from "react-router";
 import { Button, Center, EmptyState, VStack } from "@chakra-ui/react";
 import { LuPlus, LuTerminal } from "react-icons/lu";
-import { useProject } from "@/hooks/useProjects";
+import { Navigate, useParams } from "react-router";
 import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
-import { useTerminalStore } from "@/stores/terminalStore";
+import { useProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
+import { useTerminalStore } from "@/stores/terminalStore";
 
 export default function ProjectDetailPage() {
 	const { id } = useParams<{ id: string }>();
@@ -29,7 +29,9 @@ export default function ProjectDetailPage() {
 						<LuTerminal />
 					</EmptyState.Indicator>
 					<VStack textAlign="center">
-						<EmptyState.Title>{m.noTerminalsOpen()}</EmptyState.Title>
+						<EmptyState.Title>
+							{m.noTerminalsOpen()}
+						</EmptyState.Title>
 						<EmptyState.Description>
 							{m.noTerminalsOpenDescription()}
 						</EmptyState.Description>
