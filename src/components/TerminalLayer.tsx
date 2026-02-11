@@ -93,6 +93,7 @@ export default function TerminalLayer() {
 							projectName={project?.name ?? ""}
 							profileBranchName={profile?.branch_name}
 							cwd={ctx.cwd}
+							contextId={ctxId}
 						/>
 						<Box flex="1" minH="0">
 							<TerminalTabs

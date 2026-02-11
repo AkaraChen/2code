@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::models::{NewProject, Project, UpdateProject};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
-use crate::schema::projects;
+use crate::schema::{profiles, projects};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -167,6 +167,33 @@ pub fn get_git_branch(folder: String) -> AppResult<String> {
 		));
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+pub fn get_git_diff(
+	context_id: String,
+	state: State<'_, DbPool>,
+) -> AppResult<String> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+
+	let folder = profiles::table
+		.find(&context_id)
+		.select(profiles::worktree_path)
+		.first::<String>(conn)
+		.or_else(|_| {
+			projects::table
+				.find(&context_id)
+				.select(projects::folder)
+				.first::<String>(conn)
+		})
+		.map_err(|_| AppError::NotFound(format!("Context: {context_id}")))?;
+
+	let output = Command::new("git")
+		.args(["diff"])
+		.current_dir(&folder)
+		.output()?;
+
+	Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 #[tauri::command]

@@ -5,6 +5,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import App from "./App";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { Toaster } from "./components/Toaster";
 import { queryClient } from "./lib/queryClient";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
@@ -15,6 +16,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 					<BrowserRouter>
 						<App />
 					</BrowserRouter>
+					<Toaster />
 				</ThemeProvider>
 			</ChakraProvider>
 		</QueryClientProvider>

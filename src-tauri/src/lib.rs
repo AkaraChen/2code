@@ -48,6 +48,7 @@ pub fn run() {
 			project::commands::update_project,
 			project::commands::delete_project,
 			project::commands::get_git_branch,
+			project::commands::get_git_diff,
 			font::list_system_fonts,
 			sound::list_system_sounds,
 			sound::play_system_sound,

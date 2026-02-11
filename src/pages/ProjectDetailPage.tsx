@@ -50,6 +50,7 @@ export default function ProjectDetailPage() {
 				projectName={project.name}
 				profileBranchName={profile?.branch_name}
 				cwd={cwd}
+				contextId={contextId}
 			/>
 			<Center flex="1">
 				<EmptyState.Root>
