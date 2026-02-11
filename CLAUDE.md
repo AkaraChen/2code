@@ -63,7 +63,6 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 **UI Framework:**
 
 - Chakra UI v3 (not v2 — breaking API differences)
-- Tailwind CSS v4 (layer imports, not v3 directives)
 - `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
 
 ### Backend (`/src-tauri`)
@@ -149,7 +148,6 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **PTY output has UTF-8 boundary detection** (`find_utf8_boundary`) — do not remove
 - **Font listing and sound playback are macOS-only** (`core-text` crate, `/System/Library/Sounds`, `afplay`) — needs platform guards for cross-platform
 - **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
-- **Tailwind v4** uses `@import "tailwindcss/theme" layer(theme)` and `@custom-variant` syntax, not v3 `@tailwind` directives
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
 - **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification` — all registered in `lib.rs`

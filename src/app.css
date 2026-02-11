@@ -1,7 +1,3 @@
-@import "tailwindcss";
-
-@custom-variant dark (&:where(.dark, [data-theme="dark"]) *);
-
 @font-face {
 	font-family: "OPPO Sans";
 	src: url("/fonts/OPPO-Sans-4.0.ttf") format("truetype");
@@ -24,10 +20,6 @@
 		"Apple Color Emoji",
 		"Segoe UI Emoji",
 		"Segoe UI Symbol";
-}
-
-.page-padding {
-	@apply p-8 pt-16;
 }
 
 [data-tauri-drag-region] button,

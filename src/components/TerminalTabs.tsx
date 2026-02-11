@@ -1,4 +1,4 @@
-import { Button, CloseButton, Tabs } from "@chakra-ui/react";
+import { Box, Button, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { useShallow } from "zustand/react/shallow";
 import { useCloseTerminalTab } from "@/hooks/useCloseTerminalTab";
@@ -30,7 +30,7 @@ export default function TerminalTabs({
 	if (tabs.length === 0) return null;
 
 	return (
-		<div className="flex flex-col h-full w-full">
+		<Flex direction="column" h="full" w="full">
 			<Tabs.Root
 				size="sm"
 				value={activeTabId}
@@ -40,7 +40,7 @@ export default function TerminalTabs({
 					{tabs.map((tab) => (
 						<Tabs.Trigger key={tab.id} value={tab.id}>
 							<RiTerminalBoxLine />
-							<span className="flex items-center gap-2">
+							<HStack gap="2">
 								{tab.title}
 								<CloseButton
 									as="span"
@@ -54,7 +54,7 @@ export default function TerminalTabs({
 										});
 									}}
 								/>
-							</span>
+							</HStack>
 						</Tabs.Trigger>
 					))}
 					<Button
@@ -73,24 +73,22 @@ export default function TerminalTabs({
 			</Tabs.Root>
 
 			{/* Terminal area — all terminals stay mounted, hidden via CSS */}
-			<div className="flex-1 min-h-0 relative">
+			<Box flex="1" minH="0" position="relative">
 				{tabs.map((tab) => (
-					<div
+					<Box
 						key={tab.id}
-						className="absolute inset-0"
-						style={{
-							display: tab.id === activeTabId ? "block" : "none",
-						}}
+						position="absolute"
+						inset="0"
+						display={tab.id === activeTabId ? "block" : "none"}
 					>
 						<Terminal
 							projectId={contextId}
 							sessionId={tab.id}
 							restoreFrom={tab.restoreFrom}
-							className="h-full"
 						/>
-					</div>
+					</Box>
 				))}
-			</div>
-		</div>
+			</Box>
+		</Flex>
 	);
 }

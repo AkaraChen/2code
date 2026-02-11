@@ -44,7 +44,7 @@ export default function SettingsPage() {
 	});
 
 	return (
-		<div className="page-padding">
+		<Box p="8" pt="16">
 			<Stack gap="6">
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
@@ -174,6 +174,6 @@ export default function SettingsPage() {
 					<Tabs.Content value="profile" />
 				</Tabs.Root>
 			</Stack>
-		</div>
+		</Box>
 	);
 }

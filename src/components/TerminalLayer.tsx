@@ -1,3 +1,4 @@
+import { Box, Flex } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
@@ -79,27 +80,28 @@ export default function TerminalLayer() {
 						? allProfiles?.find((p) => p.id === ctxId)
 						: undefined;
 				return (
-					<div
+					<Flex
 						key={ctxId}
-						className="absolute inset-0 flex flex-col"
-						style={{
-							display:
-								ctxId === activeContextId ? "flex" : "none",
-						}}
+						position="absolute"
+						inset="0"
+						direction="column"
+						display={
+							ctxId === activeContextId ? "flex" : "none"
+						}
 					>
 						<ProjectTopBar
 							projectName={project?.name ?? ""}
 							profileBranchName={profile?.branch_name}
 							cwd={ctx.cwd}
 						/>
-						<div className="flex-1 min-h-0">
+						<Box flex="1" minH="0">
 							<TerminalTabs
 								contextId={ctxId}
 								projectId={ctx.projectId}
 								cwd={ctx.cwd}
 							/>
-						</div>
-					</div>
+						</Box>
+					</Flex>
 				);
 			})}
 		</>

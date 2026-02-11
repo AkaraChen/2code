@@ -1,3 +1,4 @@
+import { Box, Flex } from "@chakra-ui/react";
 import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import AppSidebar from "./components/AppSidebar";
@@ -15,12 +16,12 @@ import "./app.css";
 
 export default function App() {
 	return (
-		<div className="flex flex-col h-full">
-			<div className="flex flex-1 min-h-0">
+		<Flex direction="column" h="full">
+			<Flex flex="1" minH="0">
 				<Suspense fallback={<SidebarSkeleton />}>
 					<AppSidebar />
 				</Suspense>
-				<main className="flex-1 overflow-y-auto relative">
+				<Box as="main" flex="1" overflowY="auto" position="relative">
 					<ErrorBoundary
 						fallback={(error, reset) => (
 							<PageError error={error} onRetry={reset} />
@@ -51,8 +52,8 @@ export default function App() {
 
 					{/* Persistent terminal layer — survives route changes */}
 					<TerminalLayer />
-				</main>
-			</div>
-		</div>
+				</Box>
+			</Flex>
+		</Flex>
 	);
 }

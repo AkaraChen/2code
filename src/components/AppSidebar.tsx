@@ -51,7 +51,7 @@ export default function AppSidebar() {
 						<ProjectMenuItem key={project.id} project={project} />
 					))}
 
-					<div className="grow" />
+					<Box flex="1" />
 
 					<SidebarLink to="/settings" icon={<RiSettings3Line />}>
 						{m.settings()}

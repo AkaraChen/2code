@@ -1,4 +1,4 @@
-import { Button, Center, EmptyState, VStack } from "@chakra-ui/react";
+import { Button, Center, EmptyState, Flex, VStack } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
@@ -45,7 +45,7 @@ export default function ProjectDetailPage() {
 	if (hasTabs) return null;
 
 	return (
-		<div className="flex flex-col h-full">
+		<Flex direction="column" h="full">
 			<ProjectTopBar
 				projectName={project.name}
 				profileBranchName={profile?.branch_name}
@@ -81,6 +81,6 @@ export default function ProjectDetailPage() {
 					</EmptyState.Content>
 				</EmptyState.Root>
 			</Center>
-		</div>
+		</Flex>
 	);
 }

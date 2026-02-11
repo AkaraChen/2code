@@ -12,14 +12,12 @@ interface TerminalProps {
 	projectId: string;
 	sessionId: string;
 	restoreFrom?: string;
-	className?: string;
 }
 
 export function Terminal({
 	projectId,
 	sessionId,
 	restoreFrom,
-	className,
 }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
@@ -157,7 +155,6 @@ export function Terminal({
 	return (
 		<div
 			ref={containerRef}
-			className={className}
 			style={{
 				width: "100%",
 				height: "100%",
