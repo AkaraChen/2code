@@ -202,9 +202,7 @@ function ProjectMenuItem({
 						cursor="pointer"
 						borderLeft="3px solid"
 						borderColor={
-							isAnyActive
-								? "colorPalette.solid"
-								: "transparent"
+							isAnyActive ? "colorPalette.solid" : "transparent"
 						}
 						bg={isAnyActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
