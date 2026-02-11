@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import RenameProjectDialog from "@/components/RenameProjectDialog";
-import { useProjects } from "@/contexts/ProjectContext";
+import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
 function SidebarLink({
@@ -44,12 +44,12 @@ function ProjectMenuItem({
 	project: { id: string; name: string };
 	isActive: boolean;
 }) {
-	const { deleteProject } = useProjects();
+	const deleteProject = useDeleteProject();
 	const navigate = useNavigate();
 	const [renameOpen, setRenameOpen] = useState(false);
 
 	const handleDelete = async () => {
-		await deleteProject(project.id);
+		await deleteProject.mutateAsync(project.id);
 		navigate("/");
 	};
 
@@ -106,7 +106,7 @@ function ProjectMenuItem({
 
 export default function AppSidebar() {
 	const location = useLocation();
-	const { projects } = useProjects();
+	const { data: projects } = useProjects();
 	const [dialogOpen, setDialogOpen] = useState(false);
 
 	const projectsActive = location.pathname.startsWith("/projects");

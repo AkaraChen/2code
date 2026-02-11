@@ -1,60 +1,48 @@
-import { Routes, Route, Navigate, useLocation, matchPath } from "react-router";
+import { Suspense } from "react";
+import { Routes, Route, Navigate } from "react-router";
 import AppSidebar from "./components/AppSidebar";
-import TerminalTabs from "./components/TerminalTabs";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SidebarSkeleton, PageSkeleton, PageError } from "./components/Fallbacks";
+import TerminalLayer from "./components/TerminalLayer";
 import HomePage from "./pages/HomePage";
 import ProjectDetailPage from "./pages/ProjectDetailPage";
 import SettingsPage from "./pages/SettingsPage";
-import { useProjects } from "./contexts/ProjectContext";
-import { useTerminalProjectIds, useTerminalSync } from "./stores/terminalStore";
 import "./app.css";
 
 export default function App() {
-	const location = useLocation();
-	const { projects } = useProjects();
-
-	useTerminalSync(projects);
-	const terminalProjectIds = useTerminalProjectIds();
-
-	const match = matchPath("/projects/:id", location.pathname);
-	const activeProjectId = match?.params.id ?? null;
-
 	return (
 		<div className="flex flex-col h-full">
 			<div className="flex flex-1 min-h-0">
-				<AppSidebar />
+				<Suspense fallback={<SidebarSkeleton />}>
+					<AppSidebar />
+				</Suspense>
 				<main className="flex-1 overflow-y-auto relative">
-					<Routes>
-						<Route path="/" element={<HomePage />} />
-						<Route
-							path="/projects/:id"
-							element={<ProjectDetailPage />}
-						/>
-						<Route path="/settings" element={<SettingsPage />} />
-						<Route path="*" element={<Navigate to="/" replace />} />
-					</Routes>
+					<ErrorBoundary
+						fallback={(error, reset) => (
+							<PageError error={error} onRetry={reset} />
+						)}
+					>
+						<Suspense fallback={<PageSkeleton />}>
+							<Routes>
+								<Route path="/" element={<HomePage />} />
+								<Route
+									path="/projects/:id"
+									element={<ProjectDetailPage />}
+								/>
+								<Route
+									path="/settings"
+									element={<SettingsPage />}
+								/>
+								<Route
+									path="*"
+									element={<Navigate to="/" replace />}
+								/>
+							</Routes>
+						</Suspense>
+					</ErrorBoundary>
 
 					{/* Persistent terminal layer — survives route changes */}
-					{terminalProjectIds.map((id) => {
-						const project = projects.find((p) => p.id === id);
-						if (!project) return null;
-						return (
-							<div
-								key={id}
-								className="absolute inset-0"
-								style={{
-									display:
-										id === activeProjectId
-											? "block"
-											: "none",
-								}}
-							>
-								<TerminalTabs
-									projectId={id}
-									cwd={project.folder}
-								/>
-							</div>
-						);
-					})}
+					<TerminalLayer />
 				</main>
 			</div>
 		</div>

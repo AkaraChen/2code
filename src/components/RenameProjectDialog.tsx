@@ -7,7 +7,7 @@ import {
 	Portal,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { useProjects } from "@/contexts/ProjectContext";
+import { useRenameProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
 interface RenameProjectDialogProps {
@@ -22,7 +22,7 @@ export default function RenameProjectDialog({
 	project,
 }: RenameProjectDialogProps) {
 	const [name, setName] = useState(project.name);
-	const { renameProject } = useProjects();
+	const renameProject = useRenameProject();
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -37,7 +37,7 @@ export default function RenameProjectDialog({
 			onClose();
 			return;
 		}
-		await renameProject(project.id, trimmed);
+		await renameProject.mutateAsync({ id: project.id, name: trimmed });
 		onClose();
 	};
 

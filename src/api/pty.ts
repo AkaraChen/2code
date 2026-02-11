@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PtySessionRecord } from "@/types";
 
 export const ptyApi = {
 	createSession: (
@@ -26,4 +27,13 @@ export const ptyApi = {
 
 	close: (sessionId: string) =>
 		invoke<void>("close_pty_session", { sessionId }),
+
+	listSessions: (projectId: string) =>
+		invoke<PtySessionRecord[]>("list_pty_sessions", { projectId }),
+
+	getHistory: (sessionId: string) =>
+		invoke<number[]>("get_pty_session_history", { sessionId }),
+
+	deleteRecord: (sessionId: string) =>
+		invoke<void>("delete_pty_session_record", { sessionId }),
 };

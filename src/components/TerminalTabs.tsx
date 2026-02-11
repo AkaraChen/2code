@@ -3,9 +3,9 @@ import { LuPlus, LuTerminal } from "react-icons/lu";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "@/stores/terminalStore";
 import { useShallow } from "zustand/react/shallow";
+import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
+import { useCloseTerminalTab } from "@/hooks/useCloseTerminalTab";
 import * as m from "@/paraglide/messages.js";
-
-const DEFAULT_SHELL = "/bin/zsh";
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -16,9 +16,9 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow((s) => s.projects[projectId] ?? { tabs: [], activeTabId: null }),
 	);
-	const createTab = useTerminalStore((s) => s.createTab);
-	const closeTab = useTerminalStore((s) => s.closeTab);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
+	const createTab = useCreateTerminalTab();
+	const closeTab = useCloseTerminalTab();
 
 	if (tabs.length === 0) return null;
 
@@ -42,7 +42,10 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 									size="2xs"
 									onClick={(e) => {
 										e.stopPropagation();
-										closeTab(projectId, tab.id);
+										closeTab.mutate({
+											projectId,
+											sessionId: tab.id,
+										});
 									}}
 								/>
 							</span>
@@ -53,7 +56,8 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 						ms="2"
 						size="2xs"
 						variant="ghost"
-						onClick={() => createTab(projectId)}
+						disabled={createTab.isPending}
+						onClick={() => createTab.mutate({ projectId, cwd })}
 					>
 						<LuPlus /> {m.newTerminal()}
 					</Button>
@@ -71,10 +75,7 @@ export default function TerminalTabs({ projectId, cwd }: TerminalTabsProps) {
 						}}
 					>
 						<Terminal
-							projectId={projectId}
-							title={tab.title}
-							shell={DEFAULT_SHELL}
-							cwd={cwd}
+							sessionId={tab.id}
 							className="h-full"
 						/>
 					</div>

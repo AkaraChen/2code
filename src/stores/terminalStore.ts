@@ -15,7 +15,7 @@ interface ProjectTerminalState {
 
 interface TerminalStore {
 	projects: Record<string, ProjectTerminalState>;
-	createTab(projectId: string): void;
+	addTab(projectId: string, sessionId: string, title: string): void;
 	closeTab(projectId: string, tabId: string): void;
 	setActiveTab(projectId: string, tabId: string): void;
 	removeProject(projectId: string): void;
@@ -25,25 +25,21 @@ interface TerminalStore {
 export const useTerminalStore = create<TerminalStore>((set) => ({
 	projects: {},
 
-	createTab(projectId) {
+	addTab(projectId, sessionId, title) {
 		set((state) => {
 			const existing = state.projects[projectId] ?? {
 				tabs: [],
 				activeTabId: null,
 				counter: 0,
 			};
-			const counter = existing.counter + 1;
-			const tab: TerminalTab = {
-				id: crypto.randomUUID(),
-				title: `Terminal ${counter}`,
-			};
+			const tab: TerminalTab = { id: sessionId, title };
 			return {
 				projects: {
 					...state.projects,
 					[projectId]: {
 						tabs: [...existing.tabs, tab],
 						activeTabId: tab.id,
-						counter,
+						counter: existing.counter + 1,
 					},
 				},
 			};

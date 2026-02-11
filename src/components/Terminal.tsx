@@ -64,19 +64,15 @@ export interface TerminalHandle {
 }
 
 interface TerminalProps {
-	projectId: string;
-	title: string;
-	shell: string;
-	cwd: string;
+	sessionId: string;
 	className?: string;
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
-	({ projectId, title, shell, cwd, className }, ref) => {
+	({ sessionId, className }, ref) => {
 		const containerRef = useRef<HTMLDivElement>(null);
 		const termRef = useRef<XTerm | null>(null);
 		const fitAddonRef = useRef<FitAddon | null>(null);
-		const sessionIdRef = useRef<string | null>(null);
 		const unlistenersRef = useRef<UnlistenFn[]>([]);
 		const { isDark } = useThemePreference();
 		const theme = isDark ? darkTheme : lightTheme;
@@ -85,11 +81,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 			termRef.current.options.theme = theme;
 		}
 
-		const runCode = useCallback((code: string) => {
-			if (sessionIdRef.current) {
-				ptyApi.write(sessionIdRef.current, code + "\n");
-			}
-		}, []);
+		const runCode = useCallback(
+			(code: string) => {
+				ptyApi.write(sessionId, code + "\n");
+			},
+			[sessionId],
+		);
 
 		useImperativeHandle(ref, () => ({ runCode }), [runCode]);
 
@@ -113,53 +110,40 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
 
-			// Start PTY session
-			const rows = term.rows;
-			const cols = term.cols;
+			// Resize PTY to match xterm dimensions
+			ptyApi.resize(sessionId, term.rows, term.cols);
 
-			ptyApi
-				.createSession(projectId, title, shell, cwd, rows, cols)
-				.then(async (sessionId) => {
-					sessionIdRef.current = sessionId;
+			// Listen for PTY output
+			const setupListeners = async () => {
+				const unlistenOutput = await listen<string>(
+					`pty-output-${sessionId}`,
+					(event) => {
+						term.write(event.payload);
+					},
+				);
 
-					// Listen for PTY output
-					const unlistenOutput = await listen<string>(
-						`pty-output-${sessionId}`,
-						(event) => {
-							term.write(event.payload);
-						},
-					);
+				const unlistenExit = await listen(
+					`pty-exit-${sessionId}`,
+					() => {
+						term.write(
+							"\r\n\x1b[90m[Process exited]\x1b[0m\r\n",
+						);
+					},
+				);
 
-					// Listen for PTY exit
-					const unlistenExit = await listen(
-						`pty-exit-${sessionId}`,
-						() => {
-							term.write(
-								"\r\n\x1b[90m[Process exited]\x1b[0m\r\n",
-							);
-						},
-					);
+				unlistenersRef.current.push(unlistenOutput, unlistenExit);
+			};
 
-					unlistenersRef.current.push(unlistenOutput, unlistenExit);
-				})
-				.catch((err) => {
-					term.write(
-						`\x1b[31mFailed to start shell: ${err}\x1b[0m\r\n`,
-					);
-				});
+			setupListeners();
 
 			// Forward user input to PTY
 			const onDataDisposable = term.onData((data) => {
-				if (sessionIdRef.current) {
-					ptyApi.write(sessionIdRef.current, data);
-				}
+				ptyApi.write(sessionId, data);
 			});
 
 			// Handle terminal resize
 			const onResizeDisposable = term.onResize(({ rows, cols }) => {
-				if (sessionIdRef.current) {
-					ptyApi.resize(sessionIdRef.current, rows, cols);
-				}
+				ptyApi.resize(sessionId, rows, cols);
 			});
 
 			// Handle container resize
@@ -178,16 +162,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(
 				}
 				unlistenersRef.current = [];
 
-				if (sessionIdRef.current) {
-					ptyApi.close(sessionIdRef.current);
-					sessionIdRef.current = null;
-				}
-
 				term.dispose();
 				termRef.current = null;
 				fitAddonRef.current = null;
 			};
-		}, [shell, cwd]);
+		}, [sessionId]);
 
 		return (
 			<div

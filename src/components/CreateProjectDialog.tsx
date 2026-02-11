@@ -10,7 +10,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { LuFolderOpen } from "react-icons/lu";
 import { useNavigate } from "react-router";
-import { useProjects } from "@/contexts/ProjectContext";
+import { useCreateProject } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
 interface CreateProjectDialogProps {
@@ -24,7 +24,7 @@ export default function CreateProjectDialog({
 }: CreateProjectDialogProps) {
 	const [name, setName] = useState("");
 	const [folder, setFolder] = useState<string | null>(null);
-	const { createProject } = useProjects();
+	const createProject = useCreateProject();
 	const navigate = useNavigate();
 
 	const reset = () => {
@@ -51,7 +51,7 @@ export default function CreateProjectDialog({
 		const opts: { name?: string; folder?: string } = {};
 		if (name) opts.name = name;
 		if (folder) opts.folder = folder;
-		const project = await createProject(
+		const project = await createProject.mutateAsync(
 			Object.keys(opts).length > 0 ? opts : undefined,
 		);
 		handleClose();

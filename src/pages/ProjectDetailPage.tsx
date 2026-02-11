@@ -1,19 +1,18 @@
 import { useParams, Navigate } from "react-router";
 import { Button, Center, EmptyState, VStack } from "@chakra-ui/react";
 import { LuPlus, LuTerminal } from "react-icons/lu";
-import { useProjects } from "@/contexts/ProjectContext";
+import { useProject } from "@/hooks/useProjects";
+import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import { useTerminalStore } from "@/stores/terminalStore";
 import * as m from "@/paraglide/messages.js";
 
 export default function ProjectDetailPage() {
 	const { id } = useParams<{ id: string }>();
-	const { projects } = useProjects();
+	const project = useProject(id!);
 	const hasTabs = useTerminalStore(
 		(s) => (id && s.projects[id]?.tabs.length > 0) ?? false,
 	);
-	const createTab = useTerminalStore((s) => s.createTab);
-
-	const project = projects.find((p) => p.id === id);
+	const createTab = useCreateTerminalTab();
 
 	if (!project) {
 		return <Navigate to="/" replace />;
@@ -35,7 +34,15 @@ export default function ProjectDetailPage() {
 							{m.noTerminalsOpenDescription()}
 						</EmptyState.Description>
 					</VStack>
-					<Button onClick={() => createTab(project.id)}>
+					<Button
+						disabled={createTab.isPending}
+						onClick={() =>
+							createTab.mutate({
+								projectId: project.id,
+								cwd: project.folder,
+							})
+						}
+					>
 						<LuPlus />
 						{m.newTerminal()}
 					</Button>
