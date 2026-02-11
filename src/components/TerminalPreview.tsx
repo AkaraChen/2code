@@ -1,5 +1,5 @@
-import { useThemePreference } from "@/components/ThemeProvider";
-import { darkTheme, lightTheme } from "@/lib/terminalThemes";
+import { useTerminalTheme } from "@/hooks/useTerminalTheme";
+import { terminalThemes, type TerminalThemeId } from "@/lib/terminalThemes";
 import { useFontStore } from "@/stores/fontStore";
 
 const lines = [
@@ -13,11 +13,13 @@ const lines = [
 	{ prompt: true, text: "" },
 ];
 
-export function TerminalPreview() {
+export function TerminalPreview({
+	themeId,
+}: { themeId?: TerminalThemeId | null }) {
 	const fontFamily = useFontStore((s) => s.fontFamily);
 	const fontSize = useFontStore((s) => s.fontSize);
-	const { isDark } = useThemePreference();
-	const theme = isDark ? darkTheme : lightTheme;
+	const autoTheme = useTerminalTheme();
+	const theme = themeId ? terminalThemes[themeId] : autoTheme;
 
 	return (
 		<div

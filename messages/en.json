@@ -33,5 +33,10 @@
 	"showAllFonts": "Show all fonts",
 	"fontSize": "Font Size",
 	"appearance": "Appearance",
-	"profile": "Profile"
+	"profile": "Profile",
+	"terminalTheme": "Terminal Theme",
+	"terminalThemeDark": "Dark Mode Theme",
+	"terminalThemeLight": "Light Mode Theme",
+	"syncTerminalTheme": "Use same theme for both modes",
+	"preview": "Preview"
 }

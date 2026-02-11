@@ -3,8 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 import { ptyApi } from "@/api/pty";
-import { useThemePreference } from "@/components/ThemeProvider";
-import { darkTheme, lightTheme } from "@/lib/terminalThemes";
+import { useTerminalTheme } from "@/hooks/useTerminalTheme";
 import { useFontStore } from "@/stores/fontStore";
 import { useTerminalStore } from "@/stores/terminalStore";
 import "@xterm/xterm/css/xterm.css";
@@ -26,10 +25,9 @@ export function Terminal({
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const unlistenersRef = useRef<UnlistenFn[]>([]);
-	const { isDark } = useThemePreference();
 	const fontFamily = useFontStore((s) => s.fontFamily);
 	const fontSize = useFontStore((s) => s.fontSize);
-	const theme = isDark ? darkTheme : lightTheme;
+	const theme = useTerminalTheme();
 
 	// Update theme without re-mounting the terminal
 	useEffect(() => {

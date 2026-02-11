@@ -33,5 +33,10 @@
 	"showAllFonts": "显示所有字体",
 	"fontSize": "字体大小",
 	"appearance": "外观",
-	"profile": "配置"
+	"profile": "配置",
+	"terminalTheme": "终端主题",
+	"terminalThemeDark": "深色模式主题",
+	"terminalThemeLight": "浅色模式主题",
+	"syncTerminalTheme": "两种模式使用相同主题",
+	"preview": "预览"
 }
