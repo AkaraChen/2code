@@ -314,7 +314,7 @@ export default function AppSidebar() {
 			<Box
 				as="nav"
 				aria-label={m.sideNavLabel()}
-				w="250px"
+				w="var(--sidebar-width)"
 				flexShrink={0}
 				bg="bg.subtle"
 			>

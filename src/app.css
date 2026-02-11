@@ -12,6 +12,7 @@
 }
 
 :root {
+	--sidebar-width: 250px;
 	font-family:
 		"OPPO Sans",
 		-apple-system,
