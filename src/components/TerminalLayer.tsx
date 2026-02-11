@@ -85,9 +85,7 @@ export default function TerminalLayer() {
 						position="absolute"
 						inset="0"
 						direction="column"
-						display={
-							ctxId === activeContextId ? "flex" : "none"
-						}
+						display={ctxId === activeContextId ? "flex" : "none"}
 					>
 						<ProjectTopBar
 							projectName={project?.name ?? ""}

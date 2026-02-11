@@ -14,11 +14,7 @@ interface TerminalProps {
 	restoreFrom?: string;
 }
 
-export function Terminal({
-	projectId,
-	sessionId,
-	restoreFrom,
-}: TerminalProps) {
+export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);

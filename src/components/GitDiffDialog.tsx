@@ -1,11 +1,25 @@
 import { CloseButton, Dialog, Portal, Spinner, Stack } from "@chakra-ui/react";
-import { useQuery } from "@tanstack/react-query";
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
+import type { TerminalThemeId } from "@/lib/terminalThemes";
+import { useFontStore } from "@/stores/fontStore";
 import { useThemePreference } from "./ThemeProvider";
+
+const shikiThemeMap: Record<TerminalThemeId, string> = {
+	"github-dark": "github-dark",
+	"github-light": "github-light",
+	dracula: "dracula",
+	"ayu-dark": "ayu-dark",
+	"ayu-light": "ayu-light",
+	"solarized-dark": "solarized-dark",
+	"solarized-light": "solarized-light",
+	"one-dark": "one-dark-pro",
+	"one-light": "one-light",
+};
 
 interface GitDiffDialogProps {
 	isOpen: boolean;
@@ -19,6 +33,9 @@ export default function GitDiffDialog({
 	contextId,
 }: GitDiffDialogProps) {
 	const { isDark } = useThemePreference();
+	const darkTerminalTheme = useFontStore((s) => s.darkTerminalTheme);
+	const lightTerminalTheme = useFontStore((s) => s.lightTerminalTheme);
+	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
 
 	const { data: diff, isLoading } = useQuery({
 		queryKey: queryKeys.projects.diff(contextId),
@@ -31,10 +48,14 @@ export default function GitDiffDialog({
 		return parsePatchFiles(diff).flatMap((p) => p.files);
 	}, [diff]);
 
-	const options = useMemo(
-		() => ({ theme: isDark ? "github-dark" : "github-light" }),
-		[isDark],
-	);
+	const options = useMemo(() => {
+		const termTheme = syncTerminalTheme
+			? darkTerminalTheme
+			: isDark
+				? darkTerminalTheme
+				: lightTerminalTheme;
+		return { theme: shikiThemeMap[termTheme] ?? "github-dark" };
+	}, [isDark, darkTerminalTheme, lightTerminalTheme, syncTerminalTheme]);
 
 	return (
 		<Dialog.Root
