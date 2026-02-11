@@ -6,7 +6,7 @@ import { useGitBranch } from "@/hooks/useProjects";
 import GitDiffDialog from "./GitDiffDialog";
 import { toaster } from "./Toaster";
 
-function GitBranch({ cwd }: { cwd: string }) {
+function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
 	if (!branch) return null;
 	return (
@@ -14,6 +14,28 @@ function GitBranch({ cwd }: { cwd: string }) {
 			<RiGitBranchLine />
 			<Text as="span">{branch}</Text>
 		</HStack>
+	);
+}
+
+function GitBranchDiffDialog({
+	cwd,
+	diffOpen,
+	onClose,
+	contextId,
+}: {
+	cwd: string;
+	diffOpen: boolean;
+	onClose: () => void;
+	contextId: string;
+}) {
+	const { data: branch } = useGitBranch(cwd);
+	return (
+		<GitDiffDialog
+			isOpen={diffOpen}
+			onClose={onClose}
+			contextId={contextId}
+			branchName={branch ?? undefined}
+		/>
 	);
 }
 
@@ -66,7 +88,7 @@ export default function ProjectTopBar({
 						</HStack>
 					) : (
 						<Suspense>
-							<GitBranch cwd={cwd} />
+							<GitBranchLabel cwd={cwd} />
 						</Suspense>
 					)}
 				</Box>
@@ -79,11 +101,23 @@ export default function ProjectTopBar({
 			>
 				<RiGitPullRequestLine />
 			</IconButton>
-			<GitDiffDialog
-				isOpen={diffOpen}
-				onClose={() => setDiffOpen(false)}
-				contextId={contextId}
-			/>
+			{profileBranchName ? (
+				<GitDiffDialog
+					isOpen={diffOpen}
+					onClose={() => setDiffOpen(false)}
+					contextId={contextId}
+					branchName={profileBranchName}
+				/>
+			) : (
+				<Suspense>
+					<GitBranchDiffDialog
+						cwd={cwd}
+						diffOpen={diffOpen}
+						onClose={() => setDiffOpen(false)}
+						contextId={contextId}
+					/>
+				</Suspense>
+			)}
 		</Flex>
 	);
 }
