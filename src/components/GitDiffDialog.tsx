@@ -302,8 +302,6 @@ export default function GitDiffDialog({
 							<Flex align="center" justify="center" flex="1">
 								<Spinner />
 							</Flex>
-						) : files.length === 0 ? (
-							<EmptyState message="No changes detected" />
 						) : (
 							<Flex flex="1" overflow="hidden">
 								{/* Left Sidebar */}
@@ -330,62 +328,74 @@ export default function GitDiffDialog({
 											</Tabs.Trigger>
 										</Tabs.List>
 										<Tabs.Content value="changes" p="0">
-											{/* Search */}
-											<Box px="2" py="2">
-												<Input
-													size="sm"
-													placeholder="Filter changed files"
-													disabled
-												/>
-											</Box>
+											{files.length === 0 ? (
+												<EmptyState message="No changes detected" />
+											) : (
+												<>
+													{/* Search */}
+													<Box px="2" py="2">
+														<Input
+															size="sm"
+															placeholder="Filter changed files"
+															disabled
+														/>
+													</Box>
 
-											{/* Select all */}
-											<HStack
-												px="3"
-												py="1"
-												fontSize="xs"
-												color="fg.muted"
-											>
-												<Checkbox.Root
-													size="sm"
-													variant="outline"
-													checked={false}
-													readOnly
-												>
-													<Checkbox.HiddenInput />
-													<Checkbox.Control />
-												</Checkbox.Root>
-												<Text>
-													{files.length} changed{" "}
-													{files.length === 1
-														? "file"
-														: "files"}
-												</Text>
-											</HStack>
+													{/* Select all */}
+													<HStack
+														px="3"
+														py="1"
+														fontSize="xs"
+														color="fg.muted"
+													>
+														<Checkbox.Root
+															size="sm"
+															variant="outline"
+															checked={false}
+															readOnly
+														>
+															<Checkbox.HiddenInput />
+															<Checkbox.Control />
+														</Checkbox.Root>
+														<Text>
+															{files.length}{" "}
+															changed{" "}
+															{files.length === 1
+																? "file"
+																: "files"}
+														</Text>
+													</HStack>
 
-											{/* File List */}
-											<Box
-												flex="1"
-												overflowY="auto"
-												borderTopWidth="1px"
-												borderColor="border"
-											>
-												{files.map((file, i) => (
-													<FileListItem
-														key={file.name + i}
-														file={file}
-														isActive={
-															selectedFileIndex ===
-															i
-														}
-														onClick={() =>
-															setSelectedFileIndex(
-																i,
-															)
-														}
-													/>
-												))}
-											</Box>
+													{/* File List */}
+													<Box
+														flex="1"
+														overflowY="auto"
+														borderTopWidth="1px"
+														borderColor="border"
+													>
+														{files.map(
+															(file, i) => (
+																<FileListItem
+																	key={
+																		file.name +
+																		i
+																	}
+																	file={file}
+																	isActive={
+																		selectedFileIndex ===
+																		i
+																	}
+																	onClick={() =>
+																		setSelectedFileIndex(
+																			i,
+																		)
+																	}
+																/>
+															),
+														)}
+													</Box>
+												</>
+											)}
 										</Tabs.Content>
 										<Tabs.Content value="history" p="0">
 											<EmptyState message="No history available" />
@@ -438,7 +448,13 @@ export default function GitDiffDialog({
 											/>
 										</>
 									) : (
-										<EmptyState message="Select a file to view changes" />
+										<EmptyState
+											message={
+												files.length === 0
+													? "No changes detected"
+													: "Select a file to view changes"
+											}
+										/>
 									)}
 								</Box>
 							</Flex>
