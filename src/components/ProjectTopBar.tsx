@@ -52,7 +52,7 @@ export default function ProjectTopBar({
 					)}
 				</Box>
 			</HStack>
-			<IconButton aria-label="Git diff" size="2xs">
+			<IconButton aria-label="Git diff" size="2xs" variant={"outline"}>
 				<RiGitPullRequestLine />
 			</IconButton>
 		</Flex>
