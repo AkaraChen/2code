@@ -9,10 +9,11 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { LuFolderOpen, LuHouse, LuSettings } from "react-icons/lu";
-import { NavLink, useMatch, useNavigate } from "react-router";
+import { NavLink, useMatch } from "react-router";
 import CreateProjectDialog from "@/components/CreateProjectDialog";
 import RenameProjectDialog from "@/components/RenameProjectDialog";
-import { useDeleteProject, useProjects } from "@/hooks/useProjects";
+import DeleteProjectDialog from "@/components/DeleteProjectDialog";
+import { useProjects } from "@/hooks/useProjects";
 import * as m from "@/paraglide/messages.js";
 
 function SidebarLink({
@@ -50,14 +51,8 @@ function ProjectMenuItem({
 	project: { id: string; name: string };
 }) {
 	const isActive = useMatch(`/projects/${project.id}`) !== null;
-	const deleteProject = useDeleteProject();
-	const navigate = useNavigate();
 	const [renameOpen, setRenameOpen] = useState(false);
-
-	const handleDelete = async () => {
-		await deleteProject.mutateAsync(project.id);
-		navigate("/");
-	};
+	const [deleteOpen, setDeleteOpen] = useState(false);
 
 	return (
 		<>
@@ -93,7 +88,7 @@ function ProjectMenuItem({
 								value="delete"
 								color="fg.error"
 								_hover={{ bg: "bg.error", color: "fg.error" }}
-								onClick={handleDelete}
+								onClick={() => setDeleteOpen(true)}
 							>
 								{m.deleteProject()}
 							</Menu.Item>
@@ -104,6 +99,11 @@ function ProjectMenuItem({
 			<RenameProjectDialog
 				isOpen={renameOpen}
 				onClose={() => setRenameOpen(false)}
+				project={project}
+			/>
+			<DeleteProjectDialog
+				isOpen={deleteOpen}
+				onClose={() => setDeleteOpen(false)}
 				project={project}
 			/>
 		</>
