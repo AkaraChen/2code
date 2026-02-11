@@ -27,5 +27,11 @@
 }
 
 .page-padding {
-	@apply p-8;
+	@apply p-8 pt-16;
+}
+
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] [role="button"] {
+	-webkit-app-region: no-drag;
 }

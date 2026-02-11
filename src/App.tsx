@@ -21,6 +21,11 @@ export default function App() {
 					<AppSidebar />
 				</Suspense>
 				<main className="flex-1 overflow-y-auto relative">
+					{/* macOS title bar drag region */}
+					<div
+						data-tauri-drag-region
+						className="absolute top-0 left-0 w-full h-12 z-1"
+					/>
 					<ErrorBoundary
 						fallback={(error, reset) => (
 							<PageError error={error} onRetry={reset} />

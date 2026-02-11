@@ -317,10 +317,10 @@ export default function AppSidebar() {
 				w="250px"
 				flexShrink={0}
 				bg="bg.subtle"
-				borderRight="1px solid"
-				borderColor="border.subtle"
 			>
-				<Flex direction="column" h="full" py="3">
+				<Flex direction="column" h="full" pb="3">
+					{/* macOS traffic light area + drag region */}
+					<Box data-tauri-drag-region h="48px" flexShrink={0} />
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
