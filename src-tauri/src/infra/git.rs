@@ -30,8 +30,9 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 /// Get the full diff (staged + unstaged) without affecting the real index.
 /// Uses a temporary index file to stage all changes, then diffs against HEAD.
 pub fn diff(folder: &str) -> Result<String, AppError> {
-	let tmp_dir = tempfile::tempdir()
-		.map_err(|e| AppError::GitError(format!("Failed to create temp dir: {e}")))?;
+	let tmp_dir = tempfile::tempdir().map_err(|e| {
+		AppError::GitError(format!("Failed to create temp dir: {e}"))
+	})?;
 	let tmp_index = tmp_dir.path().join("index");
 
 	// Stage all changes into a fresh temporary index (git add -A builds it from scratch)
@@ -43,7 +44,9 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 
 	if !add_output.status.success() {
 		return Err(AppError::GitError(
-			String::from_utf8_lossy(&add_output.stderr).trim().to_string(),
+			String::from_utf8_lossy(&add_output.stderr)
+				.trim()
+				.to_string(),
 		));
 	}
 

@@ -15,8 +15,20 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 			: file.name;
 
 	return (
-		<Flex px="3" py="1.5" userSelect="none" gap="3" align="center" bg={"bg.subtle"}>
-			<Badge bg={`${badge.colorPalette}.solid`} color="white" fontSize="xs" fontFamily="mono">
+		<Flex
+			px="3"
+			py="1.5"
+			userSelect="none"
+			gap="3"
+			align="center"
+			bg={"bg.subtle"}
+		>
+			<Badge
+				bg={`${badge.colorPalette}.solid`}
+				color="white"
+				fontSize="xs"
+				fontFamily="mono"
+			>
 				{badge.label}
 			</Badge>
 			<Text fontSize="sm" fontFamily="mono" flex="1" truncate>

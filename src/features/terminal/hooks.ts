@@ -125,9 +125,15 @@ export function useRestoreTerminals(
 
 export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = useThemePreference();
-	const darkTerminalTheme = useTerminalSettingsStore((s) => s.darkTerminalTheme);
-	const lightTerminalTheme = useTerminalSettingsStore((s) => s.lightTerminalTheme);
-	const syncTerminalTheme = useTerminalSettingsStore((s) => s.syncTerminalTheme);
+	const darkTerminalTheme = useTerminalSettingsStore(
+		(s) => s.darkTerminalTheme,
+	);
+	const lightTerminalTheme = useTerminalSettingsStore(
+		(s) => s.lightTerminalTheme,
+	);
+	const syncTerminalTheme = useTerminalSettingsStore(
+		(s) => s.syncTerminalTheme,
+	);
 
 	if (syncTerminalTheme) return darkTerminalTheme;
 	return isDark ? darkTerminalTheme : lightTerminalTheme;
