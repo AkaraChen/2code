@@ -3,6 +3,7 @@ import { Channel } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import { watchProjects } from "@/generated";
 import type { WatchEvent } from "@/generated/types";
+import { queryNamespaces } from "@/shared/lib/queryKeys";
 
 export function useFileWatcher() {
 	const queryClient = useQueryClient();
@@ -14,10 +15,12 @@ export function useFileWatcher() {
 			// Invalidate all git queries by prefix — simple and correct since
 			// file watcher emits project_id but git queries use profileId
 			queryClient.invalidateQueries({
-				queryKey: ["git-diff"],
+				queryKey: [queryNamespaces["git-diff"]],
+				exact: false,
 			});
 			queryClient.invalidateQueries({
-				queryKey: ["git-log"],
+				queryKey: [queryNamespaces["git-log"]],
+				exact: false,
 			});
 		};
 
