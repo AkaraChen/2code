@@ -1,4 +1,5 @@
 import {
+	Box,
 	Flex,
 	HStack,
 	IconButton,
@@ -61,7 +62,7 @@ export default function HistoryFileList({
 	if (!commit) return null;
 
 	return (
-		<>
+		<Flex direction="column" flex="1" minH="0" overflow="hidden">
 			<CommitHeader commit={commit} onBack={onBack} />
 			{isLoading ? (
 				<Flex align="center" justify="center" flex="1">
@@ -75,19 +76,21 @@ export default function HistoryFileList({
 				</Flex>
 			) : (
 				<>
-					<Text px="3" py="1" fontSize="xs" color="fg.muted">
+					<Text px="3" py="1" fontSize="xs" color="fg.muted" flexShrink={0}>
 						{m.changedFiles({ count: files.length })}
 					</Text>
-					{files.map((file, i) => (
-						<FileListItem
-							key={file.name + i}
-							file={file}
-							isActive={selectedIndex === i}
-							onClick={() => onFileSelect(i)}
-						/>
-					))}
+					<Box flex="1" overflowY="auto" minH="0">
+						{files.map((file, i) => (
+							<FileListItem
+								key={file.name + i}
+								file={file}
+								isActive={selectedIndex === i}
+								onClick={() => onFileSelect(i)}
+							/>
+						))}
+					</Box>
 				</>
 			)}
-		</>
+		</Flex>
 	);
 }
