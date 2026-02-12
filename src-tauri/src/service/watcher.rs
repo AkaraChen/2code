@@ -63,6 +63,7 @@ fn run_coordinator(
 
 				if should_send {
 					last_event.insert(project_id.clone(), now);
+					tracing::info!(target: "watcher", %project_id, "file changed");
 					let event = WatchEvent { project_id };
 					if channel.send(event).is_err() {
 						// Channel closed — frontend dropped it
@@ -97,6 +98,8 @@ fn reconcile_watchers(
 
 	// Remove watchers for deleted projects
 	watchers.retain(|id, _| current_ids.contains(id));
+
+	tracing::info!(target: "watcher", count = watchers.len(), projects = current_ids.len(), "reconciled watchers");
 
 	// Add watchers for new projects
 	for project in projects {

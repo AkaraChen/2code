@@ -42,6 +42,8 @@ pub fn create_session(
 		crate::repo::pty::insert_session(conn, &new_record)?;
 	}
 
+	tracing::info!(target: "pty", %session_id, project_id = %meta.project_id, "session created");
+
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
 	let app_handle = app.clone();
@@ -192,6 +194,7 @@ fn read_pty_output(
 	if let Ok(mut conn) = db.lock() {
 		crate::repo::pty::mark_closed(&mut conn, &session_id);
 	}
+	tracing::info!(target: "pty", %session_id, "session exited");
 	let _ = app.emit(&exit_event, ());
 }
 

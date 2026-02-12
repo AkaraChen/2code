@@ -8,6 +8,21 @@ mod service;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+	// Initialize tracing subscriber with console output + channel layer
+	let (channel_layer, layer_handle) = infra::logger::ChannelLayer::new();
+	{
+		use tracing_subscriber::layer::SubscriberExt;
+		use tracing_subscriber::util::SubscriberInitExt;
+		tracing_subscriber::registry()
+			.with(
+				tracing_subscriber::fmt::layer()
+					.with_target(true)
+					.with_level(true),
+			)
+			.with(channel_layer)
+			.init();
+	}
+
 	let sessions = infra::pty::create_session_map();
 	let sessions_for_exit = sessions.clone();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
@@ -19,6 +34,7 @@ pub fn run() {
 		.plugin(tauri_plugin_notification::init())
 		.manage(sessions)
 		.manage(shutdown_flag)
+		.manage(layer_handle)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -61,6 +77,8 @@ pub fn run() {
 			handler::profile::update_profile,
 			handler::profile::delete_profile,
 			handler::watcher::watch_projects,
+			handler::debug::start_debug_log,
+			handler::debug::stop_debug_log,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

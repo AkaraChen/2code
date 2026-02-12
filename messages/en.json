@@ -68,5 +68,11 @@
 	"noCommitsFound": "No commits found",
 	"noFileChanges": "No file changes",
 	"changedFiles": "{count} changed file(s)",
-	"backToCommitList": "Back to commit list"
+	"backToCommitList": "Back to commit list",
+	"debugMode": "Debug Mode",
+	"debugModeDescription": "Show backend log events in a floating panel.",
+	"debugLog": "Debug Log",
+	"debugSearchPlaceholder": "Search logs...",
+	"debugClear": "Clear",
+	"debugNoLogs": "No log entries yet"
 }

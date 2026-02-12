@@ -1,6 +1,9 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router";
+import DebugFloat from "./features/debug/DebugFloat";
+import { useDebugStore } from "./features/debug/debugStore";
+import { useDebugLogger } from "./features/debug/useDebugLogger";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
@@ -17,6 +20,20 @@ import "./app.css";
 
 export default function App() {
 	useFileWatcher();
+	useDebugLogger();
+
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
+			if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key === "D") {
+				e.preventDefault();
+				useDebugStore.getState().togglePanel();
+			}
+		};
+		window.addEventListener("keydown", handler);
+		return () => window.removeEventListener("keydown", handler);
+	}, []);
+
 	return (
 		<Flex direction="column" h="full">
 			<Flex flex="1" minH="0">
@@ -56,6 +73,7 @@ export default function App() {
 					<TerminalLayer />
 				</Box>
 			</Flex>
+			<DebugFloat />
 		</Flex>
 	);
 }

@@ -76,7 +76,13 @@ export default function HistoryFileList({
 				</Flex>
 			) : (
 				<>
-					<Text px="3" py="1" fontSize="xs" color="fg.muted" flexShrink={0}>
+					<Text
+						px="3"
+						py="1"
+						fontSize="xs"
+						color="fg.muted"
+						flexShrink={0}
+					>
 						{m.changedFiles({ count: files.length })}
 					</Text>
 					<Box flex="1" overflowY="auto" minH="0">

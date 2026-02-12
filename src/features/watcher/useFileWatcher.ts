@@ -1,5 +1,5 @@
-import { Channel } from "@tauri-apps/api/core";
 import { useQueryClient } from "@tanstack/react-query";
+import { Channel } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import { watchProjects } from "@/generated";
 import type { WatchEvent } from "@/generated/types";

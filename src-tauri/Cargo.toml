@@ -36,5 +36,7 @@ log = "0.4"
 tauri-plugin-notification = "2"
 tempfile = "3"
 notify = "8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [ "env-filter" ] }
 
 [dev-dependencies]

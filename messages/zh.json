@@ -68,5 +68,11 @@
 	"noCommitsFound": "暂无提交记录",
 	"noFileChanges": "无文件变更",
 	"changedFiles": "{count} 个文件已变更",
-	"backToCommitList": "返回提交列表"
+	"backToCommitList": "返回提交列表",
+	"debugMode": "调试模式",
+	"debugModeDescription": "在浮动面板中显示后端日志事件。",
+	"debugLog": "调试日志",
+	"debugSearchPlaceholder": "搜索日志...",
+	"debugClear": "清除",
+	"debugNoLogs": "暂无日志"
 }

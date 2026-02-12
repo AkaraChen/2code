@@ -1,3 +1,4 @@
+pub mod debug;
 pub mod profile;
 pub mod project;
 pub mod pty;

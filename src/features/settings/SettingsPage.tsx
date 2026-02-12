@@ -8,9 +8,12 @@ import {
 	Select,
 	Skeleton,
 	Stack,
+	Switch,
 	Tabs,
+	Text,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
+import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
@@ -32,6 +35,8 @@ const localeCollection = createListCollection({
 
 export default function SettingsPage() {
 	const { preference, setPreference } = useThemePreference();
+	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
+		useDebugStore();
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
@@ -150,6 +155,23 @@ export default function SettingsPage() {
 							</Field.Root>
 							<AccentColorPicker />
 							<BorderRadiusPicker />
+							<Field.Root>
+								<Field.Label>{m.debugMode()}</Field.Label>
+								<Switch.Root
+									checked={debugEnabled}
+									onCheckedChange={(e) =>
+										setDebugEnabled(!!e.checked)
+									}
+								>
+									<Switch.HiddenInput />
+									<Switch.Control />
+									<Switch.Label>
+										<Text fontSize="sm" color="fg.muted">
+											{m.debugModeDescription()}
+										</Text>
+									</Switch.Label>
+								</Switch.Root>
+							</Field.Root>
 						</Stack>
 					</Tabs.Content>
 					<Tabs.Content value="terminal">
