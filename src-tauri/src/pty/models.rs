@@ -1,6 +1,6 @@
 use crate::schema::{pty_output_chunks, pty_sessions};
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Selectable, Serialize)]
 #[diesel(table_name = pty_sessions)]
@@ -30,4 +30,19 @@ pub struct NewPtySessionRecord<'a> {
 pub struct NewPtyOutputChunk<'a> {
 	pub session_id: &'a str,
 	pub data: &'a [u8],
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PtySessionMeta {
+	pub project_id: String,
+	pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct PtyConfig {
+	pub shell: String,
+	pub cwd: String,
+	pub rows: u16,
+	pub cols: u16,
 }

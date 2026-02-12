@@ -114,8 +114,7 @@ mod tests {
 
 	#[test]
 	fn from_io_error_preserves_message() {
-		let io_err =
-			std::io::Error::new(std::io::ErrorKind::Other, "custom msg");
+		let io_err = std::io::Error::other("custom msg");
 		let app_err: AppError = io_err.into();
 		assert!(app_err.to_string().contains("custom msg"));
 	}

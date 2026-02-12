@@ -11,12 +11,8 @@ export const ptyApi = {
 		cols: number,
 	) =>
 		invoke<string>("create_pty_session", {
-			projectId,
-			title,
-			shell,
-			cwd,
-			rows,
-			cols,
+			meta: { projectId, title },
+			config: { shell, cwd, rows, cols },
 		}),
 
 	write: (sessionId: string, data: string) =>

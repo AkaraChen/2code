@@ -19,10 +19,14 @@ pub fn init_db(app_data_dir: &std::path::Path) -> Result<DbPool, String> {
 	let mut conn = SqliteConnection::establish(&db_url)
 		.map_err(|e| format!("Failed to connect to database: {e}"))?;
 
-	if let Err(e) = diesel::sql_query("PRAGMA journal_mode=WAL;").execute(&mut conn) {
+	if let Err(e) =
+		diesel::sql_query("PRAGMA journal_mode=WAL;").execute(&mut conn)
+	{
 		log::warn!("Failed to set journal_mode=WAL: {e}");
 	}
-	if let Err(e) = diesel::sql_query("PRAGMA foreign_keys=ON;").execute(&mut conn) {
+	if let Err(e) =
+		diesel::sql_query("PRAGMA foreign_keys=ON;").execute(&mut conn)
+	{
 		log::warn!("Failed to set foreign_keys=ON: {e}");
 	}
 

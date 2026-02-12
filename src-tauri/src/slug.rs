@@ -20,5 +20,5 @@ pub fn slugify_cjk(input: &str) -> String {
 	if !buf.is_empty() {
 		parts.push(buf);
 	}
-	slugify(&parts.join(" "))
+	slugify(parts.join(" "))
 }

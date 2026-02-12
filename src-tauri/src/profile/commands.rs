@@ -16,7 +16,7 @@ use crate::schema::{profiles, projects};
 fn sanitize_branch_name(input: &str) -> String {
 	input
 		.split('/')
-		.map(|seg| crate::slug::slugify_cjk(seg))
+		.map(crate::slug::slugify_cjk)
 		.filter(|s| !s.is_empty())
 		.collect::<Vec<_>>()
 		.join("/")

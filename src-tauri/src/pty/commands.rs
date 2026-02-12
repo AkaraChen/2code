@@ -4,7 +4,10 @@ use std::sync::mpsc;
 use diesel::prelude::*;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::models::{NewPtyOutputChunk, NewPtySessionRecord, PtySessionRecord};
+use super::models::{
+	NewPtyOutputChunk, NewPtySessionRecord, PtyConfig, PtySessionMeta,
+	PtySessionRecord,
+};
 use super::session::{self, PtySessionMap};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
@@ -17,15 +20,16 @@ const MAX_OUTPUT_PER_SESSION: usize = 1024 * 1024; // 1MB
 pub fn create_pty_session(
 	app: AppHandle,
 	sessions: State<'_, PtySessionMap>,
-	project_id: String,
-	title: String,
-	shell: String,
-	cwd: String,
-	rows: u16,
-	cols: u16,
+	meta: PtySessionMeta,
+	config: PtyConfig,
 ) -> AppResult<String> {
-	let (session_id, reader) =
-		session::create_session(&sessions, &shell, &cwd, rows, cols)?;
+	let (session_id, reader) = session::create_session(
+		&sessions,
+		&config.shell,
+		&config.cwd,
+		config.rows,
+		config.cols,
+	)?;
 
 	// Insert session record into database
 	let db = app.state::<DbPool>().inner().clone();
@@ -33,10 +37,10 @@ pub fn create_pty_session(
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let new_record = NewPtySessionRecord {
 			id: &session_id,
-			project_id: &project_id,
-			title: &title,
-			shell: &shell,
-			cwd: &cwd,
+			project_id: &meta.project_id,
+			title: &meta.title,
+			shell: &config.shell,
+			cwd: &config.cwd,
 		};
 		diesel::insert_into(pty_sessions::table)
 			.values(&new_record)
