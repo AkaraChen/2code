@@ -23,9 +23,3 @@ pub struct NewProfile<'a> {
 	pub worktree_path: &'a str,
 	pub is_default: bool,
 }
-
-#[derive(AsChangeset)]
-#[diesel(table_name = profiles)]
-pub struct UpdateProfile {
-	pub branch_name: Option<String>,
-}

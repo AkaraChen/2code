@@ -44,15 +44,6 @@ pub fn close_pty_session(
 }
 
 #[tauri::command]
-pub fn list_active_sessions(
-	profile_id: String,
-	state: State<'_, DbPool>,
-) -> Result<Vec<PtySessionRecord>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::pty::list_sessions(conn, &profile_id)
-}
-
-#[tauri::command]
 pub fn list_project_sessions(
 	project_id: String,
 	state: State<'_, DbPool>,

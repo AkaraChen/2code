@@ -17,18 +17,6 @@ pub fn insert_session(
 	Ok(())
 }
 
-pub fn list_by_profile(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<Vec<PtySessionRecord>, AppError> {
-	pty_sessions::table
-		.filter(pty_sessions::profile_id.eq(profile_id))
-		.select(PtySessionRecord::as_select())
-		.order(pty_sessions::created_at.asc())
-		.load(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
-}
-
 pub fn list_by_project(
 	conn: &mut SqliteConnection,
 	project_id: &str,

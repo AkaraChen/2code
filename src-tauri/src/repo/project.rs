@@ -26,17 +26,6 @@ pub fn insert(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn find_by_id(
-	conn: &mut SqliteConnection,
-	id: &str,
-) -> Result<Project, AppError> {
-	projects::table
-		.find(id)
-		.select(Project::as_select())
-		.first(conn)
-		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
-}
-
 pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 	projects::table
 		.select(Project::as_select())
@@ -175,21 +164,6 @@ mod tests {
 		insert(&mut conn, "p2", "B", "/b").unwrap();
 		let list = list_all(&mut conn).unwrap();
 		assert_eq!(list.len(), 2);
-	}
-
-	#[test]
-	fn get_found() {
-		let mut conn = setup_db();
-		insert(&mut conn, "p1", "Found", "/f").unwrap();
-		let project = find_by_id(&mut conn, "p1").unwrap();
-		assert_eq!(project.name, "Found");
-	}
-
-	#[test]
-	fn get_not_found() {
-		let mut conn = setup_db();
-		let result = find_by_id(&mut conn, "nonexistent");
-		assert!(result.is_err());
 	}
 
 	#[test]

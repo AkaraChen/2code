@@ -70,13 +70,6 @@ pub fn close_session(
 	Ok(())
 }
 
-pub fn list_sessions(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<Vec<PtySessionRecord>, AppError> {
-	crate::repo::pty::list_by_profile(conn, profile_id)
-}
-
 pub fn list_project_sessions(
 	conn: &mut SqliteConnection,
 	project_id: &str,

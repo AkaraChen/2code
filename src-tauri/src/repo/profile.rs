@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 
 use crate::error::AppError;
-use crate::model::profile::{NewProfile, Profile, UpdateProfile};
+use crate::model::profile::{NewProfile, Profile};
 use crate::schema::{profiles, projects};
 
 pub fn insert(
@@ -55,22 +55,6 @@ pub fn insert_default(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn find_default_by_project(
-	conn: &mut SqliteConnection,
-	project_id: &str,
-) -> Result<Profile, AppError> {
-	profiles::table
-		.filter(profiles::project_id.eq(project_id))
-		.filter(profiles::is_default.eq(true))
-		.select(Profile::as_select())
-		.first(conn)
-		.map_err(|_| {
-			AppError::NotFound(format!(
-				"Default profile for project: {project_id}"
-			))
-		})
-}
-
 pub fn find_by_id(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -80,51 +64,6 @@ pub fn find_by_id(
 		.select(Profile::as_select())
 		.first(conn)
 		.map_err(|_| AppError::NotFound(format!("Profile: {id}")))
-}
-
-pub fn list_by_project(
-	conn: &mut SqliteConnection,
-	project_id: &str,
-) -> Result<Vec<Profile>, AppError> {
-	profiles::table
-		.filter(profiles::project_id.eq(project_id))
-		.select(Profile::as_select())
-		.load(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
-}
-
-pub fn update(
-	conn: &mut SqliteConnection,
-	id: &str,
-	branch_name: Option<String>,
-) -> Result<Profile, AppError> {
-	let target = profiles::table.find(id);
-
-	let profile = target
-		.select(Profile::as_select())
-		.first(conn)
-		.map_err(|_| AppError::NotFound(format!("Profile: {id}")))?;
-
-	if profile.is_default {
-		return Err(AppError::DbError(
-			"Cannot update default profile".to_string(),
-		));
-	}
-
-	if branch_name.is_none() {
-		return Ok(profile);
-	}
-
-	let changeset = UpdateProfile { branch_name };
-	diesel::update(target)
-		.set(&changeset)
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	target
-		.select(Profile::as_select())
-		.first(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 /// Delete a profile record and return the profile + project folder.
@@ -235,27 +174,6 @@ mod tests {
 	}
 
 	#[test]
-	fn list_with_results() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
-		insert(&mut conn, "p2", "proj-1", "dev", "/w/p2").unwrap();
-
-		let profiles = list_by_project(&mut conn, "proj-1").unwrap();
-		// default profile + 2 inserted
-		assert_eq!(profiles.len(), 3);
-	}
-
-	#[test]
-	fn list_only_default() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		let profiles = list_by_project(&mut conn, "proj-1").unwrap();
-		assert_eq!(profiles.len(), 1);
-		assert!(profiles[0].is_default);
-	}
-
-	#[test]
 	fn get_found() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
@@ -270,54 +188,6 @@ mod tests {
 	fn get_not_found() {
 		let mut conn = setup_db();
 		let result = find_by_id(&mut conn, "nonexistent");
-		assert!(result.is_err());
-	}
-
-	#[test]
-	fn find_default_by_project_success() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-
-		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
-		assert!(default.is_default);
-		assert_eq!(default.project_id, "proj-1");
-		assert_eq!(default.worktree_path, "/tmp/test");
-	}
-
-	#[test]
-	fn update_branch_name() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
-
-		let updated =
-			update(&mut conn, "p1", Some("develop".to_string())).unwrap();
-		assert_eq!(updated.branch_name, "develop");
-	}
-
-	#[test]
-	fn update_no_fields() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
-
-		let unchanged = update(&mut conn, "p1", None).unwrap();
-		assert_eq!(unchanged.branch_name, "main");
-	}
-
-	#[test]
-	fn update_not_found() {
-		let mut conn = setup_db();
-		let result = update(&mut conn, "nonexistent", Some("new".to_string()));
-		assert!(result.is_err());
-	}
-
-	#[test]
-	fn update_default_profile_rejected() {
-		let mut conn = setup_db();
-		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
-		let result = update(&mut conn, &default.id, Some("new".to_string()));
 		assert!(result.is_err());
 	}
 
@@ -344,8 +214,7 @@ mod tests {
 	fn delete_default_profile_rejected() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
-		let result = delete(&mut conn, &default.id);
+		let result = delete(&mut conn, "default-proj-1");
 		assert!(result.is_err());
 	}
 
@@ -360,7 +229,11 @@ mod tests {
 			.execute(&mut conn)
 			.unwrap();
 
-		let profiles = list_by_project(&mut conn, "proj-1").unwrap();
-		assert!(profiles.is_empty());
+		let count: i64 = profiles::table
+			.filter(profiles::project_id.eq("proj-1"))
+			.count()
+			.get_result(&mut conn)
+			.unwrap();
+		assert_eq!(count, 0);
 	}
 }

@@ -2,7 +2,6 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::infra::db::DbPool;
-use crate::model::profile::Profile;
 use crate::model::project::{GitCommit, Project, ProjectWithProfiles};
 
 #[tauri::command]
@@ -30,15 +29,6 @@ pub fn list_projects(
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::project::list(conn)
-}
-
-#[tauri::command]
-pub fn get_project(
-	id: String,
-	state: State<'_, DbPool>,
-) -> Result<Project, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get(conn, &id)
 }
 
 #[tauri::command]
@@ -84,15 +74,6 @@ pub fn get_commit_diff(
 ) -> Result<String, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::project::get_commit_diff(conn, &profile_id, &commit_hash)
-}
-
-#[tauri::command]
-pub fn get_default_profile(
-	project_id: String,
-	state: State<'_, DbPool>,
-) -> Result<Profile, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::repo::profile::find_default_by_project(conn, &project_id)
 }
 
 #[tauri::command]

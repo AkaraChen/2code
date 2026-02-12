@@ -72,25 +72,6 @@ pub fn create(
 	Ok(profile)
 }
 
-pub fn list(
-	conn: &mut SqliteConnection,
-	project_id: &str,
-) -> Result<Vec<Profile>, AppError> {
-	crate::repo::profile::list_by_project(conn, project_id)
-}
-
-pub fn get(conn: &mut SqliteConnection, id: &str) -> Result<Profile, AppError> {
-	crate::repo::profile::find_by_id(conn, id)
-}
-
-pub fn update(
-	conn: &mut SqliteConnection,
-	id: &str,
-	branch_name: Option<String>,
-) -> Result<Profile, AppError> {
-	crate::repo::profile::update(conn, id, branch_name)
-}
-
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = crate::repo::profile::delete(conn, id)?;
 	let worktree_path = PathBuf::from(&profile.worktree_path);

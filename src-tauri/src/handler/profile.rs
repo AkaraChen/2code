@@ -15,34 +15,6 @@ pub fn create_profile(
 }
 
 #[tauri::command]
-pub fn list_profiles(
-	project_id: String,
-	state: State<'_, DbPool>,
-) -> Result<Vec<Profile>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::profile::list(conn, &project_id)
-}
-
-#[tauri::command]
-pub fn get_profile(
-	id: String,
-	state: State<'_, DbPool>,
-) -> Result<Profile, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::profile::get(conn, &id)
-}
-
-#[tauri::command]
-pub fn update_profile(
-	id: String,
-	branch_name: Option<String>,
-	state: State<'_, DbPool>,
-) -> Result<Profile, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::profile::update(conn, &id, branch_name)
-}
-
-#[tauri::command]
 pub fn delete_profile(
 	id: String,
 	state: State<'_, DbPool>,

@@ -82,10 +82,6 @@ pub fn list(
 	crate::repo::project::list_all_with_profiles(conn)
 }
 
-pub fn get(conn: &mut SqliteConnection, id: &str) -> Result<Project, AppError> {
-	crate::repo::project::find_by_id(conn, id)
-}
-
 pub fn update(
 	conn: &mut SqliteConnection,
 	id: &str,
