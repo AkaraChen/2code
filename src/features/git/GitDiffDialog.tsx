@@ -232,13 +232,15 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			</Activity>
 
 			<Activity mode={!isChanges ? "visible" : "hidden"}>
-				<HistoryDiffPane
-					profileId={profileId}
-					selectedCommit={selectedCommit}
-					selectedCommitFileIndex={selectedCommitFileIndex}
-					options={options}
-					visible={!isChanges}
-				/>
+				<Suspense fallback={null}>
+					<HistoryDiffPane
+						profileId={profileId}
+						selectedCommit={selectedCommit}
+						selectedCommitFileIndex={selectedCommitFileIndex}
+						options={options}
+						visible={!isChanges}
+					/>
+				</Suspense>
 			</Activity>
 		</Flex>
 	);
@@ -342,15 +344,13 @@ function HistorySidebar({
 				minH="0"
 				overflow="hidden"
 			>
-				<Suspense fallback={null}>
-					<CommitFileSidebar
-						profileId={profileId}
-						commit={selectedCommit}
-						selectedCommitFileIndex={selectedCommitFileIndex}
-						onCommitFileSelect={onCommitFileSelect}
-						onCommitBack={onCommitBack}
-					/>
-				</Suspense>
+				<CommitFileSidebar
+					profileId={profileId}
+					commit={selectedCommit}
+					selectedCommitFileIndex={selectedCommitFileIndex}
+					onCommitFileSelect={onCommitFileSelect}
+					onCommitBack={onCommitBack}
+				/>
 			</Box>
 		);
 	}
@@ -422,15 +422,13 @@ function HistoryDiffPane({
 	}
 
 	return (
-		<Suspense fallback={null}>
-			<CommitDiffViewer
-				profileId={profileId}
-				commit={selectedCommit}
-				selectedCommitFileIndex={selectedCommitFileIndex}
-				options={options}
-				visible={visible}
-			/>
-		</Suspense>
+		<CommitDiffViewer
+			profileId={profileId}
+			commit={selectedCommit}
+			selectedCommitFileIndex={selectedCommitFileIndex}
+			options={options}
+			visible={visible}
+		/>
 	);
 }
 
