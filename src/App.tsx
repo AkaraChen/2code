@@ -1,11 +1,12 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense, useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router";
+import { Suspense, useEffect, useMemo } from "react";
+import { Navigate, Route, Routes, useParams } from "react-router";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
 import { useDebugLogger } from "./features/debug/useDebugLogger";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
+import { useProjects } from "./features/projects/hooks";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import { useFileWatcher } from "./features/watcher/useFileWatcher";
@@ -17,6 +18,31 @@ import {
 	SidebarSkeleton,
 } from "./shared/components/Fallbacks";
 import "./app.css";
+
+function ProjectRedirect() {
+	const { id } = useParams<{ id: string }>();
+	const { data: projects } = useProjects();
+	const defaultProfile = useMemo(
+		() =>
+			projects
+				.find((p) => p.id === id)
+				?.profiles.find((p) => p.is_default),
+		[projects, id],
+	);
+
+	if (!projects.find((p) => p.id === id)) {
+		return <Navigate to="/" replace />;
+	}
+	if (defaultProfile) {
+		return (
+			<Navigate
+				to={`/projects/${id}/profiles/${defaultProfile.id}`}
+				replace
+			/>
+		);
+	}
+	return null;
+}
 
 export default function App() {
 	useFileWatcher();
@@ -51,7 +77,7 @@ export default function App() {
 								<Route path="/" element={<HomePage />} />
 								<Route
 									path="/projects/:id"
-									element={<ProjectDetailPage />}
+									element={<ProjectRedirect />}
 								/>
 								<Route
 									path="/projects/:id/profiles/:profileId"

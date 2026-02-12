@@ -5,10 +5,9 @@ import {
 	IconButton,
 	Menu,
 	Portal,
-	Spinner,
 	Text,
 } from "@chakra-ui/react";
-import { Suspense, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
 	RiArrowDownSLine,
 	RiArrowRightSLine,
@@ -17,21 +16,34 @@ import {
 import { NavLink, useMatch } from "react-router";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
+import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { ProfileList } from "./ProfileList";
 
 export function ProjectMenuItem({
 	project,
 }: {
-	project: { id: string; name: string };
+	project: ProjectWithProfiles;
 }) {
-	const projectMatch = useMatch(`/projects/${project.id}`);
+	const defaultProfile = useMemo(
+		() => project.profiles.find((p) => p.is_default),
+		[project.profiles],
+	);
+	const nonDefaultProfiles = useMemo(
+		() => project.profiles.filter((p) => !p.is_default),
+		[project.profiles],
+	);
+
 	const profileMatch = useMatch(
 		`/projects/${project.id}/profiles/:profileId`,
 	);
-	const isProjectActive = projectMatch !== null;
-	const isAnyActive = isProjectActive || profileMatch !== null;
+	const isAnyActive = profileMatch !== null;
 	const activeProfileId = profileMatch?.params.profileId ?? null;
+	const isDefaultActive = activeProfileId === defaultProfile?.id;
+
+	const defaultProfileUrl = defaultProfile
+		? `/projects/${project.id}/profiles/${defaultProfile.id}`
+		: `/projects/${project.id}`;
 
 	const [expanded, setExpanded] = useState(isAnyActive);
 	const [renameOpen, setRenameOpen] = useState(false);
@@ -61,7 +73,7 @@ export function ProjectMenuItem({
 						_hover={{ bg: "bg.subtle" }}
 					>
 						<Box asChild truncate flex="1">
-							<NavLink to={`/projects/${project.id}`}>
+							<NavLink to={defaultProfileUrl}>
 								{project.name}
 							</NavLink>
 						</Box>
@@ -117,10 +129,10 @@ export function ProjectMenuItem({
 						py="1"
 						cursor="pointer"
 						fontSize="sm"
-						bg={isProjectActive ? "bg.subtle" : "transparent"}
+						bg={isDefaultActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
 					>
-						<NavLink to={`/projects/${project.id}`}>
+						<NavLink to={defaultProfileUrl}>
 							<Icon fontSize="xs" color="fg.muted">
 								<RiTerminalBoxLine />
 							</Icon>
@@ -128,18 +140,11 @@ export function ProjectMenuItem({
 						</NavLink>
 					</HStack>
 
-					<Suspense
-						fallback={
-							<HStack ps="9" pe="4" py="1">
-								<Spinner size="xs" />
-							</HStack>
-						}
-					>
-						<ProfileList
-							projectId={project.id}
-							activeProfileId={activeProfileId}
-						/>
-					</Suspense>
+					<ProfileList
+						profiles={nonDefaultProfiles}
+						projectId={project.id}
+						activeProfileId={activeProfileId}
+					/>
 				</>
 			)}
 

@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import type { Project } from "@/generated";
+import type { ProjectWithProfiles } from "@/generated";
 import {
 	closePtySession,
 	createPtySession,
@@ -59,7 +59,9 @@ export function useCloseTerminalTab() {
 	});
 }
 
-export function useRestoreTerminals(projects: Project[] | undefined) {
+export function useRestoreTerminals(
+	projects: ProjectWithProfiles[] | undefined,
+) {
 	const didRestore = useRef(false);
 
 	useEffect(() => {

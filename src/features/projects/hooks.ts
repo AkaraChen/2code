@@ -1,6 +1,5 @@
 import {
 	useMutation,
-	useQuery,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -9,7 +8,6 @@ import {
 	createProjectFromFolder,
 	createProjectTemporary,
 	deleteProject,
-	getDefaultProfile,
 	getGitBranch,
 	listProjects,
 	updateProject,
@@ -30,16 +28,30 @@ export function useGitBranch(folder: string) {
 	});
 }
 
-export function useDefaultProfile(projectId: string) {
-	return useQuery({
-		queryKey: queryKeys.profiles.default(projectId),
-		queryFn: () => getDefaultProfile({ projectId }),
-	});
-}
-
 export function useProject(id: string) {
 	const { data: projects } = useProjects();
 	return useMemo(() => projects.find((p) => p.id === id), [projects, id]);
+}
+
+export function useProjectProfiles(projectId: string) {
+	const { data: projects } = useProjects();
+	return useMemo(
+		() => projects.find((p) => p.id === projectId)?.profiles ?? [],
+		[projects, projectId],
+	);
+}
+
+export function useDefaultProfile(projectId: string) {
+	const profiles = useProjectProfiles(projectId);
+	return useMemo(
+		() => profiles.find((p) => p.is_default) ?? null,
+		[profiles],
+	);
+}
+
+export function useAllProfiles() {
+	const { data: projects } = useProjects();
+	return useMemo(() => projects.flatMap((p) => p.profiles), [projects]);
 }
 
 export function useCreateProject() {
@@ -57,7 +69,6 @@ export function useCreateProject() {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-			queryClient.invalidateQueries({ queryKey: ["profiles"] });
 		},
 	});
 }

@@ -2,32 +2,31 @@ import { HStack, Icon, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import { RiAddLine } from "react-icons/ri";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
-import { useProfiles } from "@/features/profiles/hooks";
+import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { ProfileItem } from "./ProfileItem";
 
 export function ProfileList({
+	profiles,
 	projectId,
 	activeProfileId,
 }: {
+	profiles: Profile[];
 	projectId: string;
 	activeProfileId: string | null;
 }) {
-	const { data: profiles } = useProfiles(projectId);
 	const [createOpen, setCreateOpen] = useState(false);
 
 	return (
 		<>
-			{profiles
-				.filter((p) => !p.is_default)
-				.map((profile) => (
-					<ProfileItem
-						key={profile.id}
-						profile={profile}
-						projectId={projectId}
-						isActive={profile.id === activeProfileId}
-					/>
-				))}
+			{profiles.map((profile) => (
+				<ProfileItem
+					key={profile.id}
+					profile={profile}
+					projectId={projectId}
+					isActive={profile.id === activeProfileId}
+				/>
+			))}
 			<HStack
 				as="button"
 				gap="2"
