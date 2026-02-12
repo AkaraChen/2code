@@ -2,29 +2,26 @@ use std::io::Read;
 use std::sync::mpsc;
 
 use diesel::prelude::*;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 
-use super::models::{
-	NewPtyOutputChunk, NewPtySessionRecord, PtyConfig, PtySessionMeta,
-	PtySessionRecord,
-};
-use super::session::{self, PtySessionMap};
-use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
-use crate::schema::{pty_output_chunks, pty_sessions};
+use crate::infra::db::DbPool;
+use crate::infra::pty::{self as session, PtySessionMap};
+use crate::model::pty::{
+	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
+};
 
 const FLUSH_THRESHOLD: usize = 32 * 1024; // 32KB
 const MAX_OUTPUT_PER_SESSION: usize = 1024 * 1024; // 1MB
 
-#[tauri::command]
-pub fn create_pty_session(
-	app: AppHandle,
-	sessions: State<'_, PtySessionMap>,
-	meta: PtySessionMeta,
-	config: PtyConfig,
+pub fn create_session(
+	app: &AppHandle,
+	sessions: &PtySessionMap,
+	meta: &PtySessionMeta,
+	config: &PtyConfig,
 ) -> AppResult<String> {
 	let (session_id, reader) = session::create_session(
-		&sessions,
+		sessions,
 		&config.shell,
 		&config.cwd,
 		config.rows,
@@ -42,10 +39,7 @@ pub fn create_pty_session(
 			shell: &config.shell,
 			cwd: &config.cwd,
 		};
-		diesel::insert_into(pty_sessions::table)
-			.values(&new_record)
-			.execute(conn)
-			.map_err(|e| AppError::DbError(e.to_string()))?;
+		crate::repo::pty::insert_session(conn, &new_record)?;
 	}
 
 	// Spawn a background thread to read PTY output and emit events
@@ -58,9 +52,53 @@ pub fn create_pty_session(
 	Ok(session_id)
 }
 
+pub fn close_session(
+	app: &AppHandle,
+	sessions: &PtySessionMap,
+	session_id: &str,
+) -> AppResult<()> {
+	session::close_session(sessions, session_id)?;
+
+	// Mark session as closed in DB
+	let db = app.state::<DbPool>().inner().clone();
+	if let Ok(mut conn) = db.lock() {
+		crate::repo::pty::mark_closed(&mut conn, session_id);
+	}
+
+	Ok(())
+}
+
+pub fn list_sessions(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> AppResult<Vec<PtySessionRecord>> {
+	crate::repo::pty::list_by_project(conn, project_id)
+}
+
+pub fn get_history(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> AppResult<Vec<u8>> {
+	crate::repo::pty::get_session_history(conn, session_id)
+}
+
+pub fn delete_session(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> AppResult<()> {
+	crate::repo::pty::delete_session(conn, session_id)
+}
+
+/// Mark all open sessions (NULL closed_at) as closed. Called on startup for orphans
+/// and on exit for any still-running sessions.
+pub fn mark_all_closed(db: &DbPool) {
+	let Ok(mut conn) = db.lock() else { return };
+	crate::repo::pty::mark_all_open_closed(&mut conn);
+}
+
 /// Find the byte position up to which the data forms complete UTF-8 sequences.
 /// Any trailing incomplete multi-byte sequence is excluded from the boundary.
-fn find_utf8_boundary(bytes: &[u8]) -> usize {
+pub fn find_utf8_boundary(bytes: &[u8]) -> usize {
 	let len = bytes.len();
 	if len == 0 {
 		return 0;
@@ -88,32 +126,6 @@ fn find_utf8_boundary(bytes: &[u8]) -> usize {
 		return if i < seq_len { len - i } else { len };
 	}
 	len
-}
-
-/// Persistence thread: receives raw bytes from channel, buffers, and flushes to DB.
-fn persist_pty_output(
-	rx: mpsc::Receiver<Vec<u8>>,
-	db: DbPool,
-	session_id: &str,
-) {
-	let mut buffer: Vec<u8> = Vec::new();
-	let mut total_written: usize = 0;
-
-	while let Ok(data) = rx.recv() {
-		buffer.extend_from_slice(&data);
-		if buffer.len() >= FLUSH_THRESHOLD {
-			flush_output_buffer(
-				&db,
-				session_id,
-				&mut buffer,
-				&mut total_written,
-			);
-		}
-	}
-
-	if !buffer.is_empty() {
-		flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
-	}
 }
 
 fn read_pty_output(
@@ -176,8 +188,37 @@ fn read_pty_output(
 	drop(tx);
 	let _ = persist_thread.join();
 
-	mark_session_closed(&db, &session_id);
+	// Mark session closed in DB
+	if let Ok(mut conn) = db.lock() {
+		crate::repo::pty::mark_closed(&mut conn, &session_id);
+	}
 	let _ = app.emit(&exit_event, ());
+}
+
+/// Persistence thread: receives raw bytes from channel, buffers, and flushes to DB.
+fn persist_pty_output(
+	rx: mpsc::Receiver<Vec<u8>>,
+	db: DbPool,
+	session_id: &str,
+) {
+	let mut buffer: Vec<u8> = Vec::new();
+	let mut total_written: usize = 0;
+
+	while let Ok(data) = rx.recv() {
+		buffer.extend_from_slice(&data);
+		if buffer.len() >= FLUSH_THRESHOLD {
+			flush_output_buffer(
+				&db,
+				session_id,
+				&mut buffer,
+				&mut total_written,
+			);
+		}
+	}
+
+	if !buffer.is_empty() {
+		flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
+	}
 }
 
 fn flush_output_buffer(
@@ -188,13 +229,7 @@ fn flush_output_buffer(
 ) {
 	let Ok(mut conn) = db.lock() else { return };
 
-	let chunk = NewPtyOutputChunk {
-		session_id,
-		data: buffer,
-	};
-	if diesel::insert_into(pty_output_chunks::table)
-		.values(&chunk)
-		.execute(&mut *conn)
+	if crate::repo::pty::insert_output_chunk(&mut conn, session_id, buffer)
 		.is_ok()
 	{
 		*total_written += buffer.len();
@@ -212,16 +247,7 @@ fn prune_oldest_chunks(
 	session_id: &str,
 	total_written: &mut usize,
 ) {
-	// Get chunk ids and sizes without loading BLOB data
-	let chunks: Vec<(Option<i32>, i32)> = pty_output_chunks::table
-		.filter(pty_output_chunks::session_id.eq(session_id))
-		.select((
-			pty_output_chunks::id,
-			diesel::dsl::sql::<diesel::sql_types::Integer>("length(data)"),
-		))
-		.order(pty_output_chunks::id.asc())
-		.load(conn)
-		.unwrap_or_default();
+	let chunks = crate::repo::pty::get_chunk_sizes(conn, session_id);
 
 	let mut running_total: usize =
 		chunks.iter().map(|(_, len)| *len as usize).sum();
@@ -238,112 +264,10 @@ fn prune_oldest_chunks(
 	}
 
 	if !ids_to_delete.is_empty() {
-		let _ = diesel::delete(
-			pty_output_chunks::table
-				.filter(pty_output_chunks::id.eq_any(&ids_to_delete)),
-		)
-		.execute(conn);
+		crate::repo::pty::delete_chunks_by_ids(conn, &ids_to_delete);
 	}
 
 	*total_written = running_total;
-}
-
-fn mark_session_closed(db: &DbPool, session_id: &str) {
-	let Ok(mut conn) = db.lock() else { return };
-	let _ = diesel::update(
-		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
-	)
-	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
-	.execute(&mut *conn);
-}
-
-#[tauri::command]
-pub fn write_to_pty(
-	sessions: State<'_, PtySessionMap>,
-	session_id: String,
-	data: String,
-) -> AppResult<()> {
-	session::write_to_pty(&sessions, &session_id, data.as_bytes())
-}
-
-#[tauri::command]
-pub fn resize_pty(
-	sessions: State<'_, PtySessionMap>,
-	session_id: String,
-	rows: u16,
-	cols: u16,
-) -> AppResult<()> {
-	session::resize_pty(&sessions, &session_id, rows, cols)
-}
-
-#[tauri::command]
-pub fn close_pty_session(
-	app: AppHandle,
-	sessions: State<'_, PtySessionMap>,
-	session_id: String,
-) -> AppResult<()> {
-	session::close_session(&sessions, &session_id)?;
-
-	// Mark session as closed in DB
-	let db = app.state::<DbPool>().inner().clone();
-	mark_session_closed(&db, &session_id);
-
-	Ok(())
-}
-
-#[tauri::command]
-pub fn list_active_sessions(
-	project_id: String,
-	state: State<'_, DbPool>,
-) -> AppResult<Vec<PtySessionRecord>> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	pty_sessions::table
-		.filter(pty_sessions::project_id.eq(&project_id))
-		.select(PtySessionRecord::as_select())
-		.order(pty_sessions::created_at.asc())
-		.load(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
-}
-
-#[tauri::command]
-pub fn get_pty_session_history(
-	session_id: String,
-	state: State<'_, DbPool>,
-) -> AppResult<Vec<u8>> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	let chunks: Vec<Vec<u8>> = pty_output_chunks::table
-		.filter(pty_output_chunks::session_id.eq(&session_id))
-		.select(pty_output_chunks::data)
-		.order(pty_output_chunks::id.asc())
-		.load(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	Ok(chunks.into_iter().flatten().collect())
-}
-
-#[tauri::command]
-pub fn delete_pty_session_record(
-	session_id: String,
-	state: State<'_, DbPool>,
-) -> AppResult<()> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	diesel::delete(
-		pty_sessions::table.filter(pty_sessions::id.eq(&session_id)),
-	)
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
-	Ok(())
-}
-
-/// Mark all open sessions (NULL closed_at) as closed. Called on startup for orphans
-/// and on exit for any still-running sessions.
-pub fn mark_all_open_sessions_closed(db: &DbPool) {
-	let Ok(mut conn) = db.lock() else { return };
-	let _ = diesel::update(
-		pty_sessions::table.filter(pty_sessions::closed_at.is_null()),
-	)
-	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
-	.execute(&mut *conn);
 }
 
 #[cfg(test)]
@@ -371,21 +295,18 @@ mod tests {
 
 	#[test]
 	fn boundary_complete_2byte() {
-		// "é" = 0xC3 0xA9
 		let bytes = "é".as_bytes();
 		assert_eq!(find_utf8_boundary(bytes), bytes.len());
 	}
 
 	#[test]
 	fn boundary_complete_3byte() {
-		// "中" = 0xE4 0xB8 0xAD
 		let bytes = "中".as_bytes();
 		assert_eq!(find_utf8_boundary(bytes), bytes.len());
 	}
 
 	#[test]
 	fn boundary_complete_4byte() {
-		// "😀" = 0xF0 0x9F 0x98 0x80
 		let bytes = "😀".as_bytes();
 		assert_eq!(find_utf8_boundary(bytes), bytes.len());
 	}
@@ -394,19 +315,16 @@ mod tests {
 
 	#[test]
 	fn boundary_incomplete_2byte_leader_only() {
-		// 0xC3 is a 2-byte leader, missing continuation
 		assert_eq!(find_utf8_boundary(&[0xC3]), 0);
 	}
 
 	#[test]
 	fn boundary_incomplete_3byte_leader_only() {
-		// 0xE4 is a 3-byte leader, missing 2 continuations
 		assert_eq!(find_utf8_boundary(&[0xE4]), 0);
 	}
 
 	#[test]
 	fn boundary_incomplete_4byte_leader_only() {
-		// 0xF0 is a 4-byte leader, missing 3 continuations
 		assert_eq!(find_utf8_boundary(&[0xF0]), 0);
 	}
 
@@ -414,19 +332,16 @@ mod tests {
 
 	#[test]
 	fn boundary_incomplete_3byte_one_continuation() {
-		// 0xE4 0xB8 — 3-byte leader + 1 continuation, missing 1 more
 		assert_eq!(find_utf8_boundary(&[0xE4, 0xB8]), 0);
 	}
 
 	#[test]
 	fn boundary_incomplete_4byte_one_continuation() {
-		// 0xF0 0x9F — 4-byte leader + 1 continuation, missing 2 more
 		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F]), 0);
 	}
 
 	#[test]
 	fn boundary_incomplete_4byte_two_continuations() {
-		// 0xF0 0x9F 0x98 — 4-byte leader + 2 continuations, missing 1 more
 		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F, 0x98]), 0);
 	}
 
@@ -434,28 +349,24 @@ mod tests {
 
 	#[test]
 	fn boundary_ascii_then_incomplete_2byte() {
-		// "Hi" + incomplete 2-byte leader
 		let bytes = &[b'H', b'i', 0xC3];
 		assert_eq!(find_utf8_boundary(bytes), 2);
 	}
 
 	#[test]
 	fn boundary_ascii_then_incomplete_3byte() {
-		// "AB" + incomplete 3-byte (leader + 1 continuation)
 		let bytes = &[b'A', b'B', 0xE4, 0xB8];
 		assert_eq!(find_utf8_boundary(bytes), 2);
 	}
 
 	#[test]
 	fn boundary_ascii_then_incomplete_4byte() {
-		// "X" + incomplete 4-byte (leader + 2 continuations)
 		let bytes = &[b'X', 0xF0, 0x9F, 0x98];
 		assert_eq!(find_utf8_boundary(bytes), 1);
 	}
 
 	#[test]
 	fn boundary_multibyte_then_incomplete() {
-		// "中" (complete 3-byte) + incomplete 2-byte leader
 		let mut bytes = "中".as_bytes().to_vec();
 		bytes.push(0xC3);
 		assert_eq!(find_utf8_boundary(&bytes), 3);
@@ -465,20 +376,16 @@ mod tests {
 
 	#[test]
 	fn boundary_only_continuation_bytes() {
-		// 3 continuation bytes with no leader — the scan finds no leading byte
-		// within the last 3 bytes, so returns len
 		assert_eq!(find_utf8_boundary(&[0x80, 0x80, 0x80]), 3);
 	}
 
 	#[test]
 	fn boundary_invalid_leading_byte_0xff() {
-		// 0xFF is invalid in UTF-8, treated as single-byte by the function
 		assert_eq!(find_utf8_boundary(&[0xFF]), 1);
 	}
 
 	#[test]
 	fn boundary_single_2byte_leader() {
-		// Single byte that's a 2-byte leader — sequence needs 2 bytes, only 1 present
 		assert_eq!(find_utf8_boundary(&[0xC0]), 0);
 	}
 }

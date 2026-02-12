@@ -1,0 +1,87 @@
+use tauri::State;
+
+use crate::error::{AppError, AppResult};
+use crate::infra::db::DbPool;
+use crate::model::project::{GitCommit, Project};
+
+#[tauri::command]
+pub fn create_project_temporary(
+	name: Option<String>,
+	state: State<'_, DbPool>,
+) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::create_temporary(conn, name)
+}
+
+#[tauri::command]
+pub fn create_project_from_folder(
+	name: String,
+	folder: String,
+	state: State<'_, DbPool>,
+) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::create_from_folder(conn, &name, &folder)
+}
+
+#[tauri::command]
+pub fn list_projects(state: State<'_, DbPool>) -> AppResult<Vec<Project>> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::list(conn)
+}
+
+#[tauri::command]
+pub fn get_project(id: String, state: State<'_, DbPool>) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::get(conn, &id)
+}
+
+#[tauri::command]
+pub fn update_project(
+	id: String,
+	name: Option<String>,
+	folder: Option<String>,
+	state: State<'_, DbPool>,
+) -> AppResult<Project> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::update(conn, &id, name, folder)
+}
+
+#[tauri::command]
+pub fn get_git_branch(folder: String) -> AppResult<String> {
+	crate::service::project::get_branch(&folder)
+}
+
+#[tauri::command]
+pub fn get_git_diff(
+	context_id: String,
+	state: State<'_, DbPool>,
+) -> AppResult<String> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::get_diff(conn, &context_id)
+}
+
+#[tauri::command]
+pub fn get_git_log(
+	context_id: String,
+	limit: Option<u32>,
+	state: State<'_, DbPool>,
+) -> AppResult<Vec<GitCommit>> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::get_log(conn, &context_id, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn get_commit_diff(
+	context_id: String,
+	commit_hash: String,
+	state: State<'_, DbPool>,
+) -> AppResult<String> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::get_commit_diff(conn, &context_id, &commit_hash)
+}
+
+#[tauri::command]
+pub fn delete_project(id: String, state: State<'_, DbPool>) -> AppResult<()> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::service::project::delete(conn, &id)
+}

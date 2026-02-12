@@ -1,0 +1,268 @@
+use diesel::prelude::*;
+
+use crate::error::{AppError, AppResult};
+use crate::model::project::{NewProject, Project, UpdateProject};
+use crate::schema::{profiles, projects};
+
+pub fn insert(
+	conn: &mut SqliteConnection,
+	id: &str,
+	name: &str,
+	folder: &str,
+) -> AppResult<Project> {
+	diesel::insert_into(projects::table)
+		.values(&NewProject { id, name, folder })
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+	projects::table
+		.find(id)
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn find_by_id(conn: &mut SqliteConnection, id: &str) -> AppResult<Project> {
+	projects::table
+		.find(id)
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
+}
+
+pub fn list_all(conn: &mut SqliteConnection) -> AppResult<Vec<Project>> {
+	projects::table
+		.select(Project::as_select())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn update(
+	conn: &mut SqliteConnection,
+	id: &str,
+	name: Option<String>,
+	folder: Option<String>,
+) -> AppResult<Project> {
+	let target = projects::table.find(id);
+
+	if name.is_none() && folder.is_none() {
+		return target
+			.select(Project::as_select())
+			.first(conn)
+			.map_err(|_| AppError::NotFound(format!("Project: {id}")));
+	}
+
+	let changeset = UpdateProject { name, folder };
+	let rows = diesel::update(target)
+		.set(&changeset)
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if rows == 0 {
+		return Err(AppError::NotFound(format!("Project: {id}")));
+	}
+
+	target
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> AppResult<()> {
+	let rows = diesel::delete(projects::table.find(id))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+	if rows == 0 {
+		return Err(AppError::NotFound(format!("Project: {id}")));
+	}
+	Ok(())
+}
+
+/// Resolve context_id to a folder path.
+/// Tries profiles.worktree_path first, falls back to projects.folder.
+pub fn resolve_context_folder(
+	conn: &mut SqliteConnection,
+	context_id: &str,
+) -> AppResult<String> {
+	profiles::table
+		.find(context_id)
+		.select(profiles::worktree_path)
+		.first::<String>(conn)
+		.or_else(|_| {
+			projects::table
+				.find(context_id)
+				.select(projects::folder)
+				.first::<String>(conn)
+		})
+		.map_err(|_| AppError::NotFound(format!("Context: {context_id}")))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::infra::db::MIGRATIONS;
+	use crate::model::profile::NewProfile;
+	use crate::model::pty::NewPtySessionRecord;
+	use crate::schema::pty_sessions;
+	use diesel_migrations::MigrationHarness;
+
+	fn setup_db() -> SqliteConnection {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		diesel::sql_query("PRAGMA foreign_keys=ON;")
+			.execute(&mut conn)
+			.ok();
+		conn.run_pending_migrations(MIGRATIONS)
+			.expect("run migrations");
+		conn
+	}
+
+	#[test]
+	fn insert_and_fetch() {
+		let mut conn = setup_db();
+		let project =
+			insert(&mut conn, "p1", "Test", "/tmp/test").expect("insert");
+		assert_eq!(project.id, "p1");
+		assert_eq!(project.name, "Test");
+		assert_eq!(project.folder, "/tmp/test");
+	}
+
+	#[test]
+	fn insert_duplicate_id() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "A", "/a").unwrap();
+		let err = insert(&mut conn, "p1", "B", "/b");
+		assert!(err.is_err());
+	}
+
+	#[test]
+	fn list_empty() {
+		let mut conn = setup_db();
+		let list = list_all(&mut conn).unwrap();
+		assert!(list.is_empty());
+	}
+
+	#[test]
+	fn list_multiple() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "A", "/a").unwrap();
+		insert(&mut conn, "p2", "B", "/b").unwrap();
+		let list = list_all(&mut conn).unwrap();
+		assert_eq!(list.len(), 2);
+	}
+
+	#[test]
+	fn get_found() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Found", "/f").unwrap();
+		let project = find_by_id(&mut conn, "p1").unwrap();
+		assert_eq!(project.name, "Found");
+	}
+
+	#[test]
+	fn get_not_found() {
+		let mut conn = setup_db();
+		let result = find_by_id(&mut conn, "nonexistent");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn update_name() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Old", "/f").unwrap();
+		let project =
+			update(&mut conn, "p1", Some("New".into()), None).unwrap();
+		assert_eq!(project.name, "New");
+		assert_eq!(project.folder, "/f");
+	}
+
+	#[test]
+	fn update_folder() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Name", "/old").unwrap();
+		let project =
+			update(&mut conn, "p1", None, Some("/new".into())).unwrap();
+		assert_eq!(project.folder, "/new");
+	}
+
+	#[test]
+	fn update_nonexistent() {
+		let mut conn = setup_db();
+		let result = update(&mut conn, "nope", Some("X".into()), None);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn delete_success() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Del", "/d").unwrap();
+		delete(&mut conn, "p1").unwrap();
+		let list = list_all(&mut conn).unwrap();
+		assert!(list.is_empty());
+	}
+
+	#[test]
+	fn delete_nonexistent() {
+		let mut conn = setup_db();
+		let result = delete(&mut conn, "nope");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn cascade_delete_removes_sessions() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Cascade", "/c").unwrap();
+
+		diesel::insert_into(pty_sessions::table)
+			.values(&NewPtySessionRecord {
+				id: "s1",
+				project_id: "p1",
+				title: "bash",
+				shell: "/bin/bash",
+				cwd: "/c",
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		delete(&mut conn, "p1").unwrap();
+
+		let sessions: Vec<String> = pty_sessions::table
+			.select(pty_sessions::id)
+			.load(&mut conn)
+			.unwrap();
+		assert!(sessions.is_empty());
+	}
+
+	#[test]
+	fn resolve_context_folder_project_fallback() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Test", "/tmp/project").unwrap();
+		let folder = resolve_context_folder(&mut conn, "p1").unwrap();
+		assert_eq!(folder, "/tmp/project");
+	}
+
+	#[test]
+	fn resolve_context_folder_profile() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Test", "/tmp/project").unwrap();
+
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: "prof1",
+				project_id: "p1",
+				branch_name: "feature",
+				worktree_path: "/tmp/worktree",
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		let folder = resolve_context_folder(&mut conn, "prof1").unwrap();
+		assert_eq!(folder, "/tmp/worktree");
+	}
+
+	#[test]
+	fn resolve_context_folder_not_found() {
+		let mut conn = setup_db();
+		let result = resolve_context_folder(&mut conn, "nonexistent");
+		assert!(result.is_err());
+	}
+}

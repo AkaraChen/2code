@@ -1,17 +1,14 @@
-mod config;
-mod db;
 mod error;
-mod font;
-mod profile;
-mod project;
-mod pty;
+mod handler;
+mod infra;
+mod model;
+mod repo;
 mod schema;
-mod slug;
-mod sound;
+mod service;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-	let sessions = pty::session::create_session_map();
+	let sessions = infra::pty::create_session_map();
 	let sessions_for_exit = sessions.clone();
 
 	let app = tauri::Builder::default()
@@ -25,41 +22,41 @@ pub fn run() {
 				.path()
 				.app_data_dir()
 				.expect("failed to resolve app data dir");
-			let pool = db::init_db(&app_data_dir)
+			let pool = infra::db::init_db(&app_data_dir)
 				.expect("failed to initialize database");
 
 			// Mark any orphaned sessions (from previous unclean shutdown) as closed
-			pty::commands::mark_all_open_sessions_closed(&pool);
+			service::pty::mark_all_closed(&pool);
 
 			app.manage(pool);
 			Ok(())
 		})
 		.invoke_handler(tauri::generate_handler![
-			pty::commands::create_pty_session,
-			pty::commands::write_to_pty,
-			pty::commands::resize_pty,
-			pty::commands::close_pty_session,
-			pty::commands::list_active_sessions,
-			pty::commands::get_pty_session_history,
-			pty::commands::delete_pty_session_record,
-			project::commands::create_project_temporary,
-			project::commands::create_project_from_folder,
-			project::commands::list_projects,
-			project::commands::get_project,
-			project::commands::update_project,
-			project::commands::delete_project,
-			project::commands::get_git_branch,
-			project::commands::get_git_diff,
-			project::commands::get_git_log,
-			project::commands::get_commit_diff,
-			font::list_system_fonts,
-			sound::list_system_sounds,
-			sound::play_system_sound,
-			profile::commands::create_profile,
-			profile::commands::list_profiles,
-			profile::commands::get_profile,
-			profile::commands::update_profile,
-			profile::commands::delete_profile,
+			handler::pty::create_pty_session,
+			handler::pty::write_to_pty,
+			handler::pty::resize_pty,
+			handler::pty::close_pty_session,
+			handler::pty::list_active_sessions,
+			handler::pty::get_pty_session_history,
+			handler::pty::delete_pty_session_record,
+			handler::project::create_project_temporary,
+			handler::project::create_project_from_folder,
+			handler::project::list_projects,
+			handler::project::get_project,
+			handler::project::update_project,
+			handler::project::delete_project,
+			handler::project::get_git_branch,
+			handler::project::get_git_diff,
+			handler::project::get_git_log,
+			handler::project::get_commit_diff,
+			handler::font::list_system_fonts,
+			handler::sound::list_system_sounds,
+			handler::sound::play_system_sound,
+			handler::profile::create_profile,
+			handler::profile::list_profiles,
+			handler::profile::get_profile,
+			handler::profile::update_profile,
+			handler::profile::delete_profile,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
@@ -68,11 +65,11 @@ pub fn run() {
 		use tauri::Manager;
 		if let tauri::RunEvent::Exit = event {
 			// Mark all open sessions as closed in DB
-			if let Some(db) = app_handle.try_state::<db::DbPool>() {
-				pty::commands::mark_all_open_sessions_closed(&db);
+			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
+				service::pty::mark_all_closed(&db);
 			}
 
-			pty::session::close_all_sessions(&sessions_for_exit);
+			infra::pty::close_all_sessions(&sessions_for_exit);
 		}
 	});
 }
