@@ -119,11 +119,10 @@ function FileListItem({
 				flex="1"
 				truncate
 				title={file.name}
-				fontFamily="mono"
 			>
 				{basename}
 			</Text>
-			<HStack gap="1" fontSize="xs" fontFamily="mono" flexShrink={0}>
+			<HStack gap="1" fontSize="xs" flexShrink={0}>
 				{additions > 0 && (
 					<Text color="green.solid" lineHeight="1">
 						+{additions}
@@ -163,6 +162,8 @@ export default function GitDiffDialog({
 	branchName,
 }: GitDiffDialogProps) {
 	const { isDark } = useThemePreference();
+	const fontFamily = useFontStore((s) => s.fontFamily);
+	const fontSize = useFontStore((s) => s.fontSize);
 	const darkTerminalTheme = useFontStore((s) => s.darkTerminalTheme);
 	const lightTerminalTheme = useFontStore((s) => s.lightTerminalTheme);
 	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
@@ -329,7 +330,14 @@ export default function GitDiffDialog({
 									</Flex>
 
 									{/* Right Diff Pane */}
-									<Box flex="1" overflow="auto">
+									<Box
+										flex="1"
+										overflow="auto"
+										css={{
+											"--diffs-font-family": `"${fontFamily}", monospace`,
+											"--diffs-font-size": `${fontSize}px`,
+										}}
+									>
 										{selectedFile ? (
 											<>
 												<FileDiffHeader

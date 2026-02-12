@@ -1,6 +1,7 @@
 import { Box } from "@chakra-ui/react";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import { createContext, use, useEffect, useMemo } from "react";
+import { useFontStore } from "@/stores/fontStore";
 import { BORDER_RADIUS_MAP, useThemeStore } from "@/stores/themeStore";
 
 type Preference = "system" | "light" | "dark";
@@ -21,6 +22,7 @@ function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
 	const accentColor = useThemeStore((s) => s.accentColor);
 	const borderRadius = useThemeStore((s) => s.borderRadius);
+	const fontFamily = useFontStore((s) => s.fontFamily);
 
 	useEffect(() => {
 		const radii = BORDER_RADIUS_MAP[borderRadius];
@@ -29,6 +31,13 @@ function ThemeBridge({ children }: { children: React.ReactNode }) {
 		root.style.setProperty("--chakra-radii-l2", radii.l2);
 		root.style.setProperty("--chakra-radii-l3", radii.l3);
 	}, [borderRadius]);
+
+	useEffect(() => {
+		document.documentElement.style.setProperty(
+			"--chakra-fonts-mono",
+			`"${fontFamily}", monospace`,
+		);
+	}, [fontFamily]);
 
 	const value = useMemo<ThemeContextValue>(
 		() => ({
