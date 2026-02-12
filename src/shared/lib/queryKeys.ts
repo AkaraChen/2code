@@ -9,5 +9,6 @@ export const queryKeys = {
 	},
 	profiles: {
 		byProject: (projectId: string) => ["profiles", projectId] as const,
+		all: ["profiles", "all"] as const,
 	},
 };

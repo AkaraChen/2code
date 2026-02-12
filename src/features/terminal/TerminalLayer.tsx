@@ -25,7 +25,7 @@ export default function TerminalLayer() {
 
 	// Fetch profiles for all projects
 	const { data: allProfiles } = useQuery({
-		queryKey: ["profiles", "all-for-terminals", projects],
+		queryKey: queryKeys.profiles.all,
 		queryFn: async () => {
 			const results = await Promise.all(
 				(projects ?? []).map((p) => listProfiles({ projectId: p.id })),

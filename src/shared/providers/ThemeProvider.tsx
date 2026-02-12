@@ -1,7 +1,7 @@
 import { Box } from "@chakra-ui/react";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import { createContext, use, useEffect, useMemo } from "react";
-import { useFontStore } from "@/features/settings/stores/fontStore";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	BORDER_RADIUS_MAP,
 	useThemeStore,
@@ -25,7 +25,7 @@ function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
 	const accentColor = useThemeStore((s) => s.accentColor);
 	const borderRadius = useThemeStore((s) => s.borderRadius);
-	const fontFamily = useFontStore((s) => s.fontFamily);
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 
 	useEffect(() => {
 		const radii = BORDER_RADIUS_MAP[borderRadius];

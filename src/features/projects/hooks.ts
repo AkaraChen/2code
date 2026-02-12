@@ -25,7 +25,6 @@ export function useGitBranch(folder: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
-		staleTime: 30_000,
 	});
 }
 

@@ -1,6 +1,7 @@
 import { Box, Flex, Tabs } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { GitCommit } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 import ChangesFileList from "./ChangesFileList";
 import CommitList from "./CommitList";
 import HistoryFileList from "./HistoryFileList";
@@ -50,8 +51,8 @@ export default function GitDiffSidebar({
 				flexDirection="column"
 			>
 				<Tabs.List px="3">
-					<Tabs.Trigger value="changes">Changes</Tabs.Trigger>
-					<Tabs.Trigger value="history">History</Tabs.Trigger>
+					<Tabs.Trigger value="changes">{m.changes()}</Tabs.Trigger>
+					<Tabs.Trigger value="history">{m.history()}</Tabs.Trigger>
 				</Tabs.List>
 				<Tabs.Content
 					value="changes"
@@ -63,16 +64,9 @@ export default function GitDiffSidebar({
 				>
 					{changesFiles.length === 0 ? (
 						<Flex align="center" justify="center" flex="1" p="8">
-							<Flex
-								align="center"
-								justify="center"
-								h="full"
-								p="8"
-							>
-								<Box color="fg.muted" fontSize="sm">
-									No changes detected
-								</Box>
-							</Flex>
+							<Box color="fg.muted" fontSize="sm">
+								{m.noChangesDetected()}
+							</Box>
 						</Flex>
 					) : (
 						<Box flex="1" overflowY="auto">
@@ -106,7 +100,7 @@ export default function GitDiffSidebar({
 					) : (logData?.length ?? 0) === 0 ? (
 						<Flex align="center" justify="center" flex="1" p="8">
 							<Box color="fg.muted" fontSize="sm">
-								No commits found
+								{m.noCommitsFound()}
 							</Box>
 						</Flex>
 					) : (

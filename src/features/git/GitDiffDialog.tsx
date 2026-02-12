@@ -13,12 +13,11 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
-import { useFontStore } from "@/features/settings/stores/fontStore";
+import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import type { GitCommit } from "@/generated";
 import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { useThemePreference } from "@/shared/providers/ThemeProvider";
 import GitDiffPane from "./components/GitDiffPane";
 import GitDiffSidebar from "./components/GitDiffSidebar";
 
@@ -47,10 +46,7 @@ export default function GitDiffDialog({
 	contextId,
 	branchName,
 }: GitDiffDialogProps) {
-	const { isDark } = useThemePreference();
-	const darkTerminalTheme = useFontStore((s) => s.darkTerminalTheme);
-	const lightTerminalTheme = useFontStore((s) => s.lightTerminalTheme);
-	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
+	const termThemeId = useTerminalThemeId();
 
 	const [activeTab, setActiveTab] = useState<string>("changes");
 	const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
@@ -106,20 +102,15 @@ export default function GitDiffDialog({
 		activeTab === "history" ? selectedCommitFile : selectedFile;
 
 	const options: FileDiffOptions<unknown> = useMemo(() => {
-		const termTheme = syncTerminalTheme
-			? darkTerminalTheme
-			: isDark
-				? darkTerminalTheme
-				: lightTerminalTheme;
 		return {
-			theme: shikiThemeMap[termTheme] ?? "github-dark",
+			theme: shikiThemeMap[termThemeId] ?? "github-dark",
 			diffStyle: "unified",
 			diffIndicators: "classic",
 			disableFileHeader: true,
 			overflow: "wrap",
 			expandUnchanged: true,
 		};
-	}, [isDark, darkTerminalTheme, lightTerminalTheme, syncTerminalTheme]);
+	}, [termThemeId]);
 
 	const handleClose = useCallback(() => {
 		setActiveTab("changes");

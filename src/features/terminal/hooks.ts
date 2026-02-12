@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
-import { useFontStore } from "@/features/settings/stores/fontStore";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import type { Profile, Project } from "@/generated";
 import {
 	closePtySession,
@@ -11,6 +11,7 @@ import {
 } from "@/generated";
 import { useThemePreference } from "@/shared/providers/ThemeProvider";
 import { useTerminalStore } from "./store";
+import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
 const DEFAULT_SHELL = "/bin/zsh";
@@ -122,18 +123,17 @@ export function useRestoreTerminals(
 	}, [projects, profiles]);
 }
 
-export function useTerminalTheme(): ITheme {
+export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = useThemePreference();
-	const darkTerminalTheme = useFontStore((s) => s.darkTerminalTheme);
-	const lightTerminalTheme = useFontStore((s) => s.lightTerminalTheme);
-	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
+	const darkTerminalTheme = useTerminalSettingsStore((s) => s.darkTerminalTheme);
+	const lightTerminalTheme = useTerminalSettingsStore((s) => s.lightTerminalTheme);
+	const syncTerminalTheme = useTerminalSettingsStore((s) => s.syncTerminalTheme);
 
-	if (syncTerminalTheme) {
-		return (
-			terminalThemes[darkTerminalTheme] ?? terminalThemes["github-dark"]
-		);
-	}
+	if (syncTerminalTheme) return darkTerminalTheme;
+	return isDark ? darkTerminalTheme : lightTerminalTheme;
+}
 
-	const id = isDark ? darkTerminalTheme : lightTerminalTheme;
+export function useTerminalTheme(): ITheme {
+	const id = useTerminalThemeId();
 	return terminalThemes[id] ?? terminalThemes["github-dark"];
 }

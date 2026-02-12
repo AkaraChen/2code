@@ -60,5 +60,13 @@
 	"radiusSmall": "小",
 	"radiusMedium": "中",
 	"radiusLarge": "大",
-	"radiusXLarge": "超大"
+	"radiusXLarge": "超大",
+	"changes": "变更",
+	"history": "历史",
+	"noChangesDetected": "未检测到变更",
+	"selectFileToView": "选择文件查看变更",
+	"noCommitsFound": "暂无提交记录",
+	"noFileChanges": "无文件变更",
+	"changedFiles": "{count} 个文件已变更",
+	"backToCommitList": "返回提交列表"
 }

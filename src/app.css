@@ -27,3 +27,9 @@
 [data-tauri-drag-region] [role="button"] {
 	-webkit-app-region: no-drag;
 }
+
+@keyframes blink {
+	50% {
+		opacity: 0;
+	}
+}

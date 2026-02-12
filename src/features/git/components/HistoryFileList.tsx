@@ -9,6 +9,7 @@ import {
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { RiArrowLeftLine } from "react-icons/ri";
 import type { GitCommit } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 import { FileListItem } from "./ChangesFileList";
 
 export interface HistoryFileListProps {
@@ -32,7 +33,7 @@ function CommitHeader({
 			<IconButton
 				size="xs"
 				variant="ghost"
-				aria-label="Back to commit list"
+				aria-label={m.backToCommitList()}
 				onClick={onBack}
 			>
 				<RiArrowLeftLine />
@@ -69,14 +70,13 @@ export default function HistoryFileList({
 			) : files.length === 0 ? (
 				<Flex align="center" justify="center" flex="1" p="8">
 					<Text color="fg.muted" fontSize="sm">
-						No file changes
+						{m.noFileChanges()}
 					</Text>
 				</Flex>
 			) : (
 				<>
 					<Text px="3" py="1" fontSize="xs" color="fg.muted">
-						{files.length} changed{" "}
-						{files.length === 1 ? "file" : "files"}
+						{m.changedFiles({ count: files.length })}
 					</Text>
 					{files.map((file, i) => (
 						<FileListItem

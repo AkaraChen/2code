@@ -60,5 +60,13 @@
 	"radiusSmall": "Small",
 	"radiusMedium": "Medium",
 	"radiusLarge": "Large",
-	"radiusXLarge": "Extra Large"
+	"radiusXLarge": "Extra Large",
+	"changes": "Changes",
+	"history": "History",
+	"noChangesDetected": "No changes detected",
+	"selectFileToView": "Select a file to view changes",
+	"noCommitsFound": "No commits found",
+	"noFileChanges": "No file changes",
+	"changedFiles": "{count} changed file(s)",
+	"backToCommitList": "Back to commit list"
 }

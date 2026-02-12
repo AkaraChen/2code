@@ -2,34 +2,13 @@ import { Badge, Box, Flex, Spinner, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useMemo } from "react";
-import { useFontStore } from "@/features/settings/stores/fontStore";
-
-const changeTypeBadge: Record<string, { label: string; colorPalette: string }> =
-	{
-		new: { label: "A", colorPalette: "green" },
-		deleted: { label: "D", colorPalette: "red" },
-		change: { label: "M", colorPalette: "blue" },
-		"rename-pure": { label: "R", colorPalette: "yellow" },
-		"rename-changed": { label: "R", colorPalette: "yellow" },
-	};
-
-function getLineStats(file: FileDiffMetadata) {
-	let additions = 0;
-	let deletions = 0;
-	for (const hunk of file.hunks) {
-		for (const content of hunk.hunkContent) {
-			if (content.type === "change") {
-				additions += content.additions.length;
-				deletions += content.deletions.length;
-			}
-		}
-	}
-	return { additions, deletions };
-}
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import * as m from "@/paraglide/messages.js";
+import { changeBadge, getLineStats } from "../utils";
 
 function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 	const { additions, deletions } = useMemo(() => getLineStats(file), [file]);
-	const badge = changeTypeBadge[file.type] ?? changeTypeBadge.change;
+	const badge = changeBadge[file.type] ?? changeBadge.change;
 	const displayName =
 		file.prevName && file.prevName !== file.name
 			? `${file.prevName} → ${file.name}`
@@ -66,16 +45,12 @@ export default function GitDiffPane({
 	activeTab,
 	tabFiles,
 }: GitDiffPaneProps) {
-	const getEmptyMessage = () => {
-		if (activeTab === "changes") {
-			return tabFiles.length === 0
-				? "No changes detected"
-				: "Select a file to view changes";
-		}
-		return "Select a file to view changes";
-	};
-	const fontFamily = useFontStore((s) => s.fontFamily);
-	const fontSize = useFontStore((s) => s.fontSize);
+	const emptyMessage =
+		activeTab === "changes" && tabFiles.length === 0
+			? m.noChangesDetected()
+			: m.selectFileToView();
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 
 	return (
 		<Box
@@ -98,7 +73,7 @@ export default function GitDiffPane({
 			) : (
 				<Flex align="center" justify="center" h="full" p="8">
 					<Text color="fg.muted" fontSize="sm">
-						{getEmptyMessage()}
+						{emptyMessage}
 					</Text>
 				</Flex>
 			)}

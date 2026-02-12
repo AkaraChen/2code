@@ -81,7 +81,7 @@ export default function TerminalTabs({
 						display={tab.id === activeTabId ? "block" : "none"}
 					>
 						<Terminal
-							projectId={contextId}
+							contextId={contextId}
 							sessionId={tab.id}
 							restoreFrom={tab.restoreFrom}
 						/>

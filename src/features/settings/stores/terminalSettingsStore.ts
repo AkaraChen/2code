@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 
-interface FontStore {
+interface TerminalSettingsStore {
 	fontFamily: string;
 	fontSize: number;
 	showAllFonts: boolean;
@@ -17,7 +17,7 @@ interface FontStore {
 	setSyncTerminalTheme: (sync: boolean) => void;
 }
 
-export const useFontStore = create<FontStore>()(
+export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 	persist(
 		(set) => ({
 			fontFamily: "JetBrains Mono",

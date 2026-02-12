@@ -1,4 +1,4 @@
-import { useFontStore } from "@/features/settings/stores/fontStore";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalTheme } from "./hooks";
 import { type TerminalThemeId, terminalThemes } from "./themes";
 
@@ -18,8 +18,8 @@ export function TerminalPreview({
 }: {
 	themeId?: TerminalThemeId | null;
 }) {
-	const fontFamily = useFontStore((s) => s.fontFamily);
-	const fontSize = useFontStore((s) => s.fontSize);
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const autoTheme = useTerminalTheme();
 	const theme = themeId ? terminalThemes[themeId] : autoTheme;
 
@@ -59,7 +59,6 @@ export function TerminalPreview({
 					</div>
 				))}
 			</pre>
-			<style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
 		</div>
 	);
 }

@@ -2,7 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
-import { useFontStore } from "@/features/settings/stores/fontStore";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	deletePtySessionRecord,
 	getPtySessionHistory,
@@ -14,18 +14,18 @@ import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
-	projectId: string;
+	contextId: string;
 	sessionId: string;
 	restoreFrom?: string;
 }
 
-export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
+export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const unlistenersRef = useRef<UnlistenFn[]>([]);
-	const fontFamily = useFontStore((s) => s.fontFamily);
-	const fontSize = useFontStore((s) => s.fontSize);
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
 
 	// Update theme without re-mounting the terminal
@@ -56,7 +56,7 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 
 		let disposed = false;
 
-		const state = useFontStore.getState();
+		const state = useTerminalSettingsStore.getState();
 		const term = new XTerm({
 			fontFamily: `"${state.fontFamily}", monospace`,
 			fontSize: state.fontSize,
@@ -98,7 +98,7 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 				deletePtySessionRecord({ sessionId: restoreFrom }).catch(
 					() => {},
 				);
-				useTerminalStore.getState().clearRestore(projectId, sessionId);
+				useTerminalStore.getState().clearRestore(contextId, sessionId);
 			}
 
 			// Listen for PTY output
@@ -162,7 +162,7 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 			termRef.current = null;
 			fitAddonRef.current = null;
 		};
-	}, [projectId, sessionId, restoreFrom]);
+	}, [contextId, sessionId, restoreFrom]);
 
 	return (
 		<div
