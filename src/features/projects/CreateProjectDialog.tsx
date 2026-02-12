@@ -64,6 +64,12 @@ export default function CreateProjectDialog({
 		navigate(`/projects/${project.id}`);
 	};
 
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter") {
+			handleCreate();
+		}
+	};
+
 	return (
 		<Dialog.Root
 			lazyMount
@@ -160,6 +166,7 @@ export default function CreateProjectDialog({
 										onChange={(e) =>
 											setName(e.target.value)
 										}
+										onKeyDown={handleKeyDown}
 									/>
 								</Field.Root>
 							</Stack>

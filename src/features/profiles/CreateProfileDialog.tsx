@@ -40,6 +40,12 @@ export default function CreateProfileDialog({
 		navigate(`/projects/${projectId}/profiles/${profile.id}`);
 	};
 
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter" && branchName.trim() && !createProfile.isPending) {
+			handleCreate();
+		}
+	};
+
 	return (
 		<Dialog.Root
 			lazyMount
@@ -64,6 +70,7 @@ export default function CreateProfileDialog({
 									onChange={(e) =>
 										setBranchName(e.target.value)
 									}
+									onKeyDown={handleKeyDown}
 								/>
 							</Field.Root>
 						</Dialog.Body>
