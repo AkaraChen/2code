@@ -23,6 +23,7 @@ export function ProfileItem({
 				<Menu.ContextTrigger asChild>
 					<HStack
 						asChild
+						data-sidebar-item
 						gap="2"
 						ps="9"
 						pe="4"

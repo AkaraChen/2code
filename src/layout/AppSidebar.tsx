@@ -1,5 +1,5 @@
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import { useProjects } from "@/features/projects/hooks";
@@ -10,15 +10,46 @@ import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const [dialogOpen, setDialogOpen] = useState(false);
+	const navRef = useRef<HTMLElement>(null);
+
+	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+		if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+
+		const nav = navRef.current;
+		if (!nav) return;
+
+		const items = Array.from(
+			nav.querySelectorAll<HTMLElement>("[data-sidebar-item]"),
+		);
+		if (items.length === 0) return;
+
+		const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+		let nextIndex: number;
+		if (e.key === "ArrowDown") {
+			nextIndex =
+				currentIndex === -1 ? 0 : (currentIndex + 1) % items.length;
+		} else {
+			nextIndex =
+				currentIndex === -1
+					? items.length - 1
+					: (currentIndex - 1 + items.length) % items.length;
+		}
+
+		items[nextIndex]?.focus();
+		e.preventDefault();
+	}, []);
 
 	return (
 		<>
 			<Box
 				as="nav"
+				ref={navRef}
 				aria-label={m.sideNavLabel()}
 				w="var(--sidebar-width)"
 				flexShrink={0}
 				bg="bg.subtle"
+				onKeyDown={handleKeyDown}
 			>
 				<Flex direction="column" h="full" pb="3">
 					{/* macOS traffic light area + drag region */}
