@@ -4,7 +4,7 @@ export const queryNamespaces = {
 	"git-diff": "git-diff",
 	"git-log": "git-log",
 	"git-commit-diff": "git-commit-diff",
-}
+};
 
 export const queryKeys = {
 	projects: {

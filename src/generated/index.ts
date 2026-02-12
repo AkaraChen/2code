@@ -7,5 +7,5 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-export * from './types';
-export * from './commands';
+export * from "./commands";
+export * from "./types";
