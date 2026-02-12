@@ -23,14 +23,14 @@ Bindings are regenerated with `cargo tauri-typegen generate` after changing Rust
 
 ## Project Commands
 
-| Command | Frontend Function | Return Type | Description |
-|---------|-------------------|-------------|-------------|
-| `create_project_temporary` | `createProjectTemporary({name?})` | `Project` | Create project in temp dir with `git init` |
-| `create_project_from_folder` | `createProjectFromFolder({name, folder})` | `Project` | Import existing folder as project |
-| `list_projects` | `listProjects()` | `Project[]` | List all projects |
-| `get_project` | `getProject({id})` | `Project` | Get single project by ID |
-| `update_project` | `updateProject({id, name?, folder?})` | `Project` | Update project metadata |
-| `delete_project` | `deleteProject({id})` | `void` | Delete project record (cascades to sessions, profiles) |
+| Command                      | Frontend Function                         | Return Type | Description                                            |
+| ---------------------------- | ----------------------------------------- | ----------- | ------------------------------------------------------ |
+| `create_project_temporary`   | `createProjectTemporary({name?})`         | `Project`   | Create project in temp dir with `git init`             |
+| `create_project_from_folder` | `createProjectFromFolder({name, folder})` | `Project`   | Import existing folder as project                      |
+| `list_projects`              | `listProjects()`                          | `Project[]` | List all projects                                      |
+| `get_project`                | `getProject({id})`                        | `Project`   | Get single project by ID                               |
+| `update_project`             | `updateProject({id, name?, folder?})`     | `Project`   | Update project metadata                                |
+| `delete_project`             | `deleteProject({id})`                     | `void`      | Delete project record (cascades to sessions, profiles) |
 
 ### Types
 
@@ -45,12 +45,12 @@ interface Project {
 
 ## Git Commands
 
-| Command | Frontend Function | Return Type | Description |
-|---------|-------------------|-------------|-------------|
-| `get_git_branch` | `getGitBranch({folder})` | `string` | Current branch name for a folder |
-| `get_git_diff` | `getGitDiff({contextId})` | `string` | Working tree diff (unified format) |
-| `get_git_log` | `getGitLog({contextId, limit?})` | `GitCommit[]` | Commit history (default limit: 50) |
-| `get_commit_diff` | `getCommitDiff({contextId, commitHash})` | `string` | Diff for a specific commit |
+| Command           | Frontend Function                        | Return Type   | Description                        |
+| ----------------- | ---------------------------------------- | ------------- | ---------------------------------- |
+| `get_git_branch`  | `getGitBranch({folder})`                 | `string`      | Current branch name for a folder   |
+| `get_git_diff`    | `getGitDiff({contextId})`                | `string`      | Working tree diff (unified format) |
+| `get_git_log`     | `getGitLog({contextId, limit?})`         | `GitCommit[]` | Commit history (default limit: 50) |
+| `get_commit_diff` | `getCommitDiff({contextId, commitHash})` | `string`      | Diff for a specific commit         |
 
 `contextId` is polymorphic: can be a project ID or profile ID. Backend resolves via `resolve_context_folder()` (tries profile worktree first, falls back to project folder).
 
@@ -76,13 +76,13 @@ interface GitAuthor {
 
 ## Profile Commands
 
-| Command | Frontend Function | Return Type | Description |
-|---------|-------------------|-------------|-------------|
-| `create_profile` | `createProfile({projectId, branchName})` | `Profile` | Create git worktree + branch |
-| `list_profiles` | `listProfiles({projectId})` | `Profile[]` | List profiles for a project |
-| `get_profile` | `getProfile({id})` | `Profile` | Get single profile by ID |
-| `update_profile` | `updateProfile({id, branchName?})` | `Profile` | Update profile metadata |
-| `delete_profile` | `deleteProfile({id})` | `void` | Remove worktree, delete branch, run teardown scripts |
+| Command          | Frontend Function                        | Return Type | Description                                          |
+| ---------------- | ---------------------------------------- | ----------- | ---------------------------------------------------- |
+| `create_profile` | `createProfile({projectId, branchName})` | `Profile`   | Create git worktree + branch                         |
+| `list_profiles`  | `listProfiles({projectId})`              | `Profile[]` | List profiles for a project                          |
+| `get_profile`    | `getProfile({id})`                       | `Profile`   | Get single profile by ID                             |
+| `update_profile` | `updateProfile({id, branchName?})`       | `Profile`   | Update profile metadata                              |
+| `delete_profile` | `deleteProfile({id})`                    | `void`      | Remove worktree, delete branch, run teardown scripts |
 
 ### Types
 
@@ -103,15 +103,15 @@ interface Profile {
 
 ## PTY Commands
 
-| Command | Frontend Function | Return Type | Description |
-|---------|-------------------|-------------|-------------|
-| `create_pty_session` | `createPtySession({meta, config})` | `string` | Spawn shell process, return session ID |
-| `write_to_pty` | `writeToPty({sessionId, data})` | `void` | Send user input to PTY |
-| `resize_pty` | `resizePty({sessionId, rows, cols})` | `void` | Resize terminal dimensions |
-| `close_pty_session` | `closePtySession({sessionId})` | `void` | Kill process, mark closed in DB |
-| `list_active_sessions` | `listActiveSessions({projectId})` | `PtySessionRecord[]` | List all sessions for a project |
-| `get_pty_session_history` | `getPtySessionHistory({sessionId})` | `number[]` | Get scrollback history (UTF-8 bytes) |
-| `delete_pty_session_record` | `deletePtySessionRecord({sessionId})` | `void` | Delete session and output chunks |
+| Command                     | Frontend Function                     | Return Type          | Description                            |
+| --------------------------- | ------------------------------------- | -------------------- | -------------------------------------- |
+| `create_pty_session`        | `createPtySession({meta, config})`    | `string`             | Spawn shell process, return session ID |
+| `write_to_pty`              | `writeToPty({sessionId, data})`       | `void`               | Send user input to PTY                 |
+| `resize_pty`                | `resizePty({sessionId, rows, cols})`  | `void`               | Resize terminal dimensions             |
+| `close_pty_session`         | `closePtySession({sessionId})`        | `void`               | Kill process, mark closed in DB        |
+| `list_active_sessions`      | `listActiveSessions({projectId})`     | `PtySessionRecord[]` | List all sessions for a project        |
+| `get_pty_session_history`   | `getPtySessionHistory({sessionId})`   | `number[]`           | Get scrollback history (UTF-8 bytes)   |
+| `delete_pty_session_record` | `deletePtySessionRecord({sessionId})` | `void`               | Delete session and output chunks       |
 
 ### Types
 
@@ -141,11 +141,11 @@ interface PtySessionRecord {
 
 ## Utility Commands
 
-| Command | Frontend Function | Return Type | Description |
-|---------|-------------------|-------------|-------------|
-| `list_system_fonts` | `listSystemFonts()` | `SystemFont[]` | List system fonts (macOS only, via core-text) |
-| `list_system_sounds` | `listSystemSounds()` | `string[]` | List system sounds (macOS only, `/System/Library/Sounds`) |
-| `play_system_sound` | `playSystemSound({name})` | `void` | Play a system sound (macOS only, via `afplay`) |
+| Command              | Frontend Function         | Return Type    | Description                                               |
+| -------------------- | ------------------------- | -------------- | --------------------------------------------------------- |
+| `list_system_fonts`  | `listSystemFonts()`       | `SystemFont[]` | List system fonts (macOS only, via core-text)             |
+| `list_system_sounds` | `listSystemSounds()`      | `string[]`     | List system sounds (macOS only, `/System/Library/Sounds`) |
+| `play_system_sound`  | `playSystemSound({name})` | `void`         | Play a system sound (macOS only, via `afplay`)            |
 
 ### Types
 

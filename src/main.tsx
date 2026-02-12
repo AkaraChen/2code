@@ -4,9 +4,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import App from "./App";
-import { ThemeProvider } from "./components/ThemeProvider";
-import { Toaster } from "./components/Toaster";
-import { queryClient } from "./lib/queryClient";
+import { queryClient } from "./shared/lib/queryClient";
+import { ThemeProvider } from "./shared/providers/ThemeProvider";
+import { Toaster } from "./shared/providers/Toaster";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

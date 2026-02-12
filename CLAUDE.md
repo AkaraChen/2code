@@ -48,20 +48,24 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 
 **Routing** (react-router v7): `/` → HomePage, `/projects/:id` → ProjectDetailPage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage.
 
-**Key directories:**
+**Key directories (feature-based organization):**
 
 - `generated/` — Auto-generated Tauri IPC bindings via `tauri-typegen` (gitignored, do not edit)
-- `stores/` — Zustand stores (`terminalStore`, `fontStore`, `notificationStore`, `themeStore`)
-- `hooks/` — TanStack Query hooks (`useProjects`, `useProfiles`, `useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`)
-- `components/` — UI components (Terminal, TerminalTabs, TerminalLayer, AppSidebar, GitDiffDialog, dialogs)
-- `pages/` — Route-level pages
-- `lib/` — Query client config (`staleTime: 30s`, `retry: 1`), centralized query keys, terminal theme definitions
+- `features/projects/` — Project hooks (`useProjects`, `useCreateProject`, etc.) and dialogs (Create/Delete/Rename)
+- `features/profiles/` — Profile hooks (`useProfiles`, `useCreateProfile`, `useDeleteProfile`) and dialogs
+- `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
+- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger)
+- `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/fontStore`, `stores/themeStore`, `stores/notificationStore`)
+- `shared/lib/` — Query client config, centralized query keys, cached promise utility
+- `shared/providers/` — ThemeProvider, Toaster
+- `shared/components/` — ErrorBoundary, Fallbacks, SidebarLink
+- `layout/` — AppSidebar, HomePage, ProjectDetailPage, and `sidebar/` sub-components
 
 **State management:**
 
 - Zustand for client state (terminal tabs per project, font preferences, notification settings)
 - TanStack Query for server state (projects, sessions, profiles)
-- Query keys centralized in `lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.profiles.byProject(id)` pattern
+- Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.profiles.byProject(id)` pattern
 - `fontStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
 
 **UI Framework:**
@@ -98,7 +102,7 @@ The project uses **tauri-typegen** to auto-generate typed TypeScript bindings fr
 2. Register in `lib.rs` via `tauri::generate_handler![]`
 3. Run `cargo tauri-typegen generate` to regenerate TypeScript bindings
 4. Import generated function directly: `import { myCommand } from "@/generated"`
-5. Consume via TanStack Query hook in `src/hooks/` with query invalidation on mutations
+5. Consume via TanStack Query hook in the relevant `src/features/*/hooks.ts` with query invalidation on mutations
 
 **Do not** create manual API wrappers in `src/api/` — all IPC bindings are auto-generated.
 

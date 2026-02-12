@@ -2,17 +2,17 @@
 
 ## Config Files
 
-| File | Format | Purpose |
-|------|--------|---------|
-| `package.json` | JSON | Frontend dependencies, build scripts |
-| `vite.config.ts` | TypeScript | Vite build config, path aliases, Paraglide plugin, Tauri dev server |
-| `tsconfig.json` | JSON | TypeScript compiler options, path aliases, `allowJs` for Paraglide |
-| `src-tauri/tauri.conf.json` | JSON | Tauri app config, window settings, build hooks, typegen config |
-| `src-tauri/Cargo.toml` | TOML | Rust dependencies and crate config |
-| `src-tauri/diesel.toml` | TOML | Diesel ORM schema output path (`src/schema.rs`) |
-| `project.inlang/settings.json` | JSON | Paraglide i18n settings, locales, message format plugin |
-| `messages/en.json`, `messages/zh.json` | JSON | i18n message strings |
-| `justfile` | Justfile | Task runner (`just fmt` runs `fama`) |
+| File                                   | Format     | Purpose                                                             |
+| -------------------------------------- | ---------- | ------------------------------------------------------------------- |
+| `package.json`                         | JSON       | Frontend dependencies, build scripts                                |
+| `vite.config.ts`                       | TypeScript | Vite build config, path aliases, Paraglide plugin, Tauri dev server |
+| `tsconfig.json`                        | JSON       | TypeScript compiler options, path aliases, `allowJs` for Paraglide  |
+| `src-tauri/tauri.conf.json`            | JSON       | Tauri app config, window settings, build hooks, typegen config      |
+| `src-tauri/Cargo.toml`                 | TOML       | Rust dependencies and crate config                                  |
+| `src-tauri/diesel.toml`                | TOML       | Diesel ORM schema output path (`src/schema.rs`)                     |
+| `project.inlang/settings.json`         | JSON       | Paraglide i18n settings, locales, message format plugin             |
+| `messages/en.json`, `messages/zh.json` | JSON       | i18n message strings                                                |
+| `justfile`                             | Justfile   | Task runner (`just fmt` runs `fama`)                                |
 
 ## Build Configuration
 
@@ -108,11 +108,11 @@ CREATE TABLE profiles (
 
 Managed by Diesel, embedded at compile time via `embed_migrations!("migrations")`, run on app startup:
 
-| Migration | Tables |
-|-----------|--------|
-| `2026-02-10-064457-0000_create_projects` | `projects` |
-| `2026-02-11-000000_create_pty_tables` | `pty_sessions`, `pty_output_chunks` |
-| `2026-02-11-080917-0000_create_profiles` | `profiles` |
+| Migration                                | Tables                              |
+| ---------------------------------------- | ----------------------------------- |
+| `2026-02-10-064457-0000_create_projects` | `projects`                          |
+| `2026-02-11-000000_create_pty_tables`    | `pty_sessions`, `pty_output_chunks` |
+| `2026-02-11-080917-0000_create_profiles` | `profiles`                          |
 
 ## Internationalization (`project.inlang/settings.json`)
 
@@ -148,23 +148,23 @@ Scripts run via `sh -c` in the project/worktree directory during profile creatio
 
 ### Terminal Output Buffering (`src-tauri/src/service/pty.rs`)
 
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `FLUSH_THRESHOLD` | 32 KB | Buffer size before database write |
-| `MAX_OUTPUT_PER_SESSION` | 1 MB | Oldest chunks pruned above this cap |
-| Read buffer | 4 KB | PTY read chunk size |
+| Constant                 | Value | Purpose                             |
+| ------------------------ | ----- | ----------------------------------- |
+| `FLUSH_THRESHOLD`        | 32 KB | Buffer size before database write   |
+| `MAX_OUTPUT_PER_SESSION` | 1 MB  | Oldest chunks pruned above this cap |
+| Read buffer              | 4 KB  | PTY read chunk size                 |
 
 ### TanStack Query (`src/lib/queryClient.ts`)
 
-| Setting | Value |
-|---------|-------|
+| Setting     | Value      |
+| ----------- | ---------- |
 | `staleTime` | 30 seconds |
-| `retry` | 1 |
+| `retry`     | 1          |
 
 ## Environment Variables
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
+| Variable         | Purpose                                                      | Default |
+| ---------------- | ------------------------------------------------------------ | ------- |
 | `TAURI_DEV_HOST` | Set HMR host for mobile dev (enables WebSocket on port 1421) | Not set |
 
 No other environment variables are required. The application uses compile-time constants from `tauri.conf.json`.
@@ -173,13 +173,13 @@ No other environment variables are required. The application uses compile-time c
 
 ### AppError Enum (`src-tauri/src/error.rs`)
 
-| Variant | Source | Example |
-|---------|--------|---------|
-| `IoError` | `From<std::io::Error>` | File not found, permission denied |
-| `LockError` | Mutex poisoning | Failed to acquire DB/PTY lock |
-| `PtyError` | PTY operations | Session not found, spawn failed |
-| `DbError` | Diesel operations | Constraint violation |
-| `NotFound` | Record lookups | Project/profile/session not found |
-| `GitError` | Git CLI failures | Branch exists, invalid hash |
+| Variant     | Source                 | Example                           |
+| ----------- | ---------------------- | --------------------------------- |
+| `IoError`   | `From<std::io::Error>` | File not found, permission denied |
+| `LockError` | Mutex poisoning        | Failed to acquire DB/PTY lock     |
+| `PtyError`  | PTY operations         | Session not found, spawn failed   |
+| `DbError`   | Diesel operations      | Constraint violation              |
+| `NotFound`  | Record lookups         | Project/profile/session not found |
+| `GitError`  | Git CLI failures       | Branch exists, invalid hash       |
 
 Errors are serialized to plain strings via a custom `Serialize` impl and returned to the frontend through Tauri's IPC error channel.

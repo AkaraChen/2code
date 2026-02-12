@@ -1,17 +1,17 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router";
-import AppSidebar from "./components/AppSidebar";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import SettingsPage from "./features/settings/SettingsPage";
+import TerminalLayer from "./features/terminal/TerminalLayer";
+import AppSidebar from "./layout/AppSidebar";
+import HomePage from "./layout/HomePage";
+import ProjectDetailPage from "./layout/ProjectDetailPage";
+import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
 	PageError,
 	PageSkeleton,
 	SidebarSkeleton,
-} from "./components/Fallbacks";
-import TerminalLayer from "./components/TerminalLayer";
-import HomePage from "./pages/HomePage";
-import ProjectDetailPage from "./pages/ProjectDetailPage";
-import SettingsPage from "./pages/SettingsPage";
+} from "./shared/components/Fallbacks";
 import "./app.css";
 
 export default function App() {

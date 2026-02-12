@@ -10,20 +10,20 @@ The architecture follows a clean separation: the frontend handles UI rendering, 
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Vite 7 |
-| UI Framework | Chakra UI v3, next-themes |
+| Layer            | Technology                                   |
+| ---------------- | -------------------------------------------- |
+| Frontend         | React 19, TypeScript, Vite 7                 |
+| UI Framework     | Chakra UI v3, next-themes                    |
 | State Management | Zustand (client), TanStack Query v5 (server) |
-| Terminal | xterm.js 6, @xterm/addon-fit |
-| Backend | Rust, Tauri 2 |
-| Database | SQLite (Diesel ORM, embedded migrations) |
-| PTY | portable-pty 0.9 |
-| IPC Bindings | tauri-typegen v0.4.1 (auto-generated) |
-| Git | CLI via `std::process::Command` |
-| i18n | Paraglide.js v2 (English + Chinese) |
-| Diff Rendering | @pierre/diffs, Shiki syntax highlighting |
-| Package Manager | Bun |
+| Terminal         | xterm.js 6, @xterm/addon-fit                 |
+| Backend          | Rust, Tauri 2                                |
+| Database         | SQLite (Diesel ORM, embedded migrations)     |
+| PTY              | portable-pty 0.9                             |
+| IPC Bindings     | tauri-typegen v0.4.1 (auto-generated)        |
+| Git              | CLI via `std::process::Command`              |
+| i18n             | Paraglide.js v2 (English + Chinese)          |
+| Diff Rendering   | @pierre/diffs, Shiki syntax highlighting     |
+| Package Manager  | Bun                                          |
 
 ## Module Structure
 

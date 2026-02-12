@@ -120,19 +120,19 @@ The frontend uses a hooks-based architecture where TanStack Query manages all se
 
 ### Frontend State (Zustand Stores)
 
-| Store | Location | Persisted | Purpose |
-|-------|----------|-----------|---------|
-| `terminalStore` | `src/stores/terminalStore.ts` | No (rebuilt from DB on startup) | Terminal tabs per context, active tab, restore flags |
-| `fontStore` | `src/stores/fontStore.ts` | Yes (localStorage) | Font family, font size, terminal theme preferences |
-| `notificationStore` | `src/stores/notificationStore.ts` | Yes (localStorage) | Notification sound/enabled preferences |
-| `themeStore` | `src/stores/themeStore.ts` | Yes (localStorage) | Dark/light mode preference |
+| Store               | Location                          | Persisted                       | Purpose                                              |
+| ------------------- | --------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| `terminalStore`     | `src/stores/terminalStore.ts`     | No (rebuilt from DB on startup) | Terminal tabs per context, active tab, restore flags |
+| `fontStore`         | `src/stores/fontStore.ts`         | Yes (localStorage)              | Font family, font size, terminal theme preferences   |
+| `notificationStore` | `src/stores/notificationStore.ts` | Yes (localStorage)              | Notification sound/enabled preferences               |
+| `themeStore`        | `src/stores/themeStore.ts`        | Yes (localStorage)              | Dark/light mode preference                           |
 
 ### Backend State (Rust, Tauri-managed)
 
-| State | Type | Purpose |
-|-------|------|---------|
+| State           | Type                                      | Purpose                       |
+| --------------- | ----------------------------------------- | ----------------------------- |
 | `PtySessionMap` | `Arc<Mutex<HashMap<String, PtySession>>>` | Active PTY sessions in memory |
-| `DbPool` | `Arc<Mutex<SqliteConnection>>` | Single SQLite connection |
+| `DbPool`        | `Arc<Mutex<SqliteConnection>>`            | Single SQLite connection      |
 
 ## Key Design Decisions
 
