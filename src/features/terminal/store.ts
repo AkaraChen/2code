@@ -26,6 +26,7 @@ interface TerminalStore {
 	setActiveTab(projectId: string, tabId: string): void;
 	clearRestore(projectId: string, tabId: string): void;
 	removeProject(projectId: string): void;
+	updateTabTitle(projectId: string, tabId: string, title: string): void;
 	removeStaleProjects(validIds: Set<string>): void;
 }
 
@@ -119,6 +120,24 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
 			if (!(projectId in state.projects)) return state;
 			const { [projectId]: _, ...rest } = state.projects;
 			return { projects: rest };
+		});
+	},
+
+	updateTabTitle(projectId, tabId, title) {
+		set((state) => {
+			const project = state.projects[projectId];
+			if (!project) return state;
+			const tab = project.tabs.find((t) => t.id === tabId);
+			if (!tab || tab.title === title) return state;
+			const tabs = project.tabs.map((t) =>
+				t.id === tabId ? { ...t, title } : t,
+			);
+			return {
+				projects: {
+					...state.projects,
+					[projectId]: { ...project, tabs },
+				},
+			};
 		});
 	},
 
