@@ -1,4 +1,5 @@
 import {
+	Box,
 	CloseButton,
 	Dialog,
 	Flex,
@@ -6,20 +7,21 @@ import {
 	Icon,
 	Portal,
 	Spinner,
+	Tabs,
 	Text,
 } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
-import { parsePatchFiles } from "@pierre/diffs";
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { Activity, Suspense, useCallback, useMemo, useState } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import type { GitCommit } from "@/generated";
-import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
-import { queryKeys } from "@/shared/lib/queryKeys";
+import * as m from "@/paraglide/messages.js";
+import ChangesFileList from "./components/ChangesFileList";
+import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
-import GitDiffSidebar from "./components/GitDiffSidebar";
+import HistoryFileList from "./components/HistoryFileList";
+import { useCommitDiffFiles, useGitDiffFiles, useGitLog } from "./hooks";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"github-dark": "github-dark",
@@ -46,100 +48,6 @@ export default function GitDiffDialog({
 	profileId,
 	branchName,
 }: GitDiffDialogProps) {
-	const termThemeId = useTerminalThemeId();
-
-	const [activeTab, setActiveTab] = useState<string>("changes");
-	const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
-	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(
-		null,
-	);
-	const [selectedCommitFileIndex, setSelectedCommitFileIndex] =
-		useState<number>(0);
-
-	const { data: diff, isLoading: isDiffLoading } = useQuery({
-		queryKey: queryKeys.git.diff(profileId),
-		queryFn: () => getGitDiff({ profileId }),
-		enabled: isOpen && activeTab === "changes",
-	});
-
-	const { data: logData, isLoading: isLogLoading } = useQuery({
-		queryKey: queryKeys.git.log(profileId),
-		queryFn: () => getGitLog({ profileId }),
-		enabled: isOpen && activeTab === "history",
-	});
-
-	const { data: commitDiff, isLoading: isCommitDiffLoading } = useQuery({
-		queryKey: queryKeys.git.commitDiff(
-			profileId,
-			selectedCommit?.full_hash ?? "",
-		),
-		queryFn: () =>
-			getCommitDiff({ profileId, commitHash: selectedCommit!.full_hash }),
-		enabled: isOpen && !!selectedCommit,
-	});
-
-	const files = useMemo(() => {
-		if (!diff) return [];
-		return parsePatchFiles(diff).flatMap((p) => p.files);
-	}, [diff]);
-
-	const commitFiles = useMemo(() => {
-		if (!commitDiff) return [];
-		return parsePatchFiles(commitDiff).flatMap((p) => p.files);
-	}, [commitDiff]);
-
-	const selectedFile =
-		files.length > 0 && selectedFileIndex < files.length
-			? files[selectedFileIndex]
-			: null;
-
-	const selectedCommitFile =
-		commitFiles.length > 0 && selectedCommitFileIndex < commitFiles.length
-			? commitFiles[selectedCommitFileIndex]
-			: null;
-
-	const activeFile =
-		activeTab === "history" ? selectedCommitFile : selectedFile;
-
-	const options: FileDiffOptions<unknown> = useMemo(() => {
-		return {
-			theme: shikiThemeMap[termThemeId] ?? "github-dark",
-			diffStyle: "unified",
-			diffIndicators: "classic",
-			disableFileHeader: true,
-			overflow: "wrap",
-			expandUnchanged: true,
-		};
-	}, [termThemeId]);
-
-	const handleClose = useCallback(() => {
-		setActiveTab("changes");
-		setSelectedFileIndex(0);
-		setSelectedCommit(null);
-		setSelectedCommitFileIndex(0);
-		onClose();
-	}, [onClose]);
-
-	const handleTabChange = useCallback((value: string) => {
-		setActiveTab(value);
-		setSelectedCommit(null);
-		setSelectedCommitFileIndex(0);
-	}, []);
-
-	const handleCommitSelect = useCallback((commit: GitCommit) => {
-		setSelectedCommit(commit);
-		setSelectedCommitFileIndex(0);
-	}, []);
-
-	const handleCommitBack = useCallback(() => {
-		setSelectedCommit(null);
-		setSelectedCommitFileIndex(0);
-	}, []);
-
-	const isLoading =
-		(activeTab === "changes" && isDiffLoading) ||
-		(activeTab === "history" && isLogLoading);
-
 	return (
 		<Dialog.Root
 			lazyMount
@@ -147,7 +55,7 @@ export default function GitDiffDialog({
 			placement="center"
 			open={isOpen}
 			onOpenChange={(e) => {
-				if (!e.open) handleClose();
+				if (!e.open) onClose();
 			}}
 		>
 			<Portal>
@@ -178,50 +86,393 @@ export default function GitDiffDialog({
 							overflow="hidden"
 							display="flex"
 						>
-							{isLoading ? (
-								<Flex align="center" justify="center" flex="1">
-									<Spinner />
-								</Flex>
-							) : (
-								<>
-									<GitDiffSidebar
-										activeTab={activeTab}
-										onTabChange={handleTabChange}
-										changesFiles={files}
-										selectedFileIndex={selectedFileIndex}
-										onFileSelect={setSelectedFileIndex}
-										logData={logData}
-										selectedCommit={selectedCommit}
-										commitFiles={commitFiles}
-										selectedCommitFileIndex={
-											selectedCommitFileIndex
-										}
-										isCommitDiffLoading={
-											isCommitDiffLoading
-										}
-										onCommitSelect={handleCommitSelect}
-										onCommitFileSelect={
-											setSelectedCommitFileIndex
-										}
-										onCommitBack={handleCommitBack}
-									/>
-									<GitDiffPane
-										activeFile={activeFile}
-										options={options}
-										isLoading={isCommitDiffLoading}
-										activeTab={activeTab}
-										tabFiles={
-											activeTab === "history"
-												? commitFiles
-												: files
-										}
-									/>
-								</>
-							)}
+							<GitDiffContent profileId={profileId} />
 						</Dialog.Body>
 					</Dialog.Content>
 				</Dialog.Positioner>
 			</Portal>
 		</Dialog.Root>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Content orchestrator
+// ---------------------------------------------------------------------------
+
+function GitDiffContent({ profileId }: { profileId: string }) {
+	const termThemeId = useTerminalThemeId();
+
+	const [activeTab, setActiveTab] = useState<string>("changes");
+	const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(
+		null,
+	);
+	const [selectedCommitFileIndex, setSelectedCommitFileIndex] = useState(0);
+
+	const options: FileDiffOptions<unknown> = useMemo(
+		() => ({
+			theme: shikiThemeMap[termThemeId] ?? "github-dark",
+			diffStyle: "unified",
+			diffIndicators: "classic",
+			disableFileHeader: true,
+			overflow: "wrap",
+			expandUnchanged: true,
+		}),
+		[termThemeId],
+	);
+
+	const handleTabChange = useCallback((value: string) => {
+		setActiveTab(value);
+		setSelectedCommit(null);
+		setSelectedCommitFileIndex(0);
+	}, []);
+
+	const handleCommitSelect = useCallback((commit: GitCommit) => {
+		setSelectedCommit(commit);
+		setSelectedCommitFileIndex(0);
+	}, []);
+
+	const handleCommitBack = useCallback(() => {
+		setSelectedCommit(null);
+		setSelectedCommitFileIndex(0);
+	}, []);
+
+	const isChanges = activeTab === "changes";
+
+	return (
+		<>
+			{/* Sidebar column */}
+			<Flex direction="column" w="320px" flexShrink={0} overflow="hidden">
+				<Tabs.Root
+					value={activeTab}
+					onValueChange={(e) => handleTabChange(e.value)}
+					size="sm"
+					variant="subtle"
+					flex="1"
+					minH="0"
+					display="flex"
+					flexDirection="column"
+				>
+					<Tabs.List px="3">
+						<Tabs.Trigger value="changes">
+							{m.changes()}
+						</Tabs.Trigger>
+						<Tabs.Trigger value="history">
+							{m.history()}
+						</Tabs.Trigger>
+					</Tabs.List>
+
+					{/* Changes sidebar */}
+					<Activity mode={isChanges ? "visible" : "hidden"}>
+						<Box
+							flex={isChanges ? "1" : undefined}
+							display={isChanges ? "flex" : "none"}
+							flexDirection="column"
+							overflow="hidden"
+						>
+							<Suspense fallback={<SidebarSpinner />}>
+								<ChangesSidebar
+									profileId={profileId}
+									selectedFileIndex={selectedFileIndex}
+									onFileSelect={setSelectedFileIndex}
+								/>
+							</Suspense>
+						</Box>
+					</Activity>
+
+					{/* History sidebar */}
+					<Activity mode={!isChanges ? "visible" : "hidden"}>
+						<Box
+							flex={!isChanges ? "1" : undefined}
+							display={!isChanges ? "flex" : "none"}
+							flexDirection="column"
+							overflow="hidden"
+						>
+							<Suspense fallback={<SidebarSpinner />}>
+								<HistorySidebar
+									profileId={profileId}
+									selectedCommit={selectedCommit}
+									selectedCommitFileIndex={
+										selectedCommitFileIndex
+									}
+									onCommitSelect={handleCommitSelect}
+									onCommitFileSelect={
+										setSelectedCommitFileIndex
+									}
+									onCommitBack={handleCommitBack}
+								/>
+							</Suspense>
+						</Box>
+					</Activity>
+				</Tabs.Root>
+			</Flex>
+
+			{/* Pane column */}
+			<Activity mode={isChanges ? "visible" : "hidden"}>
+				<Suspense fallback={<PaneSpinner visible={isChanges} />}>
+					<ChangesDiffPane
+						profileId={profileId}
+						selectedFileIndex={selectedFileIndex}
+						options={options}
+						visible={isChanges}
+					/>
+				</Suspense>
+			</Activity>
+
+			<Activity mode={!isChanges ? "visible" : "hidden"}>
+				<HistoryDiffPane
+					profileId={profileId}
+					selectedCommit={selectedCommit}
+					selectedCommitFileIndex={selectedCommitFileIndex}
+					options={options}
+					visible={!isChanges}
+				/>
+			</Activity>
+		</>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Shared spinners
+// ---------------------------------------------------------------------------
+
+function SidebarSpinner() {
+	return (
+		<Flex align="center" justify="center" flex="1">
+			<Spinner />
+		</Flex>
+	);
+}
+
+function PaneSpinner({ visible }: { visible: boolean }) {
+	return (
+		<Flex
+			align="center"
+			justify="center"
+			flex="1"
+			display={visible ? "flex" : "none"}
+		>
+			<Spinner />
+		</Flex>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// Changes tab components
+// ---------------------------------------------------------------------------
+
+function ChangesSidebar({
+	profileId,
+	selectedFileIndex,
+	onFileSelect,
+}: {
+	profileId: string;
+	selectedFileIndex: number;
+	onFileSelect: (index: number) => void;
+}) {
+	const files = useGitDiffFiles(profileId);
+
+	if (files.length === 0) {
+		return (
+			<Flex align="center" justify="center" flex="1" p="8">
+				<Box color="fg.muted" fontSize="sm">
+					{m.noChangesDetected()}
+				</Box>
+			</Flex>
+		);
+	}
+
+	return (
+		<Box flex="1" overflowY="auto">
+			<ChangesFileList
+				files={files}
+				selectedIndex={selectedFileIndex}
+				onSelect={onFileSelect}
+			/>
+		</Box>
+	);
+}
+
+function ChangesDiffPane({
+	profileId,
+	selectedFileIndex,
+	options,
+	visible,
+}: {
+	profileId: string;
+	selectedFileIndex: number;
+	options: FileDiffOptions<unknown>;
+	visible: boolean;
+}) {
+	const files = useGitDiffFiles(profileId);
+	const activeFile =
+		files.length > 0 && selectedFileIndex < files.length
+			? files[selectedFileIndex]
+			: null;
+
+	return (
+		<Box flex="1" display={visible ? "flex" : "none"}>
+			<GitDiffPane
+				activeFile={activeFile}
+				options={options}
+				emptyMessage={
+					files.length === 0
+						? m.noChangesDetected()
+						: m.selectFileToView()
+				}
+			/>
+		</Box>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// History tab components
+// ---------------------------------------------------------------------------
+
+function HistorySidebar({
+	profileId,
+	selectedCommit,
+	selectedCommitFileIndex,
+	onCommitSelect,
+	onCommitFileSelect,
+	onCommitBack,
+}: {
+	profileId: string;
+	selectedCommit: GitCommit | null;
+	selectedCommitFileIndex: number;
+	onCommitSelect: (commit: GitCommit) => void;
+	onCommitFileSelect: (index: number) => void;
+	onCommitBack: () => void;
+}) {
+	const { data: logData } = useGitLog(profileId);
+
+	if (selectedCommit) {
+		return (
+			<Box
+				flex="1"
+				display="flex"
+				flexDirection="column"
+				minH="0"
+				overflow="hidden"
+			>
+				<Suspense fallback={<SidebarSpinner />}>
+					<CommitFileSidebar
+						profileId={profileId}
+						commit={selectedCommit}
+						selectedCommitFileIndex={selectedCommitFileIndex}
+						onCommitFileSelect={onCommitFileSelect}
+						onCommitBack={onCommitBack}
+					/>
+				</Suspense>
+			</Box>
+		);
+	}
+
+	if ((logData?.length ?? 0) === 0) {
+		return (
+			<Flex align="center" justify="center" flex="1" p="8">
+				<Box color="fg.muted" fontSize="sm">
+					{m.noCommitsFound()}
+				</Box>
+			</Flex>
+		);
+	}
+
+	return (
+		<CommitList commits={logData ?? []} onCommitSelect={onCommitSelect} />
+	);
+}
+
+function CommitFileSidebar({
+	profileId,
+	commit,
+	selectedCommitFileIndex,
+	onCommitFileSelect,
+	onCommitBack,
+}: {
+	profileId: string;
+	commit: GitCommit;
+	selectedCommitFileIndex: number;
+	onCommitFileSelect: (index: number) => void;
+	onCommitBack: () => void;
+}) {
+	const files = useCommitDiffFiles(profileId, commit.full_hash);
+
+	return (
+		<HistoryFileList
+			commit={commit}
+			files={files}
+			selectedIndex={selectedCommitFileIndex}
+			onFileSelect={onCommitFileSelect}
+			onBack={onCommitBack}
+		/>
+	);
+}
+
+function HistoryDiffPane({
+	profileId,
+	selectedCommit,
+	selectedCommitFileIndex,
+	options,
+	visible,
+}: {
+	profileId: string;
+	selectedCommit: GitCommit | null;
+	selectedCommitFileIndex: number;
+	options: FileDiffOptions<unknown>;
+	visible: boolean;
+}) {
+	if (!selectedCommit) {
+		return (
+			<Box flex="1" display={visible ? "flex" : "none"}>
+				<GitDiffPane
+					activeFile={null}
+					options={options}
+					emptyMessage={m.selectFileToView()}
+				/>
+			</Box>
+		);
+	}
+
+	return (
+		<Suspense fallback={<PaneSpinner visible={visible} />}>
+			<CommitDiffViewer
+				profileId={profileId}
+				commit={selectedCommit}
+				selectedCommitFileIndex={selectedCommitFileIndex}
+				options={options}
+				visible={visible}
+			/>
+		</Suspense>
+	);
+}
+
+function CommitDiffViewer({
+	profileId,
+	commit,
+	selectedCommitFileIndex,
+	options,
+	visible,
+}: {
+	profileId: string;
+	commit: GitCommit;
+	selectedCommitFileIndex: number;
+	options: FileDiffOptions<unknown>;
+	visible: boolean;
+}) {
+	const files = useCommitDiffFiles(profileId, commit.full_hash);
+	const activeFile =
+		files.length > 0 && selectedCommitFileIndex < files.length
+			? files[selectedCommitFileIndex]
+			: null;
+
+	return (
+		<Box flex="1" display={visible ? "flex" : "none"}>
+			<GitDiffPane
+				activeFile={activeFile}
+				options={options}
+				emptyMessage={m.selectFileToView()}
+			/>
+		</Box>
 	);
 }

@@ -1,9 +1,8 @@
-import { Badge, Box, Flex, Spinner, Text } from "@chakra-ui/react";
+import { Badge, Box, Flex, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useMemo } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import * as m from "@/paraglide/messages.js";
 import { changeBadge, getLineStats } from "../utils";
 
 function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
@@ -46,22 +45,14 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 export interface GitDiffPaneProps {
 	activeFile: FileDiffMetadata | null;
 	options: FileDiffOptions<unknown>;
-	isLoading: boolean;
-	activeTab: string;
-	tabFiles: FileDiffMetadata[];
+	emptyMessage: string;
 }
 
 export default function GitDiffPane({
 	activeFile,
 	options,
-	isLoading,
-	activeTab,
-	tabFiles,
+	emptyMessage,
 }: GitDiffPaneProps) {
-	const emptyMessage =
-		activeTab === "changes" && tabFiles.length === 0
-			? m.noChangesDetected()
-			: m.selectFileToView();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 
@@ -74,11 +65,7 @@ export default function GitDiffPane({
 				"--diffs-font-size": `${fontSize}px`,
 			}}
 		>
-			{isLoading ? (
-				<Flex align="center" justify="center" flex="1" h="full">
-					<Spinner />
-				</Flex>
-			) : activeFile ? (
+			{activeFile ? (
 				<>
 					<FileDiffHeader file={activeFile} />
 					<FileDiff fileDiff={activeFile} options={options} />
