@@ -4,7 +4,7 @@ use diesel::SqliteConnection;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::model::project::{GitCommit, Project};
+use crate::model::project::{GitCommit, Project, ProjectWithProfiles};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -76,8 +76,10 @@ pub fn create_from_folder(
 	Ok(project)
 }
 
-pub fn list(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
-	crate::repo::project::list_all(conn)
+pub fn list(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<ProjectWithProfiles>, AppError> {
+	crate::repo::project::list_all_with_profiles(conn)
 }
 
 pub fn get(conn: &mut SqliteConnection, id: &str) -> Result<Project, AppError> {

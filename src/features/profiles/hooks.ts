@@ -1,18 +1,7 @@
-import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTerminalStore } from "@/features/terminal/store";
-import { createProfile, deleteProfile, listProfiles } from "@/generated";
+import { createProfile, deleteProfile } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-
-export function useProfiles(projectId: string) {
-	return useSuspenseQuery({
-		queryKey: queryKeys.profiles.byProject(projectId),
-		queryFn: () => listProfiles({ projectId }),
-	});
-}
 
 export function useCreateProfile() {
 	const queryClient = useQueryClient();
@@ -24,10 +13,8 @@ export function useCreateProfile() {
 			projectId: string;
 			branchName: string;
 		}) => createProfile({ projectId, branchName }),
-		onSuccess: (_data, { projectId }) => {
-			queryClient.invalidateQueries({
-				queryKey: queryKeys.profiles.byProject(projectId),
-			});
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
 	});
 }
@@ -37,11 +24,9 @@ export function useDeleteProfile() {
 	return useMutation({
 		mutationFn: ({ id }: { id: string; projectId: string }) =>
 			deleteProfile({ id }),
-		onSuccess: (_data, { id, projectId }) => {
+		onSuccess: (_data, { id }) => {
 			useTerminalStore.getState().removeProfile(id);
-			queryClient.invalidateQueries({
-				queryKey: queryKeys.profiles.byProject(projectId),
-			});
+			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
 	});
 }

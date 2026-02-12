@@ -1,8 +1,11 @@
 use diesel::prelude::*;
 
+use std::collections::HashMap;
+
 use crate::error::AppError;
-use crate::model::project::{NewProject, Project, UpdateProject};
-use crate::schema::projects;
+use crate::model::profile::Profile;
+use crate::model::project::{NewProject, Project, ProjectWithProfiles, UpdateProject};
+use crate::schema::{profiles, projects};
 
 pub fn insert(
 	conn: &mut SqliteConnection,
@@ -37,6 +40,44 @@ pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 		.select(Project::as_select())
 		.load(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn list_all_with_profiles(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<ProjectWithProfiles>, AppError> {
+	let all_projects: Vec<Project> = projects::table
+		.select(Project::as_select())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let all_profiles: Vec<Profile> = profiles::table
+		.select(Profile::as_select())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let mut profile_map: HashMap<String, Vec<Profile>> = HashMap::new();
+	for profile in all_profiles {
+		profile_map
+			.entry(profile.project_id.clone())
+			.or_default()
+			.push(profile);
+	}
+
+	let result = all_projects
+		.into_iter()
+		.map(|project| {
+			let profiles = profile_map.remove(&project.id).unwrap_or_default();
+			ProjectWithProfiles {
+				id: project.id,
+				name: project.name,
+				folder: project.folder,
+				created_at: project.created_at,
+				profiles,
+			}
+		})
+		.collect();
+
+	Ok(result)
 }
 
 pub fn update(
@@ -189,6 +230,64 @@ mod tests {
 		let mut conn = setup_db();
 		let result = delete(&mut conn, "nope");
 		assert!(result.is_err());
+	}
+
+	#[test]
+	fn list_with_profiles_empty() {
+		let mut conn = setup_db();
+		let result = list_all_with_profiles(&mut conn).unwrap();
+		assert!(result.is_empty());
+	}
+
+	#[test]
+	fn list_with_profiles_includes_default() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Test", "/tmp/test").unwrap();
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: "default-p1",
+				project_id: "p1",
+				branch_name: "main",
+				worktree_path: "/tmp/test",
+				is_default: true,
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		let result = list_all_with_profiles(&mut conn).unwrap();
+		assert_eq!(result.len(), 1);
+		assert_eq!(result[0].id, "p1");
+		assert_eq!(result[0].profiles.len(), 1);
+		assert!(result[0].profiles[0].is_default);
+	}
+
+	#[test]
+	fn list_with_profiles_multiple() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Test", "/tmp/test").unwrap();
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: "default-p1",
+				project_id: "p1",
+				branch_name: "main",
+				worktree_path: "/tmp/test",
+				is_default: true,
+			})
+			.execute(&mut conn)
+			.unwrap();
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: "feat-p1",
+				project_id: "p1",
+				branch_name: "feature/x",
+				worktree_path: "/w/feat",
+				is_default: false,
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		let result = list_all_with_profiles(&mut conn).unwrap();
+		assert_eq!(result[0].profiles.len(), 2);
 	}
 
 	#[test]

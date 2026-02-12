@@ -3,7 +3,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::model::profile::Profile;
-use crate::model::project::{GitCommit, Project};
+use crate::model::project::{GitCommit, Project, ProjectWithProfiles};
 
 #[tauri::command]
 pub fn create_project_temporary(
@@ -27,7 +27,7 @@ pub fn create_project_from_folder(
 #[tauri::command]
 pub fn list_projects(
 	state: State<'_, DbPool>,
-) -> Result<Vec<Project>, AppError> {
+) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::project::list(conn)
 }

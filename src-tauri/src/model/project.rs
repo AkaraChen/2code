@@ -1,3 +1,4 @@
+use crate::model::profile::Profile;
 use crate::schema::projects;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,15 @@ pub struct NewProject<'a> {
 pub struct UpdateProject {
 	pub name: Option<String>,
 	pub folder: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct ProjectWithProfiles {
+	pub id: String,
+	pub name: String,
+	pub folder: String,
+	pub created_at: String,
+	pub profiles: Vec<Profile>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

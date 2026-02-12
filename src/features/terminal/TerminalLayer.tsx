@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
-import type { Profile } from "@/generated";
-import { listProfiles, listProjects } from "@/generated";
+import type { Profile, ProjectWithProfiles } from "@/generated";
+import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { useRestoreTerminals } from "./hooks";
 import { useTerminalProfileIds, useTerminalSync } from "./store";
@@ -19,48 +19,30 @@ export default function TerminalLayer() {
 
 	const terminalProfileIds = useTerminalProfileIds();
 
-	// Fetch profiles for all projects (includes default profiles)
-	const { data: allProfiles } = useQuery({
-		queryKey: queryKeys.profiles.all,
-		queryFn: async () => {
-			const results = await Promise.all(
-				(projects ?? []).map((p) => listProfiles({ projectId: p.id })),
-			);
-			return results.flat();
-		},
-		enabled: (projects ?? []).length > 0,
-	});
+	// Derive all profiles from the projects response (no N+1)
+	const allProfiles = useMemo(
+		() => (projects ?? []).flatMap((p: ProjectWithProfiles) => p.profiles),
+		[projects],
+	);
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
 		const map = new Map<string, Profile>();
-		for (const profile of allProfiles ?? []) {
+		for (const profile of allProfiles) {
 			map.set(profile.id, profile);
 		}
 		return map;
 	}, [allProfiles]);
 
-	useTerminalSync(allProfiles ?? []);
+	useTerminalSync(allProfiles);
 	useRestoreTerminals(projects);
 
-	// Match routes: /projects/:id or /projects/:id/profiles/:profileId
-	const projectMatch = matchPath("/projects/:id", location.pathname);
+	// Only match /projects/:id/profiles/:profileId
 	const profileMatch = matchPath(
 		"/projects/:id/profiles/:profileId",
 		location.pathname,
 	);
-
-	// Resolve active profile ID
-	let activeProfileId: string | null = null;
-	if (profileMatch?.params.profileId) {
-		activeProfileId = profileMatch.params.profileId;
-	} else if (projectMatch?.params.id) {
-		// Find default profile for this project
-		const defaultProfile = (allProfiles ?? []).find(
-			(p) => p.project_id === projectMatch.params.id && p.is_default,
-		);
-		activeProfileId = defaultProfile?.id ?? null;
-	}
+	const activeProfileId = profileMatch?.params.profileId ?? null;
 
 	return (
 		<>
