@@ -1,6 +1,4 @@
 use diesel::prelude::*;
-use pinyin::ToPinyin;
-use slug::slugify;
 use std::path::Path;
 use std::process::Command;
 use tauri::State;
@@ -15,25 +13,7 @@ fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
 	match name {
 		Some(n) if !n.trim().is_empty() => {
-			// Group consecutive non-pinyin chars together;
-			// only insert spaces between pinyin syllables.
-			let mut parts: Vec<String> = Vec::new();
-			let mut buf = String::new();
-			for c in n.chars() {
-				if let Some(py) = c.to_pinyin() {
-					if !buf.is_empty() {
-						parts.push(buf.clone());
-						buf.clear();
-					}
-					parts.push(py.plain().to_string());
-				} else {
-					buf.push(c);
-				}
-			}
-			if !buf.is_empty() {
-				parts.push(buf);
-			}
-			let slug = slugify(&parts.join(" "));
+			let slug = crate::slug::slugify_cjk(n);
 			if slug.is_empty() {
 				uuid.to_string()
 			} else {

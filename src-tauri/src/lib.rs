@@ -6,6 +6,7 @@ mod profile;
 mod project;
 mod pty;
 mod schema;
+mod slug;
 mod sound;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

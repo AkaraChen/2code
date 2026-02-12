@@ -208,27 +208,37 @@ fn prune_oldest_chunks(
 	session_id: &str,
 	total_written: &mut usize,
 ) {
-	// Get all chunk ids and sizes for this session, ordered oldest first
-	let chunks: Vec<(Option<i32>, Vec<u8>)> = pty_output_chunks::table
+	// Get chunk ids and sizes without loading BLOB data
+	let chunks: Vec<(Option<i32>, i32)> = pty_output_chunks::table
 		.filter(pty_output_chunks::session_id.eq(session_id))
-		.select((pty_output_chunks::id, pty_output_chunks::data))
+		.select((
+			pty_output_chunks::id,
+			diesel::dsl::sql::<diesel::sql_types::Integer>("length(data)"),
+		))
 		.order(pty_output_chunks::id.asc())
 		.load(conn)
 		.unwrap_or_default();
 
 	let mut running_total: usize =
-		chunks.iter().map(|(_, data)| data.len()).sum();
-	for (chunk_id, data) in &chunks {
+		chunks.iter().map(|(_, len)| *len as usize).sum();
+
+	let mut ids_to_delete: Vec<i32> = Vec::new();
+	for (chunk_id, len) in &chunks {
 		if running_total <= MAX_OUTPUT_PER_SESSION {
 			break;
 		}
 		if let Some(cid) = chunk_id {
-			let _ = diesel::delete(
-				pty_output_chunks::table.filter(pty_output_chunks::id.eq(cid)),
-			)
-			.execute(conn);
-			running_total -= data.len();
+			running_total -= *len as usize;
+			ids_to_delete.push(*cid);
 		}
+	}
+
+	if !ids_to_delete.is_empty() {
+		let _ = diesel::delete(
+			pty_output_chunks::table
+				.filter(pty_output_chunks::id.eq_any(&ids_to_delete)),
+		)
+		.execute(conn);
 	}
 
 	*total_written = running_total;

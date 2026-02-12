@@ -1,6 +1,4 @@
 use diesel::prelude::*;
-use pinyin::ToPinyin;
-use slug::slugify;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::State;
@@ -18,25 +16,7 @@ use crate::schema::{profiles, projects};
 fn sanitize_branch_name(input: &str) -> String {
 	input
 		.split('/')
-		.map(|seg| {
-			let mut parts: Vec<String> = Vec::new();
-			let mut buf = String::new();
-			for c in seg.chars() {
-				if let Some(py) = c.to_pinyin() {
-					if !buf.is_empty() {
-						parts.push(buf.clone());
-						buf.clear();
-					}
-					parts.push(py.plain().to_string());
-				} else {
-					buf.push(c);
-				}
-			}
-			if !buf.is_empty() {
-				parts.push(buf);
-			}
-			slugify(&parts.join(" "))
-		})
+		.map(|seg| crate::slug::slugify_cjk(seg))
 		.filter(|s| !s.is_empty())
 		.collect::<Vec<_>>()
 		.join("/")
