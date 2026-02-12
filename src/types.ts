@@ -13,6 +13,22 @@ export interface Profile {
 	created_at: string;
 }
 
+export interface GitAuthor {
+	name: string;
+	email: string;
+}
+
+export interface GitCommit {
+	hash: string;
+	full_hash: string;
+	author: GitAuthor;
+	date: string;
+	message: string;
+	files_changed: number;
+	insertions: number;
+	deletions: number;
+}
+
 export interface PtySessionRecord {
 	id: string;
 	project_id: string;

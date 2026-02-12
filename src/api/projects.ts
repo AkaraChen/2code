@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project } from "@/types";
+import type { GitCommit, Project } from "@/types";
 
 export const projectsApi = {
 	list: () => invoke<Project[]>("list_projects"),
@@ -19,4 +19,10 @@ export const projectsApi = {
 
 	getDiff: (contextId: string) =>
 		invoke<string>("get_git_diff", { contextId }),
+
+	getLog: (contextId: string, limit?: number) =>
+		invoke<GitCommit[]>("get_git_log", { contextId, limit: limit ?? null }),
+
+	getCommitDiff: (contextId: string, commitHash: string) =>
+		invoke<string>("get_commit_diff", { contextId, commitHash }),
 };

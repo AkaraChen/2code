@@ -6,10 +6,12 @@ import {
 	Flex,
 	HStack,
 	Icon,
+	IconButton,
 	Portal,
 	Spinner,
 	Tabs,
 	Text,
+	VStack,
 } from "@chakra-ui/react";
 import type {
 	ChangeContent,
@@ -19,11 +21,16 @@ import type {
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { RiGitBranchLine } from "react-icons/ri";
+import { useCallback, useMemo, useState } from "react";
+import {
+	RiArrowLeftLine,
+	RiGitBranchLine,
+	RiGitCommitLine,
+} from "react-icons/ri";
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
+import type { GitCommit } from "@/types";
 import { useFontStore } from "@/stores/fontStore";
 import { useThemePreference } from "./ThemeProvider";
 
@@ -138,6 +145,76 @@ function FileListItem({
 	);
 }
 
+function formatRelativeTime(isoDate: string): string {
+	const now = Date.now();
+	const then = new Date(isoDate).getTime();
+	const diffSec = Math.floor((now - then) / 1000);
+
+	if (diffSec < 60) return "just now";
+	const diffMin = Math.floor(diffSec / 60);
+	if (diffMin < 60) return `${diffMin}m ago`;
+	const diffHr = Math.floor(diffMin / 60);
+	if (diffHr < 24) return `${diffHr}h ago`;
+	const diffDay = Math.floor(diffHr / 24);
+	if (diffDay < 30) return `${diffDay}d ago`;
+	const diffMonth = Math.floor(diffDay / 30);
+	if (diffMonth < 12) return `${diffMonth}mo ago`;
+	const diffYear = Math.floor(diffMonth / 12);
+	return `${diffYear}y ago`;
+}
+
+function CommitListItem({
+	commit,
+	onClick,
+}: {
+	commit: GitCommit;
+	onClick: () => void;
+}) {
+	return (
+		<VStack
+			align="stretch"
+			px="3"
+			py="1.5"
+			cursor="pointer"
+			_hover={{ bg: "bg.muted" }}
+			onClick={onClick}
+			gap="0.5"
+			userSelect="none"
+		>
+			<Text fontSize="sm" lineClamp={1}>
+				{commit.message}
+			</Text>
+			<HStack gap="2" fontSize="xs" color="fg.muted">
+				<HStack gap="1">
+					<Icon fontSize="xs">
+						<RiGitCommitLine />
+					</Icon>
+					<Text fontFamily="mono">{commit.hash}</Text>
+				</HStack>
+				<Text truncate flex="1">
+					{commit.author.name}
+				</Text>
+				<Text flexShrink={0}>
+					{formatRelativeTime(commit.date)}
+				</Text>
+			</HStack>
+			<HStack gap="2" fontSize="xs">
+				{commit.files_changed > 0 && (
+					<Text color="fg.muted">
+						{commit.files_changed} {commit.files_changed === 1 ? "file" : "files"}
+					</Text>
+				)}
+				{commit.insertions > 0 && (
+					<Text color="green.solid">+{commit.insertions}</Text>
+				)}
+				{commit.deletions > 0 && (
+					<Text color="red.solid">-{commit.deletions}</Text>
+				)}
+			</HStack>
+		</VStack>
+	);
+}
+
 function EmptyState({ message }: { message: string }) {
 	return (
 		<Flex align="center" justify="center" h="full" p="8">
@@ -168,10 +245,31 @@ export default function GitDiffDialog({
 	const lightTerminalTheme = useFontStore((s) => s.lightTerminalTheme);
 	const syncTerminalTheme = useFontStore((s) => s.syncTerminalTheme);
 
-	const { data: diff, isLoading } = useQuery({
+	const [activeTab, setActiveTab] = useState<string>("changes");
+	const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
+	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
+	const [selectedCommitFileIndex, setSelectedCommitFileIndex] = useState<number>(0);
+
+	const { data: diff, isLoading: isDiffLoading } = useQuery({
 		queryKey: queryKeys.projects.diff(contextId),
 		queryFn: () => projectsApi.getDiff(contextId),
-		enabled: isOpen,
+		enabled: isOpen && activeTab === "changes",
+	});
+
+	const { data: logData, isLoading: isLogLoading } = useQuery({
+		queryKey: queryKeys.projects.log(contextId),
+		queryFn: () => projectsApi.getLog(contextId),
+		enabled: isOpen && activeTab === "history",
+	});
+
+	const { data: commitDiff, isLoading: isCommitDiffLoading } = useQuery({
+		queryKey: queryKeys.projects.commitDiff(
+			contextId,
+			selectedCommit?.full_hash ?? "",
+		),
+		queryFn: () =>
+			projectsApi.getCommitDiff(contextId, selectedCommit!.full_hash),
+		enabled: isOpen && !!selectedCommit,
 	});
 
 	const files = useMemo(() => {
@@ -179,12 +277,24 @@ export default function GitDiffDialog({
 		return parsePatchFiles(diff).flatMap((p) => p.files);
 	}, [diff]);
 
-	const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
+	const commitFiles = useMemo(() => {
+		if (!commitDiff) return [];
+		return parsePatchFiles(commitDiff).flatMap((p) => p.files);
+	}, [commitDiff]);
 
 	const selectedFile =
 		files.length > 0 && selectedFileIndex < files.length
 			? files[selectedFileIndex]
 			: null;
+
+	const selectedCommitFile =
+		commitFiles.length > 0 && selectedCommitFileIndex < commitFiles.length
+			? commitFiles[selectedCommitFileIndex]
+			: null;
+
+	// The file shown in the right pane depends on which tab is active
+	const activeFile =
+		activeTab === "history" ? selectedCommitFile : selectedFile;
 
 	const options: FileDiffOptions<unknown> = useMemo(() => {
 		const termTheme = syncTerminalTheme
@@ -202,6 +312,29 @@ export default function GitDiffDialog({
 		};
 	}, [isDark, darkTerminalTheme, lightTerminalTheme, syncTerminalTheme]);
 
+	const handleClose = useCallback(() => {
+		setActiveTab("changes");
+		setSelectedFileIndex(0);
+		setSelectedCommit(null);
+		setSelectedCommitFileIndex(0);
+		onClose();
+	}, [onClose]);
+
+	const handleTabChange = useCallback((value: string) => {
+		setActiveTab(value);
+		setSelectedCommit(null);
+		setSelectedCommitFileIndex(0);
+	}, []);
+
+	const handleCommitBack = useCallback(() => {
+		setSelectedCommit(null);
+		setSelectedCommitFileIndex(0);
+	}, []);
+
+	const isLoading =
+		(activeTab === "changes" && isDiffLoading) ||
+		(activeTab === "history" && isLogLoading);
+
 	return (
 		<Dialog.Root
 			lazyMount
@@ -209,7 +342,7 @@ export default function GitDiffDialog({
 			placement="center"
 			open={isOpen}
 			onOpenChange={(e) => {
-				if (!e.open) onClose();
+				if (!e.open) handleClose();
 			}}
 		>
 			<Portal>
@@ -254,7 +387,10 @@ export default function GitDiffDialog({
 										overflow="hidden"
 									>
 										<Tabs.Root
-											defaultValue="changes"
+											value={activeTab}
+											onValueChange={(e) =>
+												handleTabChange(e.value)
+											}
 											size="sm"
 											variant="line"
 											flex="1"
@@ -323,8 +459,152 @@ export default function GitDiffDialog({
 													</>
 												)}
 											</Tabs.Content>
-											<Tabs.Content value="history" p="0">
-												<EmptyState message="No history available" />
+											<Tabs.Content
+												value="history"
+												p="0"
+												flex="1"
+												display="flex"
+												flexDirection="column"
+												overflow="hidden"
+											>
+												{selectedCommit ? (
+													<>
+														<HStack
+															px="2"
+															py="1"
+															gap="1"
+														>
+															<IconButton
+																size="xs"
+																variant="ghost"
+																aria-label="Back to commit list"
+																onClick={
+																	handleCommitBack
+																}
+															>
+																<RiArrowLeftLine />
+															</IconButton>
+															<VStack
+																align="start"
+																gap="0"
+																flex="1"
+																minW="0"
+															>
+																<Text
+																	fontSize="sm"
+																	fontWeight="medium"
+																	lineClamp={
+																		1
+																	}
+																>
+																	{
+																		selectedCommit.message
+																	}
+																</Text>
+																<Text
+																	fontSize="xs"
+																	color="fg.muted"
+																	fontFamily="mono"
+																>
+																	{
+																		selectedCommit.hash
+																	}
+																</Text>
+															</VStack>
+														</HStack>
+														{isCommitDiffLoading ? (
+															<Flex
+																align="center"
+																justify="center"
+																flex="1"
+															>
+																<Spinner
+																	size="sm"
+																/>
+															</Flex>
+														) : commitFiles.length ===
+															0 ? (
+															<EmptyState message="No file changes" />
+														) : (
+															<>
+																<Text
+																	px="3"
+																	py="1"
+																	fontSize="xs"
+																	color="fg.muted"
+																>
+																	{
+																		commitFiles.length
+																	}{" "}
+																	changed{" "}
+																	{commitFiles.length ===
+																	1
+																		? "file"
+																		: "files"}
+																</Text>
+																<Box
+																	flex="1"
+																	overflowY="auto"
+																>
+																	{commitFiles.map(
+																		(
+																			file,
+																			i,
+																		) => (
+																			<FileListItem
+																				key={
+																					file.name +
+																					i
+																				}
+																				file={
+																					file
+																				}
+																				isActive={
+																					selectedCommitFileIndex ===
+																					i
+																				}
+																				onClick={() =>
+																					setSelectedCommitFileIndex(
+																						i,
+																					)
+																				}
+																			/>
+																		),
+																	)}
+																</Box>
+															</>
+														)}
+													</>
+												) : (logData?.length ?? 0) ===
+													0 ? (
+													<EmptyState message="No commits found" />
+												) : (
+													<Box
+														flex="1"
+														overflowY="auto"
+													>
+														{logData?.map(
+															(commit) => (
+																<CommitListItem
+																	key={
+																		commit.full_hash
+																	}
+																	commit={
+																		commit
+																	}
+																	onClick={() => {
+																		setSelectedCommit(
+																			commit,
+																		);
+																		setSelectedCommitFileIndex(
+																			0,
+																		);
+																	}}
+																/>
+															),
+														)}
+													</Box>
+												)}
 											</Tabs.Content>
 										</Tabs.Root>
 									</Flex>
@@ -338,22 +618,37 @@ export default function GitDiffDialog({
 											"--diffs-font-size": `${fontSize}px`,
 										}}
 									>
-										{selectedFile ? (
+										{activeTab === "history" &&
+										selectedCommit &&
+										isCommitDiffLoading ? (
+											<Flex
+												align="center"
+												justify="center"
+												flex="1"
+												h="full"
+											>
+												<Spinner />
+											</Flex>
+										) : activeFile ? (
 											<>
 												<FileDiffHeader
-													file={selectedFile}
+													file={activeFile}
 												/>
 												<FileDiff
-													fileDiff={selectedFile}
+													fileDiff={activeFile}
 													options={options}
 												/>
 											</>
 										) : (
 											<EmptyState
 												message={
-													files.length === 0
-														? "No changes detected"
-														: "Select a file to view changes"
+													activeTab === "changes"
+														? files.length === 0
+															? "No changes detected"
+															: "Select a file to view changes"
+														: selectedCommit
+															? "Select a file to view changes"
+															: "Select a commit to view its diff"
 												}
 											/>
 										)}

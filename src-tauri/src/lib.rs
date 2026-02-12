@@ -50,6 +50,8 @@ pub fn run() {
 			project::commands::delete_project,
 			project::commands::get_git_branch,
 			project::commands::get_git_diff,
+			project::commands::get_git_log,
+			project::commands::get_commit_diff,
 			font::list_system_fonts,
 			sound::list_system_sounds,
 			sound::play_system_sound,
