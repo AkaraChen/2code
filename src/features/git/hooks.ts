@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
-export function useGitDiff(profileId: string) {
+function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
 		queryFn: () => getGitDiff({ profileId }),
@@ -18,7 +18,7 @@ export function useGitLog(profileId: string) {
 	});
 }
 
-export function useCommitDiff(profileId: string, commitHash: string) {
+function useCommitDiff(profileId: string, commitHash: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.commitDiff(profileId, commitHash),
 		queryFn: () => getCommitDiff({ profileId, commitHash }),

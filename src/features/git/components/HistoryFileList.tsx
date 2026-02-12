@@ -5,7 +5,7 @@ import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { FileListItem } from "./ChangesFileList";
 
-export interface HistoryFileListProps {
+interface HistoryFileListProps {
 	commit: GitCommit;
 	files: FileDiffMetadata[];
 	selectedIndex: number;

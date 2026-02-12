@@ -20,7 +20,7 @@ function formatRelativeTime(isoDate: string): string {
 	return `${diffYear}y ago`;
 }
 
-export interface CommitListProps {
+interface CommitListProps {
 	commits: GitCommit[];
 	onCommitSelect: (commit: GitCommit) => void;
 }

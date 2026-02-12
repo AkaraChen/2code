@@ -41,19 +41,6 @@ export function useProjectProfiles(projectId: string) {
 	);
 }
 
-export function useDefaultProfile(projectId: string) {
-	const profiles = useProjectProfiles(projectId);
-	return useMemo(
-		() => profiles.find((p) => p.is_default) ?? null,
-		[profiles],
-	);
-}
-
-export function useAllProfiles() {
-	const { data: projects } = useProjects();
-	return useMemo(() => projects.flatMap((p) => p.profiles), [projects]);
-}
-
 export function useCreateProject() {
 	const queryClient = useQueryClient();
 	return useMutation({

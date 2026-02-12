@@ -48,7 +48,7 @@ function FileListItem({ file, isActive, onClick }: FileListItemProps) {
 	);
 }
 
-export interface ChangesFileListProps {
+interface ChangesFileListProps {
 	files: FileDiffMetadata[];
 	selectedIndex: number;
 	onSelect: (index: number) => void;

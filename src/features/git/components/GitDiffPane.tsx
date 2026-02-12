@@ -42,7 +42,7 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 	);
 }
 
-export interface GitDiffPaneProps {
+interface GitDiffPaneProps {
 	activeFile: FileDiffMetadata | null;
 	options: FileDiffOptions<unknown>;
 	emptyMessage: string;
