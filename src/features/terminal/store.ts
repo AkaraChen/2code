@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { create } from "zustand";
+import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 
 interface TerminalTab {
@@ -30,131 +31,87 @@ interface TerminalStore {
 	removeStaleProfiles(validIds: Set<string>): void;
 }
 
-export const useTerminalStore = create<TerminalStore>((set) => ({
-	profiles: {},
+export const useTerminalStore = create<TerminalStore>()(
+	immer((set) => ({
+		profiles: {},
 
-	addTab(profileId, sessionId, title, restoreFrom?) {
-		set((state) => {
-			const existing = state.profiles[profileId] ?? {
-				tabs: [],
-				activeTabId: null,
-				counter: 0,
-			};
-			const tab: TerminalTab = { id: sessionId, title, restoreFrom };
-			return {
-				profiles: {
-					...state.profiles,
-					[profileId]: {
-						tabs: [...existing.tabs, tab],
-						activeTabId: tab.id,
-						counter: existing.counter + 1,
-					},
-				},
-			};
-		});
-	},
+		addTab(profileId, sessionId, title, restoreFrom?) {
+			set((state) => {
+				const existing = state.profiles[profileId] ?? {
+					tabs: [],
+					activeTabId: null,
+					counter: 0,
+				};
+				const tab: TerminalTab = { id: sessionId, title, restoreFrom };
+				state.profiles[profileId] = {
+					tabs: [...existing.tabs, tab],
+					activeTabId: tab.id,
+					counter: existing.counter + 1,
+				};
+			});
+		},
 
-	closeTab(profileId, tabId) {
-		set((state) => {
-			const profile = state.profiles[profileId];
-			if (!profile) return state;
+		closeTab(profileId, tabId) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
 
-			const idx = profile.tabs.findIndex((t) => t.id === tabId);
-			const next = profile.tabs.filter((t) => t.id !== tabId);
+				const idx = profile.tabs.findIndex((t) => t.id === tabId);
+				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
 
-			if (next.length === 0) {
-				const { [profileId]: _, ...rest } = state.profiles;
-				return { profiles: rest };
-			}
+				if (profile.tabs.length === 0) {
+					delete state.profiles[profileId];
+					return;
+				}
 
-			let activeTabId = profile.activeTabId;
-			if (tabId === activeTabId) {
-				const newIdx = Math.min(idx, next.length - 1);
-				activeTabId = next[newIdx].id;
-			}
+				if (tabId === profile.activeTabId) {
+					const newIdx = Math.min(idx, profile.tabs.length - 1);
+					profile.activeTabId = profile.tabs[newIdx].id;
+				}
+			});
+		},
 
-			return {
-				profiles: {
-					...state.profiles,
-					[profileId]: {
-						...profile,
-						tabs: next,
-						activeTabId,
-					},
-				},
-			};
-		});
-	},
+		setActiveTab(profileId, tabId) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				profile.activeTabId = tabId;
+			});
+		},
 
-	setActiveTab(profileId, tabId) {
-		set((state) => {
-			const profile = state.profiles[profileId];
-			if (!profile) return state;
-			return {
-				profiles: {
-					...state.profiles,
-					[profileId]: { ...profile, activeTabId: tabId },
-				},
-			};
-		});
-	},
+		clearRestore(profileId, tabId) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				const tab = profile.tabs.find((t) => t.id === tabId);
+				if (tab) delete tab.restoreFrom;
+			});
+		},
 
-	clearRestore(profileId, tabId) {
-		set((state) => {
-			const profile = state.profiles[profileId];
-			if (!profile) return state;
-			const tabs = profile.tabs.map((t) =>
-				t.id === tabId ? { id: t.id, title: t.title } : t,
-			);
-			return {
-				profiles: {
-					...state.profiles,
-					[profileId]: { ...profile, tabs },
-				},
-			};
-		});
-	},
+		removeProfile(profileId) {
+			set((state) => {
+				delete state.profiles[profileId];
+			});
+		},
 
-	removeProfile(profileId) {
-		set((state) => {
-			if (!(profileId in state.profiles)) return state;
-			const { [profileId]: _, ...rest } = state.profiles;
-			return { profiles: rest };
-		});
-	},
+		updateTabTitle(profileId, tabId, title) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				const tab = profile.tabs.find((t) => t.id === tabId);
+				if (tab && tab.title !== title) tab.title = title;
+			});
+		},
 
-	updateTabTitle(profileId, tabId, title) {
-		set((state) => {
-			const profile = state.profiles[profileId];
-			if (!profile) return state;
-			const tab = profile.tabs.find((t) => t.id === tabId);
-			if (!tab || tab.title === title) return state;
-			const tabs = profile.tabs.map((t) =>
-				t.id === tabId ? { ...t, title } : t,
-			);
-			return {
-				profiles: {
-					...state.profiles,
-					[profileId]: { ...profile, tabs },
-				},
-			};
-		});
-	},
-
-	removeStaleProfiles(validIds) {
-		set((state) => {
-			const staleKeys = Object.keys(state.profiles).filter(
-				(id) => !validIds.has(id),
-			);
-			if (staleKeys.length === 0) return state;
-			const next = { ...state.profiles };
-			for (const key of staleKeys) {
-				delete next[key];
-			}
-			return { profiles: next };
-		});
-	},
-}));
+		removeStaleProfiles(validIds) {
+			set((state) => {
+				for (const id of Object.keys(state.profiles)) {
+					if (!validIds.has(id)) delete state.profiles[id];
+				}
+			});
+		},
+	})),
+);
 
 /** IDs of profiles that currently have terminal tabs open. */
 export function useTerminalProfileIds() {
