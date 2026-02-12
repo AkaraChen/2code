@@ -30,8 +30,8 @@ import {
 import { projectsApi } from "@/api/projects";
 import { queryKeys } from "@/lib/queryKeys";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
-import type { GitCommit } from "@/types";
 import { useFontStore } from "@/stores/fontStore";
+import type { GitCommit } from "@/types";
 import { useThemePreference } from "./ThemeProvider";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
@@ -121,12 +121,7 @@ function FileListItem({
 			<Badge size="xs" colorPalette={badge.colorPalette} variant="subtle">
 				{badge.label}
 			</Badge>
-			<Text
-				fontSize="sm"
-				flex="1"
-				truncate
-				title={file.name}
-			>
+			<Text fontSize="sm" flex="1" truncate title={file.name}>
 				{basename}
 			</Text>
 			<HStack gap="1" fontSize="xs" flexShrink={0}>
@@ -194,14 +189,13 @@ function CommitListItem({
 				<Text truncate flex="1">
 					{commit.author.name}
 				</Text>
-				<Text flexShrink={0}>
-					{formatRelativeTime(commit.date)}
-				</Text>
+				<Text flexShrink={0}>{formatRelativeTime(commit.date)}</Text>
 			</HStack>
 			<HStack gap="2" fontSize="xs">
 				{commit.files_changed > 0 && (
 					<Text color="fg.muted">
-						{commit.files_changed} {commit.files_changed === 1 ? "file" : "files"}
+						{commit.files_changed}{" "}
+						{commit.files_changed === 1 ? "file" : "files"}
 					</Text>
 				)}
 				{commit.insertions > 0 && (
@@ -247,8 +241,11 @@ export default function GitDiffDialog({
 
 	const [activeTab, setActiveTab] = useState<string>("changes");
 	const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0);
-	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(null);
-	const [selectedCommitFileIndex, setSelectedCommitFileIndex] = useState<number>(0);
+	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(
+		null,
+	);
+	const [selectedCommitFileIndex, setSelectedCommitFileIndex] =
+		useState<number>(0);
 
 	const { data: diff, isLoading: isDiffLoading } = useQuery({
 		queryKey: queryKeys.projects.diff(contextId),
@@ -518,9 +515,7 @@ export default function GitDiffDialog({
 																justify="center"
 																flex="1"
 															>
-																<Spinner
-																	size="sm"
-																/>
+																<Spinner size="sm" />
 															</Flex>
 														) : commitFiles.length ===
 															0 ? (
