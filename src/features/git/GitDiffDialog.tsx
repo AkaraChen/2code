@@ -6,12 +6,18 @@ import {
 	HStack,
 	Icon,
 	Portal,
-	Spinner,
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
-import { Activity, Suspense, useCallback, useMemo, useState } from "react";
+import {
+	Activity,
+	startTransition,
+	Suspense,
+	useCallback,
+	useMemo,
+	useState,
+} from "react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
@@ -122,25 +128,31 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 	);
 
 	const handleTabChange = useCallback((value: string) => {
-		setActiveTab(value);
-		setSelectedCommit(null);
-		setSelectedCommitFileIndex(0);
+		startTransition(() => {
+			setActiveTab(value);
+			setSelectedCommit(null);
+			setSelectedCommitFileIndex(0);
+		});
 	}, []);
 
 	const handleCommitSelect = useCallback((commit: GitCommit) => {
-		setSelectedCommit(commit);
-		setSelectedCommitFileIndex(0);
+		startTransition(() => {
+			setSelectedCommit(commit);
+			setSelectedCommitFileIndex(0);
+		});
 	}, []);
 
 	const handleCommitBack = useCallback(() => {
-		setSelectedCommit(null);
-		setSelectedCommitFileIndex(0);
+		startTransition(() => {
+			setSelectedCommit(null);
+			setSelectedCommitFileIndex(0);
+		});
 	}, []);
 
 	const isChanges = activeTab === "changes";
 
 	return (
-		<>
+		<Flex flex="1" overflow="hidden">
 			{/* Sidebar column */}
 			<Flex direction="column" w="320px" flexShrink={0} overflow="hidden">
 				<Tabs.Root
@@ -170,7 +182,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 							flexDirection="column"
 							overflow="hidden"
 						>
-							<Suspense fallback={<SidebarSpinner />}>
+							<Suspense fallback={null}>
 								<ChangesSidebar
 									profileId={profileId}
 									selectedFileIndex={selectedFileIndex}
@@ -188,7 +200,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 							flexDirection="column"
 							overflow="hidden"
 						>
-							<Suspense fallback={<SidebarSpinner />}>
+							<Suspense fallback={null}>
 								<HistorySidebar
 									profileId={profileId}
 									selectedCommit={selectedCommit}
@@ -209,7 +221,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 
 			{/* Pane column */}
 			<Activity mode={isChanges ? "visible" : "hidden"}>
-				<Suspense fallback={<PaneSpinner visible={isChanges} />}>
+				<Suspense fallback={null}>
 					<ChangesDiffPane
 						profileId={profileId}
 						selectedFileIndex={selectedFileIndex}
@@ -228,31 +240,6 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 					visible={!isChanges}
 				/>
 			</Activity>
-		</>
-	);
-}
-
-// ---------------------------------------------------------------------------
-// Shared spinners
-// ---------------------------------------------------------------------------
-
-function SidebarSpinner() {
-	return (
-		<Flex align="center" justify="center" flex="1">
-			<Spinner />
-		</Flex>
-	);
-}
-
-function PaneSpinner({ visible }: { visible: boolean }) {
-	return (
-		<Flex
-			align="center"
-			justify="center"
-			flex="1"
-			display={visible ? "flex" : "none"}
-		>
-			<Spinner />
 		</Flex>
 	);
 }
@@ -355,7 +342,7 @@ function HistorySidebar({
 				minH="0"
 				overflow="hidden"
 			>
-				<Suspense fallback={<SidebarSpinner />}>
+				<Suspense fallback={null}>
 					<CommitFileSidebar
 						profileId={profileId}
 						commit={selectedCommit}
@@ -435,7 +422,7 @@ function HistoryDiffPane({
 	}
 
 	return (
-		<Suspense fallback={<PaneSpinner visible={visible} />}>
+		<Suspense fallback={null}>
 			<CommitDiffViewer
 				profileId={profileId}
 				commit={selectedCommit}
