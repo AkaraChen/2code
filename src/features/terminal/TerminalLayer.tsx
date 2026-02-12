@@ -7,7 +7,7 @@ import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { useRestoreTerminals } from "./hooks";
-import { useTerminalProfileIds, useTerminalSync } from "./store";
+import { useTerminalProfileIds } from "./store";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -43,7 +43,6 @@ export default function TerminalLayer() {
 		return map;
 	}, [projects]);
 
-	useTerminalSync(allProfiles);
 	useRestoreTerminals(projects);
 
 	// Only match /projects/:id/profiles/:profileId

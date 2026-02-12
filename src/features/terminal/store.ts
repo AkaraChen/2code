@@ -1,7 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { QueryObserver } from "@tanstack/react-query";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
+import type { ProjectWithProfiles } from "@/generated";
+import { listProjects } from "@/generated";
+import { queryClient } from "@/shared/lib/queryClient";
+import { queryKeys } from "@/shared/lib/queryKeys";
 
 interface TerminalTab {
 	id: string;
@@ -118,14 +122,17 @@ export function useTerminalProfileIds() {
 	return useTerminalStore(useShallow((s) => Object.keys(s.profiles)));
 }
 
-/** Sync store with profiles list — removes terminals for deleted profiles. */
-export function useTerminalSync(profiles: { id: string }[]) {
-	const removeStaleProfiles = useTerminalStore((s) => s.removeStaleProfiles);
-	const validIds = useMemo(
-		() => new Set(profiles.map((p) => p.id)),
-		[profiles],
-	);
-	useEffect(() => {
-		removeStaleProfiles(validIds);
-	}, [validIds, removeStaleProfiles]);
-}
+// Sync store with projects query — removes terminals for deleted profiles.
+const observer = new QueryObserver<ProjectWithProfiles[]>(queryClient, {
+	queryKey: queryKeys.projects.all,
+	queryFn: listProjects,
+});
+
+observer.subscribe((result) => {
+	if (result.data) {
+		const validIds = new Set(
+			result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
+		);
+		useTerminalStore.getState().removeStaleProfiles(validIds);
+	}
+});

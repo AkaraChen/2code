@@ -5,7 +5,6 @@ import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
-import { useDebugLogger } from "./features/debug/useDebugLogger";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
@@ -21,8 +20,6 @@ import "./app.css";
 
 export default function App() {
 	useFileWatcher();
-	useDebugLogger();
-
 	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
 	useKey("D", (e) => {
 		if (e.shiftKey && (e.metaKey || e.ctrlKey)) {
