@@ -47,6 +47,7 @@ export default function GitDiffSidebar({
 				size="sm"
 				variant="line"
 				flex="1"
+				minH="0"
 				display="flex"
 				flexDirection="column"
 			>

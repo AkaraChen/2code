@@ -1,4 +1,4 @@
-import { Box, Flex, HStack, Icon, Text, VStack } from "@chakra-ui/react";
+import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { RiGitCommitLine } from "react-icons/ri";
 import type { GitCommit } from "@/generated";
 
@@ -30,7 +30,7 @@ export default function CommitList({
 	onCommitSelect,
 }: CommitListProps) {
 	return (
-		<Box flex="1" overflowY="auto">
+		<Box flex="1" overflowY="auto" minH="0">
 			{commits.map((commit) => (
 				<VStack
 					key={commit.full_hash}
