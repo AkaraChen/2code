@@ -51,7 +51,8 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 **Key directories (feature-based organization):**
 
 - `generated/` — Auto-generated Tauri IPC bindings via `tauri-typegen` (gitignored, do not edit)
-- `features/projects/` — Project hooks (`useProjects`, `useCreateProject`, etc.) and dialogs (Create/Delete/Rename)
+- `features/home/` — HomePage
+- `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, etc.) and dialogs (Create/Delete/Rename)
 - `features/profiles/` — Profile hooks (`useProfiles`, `useCreateProfile`, `useDeleteProfile`) and dialogs
 - `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
 - `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger)
@@ -59,7 +60,7 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - `shared/lib/` — Query client config, centralized query keys, cached promise utility
 - `shared/providers/` — ThemeProvider, Toaster
 - `shared/components/` — ErrorBoundary, Fallbacks, SidebarLink
-- `layout/` — AppSidebar, HomePage, ProjectDetailPage, and `sidebar/` sub-components
+- `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
 
 **State management:**
 
