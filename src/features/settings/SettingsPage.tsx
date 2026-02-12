@@ -12,7 +12,7 @@ import {
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
@@ -40,13 +40,17 @@ export default function SettingsPage() {
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
-	const themeCollection = createListCollection({
-		items: [
-			{ value: "system", label: m.themeSystem() },
-			{ value: "light", label: m.themeLight() },
-			{ value: "dark", label: m.themeDark() },
-		],
-	});
+	const themeCollection = useMemo(
+		() =>
+			createListCollection({
+				items: [
+					{ value: "system", label: m.themeSystem() },
+					{ value: "light", label: m.themeLight() },
+					{ value: "dark", label: m.themeDark() },
+				],
+			}),
+		[],
+	);
 
 	return (
 		<Box p="8" pt="16">

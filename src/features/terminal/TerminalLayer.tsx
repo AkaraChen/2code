@@ -34,6 +34,15 @@ export default function TerminalLayer() {
 		return map;
 	}, [allProfiles]);
 
+	// Build project lookup map (avoids O(n*m) Array.find inside render loop)
+	const projectMap = useMemo(() => {
+		const map = new Map<string, ProjectWithProfiles>();
+		for (const p of projects ?? []) {
+			map.set(p.id, p);
+		}
+		return map;
+	}, [projects]);
+
 	useTerminalSync(allProfiles);
 	useRestoreTerminals(projects);
 
@@ -49,9 +58,7 @@ export default function TerminalLayer() {
 			{terminalProfileIds.map((profileId) => {
 				const profile = profileMap.get(profileId);
 				if (!profile) return null;
-				const project = projects?.find(
-					(p) => p.id === profile.project_id,
-				);
+				const project = projectMap.get(profile.project_id);
 				return (
 					<Flex
 						key={profileId}

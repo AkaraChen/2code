@@ -1,14 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { watchProjects } from "@/generated";
 import type { WatchEvent } from "@/generated/types";
 import { queryNamespaces } from "@/shared/lib/queryKeys";
 
 export function useFileWatcher() {
 	const queryClient = useQueryClient();
+	const started = useRef(false);
 
 	useEffect(() => {
+		if (started.current) return;
+		started.current = true;
+
 		const channel = new Channel<WatchEvent>();
 
 		channel.onmessage = (_event) => {

@@ -1,7 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	deletePtySessionRecord,
@@ -172,17 +172,17 @@ export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 		};
 	}, [profileId, sessionId, restoreFrom]);
 
-	return (
-		<div
-			ref={containerRef}
-			style={{
-				width: "100%",
-				height: "100%",
-				padding: "8px 0 0 8px",
-				background: theme.background,
-				border: "0.5px solid var(--chakra-colors-border-subtle)",
-				boxSizing: "border-box",
-			}}
-		/>
+	const containerStyle = useMemo(
+		() => ({
+			width: "100%",
+			height: "100%",
+			padding: "8px 0 0 8px",
+			background: theme.background,
+			border: "0.5px solid var(--chakra-colors-border-subtle)",
+			boxSizing: "border-box" as const,
+		}),
+		[theme.background],
 	);
+
+	return <div ref={containerRef} style={containerStyle} />;
 }
