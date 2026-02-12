@@ -88,7 +88,7 @@ export default function GitDiffSidebar({
 					overflow="hidden"
 				>
 					{selectedCommit ? (
-						<Box flex="1" overflowY="auto">
+						<Box flex="1" display="flex" flexDirection="column" minH="0" overflow="hidden">
 							<HistoryFileList
 								commit={selectedCommit}
 								files={commitFiles}
