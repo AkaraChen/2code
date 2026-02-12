@@ -1,10 +1,10 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router";
-import SettingsPage from "./features/settings/SettingsPage";
-import TerminalLayer from "./features/terminal/TerminalLayer";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
+import SettingsPage from "./features/settings/SettingsPage";
+import TerminalLayer from "./features/terminal/TerminalLayer";
 import AppSidebar from "./layout/AppSidebar";
 import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
