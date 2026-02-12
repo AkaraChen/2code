@@ -1,5 +1,6 @@
 import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { useEffect, useRef } from "react";
 import { RiArrowLeftLine } from "react-icons/ri";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -49,6 +50,15 @@ export default function HistoryFileList({
 	onFileSelect,
 	onBack,
 }: HistoryFileListProps) {
+	const listRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const el = listRef.current?.querySelector(
+			`[data-index="${selectedIndex}"]`,
+		);
+		el?.scrollIntoView({ block: "nearest" });
+	}, [selectedIndex]);
+
 	return (
 		<Flex direction="column" flex="1" minH="0" overflow="hidden">
 			<CommitHeader commit={commit} onBack={onBack} />
@@ -69,14 +79,15 @@ export default function HistoryFileList({
 					>
 						{m.changedFiles({ count: files.length })}
 					</Text>
-					<Box flex="1" overflowY="auto" minH="0">
+					<Box ref={listRef} flex="1" overflowY="auto" minH="0">
 						{files.map((file, i) => (
-							<FileListItem
-								key={file.name + i}
-								file={file}
-								isActive={selectedIndex === i}
-								onClick={() => onFileSelect(i)}
-							/>
+							<div key={file.name + i} data-index={i}>
+								<FileListItem
+									file={file}
+									isActive={selectedIndex === i}
+									onClick={() => onFileSelect(i)}
+								/>
+							</div>
 						))}
 					</Box>
 				</>

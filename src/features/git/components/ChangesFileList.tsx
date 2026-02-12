@@ -1,6 +1,6 @@
 import { Badge, HStack, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as m from "@/paraglide/messages.js";
 import { changeBadge, getLineStats } from "../utils";
 
@@ -59,20 +59,30 @@ export default function ChangesFileList({
 	selectedIndex,
 	onSelect,
 }: ChangesFileListProps) {
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const el = containerRef.current?.querySelector(
+			`[data-index="${selectedIndex}"]`,
+		);
+		el?.scrollIntoView({ block: "nearest" });
+	}, [selectedIndex]);
+
 	return (
-		<>
+		<div ref={containerRef}>
 			<Text px="3" py="1" fontSize="xs" color="fg.muted">
 				{m.changedFiles({ count: files.length })}
 			</Text>
 			{files.map((file, i) => (
-				<FileListItem
-					key={file.name + i}
-					file={file}
-					isActive={selectedIndex === i}
-					onClick={() => onSelect(i)}
-				/>
+				<div key={file.name + i} data-index={i}>
+					<FileListItem
+						file={file}
+						isActive={selectedIndex === i}
+						onClick={() => onSelect(i)}
+					/>
+				</div>
 			))}
-		</>
+		</div>
 	);
 }
 
