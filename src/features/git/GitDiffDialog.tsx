@@ -20,12 +20,12 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useListKeyNav } from "@/shared/hooks/useListKeyNav";
 import { RiGitBranchLine } from "react-icons/ri";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { useListKeyNav } from "@/shared/hooks/useListKeyNav";
 import ChangesFileList from "./components/ChangesFileList";
 import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
@@ -176,9 +176,13 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 				e.preventDefault();
 				const delta = e.key === "ArrowDown" ? 1 : -1;
-				const step =
-					(setter: typeof setSelectedFileIndex, count: React.RefObject<number>) =>
-						setter((prev) => Math.max(0, Math.min(prev + delta, count.current - 1)));
+				const step = (
+					setter: typeof setSelectedFileIndex,
+					count: React.RefObject<number>,
+				) =>
+					setter((prev) =>
+						Math.max(0, Math.min(prev + delta, count.current - 1)),
+					);
 
 				if (activeTab === "changes") {
 					step(setSelectedFileIndex, changesFileCountRef);

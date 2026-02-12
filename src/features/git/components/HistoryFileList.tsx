@@ -1,9 +1,9 @@
 import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { RiArrowLeftLine } from "react-icons/ri";
-import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import { FileListItem } from "./ChangesFileList";
 
 interface HistoryFileListProps {

@@ -1,7 +1,7 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { RiGitCommitLine } from "react-icons/ri";
-import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import type { GitCommit } from "@/generated";
+import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 
 function formatRelativeTime(isoDate: string): string {
 	const now = Date.now();
@@ -32,7 +32,8 @@ export default function CommitList({
 	selectedIndex,
 	onCommitSelect,
 }: CommitListProps) {
-	const { ref: containerRef } = useScrollIntoView<HTMLDivElement>(selectedIndex);
+	const { ref: containerRef } =
+		useScrollIntoView<HTMLDivElement>(selectedIndex);
 
 	return (
 		<Box ref={containerRef} flex="1" overflowY="auto" minH="0">

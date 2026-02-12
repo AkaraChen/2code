@@ -3,7 +3,11 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 import type { ProjectWithProfiles } from "@/generated";
-import { createPtySession, listProjectSessions, listProjects } from "@/generated";
+import {
+	createPtySession,
+	listProjectSessions,
+	listProjects,
+} from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
 

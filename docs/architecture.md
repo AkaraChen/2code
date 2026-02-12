@@ -133,24 +133,24 @@ The frontend uses a feature-based architecture where each feature module contain
 
 ### Frontend State (Zustand Stores)
 
-| Store                    | Location                                           | Persisted                       | Purpose                                              |
-| ------------------------ | -------------------------------------------------- | ------------------------------- | ---------------------------------------------------- |
-| `terminalStore`          | `src/features/terminal/store.ts`                   | No (rebuilt from DB on startup) | Terminal tabs per context, active tab, restore flags  |
-| `fontStore`              | `src/features/settings/stores/fontStore.ts`        | Yes (localStorage)              | Font family, font size preferences                   |
-| `terminalSettingsStore`  | `src/features/settings/stores/terminalSettingsStore.ts` | Yes (localStorage)         | Terminal theme preference                            |
-| `notificationStore`      | `src/features/settings/stores/notificationStore.ts`| Yes (localStorage)              | Notification sound/enabled preferences               |
-| `themeStore`             | `src/features/settings/stores/themeStore.ts`       | Yes (localStorage)              | Accent color, border radius preferences              |
-| `debugStore`             | `src/features/debug/debugStore.ts`                 | No                              | Debug panel enabled/open state                       |
-| `debugLogStore`          | `src/features/debug/debugLogStore.ts`              | No                              | In-memory log entries for debug panel                 |
+| Store                   | Location                                                | Persisted                       | Purpose                                              |
+| ----------------------- | ------------------------------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| `terminalStore`         | `src/features/terminal/store.ts`                        | No (rebuilt from DB on startup) | Terminal tabs per context, active tab, restore flags |
+| `fontStore`             | `src/features/settings/stores/fontStore.ts`             | Yes (localStorage)              | Font family, font size preferences                   |
+| `terminalSettingsStore` | `src/features/settings/stores/terminalSettingsStore.ts` | Yes (localStorage)              | Terminal theme preference                            |
+| `notificationStore`     | `src/features/settings/stores/notificationStore.ts`     | Yes (localStorage)              | Notification sound/enabled preferences               |
+| `themeStore`            | `src/features/settings/stores/themeStore.ts`            | Yes (localStorage)              | Accent color, border radius preferences              |
+| `debugStore`            | `src/features/debug/debugStore.ts`                      | No                              | Debug panel enabled/open state                       |
+| `debugLogStore`         | `src/features/debug/debugLogStore.ts`                   | No                              | In-memory log entries for debug panel                |
 
 ### Backend State (Rust, Tauri-managed)
 
-| State                | Type                                      | Purpose                                      |
-| -------------------- | ----------------------------------------- | -------------------------------------------- |
-| `PtySessionMap`      | `Arc<Mutex<HashMap<String, PtySession>>>` | Active PTY sessions in memory                |
-| `DbPool`             | `Arc<Mutex<SqliteConnection>>`            | Single SQLite connection                     |
-| `WatcherShutdownFlag`| `Arc<AtomicBool>`                         | Signals file watcher thread to stop on exit  |
-| `ChannelLayerHandle` | Custom handle for tracing layer           | Attaches/detaches frontend debug log channel |
+| State                 | Type                                      | Purpose                                      |
+| --------------------- | ----------------------------------------- | -------------------------------------------- |
+| `PtySessionMap`       | `Arc<Mutex<HashMap<String, PtySession>>>` | Active PTY sessions in memory                |
+| `DbPool`              | `Arc<Mutex<SqliteConnection>>`            | Single SQLite connection                     |
+| `WatcherShutdownFlag` | `Arc<AtomicBool>`                         | Signals file watcher thread to stop on exit  |
+| `ChannelLayerHandle`  | Custom handle for tracing layer           | Attaches/detaches frontend debug log channel |
 
 ## Key Design Decisions
 

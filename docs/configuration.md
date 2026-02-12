@@ -9,7 +9,7 @@
 | `tsconfig.json`                        | JSON       | TypeScript compiler options, path aliases, `allowJs` for Paraglide  |
 | `src-tauri/tauri.conf.json`            | JSON       | Tauri app config, window settings, build hooks, typegen config      |
 | `src-tauri/Cargo.toml`                 | TOML       | Rust dependencies and crate config                                  |
-| `src-tauri/diesel.toml`               | TOML       | Diesel ORM schema output path (`src/schema.rs`)                     |
+| `src-tauri/diesel.toml`                | TOML       | Diesel ORM schema output path (`src/schema.rs`)                     |
 | `project.inlang/settings.json`         | JSON       | Paraglide i18n settings, locales, message format plugin             |
 | `messages/en.json`, `messages/zh.json` | JSON       | i18n message strings                                                |
 | `justfile`                             | Justfile   | Task runner (`just fmt` runs `fama`)                                |
@@ -118,12 +118,12 @@ pty_sessions 1──N pty_output_chunks (session_id FK, CASCADE)
 
 Managed by Diesel, embedded at compile time via `embed_migrations!("migrations")`, run on app startup:
 
-| Migration                                       | Changes                                                           |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| `2026-02-10-064457-0000_create_projects`         | Create `projects` table                                           |
-| `2026-02-11-000000_create_pty_tables`            | Create `pty_sessions` (with `project_id` FK) and `pty_output_chunks` |
-| `2026-02-11-080917-0000_create_profiles`         | Create `profiles` table                                           |
-| `2026-02-13-000000_profile_first_refactor`       | Add `is_default` to profiles, create default profiles for existing projects, migrate `pty_sessions` FK from `project_id` to `profile_id` |
+| Migration                                  | Changes                                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `2026-02-10-064457-0000_create_projects`   | Create `projects` table                                                                                                                  |
+| `2026-02-11-000000_create_pty_tables`      | Create `pty_sessions` (with `project_id` FK) and `pty_output_chunks`                                                                     |
+| `2026-02-11-080917-0000_create_profiles`   | Create `profiles` table                                                                                                                  |
+| `2026-02-13-000000_profile_first_refactor` | Add `is_default` to profiles, create default profiles for existing projects, migrate `pty_sessions` FK from `project_id` to `profile_id` |
 
 ## Internationalization (`project.inlang/settings.json`)
 
@@ -167,11 +167,11 @@ Scripts run via `sh -c` in the project/worktree directory during profile creatio
 
 ### File Watcher (`src-tauri/src/service/watcher.rs`)
 
-| Constant            | Value  | Purpose                                      |
-| ------------------- | ------ | -------------------------------------------- |
-| `DB_POLL_INTERVAL`  | 3s     | How often to check for new/deleted projects  |
-| `RECV_TIMEOUT`      | 100ms  | Timeout for receiving filesystem events      |
-| `DEBOUNCE_DURATION` | 500ms  | Minimum interval between events per project  |
+| Constant            | Value | Purpose                                     |
+| ------------------- | ----- | ------------------------------------------- |
+| `DB_POLL_INTERVAL`  | 3s    | How often to check for new/deleted projects |
+| `RECV_TIMEOUT`      | 100ms | Timeout for receiving filesystem events     |
+| `DEBOUNCE_DURATION` | 500ms | Minimum interval between events per project |
 
 ### TanStack Query (`src/shared/lib/queryClient.ts`)
 
@@ -205,24 +205,24 @@ Errors are serialized to plain strings via a custom `Serialize` impl and returne
 
 ## Rust Dependencies (`src-tauri/Cargo.toml`)
 
-| Crate                | Version | Purpose                              |
-| -------------------- | ------- | ------------------------------------ |
-| `tauri`              | 2       | Desktop app framework                |
-| `tauri-plugin-opener`| 2       | Open files/URLs                      |
-| `tauri-plugin-dialog`| 2       | Native file/folder dialogs           |
-| `tauri-plugin-notification` | 2 | System notifications                |
-| `diesel`             | 2       | SQLite ORM (sqlite feature)          |
-| `diesel_migrations`  | 2       | Compile-time embedded migrations     |
-| `portable-pty`       | 0.9     | Cross-platform PTY                   |
-| `serde` / `serde_json` | 1     | Serialization                        |
-| `thiserror`          | 2       | Error derive macros                  |
-| `uuid`               | 1       | UUID v4 generation                   |
-| `pinyin`             | 0.11    | CJK → pinyin romanization           |
-| `slug`               | 0.1     | URL-safe slug generation             |
-| `core-text`          | 20      | macOS font enumeration               |
-| `dirs`               | 6       | OS-specific directory paths          |
-| `notify`             | 8       | Filesystem watching                  |
-| `tracing`            | 0.1     | Structured logging                   |
-| `tracing-subscriber` | 0.3     | Log output formatting + layers       |
-| `tempfile`           | 3       | Temporary directories for git diff   |
-| `log`                | 0.4     | Legacy log facade (for warn! macros) |
+| Crate                       | Version | Purpose                              |
+| --------------------------- | ------- | ------------------------------------ |
+| `tauri`                     | 2       | Desktop app framework                |
+| `tauri-plugin-opener`       | 2       | Open files/URLs                      |
+| `tauri-plugin-dialog`       | 2       | Native file/folder dialogs           |
+| `tauri-plugin-notification` | 2       | System notifications                 |
+| `diesel`                    | 2       | SQLite ORM (sqlite feature)          |
+| `diesel_migrations`         | 2       | Compile-time embedded migrations     |
+| `portable-pty`              | 0.9     | Cross-platform PTY                   |
+| `serde` / `serde_json`      | 1       | Serialization                        |
+| `thiserror`                 | 2       | Error derive macros                  |
+| `uuid`                      | 1       | UUID v4 generation                   |
+| `pinyin`                    | 0.11    | CJK → pinyin romanization            |
+| `slug`                      | 0.1     | URL-safe slug generation             |
+| `core-text`                 | 20      | macOS font enumeration               |
+| `dirs`                      | 6       | OS-specific directory paths          |
+| `notify`                    | 8       | Filesystem watching                  |
+| `tracing`                   | 0.1     | Structured logging                   |
+| `tracing-subscriber`        | 0.3     | Log output formatting + layers       |
+| `tempfile`                  | 3       | Temporary directories for git diff   |
+| `log`                       | 0.4     | Legacy log facade (for warn! macros) |

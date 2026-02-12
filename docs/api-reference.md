@@ -23,22 +23,22 @@ Bindings are regenerated with `cargo tauri-typegen generate` after changing Rust
 
 ## Project Commands (`handler/project.rs`)
 
-| Command                      | Parameters                   | Return Type              | Description                                            |
-| ---------------------------- | ---------------------------- | ------------------------ | ------------------------------------------------------ |
-| `create_project_temporary`   | `name: Option<String>`       | `Project`                | Create project in temp dir with `git init` + default profile |
-| `create_project_from_folder` | `name: String, folder: String` | `Project`              | Import existing folder as project + default profile    |
-| `list_projects`              | _(none)_                     | `Vec<ProjectWithProfiles>` | List all projects with their profiles                |
-| `update_project`             | `id, name?, folder?`         | `Project`                | Update project metadata                                |
-| `delete_project`             | `id: String`                 | `()`                     | Delete project (cascades to profiles, sessions)        |
+| Command                      | Parameters                     | Return Type                | Description                                                  |
+| ---------------------------- | ------------------------------ | -------------------------- | ------------------------------------------------------------ |
+| `create_project_temporary`   | `name: Option<String>`         | `Project`                  | Create project in temp dir with `git init` + default profile |
+| `create_project_from_folder` | `name: String, folder: String` | `Project`                  | Import existing folder as project + default profile          |
+| `list_projects`              | _(none)_                       | `Vec<ProjectWithProfiles>` | List all projects with their profiles                        |
+| `update_project`             | `id, name?, folder?`           | `Project`                  | Update project metadata                                      |
+| `delete_project`             | `id: String`                   | `()`                       | Delete project (cascades to profiles, sessions)              |
 
 ### Git Subcommands (also in `handler/project.rs`)
 
-| Command           | Parameters                          | Return Type     | Description                        |
-| ----------------- | ----------------------------------- | --------------- | ---------------------------------- |
-| `get_git_branch`  | `folder: String`                    | `String`        | Current branch name for a folder   |
-| `get_git_diff`    | `profile_id: String`               | `String`        | Working tree diff (unified format) |
-| `get_git_log`     | `profile_id: String, limit?: u32`  | `Vec<GitCommit>`| Commit history (default limit: 50) |
-| `get_commit_diff` | `profile_id: String, commit_hash: String` | `String` | Diff for a specific commit         |
+| Command           | Parameters                                | Return Type      | Description                        |
+| ----------------- | ----------------------------------------- | ---------------- | ---------------------------------- |
+| `get_git_branch`  | `folder: String`                          | `String`         | Current branch name for a folder   |
+| `get_git_diff`    | `profile_id: String`                      | `String`         | Working tree diff (unified format) |
+| `get_git_log`     | `profile_id: String, limit?: u32`         | `Vec<GitCommit>` | Commit history (default limit: 50) |
+| `get_commit_diff` | `profile_id: String, commit_hash: String` | `String`         | Diff for a specific commit         |
 
 Git commands resolve the working directory through the profile's `worktree_path` (for worktree profiles) or the project's `folder` (for default profiles).
 
@@ -79,10 +79,10 @@ interface GitAuthor {
 
 ## Profile Commands (`handler/profile.rs`)
 
-| Command          | Parameters                           | Return Type | Description                                          |
-| ---------------- | ------------------------------------ | ----------- | ---------------------------------------------------- |
-| `create_profile` | `project_id: String, branch_name: String` | `Profile` | Create git worktree + branch + run setup scripts     |
-| `delete_profile` | `id: String`                         | `()`        | Run teardown scripts, remove worktree, delete branch |
+| Command          | Parameters                                | Return Type | Description                                          |
+| ---------------- | ----------------------------------------- | ----------- | ---------------------------------------------------- |
+| `create_profile` | `project_id: String, branch_name: String` | `Profile`   | Create git worktree + branch + run setup scripts     |
+| `delete_profile` | `id: String`                              | `()`        | Run teardown scripts, remove worktree, delete branch |
 
 ### Types
 
@@ -104,15 +104,15 @@ interface Profile {
 
 ## PTY Commands (`handler/pty.rs`)
 
-| Command                     | Parameters                          | Return Type          | Description                            |
-| --------------------------- | ----------------------------------- | -------------------- | -------------------------------------- |
-| `create_pty_session`        | `meta: PtySessionMeta, config: PtyConfig` | `String`       | Spawn shell process, return session ID |
-| `write_to_pty`              | `session_id: String, data: String`  | `()`                 | Send user input to PTY                 |
-| `resize_pty`                | `session_id: String, rows: u16, cols: u16` | `()`            | Resize terminal dimensions             |
-| `close_pty_session`         | `session_id: String`                | `()`                 | Kill process, mark closed in DB        |
-| `list_project_sessions`     | `project_id: String`                | `Vec<PtySessionRecord>` | List all sessions for a project     |
-| `get_pty_session_history`   | `session_id: String`                | `Vec<u8>`            | Get scrollback history (raw bytes)     |
-| `delete_pty_session_record` | `session_id: String`                | `()`                 | Delete session and output chunks       |
+| Command                     | Parameters                                 | Return Type             | Description                            |
+| --------------------------- | ------------------------------------------ | ----------------------- | -------------------------------------- |
+| `create_pty_session`        | `meta: PtySessionMeta, config: PtyConfig`  | `String`                | Spawn shell process, return session ID |
+| `write_to_pty`              | `session_id: String, data: String`         | `()`                    | Send user input to PTY                 |
+| `resize_pty`                | `session_id: String, rows: u16, cols: u16` | `()`                    | Resize terminal dimensions             |
+| `close_pty_session`         | `session_id: String`                       | `()`                    | Kill process, mark closed in DB        |
+| `list_project_sessions`     | `project_id: String`                       | `Vec<PtySessionRecord>` | List all sessions for a project        |
+| `get_pty_session_history`   | `session_id: String`                       | `Vec<u8>`               | Get scrollback history (raw bytes)     |
+| `delete_pty_session_record` | `session_id: String`                       | `()`                    | Delete session and output chunks       |
 
 ### Types
 
@@ -142,11 +142,11 @@ interface PtySessionRecord {
 
 ## Utility Commands
 
-| Command              | Handler file          | Parameters       | Return Type | Description                                               |
-| -------------------- | --------------------- | ---------------- | ----------- | --------------------------------------------------------- |
-| `list_system_fonts`  | `handler/font.rs`     | _(none)_         | `Vec<SystemFont>` | List system fonts (macOS only, via core-text)        |
-| `list_system_sounds` | `handler/sound.rs`    | _(none)_         | `Vec<String>` | List system sounds (macOS, `/System/Library/Sounds`)    |
-| `play_system_sound`  | `handler/sound.rs`    | `name: String`   | `()`        | Play a system sound (macOS only, via `afplay`)            |
+| Command              | Handler file       | Parameters     | Return Type       | Description                                          |
+| -------------------- | ------------------ | -------------- | ----------------- | ---------------------------------------------------- |
+| `list_system_fonts`  | `handler/font.rs`  | _(none)_       | `Vec<SystemFont>` | List system fonts (macOS only, via core-text)        |
+| `list_system_sounds` | `handler/sound.rs` | _(none)_       | `Vec<String>`     | List system sounds (macOS, `/System/Library/Sounds`) |
+| `play_system_sound`  | `handler/sound.rs` | `name: String` | `()`              | Play a system sound (macOS only, via `afplay`)       |
 
 ### Types
 
@@ -159,11 +159,12 @@ interface SystemFont {
 
 ## File Watcher Command (`handler/watcher.rs`)
 
-| Command          | Parameters                        | Return Type | Description                                    |
-| ---------------- | --------------------------------- | ----------- | ---------------------------------------------- |
-| `watch_projects` | `on_event: Channel<WatchEvent>`   | `()`        | Start watching all project directories for changes |
+| Command          | Parameters                      | Return Type | Description                                        |
+| ---------------- | ------------------------------- | ----------- | -------------------------------------------------- |
+| `watch_projects` | `on_event: Channel<WatchEvent>` | `()`        | Start watching all project directories for changes |
 
 Uses Tauri's `Channel` for push-based streaming (not request/response). The backend spawns a coordinator thread that:
+
 - Polls the DB every 3s to reconcile watchers with current project list
 - Creates `notify::Watcher` instances per project folder (recursive)
 - Filters out `.git/` internal file changes
@@ -177,10 +178,10 @@ interface WatchEvent {
 
 ## Debug Commands (`handler/debug.rs`)
 
-| Command           | Parameters                        | Return Type | Description                              |
-| ----------------- | --------------------------------- | ----------- | ---------------------------------------- |
-| `start_debug_log` | `on_event: Channel<LogEntry>`     | `()`        | Start forwarding Rust tracing events     |
-| `stop_debug_log`  | _(none)_                          | `()`        | Stop forwarding, detach channel          |
+| Command           | Parameters                    | Return Type | Description                          |
+| ----------------- | ----------------------------- | ----------- | ------------------------------------ |
+| `start_debug_log` | `on_event: Channel<LogEntry>` | `()`        | Start forwarding Rust tracing events |
+| `stop_debug_log`  | _(none)_                      | `()`        | Stop forwarding, detach channel      |
 
 ```typescript
 interface LogEntry {

@@ -1,8 +1,8 @@
 import { Badge, HStack, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { useMemo } from "react";
-import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import * as m from "@/paraglide/messages.js";
+import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import { changeBadge, getLineStats } from "../utils";
 
 interface FileListItemProps {
@@ -60,7 +60,8 @@ export default function ChangesFileList({
 	selectedIndex,
 	onSelect,
 }: ChangesFileListProps) {
-	const { ref: containerRef } = useScrollIntoView<HTMLDivElement>(selectedIndex);
+	const { ref: containerRef } =
+		useScrollIntoView<HTMLDivElement>(selectedIndex);
 
 	return (
 		<div ref={containerRef}>

@@ -297,12 +297,12 @@ pub struct PtySession {
 
 ## Caching Strategy
 
-| Layer            | Technology             | Strategy                                                                           |
-| ---------------- | ---------------------- | ---------------------------------------------------------------------------------- |
-| Server State     | TanStack Query         | staleTime: 30s, retry: 1, invalidate on mutations and file changes                |
-| Terminal Output  | SQLite chunks          | 32KB flush threshold, 1MB cap with oldest-chunk pruning                            |
-| Session State    | Rust HashMap           | In-memory for active PTY handles, DB for persistence                               |
-| Font/Theme Prefs | Zustand + localStorage | Persist middleware, immediate writes                                               |
+| Layer            | Technology                | Strategy                                                                          |
+| ---------------- | ------------------------- | --------------------------------------------------------------------------------- |
+| Server State     | TanStack Query            | staleTime: 30s, retry: 1, invalidate on mutations and file changes                |
+| Terminal Output  | SQLite chunks             | 32KB flush threshold, 1MB cap with oldest-chunk pruning                           |
+| Session State    | Rust HashMap              | In-memory for active PTY handles, DB for persistence                              |
+| Font/Theme Prefs | Zustand + localStorage    | Persist middleware, immediate writes                                              |
 | Query Keys       | `shared/lib/queryKeys.ts` | Hierarchical: `["projects"]`, `["git-branch", folder]`, `["git-diff", profileId]` |
 
 ## Error Handling Flow

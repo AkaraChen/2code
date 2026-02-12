@@ -16,15 +16,12 @@ export function useListKeyNav(initialIndex = 0) {
 	const [index, setIndex] = useState(initialIndex);
 	const countRef = useRef(0);
 
-	const onKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
-			if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-			e.preventDefault();
-			const delta = e.key === "ArrowDown" ? 1 : -1;
-			setIndex((prev) => clamp(prev + delta, 0, countRef.current - 1));
-		},
-		[],
-	);
+	const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+		e.preventDefault();
+		const delta = e.key === "ArrowDown" ? 1 : -1;
+		setIndex((prev) => clamp(prev + delta, 0, countRef.current - 1));
+	}, []);
 
 	return [index, setIndex, countRef, onKeyDown] as const;
 }

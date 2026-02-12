@@ -10,22 +10,22 @@ The architecture follows a clean separation: the frontend handles UI rendering, 
 
 ## Tech Stack
 
-| Layer            | Technology                                   |
-| ---------------- | -------------------------------------------- |
-| Frontend         | React 19, TypeScript, Vite 7                 |
-| UI Framework     | Chakra UI v3, next-themes                    |
+| Layer            | Technology                                     |
+| ---------------- | ---------------------------------------------- |
+| Frontend         | React 19, TypeScript, Vite 7                   |
+| UI Framework     | Chakra UI v3, next-themes                      |
 | State Management | Zustand 5 (client), TanStack Query v5 (server) |
-| Terminal         | xterm.js 6, @xterm/addon-fit                 |
-| Backend          | Rust (2021 edition), Tauri 2                 |
-| Database         | SQLite (Diesel ORM 2, embedded migrations)   |
-| PTY              | portable-pty 0.9                             |
-| File Watching    | notify 8                                     |
-| IPC Bindings     | tauri-typegen (auto-generated)               |
-| Git              | CLI via `std::process::Command`              |
-| Logging          | tracing + tracing-subscriber                 |
-| i18n             | Paraglide.js v2 (English + Chinese)          |
-| Diff Rendering   | @pierre/diffs                                |
-| Package Manager  | Bun                                          |
+| Terminal         | xterm.js 6, @xterm/addon-fit                   |
+| Backend          | Rust (2021 edition), Tauri 2                   |
+| Database         | SQLite (Diesel ORM 2, embedded migrations)     |
+| PTY              | portable-pty 0.9                               |
+| File Watching    | notify 8                                       |
+| IPC Bindings     | tauri-typegen (auto-generated)                 |
+| Git              | CLI via `std::process::Command`                |
+| Logging          | tracing + tracing-subscriber                   |
+| i18n             | Paraglide.js v2 (English + Chinese)            |
+| Diff Rendering   | @pierre/diffs                                  |
+| Package Manager  | Bun                                            |
 
 ## Module Structure
 
