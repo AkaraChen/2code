@@ -10,12 +10,15 @@ mod service;
 pub fn run() {
 	let sessions = infra::pty::create_session_map();
 	let sessions_for_exit = sessions.clone();
+	let shutdown_flag = infra::watcher::create_shutdown_flag();
+	let shutdown_for_exit = shutdown_flag.clone();
 
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_notification::init())
 		.manage(sessions)
+		.manage(shutdown_flag)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -57,6 +60,7 @@ pub fn run() {
 			handler::profile::get_profile,
 			handler::profile::update_profile,
 			handler::profile::delete_profile,
+			handler::watcher::watch_projects,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
@@ -64,6 +68,9 @@ pub fn run() {
 	app.run(move |app_handle, event| {
 		use tauri::Manager;
 		if let tauri::RunEvent::Exit = event {
+			// Signal watcher thread to stop
+			shutdown_for_exit.store(true, std::sync::atomic::Ordering::Relaxed);
+
 			// Mark all open sessions as closed in DB
 			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 				service::pty::mark_all_closed(&db);

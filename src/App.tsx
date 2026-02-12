@@ -5,6 +5,7 @@ import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
+import { useFileWatcher } from "./features/watcher/useFileWatcher";
 import AppSidebar from "./layout/AppSidebar";
 import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
@@ -15,6 +16,7 @@ import {
 import "./app.css";
 
 export default function App() {
+	useFileWatcher();
 	return (
 		<Flex direction="column" h="full">
 			<Flex flex="1" minH="0">

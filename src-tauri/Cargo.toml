@@ -35,5 +35,6 @@ dirs = "6"
 log = "0.4"
 tauri-plugin-notification = "2"
 tempfile = "3"
+notify = "8"
 
 [dev-dependencies]
