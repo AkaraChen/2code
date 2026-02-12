@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
@@ -12,7 +12,7 @@ import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
 	const location = useLocation();
-	const { data: projects } = useQuery({
+	const { data: projects } = useSuspenseQuery({
 		queryKey: queryKeys.projects.all,
 		queryFn: listProjects,
 	});
