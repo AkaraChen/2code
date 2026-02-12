@@ -2,6 +2,7 @@ import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import { RiGitBranchLine, RiGitPullRequestLine } from "react-icons/ri";
 import { useGitBranch } from "@/features/projects/hooks";
+import type { Profile } from "@/generated";
 import GitDiffDialog from "./GitDiffDialog";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
@@ -19,19 +20,19 @@ function GitBranchDiffDialog({
 	cwd,
 	diffOpen,
 	onClose,
-	contextId,
+	profileId,
 }: {
 	cwd: string;
 	diffOpen: boolean;
 	onClose: () => void;
-	contextId: string;
+	profileId: string;
 }) {
 	const { data: branch } = useGitBranch(cwd);
 	return (
 		<GitDiffDialog
 			isOpen={diffOpen}
 			onClose={onClose}
-			contextId={contextId}
+			profileId={profileId}
 			branchName={branch ?? undefined}
 		/>
 	);
@@ -39,16 +40,12 @@ function GitBranchDiffDialog({
 
 interface ProjectTopBarProps {
 	projectName: string;
-	profileBranchName?: string;
-	cwd: string;
-	contextId: string;
+	profile: Profile;
 }
 
 export default function ProjectTopBar({
 	projectName,
-	profileBranchName,
-	cwd,
-	contextId,
+	profile,
 }: ProjectTopBarProps) {
 	const [diffOpen, setDiffOpen] = useState(false);
 
@@ -71,15 +68,15 @@ export default function ProjectTopBar({
 					{projectName}
 				</Text>
 				<Box color="fg.muted">
-					{profileBranchName ? (
+					{profile.is_default ? (
+						<Suspense>
+							<GitBranchLabel cwd={profile.worktree_path} />
+						</Suspense>
+					) : (
 						<HStack gap="1">
 							<RiGitBranchLine />
-							<Text as="span">{profileBranchName}</Text>
+							<Text as="span">{profile.branch_name}</Text>
 						</HStack>
-					) : (
-						<Suspense>
-							<GitBranchLabel cwd={cwd} />
-						</Suspense>
 					)}
 				</Box>
 			</HStack>
@@ -91,22 +88,22 @@ export default function ProjectTopBar({
 			>
 				<RiGitPullRequestLine />
 			</IconButton>
-			{profileBranchName ? (
+			{profile.is_default ? (
+				<Suspense>
+					<GitBranchDiffDialog
+						cwd={profile.worktree_path}
+						diffOpen={diffOpen}
+						onClose={() => setDiffOpen(false)}
+						profileId={profile.id}
+					/>
+				</Suspense>
+			) : (
 				<GitDiffDialog
 					isOpen={diffOpen}
 					onClose={() => setDiffOpen(false)}
-					contextId={contextId}
-					branchName={profileBranchName}
+					profileId={profile.id}
+					branchName={profile.branch_name}
 				/>
-			) : (
-				<Suspense>
-					<GitBranchDiffDialog
-						cwd={cwd}
-						diffOpen={diffOpen}
-						onClose={() => setDiffOpen(false)}
-						contextId={contextId}
-					/>
-				</Suspense>
 			)}
 		</Flex>
 	);

@@ -11,6 +11,7 @@ pub struct Profile {
 	pub branch_name: String,
 	pub worktree_path: String,
 	pub created_at: String,
+	pub is_default: bool,
 }
 
 #[derive(Insertable)]
@@ -20,6 +21,7 @@ pub struct NewProfile<'a> {
 	pub project_id: &'a str,
 	pub branch_name: &'a str,
 	pub worktree_path: &'a str,
+	pub is_default: bool,
 }
 
 #[derive(AsChangeset)]

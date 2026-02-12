@@ -39,7 +39,18 @@ pub fn create_temporary(
 	let project_name = name.unwrap_or_else(|| "Untitled".to_string());
 	let dir_str = dir.to_string_lossy();
 
-	crate::repo::project::insert(conn, &id, &project_name, &dir_str)
+	let project =
+		crate::repo::project::insert(conn, &id, &project_name, &dir_str)?;
+
+	let default_profile_id = format!("default-{id}");
+	crate::repo::profile::insert_default(
+		conn,
+		&default_profile_id,
+		&id,
+		&dir_str,
+	)?;
+
+	Ok(project)
 }
 
 pub fn create_from_folder(
@@ -52,7 +63,17 @@ pub fn create_from_folder(
 	}
 
 	let id = Uuid::new_v4().to_string();
-	crate::repo::project::insert(conn, &id, name, folder)
+	let project = crate::repo::project::insert(conn, &id, name, folder)?;
+
+	let default_profile_id = format!("default-{id}");
+	crate::repo::profile::insert_default(
+		conn,
+		&default_profile_id,
+		&id,
+		folder,
+	)?;
+
+	Ok(project)
 }
 
 pub fn list(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
@@ -82,31 +103,28 @@ pub fn get_branch(folder: &str) -> Result<String, AppError> {
 
 pub fn get_diff(
 	conn: &mut SqliteConnection,
-	context_id: &str,
+	profile_id: &str,
 ) -> Result<String, AppError> {
-	let folder =
-		crate::repo::project::resolve_context_folder(conn, context_id)?;
-	crate::infra::git::diff(&folder)
+	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
+	crate::infra::git::diff(&profile.worktree_path)
 }
 
 pub fn get_log(
 	conn: &mut SqliteConnection,
-	context_id: &str,
+	profile_id: &str,
 	limit: u32,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let folder =
-		crate::repo::project::resolve_context_folder(conn, context_id)?;
-	crate::infra::git::log(&folder, limit)
+	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
+	crate::infra::git::log(&profile.worktree_path, limit)
 }
 
 pub fn get_commit_diff(
 	conn: &mut SqliteConnection,
-	context_id: &str,
+	profile_id: &str,
 	commit_hash: &str,
 ) -> Result<String, AppError> {
-	let folder =
-		crate::repo::project::resolve_context_folder(conn, context_id)?;
-	crate::infra::git::show(&folder, commit_hash)
+	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
+	crate::infra::git::show(&profile.worktree_path, commit_hash)
 }
 
 #[cfg(test)]

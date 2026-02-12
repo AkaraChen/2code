@@ -14,12 +14,12 @@ import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
-	contextId: string;
+	profileId: string;
 	sessionId: string;
 	restoreFrom?: string;
 }
 
-export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
+export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
@@ -98,7 +98,7 @@ export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 				deletePtySessionRecord({ sessionId: restoreFrom }).catch(
 					() => {},
 				);
-				useTerminalStore.getState().clearRestore(contextId, sessionId);
+				useTerminalStore.getState().clearRestore(profileId, sessionId);
 			}
 
 			// Listen for PTY output
@@ -136,7 +136,9 @@ export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 
 		// Update tab title when programs set it via OSC 0/2 escape sequences
 		const onTitleChangeDisposable = term.onTitleChange((title) => {
-			useTerminalStore.getState().updateTabTitle(contextId, sessionId, title);
+			useTerminalStore
+				.getState()
+				.updateTabTitle(profileId, sessionId, title);
 		});
 
 		// Handle container resize
@@ -168,7 +170,7 @@ export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 			termRef.current = null;
 			fitAddonRef.current = null;
 		};
-	}, [contextId, sessionId, restoreFrom]);
+	}, [profileId, sessionId, restoreFrom]);
 
 	return (
 		<div

@@ -7,6 +7,7 @@ diesel::table! {
 		branch_name -> Text,
 		worktree_path -> Text,
 		created_at -> Timestamp,
+		is_default -> Bool,
 	}
 }
 
@@ -30,7 +31,7 @@ diesel::table! {
 diesel::table! {
 	pty_sessions (id) {
 		id -> Text,
-		project_id -> Text,
+		profile_id -> Text,
 		title -> Text,
 		shell -> Text,
 		cwd -> Text,
@@ -41,7 +42,7 @@ diesel::table! {
 
 diesel::joinable!(profiles -> projects (project_id));
 diesel::joinable!(pty_output_chunks -> pty_sessions (session_id));
-diesel::joinable!(pty_sessions -> projects (project_id));
+diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	profiles,

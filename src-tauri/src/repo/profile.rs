@@ -17,6 +17,7 @@ pub fn insert(
 			project_id,
 			branch_name,
 			worktree_path,
+			is_default: false,
 		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
@@ -26,6 +27,48 @@ pub fn insert(
 		.select(Profile::as_select())
 		.first(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn insert_default(
+	conn: &mut SqliteConnection,
+	id: &str,
+	project_id: &str,
+	worktree_path: &str,
+) -> Result<Profile, AppError> {
+	let branch_name = crate::infra::git::branch(worktree_path)
+		.unwrap_or_else(|_| "main".to_string());
+	diesel::insert_into(profiles::table)
+		.values(&NewProfile {
+			id,
+			project_id,
+			branch_name: &branch_name,
+			worktree_path,
+			is_default: true,
+		})
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	profiles::table
+		.find(id)
+		.select(Profile::as_select())
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn find_default_by_project(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<Profile, AppError> {
+	profiles::table
+		.filter(profiles::project_id.eq(project_id))
+		.filter(profiles::is_default.eq(true))
+		.select(Profile::as_select())
+		.first(conn)
+		.map_err(|_| {
+			AppError::NotFound(format!(
+				"Default profile for project: {project_id}"
+			))
+		})
 }
 
 pub fn find_by_id(
@@ -57,22 +100,26 @@ pub fn update(
 ) -> Result<Profile, AppError> {
 	let target = profiles::table.find(id);
 
+	let profile = target
+		.select(Profile::as_select())
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Profile: {id}")))?;
+
+	if profile.is_default {
+		return Err(AppError::DbError(
+			"Cannot update default profile".to_string(),
+		));
+	}
+
 	if branch_name.is_none() {
-		return target
-			.select(Profile::as_select())
-			.first(conn)
-			.map_err(|_| AppError::NotFound(format!("Profile: {id}")));
+		return Ok(profile);
 	}
 
 	let changeset = UpdateProfile { branch_name };
-	let rows = diesel::update(target)
+	diesel::update(target)
 		.set(&changeset)
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	if rows == 0 {
-		return Err(AppError::NotFound(format!("Profile: {id}")));
-	}
 
 	target
 		.select(Profile::as_select())
@@ -81,11 +128,19 @@ pub fn update(
 }
 
 /// Delete a profile record and return the profile + project folder.
+/// Default profiles cannot be deleted directly — they are removed via cascade when the project is deleted.
 pub fn delete(
 	conn: &mut SqliteConnection,
 	id: &str,
 ) -> Result<(Profile, String), AppError> {
 	let profile = find_by_id(conn, id)?;
+
+	if profile.is_default {
+		return Err(AppError::DbError(
+			"Cannot delete default profile".to_string(),
+		));
+	}
+
 	let project_folder = get_project_folder(conn, &profile.project_id)?;
 
 	diesel::delete(profiles::table.find(id))
@@ -124,6 +179,7 @@ mod tests {
 		conn
 	}
 
+	/// Insert a test project with its default profile (mirrors real app behavior).
 	fn insert_test_project(
 		conn: &mut SqliteConnection,
 		id: &str,
@@ -137,6 +193,18 @@ mod tests {
 			})
 			.execute(conn)
 			.expect("insert project");
+
+		let default_id = format!("default-{id}");
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: &default_id,
+				project_id: id,
+				branch_name: "main",
+				worktree_path: folder,
+				is_default: true,
+			})
+			.execute(conn)
+			.expect("insert default profile");
 	}
 
 	#[test]
@@ -156,6 +224,7 @@ mod tests {
 		assert_eq!(profile.id, "prof-1");
 		assert_eq!(profile.project_id, "proj-1");
 		assert_eq!(profile.branch_name, "feature/login");
+		assert!(!profile.is_default);
 	}
 
 	#[test]
@@ -173,15 +242,17 @@ mod tests {
 		insert(&mut conn, "p2", "proj-1", "dev", "/w/p2").unwrap();
 
 		let profiles = list_by_project(&mut conn, "proj-1").unwrap();
-		assert_eq!(profiles.len(), 2);
+		// default profile + 2 inserted
+		assert_eq!(profiles.len(), 3);
 	}
 
 	#[test]
-	fn list_empty() {
+	fn list_only_default() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
 		let profiles = list_by_project(&mut conn, "proj-1").unwrap();
-		assert!(profiles.is_empty());
+		assert_eq!(profiles.len(), 1);
+		assert!(profiles[0].is_default);
 	}
 
 	#[test]
@@ -200,6 +271,17 @@ mod tests {
 		let mut conn = setup_db();
 		let result = find_by_id(&mut conn, "nonexistent");
 		assert!(result.is_err());
+	}
+
+	#[test]
+	fn find_default_by_project_success() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+
+		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
+		assert!(default.is_default);
+		assert_eq!(default.project_id, "proj-1");
+		assert_eq!(default.worktree_path, "/tmp/test");
 	}
 
 	#[test]
@@ -231,6 +313,15 @@ mod tests {
 	}
 
 	#[test]
+	fn update_default_profile_rejected() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
+		let result = update(&mut conn, &default.id, Some("new".to_string()));
+		assert!(result.is_err());
+	}
+
+	#[test]
 	fn delete_success() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
@@ -246,6 +337,15 @@ mod tests {
 	fn delete_not_found() {
 		let mut conn = setup_db();
 		let result = delete(&mut conn, "nonexistent");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn delete_default_profile_rejected() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		let default = find_default_by_project(&mut conn, "proj-1").unwrap();
+		let result = delete(&mut conn, &default.id);
 		assert!(result.is_err());
 	}
 

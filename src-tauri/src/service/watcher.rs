@@ -99,7 +99,6 @@ fn reconcile_watchers(
 	// Remove watchers for deleted projects
 	watchers.retain(|id, _| current_ids.contains(id));
 
-
 	// Add watchers for new projects
 	for project in projects {
 		if watchers.contains_key(&project.id) {

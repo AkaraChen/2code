@@ -1,5 +1,6 @@
 import {
 	useMutation,
+	useQuery,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import {
 	createProjectFromFolder,
 	createProjectTemporary,
 	deleteProject,
+	getDefaultProfile,
 	getGitBranch,
 	listProjects,
 	updateProject,
@@ -23,8 +25,15 @@ export function useProjects() {
 
 export function useGitBranch(folder: string) {
 	return useSuspenseQuery({
-		queryKey: queryKeys.projects.branch(folder),
+		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
+	});
+}
+
+export function useDefaultProfile(projectId: string) {
+	return useQuery({
+		queryKey: queryKeys.profiles.default(projectId),
+		queryFn: () => getDefaultProfile({ projectId }),
 	});
 }
 
@@ -48,6 +57,7 @@ export function useCreateProject() {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+			queryClient.invalidateQueries({ queryKey: ["profiles"] });
 		},
 	});
 }

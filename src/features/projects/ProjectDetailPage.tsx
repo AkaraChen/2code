@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
-import { useProject } from "@/features/projects/hooks";
+import { useDefaultProfile, useProject } from "@/features/projects/hooks";
 import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
 import { listProfiles } from "@/generated";
@@ -11,24 +11,28 @@ import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 export default function ProjectDetailPage() {
-	const { id, profileId } = useParams<{ id: string; profileId?: string }>();
+	const { id, profileId: routeProfileId } = useParams<{
+		id: string;
+		profileId?: string;
+	}>();
 	const project = useProject(id!);
+	const { data: defaultProfile } = useDefaultProfile(id!);
 
 	// Fetch the specific profile if profileId is in the route
 	const { data: profiles } = useQuery({
 		queryKey: queryKeys.profiles.byProject(id!),
 		queryFn: () => listProfiles({ projectId: id! }),
-		enabled: !!profileId,
+		enabled: !!routeProfileId,
 	});
-	const profile = profileId
-		? profiles?.find((p) => p.id === profileId)
+	const routeProfile = routeProfileId
+		? profiles?.find((p) => p.id === routeProfileId)
 		: undefined;
 
-	const contextId = profileId ?? id!;
-	const cwd = profile?.worktree_path ?? project?.folder ?? "";
+	const profile = routeProfile ?? defaultProfile;
+	const profileId = profile?.id;
 
 	const hasTabs = useTerminalStore(
-		(s) => (s.projects[contextId]?.tabs.length ?? 0) > 0,
+		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
 	);
 	const createTab = useCreateTerminalTab();
 
@@ -36,22 +40,19 @@ export default function ProjectDetailPage() {
 		return <Navigate to="/" replace />;
 	}
 
-	// If profileId is specified but profile not found (and profiles have loaded), redirect
-	if (profileId && profiles && !profile) {
+	// If routeProfileId is specified but profile not found (and profiles have loaded), redirect
+	if (routeProfileId && profiles && !routeProfile) {
 		return <Navigate to={`/projects/${id}`} replace />;
 	}
 
 	// Terminal overlay handles rendering when tabs exist
 	if (hasTabs) return null;
 
+	if (!profile) return null;
+
 	return (
 		<Flex direction="column" h="full">
-			<ProjectTopBar
-				projectName={project.name}
-				profileBranchName={profile?.branch_name}
-				cwd={cwd}
-				contextId={contextId}
-			/>
+			<ProjectTopBar projectName={project.name} profile={profile} />
 			<Center flex="1">
 				<EmptyState.Root>
 					<EmptyState.Content>
@@ -70,9 +71,8 @@ export default function ProjectDetailPage() {
 							disabled={createTab.isPending}
 							onClick={() =>
 								createTab.mutate({
-									contextId,
-									projectId: project.id,
-									cwd,
+									profileId: profile.id,
+									cwd: profile.worktree_path,
 								})
 							}
 						>

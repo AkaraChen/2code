@@ -7,19 +7,14 @@ import { useTerminalStore } from "./store";
 import { Terminal } from "./Terminal";
 
 interface TerminalTabsProps {
-	contextId: string;
-	projectId: string;
+	profileId: string;
 	cwd: string;
 }
 
-export default function TerminalTabs({
-	contextId,
-	projectId,
-	cwd,
-}: TerminalTabsProps) {
+export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow(
-			(s) => s.projects[contextId] ?? { tabs: [], activeTabId: null },
+			(s) => s.profiles[profileId] ?? { tabs: [], activeTabId: null },
 		),
 	);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
@@ -33,7 +28,7 @@ export default function TerminalTabs({
 			<Tabs.Root
 				size="sm"
 				value={activeTabId}
-				onValueChange={(e) => setActiveTab(contextId, e.value)}
+				onValueChange={(e) => setActiveTab(profileId, e.value)}
 			>
 				<Tabs.List>
 					{tabs.map((tab) => (
@@ -48,7 +43,7 @@ export default function TerminalTabs({
 									onClick={(e) => {
 										e.stopPropagation();
 										closeTab.mutate({
-											contextId,
+											profileId,
 											sessionId: tab.id,
 										});
 									}}
@@ -62,9 +57,7 @@ export default function TerminalTabs({
 						size="2xs"
 						variant="ghost"
 						disabled={createTab.isPending}
-						onClick={() =>
-							createTab.mutate({ contextId, projectId, cwd })
-						}
+						onClick={() => createTab.mutate({ profileId, cwd })}
 					>
 						<RiAddLine /> {m.newTerminal()}
 					</Button>
@@ -81,7 +74,7 @@ export default function TerminalTabs({
 						display={tab.id === activeTabId ? "block" : "none"}
 					>
 						<Terminal
-							contextId={contextId}
+							profileId={profileId}
 							sessionId={tab.id}
 							restoreFrom={tab.restoreFrom}
 						/>

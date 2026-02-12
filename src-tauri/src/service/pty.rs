@@ -34,7 +34,7 @@ pub fn create_session(
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let new_record = NewPtySessionRecord {
 			id: &session_id,
-			project_id: &meta.project_id,
+			profile_id: &meta.profile_id,
 			title: &meta.title,
 			shell: &config.shell,
 			cwd: &config.cwd,
@@ -42,7 +42,7 @@ pub fn create_session(
 		crate::repo::pty::insert_session(conn, &new_record)?;
 	}
 
-	tracing::info!(target: "pty", %session_id, project_id = %meta.project_id, "session created");
+	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, "session created");
 
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
@@ -71,6 +71,13 @@ pub fn close_session(
 }
 
 pub fn list_sessions(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<Vec<PtySessionRecord>, AppError> {
+	crate::repo::pty::list_by_profile(conn, profile_id)
+}
+
+pub fn list_project_sessions(
 	conn: &mut SqliteConnection,
 	project_id: &str,
 ) -> Result<Vec<PtySessionRecord>, AppError> {

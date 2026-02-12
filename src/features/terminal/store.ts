@@ -15,36 +15,36 @@ interface ProjectTerminalState {
 }
 
 interface TerminalStore {
-	projects: Record<string, ProjectTerminalState>;
+	profiles: Record<string, ProjectTerminalState>;
 	addTab(
-		projectId: string,
+		profileId: string,
 		sessionId: string,
 		title: string,
 		restoreFrom?: string,
 	): void;
-	closeTab(projectId: string, tabId: string): void;
-	setActiveTab(projectId: string, tabId: string): void;
-	clearRestore(projectId: string, tabId: string): void;
-	removeProject(projectId: string): void;
-	updateTabTitle(projectId: string, tabId: string, title: string): void;
-	removeStaleProjects(validIds: Set<string>): void;
+	closeTab(profileId: string, tabId: string): void;
+	setActiveTab(profileId: string, tabId: string): void;
+	clearRestore(profileId: string, tabId: string): void;
+	removeProfile(profileId: string): void;
+	updateTabTitle(profileId: string, tabId: string, title: string): void;
+	removeStaleProfiles(validIds: Set<string>): void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set) => ({
-	projects: {},
+	profiles: {},
 
-	addTab(projectId, sessionId, title, restoreFrom?) {
+	addTab(profileId, sessionId, title, restoreFrom?) {
 		set((state) => {
-			const existing = state.projects[projectId] ?? {
+			const existing = state.profiles[profileId] ?? {
 				tabs: [],
 				activeTabId: null,
 				counter: 0,
 			};
 			const tab: TerminalTab = { id: sessionId, title, restoreFrom };
 			return {
-				projects: {
-					...state.projects,
-					[projectId]: {
+				profiles: {
+					...state.profiles,
+					[profileId]: {
 						tabs: [...existing.tabs, tab],
 						activeTabId: tab.id,
 						counter: existing.counter + 1,
@@ -54,30 +54,30 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
 		});
 	},
 
-	closeTab(projectId, tabId) {
+	closeTab(profileId, tabId) {
 		set((state) => {
-			const project = state.projects[projectId];
-			if (!project) return state;
+			const profile = state.profiles[profileId];
+			if (!profile) return state;
 
-			const idx = project.tabs.findIndex((t) => t.id === tabId);
-			const next = project.tabs.filter((t) => t.id !== tabId);
+			const idx = profile.tabs.findIndex((t) => t.id === tabId);
+			const next = profile.tabs.filter((t) => t.id !== tabId);
 
 			if (next.length === 0) {
-				const { [projectId]: _, ...rest } = state.projects;
-				return { projects: rest };
+				const { [profileId]: _, ...rest } = state.profiles;
+				return { profiles: rest };
 			}
 
-			let activeTabId = project.activeTabId;
+			let activeTabId = profile.activeTabId;
 			if (tabId === activeTabId) {
 				const newIdx = Math.min(idx, next.length - 1);
 				activeTabId = next[newIdx].id;
 			}
 
 			return {
-				projects: {
-					...state.projects,
-					[projectId]: {
-						...project,
+				profiles: {
+					...state.profiles,
+					[profileId]: {
+						...profile,
 						tabs: next,
 						activeTabId,
 					},
@@ -86,89 +86,89 @@ export const useTerminalStore = create<TerminalStore>((set) => ({
 		});
 	},
 
-	setActiveTab(projectId, tabId) {
+	setActiveTab(profileId, tabId) {
 		set((state) => {
-			const project = state.projects[projectId];
-			if (!project) return state;
+			const profile = state.profiles[profileId];
+			if (!profile) return state;
 			return {
-				projects: {
-					...state.projects,
-					[projectId]: { ...project, activeTabId: tabId },
+				profiles: {
+					...state.profiles,
+					[profileId]: { ...profile, activeTabId: tabId },
 				},
 			};
 		});
 	},
 
-	clearRestore(projectId, tabId) {
+	clearRestore(profileId, tabId) {
 		set((state) => {
-			const project = state.projects[projectId];
-			if (!project) return state;
-			const tabs = project.tabs.map((t) =>
+			const profile = state.profiles[profileId];
+			if (!profile) return state;
+			const tabs = profile.tabs.map((t) =>
 				t.id === tabId ? { id: t.id, title: t.title } : t,
 			);
 			return {
-				projects: {
-					...state.projects,
-					[projectId]: { ...project, tabs },
+				profiles: {
+					...state.profiles,
+					[profileId]: { ...profile, tabs },
 				},
 			};
 		});
 	},
 
-	removeProject(projectId) {
+	removeProfile(profileId) {
 		set((state) => {
-			if (!(projectId in state.projects)) return state;
-			const { [projectId]: _, ...rest } = state.projects;
-			return { projects: rest };
+			if (!(profileId in state.profiles)) return state;
+			const { [profileId]: _, ...rest } = state.profiles;
+			return { profiles: rest };
 		});
 	},
 
-	updateTabTitle(projectId, tabId, title) {
+	updateTabTitle(profileId, tabId, title) {
 		set((state) => {
-			const project = state.projects[projectId];
-			if (!project) return state;
-			const tab = project.tabs.find((t) => t.id === tabId);
+			const profile = state.profiles[profileId];
+			if (!profile) return state;
+			const tab = profile.tabs.find((t) => t.id === tabId);
 			if (!tab || tab.title === title) return state;
-			const tabs = project.tabs.map((t) =>
+			const tabs = profile.tabs.map((t) =>
 				t.id === tabId ? { ...t, title } : t,
 			);
 			return {
-				projects: {
-					...state.projects,
-					[projectId]: { ...project, tabs },
+				profiles: {
+					...state.profiles,
+					[profileId]: { ...profile, tabs },
 				},
 			};
 		});
 	},
 
-	removeStaleProjects(validIds) {
+	removeStaleProfiles(validIds) {
 		set((state) => {
-			const staleKeys = Object.keys(state.projects).filter(
+			const staleKeys = Object.keys(state.profiles).filter(
 				(id) => !validIds.has(id),
 			);
 			if (staleKeys.length === 0) return state;
-			const next = { ...state.projects };
+			const next = { ...state.profiles };
 			for (const key of staleKeys) {
 				delete next[key];
 			}
-			return { projects: next };
+			return { profiles: next };
 		});
 	},
 }));
 
-/** IDs of projects that currently have terminal tabs open. */
-export function useTerminalProjectIds() {
-	return useTerminalStore(useShallow((s) => Object.keys(s.projects)));
+/** IDs of profiles that currently have terminal tabs open. */
+export function useTerminalProfileIds() {
+	return useTerminalStore(useShallow((s) => Object.keys(s.profiles)));
 }
 
-/** Sync store with project list — removes terminals for deleted projects. */
-export function useTerminalSync(projects: { id: string }[]) {
-	const removeStaleProjects = useTerminalStore((s) => s.removeStaleProjects);
+/** Sync store with profiles list — removes terminals for deleted profiles. */
+export function useTerminalSync(profiles: { id: string }[]) {
+	const removeStaleProfiles = useTerminalStore((s) => s.removeStaleProfiles);
 	const validIds = useMemo(
-		() => new Set(projects.map((p) => p.id)),
-		[projects],
+		() => new Set(profiles.map((p) => p.id)),
+		[profiles],
 	);
 	useEffect(() => {
-		removeStaleProjects(validIds);
-	}, [validIds, removeStaleProjects]);
+		removeStaleProfiles(validIds);
+	}, [validIds, removeStaleProfiles]);
 }

@@ -2,6 +2,7 @@ use tauri::State;
 
 use crate::error::AppError;
 use crate::infra::db::DbPool;
+use crate::model::profile::Profile;
 use crate::model::project::{GitCommit, Project};
 
 #[tauri::command]
@@ -58,31 +59,40 @@ pub fn get_git_branch(folder: String) -> Result<String, AppError> {
 
 #[tauri::command]
 pub fn get_git_diff(
-	context_id: String,
+	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_diff(conn, &context_id)
+	crate::service::project::get_diff(conn, &profile_id)
 }
 
 #[tauri::command]
 pub fn get_git_log(
-	context_id: String,
+	profile_id: String,
 	limit: Option<u32>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitCommit>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_log(conn, &context_id, limit.unwrap_or(50))
+	crate::service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
 }
 
 #[tauri::command]
 pub fn get_commit_diff(
-	context_id: String,
+	profile_id: String,
 	commit_hash: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_commit_diff(conn, &context_id, &commit_hash)
+	crate::service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+}
+
+#[tauri::command]
+pub fn get_default_profile(
+	project_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Profile, AppError> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	crate::repo::profile::find_default_by_project(conn, &project_id)
 }
 
 #[tauri::command]

@@ -2,7 +2,7 @@ use diesel::prelude::*;
 
 use crate::error::AppError;
 use crate::model::project::{NewProject, Project, UpdateProject};
-use crate::schema::{profiles, projects};
+use crate::schema::projects;
 
 pub fn insert(
 	conn: &mut SqliteConnection,
@@ -80,32 +80,13 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
-/// Resolve context_id to a folder path.
-/// Tries profiles.worktree_path first, falls back to projects.folder.
-pub fn resolve_context_folder(
-	conn: &mut SqliteConnection,
-	context_id: &str,
-) -> Result<String, AppError> {
-	profiles::table
-		.find(context_id)
-		.select(profiles::worktree_path)
-		.first::<String>(conn)
-		.or_else(|_| {
-			projects::table
-				.find(context_id)
-				.select(projects::folder)
-				.first::<String>(conn)
-		})
-		.map_err(|_| AppError::NotFound(format!("Context: {context_id}")))
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::infra::db::MIGRATIONS;
 	use crate::model::profile::NewProfile;
 	use crate::model::pty::NewPtySessionRecord;
-	use crate::schema::pty_sessions;
+	use crate::schema::{profiles, pty_sessions};
 	use diesel_migrations::MigrationHarness;
 
 	fn setup_db() -> SqliteConnection {
@@ -215,10 +196,23 @@ mod tests {
 		let mut conn = setup_db();
 		insert(&mut conn, "p1", "Cascade", "/c").unwrap();
 
+		// Create default profile (in real app, service layer does this)
+		diesel::insert_into(profiles::table)
+			.values(&NewProfile {
+				id: "default-p1",
+				project_id: "p1",
+				branch_name: "main",
+				worktree_path: "/c",
+				is_default: true,
+			})
+			.execute(&mut conn)
+			.unwrap();
+
+		// Sessions belong to profiles; cascade: project → profile → session
 		diesel::insert_into(pty_sessions::table)
 			.values(&NewPtySessionRecord {
 				id: "s1",
-				project_id: "p1",
+				profile_id: "default-p1",
 				title: "bash",
 				shell: "/bin/bash",
 				cwd: "/c",
@@ -233,39 +227,5 @@ mod tests {
 			.load(&mut conn)
 			.unwrap();
 		assert!(sessions.is_empty());
-	}
-
-	#[test]
-	fn resolve_context_folder_project_fallback() {
-		let mut conn = setup_db();
-		insert(&mut conn, "p1", "Test", "/tmp/project").unwrap();
-		let folder = resolve_context_folder(&mut conn, "p1").unwrap();
-		assert_eq!(folder, "/tmp/project");
-	}
-
-	#[test]
-	fn resolve_context_folder_profile() {
-		let mut conn = setup_db();
-		insert(&mut conn, "p1", "Test", "/tmp/project").unwrap();
-
-		diesel::insert_into(profiles::table)
-			.values(&NewProfile {
-				id: "prof1",
-				project_id: "p1",
-				branch_name: "feature",
-				worktree_path: "/tmp/worktree",
-			})
-			.execute(&mut conn)
-			.unwrap();
-
-		let folder = resolve_context_folder(&mut conn, "prof1").unwrap();
-		assert_eq!(folder, "/tmp/worktree");
-	}
-
-	#[test]
-	fn resolve_context_folder_not_found() {
-		let mut conn = setup_db();
-		let result = resolve_context_folder(&mut conn, "nonexistent");
-		assert!(result.is_err());
 	}
 }

@@ -18,14 +18,16 @@ export function ProfileList({
 
 	return (
 		<>
-			{profiles.map((profile) => (
-				<ProfileItem
-					key={profile.id}
-					profile={profile}
-					projectId={projectId}
-					isActive={profile.id === activeProfileId}
-				/>
-			))}
+			{profiles
+				.filter((p) => !p.is_default)
+				.map((profile) => (
+					<ProfileItem
+						key={profile.id}
+						profile={profile}
+						projectId={projectId}
+						isActive={profile.id === activeProfileId}
+					/>
+				))}
 			<HStack
 				as="button"
 				gap="2"

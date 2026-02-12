@@ -36,14 +36,14 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 interface GitDiffDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
-	contextId: string;
+	profileId: string;
 	branchName?: string;
 }
 
 export default function GitDiffDialog({
 	isOpen,
 	onClose,
-	contextId,
+	profileId,
 	branchName,
 }: GitDiffDialogProps) {
 	const termThemeId = useTerminalThemeId();
@@ -57,24 +57,24 @@ export default function GitDiffDialog({
 		useState<number>(0);
 
 	const { data: diff, isLoading: isDiffLoading } = useQuery({
-		queryKey: queryKeys.projects.diff(contextId),
-		queryFn: () => getGitDiff({ contextId }),
+		queryKey: queryKeys.git.diff(profileId),
+		queryFn: () => getGitDiff({ profileId }),
 		enabled: isOpen && activeTab === "changes",
 	});
 
 	const { data: logData, isLoading: isLogLoading } = useQuery({
-		queryKey: queryKeys.projects.log(contextId),
-		queryFn: () => getGitLog({ contextId }),
+		queryKey: queryKeys.git.log(profileId),
+		queryFn: () => getGitLog({ profileId }),
 		enabled: isOpen && activeTab === "history",
 	});
 
 	const { data: commitDiff, isLoading: isCommitDiffLoading } = useQuery({
-		queryKey: queryKeys.projects.commitDiff(
-			contextId,
+		queryKey: queryKeys.git.commitDiff(
+			profileId,
 			selectedCommit?.full_hash ?? "",
 		),
 		queryFn: () =>
-			getCommitDiff({ contextId, commitHash: selectedCommit!.full_hash }),
+			getCommitDiff({ profileId, commitHash: selectedCommit!.full_hash }),
 		enabled: isOpen && !!selectedCommit,
 	});
 

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct PtySessionRecord {
 	pub id: String,
-	pub project_id: String,
+	pub profile_id: String,
 	pub title: String,
 	pub shell: String,
 	pub cwd: String,
@@ -19,7 +19,7 @@ pub struct PtySessionRecord {
 #[diesel(table_name = pty_sessions)]
 pub struct NewPtySessionRecord<'a> {
 	pub id: &'a str,
-	pub project_id: &'a str,
+	pub profile_id: &'a str,
 	pub title: &'a str,
 	pub shell: &'a str,
 	pub cwd: &'a str,
@@ -35,7 +35,7 @@ pub struct NewPtyOutputChunk<'a> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtySessionMeta {
-	pub project_id: String,
+	pub profile_id: String,
 	pub title: String,
 }
 

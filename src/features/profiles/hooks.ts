@@ -38,7 +38,7 @@ export function useDeleteProfile() {
 		mutationFn: ({ id }: { id: string; projectId: string }) =>
 			deleteProfile({ id }),
 		onSuccess: (_data, { id, projectId }) => {
-			useTerminalStore.getState().removeProject(id);
+			useTerminalStore.getState().removeProfile(id);
 			queryClient.invalidateQueries({
 				queryKey: queryKeys.profiles.byProject(projectId),
 			});
