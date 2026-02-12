@@ -46,28 +46,30 @@ just fmt               # runs 'fama'
 
 React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ChakraProvider` → `ThemeProvider` → `BrowserRouter` → `App`.
 
-**Routing** (react-router v7): `/` → HomePage, `/projects/:id` → ProjectDetailPage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage.
+**Routing** (react-router v7): `/` → HomePage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage, `*` → redirect to `/`.
 
 **Key directories (feature-based organization):**
 
 - `generated/` — Auto-generated Tauri IPC bindings via `tauri-typegen` (gitignored, do not edit)
 - `features/home/` — HomePage
-- `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, etc.) and dialogs (Create/Delete/Rename)
-- `features/profiles/` — Profile hooks (`useProfiles`, `useCreateProfile`, `useDeleteProfile`) and dialogs
+- `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, `useProjectProfiles`, etc.) and dialogs (Create/Delete/Rename)
+- `features/profiles/` — Profile hooks (`useCreateProfile`, `useDeleteProfile`) and dialogs
 - `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
-- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger)
-- `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/fontStore`, `stores/themeStore`, `stores/notificationStore`)
+- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger), and components (ChangesFileList, CommitList, GitDiffPane, HistoryFileList)
+- `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/terminalSettingsStore`, `stores/themeStore`, `stores/notificationStore`)
+- `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
+- `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
 - `shared/lib/` — Query client config, centralized query keys, cached promise utility
 - `shared/providers/` — ThemeProvider, Toaster
-- `shared/components/` — ErrorBoundary, Fallbacks, SidebarLink
+- `shared/components/` — Fallbacks (PageSkeleton, PageError, SidebarSkeleton), SidebarLink. ErrorBoundary is from `react-error-boundary` package.
 - `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
 
 **State management:**
 
 - Zustand for client state (terminal tabs per project, font preferences, notification settings)
 - TanStack Query for server state (projects, sessions, profiles)
-- Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.profiles.byProject(id)` pattern
-- `fontStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
+- Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.git.diff(profileId)` pattern
+- `terminalSettingsStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
 
 **UI Framework:**
 
@@ -83,9 +85,9 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
 2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
 3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution).
+4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching).
 
-**Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`).
+**Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
 **Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions`, `pty_output_chunks`.
 
