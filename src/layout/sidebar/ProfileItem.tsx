@@ -1,10 +1,10 @@
 import { HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
-import { useState } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { useDialogState } from "@/shared/hooks/useDialogState";
 
 export function ProfileItem({
 	profile,
@@ -15,7 +15,7 @@ export function ProfileItem({
 	projectId: string;
 	isActive: boolean;
 }) {
-	const [deleteOpen, setDeleteOpen] = useState(false);
+	const deleteDialog = useDialogState();
 
 	return (
 		<>
@@ -51,7 +51,7 @@ export function ProfileItem({
 								value="delete"
 								color="fg.error"
 								_hover={{ bg: "bg.error", color: "fg.error" }}
-								onClick={() => setDeleteOpen(true)}
+								onClick={deleteDialog.onOpen}
 							>
 								{m.deleteProfile()}
 							</Menu.Item>
@@ -60,8 +60,8 @@ export function ProfileItem({
 				</Portal>
 			</Menu.Root>
 			<DeleteProfileDialog
-				isOpen={deleteOpen}
-				onClose={() => setDeleteOpen(false)}
+				isOpen={deleteDialog.isOpen}
+				onClose={deleteDialog.onClose}
 				profile={profile}
 			/>
 		</>

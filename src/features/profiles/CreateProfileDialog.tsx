@@ -6,7 +6,7 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProfile } from "./hooks";
@@ -17,34 +17,36 @@ interface CreateProfileDialogProps {
 	projectId: string;
 }
 
+interface FormValues {
+	branchName: string;
+}
+
 export default function CreateProfileDialog({
 	isOpen,
 	onClose,
 	projectId,
 }: CreateProfileDialogProps) {
-	const [branchName, setBranchName] = useState("");
+	const form = useForm<FormValues>({
+		defaultValues: { branchName: "" },
+	});
 	const createProfile = useCreateProfile();
 	const navigate = useNavigate();
 
 	const handleClose = () => {
-		setBranchName("");
+		form.reset();
 		onClose();
 	};
 
-	const handleCreate = async () => {
+	const handleCreate = form.handleSubmit(async (data) => {
 		const profile = await createProfile.mutateAsync({
 			projectId,
-			branchName,
+			branchName: data.branchName,
 		});
 		handleClose();
 		navigate(`/projects/${projectId}/profiles/${profile.id}`);
-	};
+	});
 
-	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && branchName.trim() && !createProfile.isPending) {
-			handleCreate();
-		}
-	};
+	const branchName = form.watch("branchName");
 
 	return (
 		<Dialog.Root
@@ -66,11 +68,18 @@ export default function CreateProfileDialog({
 								<Field.Label>{m.branchName()}</Field.Label>
 								<Input
 									placeholder={m.branchNamePlaceholder()}
-									value={branchName}
-									onChange={(e) =>
-										setBranchName(e.target.value)
-									}
-									onKeyDown={handleKeyDown}
+									{...form.register("branchName", {
+										validate: (v) => !!v.trim(),
+									})}
+									onKeyDown={(e) => {
+										if (
+											e.key === "Enter" &&
+											branchName.trim() &&
+											!createProfile.isPending
+										) {
+											handleCreate();
+										}
+									}}
 								/>
 							</Field.Root>
 						</Dialog.Body>

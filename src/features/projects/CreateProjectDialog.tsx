@@ -13,8 +13,9 @@ import {
 	Stack,
 	Text,
 } from "@chakra-ui/react";
+import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { RiFolderOpenLine, RiPencilLine } from "react-icons/ri";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
@@ -25,50 +26,50 @@ interface CreateProjectDialogProps {
 	onClose: () => void;
 }
 
+interface FormValues {
+	name: string;
+	folder: string | null;
+}
+
 export default function CreateProjectDialog({
 	isOpen,
 	onClose,
 }: CreateProjectDialogProps) {
-	const [name, setName] = useState("");
-	const [folder, setFolder] = useState<string | null>(null);
+	const form = useForm<FormValues>({
+		defaultValues: { name: "", folder: null },
+	});
 	const createProject = useCreateProject();
 	const navigate = useNavigate();
 
-	const reset = () => {
-		setName("");
-		setFolder(null);
-	};
+	const folder = form.watch("folder");
 
 	const handleClose = () => {
-		reset();
+		form.reset();
 		onClose();
 	};
 
 	const handleChooseFolder = async () => {
 		const selected = await open({ directory: true });
 		if (selected) {
-			setFolder(selected);
-			if (!name) {
-				setName(selected.split("/").pop() || "");
+			form.setValue("folder", selected);
+			if (!form.getValues("name")) {
+				form.setValue("name", await basename(selected));
 			}
 		}
 	};
 
-	const handleCreate = async () => {
+	const handleCreate = form.handleSubmit(async (data) => {
 		const project = await createProject.mutateAsync(
-			name || folder
-				? { name: name || undefined, folder: folder ?? undefined }
+			data.name || data.folder
+				? {
+						name: data.name || undefined,
+						folder: data.folder ?? undefined,
+					}
 				: undefined,
 		);
 		handleClose();
 		navigate(`/projects/${project.id}`);
-	};
-
-	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter") {
-			handleCreate();
-		}
-	};
+	});
 
 	return (
 		<Dialog.Root
@@ -162,11 +163,11 @@ export default function CreateProjectDialog({
 									<Field.Label>{m.projectName()}</Field.Label>
 									<Input
 										placeholder={m.projectNamePlaceholder()}
-										value={name}
-										onChange={(e) =>
-											setName(e.target.value)
-										}
-										onKeyDown={handleKeyDown}
+										{...form.register("name")}
+										onKeyDown={(e) => {
+											if (e.key === "Enter")
+												handleCreate();
+										}}
 									/>
 								</Field.Root>
 							</Stack>

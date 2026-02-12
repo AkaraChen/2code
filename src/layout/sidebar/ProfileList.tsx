@@ -1,9 +1,9 @@
 import { HStack, Icon, Text } from "@chakra-ui/react";
-import { useState } from "react";
 import { RiAddLine } from "react-icons/ri";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProfileItem } from "./ProfileItem";
 
 export function ProfileList({
@@ -15,7 +15,7 @@ export function ProfileList({
 	projectId: string;
 	activeProfileId: string | null;
 }) {
-	const [createOpen, setCreateOpen] = useState(false);
+	const createDialog = useDialogState();
 
 	return (
 		<>
@@ -37,7 +37,7 @@ export function ProfileList({
 				fontSize="sm"
 				color="fg.muted"
 				_hover={{ bg: "bg.subtle", color: "fg" }}
-				onClick={() => setCreateOpen(true)}
+				onClick={createDialog.onOpen}
 			>
 				<Icon fontSize="xs">
 					<RiAddLine />
@@ -45,8 +45,8 @@ export function ProfileList({
 				<Text>{m.createProfile()}</Text>
 			</HStack>
 			<CreateProfileDialog
-				isOpen={createOpen}
-				onClose={() => setCreateOpen(false)}
+				isOpen={createDialog.isOpen}
+				onClose={createDialog.onClose}
 				projectId={projectId}
 			/>
 		</>

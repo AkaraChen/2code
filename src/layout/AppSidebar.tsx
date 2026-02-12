@@ -1,15 +1,16 @@
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
+import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
-	const [dialogOpen, setDialogOpen] = useState(false);
+	const createDialog = useDialogState();
 	const navRef = useRef<HTMLElement>(null);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -23,7 +24,9 @@ export default function AppSidebar() {
 		);
 		if (items.length === 0) return;
 
-		const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+		const currentIndex = items.indexOf(
+			document.activeElement as HTMLElement,
+		);
 
 		let nextIndex: number;
 		if (e.key === "ArrowDown") {
@@ -72,7 +75,7 @@ export default function AppSidebar() {
 							aria-label={m.newProject()}
 							variant="ghost"
 							size="2xs"
-							onClick={() => setDialogOpen(true)}
+							onClick={createDialog.onOpen}
 						>
 							<RiAddLine />
 						</IconButton>
@@ -90,8 +93,8 @@ export default function AppSidebar() {
 				</Flex>
 			</Box>
 			<CreateProjectDialog
-				isOpen={dialogOpen}
-				onClose={() => setDialogOpen(false)}
+				isOpen={createDialog.isOpen}
+				onClose={createDialog.onClose}
 			/>
 		</>
 	);

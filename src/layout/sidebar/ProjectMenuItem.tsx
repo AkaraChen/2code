@@ -18,6 +18,7 @@ import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProfileList } from "./ProfileList";
 
 export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
@@ -42,8 +43,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 		: `/projects/${project.id}`;
 
 	const [expanded, setExpanded] = useState(isAnyActive);
-	const [renameOpen, setRenameOpen] = useState(false);
-	const [deleteOpen, setDeleteOpen] = useState(false);
+	const renameDialog = useDialogState();
+	const deleteDialog = useDialogState();
 	const wasActive = useRef(isAnyActive);
 
 	// Auto-expand only on transition from inactive → active
@@ -96,7 +97,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						<Menu.Content>
 							<Menu.Item
 								value="rename"
-								onClick={() => setRenameOpen(true)}
+								onClick={renameDialog.onOpen}
 							>
 								{m.renameProject()}
 							</Menu.Item>
@@ -105,7 +106,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 								value="delete"
 								color="fg.error"
 								_hover={{ bg: "bg.error", color: "fg.error" }}
-								onClick={() => setDeleteOpen(true)}
+								onClick={deleteDialog.onOpen}
 							>
 								{m.deleteProject()}
 							</Menu.Item>
@@ -146,14 +147,14 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 			)}
 
 			<RenameProjectDialog
-				isOpen={renameOpen}
-				onClose={() => setRenameOpen(false)}
+				isOpen={renameDialog.isOpen}
+				onClose={renameDialog.onClose}
 				projectId={project.id}
 				initName={project.name}
 			/>
 			<DeleteProjectDialog
-				isOpen={deleteOpen}
-				onClose={() => setDeleteOpen(false)}
+				isOpen={deleteDialog.isOpen}
+				onClose={deleteDialog.onClose}
 				project={project}
 			/>
 		</>

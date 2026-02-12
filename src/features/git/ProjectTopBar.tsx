@@ -1,8 +1,9 @@
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { RiGitBranchLine, RiGitPullRequestLine } from "react-icons/ri";
 import { useGitBranch } from "@/features/projects/hooks";
 import type { Profile } from "@/generated";
+import { useDialogState } from "@/shared/hooks/useDialogState";
 import GitDiffDialog from "./GitDiffDialog";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
@@ -47,11 +48,7 @@ export default function ProjectTopBar({
 	projectName,
 	profile,
 }: ProjectTopBarProps) {
-	const [diffOpen, setDiffOpen] = useState(false);
-
-	const handleDiffClick = () => {
-		setDiffOpen(true);
-	};
+	const diffDialog = useDialogState();
 
 	return (
 		<Flex
@@ -84,7 +81,7 @@ export default function ProjectTopBar({
 				aria-label="Git diff"
 				size="2xs"
 				variant="outline"
-				onClick={handleDiffClick}
+				onClick={diffDialog.onOpen}
 			>
 				<RiGitPullRequestLine />
 			</IconButton>
@@ -92,15 +89,15 @@ export default function ProjectTopBar({
 				<Suspense>
 					<GitBranchDiffDialog
 						cwd={profile.worktree_path}
-						diffOpen={diffOpen}
-						onClose={() => setDiffOpen(false)}
+						diffOpen={diffDialog.isOpen}
+						onClose={diffDialog.onClose}
 						profileId={profile.id}
 					/>
 				</Suspense>
 			) : (
 				<GitDiffDialog
-					isOpen={diffOpen}
-					onClose={() => setDiffOpen(false)}
+					isOpen={diffDialog.isOpen}
+					onClose={diffDialog.onClose}
 					profileId={profile.id}
 					branchName={profile.branch_name}
 				/>

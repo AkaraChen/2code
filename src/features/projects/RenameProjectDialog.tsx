@@ -6,7 +6,8 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useRef, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 import * as m from "@/paraglide/messages.js";
 import { useRenameProject } from "./hooks";
 
@@ -17,31 +18,37 @@ interface RenameProjectDialogProps {
 	initName: string;
 }
 
+interface FormValues {
+	name: string;
+}
+
 export default function RenameProjectDialog({
 	isOpen,
 	onClose,
 	projectId,
 	initName,
 }: RenameProjectDialogProps) {
-	const [name, setName] = useState(initName);
+	const form = useForm<FormValues>({
+		defaultValues: { name: initName },
+	});
 	const renameProject = useRenameProject();
-	const inputRef = useRef<HTMLInputElement>(null);
 
-	const handleRename = async () => {
-		const trimmed = name.trim();
+	// Reset to current name when dialog opens (initName may change between opens)
+	useEffect(() => {
+		if (isOpen) form.reset({ name: initName });
+	}, [isOpen, initName, form]);
+
+	const handleRename = form.handleSubmit(async (data) => {
+		const trimmed = data.name.trim();
 		if (!trimmed || trimmed === initName) {
 			onClose();
 			return;
 		}
 		await renameProject.mutateAsync({ id: projectId, name: trimmed });
 		onClose();
-	};
+	});
 
-	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter") {
-			handleRename();
-		}
-	};
+	const name = form.watch("name");
 
 	return (
 		<Dialog.Root
@@ -50,7 +57,9 @@ export default function RenameProjectDialog({
 			onOpenChange={(e) => {
 				if (!e.open) onClose();
 			}}
-			initialFocusEl={() => inputRef.current}
+			initialFocusEl={() =>
+				document.querySelector<HTMLInputElement>("[data-rename-input]")
+			}
 		>
 			<Portal>
 				<Dialog.Backdrop />
@@ -63,10 +72,11 @@ export default function RenameProjectDialog({
 							<Field.Root>
 								<Field.Label>{m.newName()}</Field.Label>
 								<Input
-									ref={inputRef}
-									value={name}
-									onChange={(e) => setName(e.target.value)}
-									onKeyDown={handleKeyDown}
+									data-rename-input
+									{...form.register("name")}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") handleRename();
+									}}
 								/>
 							</Field.Root>
 						</Dialog.Body>
