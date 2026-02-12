@@ -134,6 +134,11 @@ export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 			resizePty({ sessionId, rows, cols });
 		});
 
+		// Update tab title when programs set it via OSC 0/2 escape sequences
+		const onTitleChangeDisposable = term.onTitleChange((title) => {
+			useTerminalStore.getState().updateTabTitle(contextId, sessionId, title);
+		});
+
 		// Handle container resize
 		const resizeObserver = new ResizeObserver((entries) => {
 			const entry = entries[0];
@@ -152,6 +157,7 @@ export function Terminal({ contextId, sessionId, restoreFrom }: TerminalProps) {
 			resizeObserver.disconnect();
 			onDataDisposable.dispose();
 			onResizeDisposable.dispose();
+			onTitleChangeDisposable.dispose();
 
 			for (const unlisten of unlistenersRef.current) {
 				unlisten();
