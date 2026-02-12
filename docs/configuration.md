@@ -1,383 +1,185 @@
 # Configuration
 
-## Overview
+## Config Files
 
-2code configuration is split across multiple files: build configuration, application settings, and internationalization. The project uses a modern toolchain with Vite for frontend building and Tauri for the desktop wrapper.
+| File | Format | Purpose |
+|------|--------|---------|
+| `package.json` | JSON | Frontend dependencies, build scripts |
+| `vite.config.ts` | TypeScript | Vite build config, path aliases, Paraglide plugin, Tauri dev server |
+| `tsconfig.json` | JSON | TypeScript compiler options, path aliases, `allowJs` for Paraglide |
+| `src-tauri/tauri.conf.json` | JSON | Tauri app config, window settings, build hooks, typegen config |
+| `src-tauri/Cargo.toml` | TOML | Rust dependencies and crate config |
+| `src-tauri/diesel.toml` | TOML | Diesel ORM schema output path (`src/schema.rs`) |
+| `project.inlang/settings.json` | JSON | Paraglide i18n settings, locales, message format plugin |
+| `messages/en.json`, `messages/zh.json` | JSON | i18n message strings |
+| `justfile` | Justfile | Task runner (`just fmt` runs `fama`) |
 
-## Configuration Files
+## Build Configuration
 
-### Build Configuration
+### Build Pipeline
 
-#### `package.json`
-
-**Location:** `package.json`
-
-Frontend dependencies and build scripts.
-
-```json
-{
-  "scripts": {
-    "dev": "vite",                                    // Development server
-    "build": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide && tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "start": "tauri dev"                              // Full dev with Rust hot-reload
-  }
-}
+```
+bun tauri dev     → runs "bun run dev" (Vite) + Rust hot-reload
+bun tauri build   → runs "bun run build" (paraglide → tsc → vite) + Rust release build
 ```
 
-#### `vite.config.ts`
+The `build` script chain: `paraglide-js compile` → `tsc` → `vite build` (order matters: paraglide generates code that tsc checks, then vite bundles).
 
-**Location:** `vite.config.ts`
+### Vite Settings (`vite.config.ts`)
 
-Vite configuration with Tauri-specific settings.
+- **Port**: 1420 (strict — fails if unavailable)
+- **HMR**: Custom WebSocket on port 1421 when `TAURI_DEV_HOST` is set
+- **Watch exclusion**: `**/src-tauri/**` (prevents circular reloads)
+- **Plugins**: `@vitejs/plugin-react`, `paraglideVitePlugin`
+- **Path alias**: `@` → `./src`
 
-```typescript
-export default defineConfig(async () => ({
-  plugins: [
-    tailwindcss(),
-    react(),
-    paraglideVitePlugin({
-      project: "./project.inlang",
-      outdir: "./src/paraglide",
-    }),
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),    // Path alias
-    },
-  },
-  clearScreen: false,                              // Keep Rust errors visible
-  server: {
-    port: 1420,
-    strictPort: true,                              // Fail if port unavailable
-    host: host || false,
-    hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
-    watch: {
-      ignored: ["**/src-tauri/**"],                // Don't watch Rust files
-    },
-  },
-}));
-```
+### Tauri Window Settings (`tauri.conf.json`)
 
-### Tauri Configuration
+- **Window**: 1440x900, centered, maximizable
+- **Title bar**: Overlay style, hidden title (macOS native chrome)
+- **Traffic lights**: Custom position at `{x: 16, y: 18}`
+- **CSP**: Disabled (`null`)
 
-#### `tauri.conf.json`
+### TypeScript Binding Generation (`tauri.conf.json` → `plugins.typegen`)
 
-**Location:** `src-tauri/tauri.conf.json`
-
-Application window and bundle configuration.
-
-```json
-{
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "code",
-  "version": "0.1.0",
-  "identifier": "com.akrc.code",
-  "build": {
-    "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "code",
-        "width": 1440,
-        "height": 900,
-        "center": true,
-        "maximizable": true,
-        "decorations": true
-      }
-    ],
-    "security": {
-      "csp": null
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ]
-  }
-}
-```
-
-### Rust Configuration
-
-#### `Cargo.toml`
-
-**Location:** `src-tauri/Cargo.toml`
-
-Rust dependencies and crate configuration.
-
-```toml
-[package]
-name = "code"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-name = "code_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-[dependencies]
-# Core
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-# PTY
-portable-pty = "0.9"
-
-# Error handling
-thiserror = "2"
-
-# Utilities
-uuid = { version = "1", features = ["v4"] }
-slug = "0.1"
-pinyin = "0.11"
-
-# Database
-diesel = { version = "2", features = ["sqlite"] }
-diesel_migrations = "2"
-
-# Dialogs
-tauri-plugin-dialog = "2"
-
-# Fonts (macOS)
-core-text = "20"
-```
-
-### TypeScript Configuration
-
-#### `tsconfig.json`
-
-**Location:** `tsconfig.json`
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "allowJs": true,                       // Required for Paraglide.js output
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]                  // Path alias
-    }
-  },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
-}
-```
-
-## Internationalization Configuration
-
-#### `project.inlang/settings.json`
-
-**Location:** `project.inlang/settings.json`
-
-```json
-{
-  "baseLocale": "en",
-  "locales": ["en", "zh"],
-  "modules": [
-    "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"
-  ],
-  "plugin.inlang.messageFormat": {
-    "pathPattern": "./messages/{locale}.json"
-  }
-}
-```
-
-**Important:** The `modules` array is **required** for Paraglide.js to generate message functions. Without it, compilation succeeds but generates empty message files.
-
-### Message Files
-
-**Location:** `messages/en.json`, `messages/zh.json`
-
-Example structure:
-
-```json
-{
-  "home": "Home",
-  "projects": "Projects",
-  "newProject": "New Project",
-  "deleteProject": "Delete Project",
-  "renameProject": "Rename Project",
-  "settings": "Settings",
-  "noTerminalsOpen": "No terminals open",
-  "noTerminalsOpenDescription": "Click the button below to open a new terminal",
-  "newTerminal": "New Terminal"
-}
-```
+- **Output**: `./src/generated` (gitignored)
+- **Source scan**: `./src-tauri`
+- **Validation**: None (no Zod/Yup runtime validation)
+- **Regenerate**: `cargo tauri-typegen generate`
 
 ## Database Configuration
 
-### SQLite Setup
+### SQLite Setup (`src-tauri/src/infra/db.rs`)
 
-**Location:** `src-tauri/src/db.rs`
+Stored at the OS-specific app data directory:
 
-The database is stored in the app's data directory:
+- **macOS**: `~/Library/Application Support/com.akrc.code/app.db`
+- **Linux**: `~/.local/share/com.akrc.code/app.db`
+- **Windows**: `%APPDATA%/com.akrc.code/app.db`
 
-- macOS: `~/Library/Application Support/com.akrc.code/app.db`
-- Windows: `%APPDATA%/com.akrc.code/app.db`
-- Linux: `~/.local/share/com.akrc.code/app.db`
-
-### Schema
+**Pragmas** (applied on every connection):
 
 ```sql
--- Projects table
+PRAGMA journal_mode=WAL;    -- Write-Ahead Logging for better concurrency
+PRAGMA foreign_keys=ON;     -- Enforce referential integrity
+```
+
+### Schema (4 tables)
+
+```sql
+-- Projects (top-level entity)
 CREATE TABLE projects (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     folder TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- PTY Sessions table
+-- PTY Sessions (belongs to project, CASCADE delete)
 CREATE TABLE pty_sessions (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id),
-    title TEXT NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT '',
     shell TEXT NOT NULL,
     cwd TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     closed_at TIMESTAMP
 );
 
--- PTY Output Chunks table (scrollback storage)
+-- PTY Output Chunks (belongs to session, CASCADE delete)
 CREATE TABLE pty_output_chunks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL REFERENCES pty_sessions(id),
+    session_id TEXT NOT NULL REFERENCES pty_sessions(id) ON DELETE CASCADE,
     data BLOB NOT NULL
+);
+CREATE INDEX idx_pty_output_session ON pty_output_chunks(session_id);
+
+-- Profiles (belongs to project, CASCADE delete)
+CREATE TABLE profiles (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    branch_name TEXT NOT NULL,
+    worktree_path TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-### Database Settings
+### Migrations (`src-tauri/migrations/`)
 
-```rust
-// PRAGMA settings applied on connection
-diesel::sql_query("PRAGMA journal_mode=WAL;").execute(&mut conn)?;
-diesel::sql_query("PRAGMA foreign_keys=ON;").execute(&mut conn)?;
-```
+Managed by Diesel, embedded at compile time via `embed_migrations!("migrations")`, run on app startup:
 
-- **WAL Mode**: Write-Ahead Logging for better concurrency
-- **Foreign Keys**: Enforce referential integrity
+| Migration | Tables |
+|-----------|--------|
+| `2026-02-10-064457-0000_create_projects` | `projects` |
+| `2026-02-11-000000_create_pty_tables` | `pty_sessions`, `pty_output_chunks` |
+| `2026-02-11-080917-0000_create_profiles` | `profiles` |
 
-## Error Handling Configuration
+## Internationalization (`project.inlang/settings.json`)
 
-### Error Types (`src-tauri/src/error.rs`)
-
-```rust
-#[derive(Error, Debug)]
-pub enum AppError {
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
-
-    #[error("Lock error: failed to acquire lock")]
-    LockError,
-
-    #[error("PTY error: {0}")]
-    PtyError(String),
-
-    #[error("Database error: {0}")]
-    DbError(String),
-
-    #[error("Not found: {0}")]
-    NotFound(String),
+```json
+{
+    "baseLocale": "en",
+    "locales": ["en", "zh"],
+    "modules": [
+        "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"
+    ],
+    "plugin.inlang.messageFormat": {
+        "pathPattern": "./messages/{locale}.json"
+    }
 }
 ```
 
-Errors are serialized to strings and returned to the frontend via Tauri's error channel.
+The `modules` array is **required** -- without it, paraglide compiles but generates empty message files.
+
+## Project Configuration (`2code.json`)
+
+Optional per-project config file in the project root:
+
+```json
+{
+    "setup_script": ["npm install"],
+    "teardown_script": ["rm -rf node_modules"]
+}
+```
+
+Scripts run via `sh -c` in the project/worktree directory during profile creation (`setup_script`) and deletion (`teardown_script`).
+
+## Performance Tuning
+
+### Terminal Output Buffering (`src-tauri/src/service/pty.rs`)
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `FLUSH_THRESHOLD` | 32 KB | Buffer size before database write |
+| `MAX_OUTPUT_PER_SESSION` | 1 MB | Oldest chunks pruned above this cap |
+| Read buffer | 4 KB | PTY read chunk size |
+
+### TanStack Query (`src/lib/queryClient.ts`)
+
+| Setting | Value |
+|---------|-------|
+| `staleTime` | 30 seconds |
+| `retry` | 1 |
 
 ## Environment Variables
 
-### Development
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `TAURI_DEV_HOST` | Set HMR host for mobile dev (enables WebSocket on port 1421) | Not set |
 
-| Variable         | Purpose                 | Example         |
-| ---------------- | ----------------------- | --------------- |
-| `TAURI_DEV_HOST` | Mobile development host | `192.168.1.100` |
+No other environment variables are required. The application uses compile-time constants from `tauri.conf.json`.
 
-### Build
+## Error Handling
 
-No environment variables required for standard builds. The application uses compile-time constants from `tauri.conf.json`.
+### AppError Enum (`src-tauri/src/error.rs`)
 
-## Performance Configuration
+| Variant | Source | Example |
+|---------|--------|---------|
+| `IoError` | `From<std::io::Error>` | File not found, permission denied |
+| `LockError` | Mutex poisoning | Failed to acquire DB/PTY lock |
+| `PtyError` | PTY operations | Session not found, spawn failed |
+| `DbError` | Diesel operations | Constraint violation |
+| `NotFound` | Record lookups | Project/profile/session not found |
+| `GitError` | Git CLI failures | Branch exists, invalid hash |
 
-### Terminal Output Buffering
-
-```rust
-// src-tauri/src/pty/commands.rs
-const FLUSH_THRESHOLD: usize = 32 * 1024;      // 32KB
-const MAX_OUTPUT_PER_SESSION: usize = 1024 * 1024;  // 1MB
-```
-
-- **Flush Threshold**: Output is batched in 32KB chunks before database writes
-- **Max Output**: Oldest chunks are pruned when total exceeds 1MB per session
-
-### TanStack Query Configuration
-
-```typescript
-// src/lib/queryClient.ts
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000,  // 5 minutes
-      gcTime: 10 * 60 * 1000,    // 10 minutes
-    },
-  },
-});
-```
-
-## Security Configuration
-
-### CSP (Content Security Policy)
-
-```json
-// tauri.conf.json
-"security": {
-  "csp": null  // Disabled for development
-}
-```
-
-For production, a strict CSP should be configured:
-
-```json
-"csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-```
-
-### Database Security
-
-- SQLite runs in WAL mode for better isolation
-- Foreign keys are enforced
-- No sensitive data is stored (only project paths and terminal scrollback)
-
-### PTY Security
-
-- Shell commands run with user privileges
-- No sandbox escape from PTY
-- Environment variables sanitized (`TERM=xterm-256color`)
+Errors are serialized to plain strings via a custom `Serialize` impl and returned to the frontend through Tauri's IPC error channel.

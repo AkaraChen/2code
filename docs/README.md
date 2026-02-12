@@ -1,108 +1,64 @@
-# 2code Documentation
+# 2code Architecture Documentation
+
+> Auto-generated structural documentation.
 
 ## Overview
 
-**2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions. It provides a modern, fast development environment that combines a React 19 frontend with a Rust backend, featuring persistent PTY sessions, SQLite-based project storage, and full i18n support.
+**2code** is a Tauri 2 desktop application for managing code projects with integrated persistent terminal sessions. It combines a React 19 + TypeScript frontend with a Rust backend, using SQLite for persistence, xterm.js for terminal emulation, and git worktrees for branch-isolated workspaces (called "profiles"). The app targets macOS with a native title bar overlay and system font/sound integration.
+
+The architecture follows a clean separation: the frontend handles UI rendering, client state, and server-state caching via TanStack Query, while the Rust backend owns all business logic, database access, PTY lifecycle, and git operations. Communication between layers uses Tauri's IPC invoke mechanism with auto-generated TypeScript bindings via `tauri-typegen`.
 
 ## Tech Stack
 
-### Frontend
-
-| Technology      | Purpose                               |
-| --------------- | ------------------------------------- |
-| React 19        | UI framework with concurrent features |
-| TypeScript      | Type-safe development                 |
-| Vite            | Build tool and dev server             |
-| Chakra UI v3    | Component library                     |
-| Tailwind CSS v4 | Utility-first styling                 |
-| TanStack Query  | Server state management               |
-| Zustand         | Client state management               |
-| XTerm.js        | Terminal emulator                     |
-| Paraglide.js v2 | Internationalization                  |
-
-### Backend
-
-| Technology   | Purpose             |
-| ------------ | ------------------- |
-| Rust         | Systems programming |
-| Tauri 2      | Desktop framework   |
-| Diesel ORM   | Database access     |
-| SQLite       | Embedded database   |
-| portable-pty | Cross-platform PTY  |
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, TypeScript, Vite 7 |
+| UI Framework | Chakra UI v3, next-themes |
+| State Management | Zustand (client), TanStack Query v5 (server) |
+| Terminal | xterm.js 6, @xterm/addon-fit |
+| Backend | Rust, Tauri 2 |
+| Database | SQLite (Diesel ORM, embedded migrations) |
+| PTY | portable-pty 0.9 |
+| IPC Bindings | tauri-typegen v0.4.1 (auto-generated) |
+| Git | CLI via `std::process::Command` |
+| i18n | Paraglide.js v2 (English + Chinese) |
+| Diff Rendering | @pierre/diffs, Shiki syntax highlighting |
+| Package Manager | Bun |
 
 ## Module Structure
 
 ```
-src/                          # Frontend source
-├── main.tsx                  # React entry point
-├── App.tsx                   # Root layout with sidebar/routes
-├── api/                      # API clients
-│   ├── pty.ts               # PTY commands
-│   └── projects.ts          # Project commands
-├── components/               # React components
-│   ├── AppSidebar.tsx       # Navigation sidebar
-│   ├── Terminal.tsx         # XTerm terminal instance
-│   ├── TerminalLayer.tsx    # Terminal overlay manager
-│   └── ...
-├── hooks/                    # Custom React hooks
-│   ├── useProjects.ts       # Project data hooks
-│   └── ...
-├── pages/                    # Route pages
-│   ├── HomePage.tsx
-│   ├── ProjectDetailPage.tsx
-│   └── SettingsPage.tsx
-├── stores/                   # Zustand stores
-│   ├── terminalStore.ts     # Terminal state
-│   └── fontStore.ts         # Font preferences
-└── paraglide/               # Generated i18n files
+src/                          # Frontend (React + TypeScript)
+  generated/                  # Auto-generated Tauri IPC bindings (gitignored)
+  components/                 # UI components (Terminal, GitDiffDialog, dialogs, sidebar)
+    settings/                 # Settings page sub-components
+    sidebar/                  # Sidebar sub-components
+  hooks/                      # TanStack Query hooks
+  stores/                     # Zustand stores (terminal, font, notification, theme)
+  pages/                      # Route-level pages (Home, ProjectDetail, Settings)
+  lib/                        # Query client, query keys, terminal themes
+  paraglide/                  # Generated i18n messages (gitignored)
 
-src-tauri/src/                # Backend source
-├── lib.rs                   # Main entry, command registration
-├── main.rs                  # Binary entry
-├── error.rs                 # Error types
-├── db.rs                    # Database initialization
-├── schema.rs                # Diesel table definitions
-├── font.rs                  # System font listing
-├── project/                 # Project module
-│   ├── mod.rs
-│   ├── models.rs            # Project data models
-│   └── commands.rs          # Tauri commands
-└── pty/                     # PTY module
-    ├── mod.rs
-    ├── models.rs            # Session data models
-    ├── session.rs           # Session management
-    └── commands.rs          # Tauri commands
+src-tauri/                    # Backend (Rust)
+  src/
+    handler/                  # Tauri command entry points (thin layer)
+    service/                  # Business logic and orchestration
+    repo/                     # Database access (Diesel ORM)
+    infra/                    # Infrastructure: db, git, pty, slug, config
+    model/                    # Diesel models and DTOs
+    schema.rs                 # Auto-generated Diesel schema
+    error.rs                  # AppError enum (thiserror)
+    lib.rs                    # App bootstrap, plugin registration, command registration
+  migrations/                 # Diesel SQL migrations (embedded at compile time)
 ```
 
 ## Documentation Index
 
-| Document                               | Description                                                    |
-| -------------------------------------- | -------------------------------------------------------------- |
-| [architecture.md](./architecture.md)   | System architecture, component relationships, design decisions |
-| [data-flow.md](./data-flow.md)         | Data flow diagrams, request lifecycle, state management        |
-| [api-reference.md](./api-reference.md) | Tauri commands, IPC interface, API patterns                    |
-| [configuration.md](./configuration.md) | Config files, environment variables, build options             |
+- [Architecture](./architecture.md) - System architecture, layered backend, component map
+- [Data Flow](./data-flow.md) - IPC lifecycle, terminal streaming, session restoration
+- [API Reference](./api-reference.md) - All Tauri IPC commands with types
+- [Configuration](./configuration.md) - Config files, database schema, error handling
 
-## Key Features
+## Summary
 
-- **Project Management**: Create projects from folders or temporary directories with auto-generated folder names (supports CJK transliteration)
-- **Persistent Terminals**: PTY sessions survive page navigation, with scrollback history stored in SQLite
-- **Multi-tab Terminals**: Each project can have multiple terminal tabs
-- **Internationalization**: Full i18n support via Paraglide.js (English and Chinese)
-- **Customizable Fonts**: User-selectable terminal fonts from system fonts
-- **Dark/Light Themes**: Automatic theme switching with custom color schemes
-
-## Development
-
-```bash
-# Run dev server (frontend + backend hot-reload)
-bun tauri dev
-
-# Production build (creates native binary)
-bun tauri build
-
-# Run Rust tests
-cd src-tauri && cargo test
-```
-
-See [CLAUDE.md](../CLAUDE.md) for detailed development commands and architecture notes.
+The application uses a 4-layer backend architecture (handler/service/repo/infra) with auto-generated TypeScript bindings for type-safe IPC. Terminal persistence is achieved through CSS display toggling (never unmounting xterm.js instances) combined with SQLite-backed scrollback restoration. The profile system leverages git worktrees for zero-copy branch isolation with automated setup/teardown scripts.
