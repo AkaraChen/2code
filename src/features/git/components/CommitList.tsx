@@ -1,4 +1,5 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
+import { useEffect, useRef } from "react";
 import { RiGitCommitLine } from "react-icons/ri";
 import type { GitCommit } from "@/generated";
 
@@ -22,24 +23,46 @@ function formatRelativeTime(isoDate: string): string {
 
 interface CommitListProps {
 	commits: GitCommit[];
-	onCommitSelect: (commit: GitCommit) => void;
+	selectedIndex: number;
+	onCommitSelect: (commit: GitCommit, index: number) => void;
 }
 
 export default function CommitList({
 	commits,
+	selectedIndex,
 	onCommitSelect,
 }: CommitListProps) {
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const el = containerRef.current?.querySelector(
+			`[data-index="${selectedIndex}"]`,
+		);
+		el?.scrollIntoView({ block: "nearest" });
+	}, [selectedIndex]);
+
 	return (
-		<Box flex="1" overflowY="auto" minH="0">
-			{commits.map((commit) => (
+		<Box ref={containerRef} flex="1" overflowY="auto" minH="0">
+			{commits.map((commit, index) => (
 				<VStack
 					key={commit.full_hash}
+					data-index={index}
 					align="stretch"
 					px="3"
 					py="1.5"
 					cursor="pointer"
-					_hover={{ bg: "bg.muted" }}
-					onClick={() => onCommitSelect(commit)}
+					bg={
+						selectedIndex === index
+							? "bg.emphasized"
+							: "transparent"
+					}
+					_hover={{
+						bg:
+							selectedIndex === index
+								? "bg.emphasized"
+								: "bg.muted",
+					}}
+					onClick={() => onCommitSelect(commit, index)}
 					gap="0.5"
 					userSelect="none"
 				>

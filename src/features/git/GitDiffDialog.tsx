@@ -12,10 +12,13 @@ import {
 import type { FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
+	type MutableRefObject,
 	Suspense,
 	startTransition,
 	useCallback,
+	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
@@ -40,6 +43,10 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-dark": "one-dark-pro",
 	"one-light": "one-light",
 };
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, value));
+}
 
 interface GitDiffDialogProps {
 	isOpen: boolean;
@@ -114,6 +121,14 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 		null,
 	);
 	const [selectedCommitFileIndex, setSelectedCommitFileIndex] = useState(0);
+	const [selectedCommitIndex, setSelectedCommitIndex] = useState(0);
+
+	// Refs for item counts — children sync these so the keydown handler can clamp
+	const sidebarRef = useRef<HTMLDivElement>(null);
+	const changesFileCountRef = useRef(0);
+	const commitCountRef = useRef(0);
+	const commitFileCountRef = useRef(0);
+	const commitsRef = useRef<GitCommit[]>([]);
 
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({
@@ -132,29 +147,134 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			setActiveTab(value);
 			setSelectedCommit(null);
 			setSelectedCommitFileIndex(0);
+			setSelectedCommitIndex(0);
 		});
 	}, []);
 
-	const handleCommitSelect = useCallback((commit: GitCommit) => {
-		startTransition(() => {
-			setSelectedCommit(commit);
-			setSelectedCommitFileIndex(0);
-		});
-	}, []);
+	const handleCommitSelect = useCallback(
+		(commit: GitCommit, index: number) => {
+			startTransition(() => {
+				setSelectedCommit(commit);
+				setSelectedCommitFileIndex(0);
+				setSelectedCommitIndex(index);
+			});
+		},
+		[],
+	);
 
 	const handleCommitBack = useCallback(() => {
 		startTransition(() => {
 			setSelectedCommit(null);
 			setSelectedCommitFileIndex(0);
+			// selectedCommitIndex intentionally preserved
 		});
 	}, []);
+
+	// Keyboard navigation
+	const handleSidebarKeyDown = useCallback(
+		(e: React.KeyboardEvent<HTMLDivElement>) => {
+			const key = e.key;
+
+			if (key === "ArrowDown" || key === "ArrowUp") {
+				e.preventDefault();
+				const delta = key === "ArrowDown" ? 1 : -1;
+
+				if (activeTab === "changes") {
+					setSelectedFileIndex((prev) =>
+						clamp(
+							prev + delta,
+							0,
+							changesFileCountRef.current - 1,
+						),
+					);
+				} else if (selectedCommit) {
+					setSelectedCommitFileIndex((prev) =>
+						clamp(
+							prev + delta,
+							0,
+							commitFileCountRef.current - 1,
+						),
+					);
+				} else {
+					setSelectedCommitIndex((prev) =>
+						clamp(prev + delta, 0, commitCountRef.current - 1),
+					);
+				}
+				return;
+			}
+
+			if (
+				key === "Enter" &&
+				activeTab === "history" &&
+				!selectedCommit
+			) {
+				e.preventDefault();
+				const commits = commitsRef.current;
+				if (
+					commits.length > 0 &&
+					selectedCommitIndex < commits.length
+				) {
+					handleCommitSelect(
+						commits[selectedCommitIndex],
+						selectedCommitIndex,
+					);
+				}
+				return;
+			}
+
+			if (activeTab === "history" && selectedCommit) {
+				if (key === "Backspace") {
+					e.preventDefault();
+					handleCommitBack();
+					return;
+				}
+				if (key === "Escape") {
+					e.preventDefault();
+					e.stopPropagation();
+					handleCommitBack();
+					return;
+				}
+			}
+		},
+		[
+			activeTab,
+			selectedCommit,
+			selectedCommitIndex,
+			handleCommitSelect,
+			handleCommitBack,
+		],
+	);
+
+	// Auto-focus sidebar on tab change (also covers initial dialog open)
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			sidebarRef.current?.focus();
+		}, 50);
+		return () => clearTimeout(timer);
+	}, [activeTab]);
+
+	// Re-focus sidebar when returning from commit files to commit list
+	useEffect(() => {
+		if (!selectedCommit) {
+			sidebarRef.current?.focus();
+		}
+	}, [selectedCommit]);
 
 	const isChanges = activeTab === "changes";
 
 	return (
 		<Flex flex="1" overflow="hidden">
 			{/* Sidebar column */}
-			<Flex direction="column" w="320px" flexShrink={0} overflow="hidden">
+			<Flex
+				ref={sidebarRef}
+				direction="column"
+				w="320px"
+				flexShrink={0}
+				overflow="hidden"
+				tabIndex={0}
+				onKeyDown={handleSidebarKeyDown}
+				outline="none"
+			>
 				<Tabs.Root
 					value={activeTab}
 					onValueChange={(e) => handleTabChange(e.value)}
@@ -187,6 +307,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 									profileId={profileId}
 									selectedFileIndex={selectedFileIndex}
 									onFileSelect={setSelectedFileIndex}
+									countRef={changesFileCountRef}
 								/>
 							</Suspense>
 						</Box>
@@ -204,6 +325,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								<HistorySidebar
 									profileId={profileId}
 									selectedCommit={selectedCommit}
+									selectedCommitIndex={selectedCommitIndex}
 									selectedCommitFileIndex={
 										selectedCommitFileIndex
 									}
@@ -212,6 +334,9 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 										setSelectedCommitFileIndex
 									}
 									onCommitBack={handleCommitBack}
+									commitCountRef={commitCountRef}
+									commitFileCountRef={commitFileCountRef}
+									commitsRef={commitsRef}
 								/>
 							</Suspense>
 						</Box>
@@ -254,12 +379,15 @@ function ChangesSidebar({
 	profileId,
 	selectedFileIndex,
 	onFileSelect,
+	countRef,
 }: {
 	profileId: string;
 	selectedFileIndex: number;
 	onFileSelect: (index: number) => void;
+	countRef: MutableRefObject<number>;
 }) {
 	const files = useGitDiffFiles(profileId);
+	countRef.current = files.length;
 
 	if (files.length === 0) {
 		return (
@@ -321,19 +449,30 @@ function ChangesDiffPane({
 function HistorySidebar({
 	profileId,
 	selectedCommit,
+	selectedCommitIndex,
 	selectedCommitFileIndex,
 	onCommitSelect,
 	onCommitFileSelect,
 	onCommitBack,
+	commitCountRef,
+	commitFileCountRef,
+	commitsRef,
 }: {
 	profileId: string;
 	selectedCommit: GitCommit | null;
+	selectedCommitIndex: number;
 	selectedCommitFileIndex: number;
-	onCommitSelect: (commit: GitCommit) => void;
+	onCommitSelect: (commit: GitCommit, index: number) => void;
 	onCommitFileSelect: (index: number) => void;
 	onCommitBack: () => void;
+	commitCountRef: MutableRefObject<number>;
+	commitFileCountRef: MutableRefObject<number>;
+	commitsRef: MutableRefObject<GitCommit[]>;
 }) {
 	const { data: logData } = useGitLog(profileId);
+	const commits = logData ?? [];
+	commitsRef.current = commits;
+	commitCountRef.current = commits.length;
 
 	if (selectedCommit) {
 		return (
@@ -350,12 +489,13 @@ function HistorySidebar({
 					selectedCommitFileIndex={selectedCommitFileIndex}
 					onCommitFileSelect={onCommitFileSelect}
 					onCommitBack={onCommitBack}
+					countRef={commitFileCountRef}
 				/>
 			</Box>
 		);
 	}
 
-	if ((logData?.length ?? 0) === 0) {
+	if (commits.length === 0) {
 		return (
 			<Flex align="center" justify="center" flex="1" p="8">
 				<Box color="fg.muted" fontSize="sm">
@@ -366,7 +506,11 @@ function HistorySidebar({
 	}
 
 	return (
-		<CommitList commits={logData ?? []} onCommitSelect={onCommitSelect} />
+		<CommitList
+			commits={commits}
+			selectedIndex={selectedCommitIndex}
+			onCommitSelect={onCommitSelect}
+		/>
 	);
 }
 
@@ -376,14 +520,17 @@ function CommitFileSidebar({
 	selectedCommitFileIndex,
 	onCommitFileSelect,
 	onCommitBack,
+	countRef,
 }: {
 	profileId: string;
 	commit: GitCommit;
 	selectedCommitFileIndex: number;
 	onCommitFileSelect: (index: number) => void;
 	onCommitBack: () => void;
+	countRef: MutableRefObject<number>;
 }) {
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
+	countRef.current = files.length;
 
 	return (
 		<HistoryFileList
