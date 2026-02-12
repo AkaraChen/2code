@@ -57,3 +57,17 @@ export const useThemeStore = create<ThemeStore>()(
 		{ name: "theme-settings" },
 	),
 );
+
+function syncBorderRadius(borderRadius: BorderRadius) {
+	const radii = BORDER_RADIUS_MAP[borderRadius];
+	const root = document.documentElement;
+	root.style.setProperty("--chakra-radii-l1", radii.l1);
+	root.style.setProperty("--chakra-radii-l2", radii.l2);
+	root.style.setProperty("--chakra-radii-l3", radii.l3);
+}
+
+syncBorderRadius(useThemeStore.getState().borderRadius);
+
+useThemeStore.subscribe((s, prev) => {
+	if (s.borderRadius !== prev.borderRadius) syncBorderRadius(s.borderRadius);
+});

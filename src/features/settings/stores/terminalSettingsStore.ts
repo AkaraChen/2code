@@ -36,3 +36,16 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 		{ name: "font-settings" },
 	),
 );
+
+function syncMonoFont(fontFamily: string) {
+	document.documentElement.style.setProperty(
+		"--chakra-fonts-mono",
+		`"${fontFamily}", monospace`,
+	);
+}
+
+syncMonoFont(useTerminalSettingsStore.getState().fontFamily);
+
+useTerminalSettingsStore.subscribe((s, prev) => {
+	if (s.fontFamily !== prev.fontFamily) syncMonoFont(s.fontFamily);
+});
