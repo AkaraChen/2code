@@ -1,7 +1,7 @@
 import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { useEffect, useRef } from "react";
 import { RiArrowLeftLine } from "react-icons/ri";
+import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { FileListItem } from "./ChangesFileList";
@@ -50,14 +50,7 @@ export default function HistoryFileList({
 	onFileSelect,
 	onBack,
 }: HistoryFileListProps) {
-	const listRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		const el = listRef.current?.querySelector(
-			`[data-index="${selectedIndex}"]`,
-		);
-		el?.scrollIntoView({ block: "nearest" });
-	}, [selectedIndex]);
+	const { ref: listRef } = useScrollIntoView<HTMLDivElement>(selectedIndex);
 
 	return (
 		<Flex direction="column" flex="1" minH="0" overflow="hidden">

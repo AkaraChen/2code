@@ -12,7 +12,6 @@ import {
 import type { FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
-	type MutableRefObject,
 	Suspense,
 	startTransition,
 	useCallback,
@@ -21,6 +20,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useListKeyNav } from "@/shared/hooks/useListKeyNav";
 import { RiGitBranchLine } from "react-icons/ri";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
@@ -43,10 +43,6 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-dark": "one-dark-pro",
 	"one-light": "one-light",
 };
-
-function clamp(value: number, min: number, max: number): number {
-	return Math.max(min, Math.min(max, value));
-}
 
 interface GitDiffDialogProps {
 	isOpen: boolean;
@@ -116,19 +112,22 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 	const termThemeId = useTerminalThemeId();
 
 	const [activeTab, setActiveTab] = useState<string>("changes");
-	const [selectedFileIndex, setSelectedFileIndex] = useState(0);
 	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(
 		null,
 	);
-	const [selectedCommitFileIndex, setSelectedCommitFileIndex] = useState(0);
-	const [selectedCommitIndex, setSelectedCommitIndex] = useState(0);
 
-	// Refs for item counts — children sync these so the keydown handler can clamp
 	const sidebarRef = useRef<HTMLDivElement>(null);
-	const changesFileCountRef = useRef(0);
-	const commitCountRef = useRef(0);
-	const commitFileCountRef = useRef(0);
 	const commitsRef = useRef<GitCommit[]>([]);
+
+	const [selectedFileIndex, setSelectedFileIndex, changesFileCountRef] =
+		useListKeyNav();
+	const [selectedCommitIndex, setSelectedCommitIndex, commitCountRef] =
+		useListKeyNav();
+	const [
+		selectedCommitFileIndex,
+		setSelectedCommitFileIndex,
+		commitFileCountRef,
+	] = useListKeyNav();
 
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({
@@ -170,41 +169,29 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 		});
 	}, []);
 
-	// Keyboard navigation
-	const handleSidebarKeyDown = useCallback(
+	// Keyboard navigation — dispatch arrow keys to the active list,
+	// handle Enter / Escape / Backspace for commit drill-in/back.
+	const activeListKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLDivElement>) => {
-			const key = e.key;
-
-			if (key === "ArrowDown" || key === "ArrowUp") {
+			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 				e.preventDefault();
-				const delta = key === "ArrowDown" ? 1 : -1;
+				const delta = e.key === "ArrowDown" ? 1 : -1;
+				const step =
+					(setter: typeof setSelectedFileIndex, count: React.RefObject<number>) =>
+						setter((prev) => Math.max(0, Math.min(prev + delta, count.current - 1)));
 
 				if (activeTab === "changes") {
-					setSelectedFileIndex((prev) =>
-						clamp(
-							prev + delta,
-							0,
-							changesFileCountRef.current - 1,
-						),
-					);
+					step(setSelectedFileIndex, changesFileCountRef);
 				} else if (selectedCommit) {
-					setSelectedCommitFileIndex((prev) =>
-						clamp(
-							prev + delta,
-							0,
-							commitFileCountRef.current - 1,
-						),
-					);
+					step(setSelectedCommitFileIndex, commitFileCountRef);
 				} else {
-					setSelectedCommitIndex((prev) =>
-						clamp(prev + delta, 0, commitCountRef.current - 1),
-					);
+					step(setSelectedCommitIndex, commitCountRef);
 				}
 				return;
 			}
 
 			if (
-				key === "Enter" &&
+				e.key === "Enter" &&
 				activeTab === "history" &&
 				!selectedCommit
 			) {
@@ -223,12 +210,12 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			}
 
 			if (activeTab === "history" && selectedCommit) {
-				if (key === "Backspace") {
+				if (e.key === "Backspace") {
 					e.preventDefault();
 					handleCommitBack();
 					return;
 				}
-				if (key === "Escape") {
+				if (e.key === "Escape") {
 					e.preventDefault();
 					e.stopPropagation();
 					handleCommitBack();
@@ -240,6 +227,12 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			activeTab,
 			selectedCommit,
 			selectedCommitIndex,
+			changesFileCountRef,
+			commitCountRef,
+			commitFileCountRef,
+			setSelectedFileIndex,
+			setSelectedCommitIndex,
+			setSelectedCommitFileIndex,
 			handleCommitSelect,
 			handleCommitBack,
 		],
@@ -272,7 +265,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 				flexShrink={0}
 				overflow="hidden"
 				tabIndex={0}
-				onKeyDown={handleSidebarKeyDown}
+				onKeyDown={activeListKeyDown}
 				outline="none"
 			>
 				<Tabs.Root
@@ -384,7 +377,7 @@ function ChangesSidebar({
 	profileId: string;
 	selectedFileIndex: number;
 	onFileSelect: (index: number) => void;
-	countRef: MutableRefObject<number>;
+	countRef: React.RefObject<number>;
 }) {
 	const files = useGitDiffFiles(profileId);
 	countRef.current = files.length;
@@ -465,9 +458,9 @@ function HistorySidebar({
 	onCommitSelect: (commit: GitCommit, index: number) => void;
 	onCommitFileSelect: (index: number) => void;
 	onCommitBack: () => void;
-	commitCountRef: MutableRefObject<number>;
-	commitFileCountRef: MutableRefObject<number>;
-	commitsRef: MutableRefObject<GitCommit[]>;
+	commitCountRef: React.RefObject<number>;
+	commitFileCountRef: React.RefObject<number>;
+	commitsRef: React.RefObject<GitCommit[]>;
 }) {
 	const { data: logData } = useGitLog(profileId);
 	const commits = logData ?? [];
@@ -527,7 +520,7 @@ function CommitFileSidebar({
 	selectedCommitFileIndex: number;
 	onCommitFileSelect: (index: number) => void;
 	onCommitBack: () => void;
-	countRef: MutableRefObject<number>;
+	countRef: React.RefObject<number>;
 }) {
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
 	countRef.current = files.length;
