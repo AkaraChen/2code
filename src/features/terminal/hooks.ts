@@ -1,13 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
-import { useEffectOnceWhen } from "rooks";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import type { ProjectWithProfiles } from "@/generated";
 import {
 	closePtySession,
 	createPtySession,
 	deletePtySessionRecord,
-	listProjectSessions,
 } from "@/generated";
 import { useThemePreference } from "@/shared/providers/ThemeProvider";
 import { useTerminalStore } from "./store";
@@ -57,48 +54,6 @@ export function useCloseTerminalTab() {
 			useTerminalStore.getState().closeTab(profileId, sessionId);
 		},
 	});
-}
-
-export function useRestoreTerminals(
-	projects: ProjectWithProfiles[] | undefined,
-) {
-	useEffectOnceWhen(async () => {
-		const projectSessions = await Promise.all(
-			projects!.map(async (project) => ({
-				project,
-				sessions: await listProjectSessions({
-					projectId: project.id,
-				}),
-			})),
-		);
-
-		await Promise.all(
-			projectSessions.flatMap(({ sessions }) =>
-				sessions.map(async (session) => {
-					const newSessionId = await createPtySession({
-						meta: {
-							profileId: session.profile_id,
-							title: session.title,
-						},
-						config: {
-							shell: session.shell,
-							cwd: session.cwd,
-							rows: 24,
-							cols: 80,
-						},
-					});
-					useTerminalStore
-						.getState()
-						.addTab(
-							session.profile_id,
-							newSessionId,
-							session.title,
-							session.id,
-						);
-				}),
-			),
-		);
-	}, !!projects && projects.length > 0);
 }
 
 export function useTerminalThemeId(): TerminalThemeId {

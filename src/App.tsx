@@ -9,7 +9,6 @@ import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
-import { useFileWatcher } from "./features/watcher/useFileWatcher";
 import AppSidebar from "./layout/AppSidebar";
 import {
 	PageError,
@@ -19,7 +18,6 @@ import {
 import "./app.css";
 
 export default function App() {
-	useFileWatcher();
 	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
 	useKey("D", (e) => {
 		if (e.shiftKey && (e.metaKey || e.ctrlKey)) {

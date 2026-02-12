@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import App from "./App";
+import "./features/watcher/fileWatcher";
 import { queryClient } from "./shared/lib/queryClient";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 import { Toaster } from "./shared/providers/Toaster";

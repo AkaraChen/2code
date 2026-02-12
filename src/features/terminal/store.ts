@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 import type { ProjectWithProfiles } from "@/generated";
-import { listProjects } from "@/generated";
+import { createPtySession, listProjectSessions, listProjects } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
@@ -128,11 +128,56 @@ const observer = new QueryObserver<ProjectWithProfiles[]>(queryClient, {
 	queryFn: listProjects,
 });
 
+let restored = false;
+
 observer.subscribe((result) => {
-	if (result.data) {
-		const validIds = new Set(
-			result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
-		);
-		useTerminalStore.getState().removeStaleProfiles(validIds);
+	if (!result.data) return;
+
+	// Stale profile cleanup
+	const validIds = new Set(
+		result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
+	);
+	useTerminalStore.getState().removeStaleProfiles(validIds);
+
+	// One-shot terminal restoration
+	if (!restored && result.data.length > 0) {
+		restored = true;
+		restoreTerminals(result.data);
 	}
 });
+
+async function restoreTerminals(projects: ProjectWithProfiles[]) {
+	const projectSessions = await Promise.all(
+		projects.map(async (project) => ({
+			project,
+			sessions: await listProjectSessions({ projectId: project.id }),
+		})),
+	);
+
+	await Promise.all(
+		projectSessions.flatMap(({ sessions }) =>
+			sessions.map(async (session) => {
+				const newSessionId = await createPtySession({
+					meta: {
+						profileId: session.profile_id,
+						title: session.title,
+					},
+					config: {
+						shell: session.shell,
+						cwd: session.cwd,
+						rows: 24,
+						cols: 80,
+					},
+				});
+				useTerminalStore
+					.getState()
+					.addTab(
+						session.profile_id,
+						newSessionId,
+						session.title,
+						session.id,
+					);
+			}),
+		),
+	);
+}
