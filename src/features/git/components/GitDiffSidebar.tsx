@@ -45,7 +45,7 @@ export default function GitDiffSidebar({
 				value={activeTab}
 				onValueChange={(e) => onTabChange(e.value)}
 				size="sm"
-				variant="line"
+				variant="subtle"
 				flex="1"
 				minH="0"
 				display="flex"
