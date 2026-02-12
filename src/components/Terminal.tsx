@@ -126,8 +126,15 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 		});
 
 		// Handle container resize
-		const resizeObserver = new ResizeObserver(() => {
-			fitAddon.fit();
+		const resizeObserver = new ResizeObserver((entries) => {
+			const entry = entries[0];
+			if (
+				entry &&
+				entry.contentRect.width > 0 &&
+				entry.contentRect.height > 0
+			) {
+				fitAddon.fit();
+			}
 		});
 		resizeObserver.observe(containerRef.current);
 
