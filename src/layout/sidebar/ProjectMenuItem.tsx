@@ -68,7 +68,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						bg={isAnyActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
 					>
-						<Box asChild truncate flex="1">
+						<Box asChild truncate flex="1" data-sidebar-item>
 							<NavLink to={defaultProfileUrl}>
 								{project.name}
 							</NavLink>
@@ -119,6 +119,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 					{/* Default (project root) item */}
 					<HStack
 						asChild
+						data-sidebar-item
 						gap="2"
 						ps="9"
 						pe="4"

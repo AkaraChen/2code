@@ -14,6 +14,7 @@ export function SidebarLink({
 	return (
 		<HStack
 			asChild
+			data-sidebar-item
 			gap="3"
 			px="4"
 			py="2"
