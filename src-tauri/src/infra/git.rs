@@ -27,13 +27,50 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Get the full diff (staged + unstaged) without affecting the real index.
+/// Uses a temporary index file to stage all changes, then diffs against HEAD.
 pub fn diff(folder: &str) -> Result<String, AppError> {
-	let output = Command::new("git")
-		.args(["diff"])
+	let tmp_dir = tempfile::tempdir()
+		.map_err(|e| AppError::GitError(format!("Failed to create temp dir: {e}")))?;
+	let tmp_index = tmp_dir.path().join("index");
+
+	// Stage all changes into a fresh temporary index (git add -A builds it from scratch)
+	let add_output = Command::new("git")
+		.args(["add", "-A"])
 		.current_dir(folder)
+		.env("GIT_INDEX_FILE", &tmp_index)
 		.output()?;
 
-	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+	if !add_output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&add_output.stderr).trim().to_string(),
+		));
+	}
+
+	// Diff the temporary index (everything staged) against HEAD
+	let diff_output = Command::new("git")
+		.args(["diff", "--cached", "HEAD"])
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", &tmp_index)
+		.output()?;
+
+	if !diff_output.status.success() {
+		let stderr = String::from_utf8_lossy(&diff_output.stderr)
+			.trim()
+			.to_string();
+		let no_head_patterns = [
+			"does not have any commits",
+			"bad revision 'HEAD'",
+			"invalid revision 'HEAD'",
+			"unknown revision",
+		];
+		if no_head_patterns.iter().any(|p| stderr.contains(p)) {
+			return Ok(String::new());
+		}
+		return Err(AppError::GitError(stderr));
+	}
+
+	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
 }
 
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
@@ -552,5 +589,123 @@ mod tests {
 		let _ = std::fs::remove_dir_all(&dir);
 
 		assert!(result.is_err());
+	}
+
+	// --- diff tests ---
+
+	#[test]
+	fn diff_empty_repo() {
+		let dir = create_temp_git_repo();
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		// Empty repo (no HEAD) should return empty string, not an error
+		match result {
+			Ok(diff) => assert_eq!(diff, ""),
+			Err(e) => panic!("diff returned error: {e:?}"),
+		}
+	}
+
+	#[test]
+	fn diff_no_changes() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		// No changes should return empty string
+		assert!(result.is_ok());
+		assert_eq!(result.unwrap(), "");
+	}
+
+	#[test]
+	fn diff_unstaged_changes() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		// Modify file without staging
+		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
+
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(result.is_ok());
+		let diff_output = result.unwrap();
+		assert!(diff_output.contains("a.txt"));
+		assert!(diff_output.contains("-hello"));
+		assert!(diff_output.contains("+hello world"));
+	}
+
+	#[test]
+	fn diff_staged_changes() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		// Modify and stage file
+		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(result.is_ok());
+		let diff_output = result.unwrap();
+		assert!(diff_output.contains("a.txt"));
+		assert!(diff_output.contains("-hello"));
+		assert!(diff_output.contains("+hello world"));
+	}
+
+	#[test]
+	fn diff_staged_and_unstaged() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "Init");
+		add_commit(&dir, "b.txt", "foo", "Add b");
+
+		// Stage changes to a.txt
+		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		// Unstaged changes to b.txt
+		std::fs::write(dir.join("b.txt"), "bar").unwrap();
+
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(result.is_ok());
+		let diff_output = result.unwrap();
+		// Should show both staged and unstaged changes
+		assert!(diff_output.contains("a.txt"));
+		assert!(diff_output.contains("b.txt"));
+		assert!(diff_output.contains("-hello"));
+		assert!(diff_output.contains("+hello world"));
+		assert!(diff_output.contains("-foo"));
+		assert!(diff_output.contains("+bar"));
+	}
+
+	#[test]
+	fn diff_new_untracked_file() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		// Create new untracked file
+		std::fs::write(dir.join("new.txt"), "new content").unwrap();
+
+		let result = diff(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(result.is_ok());
+		let diff_output = result.unwrap();
+		// Should show new file (as if it were added)
+		assert!(diff_output.contains("new.txt"));
+		assert!(diff_output.contains("+new content"));
 	}
 }
