@@ -1,7 +1,8 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense, useEffect } from "react";
+import { Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
+import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
 import { useDebugLogger } from "./features/debug/useDebugLogger";
@@ -22,17 +23,13 @@ export default function App() {
 	useFileWatcher();
 	useDebugLogger();
 
-	useEffect(() => {
-		const handler = (e: KeyboardEvent) => {
-			// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
-			if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key === "D") {
-				e.preventDefault();
-				useDebugStore.getState().togglePanel();
-			}
-		};
-		window.addEventListener("keydown", handler);
-		return () => window.removeEventListener("keydown", handler);
-	}, []);
+	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
+	useKey("D", (e) => {
+		if (e.shiftKey && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			useDebugStore.getState().togglePanel();
+		}
+	});
 
 	return (
 		<Flex direction="column" h="full">

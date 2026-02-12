@@ -1,18 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect, useRef } from "react";
+import { useEffectOnceWhen } from "rooks";
 import { watchProjects } from "@/generated";
 import type { WatchEvent } from "@/generated/types";
 import { queryNamespaces } from "@/shared/lib/queryKeys";
 
 export function useFileWatcher() {
 	const queryClient = useQueryClient();
-	const started = useRef(false);
 
-	useEffect(() => {
-		if (started.current) return;
-		started.current = true;
-
+	useEffectOnceWhen(() => {
 		const channel = new Channel<WatchEvent>();
 
 		channel.onmessage = (_event) => {
@@ -29,5 +25,5 @@ export function useFileWatcher() {
 		};
 
 		watchProjects({ onEvent: channel });
-	}, [queryClient]);
+	});
 }

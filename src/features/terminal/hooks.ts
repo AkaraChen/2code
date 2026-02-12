@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
-import { useEffect, useRef } from "react";
+import { useEffectOnceWhen } from "rooks";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import type { ProjectWithProfiles } from "@/generated";
 import {
@@ -62,52 +62,43 @@ export function useCloseTerminalTab() {
 export function useRestoreTerminals(
 	projects: ProjectWithProfiles[] | undefined,
 ) {
-	const didRestore = useRef(false);
+	useEffectOnceWhen(async () => {
+		const projectSessions = await Promise.all(
+			projects!.map(async (project) => ({
+				project,
+				sessions: await listProjectSessions({
+					projectId: project.id,
+				}),
+			})),
+		);
 
-	useEffect(() => {
-		if (!projects || projects.length === 0 || didRestore.current) return;
-		didRestore.current = true;
-
-		const restore = async () => {
-			const projectSessions = await Promise.all(
-				projects.map(async (project) => ({
-					project,
-					sessions: await listProjectSessions({
-						projectId: project.id,
-					}),
-				})),
-			);
-
-			await Promise.all(
-				projectSessions.flatMap(({ sessions }) =>
-					sessions.map(async (session) => {
-						const newSessionId = await createPtySession({
-							meta: {
-								profileId: session.profile_id,
-								title: session.title,
-							},
-							config: {
-								shell: session.shell,
-								cwd: session.cwd,
-								rows: 24,
-								cols: 80,
-							},
-						});
-						useTerminalStore
-							.getState()
-							.addTab(
-								session.profile_id,
-								newSessionId,
-								session.title,
-								session.id,
-							);
-					}),
-				),
-			);
-		};
-
-		restore();
-	}, [projects]);
+		await Promise.all(
+			projectSessions.flatMap(({ sessions }) =>
+				sessions.map(async (session) => {
+					const newSessionId = await createPtySession({
+						meta: {
+							profileId: session.profile_id,
+							title: session.title,
+						},
+						config: {
+							shell: session.shell,
+							cwd: session.cwd,
+							rows: 24,
+							cols: 80,
+						},
+					});
+					useTerminalStore
+						.getState()
+						.addTab(
+							session.profile_id,
+							newSessionId,
+							session.title,
+							session.id,
+						);
+				}),
+			),
+		);
+	}, !!projects && projects.length > 0);
 }
 
 export function useTerminalThemeId(): TerminalThemeId {
