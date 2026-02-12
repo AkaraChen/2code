@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::project::{GitAuthor, GitCommit};
 
-pub fn init(dir: &Path) -> AppResult<()> {
+pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
 
 	if !output.status.success() {
@@ -14,7 +14,7 @@ pub fn init(dir: &Path) -> AppResult<()> {
 	Ok(())
 }
 
-pub fn branch(folder: &str) -> AppResult<String> {
+pub fn branch(folder: &str) -> Result<String, AppError> {
 	let output = Command::new("git")
 		.args(["rev-parse", "--abbrev-ref", "HEAD"])
 		.current_dir(folder)
@@ -27,7 +27,7 @@ pub fn branch(folder: &str) -> AppResult<String> {
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-pub fn diff(folder: &str) -> AppResult<String> {
+pub fn diff(folder: &str) -> Result<String, AppError> {
 	let output = Command::new("git")
 		.args(["diff"])
 		.current_dir(folder)
@@ -36,7 +36,7 @@ pub fn diff(folder: &str) -> AppResult<String> {
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-pub fn log(folder: &str, limit: u32) -> AppResult<Vec<GitCommit>> {
+pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 	let output = Command::new("git")
 		.args([
 			"log",
@@ -60,7 +60,7 @@ pub fn log(folder: &str, limit: u32) -> AppResult<Vec<GitCommit>> {
 	Ok(parse_git_log(&stdout))
 }
 
-pub fn show(folder: &str, commit_hash: &str) -> AppResult<String> {
+pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	validate_commit_hash(commit_hash)?;
 
 	let output = Command::new("git")
@@ -84,7 +84,7 @@ pub fn worktree_add(
 	project_folder: &str,
 	branch_name: &str,
 	worktree_path: &str,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let output = Command::new("git")
 		.args(["worktree", "add", "-b", branch_name, worktree_path])
 		.current_dir(project_folder)
@@ -170,7 +170,7 @@ pub fn branch_delete(project_folder: &str, branch_name: &str) {
 
 // --- Private helpers ---
 
-pub fn validate_commit_hash(hash: &str) -> AppResult<()> {
+pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	if hash.len() < 4 || hash.len() > 40 {
 		return Err(AppError::GitError(format!(
 			"Invalid commit hash length: {}",

@@ -1,6 +1,9 @@
 import { Field, Skeleton, Stack, Switch, Text } from "@chakra-ui/react";
+import {
+	isPermissionGranted,
+	requestPermission,
+} from "@tauri-apps/plugin-notification";
 import { Suspense } from "react";
-import { isPermissionGranted, requestPermission } from "@/api/notification";
 import * as m from "@/paraglide/messages.js";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { SoundPicker } from "./SoundPicker";

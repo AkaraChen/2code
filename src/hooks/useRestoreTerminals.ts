@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { ptyApi } from "@/api/pty";
+import type { Profile, Project } from "@/generated";
+import { createPtySession, listActiveSessions } from "@/generated";
 import { useTerminalStore } from "@/stores/terminalStore";
-import type { Profile, Project } from "@/types";
 
 export function useRestoreTerminals(
 	projects: Project[] | undefined,
@@ -23,7 +23,9 @@ export function useRestoreTerminals(
 			const projectSessions = await Promise.all(
 				projects.map(async (project) => ({
 					project,
-					sessions: await ptyApi.listActiveSessions(project.id),
+					sessions: await listActiveSessions({
+						projectId: project.id,
+					}),
 				})),
 			);
 
@@ -34,14 +36,18 @@ export function useRestoreTerminals(
 						const contextId =
 							worktreeToProfile.get(session.cwd) ?? project.id;
 
-						const newSessionId = await ptyApi.createSession(
-							project.id,
-							session.title,
-							session.shell,
-							session.cwd,
-							24,
-							80,
-						);
+						const newSessionId = await createPtySession({
+							meta: {
+								projectId: project.id,
+								title: session.title,
+							},
+							config: {
+								shell: session.shell,
+								cwd: session.cwd,
+								rows: 24,
+								cols: 80,
+							},
+						});
 						useTerminalStore
 							.getState()
 							.addTab(

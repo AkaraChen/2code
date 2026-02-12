@@ -2,8 +2,7 @@ import { Box, Flex } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
-import { profilesApi } from "@/api/profiles";
-import { projectsApi } from "@/api/projects";
+import { listProfiles, listProjects } from "@/generated";
 import { useRestoreTerminals } from "@/hooks/useRestoreTerminals";
 import { queryKeys } from "@/lib/queryKeys";
 import { useTerminalProjectIds, useTerminalSync } from "@/stores/terminalStore";
@@ -19,7 +18,7 @@ export default function TerminalLayer() {
 	const location = useLocation();
 	const { data: projects } = useQuery({
 		queryKey: queryKeys.projects.all,
-		queryFn: projectsApi.list,
+		queryFn: listProjects,
 	});
 
 	const terminalContextIds = useTerminalProjectIds();
@@ -29,7 +28,7 @@ export default function TerminalLayer() {
 		queryKey: ["profiles", "all-for-terminals", projects],
 		queryFn: async () => {
 			const results = await Promise.all(
-				(projects ?? []).map((p) => profilesApi.list(p.id)),
+				(projects ?? []).map((p) => listProfiles({ projectId: p.id })),
 			);
 			return results.flat();
 		},

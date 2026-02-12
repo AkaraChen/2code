@@ -31,8 +31,6 @@ impl Serialize for AppError {
 	}
 }
 
-pub type AppResult<T> = Result<T, AppError>;
-
 #[cfg(test)]
 mod tests {
 	use super::*;

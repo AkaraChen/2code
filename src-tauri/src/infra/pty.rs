@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 
 pub struct PtySession {
 	pub master: Box<dyn MasterPty + Send>,
@@ -24,7 +24,7 @@ pub fn create_session(
 	cwd: &str,
 	rows: u16,
 	cols: u16,
-) -> AppResult<(String, Box<dyn std::io::Read + Send>)> {
+) -> Result<(String, Box<dyn std::io::Read + Send>), AppError> {
 	let pty_system = native_pty_system();
 
 	let pair = pty_system
@@ -80,7 +80,7 @@ pub fn write_to_pty(
 	sessions: &PtySessionMap,
 	session_id: &str,
 	data: &[u8],
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
 	let session = map.get_mut(session_id).ok_or_else(|| {
 		AppError::PtyError(format!("Session not found: {}", session_id))
@@ -103,7 +103,7 @@ pub fn resize_pty(
 	session_id: &str,
 	rows: u16,
 	cols: u16,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let map = sessions.lock().map_err(|_| AppError::LockError)?;
 	let session = map.get(session_id).ok_or_else(|| {
 		AppError::PtyError(format!("Session not found: {}", session_id))
@@ -125,7 +125,7 @@ pub fn resize_pty(
 pub fn close_session(
 	sessions: &PtySessionMap,
 	session_id: &str,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
 	if let Some(mut session) = map.remove(session_id) {
 		let _ = session.child.kill();

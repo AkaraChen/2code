@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { ptyApi } from "@/api/pty";
+import { closePtySession, deletePtySessionRecord } from "@/generated";
 import { useTerminalStore } from "@/stores/terminalStore";
 
 export function useCloseTerminalTab() {
@@ -11,8 +11,8 @@ export function useCloseTerminalTab() {
 			sessionId: string;
 		}) => {
 			await Promise.all([
-				ptyApi.close(sessionId).catch(() => {}),
-				ptyApi.deleteRecord(sessionId).catch(() => {}),
+				closePtySession({ sessionId }).catch(() => {}),
+				deletePtySessionRecord({ sessionId }).catch(() => {}),
 			]);
 		},
 		onSettled: (_data, _err, { contextId, sessionId }) => {

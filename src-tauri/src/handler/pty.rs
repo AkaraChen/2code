@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::infra::pty::{self as session, PtySessionMap};
 use crate::model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
@@ -11,7 +11,7 @@ pub fn create_pty_session(
 	sessions: State<'_, PtySessionMap>,
 	meta: PtySessionMeta,
 	config: PtyConfig,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	crate::service::pty::create_session(&app, sessions.inner(), &meta, &config)
 }
 
@@ -20,7 +20,7 @@ pub fn write_to_pty(
 	sessions: State<'_, PtySessionMap>,
 	session_id: String,
 	data: String,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	session::write_to_pty(&sessions, &session_id, data.as_bytes())
 }
 
@@ -30,7 +30,7 @@ pub fn resize_pty(
 	session_id: String,
 	rows: u16,
 	cols: u16,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	session::resize_pty(&sessions, &session_id, rows, cols)
 }
 
@@ -39,7 +39,7 @@ pub fn close_pty_session(
 	app: AppHandle,
 	sessions: State<'_, PtySessionMap>,
 	session_id: String,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	crate::service::pty::close_session(&app, sessions.inner(), &session_id)
 }
 
@@ -47,7 +47,7 @@ pub fn close_pty_session(
 pub fn list_active_sessions(
 	project_id: String,
 	state: State<'_, DbPool>,
-) -> AppResult<Vec<PtySessionRecord>> {
+) -> Result<Vec<PtySessionRecord>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::pty::list_sessions(conn, &project_id)
 }
@@ -56,7 +56,7 @@ pub fn list_active_sessions(
 pub fn get_pty_session_history(
 	session_id: String,
 	state: State<'_, DbPool>,
-) -> AppResult<Vec<u8>> {
+) -> Result<Vec<u8>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::pty::get_history(conn, &session_id)
 }
@@ -65,7 +65,7 @@ pub fn get_pty_session_history(
 pub fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::pty::delete_session(conn, &session_id)
 }

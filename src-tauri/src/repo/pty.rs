@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::pty::{
 	NewPtyOutputChunk, NewPtySessionRecord, PtySessionRecord,
 };
@@ -9,7 +9,7 @@ use crate::schema::{pty_output_chunks, pty_sessions};
 pub fn insert_session(
 	conn: &mut SqliteConnection,
 	record: &NewPtySessionRecord,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	diesel::insert_into(pty_sessions::table)
 		.values(record)
 		.execute(conn)
@@ -20,7 +20,7 @@ pub fn insert_session(
 pub fn list_by_project(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-) -> AppResult<Vec<PtySessionRecord>> {
+) -> Result<Vec<PtySessionRecord>, AppError> {
 	pty_sessions::table
 		.filter(pty_sessions::project_id.eq(project_id))
 		.select(PtySessionRecord::as_select())
@@ -49,7 +49,7 @@ pub fn insert_output_chunk(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 	data: &[u8],
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	let chunk = NewPtyOutputChunk { session_id, data };
 	diesel::insert_into(pty_output_chunks::table)
 		.values(&chunk)
@@ -61,7 +61,7 @@ pub fn insert_output_chunk(
 pub fn get_session_history(
 	conn: &mut SqliteConnection,
 	session_id: &str,
-) -> AppResult<Vec<u8>> {
+) -> Result<Vec<u8>, AppError> {
 	let chunks: Vec<Vec<u8>> = pty_output_chunks::table
 		.filter(pty_output_chunks::session_id.eq(session_id))
 		.select(pty_output_chunks::data)
@@ -75,7 +75,7 @@ pub fn get_session_history(
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	diesel::delete(pty_sessions::table.filter(pty_sessions::id.eq(session_id)))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;

@@ -8,13 +8,13 @@ import {
 } from "@chakra-ui/react";
 import { use, useMemo } from "react";
 import { RiVolumeUpLine } from "react-icons/ri";
-import { notificationApi } from "@/api/notification";
+import { listSystemSounds, playSystemSound } from "@/generated";
 import { createCachedPromise } from "@/lib/cachedPromise";
 import * as m from "@/paraglide/messages.js";
 import { useNotificationStore } from "@/stores/notificationStore";
 
 const getSoundsPromise = createCachedPromise<string[]>(() =>
-	notificationApi.listSystemSounds(),
+	listSystemSounds(),
 );
 
 export function SoundPicker() {
@@ -45,7 +45,7 @@ export function SoundPicker() {
 					_hover={{ opacity: 1 }}
 					disabled={!enabled || !sound}
 					onClick={() => {
-						if (sound) notificationApi.playSystemSound(sound);
+						if (sound) playSystemSound({ name: sound });
 					}}
 				>
 					<RiVolumeUpLine />

@@ -2,7 +2,12 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
-import { ptyApi } from "@/api/pty";
+import {
+	deletePtySessionRecord,
+	getPtySessionHistory,
+	resizePty,
+	writeToPty,
+} from "@/generated";
 import { useTerminalTheme } from "@/hooks/useTerminalTheme";
 import { useFontStore } from "@/stores/fontStore";
 import { useTerminalStore } from "@/stores/terminalStore";
@@ -69,13 +74,15 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 		fitAddonRef.current = fitAddon;
 
 		// Resize PTY to match xterm dimensions
-		ptyApi.resize(sessionId, term.rows, term.cols);
+		resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
 		// Restore history from previous session before connecting live stream
 		const setup = async () => {
 			if (restoreFrom) {
 				try {
-					const history = await ptyApi.getHistory(restoreFrom);
+					const history = await getPtySessionHistory({
+						sessionId: restoreFrom,
+					});
 					if (disposed) return;
 					if (history.length > 0) {
 						const text = new TextDecoder().decode(
@@ -88,7 +95,9 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 				}
 				if (disposed) return;
 				// Clean up old session record and store flag
-				ptyApi.deleteRecord(restoreFrom).catch(() => {});
+				deletePtySessionRecord({ sessionId: restoreFrom }).catch(
+					() => {},
+				);
 				useTerminalStore.getState().clearRestore(projectId, sessionId);
 			}
 
@@ -117,12 +126,12 @@ export function Terminal({ projectId, sessionId, restoreFrom }: TerminalProps) {
 
 		// Forward user input to PTY
 		const onDataDisposable = term.onData((data) => {
-			ptyApi.write(sessionId, data);
+			writeToPty({ sessionId, data });
 		});
 
 		// Handle terminal resize
 		const onResizeDisposable = term.onResize(({ rows, cols }) => {
-			ptyApi.resize(sessionId, rows, cols);
+			resizePty({ sessionId, rows, cols });
 		});
 
 		// Handle container resize

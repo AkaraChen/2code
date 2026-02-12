@@ -6,13 +6,14 @@ import {
 	Select,
 } from "@chakra-ui/react";
 import { use, useMemo } from "react";
-import { fontsApi, type SystemFont } from "@/api/fonts";
+import type { SystemFont } from "@/generated";
+import { listSystemFonts } from "@/generated";
 import { createCachedPromise } from "@/lib/cachedPromise";
 import * as m from "@/paraglide/messages.js";
 import { useFontStore } from "@/stores/fontStore";
 
 const getFontsPromise = createCachedPromise<SystemFont[]>(() =>
-	fontsApi.listSystemFonts(),
+	listSystemFonts(),
 );
 
 export function FontPicker() {

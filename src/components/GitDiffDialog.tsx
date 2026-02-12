@@ -27,11 +27,11 @@ import {
 	RiGitBranchLine,
 	RiGitCommitLine,
 } from "react-icons/ri";
-import { projectsApi } from "@/api/projects";
+import type { GitCommit } from "@/generated";
+import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
 import { queryKeys } from "@/lib/queryKeys";
 import type { TerminalThemeId } from "@/lib/terminalThemes";
 import { useFontStore } from "@/stores/fontStore";
-import type { GitCommit } from "@/types";
 import { useThemePreference } from "./ThemeProvider";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
@@ -249,13 +249,13 @@ export default function GitDiffDialog({
 
 	const { data: diff, isLoading: isDiffLoading } = useQuery({
 		queryKey: queryKeys.projects.diff(contextId),
-		queryFn: () => projectsApi.getDiff(contextId),
+		queryFn: () => getGitDiff({ contextId }),
 		enabled: isOpen && activeTab === "changes",
 	});
 
 	const { data: logData, isLoading: isLogLoading } = useQuery({
 		queryKey: queryKeys.projects.log(contextId),
-		queryFn: () => projectsApi.getLog(contextId),
+		queryFn: () => getGitLog({ contextId }),
 		enabled: isOpen && activeTab === "history",
 	});
 
@@ -265,7 +265,7 @@ export default function GitDiffDialog({
 			selectedCommit?.full_hash ?? "",
 		),
 		queryFn: () =>
-			projectsApi.getCommitDiff(contextId, selectedCommit!.full_hash),
+			getCommitDiff({ contextId, commitHash: selectedCommit!.full_hash }),
 		enabled: isOpen && !!selectedCommit,
 	});
 

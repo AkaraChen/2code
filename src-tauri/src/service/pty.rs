@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use diesel::prelude::*;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::infra::pty::{self as session, PtySessionMap};
 use crate::model::pty::{
@@ -19,7 +19,7 @@ pub fn create_session(
 	sessions: &PtySessionMap,
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	let (session_id, reader) = session::create_session(
 		sessions,
 		&config.shell,
@@ -56,7 +56,7 @@ pub fn close_session(
 	app: &AppHandle,
 	sessions: &PtySessionMap,
 	session_id: &str,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	session::close_session(sessions, session_id)?;
 
 	// Mark session as closed in DB
@@ -71,21 +71,21 @@ pub fn close_session(
 pub fn list_sessions(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-) -> AppResult<Vec<PtySessionRecord>> {
+) -> Result<Vec<PtySessionRecord>, AppError> {
 	crate::repo::pty::list_by_project(conn, project_id)
 }
 
 pub fn get_history(
 	conn: &mut SqliteConnection,
 	session_id: &str,
-) -> AppResult<Vec<u8>> {
+) -> Result<Vec<u8>, AppError> {
 	crate::repo::pty::get_session_history(conn, session_id)
 }
 
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
-) -> AppResult<()> {
+) -> Result<(), AppError> {
 	crate::repo::pty::delete_session(conn, session_id)
 }
 

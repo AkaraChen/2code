@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::model::profile::Profile;
 
@@ -9,7 +9,7 @@ pub fn create_profile(
 	project_id: String,
 	branch_name: String,
 	state: State<'_, DbPool>,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::profile::create(conn, &project_id, &branch_name)
 }
@@ -18,13 +18,16 @@ pub fn create_profile(
 pub fn list_profiles(
 	project_id: String,
 	state: State<'_, DbPool>,
-) -> AppResult<Vec<Profile>> {
+) -> Result<Vec<Profile>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::profile::list(conn, &project_id)
 }
 
 #[tauri::command]
-pub fn get_profile(id: String, state: State<'_, DbPool>) -> AppResult<Profile> {
+pub fn get_profile(
+	id: String,
+	state: State<'_, DbPool>,
+) -> Result<Profile, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::profile::get(conn, &id)
 }
@@ -34,13 +37,16 @@ pub fn update_profile(
 	id: String,
 	branch_name: Option<String>,
 	state: State<'_, DbPool>,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::profile::update(conn, &id, branch_name)
 }
 
 #[tauri::command]
-pub fn delete_profile(id: String, state: State<'_, DbPool>) -> AppResult<()> {
+pub fn delete_profile(
+	id: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::profile::delete(conn, &id)
 }

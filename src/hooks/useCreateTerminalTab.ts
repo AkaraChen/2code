@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { ptyApi } from "@/api/pty";
+import { createPtySession } from "@/generated";
 import { useTerminalStore } from "@/stores/terminalStore";
 
 const DEFAULT_SHELL = "/bin/zsh";
@@ -18,14 +18,10 @@ export function useCreateTerminalTab() {
 			const counter =
 				useTerminalStore.getState().projects[contextId]?.counter ?? 0;
 			const title = `Terminal ${counter + 1}`;
-			const sessionId = await ptyApi.createSession(
-				projectId,
-				title,
-				DEFAULT_SHELL,
-				cwd,
-				24,
-				80,
-			);
+			const sessionId = await createPtySession({
+				meta: { projectId, title },
+				config: { shell: DEFAULT_SHELL, cwd, rows: 24, cols: 80 },
+			});
 			return { contextId, sessionId, title };
 		},
 		onSuccess: ({ contextId, sessionId, title }) => {

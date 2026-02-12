@@ -3,7 +3,7 @@ use std::path::Path;
 use diesel::SqliteConnection;
 use uuid::Uuid;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::project::{GitCommit, Project};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
@@ -24,7 +24,7 @@ fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 pub fn create_temporary(
 	conn: &mut SqliteConnection,
 	name: Option<String>,
-) -> AppResult<Project> {
+) -> Result<Project, AppError> {
 	let id = Uuid::new_v4().to_string();
 	let dir_name = generate_dir_name(&name, &id);
 	let dir = std::env::temp_dir().join(dir_name);
@@ -46,7 +46,7 @@ pub fn create_from_folder(
 	conn: &mut SqliteConnection,
 	name: &str,
 	folder: &str,
-) -> AppResult<Project> {
+) -> Result<Project, AppError> {
 	if !Path::new(folder).exists() {
 		return Err(AppError::NotFound(format!("Folder: {folder}")));
 	}
@@ -55,11 +55,11 @@ pub fn create_from_folder(
 	crate::repo::project::insert(conn, &id, name, folder)
 }
 
-pub fn list(conn: &mut SqliteConnection) -> AppResult<Vec<Project>> {
+pub fn list(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 	crate::repo::project::list_all(conn)
 }
 
-pub fn get(conn: &mut SqliteConnection, id: &str) -> AppResult<Project> {
+pub fn get(conn: &mut SqliteConnection, id: &str) -> Result<Project, AppError> {
 	crate::repo::project::find_by_id(conn, id)
 }
 
@@ -68,22 +68,22 @@ pub fn update(
 	id: &str,
 	name: Option<String>,
 	folder: Option<String>,
-) -> AppResult<Project> {
+) -> Result<Project, AppError> {
 	crate::repo::project::update(conn, id, name, folder)
 }
 
-pub fn delete(conn: &mut SqliteConnection, id: &str) -> AppResult<()> {
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	crate::repo::project::delete(conn, id)
 }
 
-pub fn get_branch(folder: &str) -> AppResult<String> {
+pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	crate::infra::git::branch(folder)
 }
 
 pub fn get_diff(
 	conn: &mut SqliteConnection,
 	context_id: &str,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	let folder =
 		crate::repo::project::resolve_context_folder(conn, context_id)?;
 	crate::infra::git::diff(&folder)
@@ -93,7 +93,7 @@ pub fn get_log(
 	conn: &mut SqliteConnection,
 	context_id: &str,
 	limit: u32,
-) -> AppResult<Vec<GitCommit>> {
+) -> Result<Vec<GitCommit>, AppError> {
 	let folder =
 		crate::repo::project::resolve_context_folder(conn, context_id)?;
 	crate::infra::git::log(&folder, limit)
@@ -103,7 +103,7 @@ pub fn get_commit_diff(
 	conn: &mut SqliteConnection,
 	context_id: &str,
 	commit_hash: &str,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	let folder =
 		crate::repo::project::resolve_context_folder(conn, context_id)?;
 	crate::infra::git::show(&folder, commit_hash)

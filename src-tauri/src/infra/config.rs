@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 pub struct ProjectConfig {
@@ -12,7 +12,9 @@ pub struct ProjectConfig {
 	pub teardown_script: Vec<String>,
 }
 
-pub fn load_project_config(project_folder: &str) -> AppResult<ProjectConfig> {
+pub fn load_project_config(
+	project_folder: &str,
+) -> Result<ProjectConfig, AppError> {
 	let config_path = Path::new(project_folder).join("2code.json");
 	if !config_path.exists() {
 		return Ok(ProjectConfig::default());

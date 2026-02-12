@@ -4,20 +4,27 @@ import {
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { projectsApi } from "@/api/projects";
+import {
+	createProjectFromFolder,
+	createProjectTemporary,
+	deleteProject,
+	getGitBranch,
+	listProjects,
+	updateProject,
+} from "@/generated";
 import { queryKeys } from "@/lib/queryKeys";
 
 export function useProjects() {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.all,
-		queryFn: projectsApi.list,
+		queryFn: listProjects,
 	});
 }
 
 export function useGitBranch(folder: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.branch(folder),
-		queryFn: () => projectsApi.getBranch(folder),
+		queryFn: () => getGitBranch({ folder }),
 		staleTime: 30_000,
 	});
 }
@@ -32,12 +39,13 @@ export function useCreateProject() {
 	return useMutation({
 		mutationFn: async (opts?: { name?: string; folder?: string }) => {
 			if (opts?.folder) {
-				return projectsApi.createFromFolder(
-					opts.name || opts.folder.split("/").pop() || "Untitled",
-					opts.folder,
-				);
+				return createProjectFromFolder({
+					name:
+						opts.name || opts.folder.split("/").pop() || "Untitled",
+					folder: opts.folder,
+				});
 			}
-			return projectsApi.createTemporary(opts?.name);
+			return createProjectTemporary({ name: opts?.name });
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
@@ -49,7 +57,7 @@ export function useRenameProject() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({ id, name }: { id: string; name: string }) =>
-			projectsApi.update(id, name),
+			updateProject({ id, name }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
@@ -59,7 +67,7 @@ export function useRenameProject() {
 export function useDeleteProject() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (id: string) => projectsApi.delete(id),
+		mutationFn: (id: string) => deleteProject({ id }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},

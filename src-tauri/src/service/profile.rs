@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use diesel::SqliteConnection;
 use uuid::Uuid;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::profile::Profile;
 
 /// Sanitize user input into a valid git branch name.
@@ -18,7 +18,7 @@ fn sanitize_branch_name(input: &str) -> String {
 		.join("/")
 }
 
-fn resolve_worktree_base() -> AppResult<PathBuf> {
+fn resolve_worktree_base() -> Result<PathBuf, AppError> {
 	let home = dirs::home_dir().ok_or_else(|| {
 		AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::NotFound,
@@ -32,7 +32,7 @@ pub fn create(
 	conn: &mut SqliteConnection,
 	project_id: &str,
 	branch_name: &str,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	let project_folder =
 		crate::repo::profile::get_project_folder(conn, project_id)?;
 
@@ -75,11 +75,11 @@ pub fn create(
 pub fn list(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-) -> AppResult<Vec<Profile>> {
+) -> Result<Vec<Profile>, AppError> {
 	crate::repo::profile::list_by_project(conn, project_id)
 }
 
-pub fn get(conn: &mut SqliteConnection, id: &str) -> AppResult<Profile> {
+pub fn get(conn: &mut SqliteConnection, id: &str) -> Result<Profile, AppError> {
 	crate::repo::profile::find_by_id(conn, id)
 }
 
@@ -87,11 +87,11 @@ pub fn update(
 	conn: &mut SqliteConnection,
 	id: &str,
 	branch_name: Option<String>,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	crate::repo::profile::update(conn, id, branch_name)
 }
 
-pub fn delete(conn: &mut SqliteConnection, id: &str) -> AppResult<()> {
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = crate::repo::profile::delete(conn, id)?;
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 

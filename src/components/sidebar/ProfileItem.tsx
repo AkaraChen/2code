@@ -3,8 +3,8 @@ import { useState } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/components/DeleteProfileDialog";
+import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import type { Profile } from "@/types";
 
 export function ProfileItem({
 	profile,

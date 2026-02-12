@@ -2,8 +2,8 @@ import { Button, Center, EmptyState, Flex, VStack } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
-import { profilesApi } from "@/api/profiles";
 import ProjectTopBar from "@/components/ProjectTopBar";
+import { listProfiles } from "@/generated";
 import { useCreateTerminalTab } from "@/hooks/useCreateTerminalTab";
 import { useProject } from "@/hooks/useProjects";
 import { queryKeys } from "@/lib/queryKeys";
@@ -17,7 +17,7 @@ export default function ProjectDetailPage() {
 	// Fetch the specific profile if profileId is in the route
 	const { data: profiles } = useQuery({
 		queryKey: queryKeys.profiles.byProject(id!),
-		queryFn: () => profilesApi.list(id!),
+		queryFn: () => listProfiles({ projectId: id! }),
 		enabled: !!profileId,
 	});
 	const profile = profileId

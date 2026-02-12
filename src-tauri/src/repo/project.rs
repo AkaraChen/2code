@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::project::{NewProject, Project, UpdateProject};
 use crate::schema::{profiles, projects};
 
@@ -9,7 +9,7 @@ pub fn insert(
 	id: &str,
 	name: &str,
 	folder: &str,
-) -> AppResult<Project> {
+) -> Result<Project, AppError> {
 	diesel::insert_into(projects::table)
 		.values(&NewProject { id, name, folder })
 		.execute(conn)
@@ -21,7 +21,10 @@ pub fn insert(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn find_by_id(conn: &mut SqliteConnection, id: &str) -> AppResult<Project> {
+pub fn find_by_id(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<Project, AppError> {
 	projects::table
 		.find(id)
 		.select(Project::as_select())
@@ -29,7 +32,7 @@ pub fn find_by_id(conn: &mut SqliteConnection, id: &str) -> AppResult<Project> {
 		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
 }
 
-pub fn list_all(conn: &mut SqliteConnection) -> AppResult<Vec<Project>> {
+pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 	projects::table
 		.select(Project::as_select())
 		.load(conn)
@@ -41,7 +44,7 @@ pub fn update(
 	id: &str,
 	name: Option<String>,
 	folder: Option<String>,
-) -> AppResult<Project> {
+) -> Result<Project, AppError> {
 	let target = projects::table.find(id);
 
 	if name.is_none() && folder.is_none() {
@@ -67,7 +70,7 @@ pub fn update(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn delete(conn: &mut SqliteConnection, id: &str) -> AppResult<()> {
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let rows = diesel::delete(projects::table.find(id))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
@@ -82,7 +85,7 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> AppResult<()> {
 pub fn resolve_context_folder(
 	conn: &mut SqliteConnection,
 	context_id: &str,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	profiles::table
 		.find(context_id)
 		.select(profiles::worktree_path)

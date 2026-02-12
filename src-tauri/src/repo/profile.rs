@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppError;
 use crate::model::profile::{NewProfile, Profile, UpdateProfile};
 use crate::schema::{profiles, projects};
 
@@ -10,7 +10,7 @@ pub fn insert(
 	project_id: &str,
 	branch_name: &str,
 	worktree_path: &str,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	diesel::insert_into(profiles::table)
 		.values(&NewProfile {
 			id,
@@ -28,7 +28,10 @@ pub fn insert(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn find_by_id(conn: &mut SqliteConnection, id: &str) -> AppResult<Profile> {
+pub fn find_by_id(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<Profile, AppError> {
 	profiles::table
 		.find(id)
 		.select(Profile::as_select())
@@ -39,7 +42,7 @@ pub fn find_by_id(conn: &mut SqliteConnection, id: &str) -> AppResult<Profile> {
 pub fn list_by_project(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-) -> AppResult<Vec<Profile>> {
+) -> Result<Vec<Profile>, AppError> {
 	profiles::table
 		.filter(profiles::project_id.eq(project_id))
 		.select(Profile::as_select())
@@ -51,7 +54,7 @@ pub fn update(
 	conn: &mut SqliteConnection,
 	id: &str,
 	branch_name: Option<String>,
-) -> AppResult<Profile> {
+) -> Result<Profile, AppError> {
 	let target = profiles::table.find(id);
 
 	if branch_name.is_none() {
@@ -81,7 +84,7 @@ pub fn update(
 pub fn delete(
 	conn: &mut SqliteConnection,
 	id: &str,
-) -> AppResult<(Profile, String)> {
+) -> Result<(Profile, String), AppError> {
 	let profile = find_by_id(conn, id)?;
 	let project_folder = get_project_folder(conn, &profile.project_id)?;
 
@@ -95,7 +98,7 @@ pub fn delete(
 pub fn get_project_folder(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-) -> AppResult<String> {
+) -> Result<String, AppError> {
 	projects::table
 		.find(project_id)
 		.select(projects::folder)
