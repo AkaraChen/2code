@@ -3,9 +3,9 @@ import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
+import HomePage from "./features/home/HomePage";
+import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import AppSidebar from "./layout/AppSidebar";
-import HomePage from "./layout/HomePage";
-import ProjectDetailPage from "./layout/ProjectDetailPage";
 import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
 	PageError,
