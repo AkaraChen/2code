@@ -1,5 +1,6 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { Suspense, useEffect } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
@@ -10,7 +11,6 @@ import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import { useFileWatcher } from "./features/watcher/useFileWatcher";
 import AppSidebar from "./layout/AppSidebar";
-import { ErrorBoundary } from "./shared/components/ErrorBoundary";
 import {
 	PageError,
 	PageSkeleton,
@@ -42,8 +42,15 @@ export default function App() {
 				</Suspense>
 				<Box as="main" flex="1" overflowY="auto" position="relative">
 					<ErrorBoundary
-						fallback={(error, reset) => (
-							<PageError error={error} onRetry={reset} />
+						fallbackRender={({ error, resetErrorBoundary }) => (
+							<PageError
+								error={
+									error instanceof Error
+										? error
+										: new Error(String(error))
+								}
+								onRetry={resetErrorBoundary}
+							/>
 						)}
 					>
 						<Suspense fallback={<PageSkeleton />}>
