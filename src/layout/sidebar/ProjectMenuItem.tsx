@@ -148,7 +148,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 			<RenameProjectDialog
 				isOpen={renameOpen}
 				onClose={() => setRenameOpen(false)}
-				project={project}
+				projectId={project.id}
+				initName={project.name}
 			/>
 			<DeleteProjectDialog
 				isOpen={deleteOpen}

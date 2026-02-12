@@ -6,38 +6,34 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useRenameProject } from "./hooks";
 
 interface RenameProjectDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
-	project: { id: string; name: string };
+	projectId: string;
+	initName: string;
 }
 
 export default function RenameProjectDialog({
 	isOpen,
 	onClose,
-	project,
+	projectId,
+	initName,
 }: RenameProjectDialogProps) {
-	const [name, setName] = useState(project.name);
+	const [name, setName] = useState(initName);
 	const renameProject = useRenameProject();
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	useEffect(() => {
-		if (isOpen) {
-			setName(project.name);
-		}
-	}, [isOpen, project.name]);
-
 	const handleRename = async () => {
 		const trimmed = name.trim();
-		if (!trimmed || trimmed === project.name) {
+		if (!trimmed || trimmed === initName) {
 			onClose();
 			return;
 		}
-		await renameProject.mutateAsync({ id: project.id, name: trimmed });
+		await renameProject.mutateAsync({ id: projectId, name: trimmed });
 		onClose();
 	};
 
@@ -81,7 +77,7 @@ export default function RenameProjectDialog({
 							<Button
 								onClick={handleRename}
 								disabled={
-									!name.trim() || name.trim() === project.name
+									!name.trim() || name.trim() === initName
 								}
 							>
 								{m.rename()}
