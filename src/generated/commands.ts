@@ -7,160 +7,175 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-import { invoke } from '@tauri-apps/api/core';
-import * as types from './types';
-
+import { invoke } from "@tauri-apps/api/core";
+import * as types from "./types";
 
 export async function listSystemSounds(): Promise<string[]> {
-  return invoke('list_system_sounds');
+	return invoke("list_system_sounds");
 }
 
-
-export async function playSystemSound(params: types.PlaySystemSoundParams): Promise<void> {
-  return invoke('play_system_sound', params);
+export async function playSystemSound(
+	params: types.PlaySystemSoundParams,
+): Promise<void> {
+	return invoke("play_system_sound", params);
 }
 
-
-export async function watchProjects(params: types.WatchProjectsParams): Promise<void> {
-  return invoke('watch_projects', params);
+export async function watchProjects(
+	params: types.WatchProjectsParams,
+): Promise<void> {
+	return invoke("watch_projects", params);
 }
 
-
-export async function createPtySession(params: types.CreatePtySessionParams): Promise<string> {
-  return invoke('create_pty_session', params);
+export async function createPtySession(
+	params: types.CreatePtySessionParams,
+): Promise<string> {
+	return invoke("create_pty_session", params);
 }
 
-
-export async function writeToPty(params: types.WriteToPtyParams): Promise<void> {
-  return invoke('write_to_pty', params);
+export async function writeToPty(
+	params: types.WriteToPtyParams,
+): Promise<void> {
+	return invoke("write_to_pty", params);
 }
-
 
 export async function resizePty(params: types.ResizePtyParams): Promise<void> {
-  return invoke('resize_pty', params);
+	return invoke("resize_pty", params);
 }
 
-
-export async function closePtySession(params: types.ClosePtySessionParams): Promise<void> {
-  return invoke('close_pty_session', params);
+export async function closePtySession(
+	params: types.ClosePtySessionParams,
+): Promise<void> {
+	return invoke("close_pty_session", params);
 }
 
-
-export async function listActiveSessions(params: types.ListActiveSessionsParams): Promise<types.PtySessionRecord[]> {
-  return invoke('list_active_sessions', params);
+export async function listActiveSessions(
+	params: types.ListActiveSessionsParams,
+): Promise<types.PtySessionRecord[]> {
+	return invoke("list_active_sessions", params);
 }
 
-
-export async function listProjectSessions(params: types.ListProjectSessionsParams): Promise<types.PtySessionRecord[]> {
-  return invoke('list_project_sessions', params);
+export async function listProjectSessions(
+	params: types.ListProjectSessionsParams,
+): Promise<types.PtySessionRecord[]> {
+	return invoke("list_project_sessions", params);
 }
 
-
-export async function getPtySessionHistory(params: types.GetPtySessionHistoryParams): Promise<number[]> {
-  return invoke('get_pty_session_history', params);
+export async function getPtySessionHistory(
+	params: types.GetPtySessionHistoryParams,
+): Promise<number[]> {
+	return invoke("get_pty_session_history", params);
 }
 
-
-export async function deletePtySessionRecord(params: types.DeletePtySessionRecordParams): Promise<void> {
-  return invoke('delete_pty_session_record', params);
+export async function deletePtySessionRecord(
+	params: types.DeletePtySessionRecordParams,
+): Promise<void> {
+	return invoke("delete_pty_session_record", params);
 }
 
-
-export async function createProfile(params: types.CreateProfileParams): Promise<types.Profile> {
-  return invoke('create_profile', params);
+export async function createProfile(
+	params: types.CreateProfileParams,
+): Promise<types.Profile> {
+	return invoke("create_profile", params);
 }
 
-
-export async function listProfiles(params: types.ListProfilesParams): Promise<types.Profile[]> {
-  return invoke('list_profiles', params);
+export async function listProfiles(
+	params: types.ListProfilesParams,
+): Promise<types.Profile[]> {
+	return invoke("list_profiles", params);
 }
 
-
-export async function getProfile(params: types.GetProfileParams): Promise<types.Profile> {
-  return invoke('get_profile', params);
+export async function getProfile(
+	params: types.GetProfileParams,
+): Promise<types.Profile> {
+	return invoke("get_profile", params);
 }
 
-
-export async function updateProfile(params: types.UpdateProfileParams): Promise<types.Profile> {
-  return invoke('update_profile', params);
+export async function updateProfile(
+	params: types.UpdateProfileParams,
+): Promise<types.Profile> {
+	return invoke("update_profile", params);
 }
 
-
-export async function deleteProfile(params: types.DeleteProfileParams): Promise<void> {
-  return invoke('delete_profile', params);
+export async function deleteProfile(
+	params: types.DeleteProfileParams,
+): Promise<void> {
+	return invoke("delete_profile", params);
 }
-
-
 
 export async function listSystemFonts(): Promise<types.SystemFont[]> {
-  return invoke('list_system_fonts');
+	return invoke("list_system_fonts");
 }
 
-
-export async function createProjectTemporary(params: types.CreateProjectTemporaryParams): Promise<types.Project> {
-  return invoke('create_project_temporary', params);
+export async function createProjectTemporary(
+	params: types.CreateProjectTemporaryParams,
+): Promise<types.Project> {
+	return invoke("create_project_temporary", params);
 }
 
-
-export async function createProjectFromFolder(params: types.CreateProjectFromFolderParams): Promise<types.Project> {
-  return invoke('create_project_from_folder', params);
+export async function createProjectFromFolder(
+	params: types.CreateProjectFromFolderParams,
+): Promise<types.Project> {
+	return invoke("create_project_from_folder", params);
 }
-
-
 
 export async function listProjects(): Promise<types.ProjectWithProfiles[]> {
-  return invoke('list_projects');
+	return invoke("list_projects");
 }
 
-
-export async function getProject(params: types.GetProjectParams): Promise<types.Project> {
-  return invoke('get_project', params);
+export async function getProject(
+	params: types.GetProjectParams,
+): Promise<types.Project> {
+	return invoke("get_project", params);
 }
 
-
-export async function updateProject(params: types.UpdateProjectParams): Promise<types.Project> {
-  return invoke('update_project', params);
+export async function updateProject(
+	params: types.UpdateProjectParams,
+): Promise<types.Project> {
+	return invoke("update_project", params);
 }
 
-
-export async function getGitBranch(params: types.GetGitBranchParams): Promise<string> {
-  return invoke('get_git_branch', params);
+export async function getGitBranch(
+	params: types.GetGitBranchParams,
+): Promise<string> {
+	return invoke("get_git_branch", params);
 }
 
-
-export async function getGitDiff(params: types.GetGitDiffParams): Promise<string> {
-  return invoke('get_git_diff', params);
+export async function getGitDiff(
+	params: types.GetGitDiffParams,
+): Promise<string> {
+	return invoke("get_git_diff", params);
 }
 
-
-export async function getGitLog(params: types.GetGitLogParams): Promise<types.GitCommit[]> {
-  return invoke('get_git_log', params);
+export async function getGitLog(
+	params: types.GetGitLogParams,
+): Promise<types.GitCommit[]> {
+	return invoke("get_git_log", params);
 }
 
-
-export async function getCommitDiff(params: types.GetCommitDiffParams): Promise<string> {
-  return invoke('get_commit_diff', params);
+export async function getCommitDiff(
+	params: types.GetCommitDiffParams,
+): Promise<string> {
+	return invoke("get_commit_diff", params);
 }
 
-
-export async function getDefaultProfile(params: types.GetDefaultProfileParams): Promise<types.Profile> {
-  return invoke('get_default_profile', params);
+export async function getDefaultProfile(
+	params: types.GetDefaultProfileParams,
+): Promise<types.Profile> {
+	return invoke("get_default_profile", params);
 }
 
-
-export async function deleteProject(params: types.DeleteProjectParams): Promise<void> {
-  return invoke('delete_project', params);
+export async function deleteProject(
+	params: types.DeleteProjectParams,
+): Promise<void> {
+	return invoke("delete_project", params);
 }
 
-
-export async function startDebugLog(params: types.StartDebugLogParams): Promise<void> {
-  return invoke('start_debug_log', params);
+export async function startDebugLog(
+	params: types.StartDebugLogParams,
+): Promise<void> {
+	return invoke("start_debug_log", params);
 }
-
-
 
 export async function stopDebugLog(): Promise<void> {
-  return invoke('stop_debug_log');
+	return invoke("stop_debug_log");
 }
-
-

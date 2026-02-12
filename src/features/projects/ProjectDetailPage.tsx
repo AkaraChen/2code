@@ -3,10 +3,7 @@ import { useMemo } from "react";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
-import {
-	useProject,
-	useProjectProfiles,
-} from "@/features/projects/hooks";
+import { useProject, useProjectProfiles } from "@/features/projects/hooks";
 import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
 import * as m from "@/paraglide/messages.js";

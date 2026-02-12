@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::error::AppError;
 use crate::model::profile::Profile;
-use crate::model::project::{NewProject, Project, ProjectWithProfiles, UpdateProject};
+use crate::model::project::{
+	NewProject, Project, ProjectWithProfiles, UpdateProject,
+};
 use crate::schema::{profiles, projects};
 
 pub fn insert(

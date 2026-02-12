@@ -20,11 +20,7 @@ import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { ProfileList } from "./ProfileList";
 
-export function ProjectMenuItem({
-	project,
-}: {
-	project: ProjectWithProfiles;
-}) {
+export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const defaultProfile = useMemo(
 		() => project.profiles.find((p) => p.is_default),
 		[project.profiles],
