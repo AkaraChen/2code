@@ -291,6 +291,8 @@ mod tests {
 				title: "bash",
 				shell: "/bin/bash",
 				cwd: "/c",
+				cols: 80,
+				rows: 24,
 			})
 			.execute(&mut conn)
 			.unwrap();

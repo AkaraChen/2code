@@ -252,8 +252,8 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 					config: {
 						shell: session.shell,
 						cwd: session.cwd,
-						rows: 24,
-						cols: 80,
+						rows: session.rows,
+						cols: session.cols,
 					},
 				});
 				consola.log(

@@ -28,11 +28,17 @@ pub fn write_to_pty(
 #[tauri::command]
 pub fn resize_pty(
 	sessions: State<'_, PtySessionMap>,
+	db: State<'_, DbPool>,
 	session_id: String,
 	rows: u16,
 	cols: u16,
 ) -> Result<(), AppError> {
-	session::resize_pty(&sessions, &session_id, rows, cols)
+	session::resize_pty(&sessions, &session_id, rows, cols)?;
+
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	crate::repo::pty::update_dimensions(conn, &session_id, cols, rows);
+
+	Ok(())
 }
 
 #[tauri::command]

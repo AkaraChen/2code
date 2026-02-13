@@ -13,6 +13,8 @@ pub struct PtySessionRecord {
 	pub cwd: String,
 	pub created_at: String,
 	pub closed_at: Option<String>,
+	pub cols: i32,
+	pub rows: i32,
 }
 
 #[derive(Insertable)]
@@ -23,6 +25,8 @@ pub struct NewPtySessionRecord<'a> {
 	pub title: &'a str,
 	pub shell: &'a str,
 	pub cwd: &'a str,
+	pub cols: i32,
+	pub rows: i32,
 }
 
 #[derive(Insertable)]

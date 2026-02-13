@@ -37,6 +37,8 @@ diesel::table! {
 		cwd -> Text,
 		created_at -> Timestamp,
 		closed_at -> Nullable<Timestamp>,
+		cols -> Integer,
+		rows -> Integer,
 	}
 }
 

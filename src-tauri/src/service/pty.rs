@@ -94,6 +94,8 @@ pub fn create_session(
 			title: &meta.title,
 			shell: &config.shell,
 			cwd: &config.cwd,
+			cols: config.cols as i32,
+			rows: config.rows as i32,
 		};
 		crate::repo::pty::insert_session(conn, &new_record)?;
 	}

@@ -12,6 +12,7 @@ import { useTerminalStore } from "./store";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
+// TODO: Allow users to configure the default shell in settings
 const DEFAULT_SHELL = "/bin/zsh";
 
 export function useCreateTerminalTab() {
@@ -47,8 +48,8 @@ export function useCloseTerminalTab() {
 			sessionId: string;
 		}) => {
 			await Promise.all([
-				closePtySession({ sessionId }).catch(() => {}),
-				deletePtySessionRecord({ sessionId }).catch(() => {}),
+				closePtySession({ sessionId }),
+				deletePtySessionRecord({ sessionId }),
 			]);
 		},
 		onSettled: (_data, _err, { profileId, sessionId }) => {

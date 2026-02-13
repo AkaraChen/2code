@@ -41,6 +41,22 @@ pub fn list_by_project(
 	Ok(sessions)
 }
 
+pub fn update_dimensions(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	cols: u16,
+	rows: u16,
+) {
+	let _ = diesel::update(
+		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
+	)
+	.set((
+		pty_sessions::cols.eq(cols as i32),
+		pty_sessions::rows.eq(rows as i32),
+	))
+	.execute(conn);
+}
+
 pub fn mark_closed(conn: &mut SqliteConnection, session_id: &str) {
 	let _ = diesel::update(
 		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
