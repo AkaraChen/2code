@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
@@ -14,9 +15,29 @@ pub struct PtySession {
 }
 
 pub type PtySessionMap = Arc<Mutex<HashMap<String, PtySession>>>;
+/// Tracks background PTY read thread handles so they can be joined on exit,
+/// ensuring persistence threads flush their output buffers before the process terminates.
+pub type PtyReadThreads = Arc<Mutex<Vec<JoinHandle<()>>>>;
 
 pub fn create_session_map() -> PtySessionMap {
 	Arc::new(Mutex::new(HashMap::new()))
+}
+
+pub fn create_thread_tracker() -> PtyReadThreads {
+	Arc::new(Mutex::new(Vec::new()))
+}
+
+/// Join all tracked read threads, blocking until they complete.
+/// This ensures each read thread's persistence sub-thread flushes its output buffer.
+pub fn join_all_read_threads(threads: &PtyReadThreads) {
+	let handles: Vec<JoinHandle<()>> = {
+		let Ok(mut guard) = threads.lock() else { return };
+		guard.drain(..).collect()
+	};
+
+	for handle in handles {
+		let _ = handle.join();
+	}
 }
 
 pub fn create_session(
