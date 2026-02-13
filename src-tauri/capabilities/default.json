@@ -15,6 +15,7 @@
 		"core:window:allow-set-focus",
 		"dialog:allow-open",
 		"notification:default",
-		"store:default"
+		"store:default",
+		"shell:allow-open"
 	]
 }
