@@ -7,8 +7,8 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-import { Channel, invoke } from "@tauri-apps/api/core";
-import * as types from "./types";
+import { invoke } from "@tauri-apps/api/core";
+import type * as types from "./types";
 
 export async function createPtySession(
 	params: types.CreatePtySessionParams,

@@ -11,8 +11,7 @@
  * Event Listeners
  * Type-safe event listener helpers for Tauri events
  */
-import { type Event, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import * as types from "./types";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /**
  * Listen for 'pty-notify' events

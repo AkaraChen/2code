@@ -12,8 +12,8 @@ import {
 import type { FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
-	Suspense,
 	startTransition,
+	Suspense,
 	use,
 	useEffect,
 	useMemo,

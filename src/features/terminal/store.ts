@@ -10,8 +10,8 @@ import {
 	createPtySession,
 	deletePtySessionRecord,
 	getPtySessionHistory,
-	listProjectSessions,
 	listProjects,
+	listProjectSessions,
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
