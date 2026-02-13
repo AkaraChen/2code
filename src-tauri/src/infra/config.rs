@@ -119,10 +119,7 @@ mod tests {
 		);
 
 		let config = load_project_config(dir.path().to_str().unwrap()).unwrap();
-		assert_eq!(
-			config.init_script,
-			vec!["echo hello", "export FOO=bar"]
-		);
+		assert_eq!(config.init_script, vec!["echo hello", "export FOO=bar"]);
 		assert!(config.setup_script.is_empty());
 	}
 

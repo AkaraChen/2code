@@ -12,8 +12,8 @@ import {
 import type { FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
-	startTransition,
 	Suspense,
+	startTransition,
 	use,
 	useEffect,
 	useMemo,
@@ -28,11 +28,7 @@ import ChangesFileList from "./components/ChangesFileList";
 import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
 import HistoryFileList from "./components/HistoryFileList";
-import {
-	GitDiffContext,
-	gitDiffReducer,
-	initialState,
-} from "./gitDiffReducer";
+import { GitDiffContext, gitDiffReducer, initialState } from "./gitDiffReducer";
 import { useCommitDiffFiles, useGitDiffFiles, useGitLog } from "./hooks";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
@@ -137,7 +133,10 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 
 	const handleTabChange = (value: string) => {
 		startTransition(() => {
-			dispatch({ type: "switchTab", tab: value as "changes" | "history" });
+			dispatch({
+				type: "switchTab",
+				tab: value as "changes" | "history",
+			});
 		});
 	};
 
@@ -345,8 +344,7 @@ function ChangesSidebar() {
 function ChangesDiffPane({ visible }: { visible: boolean }) {
 	const { changesFiles, state, options } = use(GitDiffContext)!;
 	const activeFile =
-		changesFiles.length > 0 &&
-		state.selectedFileIndex < changesFiles.length
+		changesFiles.length > 0 && state.selectedFileIndex < changesFiles.length
 			? changesFiles[state.selectedFileIndex]
 			: null;
 

@@ -109,9 +109,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				const unlistenExit = await listen(
 					`pty-exit-${sessionId}`,
 					() => {
-						term.write(
-							"\r\n\x1B[90m[Process exited]\x1B[0m\r\n",
-						);
+						term.write("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
 					},
 				);
 
@@ -164,9 +162,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 			// 5. React 19 ref cleanup
 			return () => {
-				consola.log(
-					`[pty-terminal] unmount sessionId=${sessionId}`,
-				);
+				consola.log(`[pty-terminal] unmount sessionId=${sessionId}`);
 				disposed = true;
 
 				// Flush buffered PTY output to DB before teardown (best-effort)

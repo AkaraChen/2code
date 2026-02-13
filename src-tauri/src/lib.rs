@@ -98,7 +98,9 @@ pub fn run() {
 	app.run(move |app_handle, event| {
 		use std::sync::atomic::Ordering;
 		use tauri::Manager;
-		use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+		use tauri_plugin_dialog::{
+			DialogExt, MessageDialogButtons, MessageDialogKind,
+		};
 
 		match event {
 			tauri::RunEvent::WindowEvent {

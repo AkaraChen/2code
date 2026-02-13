@@ -47,42 +47,48 @@ const stepKeyMap = {
 	commitFile: "selectedCommitFileIndex",
 } as const;
 
-export const gitDiffReducer = produce((draft: GitDiffState, action: GitDiffAction) => {
-	switch (action.type) {
-		case "switchTab":
-			draft.activeTab = action.tab;
-			draft.selectedCommit = null;
-			draft.selectedFileIndex = 0;
-			draft.selectedCommitIndex = 0;
-			draft.selectedCommitFileIndex = 0;
-			draft.commitFileCount = 0;
-			break;
-		case "selectFile":
-			draft.selectedFileIndex = action.index;
-			break;
-		case "selectCommit":
-			draft.selectedCommit = action.commit;
-			draft.selectedCommitIndex = action.index;
-			draft.selectedCommitFileIndex = 0;
-			break;
-		case "selectCommitFile":
-			draft.selectedCommitFileIndex = action.index;
-			break;
-		case "commitBack":
-			draft.selectedCommit = null;
-			draft.selectedCommitFileIndex = 0;
-			draft.commitFileCount = 0;
-			break;
-		case "setCommitFileCount":
-			draft.commitFileCount = action.count;
-			break;
-		case "stepIndex": {
-			const key = stepKeyMap[action.target];
-			draft[key] = clamp(draft[key] + action.delta, 0, action.count - 1);
-			break;
+export const gitDiffReducer = produce(
+	(draft: GitDiffState, action: GitDiffAction) => {
+		switch (action.type) {
+			case "switchTab":
+				draft.activeTab = action.tab;
+				draft.selectedCommit = null;
+				draft.selectedFileIndex = 0;
+				draft.selectedCommitIndex = 0;
+				draft.selectedCommitFileIndex = 0;
+				draft.commitFileCount = 0;
+				break;
+			case "selectFile":
+				draft.selectedFileIndex = action.index;
+				break;
+			case "selectCommit":
+				draft.selectedCommit = action.commit;
+				draft.selectedCommitIndex = action.index;
+				draft.selectedCommitFileIndex = 0;
+				break;
+			case "selectCommitFile":
+				draft.selectedCommitFileIndex = action.index;
+				break;
+			case "commitBack":
+				draft.selectedCommit = null;
+				draft.selectedCommitFileIndex = 0;
+				draft.commitFileCount = 0;
+				break;
+			case "setCommitFileCount":
+				draft.commitFileCount = action.count;
+				break;
+			case "stepIndex": {
+				const key = stepKeyMap[action.target];
+				draft[key] = clamp(
+					draft[key] + action.delta,
+					0,
+					action.count - 1,
+				);
+				break;
+			}
 		}
-	}
-});
+	},
+);
 
 export interface GitDiffContextValue {
 	state: GitDiffState;

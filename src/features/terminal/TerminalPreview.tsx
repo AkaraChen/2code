@@ -7,7 +7,11 @@ const lines = [
 	{ id: "whoami", prompt: true, text: "whoami" },
 	{ id: "whoami-out", prompt: false, text: "akrc" },
 	{ id: "ls", prompt: true, text: "ls" },
-	{ id: "ls-out-1", prompt: false, text: "Desktop    Documents    Downloads    Projects" },
+	{
+		id: "ls-out-1",
+		prompt: false,
+		text: "Desktop    Documents    Downloads    Projects",
+	},
 	{ id: "ls-out-2", prompt: false, text: "Music      Pictures     Videos" },
 	{ id: "echo", prompt: true, text: 'echo "Hello, 2code!"' },
 	{ id: "echo-out", prompt: false, text: "Hello, 2code!" },

@@ -4,11 +4,10 @@ export default antfu({
 	stylistic: false,
 	react: true,
 	imports: false,
-}).overrideRules({
-	"perfectionist/sort-imports": "off",
-}).append({
-	ignores: [
-		"**/*.md",
-		"./src-tauri/target/**"
-	]
 })
+	.overrideRules({
+		"perfectionist/sort-imports": "off",
+	})
+	.append({
+		ignores: ["**/*.md", "./src-tauri/target/**"],
+	});

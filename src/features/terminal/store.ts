@@ -1,5 +1,6 @@
 import { QueryObserver } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
+import consola from "consola";
 import { enableMapSet } from "immer";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
@@ -9,8 +10,8 @@ import {
 	createPtySession,
 	deletePtySessionRecord,
 	getPtySessionHistory,
-	listProjects,
 	listProjectSessions,
+	listProjects,
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -60,7 +61,11 @@ export const useTerminalStore = create<TerminalStore>()(
 					activeTabId: null,
 					counter: 0,
 				};
-				const tab: TerminalTab = { id: sessionId, title, pendingHistory };
+				const tab: TerminalTab = {
+					id: sessionId,
+					title,
+					pendingHistory,
+				};
 				state.profiles[profileId] = {
 					tabs: [...existing.tabs, tab],
 					activeTabId: tab.id,
@@ -185,7 +190,9 @@ observer.subscribe((result) => {
 });
 
 async function restoreTerminals(projects: ProjectWithProfiles[]) {
-	console.log(`[pty-restore] starting restore for ${projects.length} projects`);
+	consola.log(
+		`[pty-restore] starting restore for ${projects.length} projects`,
+	);
 	const projectSessions = await Promise.all(
 		projects.map(async (project) => ({
 			project,
@@ -194,7 +201,14 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	);
 
 	for (const { project, sessions } of projectSessions) {
-		console.log(`[pty-restore] project ${project.id}: found ${sessions.length} sessions`, sessions.map(s => ({ id: s.id, profile: s.profile_id, closed: s.closed_at })));
+		consola.log(
+			`[pty-restore] project ${project.id}: found ${sessions.length} sessions`,
+			sessions.map((s) => ({
+				id: s.id,
+				profile: s.profile_id,
+				closed: s.closed_at,
+			})),
+		);
 	}
 
 	let count = 0;
@@ -204,7 +218,9 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 				// Pre-fetch history from old session
 				let historyText: string | undefined;
 				try {
-					console.log(`[pty-restore] fetching history for old session ${session.id}`);
+					consola.log(
+						`[pty-restore] fetching history for old session ${session.id}`,
+					);
 					const history = await getPtySessionHistory({
 						sessionId: session.id,
 					});
@@ -212,14 +228,21 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 						historyText = new TextDecoder().decode(
 							new Uint8Array(history),
 						);
-						console.log(`[pty-restore] fetched ${history.length} bytes of history`);
+						consola.log(
+							`[pty-restore] fetched ${history.length} bytes of history`,
+						);
 					}
 				} catch (e) {
-					console.warn(`[pty-restore] failed to fetch history for ${session.id}:`, e);
+					consola.warn(
+						`[pty-restore] failed to fetch history for ${session.id}:`,
+						e,
+					);
 				}
 
 				// Delete old session record
-				deletePtySessionRecord({ sessionId: session.id }).catch(() => {});
+				deletePtySessionRecord({ sessionId: session.id }).catch(
+					() => {},
+				);
 
 				const newSessionId = await createPtySession({
 					meta: {
@@ -233,7 +256,9 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 						cols: 80,
 					},
 				});
-				console.log(`[pty-restore] restoring session ${session.id} -> new ${newSessionId} for profile ${session.profile_id}`);
+				consola.log(
+					`[pty-restore] restoring session ${session.id} -> new ${newSessionId} for profile ${session.profile_id}`,
+				);
 				useTerminalStore
 					.getState()
 					.addTab(
@@ -246,7 +271,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 			}),
 		),
 	);
-	console.log(`[pty-restore] restore complete, ${count} sessions restored`);
+	consola.log(`[pty-restore] restore complete, ${count} sessions restored`);
 }
 
 // Module-level listener for notification events from the backend

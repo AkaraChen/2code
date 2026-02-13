@@ -77,6 +77,7 @@ sequenceDiagram
 ```
 
 Key details:
+
 - Reader thread reads 4KB chunks from PTY
 - UTF-8 boundary detection (`find_utf8_boundary`) prevents partial character output to frontend
 - Persistence runs on a separate thread via mpsc channel (non-blocking)
@@ -144,6 +145,7 @@ sequenceDiagram
 ```
 
 Clearing notifications:
+
 - `setActiveTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
 - `closeTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
 

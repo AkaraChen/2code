@@ -8,18 +8,18 @@
 
 ### Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Vite 7, Chakra UI v3 |
-| State (client) | Zustand 5 + immer |
-| State (server) | TanStack Query 5 |
-| Routing | react-router v7 |
-| Terminal | xterm.js 6 |
-| Backend | Rust, Tauri 2 |
-| Database | SQLite via Diesel ORM |
-| IPC codegen | tauri-typegen |
-| i18n | Paraglide.js v2 |
-| Sidecar | `2code-helper` CLI (Rust, clap + ureq) |
+| Layer          | Technology                                 |
+| -------------- | ------------------------------------------ |
+| Frontend       | React 19, TypeScript, Vite 7, Chakra UI v3 |
+| State (client) | Zustand 5 + immer                          |
+| State (server) | TanStack Query 5                           |
+| Routing        | react-router v7                            |
+| Terminal       | xterm.js 6                                 |
+| Backend        | Rust, Tauri 2                              |
+| Database       | SQLite via Diesel ORM                      |
+| IPC codegen    | tauri-typegen                              |
+| i18n           | Paraglide.js v2                            |
+| Sidecar        | `2code-helper` CLI (Rust, clap + ureq)     |
 
 ### Module Structure
 
@@ -63,9 +63,9 @@
 
 ## Documentation Index
 
-| Document | Contents |
-|----------|----------|
-| [Architecture](architecture.md) | Layer diagram, component map, design decisions |
-| [Data Flow](data-flow.md) | IPC lifecycle, PTY streaming, notification pipeline, terminal restoration |
-| [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints |
-| [Configuration](configuration.md) | Config files, environment variables, database schema |
+| Document                          | Contents                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| [Architecture](architecture.md)   | Layer diagram, component map, design decisions                            |
+| [Data Flow](data-flow.md)         | IPC lifecycle, PTY streaming, notification pipeline, terminal restoration |
+| [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
+| [Configuration](configuration.md) | Config files, environment variables, database schema                      |

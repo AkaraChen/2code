@@ -38,8 +38,7 @@ pub fn create_session(
 	let project_init_scripts = {
 		let db = app.state::<DbPool>().inner().clone();
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let profile =
-			crate::repo::profile::find_by_id(conn, &meta.profile_id)?;
+		let profile = crate::repo::profile::find_by_id(conn, &meta.profile_id)?;
 		let folder = crate::repo::profile::get_project_folder(
 			conn,
 			&profile.project_id,
@@ -111,8 +110,7 @@ pub fn create_session(
 
 	// Track the thread handle so it can be joined on app exit,
 	// ensuring the persistence sub-thread flushes its buffer.
-	if let Some(threads) =
-		app.try_state::<crate::infra::pty::PtyReadThreads>()
+	if let Some(threads) = app.try_state::<crate::infra::pty::PtyReadThreads>()
 	{
 		if let Ok(mut guard) = threads.lock() {
 			guard.push(handle);

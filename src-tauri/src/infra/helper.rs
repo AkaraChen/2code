@@ -16,7 +16,8 @@ pub struct HelperState {
 }
 
 fn find_free_port() -> u16 {
-	let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+	let listener =
+		TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
 	listener.local_addr().unwrap().port()
 }
 
@@ -71,19 +72,14 @@ fn try_play_notification(app: &AppHandle) -> bool {
 		return false;
 	}
 
-	let sound_path = format!(
-		"/System/Library/Sounds/{}.aiff",
-		entry.state.sound
-	);
+	let sound_path =
+		format!("/System/Library/Sounds/{}.aiff", entry.state.sound);
 
 	if !std::path::Path::new(&sound_path).exists() {
 		return false;
 	}
 
-	Command::new("afplay")
-		.arg(&sound_path)
-		.spawn()
-		.is_ok()
+	Command::new("afplay").arg(&sound_path).spawn().is_ok()
 }
 
 async fn health_handler() -> &'static str {
@@ -103,10 +99,9 @@ pub fn start(app: &AppHandle) -> HelperState {
 			.route("/health", get(health_handler))
 			.with_state(app_handle);
 
-		let listener =
-			tokio::net::TcpListener::bind(("127.0.0.1", port))
-				.await
-				.expect("bind helper HTTP server");
+		let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+			.await
+			.expect("bind helper HTTP server");
 
 		if let Err(e) = axum::serve(listener, router).await {
 			tracing::error!(target: "helper", "HTTP server error: {e}");

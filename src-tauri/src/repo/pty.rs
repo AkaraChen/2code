@@ -56,8 +56,12 @@ pub fn mark_all_open_closed(conn: &mut SqliteConnection) {
 	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
 	.execute(conn)
 	{
-		Ok(n) => tracing::info!(target: "pty", count = n, "repo: marked open sessions closed"),
-		Err(e) => tracing::warn!(target: "pty", error = %e, "repo: failed to mark sessions closed"),
+		Ok(n) => {
+			tracing::info!(target: "pty", count = n, "repo: marked open sessions closed")
+		}
+		Err(e) => {
+			tracing::warn!(target: "pty", error = %e, "repo: failed to mark sessions closed")
+		}
 	}
 }
 

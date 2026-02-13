@@ -31,7 +31,9 @@ pub fn create_thread_tracker() -> PtyReadThreads {
 /// This ensures each read thread's persistence sub-thread flushes its output buffer.
 pub fn join_all_read_threads(threads: &PtyReadThreads) {
 	let handles: Vec<JoinHandle<()>> = {
-		let Ok(mut guard) = threads.lock() else { return };
+		let Ok(mut guard) = threads.lock() else {
+			return;
+		};
 		guard.drain(..).collect()
 	};
 

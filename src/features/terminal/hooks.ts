@@ -1,12 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
+import { use } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	closePtySession,
 	createPtySession,
 	deletePtySessionRecord,
 } from "@/generated";
-import { use } from "react";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { useTerminalStore } from "./store";
 import type { TerminalThemeId } from "./themes";

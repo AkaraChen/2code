@@ -64,8 +64,7 @@ mod tests {
 
 	#[test]
 	fn prepare_init_dir_creates_zshenv() {
-		let dir =
-			prepare_init_dir("test-session-1", &[]).unwrap();
+		let dir = prepare_init_dir("test-session-1", &[]).unwrap();
 		assert!(dir.exists());
 		assert!(dir.join(".zshenv").exists());
 
@@ -75,10 +74,8 @@ mod tests {
 
 	#[test]
 	fn zshenv_contains_default_init() {
-		let dir =
-			prepare_init_dir("test-session-2", &[]).unwrap();
-		let content =
-			std::fs::read_to_string(dir.join(".zshenv")).unwrap();
+		let dir = prepare_init_dir("test-session-2", &[]).unwrap();
+		let content = std::fs::read_to_string(dir.join(".zshenv")).unwrap();
 
 		assert!(content.contains("2code default init"));
 		assert!(content.contains(DEFAULT_INIT.trim_end()));
@@ -90,10 +87,8 @@ mod tests {
 	fn zshenv_contains_project_init() {
 		let scripts =
 			vec!["echo HELLO".to_string(), "export FOO=bar".to_string()];
-		let dir =
-			prepare_init_dir("test-session-3", &scripts).unwrap();
-		let content =
-			std::fs::read_to_string(dir.join(".zshenv")).unwrap();
+		let dir = prepare_init_dir("test-session-3", &scripts).unwrap();
+		let content = std::fs::read_to_string(dir.join(".zshenv")).unwrap();
 
 		assert!(content.contains("echo HELLO"));
 		assert!(content.contains("export FOO=bar"));

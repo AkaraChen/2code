@@ -44,7 +44,11 @@ export function ProfileItem({
 							</Icon>
 							<Text truncate>{profile.branch_name}</Text>
 							{hasNotification && (
-								<Circle size="2" bg="green.500" flexShrink={0} />
+								<Circle
+									size="2"
+									bg="green.500"
+									flexShrink={0}
+								/>
 							)}
 						</NavLink>
 					</HStack>
