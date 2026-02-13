@@ -16,6 +16,7 @@ use crate::model::pty::{
 pub(crate) enum PersistMsg {
 	Data(Vec<u8>),
 	Flush,
+	Clear,
 }
 
 pub type PtyFlushSenders =
@@ -212,6 +213,19 @@ pub fn flush_output(
 	Ok(())
 }
 
+/// Find the last occurrence of `needle` in `haystack`.
+/// Returns the byte offset of the match start, or `None` if not found.
+fn find_last_pattern(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+	if needle.is_empty() || haystack.len() < needle.len() {
+		return None;
+	}
+	(0..=haystack.len() - needle.len())
+		.rev()
+		.find(|&i| haystack[i..i + needle.len()] == *needle)
+}
+
+const CLEAR_SCROLLBACK_SEQ: &[u8] = b"\x1b[3J";
+
 /// Find the byte position up to which the data forms complete UTF-8 sequences.
 /// Any trailing incomplete multi-byte sequence is excluded from the boundary.
 pub fn find_utf8_boundary(bytes: &[u8]) -> usize {
@@ -276,8 +290,16 @@ fn read_pty_output(
 				tracing::info!(target: "pty", %session_id, n, "read: bytes from PTY");
 				let raw = &buf[..n];
 
-				// Send raw bytes to persistence thread (non-blocking)
-				let _ = tx.send(PersistMsg::Data(raw.to_vec()));
+				// Detect clear-scrollback sequence and notify persistence thread
+				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ) {
+					let after = pos + CLEAR_SCROLLBACK_SEQ.len();
+					let _ = tx.send(PersistMsg::Clear);
+					if after < n {
+						let _ = tx.send(PersistMsg::Data(raw[after..].to_vec()));
+					}
+				} else {
+					let _ = tx.send(PersistMsg::Data(raw.to_vec()));
+				}
 
 				// Prepend any leftover bytes from incomplete UTF-8 sequence
 				let combined;
@@ -348,6 +370,13 @@ fn persist_pty_output(
 				if !buffer.is_empty() {
 					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: flush signal received, flushing");
 					flush_output_buffer(&db, session_id, &mut buffer);
+				}
+			}
+			PersistMsg::Clear => {
+				tracing::info!(target: "pty", %session_id, "persist: clear scrollback");
+				buffer.clear();
+				if let Ok(mut conn) = db.lock() {
+					crate::repo::pty::clear_output(&mut conn, session_id);
 				}
 			}
 		}
@@ -492,5 +521,57 @@ mod tests {
 	#[test]
 	fn boundary_single_2byte_leader() {
 		assert_eq!(find_utf8_boundary(&[0xC0]), 0);
+	}
+
+	// --- find_last_pattern ---
+
+	#[test]
+	fn pattern_not_found() {
+		assert_eq!(find_last_pattern(b"hello", b"\x1b[3J"), None);
+	}
+
+	#[test]
+	fn pattern_empty_needle() {
+		assert_eq!(find_last_pattern(b"hello", b""), None);
+	}
+
+	#[test]
+	fn pattern_needle_longer_than_haystack() {
+		assert_eq!(find_last_pattern(b"ab", b"abcde"), None);
+	}
+
+	#[test]
+	fn pattern_single_occurrence() {
+		let data = b"before\x1b[3Jafter";
+		assert_eq!(find_last_pattern(data, CLEAR_SCROLLBACK_SEQ), Some(6));
+	}
+
+	#[test]
+	fn pattern_multiple_occurrences_returns_last() {
+		let data = b"\x1b[3Jfoo\x1b[3Jbar";
+		assert_eq!(find_last_pattern(data, CLEAR_SCROLLBACK_SEQ), Some(7));
+	}
+
+	#[test]
+	fn pattern_at_start() {
+		let data = b"\x1b[3Jrest";
+		assert_eq!(find_last_pattern(data, CLEAR_SCROLLBACK_SEQ), Some(0));
+	}
+
+	#[test]
+	fn pattern_at_end() {
+		let data = b"stuff\x1b[3J";
+		assert_eq!(
+			find_last_pattern(data, CLEAR_SCROLLBACK_SEQ),
+			Some(data.len() - CLEAR_SCROLLBACK_SEQ.len())
+		);
+	}
+
+	#[test]
+	fn pattern_exact_match() {
+		assert_eq!(
+			find_last_pattern(CLEAR_SCROLLBACK_SEQ, CLEAR_SCROLLBACK_SEQ),
+			Some(0)
+		);
 	}
 }

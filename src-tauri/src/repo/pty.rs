@@ -119,6 +119,15 @@ pub fn append_output(
 	Ok(())
 }
 
+/// Clear persisted output for a session (reset BLOB to empty).
+pub fn clear_output(conn: &mut SqliteConnection, session_id: &str) {
+	let _ = diesel::sql_query(
+		"UPDATE pty_session_output SET data = X'' WHERE session_id = ?",
+	)
+	.bind::<diesel::sql_types::Text, _>(session_id)
+	.execute(conn);
+}
+
 pub fn get_session_history(
 	conn: &mut SqliteConnection,
 	session_id: &str,
