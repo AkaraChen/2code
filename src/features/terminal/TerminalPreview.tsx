@@ -4,14 +4,14 @@ import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
 const lines = [
-	{ prompt: true, text: "whoami" },
-	{ prompt: false, text: "akrc" },
-	{ prompt: true, text: "ls" },
-	{ prompt: false, text: "Desktop    Documents    Downloads    Projects" },
-	{ prompt: false, text: "Music      Pictures     Videos" },
-	{ prompt: true, text: 'echo "Hello, 2code!"' },
-	{ prompt: false, text: "Hello, 2code!" },
-	{ prompt: true, text: "" },
+	{ id: "whoami", prompt: true, text: "whoami" },
+	{ id: "whoami-out", prompt: false, text: "akrc" },
+	{ id: "ls", prompt: true, text: "ls" },
+	{ id: "ls-out-1", prompt: false, text: "Desktop    Documents    Downloads    Projects" },
+	{ id: "ls-out-2", prompt: false, text: "Music      Pictures     Videos" },
+	{ id: "echo", prompt: true, text: 'echo "Hello, 2code!"' },
+	{ id: "echo-out", prompt: false, text: "Hello, 2code!" },
+	{ id: "prompt", prompt: true, text: "" },
 ];
 
 export function TerminalPreview({
@@ -40,7 +40,7 @@ export function TerminalPreview({
 		>
 			<pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
 				{lines.map((line, i) => (
-					<div key={i}>
+					<div key={line.id}>
 						{line.prompt && (
 							<span style={{ color: theme.green }}>$ </span>
 						)}
