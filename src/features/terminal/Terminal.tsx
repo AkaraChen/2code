@@ -8,6 +8,7 @@ import { resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
+import consola from "consola";
 
 interface TerminalProps {
 	profileId: string;
@@ -61,7 +62,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 		(container: HTMLDivElement | null) => {
 			if (!container) return;
 
-			console.log(`[pty-terminal] mount sessionId=${sessionId}`);
+			consola.log(`[pty-terminal] mount sessionId=${sessionId}`);
 			let disposed = false;
 
 			// 1. Create xterm (sync)
@@ -90,7 +91,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				.profiles[profileId]?.tabs.find((t) => t.id === sessionId);
 			if (tab?.pendingHistory) {
 				term.write(tab.pendingHistory);
-				console.log(
+				consola.log(
 					`[pty-restore] wrote ${tab.pendingHistory.length} chars of history to xterm`,
 				);
 				useTerminalStore
@@ -123,7 +124,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 					return;
 				}
 
-				console.log(
+				consola.log(
 					`[pty-terminal] live listeners registered for session ${sessionId}`,
 				);
 				unlisteners.push(unlistenOutput, unlistenExit);
@@ -158,7 +159,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 			// 5. React 19 ref cleanup
 			return () => {
-				console.log(
+				consola.log(
 					`[pty-terminal] unmount sessionId=${sessionId}`,
 				);
 				disposed = true;
