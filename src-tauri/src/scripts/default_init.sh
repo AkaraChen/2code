@@ -13,7 +13,8 @@ command mkdir -p "$_2CODE_BIN" "$_2CODE_HOOKS" 2>/dev/null
 # --- notify.sh (plays system sound on agent events) ---
 cat > "$_2CODE_NOTIFY" << 'NOTIFY_SH'
 #!/bin/bash
-afplay /System/Library/Sounds/Glass.aiff &>/dev/null &
+[[ -z "$_2CODE_NOTIFY_SOUND" ]] && exit 0
+afplay "/System/Library/Sounds/${_2CODE_NOTIFY_SOUND}.aiff" &>/dev/null &
 NOTIFY_SH
 command chmod +x "$_2CODE_NOTIFY"
 

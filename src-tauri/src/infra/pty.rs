@@ -27,6 +27,7 @@ pub fn create_session(
 	rows: u16,
 	cols: u16,
 	init_dir: Option<&Path>,
+	notify_sound: Option<&str>,
 ) -> Result<Box<dyn std::io::Read + Send>, AppError> {
 	let pty_system = native_pty_system();
 
@@ -41,6 +42,11 @@ pub fn create_session(
 
 	let mut cmd = CommandBuilder::new(shell);
 	cmd.env("TERM", "xterm-256color");
+
+	// Inject notification sound env var
+	if let Some(sound) = notify_sound {
+		cmd.env("_2CODE_NOTIFY_SOUND", sound);
+	}
 
 	// Inject shell init via ZDOTDIR
 	if let Some(dir) = init_dir {

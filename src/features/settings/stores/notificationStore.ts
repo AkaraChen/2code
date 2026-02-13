@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { tauriStorage } from "@/shared/lib/tauriStorage";
 
 interface NotificationStore {
 	enabled: boolean;
@@ -16,6 +17,9 @@ export const useNotificationStore = create<NotificationStore>()(
 			setEnabled: (v) => set({ enabled: v }),
 			setSound: (v) => set({ sound: v }),
 		}),
-		{ name: "notification-settings" },
+		{
+			name: "notification-settings",
+			storage: createJSONStorage(() => tauriStorage),
+		},
 	),
 );

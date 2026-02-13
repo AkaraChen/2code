@@ -14,6 +14,7 @@
 		"core:window:allow-is-maximized",
 		"core:window:allow-set-focus",
 		"dialog:allow-open",
-		"notification:default"
+		"notification:default",
+		"store:default"
 	]
 }
