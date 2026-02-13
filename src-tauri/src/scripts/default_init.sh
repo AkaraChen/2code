@@ -10,11 +10,11 @@ _2CODE_SETTINGS="${_2CODE_HOOKS}/claude-settings.json"
 
 command mkdir -p "$_2CODE_BIN" "$_2CODE_HOOKS" 2>/dev/null
 
-# --- notify.sh (plays system sound on agent events) ---
+# --- notify.sh (triggers notification via helper CLI) ---
 cat > "$_2CODE_NOTIFY" << 'NOTIFY_SH'
 #!/bin/bash
-[[ -z "$_2CODE_NOTIFY_SOUND" ]] && exit 0
-afplay "/System/Library/Sounds/${_2CODE_NOTIFY_SOUND}.aiff" &>/dev/null &
+[[ -z "$_2CODE_HELPER" ]] && exit 0
+"$_2CODE_HELPER" notify &>/dev/null &
 NOTIFY_SH
 command chmod +x "$_2CODE_NOTIFY"
 

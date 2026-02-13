@@ -1,3 +1,6 @@
+[workspace]
+members = [ "shared", "2code-helper" ]
+
 [package]
 name = "code"
 version = "0.1.0"
@@ -39,5 +42,8 @@ tempfile = "3"
 notify = "8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [ "env-filter" ] }
+axum = "0.8"
+tokio = { version = "1", features = [ "net" ] }
+shared = { path = "shared" }
 
 [dev-dependencies]

@@ -49,6 +49,11 @@ pub fn run() {
 			service::pty::mark_all_closed(&pool);
 
 			app.manage(pool);
+
+			// Start helper HTTP server (for CLI sidecar communication)
+			let helper = infra::helper::start(app.handle());
+			app.manage(helper);
+
 			Ok(())
 		})
 		.invoke_handler(tauri::generate_handler![

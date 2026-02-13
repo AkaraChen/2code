@@ -1,6 +1,7 @@
 pub mod config;
 pub mod db;
 pub mod git;
+pub mod helper;
 pub mod logger;
 pub mod pty;
 pub mod shell_init;

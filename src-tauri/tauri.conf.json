@@ -22,13 +22,16 @@
 		]
 	},
 	"build": {
-		"beforeBuildCommand": "bun run build",
-		"beforeDevCommand": "bun run dev",
+		"beforeBuildCommand": "just build-helper && bun run build",
+		"beforeDevCommand": "just build-helper-dev && bun run dev",
 		"devUrl": "http://localhost:1420",
 		"frontendDist": "../dist"
 	},
 	"bundle": {
 		"active": true,
+		"externalBin": [
+			"binaries/2code-helper"
+		],
 		"icon": [
 			"icons/32x32.png",
 			"icons/128x128.png",

@@ -4,8 +4,6 @@ use std::sync::mpsc;
 use diesel::prelude::*;
 use tauri::{AppHandle, Emitter, Manager};
 
-use tauri_plugin_store::StoreExt;
-
 use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::infra::pty::{self as session, PtySessionMap};
@@ -49,18 +47,16 @@ pub fn create_session(
 		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
 	}
 
-	// 4. Read notification sound from shared settings store
-	let notify_sound: Option<String> = app
-		.store("settings.json")
-		.ok()
-		.and_then(|store| {
-			let val = store.get("notification-settings")?;
-			let enabled = val.get("state")?.get("enabled")?.as_bool()?;
-			if !enabled {
-				return None;
-			}
-			val.get("state")?.get("sound")?.as_str().map(String::from)
-		});
+	// 4. Read helper URL and binary path from managed state
+	let (helper_url, helper_bin) = app
+		.try_state::<crate::infra::helper::HelperState>()
+		.map(|s| {
+			(
+				format!("http://127.0.0.1:{}", s.port),
+				s.sidecar_path.to_string_lossy().to_string(),
+			)
+		})
+		.unzip();
 
 	// 5. Create PTY session
 	let reader = session::create_session(
@@ -71,7 +67,8 @@ pub fn create_session(
 		config.rows,
 		config.cols,
 		init_dir.as_deref().ok(),
-		notify_sound.as_deref(),
+		helper_url.as_deref(),
+		helper_bin.as_deref(),
 	)?;
 
 	// Insert session record into database
