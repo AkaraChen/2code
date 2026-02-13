@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -20,11 +21,13 @@ pub fn create_session_map() -> PtySessionMap {
 
 pub fn create_session(
 	sessions: &PtySessionMap,
+	session_id: &str,
 	shell: &str,
 	cwd: &str,
 	rows: u16,
 	cols: u16,
-) -> Result<(String, Box<dyn std::io::Read + Send>), AppError> {
+	init_dir: Option<&Path>,
+) -> Result<Box<dyn std::io::Read + Send>, AppError> {
 	let pty_system = native_pty_system();
 
 	let pair = pty_system
@@ -38,6 +41,15 @@ pub fn create_session(
 
 	let mut cmd = CommandBuilder::new(shell);
 	cmd.env("TERM", "xterm-256color");
+
+	// Inject shell init via ZDOTDIR
+	if let Some(dir) = init_dir {
+		if let Ok(original) = std::env::var("ZDOTDIR") {
+			cmd.env("_2CODE_ORIG_ZDOTDIR", &original);
+		}
+		cmd.env("ZDOTDIR", dir.to_string_lossy().as_ref());
+	}
+
 	if !cwd.is_empty() {
 		cmd.cwd(cwd);
 	}
@@ -57,8 +69,6 @@ pub fn create_session(
 		.take_writer()
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
-	let session_id = uuid::Uuid::new_v4().to_string();
-
 	let session = PtySession {
 		master: pair.master,
 		writer,
@@ -68,12 +78,12 @@ pub fn create_session(
 	sessions
 		.lock()
 		.map_err(|_| AppError::LockError)?
-		.insert(session_id.clone(), session);
+		.insert(session_id.to_string(), session);
 
 	// Drop the slave to avoid blocking
 	drop(pair.slave);
 
-	Ok((session_id, reader))
+	Ok(reader)
 }
 
 pub fn write_to_pty(

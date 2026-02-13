@@ -20,12 +20,42 @@ pub fn create_session(
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
 ) -> Result<String, AppError> {
-	let (session_id, reader) = session::create_session(
+	// 1. Resolve project folder and load init_script from 2code.json
+	let project_init_scripts = {
+		let db = app.state::<DbPool>().inner().clone();
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let profile =
+			crate::repo::profile::find_by_id(conn, &meta.profile_id)?;
+		let folder = crate::repo::profile::get_project_folder(
+			conn,
+			&profile.project_id,
+		)?;
+		crate::infra::config::load_project_config(&folder)
+			.map(|c| c.init_script)
+			.unwrap_or_default()
+	};
+
+	// 2. Generate session ID (needed for init dir name)
+	let session_id = uuid::Uuid::new_v4().to_string();
+
+	// 3. Prepare shell init directory (graceful degradation on failure)
+	let init_dir = crate::infra::shell_init::prepare_init_dir(
+		&session_id,
+		&project_init_scripts,
+	);
+	if let Err(ref e) = init_dir {
+		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
+	}
+
+	// 4. Create PTY session
+	let reader = session::create_session(
 		sessions,
+		&session_id,
 		&config.shell,
 		&config.cwd,
 		config.rows,
 		config.cols,
+		init_dir.as_deref().ok(),
 	)?;
 
 	// Insert session record into database

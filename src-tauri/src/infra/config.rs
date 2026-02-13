@@ -10,6 +10,8 @@ pub struct ProjectConfig {
 	pub setup_script: Vec<String>,
 	#[serde(default)]
 	pub teardown_script: Vec<String>,
+	#[serde(default)]
+	pub init_script: Vec<String>,
 }
 
 pub fn load_project_config(
@@ -105,6 +107,23 @@ mod tests {
 		let config = load_project_config(dir.path().to_str().unwrap()).unwrap();
 		assert!(config.setup_script.is_empty());
 		assert!(config.teardown_script.is_empty());
+		assert!(config.init_script.is_empty());
+	}
+
+	#[test]
+	fn load_init_script() {
+		let dir = TempDir::new().unwrap();
+		setup_config(
+			dir.path(),
+			r#"{"init_script": ["echo hello", "export FOO=bar"]}"#,
+		);
+
+		let config = load_project_config(dir.path().to_str().unwrap()).unwrap();
+		assert_eq!(
+			config.init_script,
+			vec!["echo hello", "export FOO=bar"]
+		);
+		assert!(config.setup_script.is_empty());
 	}
 
 	#[test]
