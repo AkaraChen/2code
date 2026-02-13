@@ -21,7 +21,7 @@ pub fn list_by_project(
 	conn: &mut SqliteConnection,
 	project_id: &str,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
-	pty_sessions::table
+	let sessions = pty_sessions::table
 		.inner_join(
 			profiles::table.on(profiles::id.eq(pty_sessions::profile_id)),
 		)
@@ -29,7 +29,16 @@ pub fn list_by_project(
 		.select(PtySessionRecord::as_select())
 		.order(pty_sessions::created_at.asc())
 		.load(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	tracing::info!(
+		target: "pty",
+		%project_id,
+		count = sessions.len(),
+		session_ids = ?sessions.iter().map(|s| &s.id).collect::<Vec<_>>(),
+		"repo: list_by_project"
+	);
+	Ok(sessions)
 }
 
 pub fn mark_closed(conn: &mut SqliteConnection, session_id: &str) {
@@ -41,11 +50,15 @@ pub fn mark_closed(conn: &mut SqliteConnection, session_id: &str) {
 }
 
 pub fn mark_all_open_closed(conn: &mut SqliteConnection) {
-	let _ = diesel::update(
+	match diesel::update(
 		pty_sessions::table.filter(pty_sessions::closed_at.is_null()),
 	)
 	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
-	.execute(conn);
+	.execute(conn)
+	{
+		Ok(n) => tracing::info!(target: "pty", count = n, "repo: marked open sessions closed"),
+		Err(e) => tracing::warn!(target: "pty", error = %e, "repo: failed to mark sessions closed"),
+	}
 }
 
 pub fn insert_output_chunk(
@@ -72,6 +85,10 @@ pub fn get_session_history(
 		.load(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
+	let chunk_count = chunks.len();
+	let total_bytes: usize = chunks.iter().map(|c| c.len()).sum();
+	tracing::info!(target: "pty", %session_id, chunk_count, total_bytes, "repo: loaded history");
+
 	Ok(chunks.into_iter().flatten().collect())
 }
 
@@ -79,9 +96,12 @@ pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	diesel::delete(pty_sessions::table.filter(pty_sessions::id.eq(session_id)))
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+	let rows = diesel::delete(
+		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
+	)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+	tracing::info!(target: "pty", %session_id, rows_deleted = rows, "repo: delete_session");
 	Ok(())
 }
 

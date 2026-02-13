@@ -80,7 +80,6 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 						<Terminal
 							profileId={profileId}
 							sessionId={tab.id}
-							restoreFrom={tab.restoreFrom}
 						/>
 					</Box>
 				))}

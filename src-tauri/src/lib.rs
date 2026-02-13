@@ -50,6 +50,7 @@ pub fn run() {
 
 			// Mark any orphaned sessions (from previous unclean shutdown) as closed
 			service::pty::mark_all_closed(&pool);
+			tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
 
 			app.manage(pool);
 
@@ -173,7 +174,9 @@ pub fn run() {
 				// Safety net: ensure everything is flushed
 				shutdown_for_exit.store(true, Ordering::Relaxed);
 				infra::pty::close_all_sessions(&sessions_for_exit);
+				tracing::info!(target: "pty", "exit: joining read threads...");
 				infra::pty::join_all_read_threads(&read_threads_for_exit);
+				tracing::info!(target: "pty", "exit: all read threads joined");
 
 				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 					service::pty::mark_all_closed(&db);

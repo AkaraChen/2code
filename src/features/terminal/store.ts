@@ -7,6 +7,8 @@ import { useShallow } from "zustand/react/shallow";
 import type { ProjectWithProfiles } from "@/generated";
 import {
 	createPtySession,
+	deletePtySessionRecord,
+	getPtySessionHistory,
 	listProjects,
 	listProjectSessions,
 } from "@/generated";
@@ -18,7 +20,7 @@ enableMapSet();
 interface TerminalTab {
 	id: string;
 	title: string;
-	restoreFrom?: string;
+	pendingHistory?: string;
 }
 
 interface ProjectTerminalState {
@@ -34,11 +36,11 @@ interface TerminalStore {
 		profileId: string,
 		sessionId: string,
 		title: string,
-		restoreFrom?: string,
+		pendingHistory?: string,
 	) => void;
 	closeTab: (profileId: string, tabId: string) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
-	clearRestore: (profileId: string, tabId: string) => void;
+	consumeHistory: (profileId: string, tabId: string) => void;
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
 	removeStaleProfiles: (validIds: Set<string>) => void;
@@ -51,14 +53,14 @@ export const useTerminalStore = create<TerminalStore>()(
 		profiles: {},
 		notifiedTabs: new Set<string>(),
 
-		addTab(profileId, sessionId, title, restoreFrom?) {
+		addTab(profileId, sessionId, title, pendingHistory?) {
 			set((state) => {
 				const existing = state.profiles[profileId] ?? {
 					tabs: [],
 					activeTabId: null,
 					counter: 0,
 				};
-				const tab: TerminalTab = { id: sessionId, title, restoreFrom };
+				const tab: TerminalTab = { id: sessionId, title, pendingHistory };
 				state.profiles[profileId] = {
 					tabs: [...existing.tabs, tab],
 					activeTabId: tab.id,
@@ -98,12 +100,12 @@ export const useTerminalStore = create<TerminalStore>()(
 			});
 		},
 
-		clearRestore(profileId, tabId) {
+		consumeHistory(profileId, tabId) {
 			set((state) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				const tab = profile.tabs.find((t) => t.id === tabId);
-				if (tab) delete tab.restoreFrom;
+				if (tab) delete tab.pendingHistory;
 			});
 		},
 
@@ -183,6 +185,7 @@ observer.subscribe((result) => {
 });
 
 async function restoreTerminals(projects: ProjectWithProfiles[]) {
+	console.log(`[pty-restore] starting restore for ${projects.length} projects`);
 	const projectSessions = await Promise.all(
 		projects.map(async (project) => ({
 			project,
@@ -190,9 +193,34 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 		})),
 	);
 
+	for (const { project, sessions } of projectSessions) {
+		console.log(`[pty-restore] project ${project.id}: found ${sessions.length} sessions`, sessions.map(s => ({ id: s.id, profile: s.profile_id, closed: s.closed_at })));
+	}
+
+	let count = 0;
 	await Promise.all(
 		projectSessions.flatMap(({ sessions }) =>
 			sessions.map(async (session) => {
+				// Pre-fetch history from old session
+				let historyText: string | undefined;
+				try {
+					console.log(`[pty-restore] fetching history for old session ${session.id}`);
+					const history = await getPtySessionHistory({
+						sessionId: session.id,
+					});
+					if (history.length > 0) {
+						historyText = new TextDecoder().decode(
+							new Uint8Array(history),
+						);
+						console.log(`[pty-restore] fetched ${history.length} bytes of history`);
+					}
+				} catch (e) {
+					console.warn(`[pty-restore] failed to fetch history for ${session.id}:`, e);
+				}
+
+				// Delete old session record
+				deletePtySessionRecord({ sessionId: session.id }).catch(() => {});
+
 				const newSessionId = await createPtySession({
 					meta: {
 						profileId: session.profile_id,
@@ -205,17 +233,20 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 						cols: 80,
 					},
 				});
+				console.log(`[pty-restore] restoring session ${session.id} -> new ${newSessionId} for profile ${session.profile_id}`);
 				useTerminalStore
 					.getState()
 					.addTab(
 						session.profile_id,
 						newSessionId,
 						session.title,
-						session.id,
+						historyText,
 					);
+				count++;
 			}),
 		),
 	);
+	console.log(`[pty-restore] restore complete, ${count} sessions restored`);
 }
 
 // Module-level listener for notification events from the backend

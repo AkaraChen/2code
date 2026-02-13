@@ -206,6 +206,7 @@ fn read_pty_output(
 		match reader.read(&mut buf) {
 			Ok(0) => break,
 			Ok(n) => {
+				tracing::info!(target: "pty", %session_id, n, "read: bytes from PTY");
 				let raw = &buf[..n];
 
 				// Send raw bytes to persistence thread (non-blocking)
@@ -240,8 +241,10 @@ fn read_pty_output(
 	}
 
 	// Signal persistence thread to finish and wait
+	tracing::info!(target: "pty", %session_id, "read: EOF, waiting for persist thread");
 	drop(tx);
 	let _ = persist_thread.join();
+	tracing::info!(target: "pty", %session_id, "read: persist thread joined");
 
 	// Mark session closed in DB
 	if let Ok(mut conn) = db.lock() {
@@ -261,8 +264,10 @@ fn persist_pty_output(
 	let mut total_written: usize = 0;
 
 	while let Ok(data) = rx.recv() {
+		tracing::info!(target: "pty", %session_id, n = data.len(), buf_len = buffer.len() + data.len(), "persist: received chunk");
 		buffer.extend_from_slice(&data);
 		if buffer.len() >= FLUSH_THRESHOLD {
+			tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: buffer reached threshold, flushing");
 			flush_output_buffer(
 				&db,
 				session_id,
@@ -273,8 +278,10 @@ fn persist_pty_output(
 	}
 
 	if !buffer.is_empty() {
+		tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: EOF, flushing remaining");
 		flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
 	}
+	tracing::info!(target: "pty", %session_id, total_written, "persist: thread exiting");
 }
 
 fn flush_output_buffer(
@@ -285,10 +292,12 @@ fn flush_output_buffer(
 ) {
 	let Ok(mut conn) = db.lock() else { return };
 
+	let chunk_len = buffer.len();
 	if crate::repo::pty::insert_output_chunk(&mut conn, session_id, buffer)
 		.is_ok()
 	{
-		*total_written += buffer.len();
+		*total_written += chunk_len;
+		tracing::info!(target: "pty", %session_id, chunk_len, total_written = *total_written, "flush: wrote chunk");
 	}
 	buffer.clear();
 
@@ -320,6 +329,8 @@ fn prune_oldest_chunks(
 	}
 
 	if !ids_to_delete.is_empty() {
+		let before: usize = chunks.iter().map(|(_, len)| *len as usize).sum();
+		tracing::info!(target: "pty", %session_id, count = ids_to_delete.len(), before, after = running_total, "prune: deleting chunks");
 		crate::repo::pty::delete_chunks_by_ids(conn, &ids_to_delete);
 	}
 

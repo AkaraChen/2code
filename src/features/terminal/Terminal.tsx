@@ -4,12 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import {
-	deletePtySessionRecord,
-	getPtySessionHistory,
-	resizePty,
-	writeToPty,
-} from "@/generated";
+import { resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -17,17 +12,22 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalProps {
 	profileId: string;
 	sessionId: string;
-	restoreFrom?: string;
 }
 
-export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
-	const containerRef = useRef<HTMLDivElement>(null);
+export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
-	const unlistenersRef = useRef<UnlistenFn[]>([]);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
+
+	// Refs to bridge hook values into the ref callback
+	const themeRef = useRef(theme);
+	themeRef.current = theme;
+	const fontFamilyRef = useRef(fontFamily);
+	fontFamilyRef.current = fontFamily;
+	const fontSizeRef = useRef(fontSize);
+	fontSizeRef.current = fontSize;
 
 	// Update theme without re-mounting the terminal
 	useEffect(() => {
@@ -52,128 +52,6 @@ export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 		}
 	}, [fontSize]);
 
-	useEffect(() => {
-		if (!containerRef.current) return;
-
-		let disposed = false;
-
-		const state = useTerminalSettingsStore.getState();
-		const term = new XTerm({
-			fontFamily: `"${state.fontFamily}", monospace`,
-			fontSize: state.fontSize,
-			theme,
-			cursorBlink: true,
-			convertEol: true,
-		});
-
-		const fitAddon = new FitAddon();
-		term.loadAddon(fitAddon);
-		term.open(containerRef.current);
-		fitAddon.fit();
-
-		termRef.current = term;
-		fitAddonRef.current = fitAddon;
-
-		// Resize PTY to match xterm dimensions
-		resizePty({ sessionId, rows: term.rows, cols: term.cols });
-
-		// Restore history from previous session before connecting live stream
-		const setup = async () => {
-			if (restoreFrom) {
-				try {
-					const history = await getPtySessionHistory({
-						sessionId: restoreFrom,
-					});
-					if (disposed) return;
-					if (history.length > 0) {
-						const text = new TextDecoder().decode(
-							new Uint8Array(history),
-						);
-						term.write(text);
-					}
-				} catch {
-					// Old session may already be deleted — ignore
-				}
-				if (disposed) return;
-				// Clean up old session record and store flag
-				deletePtySessionRecord({ sessionId: restoreFrom }).catch(
-					() => {},
-				);
-				useTerminalStore.getState().clearRestore(profileId, sessionId);
-			}
-
-			// Listen for PTY output
-			const unlistenOutput = await listen<string>(
-				`pty-output-${sessionId}`,
-				(event) => {
-					term.write(event.payload);
-				},
-			);
-
-			const unlistenExit = await listen(`pty-exit-${sessionId}`, () => {
-				term.write("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
-			});
-
-			if (disposed) {
-				unlistenOutput();
-				unlistenExit();
-				return;
-			}
-
-			unlistenersRef.current.push(unlistenOutput, unlistenExit);
-		};
-
-		setup().catch(() => {});
-
-		// Forward user input to PTY
-		const onDataDisposable = term.onData((data) => {
-			writeToPty({ sessionId, data });
-		});
-
-		// Handle terminal resize
-		const onResizeDisposable = term.onResize(({ rows, cols }) => {
-			resizePty({ sessionId, rows, cols });
-		});
-
-		// Update tab title when programs set it via OSC 0/2 escape sequences
-		const onTitleChangeDisposable = term.onTitleChange((title) => {
-			useTerminalStore
-				.getState()
-				.updateTabTitle(profileId, sessionId, title);
-		});
-
-		// Handle container resize
-		const resizeObserver = new ResizeObserver((entries) => {
-			const entry = entries[0];
-			if (
-				entry &&
-				entry.contentRect.width > 0 &&
-				entry.contentRect.height > 0
-			) {
-				fitAddon.fit();
-			}
-		});
-		resizeObserver.observe(containerRef.current);
-
-		return () => {
-			disposed = true;
-			resizeObserver.disconnect();
-			onDataDisposable.dispose();
-			onResizeDisposable.dispose();
-			onTitleChangeDisposable.dispose();
-
-			for (const unlisten of unlistenersRef.current) {
-				unlisten();
-			}
-			unlistenersRef.current = [];
-
-			term.dispose();
-			termRef.current = null;
-			fitAddonRef.current = null;
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [profileId, sessionId, restoreFrom]);
-
 	const containerStyle = useMemo(
 		() => ({
 			width: "100%",
@@ -186,5 +64,127 @@ export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 		[theme.background],
 	);
 
-	return <div ref={containerRef} style={containerStyle} />;
+	return (
+		<div
+			ref={(container) => {
+				if (!container) return;
+
+				console.log(`[pty-terminal] mount sessionId=${sessionId}`);
+				let disposed = false;
+
+				// 1. Create xterm (sync)
+				const term = new XTerm({
+					fontFamily: `"${fontFamilyRef.current}", monospace`,
+					fontSize: fontSizeRef.current,
+					theme: themeRef.current,
+					cursorBlink: true,
+					convertEol: true,
+				});
+
+				const fitAddon = new FitAddon();
+				term.loadAddon(fitAddon);
+				term.open(container);
+				fitAddon.fit();
+
+				termRef.current = term;
+				fitAddonRef.current = fitAddon;
+
+				// Resize PTY to match xterm dimensions
+				resizePty({ sessionId, rows: term.rows, cols: term.cols });
+
+				// 2. Write pre-fetched history (sync, from store via getState())
+				const tab = useTerminalStore
+					.getState()
+					.profiles[profileId]?.tabs.find((t) => t.id === sessionId);
+				if (tab?.pendingHistory) {
+					term.write(tab.pendingHistory);
+					console.log(
+						`[pty-restore] wrote ${tab.pendingHistory.length} chars of history to xterm`,
+					);
+					useTerminalStore
+						.getState()
+						.consumeHistory(profileId, sessionId);
+				}
+
+				// 3. Register Tauri listeners (async, fire-and-forget with disposed guard)
+				const unlisteners: UnlistenFn[] = [];
+				(async () => {
+					const unlistenOutput = await listen<string>(
+						`pty-output-${sessionId}`,
+						(event) => {
+							term.write(event.payload);
+						},
+					);
+
+					const unlistenExit = await listen(
+						`pty-exit-${sessionId}`,
+						() => {
+							term.write(
+								"\r\n\x1B[90m[Process exited]\x1B[0m\r\n",
+							);
+						},
+					);
+
+					if (disposed) {
+						unlistenOutput();
+						unlistenExit();
+						return;
+					}
+
+					console.log(
+						`[pty-terminal] live listeners registered for session ${sessionId}`,
+					);
+					unlisteners.push(unlistenOutput, unlistenExit);
+				})();
+
+				// 4. Sync handlers
+				const onDataDisposable = term.onData((data) => {
+					writeToPty({ sessionId, data });
+				});
+
+				const onResizeDisposable = term.onResize(({ rows, cols }) => {
+					resizePty({ sessionId, rows, cols });
+				});
+
+				const onTitleChangeDisposable = term.onTitleChange((title) => {
+					useTerminalStore
+						.getState()
+						.updateTabTitle(profileId, sessionId, title);
+				});
+
+				const resizeObserver = new ResizeObserver((entries) => {
+					const entry = entries[0];
+					if (
+						entry &&
+						entry.contentRect.width > 0 &&
+						entry.contentRect.height > 0
+					) {
+						fitAddon.fit();
+					}
+				});
+				resizeObserver.observe(container);
+
+				// 5. React 19 ref cleanup
+				return () => {
+					console.log(
+						`[pty-terminal] unmount sessionId=${sessionId}`,
+					);
+					disposed = true;
+					resizeObserver.disconnect();
+					onDataDisposable.dispose();
+					onResizeDisposable.dispose();
+					onTitleChangeDisposable.dispose();
+
+					for (const unlisten of unlisteners) {
+						unlisten();
+					}
+
+					term.dispose();
+					termRef.current = null;
+					fitAddonRef.current = null;
+				};
+			}}
+			style={containerStyle}
+		/>
+	);
 }
