@@ -69,7 +69,7 @@ export default function ChangesFileList({
 				{m.changedFiles({ count: files.length })}
 			</Text>
 			{files.map((file, i) => (
-				<div key={file.name + i} data-index={i}>
+				<div key={file.name} data-index={i}>
 					<FileListItem
 						file={file}
 						isActive={selectedIndex === i}

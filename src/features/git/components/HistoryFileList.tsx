@@ -74,7 +74,7 @@ export default function HistoryFileList({
 					</Text>
 					<Box ref={listRef} flex="1" overflowY="auto" minH="0">
 						{files.map((file, i) => (
-							<div key={file.name + i} data-index={i}>
+							<div key={file.name} data-index={i}>
 								<FileListItem
 									file={file}
 									isActive={selectedIndex === i}
