@@ -6,7 +6,7 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProfile } from "./hooks";
@@ -46,7 +46,7 @@ export default function CreateProfileDialog({
 		navigate(`/projects/${projectId}/profiles/${profile.id}`);
 	});
 
-	const branchName = form.watch("branchName");
+	const branchName = useWatch({ control: form.control, name: "branchName" });
 
 	return (
 		<Dialog.Root

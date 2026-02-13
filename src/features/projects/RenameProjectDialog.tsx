@@ -7,7 +7,7 @@ import {
 	Portal,
 } from "@chakra-ui/react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import * as m from "@/paraglide/messages.js";
 import { useRenameProject } from "./hooks";
 
@@ -48,7 +48,7 @@ export default function RenameProjectDialog({
 		onClose();
 	});
 
-	const name = form.watch("name");
+	const name = useWatch({ control: form.control, name: "name" });
 
 	return (
 		<Dialog.Root

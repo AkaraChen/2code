@@ -15,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { RiFolderOpenLine, RiPencilLine } from "react-icons/ri";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
@@ -41,7 +41,7 @@ export default function CreateProjectDialog({
 	const createProject = useCreateProject();
 	const navigate = useNavigate();
 
-	const folder = form.watch("folder");
+	const folder = useWatch({ control: form.control, name: "folder" });
 
 	const handleClose = () => {
 		form.reset();
