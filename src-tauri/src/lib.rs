@@ -92,91 +92,12 @@ pub fn run() {
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
 
-	let closing =
-		std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
 	app.run(move |app_handle, event| {
 		use std::sync::atomic::Ordering;
 		use tauri::Manager;
-		use tauri_plugin_dialog::{
-			DialogExt, MessageDialogButtons, MessageDialogKind,
-		};
 
 		match event {
-			tauri::RunEvent::WindowEvent {
-				event: tauri::WindowEvent::CloseRequested { api, .. },
-				..
-			} => {
-				api.prevent_close();
-
-				// Guard: only show dialog once
-				if closing.swap(true, Ordering::SeqCst) {
-					return;
-				}
-
-				// Start sync NOW: kill PTYs → read threads get EOF → start flushing
-				shutdown_for_exit.store(true, Ordering::Relaxed);
-				infra::pty::close_all_sessions(&sessions_for_exit);
-
-				// Show native confirmation dialog (non-blocking)
-				let handle = app_handle.clone();
-				let closing_cb = closing.clone();
-				app_handle
-					.dialog()
-					.message(
-						"Do you want to quit? Terminal sessions will be saved.",
-					)
-					.title("Quit")
-					.kind(MessageDialogKind::Warning)
-					.buttons(MessageDialogButtons::OkCancelCustom(
-						"Quit".into(),
-						"Cancel".into(),
-					))
-					.show(move |confirmed| {
-						if confirmed {
-							handle.exit(0);
-						} else {
-							closing_cb.store(false, Ordering::SeqCst);
-						}
-					});
-			}
-
-			tauri::RunEvent::ExitRequested { api, .. } => {
-				// If closing=true, this is from our dialog callback's exit(0) → let it through
-				if closing.load(Ordering::SeqCst) {
-					return;
-				}
-
-				api.prevent_exit();
-				closing.store(true, Ordering::SeqCst);
-
-				shutdown_for_exit.store(true, Ordering::Relaxed);
-				infra::pty::close_all_sessions(&sessions_for_exit);
-
-				let handle = app_handle.clone();
-				let closing_cb = closing.clone();
-				app_handle
-					.dialog()
-					.message(
-						"Do you want to quit? Terminal sessions will be saved.",
-					)
-					.title("Quit")
-					.kind(MessageDialogKind::Warning)
-					.buttons(MessageDialogButtons::OkCancelCustom(
-						"Quit".into(),
-						"Cancel".into(),
-					))
-					.show(move |confirmed| {
-						if confirmed {
-							handle.exit(0);
-						} else {
-							closing_cb.store(false, Ordering::SeqCst);
-						}
-					});
-			}
-
 			tauri::RunEvent::Exit => {
-				// Safety net: ensure everything is flushed
 				shutdown_for_exit.store(true, Ordering::Relaxed);
 				infra::pty::close_all_sessions(&sessions_for_exit);
 				tracing::info!(target: "pty", "exit: joining read threads...");
