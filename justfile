@@ -2,7 +2,8 @@ start:
     nr start
 
 fmt:
-    fama
+    fama "./src/**/*.{ts,tsx}"
+    cd src-tauri && cargo fmt
 
 build-helper:
     #!/usr/bin/env bash
