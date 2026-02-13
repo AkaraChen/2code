@@ -90,9 +90,19 @@ pub fn create_session(
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
 	let app_handle = app.clone();
-	std::thread::spawn(move || {
+	let handle = std::thread::spawn(move || {
 		read_pty_output(app_handle, id, reader, db);
 	});
+
+	// Track the thread handle so it can be joined on app exit,
+	// ensuring the persistence sub-thread flushes its buffer.
+	if let Some(threads) =
+		app.try_state::<crate::infra::pty::PtyReadThreads>()
+	{
+		if let Ok(mut guard) = threads.lock() {
+			guard.push(handle);
+		}
+	}
 
 	Ok(session_id)
 }
