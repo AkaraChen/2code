@@ -2,13 +2,14 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
+import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
+import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
-import consola from "consola";
 
 interface TerminalProps {
 	profileId: string;
@@ -18,6 +19,8 @@ interface TerminalProps {
 export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
+	const isStreamReadyRef = useRef(false);
+	const pendingEventsRef = useRef<string[]>([]);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
@@ -67,7 +70,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			if (!container) return;
 			const unlisteners: UnlistenFn[] = [];
 
-			consola.log(`[pty-terminal] mount sessionId=${sessionId}`);
+			consola.info(`[pty-terminal] mount sessionId=${sessionId}`);
 			let disposed = false;
 
 			// 1. Create xterm (sync)
@@ -79,13 +82,13 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				cursorStyle: "bar",
 				cursorWidth: 4,
 			});
-			unlisteners.push(() => term.dispose()); // Ensure disposal on unmount or dependency change
+			unlisteners.push(() => term.dispose());
 
 			const fitAddon = new FitAddon();
 			term.loadAddon(fitAddon);
 			term.open(container);
 			fitAddon.fit();
-			unlisteners.push(() => fitAddon.dispose()); // Clean up addon resources
+			unlisteners.push(() => fitAddon.dispose());
 
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
@@ -93,57 +96,56 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			// Resize PTY to match xterm dimensions
 			resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
-			// 2. Write pre-fetched history (sync, from store via getState())
-			const tab = useTerminalStore
-				.getState()
-				.profiles[profileId]?.tabs.find((t) => t.id === sessionId);
-			if (tab?.pendingHistory && tab.pendingHistory.length > 0) {
-				consola.info(
-					`[pty-restore] writing ${tab.pendingHistory.length} bytes of history to xterm for session ${sessionId}`,
-				);
-				// term.write(stripPromptSP(new Uint8Array(tab.pendingHistory)));
-				term.write(new Uint8Array(tab.pendingHistory));
-				consola.log(
-					`[pty-restore] wrote ${tab.pendingHistory.length} bytes of history to xterm`,
-				);
-			}
-
-			// 3. Register Tauri listeners (async, fire-and-forget with disposed guard)
-			async function setupAsync() {
+			// 2. Register listeners (before history write, but buffer events)
+			async function setupListeners() {
 				const unlistenOutput = await listen<string>(
 					`pty-output-${sessionId}`,
 					(event) => {
+						if (!isStreamReadyRef.current) {
+							pendingEventsRef.current.push(event.payload);
+							return;
+						}
 						term.write(event.payload);
 					},
 				);
-
 				const unlistenExit = await listen(
 					`pty-exit-${sessionId}`,
 					() => {
 						term.write("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
 					},
 				);
-
 				if (disposed) {
 					unlistenOutput();
 					unlistenExit();
 					return;
 				}
-
-				// Consume history only after confirming this mount is stable
-				// (not a throwaway StrictMode mount that will be immediately disposed)
-				if (tab?.pendingHistory && tab.pendingHistory.length > 0) {
-					useTerminalStore
-						.getState()
-						.consumeHistory(profileId, sessionId);
-				}
-
-				consola.log(
+				unlisteners.push(unlistenOutput, unlistenExit);
+				consola.info(
 					`[pty-terminal] live listeners registered for session ${sessionId}`,
 				);
-				unlisteners.push(unlistenOutput, unlistenExit);
 			}
-			void setupAsync();
+			void setupListeners();
+
+			// 3. Write history from module-level Map
+			const history = sessionHistory.get(sessionId);
+			if (history && history.length > 0) {
+				consola.info(
+					`[pty-restore] writing ${history.length} bytes of history for session ${sessionId}`,
+				);
+				const renderDisposable = term.onRender(() => {
+					renderDisposable.dispose();
+					term.write(history, () => {
+						sessionHistory.delete(sessionId);
+						isStreamReadyRef.current = true;
+						for (const payload of pendingEventsRef.current) {
+							term.write(payload);
+						}
+						pendingEventsRef.current = [];
+					});
+				});
+			} else {
+				isStreamReadyRef.current = true;
+			}
 
 			// 4. Sync handlers
 			term.onData((data) => {
@@ -175,11 +177,15 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 			// 5. React 19 ref cleanup
 			return () => {
-				consola.log(`[pty-terminal] unmount sessionId=${sessionId}`);
+				consola.info(`[pty-terminal] unmount sessionId=${sessionId}`);
 				disposed = true;
 
 				// Flush buffered PTY output to DB before teardown (best-effort)
 				flushPtyOutput({ sessionId }).catch(() => {});
+
+				// Reset stream state (sessionHistory is only deleted after successful write)
+				isStreamReadyRef.current = false;
+				pendingEventsRef.current = [];
 
 				for (const unlisten of unlisteners) {
 					unlisten();

@@ -50,3 +50,10 @@ pub struct PtyConfig {
 	pub rows: u16,
 	pub cols: u16,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreResult {
+	pub new_session_id: String,
+	pub history: Vec<u8>,
+}

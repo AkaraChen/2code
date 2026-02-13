@@ -1,15 +1,18 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { use, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { restorationPromise } from "./state";
 import { useTerminalProfileIds } from "./store";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
+	use(restorationPromise); // Suspense handles the pending state
+
 	const location = useLocation();
 	const { data: projects } = useSuspenseQuery({
 		queryKey: queryKeys.projects.all,

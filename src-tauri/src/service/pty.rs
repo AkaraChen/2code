@@ -165,6 +165,40 @@ pub fn mark_all_closed(db: &DbPool) {
 	crate::repo::pty::mark_all_open_closed(&mut conn);
 }
 
+/// Atomically restore a PTY session: read history → create new PTY → delete old record.
+/// DB lock is acquired/released carefully to avoid deadlock with `create_session`.
+pub fn restore_session(
+	app: &AppHandle,
+	sessions: &PtySessionMap,
+	old_session_id: &str,
+	meta: &PtySessionMeta,
+	config: &PtyConfig,
+) -> Result<crate::model::pty::RestoreResult, AppError> {
+	// 1. Read history (acquire lock → read → release)
+	let history = {
+		let db = app.state::<DbPool>().inner().clone();
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		crate::repo::pty::get_session_history(conn, old_session_id)?
+	};
+	tracing::info!(target: "pty", %old_session_id, bytes = history.len(), "restore: loaded history");
+
+	// 2. Create new PTY (manages its own lock internally)
+	let new_session_id = create_session(app, sessions, meta, config)?;
+	tracing::info!(target: "pty", %old_session_id, %new_session_id, "restore: new session created");
+
+	// 3. Delete old record (re-acquire lock — only after new session succeeds)
+	{
+		let db = app.state::<DbPool>().inner().clone();
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		crate::repo::pty::delete_session(conn, old_session_id)?;
+	}
+
+	Ok(crate::model::pty::RestoreResult {
+		new_session_id,
+		history,
+	})
+}
+
 /// Send a flush signal to the persistence thread for the given session.
 /// Best-effort: silently ignores errors (session already closed, lock poisoned, etc.).
 pub fn flush_output(

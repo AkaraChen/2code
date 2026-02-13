@@ -71,6 +71,7 @@ pub fn run() {
 			handler::pty::get_pty_session_history,
 			handler::pty::delete_pty_session_record,
 			handler::pty::flush_pty_output,
+			handler::pty::restore_pty_session,
 			handler::project::create_project_temporary,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,

@@ -65,7 +65,9 @@ export default function App() {
 					</ErrorBoundary>
 
 					{/* Persistent terminal layer — survives route changes */}
-					<TerminalLayer />
+					<Suspense>
+						<TerminalLayer />
+					</Suspense>
 				</Box>
 			</Flex>
 			<DebugFloat />

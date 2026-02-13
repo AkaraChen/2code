@@ -78,6 +78,23 @@ pub fn delete_pty_session_record(
 }
 
 #[tauri::command]
+pub fn restore_pty_session(
+	app: AppHandle,
+	sessions: State<'_, PtySessionMap>,
+	old_session_id: String,
+	meta: PtySessionMeta,
+	config: PtyConfig,
+) -> Result<crate::model::pty::RestoreResult, AppError> {
+	crate::service::pty::restore_session(
+		&app,
+		sessions.inner(),
+		&old_session_id,
+		&meta,
+		&config,
+	)
+}
+
+#[tauri::command]
 pub fn flush_pty_output(
 	session_id: String,
 	state: State<'_, PtyFlushSenders>,
