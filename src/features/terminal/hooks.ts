@@ -6,7 +6,8 @@ import {
 	createPtySession,
 	deletePtySessionRecord,
 } from "@/generated";
-import { useThemePreference } from "@/shared/providers/ThemeProvider";
+import { use } from "react";
+import { ThemeContext } from "@/shared/providers/themeContext";
 import { useTerminalStore } from "./store";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
@@ -57,7 +58,7 @@ export function useCloseTerminalTab() {
 }
 
 export function useTerminalThemeId(): TerminalThemeId {
-	const { isDark } = useThemePreference();
+	const { isDark } = use(ThemeContext);
 	const darkTerminalTheme = useTerminalSettingsStore(
 		(s) => s.darkTerminalTheme,
 	);

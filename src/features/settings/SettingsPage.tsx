@@ -12,14 +12,14 @@ import {
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, use, useMemo, useState } from "react";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
 import { getLocale, setLocale } from "@/paraglide/runtime.js";
-import { useThemePreference } from "@/shared/providers/ThemeProvider";
+import { ThemeContext } from "@/shared/providers/themeContext";
 import { AccentColorPicker } from "./AccentColorPicker";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
@@ -35,7 +35,7 @@ const localeCollection = createListCollection({
 });
 
 export default function SettingsPage() {
-	const { preference, setPreference } = useThemePreference();
+	const { preference, setPreference } = use(ThemeContext);
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
 	const [previewThemeId, setPreviewThemeId] =

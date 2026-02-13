@@ -1,21 +1,9 @@
 import { Box } from "@chakra-ui/react";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
-import { createContext, use, useMemo } from "react";
+import { useMemo } from "react";
 import { useThemeStore } from "@/features/settings/stores/themeStore";
-
-type Preference = "system" | "light" | "dark";
-
-interface ThemeContextValue {
-	preference: Preference;
-	setPreference: (p: Preference) => void;
-	isDark: boolean;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-	preference: "system",
-	setPreference: () => {},
-	isDark: true,
-});
+import type { Preference, ThemeContextValue } from "./themeContext";
+import { ThemeContext } from "./themeContext";
 
 function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
@@ -51,6 +39,3 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 	);
 }
 
-export function useThemePreference() {
-	return use(ThemeContext);
-}
