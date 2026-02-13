@@ -22,6 +22,10 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
 
+	const initFontFamilyRef = useRef(fontFamily);
+	const initFontSizeRef = useRef(fontSize);
+	const initThemeRef = useRef(theme);
+
 	// Update theme without re-mounting the terminal
 	useEffect(() => {
 		if (termRef.current) {
@@ -61,23 +65,27 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const terminalRef = useCallback(
 		(container: HTMLDivElement | null) => {
 			if (!container) return;
+			const unlisteners: UnlistenFn[] = [];
 
 			consola.log(`[pty-terminal] mount sessionId=${sessionId}`);
 			let disposed = false;
 
 			// 1. Create xterm (sync)
 			const term = new XTerm({
-				fontFamily: `"${fontFamily}", monospace`,
-				fontSize,
-				theme,
+				fontFamily: `"${initFontFamilyRef.current}", monospace`,
+				fontSize: initFontSizeRef.current,
+				theme: initThemeRef.current,
 				cursorBlink: true,
-				convertEol: true,
+				cursorStyle: "bar",
+				cursorWidth: 4,
 			});
+			unlisteners.push(() => term.dispose()); // Ensure disposal on unmount or dependency change
 
 			const fitAddon = new FitAddon();
 			term.loadAddon(fitAddon);
 			term.open(container);
 			fitAddon.fit();
+			unlisteners.push(() => fitAddon.dispose()); // Clean up addon resources
 
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
@@ -97,7 +105,6 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			}
 
 			// 3. Register Tauri listeners (async, fire-and-forget with disposed guard)
-			const unlisteners: UnlistenFn[] = [];
 			(async () => {
 				const unlistenOutput = await listen<string>(
 					`pty-output-${sessionId}`,
@@ -134,15 +141,15 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			})();
 
 			// 4. Sync handlers
-			const onDataDisposable = term.onData((data) => {
+			term.onData((data) => {
 				writeToPty({ sessionId, data });
 			});
 
-			const onResizeDisposable = term.onResize(({ rows, cols }) => {
+			term.onResize(({ rows, cols }) => {
 				resizePty({ sessionId, rows, cols });
 			});
 
-			const onTitleChangeDisposable = term.onTitleChange((title) => {
+			term.onTitleChange((title) => {
 				useTerminalStore
 					.getState()
 					.updateTabTitle(profileId, sessionId, title);
@@ -159,6 +166,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				}
 			});
 			resizeObserver.observe(container);
+			unlisteners.push(() => resizeObserver.disconnect());
 
 			// 5. React 19 ref cleanup
 			return () => {
@@ -167,21 +175,16 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 				// Flush buffered PTY output to DB before teardown (best-effort)
 				flushPtyOutput({ sessionId }).catch(() => {});
-				resizeObserver.disconnect();
-				onDataDisposable.dispose();
-				onResizeDisposable.dispose();
-				onTitleChangeDisposable.dispose();
 
 				for (const unlisten of unlisteners) {
 					unlisten();
 				}
 
-				term.dispose();
 				termRef.current = null;
 				fitAddonRef.current = null;
 			};
 		},
-		[profileId, sessionId, fontFamily, fontSize, theme],
+		[profileId, sessionId],
 	);
 
 	return <div ref={terminalRef} style={containerStyle} />;
