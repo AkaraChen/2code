@@ -36,6 +36,10 @@ cd src-tauri && cargo test test_name   # single test
 # Regenerate TypeScript bindings from Rust commands
 cargo tauri-typegen generate
 
+# Build CLI sidecar (release / dev)
+just build-helper
+just build-helper-dev
+
 # Format code
 just fmt               # runs 'fama'
 ```
@@ -85,7 +89,7 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
 2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
 3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching).
+4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
@@ -94,6 +98,10 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 **Database migrations:** Diesel migrations in `src-tauri/migrations/`, embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`. Schema auto-generated in `src/schema.rs`.
 
 **PTY output streaming:** Background thread reads 4KB chunks → emits Tauri events (`pty-output-{id}`, `pty-exit-{id}`). Separate persistence thread via mpsc channel with 32KB flush buffer. UTF-8 boundary detection prevents partial character output. 1MB cap per session with oldest-chunk pruning.
+
+**Workspace crates:** `shared/` (types shared between main app and sidecar: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `2code-helper/` (CLI sidecar binary).
+
+**CLI sidecar & notification pipeline:** The `2code-helper` binary is a small CLI that PTY shells invoke (via `$_2CODE_HELPER notify`) to trigger notifications. Flow: PTY env vars (`_2CODE_HELPER_URL`, `_2CODE_HELPER`, `_2CODE_SESSION_ID`) → sidecar sends HTTP GET `/notify?session_id=<sid>` → Axum server in `infra/helper.rs` plays sound + emits `pty-notify` Tauri event → frontend `terminalStore.markNotified(sessionId)` → green dot on terminal tab + sidebar profile. Focusing the tab clears the dot. Sidecar is bundled via `externalBin` in `tauri.conf.json`.
 
 ### IPC Pattern (Frontend ↔ Backend)
 
@@ -149,7 +157,7 @@ Scripts execute via `sh -c` in the project/worktree directory. Used automaticall
 useTerminalStore.getState().addTab(...)
 
 // Reactive subscriptions in components:
-const tabs = useTerminalStore(s => s.projects[id]?.tabs)
+const tabs = useTerminalStore(s => s.profiles[profileId]?.tabs)
 ```
 
 ### Rust Test Pattern
@@ -194,6 +202,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
-- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification` — all registered in `lib.rs`
+- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`
 - **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
 - **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
+- **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too

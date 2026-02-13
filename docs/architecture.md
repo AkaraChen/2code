@@ -4,168 +4,154 @@
 
 ```mermaid
 graph TD
-    subgraph Frontend ["Frontend (React 19 + TypeScript)"]
-        Pages["Pages<br/>HomePage, ProjectDetailPage, SettingsPage"]
-        Features["Feature Modules<br/>terminal, git, profiles, settings, debug, watcher"]
-        Hooks["TanStack Query Hooks<br/>useProjects, useProfiles,<br/>useCreateTerminalTab, useRestoreTerminals"]
-        Stores["Zustand Stores<br/>terminalStore, fontStore, themeStore,<br/>notificationStore, debugStore, debugLogStore"]
-        Generated["Auto-Generated IPC Bindings<br/>src/generated/ (tauri-typegen)"]
+    subgraph Frontend ["Frontend (React 19 + Vite)"]
+        App[App.tsx<br/>Routes + Layout]
+        TQ[TanStack Query<br/>Server State]
+        ZS[Zustand Stores<br/>Client State]
+        XT[xterm.js<br/>Terminal Emulator]
+        Gen[generated/<br/>IPC Bindings]
     end
 
-    subgraph Backend ["Backend (Rust / Tauri 2)"]
-        Handler["Handler Layer<br/>#[tauri::command] entry points"]
-        Service["Service Layer<br/>Business logic, orchestration"]
-        Repo["Repository Layer<br/>Diesel ORM queries"]
-        Infra["Infrastructure Layer<br/>db, git, pty, slug, config, watcher, logger"]
+    subgraph Backend ["Backend (Rust + Tauri 2)"]
+        H[Handler Layer<br/>Tauri Commands]
+        S[Service Layer<br/>Business Logic]
+        R[Repo Layer<br/>Diesel ORM]
+        I[Infrastructure<br/>PTY, Git, DB, HTTP]
     end
 
-    subgraph External ["External Systems"]
-        SQLite["SQLite Database<br/>app_data_dir/app.db"]
-        PTY["PTY Sessions<br/>portable-pty"]
-        Git["Git CLI<br/>worktrees, diff, log"]
-        FS["File System<br/>temp dirs, worktrees, 2code.json"]
+    subgraph Sidecar ["CLI Sidecar"]
+        Helper[2code-helper<br/>Notification CLI]
     end
 
-    Pages --> Features
-    Features --> Hooks
-    Features --> Stores
-    Hooks --> Generated
-    Generated -->|"Tauri IPC invoke()"| Handler
-    Handler --> Service
-    Service --> Repo
-    Service --> Infra
-    Repo --> SQLite
-    Infra --> SQLite
-    Infra --> PTY
-    Infra --> Git
-    Infra --> FS
+    subgraph External ["External"]
+        DB[(SQLite)]
+        FS[File System]
+        Git[Git CLI]
+        Shell[User Shell<br/>zsh/bash]
+    end
 
-    PTY -->|"Tauri events<br/>pty-output-{id}"| Features
-    Infra -->|"Tauri Channel<br/>file change events"| Features
-    Infra -->|"Tauri Channel<br/>debug log events"| Features
+    App --> Gen
+    Gen -->|IPC| H
+    H --> S
+    S --> R
+    S --> I
+    R --> DB
+    I -->|portable-pty| Shell
+    I -->|git commands| Git
+    I -->|notify crate| FS
+    Shell -->|$_2CODE_HELPER notify| Helper
+    Helper -->|HTTP /notify| I
+    I -->|Tauri events| XT
+    I -->|pty-notify event| ZS
 ```
 
 ## Architecture Pattern
 
-**Layered Architecture** with a 4-layer backend and a feature-based reactive frontend.
+**Layered architecture** with 4 backend layers and a feature-based frontend. The backend enforces strict dependency direction: Handler → Service → Repo/Infrastructure. The frontend uses feature modules with co-located hooks, components, and stores.
 
-The backend follows a strict dependency flow: Handler -> Service -> Repository/Infrastructure. Each layer has a single responsibility:
+## Backend Layers
 
-1. **Handler** - Tauri command registration, state extraction, lock acquisition
-2. **Service** - Domain logic, cross-cutting orchestration
-3. **Repository** - Database CRUD via Diesel ORM
-4. **Infrastructure** - External system integration (git CLI, PTY, filesystem, config, file watcher, logger)
+### 1. Handler (`src-tauri/src/handler/`)
 
-The frontend uses a feature-based architecture where each feature module contains its own components, hooks, and stores. TanStack Query manages all server state and Zustand handles ephemeral client state.
+Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `PtySessionMap`), acquires DB lock, delegates to service layer. No business logic.
 
-## Core Components
+| File | Commands |
+|------|----------|
+| `project.rs` | `create_project_temporary`, `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_git_branch`, `get_git_diff`, `get_git_log`, `get_commit_diff` |
+| `pty.rs` | `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record` |
+| `profile.rs` | `create_profile`, `delete_profile` |
+| `watcher.rs` | `watch_projects` |
+| `font.rs` | `list_system_fonts` |
+| `sound.rs` | `list_system_sounds`, `play_system_sound` |
+| `debug.rs` | `start_debug_log`, `stop_debug_log` |
 
-### Handler Layer (`src-tauri/src/handler/`)
+### 2. Service (`src-tauri/src/service/`)
 
-- **Files**: `project.rs`, `pty.rs`, `profile.rs`, `font.rs`, `sound.rs`, `watcher.rs`, `debug.rs`
-- **Responsibility**: Thin entry points for Tauri IPC commands. Extracts `State<DbPool>` and `State<PtySessionMap>`, acquires mutex lock, delegates to service layer.
-- **Key interfaces**: 22 `#[tauri::command]` functions registered in `lib.rs`
-- **Dependencies**: `service/*`, `infra::db::DbPool`, `infra::pty::PtySessionMap`
+Business logic and orchestration. Coordinates between repo and infrastructure layers.
 
-### Service Layer (`src-tauri/src/service/`)
+| File | Responsibility |
+|------|---------------|
+| `project.rs` | Project CRUD, git branch/diff/log resolution via context ID |
+| `profile.rs` | Profile creation (git worktree + setup script), deletion (teardown + cleanup), branch name sanitization |
+| `pty.rs` | Session lifecycle (create with env injection, read loop, persistence thread, UTF-8 boundary handling), session cleanup |
+| `watcher.rs` | File system watch orchestration |
 
-- **Files**: `project.rs`, `pty.rs`, `profile.rs`, `watcher.rs`
-- **Responsibility**: Business logic -- project creation (temp dir + git init + default profile), PTY session lifecycle with background output streaming, profile creation (branch sanitization + worktree + setup scripts), file watcher coordination with debouncing.
-- **Key interfaces**: `create_temporary()`, `create_from_folder()`, `create_session()`, `create()` (profile), `mark_all_closed()`, `get_diff()`, `get_log()`, `watcher::start()`
-- **Dependencies**: `repo/*`, `infra/*`
+### 3. Repository (`src-tauri/src/repo/`)
 
-### Repository Layer (`src-tauri/src/repo/`)
+Direct database access via Diesel ORM. Pure CRUD plus composite queries.
 
-- **Files**: `project.rs`, `pty.rs`, `profile.rs`
-- **Responsibility**: Database access -- CRUD operations, session history retrieval, output chunk management with pruning, profile lookups.
-- **Key interfaces**: `insert()`, `find_by_id()`, `list_all()`, `list_all_with_profiles()`, `insert_output_chunk()`, `get_chunk_sizes()`, `delete_chunks_by_ids()`
-- **Dependencies**: Diesel ORM, `schema.rs`
+| File | Responsibility |
+|------|---------------|
+| `project.rs` | Project CRUD, `resolve_context_folder()` (profile ID → worktree path, project ID → folder) |
+| `profile.rs` | Profile CRUD, project folder lookup |
+| `pty.rs` | Session records, output chunk storage/retrieval/pruning |
 
-### Infrastructure Layer (`src-tauri/src/infra/`)
+### 4. Infrastructure (`src-tauri/src/infra/`)
 
-- **Files**: `db.rs`, `git.rs`, `pty.rs`, `slug.rs`, `config.rs`, `watcher.rs`, `logger.rs`
-- **Responsibility**: External system integration -- database initialization with embedded migrations and pragmas (`WAL`, `foreign_keys`), git operations via CLI (init, diff, log, show, worktree add/remove, branch delete), PTY session creation/management, CJK-aware slug generation (pinyin), project config loading and script execution, filesystem watcher lifecycle, tracing-to-frontend log forwarding.
-- **Key interfaces**: `init_db()`, `create_session()` (PTY), `worktree_add()`, `diff()`, `log()`, `show()`, `slugify_cjk()`, `load_project_config()`, `execute_scripts()`, `ChannelLayer::new()`, `ChannelLayerHandle::attach()`
-- **Dependencies**: `portable-pty`, `diesel_migrations`, `pinyin`, `dirs`, `notify`, `tracing`, `tracing-subscriber`
+Cross-cutting concerns and external system integrations.
 
-### Model Layer (`src-tauri/src/model/`)
+| File | Responsibility |
+|------|---------------|
+| `db.rs` | SQLite init, WAL + FK pragmas, embedded migrations. Type: `DbPool = Arc<Mutex<SqliteConnection>>` |
+| `pty.rs` | PTY session map, `create_session()` / `write_to_pty()` / `resize_pty()` / `close_session()` via portable-pty |
+| `git.rs` | Git CLI execution: branch, diff, log, show. Commit parsing, shortstat parsing |
+| `helper.rs` | Axum HTTP server (ephemeral port) for sidecar communication. Routes: `/notify`, `/health` |
+| `shell_init.rs` | Prepares ZDOTDIR temp directory with `.zshenv` for shell init script injection |
+| `config.rs` | Loads `2code.json` project config, executes setup/teardown scripts |
+| `slug.rs` | CJK-aware slug generation (pinyin crate) |
+| `logger.rs` | Tracing channel layer for debug log streaming |
+| `watcher.rs` | File system watching via `notify` crate, shutdown flag |
 
-- **Files**: `project.rs`, `pty.rs`, `profile.rs`, `watcher.rs`, `debug.rs`
-- **Responsibility**: Data types -- Diesel `Queryable` structs (`Project`, `Profile`, `PtySessionRecord`), `Insertable` structs (`NewProject`, `NewProfile`, `NewPtySessionRecord`), `AsChangeset` structs (`UpdateProject`, `UpdateProfile`), composite types (`ProjectWithProfiles`), and non-DB types (`GitCommit`, `GitAuthor`, `PtyConfig`, `PtySessionMeta`, `WatchEvent`, `LogEntry`)
-- **Dependencies**: `diesel`, `serde`, `schema.rs`
+## Frontend Architecture
 
-### Frontend Feature Modules (`src/features/`)
+### Provider Stack (`src/main.tsx`)
 
-#### Terminal (`src/features/terminal/`)
+```
+QueryClientProvider → ChakraProvider → ThemeProvider → BrowserRouter → App
+```
 
-- **Files**: `Terminal.tsx`, `TerminalLayer.tsx`, `TerminalTabs.tsx`, `TerminalPreview.tsx`, `store.ts`, `hooks.ts`, `themes.ts`
-- **Responsibility**: Persistent terminal overlay that renders all open terminal sessions across all routes. Uses CSS `display: none` to hide inactive terminals without unmounting xterm.js instances. Individual terminals handle session restoration from scrollback history, live PTY output via Tauri event listeners, user input forwarding, and dynamic resize via `ResizeObserver` + `FitAddon`.
-- **Dependencies**: `@xterm/xterm`, `@xterm/addon-fit`, Tauri event API, Zustand store
+### Routing (`src/App.tsx`)
 
-#### Git (`src/features/git/`)
+| Path | Component |
+|------|-----------|
+| `/` | `HomePage` |
+| `/projects/:id/profiles/:profileId` | `ProjectDetailPage` |
+| `/settings` | `SettingsPage` |
+| `*` | Redirect to `/` |
 
-- **Files**: `GitDiffDialog.tsx`, `ProjectTopBar.tsx`, `hooks.ts`, `utils.ts`, `components/ChangesFileList.tsx`, `components/CommitList.tsx`, `components/GitDiffPane.tsx`, `components/HistoryFileList.tsx`
-- **Responsibility**: Git diff viewing (working-tree changes + commit history), branch display in top bar, syntax-highlighted unified diffs via `@pierre/diffs`.
-- **Dependencies**: `@pierre/diffs`, TanStack Query hooks for git commands
+### State Management
 
-#### Settings (`src/features/settings/`)
+| Store | Type | Location | Persistence |
+|-------|------|----------|-------------|
+| Terminal tabs | Zustand + immer | `features/terminal/store.ts` | Rebuilt from DB on startup |
+| Terminal settings | Zustand + persist | `features/settings/stores/terminalSettingsStore.ts` | localStorage |
+| Notification settings | Zustand + persist | `features/settings/stores/notificationStore.ts` | localStorage + tauri-plugin-store |
+| Theme settings | Zustand + persist | `features/settings/stores/themeStore.ts` | localStorage |
+| Debug panel | Zustand | `features/debug/debugStore.ts` | None |
+| Debug logs | Zustand | `features/debug/debugLogStore.ts` | None |
+| Server data | TanStack Query | `shared/lib/queryClient.ts` | None (refetched) |
 
-- **Files**: `SettingsPage.tsx`, `FontPicker.tsx`, `FontSizePicker.tsx`, `TerminalThemePicker.tsx`, `AccentColorPicker.tsx`, `BorderRadiusPicker.tsx`, `SoundPicker.tsx`, `NotificationSettings.tsx`, `stores/fontStore.ts`, `stores/themeStore.ts`, `stores/notificationStore.ts`, `stores/terminalSettingsStore.ts`
-- **Responsibility**: User preferences for fonts, terminal themes, accent colors, border radius, notification sounds. All preference stores use Zustand persist middleware (localStorage).
+### Terminal Architecture
 
-#### Debug (`src/features/debug/`)
+Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`) renders as a persistent absolute-positioned overlay. Tab switches use CSS `display: none` to preserve xterm.js state. Each terminal instance wraps xterm.js and communicates with the backend via Tauri events (`pty-output-{id}`, `pty-exit-{id}`).
 
-- **Files**: `DebugFloat.tsx`, `DebugLogDialog.tsx`, `debugStore.ts`, `debugLogStore.ts`, `useDebugLogger.ts`
-- **Responsibility**: Debug log panel toggled via `Cmd+Shift+D`. Receives Rust `tracing` events via Tauri Channel, displays with level badges, timestamp, source, and searchable message content.
+## Workspace Crates
 
-#### Watcher (`src/features/watcher/`)
+```
+src-tauri/
+├── Cargo.toml          # workspace root, members: ["shared", "2code-helper"]
+├── shared/             # Shared types: NotifyResponse, NotificationEntry
+└── 2code-helper/       # CLI sidecar binary (clap + ureq)
+```
 
-- **Files**: `useFileWatcher.ts`
-- **Responsibility**: Subscribes to file change events from the backend watcher. Invalidates relevant TanStack Query caches (git branch, diff, log) when project files change on disk.
+## Design Decisions
 
-### Auto-Generated IPC Bindings (`src/generated/`)
-
-- **Files**: `commands.ts`, `types.ts`, `index.ts`
-- **Responsibility**: Type-safe TypeScript wrappers for all Rust `#[tauri::command]` functions. Generated by `tauri-typegen` from Rust source code.
-- **Dependencies**: `@tauri-apps/api/core` (`invoke`)
-
-## State Management
-
-### Frontend State (Zustand Stores)
-
-| Store                   | Location                                                | Persisted                       | Purpose                                              |
-| ----------------------- | ------------------------------------------------------- | ------------------------------- | ---------------------------------------------------- |
-| `terminalStore`         | `src/features/terminal/store.ts`                        | No (rebuilt from DB on startup) | Terminal tabs per context, active tab, restore flags |
-| `fontStore`             | `src/features/settings/stores/fontStore.ts`             | Yes (localStorage)              | Font family, font size preferences                   |
-| `terminalSettingsStore` | `src/features/settings/stores/terminalSettingsStore.ts` | Yes (localStorage)              | Terminal theme preference                            |
-| `notificationStore`     | `src/features/settings/stores/notificationStore.ts`     | Yes (localStorage)              | Notification sound/enabled preferences               |
-| `themeStore`            | `src/features/settings/stores/themeStore.ts`            | Yes (localStorage)              | Accent color, border radius preferences              |
-| `debugStore`            | `src/features/debug/debugStore.ts`                      | No                              | Debug panel enabled/open state                       |
-| `debugLogStore`         | `src/features/debug/debugLogStore.ts`                   | No                              | In-memory log entries for debug panel                |
-
-### Backend State (Rust, Tauri-managed)
-
-| State                 | Type                                      | Purpose                                      |
-| --------------------- | ----------------------------------------- | -------------------------------------------- |
-| `PtySessionMap`       | `Arc<Mutex<HashMap<String, PtySession>>>` | Active PTY sessions in memory                |
-| `DbPool`              | `Arc<Mutex<SqliteConnection>>`            | Single SQLite connection                     |
-| `WatcherShutdownFlag` | `Arc<AtomicBool>`                         | Signals file watcher thread to stop on exit  |
-| `ChannelLayerHandle`  | Custom handle for tracing layer           | Attaches/detaches frontend debug log channel |
-
-## Key Design Decisions
-
-**Single DB connection with mutex**: Uses `Arc<Mutex<SqliteConnection>>` instead of a connection pool. Simplifies the codebase at the cost of concurrent write throughput -- acceptable for a single-user desktop app.
-
-**CSS display toggling for terminals**: xterm.js instances are never unmounted during route changes or tab switches. This preserves terminal state (scrollback, cursor position) without re-rendering overhead.
-
-**Profile-first data model**: After the `profile_first_refactor` migration, PTY sessions belong to profiles (not directly to projects). Every project has a default profile (`is_default = true`) that points to the project's own folder, enabling a unified API where all operations go through profiles.
-
-**PTY output dual-threading**: One thread reads PTY output and emits real-time Tauri events for the terminal UI. A separate persistence thread receives raw bytes via mpsc channel, buffers to 32KB, and flushes to SQLite -- decoupling UI responsiveness from database write latency.
-
-**Embedded Diesel migrations**: Migrations are compiled into the binary via `embed_migrations!()` and run automatically on startup, ensuring the database schema is always current without requiring external migration tooling.
-
-**Auto-generated TypeScript bindings**: `tauri-typegen` generates typed IPC wrappers directly from Rust command signatures, eliminating manual API layer maintenance and preventing type drift between frontend and backend.
-
-**Feature-based frontend organization**: Each feature (`terminal`, `git`, `settings`, `debug`, `watcher`, `projects`, `profiles`, `home`) is self-contained with its own components, hooks, and stores, reducing cross-feature coupling.
-
-**Tracing-based debug logging**: The backend uses Rust's `tracing` crate with a custom `ChannelLayer` that forwards log events (INFO and above) to the frontend via a Tauri Channel when the debug panel is active. The forwarder runs on a dedicated thread to avoid blocking logging calls.
+| Decision | Rationale |
+|----------|-----------|
+| Single SQLite connection (`Arc<Mutex>`) | Desktop app with single user; pool overhead unnecessary |
+| CSS display for terminal visibility | xterm.js loses state on unmount; display toggle preserves it |
+| tauri-typegen for IPC bindings | Eliminates manual TS wrappers, type-safe end-to-end |
+| Sidecar for notifications | Shell processes can't call Tauri IPC directly; HTTP bridge enables CLI → app communication |
+| ZDOTDIR injection for shell init | Non-destructive way to inject init scripts into zsh without modifying user dotfiles |
+| immer `enableMapSet()` | Terminal store uses `Set<string>` for notification tracking; requires explicit immer plugin |
+| Feature-based frontend structure | Co-locates hooks, components, and stores per domain for cohesion |

@@ -1,337 +1,191 @@
 # Data Flow
 
-## Overview
+## IPC Request Lifecycle
 
-2code uses a hybrid data flow combining **React's unidirectional data flow** on the frontend with **layered command handlers** in the Rust backend. PTY output uses a **streaming event pattern** for real-time terminal updates. File watching and debug logging use **Tauri Channels** for push-based communication. All IPC calls use auto-generated typed bindings from `src/generated/`.
-
-## Primary Data Flows
-
-### 1. Project Creation Flow
+All frontend-to-backend communication uses Tauri IPC via auto-generated bindings in `src/generated/`.
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant UI as CreateProjectDialog
-    participant Hook as useCreateProject
+    participant C as React Component
     participant TQ as TanStack Query
-    participant Gen as generated/commands.ts
-    participant Handler as handler/project.rs
-    participant Service as service/project.rs
-    participant Repo as repo/project.rs + repo/profile.rs
-    participant Infra as infra/git.rs
+    participant Gen as Generated Bindings
+    participant H as Handler (Rust)
+    participant S as Service (Rust)
+    participant R as Repo (Rust)
     participant DB as SQLite
 
-    User->>UI: Click "Create Project"
-    UI->>Hook: mutate({name, folder})
-    Hook->>TQ: useMutation
-    TQ->>Gen: createProjectTemporary({name})
-    Gen->>Handler: invoke("create_project_temporary")
-
-    Handler->>Handler: Lock DbPool mutex
-    Handler->>Service: create_temporary(conn, name)
-    Service->>Service: Generate UUID + dir name (CJK → pinyin)
-    Service->>Infra: fs::create_dir_all + git::init
-    Service->>Repo: project::insert(conn, id, name, folder)
-    Repo->>DB: INSERT INTO projects
-    Service->>Repo: profile::insert_default(conn, defaultProfileId, projectId, folder)
-    Repo->>DB: INSERT INTO profiles (is_default = true)
-    DB-->>Repo: Project record
-
-    Repo-->>Service: Project
-    Service-->>Handler: Project
-    Handler-->>Gen: Project
-    Gen-->>Hook: Project
-    Hook->>TQ: invalidateQueries(["projects"])
-    TQ-->>UI: onSuccess → navigate to project
+    C->>TQ: useQuery / useMutation
+    TQ->>Gen: invoke command
+    Gen->>H: Tauri IPC
+    H->>H: Extract State, acquire DB lock
+    H->>S: Delegate to service
+    S->>R: Database operations
+    R->>DB: Diesel query
+    DB-->>R: Result
+    R-->>S: Domain objects
+    S-->>H: Result<T, AppError>
+    H-->>Gen: Serialized response
+    Gen-->>TQ: Typed result
+    TQ-->>C: Re-render with data
 ```
 
-### 2. Terminal Session Lifecycle
+## PTY Session Lifecycle
+
+### Creation
+
+1. Frontend calls `createPtySession({ meta, config })` via TanStack Query mutation
+2. Handler delegates to `service::pty::create_session()`
+3. Service loads project config (`2code.json`) for init scripts
+4. Service prepares ZDOTDIR temp directory with shell init script
+5. Service reads helper HTTP server state (port + sidecar path)
+6. `infra::pty::create_session()` spawns PTY with env vars:
+   - `TERM=xterm-256color`
+   - `_2CODE_HELPER_URL=http://127.0.0.1:{port}`
+   - `_2CODE_HELPER={sidecar_path}`
+   - `_2CODE_SESSION_ID={session_id}`
+   - `ZDOTDIR={init_dir}` (for shell init injection)
+7. Session record inserted into `pty_sessions` table
+8. Background reader thread spawned for output streaming
+
+### Output Streaming
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant UI as TerminalTabs
-    participant Store as terminalStore
-    participant Gen as generated/commands.ts
-    participant Handler as handler/pty.rs
-    participant Service as service/pty.rs
-    participant Infra as infra/pty.rs
+    participant PTY as PTY Process
+    participant RT as Reader Thread
+    participant PT as Persist Thread
+    participant FE as Frontend (xterm.js)
     participant DB as SQLite
-    participant Shell as System Shell
 
-    User->>UI: Click "+" (new tab)
-    UI->>Gen: createPtySession({meta, config})
-    Gen->>Handler: invoke("create_pty_session")
-
-    Handler->>Service: create_session(app, sessions, meta, config)
-    Service->>Infra: create_session(sessions, shell, cwd, rows, cols)
-    Infra->>Infra: native_pty_system().openpty()
-    Infra->>Shell: spawn_command(shell, cwd)
-    Infra->>Infra: Store PtySession in HashMap
-
-    Service->>DB: INSERT INTO pty_sessions (profile_id)
-    Service->>Service: spawn reader thread
-    Service->>Service: spawn persistence thread
-
-    Service-->>Handler: sessionId
-    Handler-->>Gen: sessionId
-    Gen-->>UI: sessionId
-    UI->>Store: addTab(contextId, sessionId, title)
-```
-
-### 3. PTY Output Streaming (Dual-Thread)
-
-```mermaid
-sequenceDiagram
-    participant Shell as Shell Process
-    participant Reader as Reader Thread
-    participant UTF8 as UTF-8 Boundary Detection
-    participant Event as Tauri Event Bus
-    participant Persist as Persistence Thread
-    participant DB as SQLite
-    participant Term as Terminal Component
-    participant XTerm as xterm.js
-
-    loop Continuous Read (4KB buffer)
-        Shell-->>Reader: stdout/stderr bytes
-        Reader->>Persist: mpsc::send(raw bytes)
-        Reader->>UTF8: find_utf8_boundary(bytes)
-        UTF8-->>Reader: valid boundary position
-        Reader->>Event: emit("pty-output-{id}", text)
-        Event-->>Term: listen callback
-        Term->>XTerm: term.write(data)
+    loop Every 4KB read
+        PTY->>RT: Raw bytes
+        RT->>RT: UTF-8 boundary detection
+        RT->>FE: emit("pty-output-{id}", text)
+        RT->>PT: mpsc channel (raw bytes)
     end
 
-    loop Buffer Flush (32KB threshold)
-        Persist->>Persist: buffer.extend(data)
-        alt buffer >= 32KB
-            Persist->>DB: INSERT INTO pty_output_chunks
-            alt total > 1MB
-                Persist->>DB: DELETE oldest chunks (pruning)
-            end
-        end
+    loop Buffer >= 32KB
+        PT->>DB: Insert output chunk
+        PT->>PT: Prune if > 1MB total
     end
 
-    Shell-->>Reader: EOF (process exit)
-    Reader->>Persist: drop(tx) → channel closed
-    Persist->>DB: Flush remaining buffer
-    Reader->>DB: Mark session closed
-    Reader->>Event: emit("pty-exit-{id}")
-    Event-->>Term: Show "[Process exited]"
+    PTY->>RT: EOF / Error
+    RT->>PT: Drop channel (signal flush)
+    PT->>DB: Flush remaining buffer
+    RT->>DB: Mark session closed
+    RT->>FE: emit("pty-exit-{id}")
 ```
 
-### 4. Session Restoration on App Start
+Key details:
+- Reader thread reads 4KB chunks from PTY
+- UTF-8 boundary detection (`find_utf8_boundary`) prevents partial character output to frontend
+- Persistence runs on a separate thread via mpsc channel (non-blocking)
+- 32KB flush threshold for DB writes
+- 1MB cap per session with oldest-chunk pruning
+
+### Session Restoration (App Startup)
 
 ```mermaid
 sequenceDiagram
-    participant App as App Startup
-    participant Hook as useRestoreTerminals
-    participant Gen as generated/commands.ts
-    participant Backend as Rust Backend
+    participant Store as Terminal Store
+    participant QO as QueryObserver
+    participant BE as Backend
     participant DB as SQLite
-    participant Store as terminalStore
-    participant Term as Terminal Component
 
-    App->>Backend: mark_all_open_sessions_closed()
-    Backend->>DB: UPDATE pty_sessions SET closed_at = NOW()
+    Note over BE: mark_all_open_sessions_closed()
+    QO->>BE: listProjects()
+    BE-->>QO: ProjectWithProfiles[]
+    QO->>Store: removeStaleProfiles()
 
-    App->>Hook: useRestoreTerminals(projects)
-    Hook->>Gen: listProjectSessions(projectId) × N projects
-    Gen->>Backend: invoke per project
-    Backend->>DB: SELECT * FROM pty_sessions WHERE profile_id IN (project profiles)
+    loop For each project
+        Store->>BE: listProjectSessions(projectId)
+        BE-->>Store: PtySessionRecord[]
+    end
 
     loop For each old session
-        Hook->>Gen: createPtySession({meta, config})
-        Gen->>Backend: Create new PTY session
-        Backend-->>Hook: newSessionId
-        Hook->>Store: addTab(contextId, newSessionId, title, restoreFrom=oldId)
+        Store->>BE: createPtySession(same metadata)
+        BE-->>Store: newSessionId
+        Store->>Store: addTab(profileId, newSessionId, title, restoreFrom=oldId)
     end
 
-    Term->>Gen: getPtySessionHistory({sessionId: oldId})
-    Gen->>Backend: invoke
-    Backend->>DB: SELECT data FROM pty_output_chunks WHERE session_id = ?
-    Backend-->>Term: history bytes
-    Term->>XTerm: term.write(decoded history)
-    Term->>Gen: deletePtySessionRecord({sessionId: oldId})
-    Term->>Store: clearRestore(contextId, sessionId)
+    Note over Store: Terminal component fetches history from old session,<br/>writes to xterm, then deletes old record
 ```
 
-### 5. Profile Creation (Git Worktree)
+This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/store.ts`.
+
+## Notification Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant UI as CreateProfileDialog
-    participant Gen as generated/commands.ts
-    participant Handler as handler/profile.rs
-    participant Service as service/profile.rs
-    participant Repo as repo/profile.rs
-    participant Git as infra/git.rs
-    participant Config as infra/config.rs
-    participant DB as SQLite
-    participant FS as File System
+    participant Shell as User Shell
+    participant CLI as 2code-helper
+    participant HTTP as Axum Server
+    participant Store as Tauri Plugin Store
+    participant App as Tauri App
+    participant FE as Frontend Store
 
-    UI->>Gen: createProfile({projectId, branchName})
-    Gen->>Handler: invoke("create_profile")
-    Handler->>Service: create(conn, projectId, branchName)
+    Shell->>CLI: $_2CODE_HELPER notify
+    CLI->>CLI: Read $_2CODE_HELPER_URL, $_2CODE_SESSION_ID
+    CLI->>HTTP: GET /notify?session_id={sid}
+    HTTP->>Store: Read notification-settings
+    Store-->>HTTP: {enabled, sound}
 
-    Service->>Service: sanitize_branch_name (CJK → pinyin, preserve /)
-    Service->>Repo: get_project_folder(conn, projectId)
-    Repo->>DB: SELECT folder FROM projects WHERE id = ?
-
-    Service->>Service: resolve_worktree_base (~/.2code/workspace)
-    Service->>Git: worktree_add(project_folder, branch, worktree_path)
-    Git->>FS: git worktree add -b {branch} {path}
-
-    Service->>Repo: insert(conn, id, projectId, branchName, worktreePath)
-    Repo->>DB: INSERT INTO profiles
-
-    Service->>Config: load_project_config(project_folder)
-    Config->>FS: Read 2code.json
-    Service->>Config: execute_scripts(setup_script, worktree_path)
-    Config->>FS: sh -c "{script}" in worktree dir
-
-    Service-->>Handler: Profile
-    Handler-->>UI: Profile
+    alt Notifications enabled
+        HTTP->>HTTP: afplay /System/Library/Sounds/{sound}.aiff
+        HTTP->>App: app.emit("pty-notify", session_id)
+        HTTP-->>CLI: {played: true}
+        App->>FE: listen("pty-notify")
+        FE->>FE: markNotified(sessionId)
+        Note over FE: Green dot on terminal tab + sidebar profile
+    else Notifications disabled
+        HTTP-->>CLI: {played: false}
+        CLI->>CLI: exit(1)
+    end
 ```
 
-### 6. File Watcher System
+Clearing notifications:
+- `setActiveTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
+- `closeTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
+
+## Git Operations & Context ID Resolution
+
+Git operations accept a `profileId` that resolves polymorphically:
 
 ```mermaid
 sequenceDiagram
-    participant Frontend as useFileWatcher
-    participant Channel as Tauri Channel
-    participant Coord as Coordinator Thread
-    participant Notify as notify::Watcher (per project)
-    participant DB as SQLite
-    participant FS as File System
-    participant TQ as TanStack Query
+    participant FE as Frontend
+    participant S as Service
+    participant R as Repo
 
-    Frontend->>Channel: watchProjects(onEvent: Channel<WatchEvent>)
-    Channel->>Coord: spawn coordinator thread
+    FE->>S: get_git_diff(profileId)
+    S->>R: resolve_context_folder(profileId)
 
-    loop Every 3s (DB poll)
-        Coord->>DB: SELECT * FROM projects
-        Coord->>Coord: Reconcile watchers (add new, remove deleted)
-        Coord->>Notify: watch(project.folder, Recursive)
+    alt Profile found
+        R-->>S: profile.worktree_path
+    else Fallback to project
+        R-->>S: project.folder
     end
 
-    FS-->>Notify: File modify/create/remove event
-    Notify->>Coord: mpsc::send(projectId, path)
-    Note over Coord: Skip .git/ internal files
-    Note over Coord: Debounce 500ms per project
-
-    Coord->>Channel: send(WatchEvent{projectId})
-    Channel-->>Frontend: onEvent callback
-    Frontend->>TQ: invalidateQueries(["git-branch", ...])
-    Frontend->>TQ: invalidateQueries(["git-diff", ...])
-    Frontend->>TQ: invalidateQueries(["git-log", ...])
+    S->>S: Execute git diff in resolved folder
+    S-->>FE: Diff string
 ```
 
-### 7. Debug Log Streaming
+## File System Watching
 
-```mermaid
-sequenceDiagram
-    participant UI as DebugFloat
-    participant Hook as useDebugLogger
-    participant Gen as generated/commands.ts
-    participant Handler as handler/debug.rs
-    participant Handle as ChannelLayerHandle
-    participant Layer as ChannelLayer (tracing)
-    participant Forwarder as Forwarder Thread
-    participant Channel as Tauri Channel
-    participant Store as debugLogStore
+The `watch_projects` command starts a background watcher thread using the `notify` crate. It watches all project folders and emits `watch-event` Tauri events on file changes. The frontend `fileWatcher.ts` module subscribes and invalidates relevant TanStack Query cache entries.
 
-    UI->>UI: User toggles debug (Cmd+Shift+D)
-    Hook->>Gen: startDebugLog(onEvent: Channel<LogEntry>)
-    Gen->>Handler: invoke("start_debug_log")
-    Handler->>Handle: attach(channel)
-    Handle->>Handle: Set mpsc::Sender in Arc<Mutex>
-    Handle->>Forwarder: spawn forwarder thread
+## Profile System (Git Worktrees)
 
-    loop Rust code emits tracing events
-        Layer->>Layer: on_event (filter: INFO and above)
-        Layer->>Forwarder: mpsc::send(LogEntry)
-        Forwarder->>Channel: channel.send(LogEntry)
-        Channel-->>Hook: onEvent callback
-        Hook->>Store: addLog(entry)
-        Store-->>UI: DebugLogDialog re-renders
-    end
+### Creation Flow
 
-    UI->>Gen: stopDebugLog()
-    Handler->>Handle: detach()
-    Handle->>Handle: Drop sender → forwarder exits
-```
+1. Frontend calls `createProfile(projectId, branchName)`
+2. Service sanitizes branch name (CJK → pinyin via `slug.rs`)
+3. Service runs `git worktree add ~/.2code/workspace/{profile_id} -b {branch}`
+4. Profile record inserted into `profiles` table
+5. If `2code.json` has `setup_script`, execute in worktree directory
 
-## State Management Patterns
+### Deletion Flow
 
-### Frontend State (Zustand)
-
-```
-terminalStore: {
-  projects: {
-    [contextId]: {           // contextId = profileId (default or worktree)
-      tabs: TerminalTab[]    // {id, title, restoreFrom?}
-      activeTabId: string
-      counter: number
-    }
-  }
-}
-```
-
-### Backend State (Rust)
-
-```rust
-// Managed by Tauri as application state
-PtySessionMap: Arc<Mutex<HashMap<String, PtySession>>>
-DbPool: Arc<Mutex<SqliteConnection>>
-WatcherShutdownFlag: Arc<AtomicBool>
-ChannelLayerHandle: { tx: Arc<Mutex<Option<mpsc::Sender<LogEntry>>>> }
-
-// PtySession holds the live PTY connection
-pub struct PtySession {
-    pub master: Box<dyn MasterPty + Send>,
-    pub writer: Box<dyn Write + Send>,
-    pub child: Box<dyn Child + Send + Sync>,
-}
-```
-
-## Caching Strategy
-
-| Layer            | Technology                | Strategy                                                                          |
-| ---------------- | ------------------------- | --------------------------------------------------------------------------------- |
-| Server State     | TanStack Query            | staleTime: 30s, retry: 1, invalidate on mutations and file changes                |
-| Terminal Output  | SQLite chunks             | 32KB flush threshold, 1MB cap with oldest-chunk pruning                           |
-| Session State    | Rust HashMap              | In-memory for active PTY handles, DB for persistence                              |
-| Font/Theme Prefs | Zustand + localStorage    | Persist middleware, immediate writes                                              |
-| Query Keys       | `shared/lib/queryKeys.ts` | Hierarchical: `["projects"]`, `["git-branch", folder]`, `["git-diff", profileId]` |
-
-## Error Handling Flow
-
-```
-Rust Error (AppError enum)
-    ↓ thiserror #[error("...")]
-Serialize to string via custom Serialize impl
-    ↓ Tauri IPC
-Frontend catch block (TanStack Query onError / Promise.catch)
-    ↓
-Display error toast via Chakra UI Toaster
-```
-
-Error variants: `IoError`, `LockError`, `PtyError`, `DbError`, `NotFound`, `GitError`
-
-## App Lifecycle
-
-### Startup
-
-1. Initialize `tracing_subscriber` with console output + `ChannelLayer` for debug forwarding
-2. Create `PtySessionMap` and `WatcherShutdownFlag`
-3. Register Tauri plugins: `opener`, `dialog`, `notification`
-4. `setup`: Initialize SQLite database (`init_db`), run embedded migrations
-5. `setup`: Mark orphaned PTY sessions as closed (`mark_all_open_sessions_closed`)
-6. Register all 22 command handlers
-
-### Shutdown (`RunEvent::Exit`)
-
-1. Signal watcher thread to stop via `WatcherShutdownFlag`
-2. Mark all open PTY sessions as closed in DB
-3. Kill all active PTY child processes (`close_all_sessions`)
+1. If `2code.json` has `teardown_script`, execute in worktree directory
+2. Run `git worktree remove` and `git branch -D`
+3. Delete profile record from DB (cascades to sessions)
