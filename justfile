@@ -21,3 +21,6 @@ build-helper-dev:
     mkdir -p binaries
     cp -f target/debug/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
+
+cloc:
+    cloc --include-lang="TypeScript,Rust,JavaScript,CSS" . --exclude-dir=node_modules,dist,target --fullpath --not-match-d='(src-tauri/target|src/generated|src/paraglide)'
