@@ -21,14 +21,6 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
 
-	// Refs to bridge hook values into the ref callback
-	const themeRef = useRef(theme);
-	themeRef.current = theme;
-	const fontFamilyRef = useRef(fontFamily);
-	fontFamilyRef.current = fontFamily;
-	const fontSizeRef = useRef(fontSize);
-	fontSizeRef.current = fontSize;
-
 	// Update theme without re-mounting the terminal
 	useEffect(() => {
 		if (termRef.current) {
@@ -74,9 +66,9 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 			// 1. Create xterm (sync)
 			const term = new XTerm({
-				fontFamily: `"${fontFamilyRef.current}", monospace`,
-				fontSize: fontSizeRef.current,
-				theme: themeRef.current,
+				fontFamily: `"${fontFamily}", monospace`,
+				fontSize,
+				theme,
 				cursorBlink: true,
 				convertEol: true,
 			});
@@ -184,7 +176,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				fitAddonRef.current = null;
 			};
 		},
-		[profileId, sessionId],
+		[profileId, sessionId, fontFamily, fontSize, theme],
 	);
 
 	return <div ref={terminalRef} style={containerStyle} />;
