@@ -21,7 +21,7 @@ enableMapSet();
 interface TerminalTab {
 	id: string;
 	title: string;
-	pendingHistory?: string;
+	pendingHistory?: number[];
 }
 
 interface ProjectTerminalState {
@@ -37,7 +37,7 @@ interface TerminalStore {
 		profileId: string,
 		sessionId: string,
 		title: string,
-		pendingHistory?: string,
+		pendingHistory?: number[],
 	) => void;
 	closeTab: (profileId: string, tabId: string) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
@@ -216,7 +216,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 		projectSessions.flatMap(({ sessions }) =>
 			sessions.map(async (session) => {
 				// Pre-fetch history from old session
-				let historyText: string | undefined;
+				let historyData: number[] | undefined;
 				try {
 					consola.log(
 						`[pty-restore] fetching history for old session ${session.id}`,
@@ -225,9 +225,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 						sessionId: session.id,
 					});
 					if (history.length > 0) {
-						historyText = new TextDecoder().decode(
-							new Uint8Array(history),
-						);
+						historyData = history;
 						consola.log(
 							`[pty-restore] fetched ${history.length} bytes of history`,
 						);
@@ -265,7 +263,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 						session.profile_id,
 						newSessionId,
 						session.title,
-						historyText,
+						historyData,
 					);
 				count++;
 			}),

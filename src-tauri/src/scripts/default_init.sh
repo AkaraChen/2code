@@ -42,3 +42,5 @@ CLAUDE_WRAPPER
 command chmod +x "$_2CODE_BIN/claude"
 
 export PATH="$_2CODE_BIN:$PATH"
+
+unsetopt PROMPT_SP

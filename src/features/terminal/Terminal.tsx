@@ -97,15 +97,19 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			const tab = useTerminalStore
 				.getState()
 				.profiles[profileId]?.tabs.find((t) => t.id === sessionId);
-			if (tab?.pendingHistory) {
-				term.write(tab.pendingHistory);
+			if (tab?.pendingHistory && tab.pendingHistory.length > 0) {
+				consola.info(
+					`[pty-restore] writing ${tab.pendingHistory.length} bytes of history to xterm for session ${sessionId}`,
+				);
+				// term.write(stripPromptSP(new Uint8Array(tab.pendingHistory)));
+				term.write(new Uint8Array(tab.pendingHistory));
 				consola.log(
-					`[pty-restore] wrote ${tab.pendingHistory.length} chars of history to xterm`,
+					`[pty-restore] wrote ${tab.pendingHistory.length} bytes of history to xterm`,
 				);
 			}
 
 			// 3. Register Tauri listeners (async, fire-and-forget with disposed guard)
-			(async () => {
+			async function setupAsync() {
 				const unlistenOutput = await listen<string>(
 					`pty-output-${sessionId}`,
 					(event) => {
@@ -128,7 +132,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 
 				// Consume history only after confirming this mount is stable
 				// (not a throwaway StrictMode mount that will be immediately disposed)
-				if (tab?.pendingHistory) {
+				if (tab?.pendingHistory && tab.pendingHistory.length > 0) {
 					useTerminalStore
 						.getState()
 						.consumeHistory(profileId, sessionId);
@@ -138,7 +142,8 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 					`[pty-terminal] live listeners registered for session ${sessionId}`,
 				);
 				unlisteners.push(unlistenOutput, unlistenExit);
-			})();
+			}
+			void setupAsync();
 
 			// 4. Sync handlers
 			term.onData((data) => {

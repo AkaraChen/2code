@@ -3,7 +3,7 @@ use std::io::Read;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
-use diesel::prelude::*;
+use diesel::SqliteConnection;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::AppError;
@@ -26,7 +26,6 @@ pub fn create_flush_senders() -> PtyFlushSenders {
 }
 
 const FLUSH_THRESHOLD: usize = 32 * 1024; // 32KB
-const MAX_OUTPUT_PER_SESSION: usize = 1024 * 1024; // 1MB
 
 pub fn create_session(
 	app: &AppHandle,
@@ -300,7 +299,6 @@ fn persist_pty_output(
 	session_id: &str,
 ) {
 	let mut buffer: Vec<u8> = Vec::new();
-	let mut total_written: usize = 0;
 
 	while let Ok(msg) = rx.recv() {
 		match msg {
@@ -309,23 +307,13 @@ fn persist_pty_output(
 				buffer.extend_from_slice(&data);
 				if buffer.len() >= FLUSH_THRESHOLD {
 					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: buffer reached threshold, flushing");
-					flush_output_buffer(
-						&db,
-						session_id,
-						&mut buffer,
-						&mut total_written,
-					);
+					flush_output_buffer(&db, session_id, &mut buffer);
 				}
 			}
 			PersistMsg::Flush => {
 				if !buffer.is_empty() {
 					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: flush signal received, flushing");
-					flush_output_buffer(
-						&db,
-						session_id,
-						&mut buffer,
-						&mut total_written,
-					);
+					flush_output_buffer(&db, session_id, &mut buffer);
 				}
 			}
 		}
@@ -333,62 +321,24 @@ fn persist_pty_output(
 
 	if !buffer.is_empty() {
 		tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: EOF, flushing remaining");
-		flush_output_buffer(&db, session_id, &mut buffer, &mut total_written);
+		flush_output_buffer(&db, session_id, &mut buffer);
 	}
-	tracing::info!(target: "pty", %session_id, total_written, "persist: thread exiting");
+	tracing::info!(target: "pty", %session_id, "persist: thread exiting");
 }
 
-fn flush_output_buffer(
-	db: &DbPool,
-	session_id: &str,
-	buffer: &mut Vec<u8>,
-	total_written: &mut usize,
-) {
+fn flush_output_buffer(db: &DbPool, session_id: &str, buffer: &mut Vec<u8>) {
 	let Ok(mut conn) = db.lock() else { return };
 
 	let chunk_len = buffer.len();
-	if crate::repo::pty::insert_output_chunk(&mut conn, session_id, buffer)
-		.is_ok()
-	{
-		*total_written += chunk_len;
-		tracing::info!(target: "pty", %session_id, chunk_len, total_written = *total_written, "flush: wrote chunk");
+	match crate::repo::pty::append_output(&mut conn, session_id, buffer) {
+		Ok(()) => {
+			tracing::info!(target: "pty", %session_id, chunk_len, "flush: appended to blob");
+		}
+		Err(e) => {
+			tracing::warn!(target: "pty", %session_id, error = %e, "flush: failed to append");
+		}
 	}
 	buffer.clear();
-
-	// Prune oldest chunks if total exceeds cap
-	if *total_written > MAX_OUTPUT_PER_SESSION {
-		prune_oldest_chunks(&mut conn, session_id, total_written);
-	}
-}
-
-fn prune_oldest_chunks(
-	conn: &mut SqliteConnection,
-	session_id: &str,
-	total_written: &mut usize,
-) {
-	let chunks = crate::repo::pty::get_chunk_sizes(conn, session_id);
-
-	let mut running_total: usize =
-		chunks.iter().map(|(_, len)| *len as usize).sum();
-
-	let mut ids_to_delete: Vec<i32> = Vec::new();
-	for (chunk_id, len) in &chunks {
-		if running_total <= MAX_OUTPUT_PER_SESSION {
-			break;
-		}
-		if let Some(cid) = chunk_id {
-			running_total -= *len as usize;
-			ids_to_delete.push(*cid);
-		}
-	}
-
-	if !ids_to_delete.is_empty() {
-		let before: usize = chunks.iter().map(|(_, len)| *len as usize).sum();
-		tracing::info!(target: "pty", %session_id, count = ids_to_delete.len(), before, after = running_total, "prune: deleting chunks");
-		crate::repo::pty::delete_chunks_by_ids(conn, &ids_to_delete);
-	}
-
-	*total_written = running_total;
 }
 
 #[cfg(test)]

@@ -21,8 +21,7 @@ diesel::table! {
 }
 
 diesel::table! {
-	pty_output_chunks (id) {
-		id -> Nullable<Integer>,
+	pty_session_output (session_id) {
 		session_id -> Text,
 		data -> Binary,
 	}
@@ -43,12 +42,12 @@ diesel::table! {
 }
 
 diesel::joinable!(profiles -> projects (project_id));
-diesel::joinable!(pty_output_chunks -> pty_sessions (session_id));
+diesel::joinable!(pty_session_output -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	profiles,
 	projects,
-	pty_output_chunks,
+	pty_session_output,
 	pty_sessions,
 );
