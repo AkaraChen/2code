@@ -26,7 +26,6 @@ pub fn create_flush_senders() -> PtyFlushSenders {
 	Arc::new(Mutex::new(HashMap::new()))
 }
 
-const FLUSH_THRESHOLD: usize = 32 * 1024; // 32KB
 const VT100_SCROLLBACK: usize = 10000;
 
 /// Process raw terminal history through a virtual terminal emulator
@@ -451,60 +450,37 @@ fn read_pty_output(
 	let _ = app.emit(&exit_event, ());
 }
 
-/// Persistence thread: receives raw bytes from channel, buffers, and flushes to DB.
+/// Persistence thread: receives raw bytes from channel and writes to DB immediately.
 fn persist_pty_output(
 	rx: mpsc::Receiver<PersistMsg>,
 	db: DbPool,
 	session_id: &str,
 ) {
-	let mut buffer: Vec<u8> = Vec::new();
-
 	while let Ok(msg) = rx.recv() {
 		match msg {
 			PersistMsg::Data(data) => {
-				tracing::info!(target: "pty", %session_id, n = data.len(), buf_len = buffer.len() + data.len(), "persist: received chunk");
-				buffer.extend_from_slice(&data);
-				if buffer.len() >= FLUSH_THRESHOLD {
-					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: buffer reached threshold, flushing");
-					flush_output_buffer(&db, session_id, &mut buffer);
+				let Ok(mut conn) = db.lock() else { continue };
+				let n = data.len();
+				match crate::repo::pty::append_output(&mut conn, session_id, &data)
+				{
+					Ok(()) => {
+						tracing::info!(target: "pty", %session_id, n, "persist: appended");
+					}
+					Err(e) => {
+						tracing::warn!(target: "pty", %session_id, error = %e, "persist: failed to append");
+					}
 				}
 			}
-			PersistMsg::Flush => {
-				if !buffer.is_empty() {
-					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: flush signal received, flushing");
-					flush_output_buffer(&db, session_id, &mut buffer);
-				}
-			}
+			PersistMsg::Flush => {} // no-op: data is already persisted
 			PersistMsg::Clear => {
 				tracing::info!(target: "pty", %session_id, "persist: clear scrollback");
-				buffer.clear();
 				if let Ok(mut conn) = db.lock() {
 					crate::repo::pty::clear_output(&mut conn, session_id);
 				}
 			}
 		}
 	}
-
-	if !buffer.is_empty() {
-		tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: EOF, flushing remaining");
-		flush_output_buffer(&db, session_id, &mut buffer);
-	}
 	tracing::info!(target: "pty", %session_id, "persist: thread exiting");
-}
-
-fn flush_output_buffer(db: &DbPool, session_id: &str, buffer: &mut Vec<u8>) {
-	let Ok(mut conn) = db.lock() else { return };
-
-	let chunk_len = buffer.len();
-	match crate::repo::pty::append_output(&mut conn, session_id, buffer) {
-		Ok(()) => {
-			tracing::info!(target: "pty", %session_id, chunk_len, "flush: appended to blob");
-		}
-		Err(e) => {
-			tracing::warn!(target: "pty", %session_id, error = %e, "flush: failed to append");
-		}
-	}
-	buffer.clear();
 }
 
 #[cfg(test)]
