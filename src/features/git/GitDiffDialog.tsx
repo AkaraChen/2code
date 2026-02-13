@@ -14,22 +14,25 @@ import {
 	Activity,
 	startTransition,
 	Suspense,
-	useCallback,
+	use,
 	useEffect,
 	useMemo,
+	useReducer,
 	useRef,
-	useState,
 } from "react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
-import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { useListKeyNav } from "@/shared/hooks/useListKeyNav";
 import ChangesFileList from "./components/ChangesFileList";
 import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
 import HistoryFileList from "./components/HistoryFileList";
+import {
+	GitDiffContext,
+	gitDiffReducer,
+	initialState,
+} from "./gitDiffReducer";
 import { useCommitDiffFiles, useGitDiffFiles, useGitLog } from "./hooks";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
@@ -95,7 +98,9 @@ export default function GitDiffDialog({
 							overflow="hidden"
 							display="flex"
 						>
-							<GitDiffContent profileId={profileId} />
+							<Suspense fallback={null}>
+								<GitDiffContent profileId={profileId} />
+							</Suspense>
 						</Dialog.Body>
 					</Dialog.Content>
 				</Dialog.Positioner>
@@ -110,24 +115,13 @@ export default function GitDiffDialog({
 
 function GitDiffContent({ profileId }: { profileId: string }) {
 	const termThemeId = useTerminalThemeId();
-
-	const [activeTab, setActiveTab] = useState<string>("changes");
-	const [selectedCommit, setSelectedCommit] = useState<GitCommit | null>(
-		null,
-	);
+	const [state, dispatch] = useReducer(gitDiffReducer, initialState);
 
 	const sidebarRef = useRef<HTMLDivElement>(null);
-	const commitsRef = useRef<GitCommit[]>([]);
 
-	const [selectedFileIndex, setSelectedFileIndex, changesFileCountRef] =
-		useListKeyNav();
-	const [selectedCommitIndex, setSelectedCommitIndex, commitCountRef] =
-		useListKeyNav();
-	const [
-		selectedCommitFileIndex,
-		setSelectedCommitFileIndex,
-		commitFileCountRef,
-	] = useListKeyNav();
+	const changesFiles = useGitDiffFiles(profileId);
+	const { data: logData } = useGitLog(profileId);
+	const commits = useMemo(() => logData ?? [], [logData]);
 
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({
@@ -141,105 +135,82 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 		[termThemeId],
 	);
 
-	const handleTabChange = useCallback((value: string) => {
+	const handleTabChange = (value: string) => {
 		startTransition(() => {
-			setActiveTab(value);
-			setSelectedCommit(null);
-			setSelectedCommitFileIndex(0);
-			setSelectedCommitIndex(0);
+			dispatch({ type: "switchTab", tab: value as "changes" | "history" });
 		});
-	}, []);
-
-	const handleCommitSelect = useCallback(
-		(commit: GitCommit, index: number) => {
-			startTransition(() => {
-				setSelectedCommit(commit);
-				setSelectedCommitFileIndex(0);
-				setSelectedCommitIndex(index);
-			});
-		},
-		[],
-	);
-
-	const handleCommitBack = useCallback(() => {
-		startTransition(() => {
-			setSelectedCommit(null);
-			setSelectedCommitFileIndex(0);
-			// selectedCommitIndex intentionally preserved
-		});
-	}, []);
+	};
 
 	// Keyboard navigation — dispatch arrow keys to the active list,
 	// handle Enter / Escape / Backspace for commit drill-in/back.
-	const activeListKeyDown = useCallback(
-		(e: React.KeyboardEvent<HTMLDivElement>) => {
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-				e.preventDefault();
-				const delta = e.key === "ArrowDown" ? 1 : -1;
-				const step = (
-					setter: typeof setSelectedFileIndex,
-					count: React.RefObject<number>,
-				) =>
-					setter((prev) =>
-						Math.max(0, Math.min(prev + delta, count.current - 1)),
-					);
+	const activeListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			e.preventDefault();
+			const delta = e.key === "ArrowDown" ? 1 : -1;
 
-				if (activeTab === "changes") {
-					step(setSelectedFileIndex, changesFileCountRef);
-				} else if (selectedCommit) {
-					step(setSelectedCommitFileIndex, commitFileCountRef);
-				} else {
-					step(setSelectedCommitIndex, commitCountRef);
-				}
-				return;
+			if (state.activeTab === "changes") {
+				dispatch({
+					type: "stepIndex",
+					target: "file",
+					delta,
+					count: changesFiles.length,
+				});
+			} else if (state.selectedCommit) {
+				dispatch({
+					type: "stepIndex",
+					target: "commitFile",
+					delta,
+					count: state.commitFileCount,
+				});
+			} else {
+				dispatch({
+					type: "stepIndex",
+					target: "commit",
+					delta,
+					count: commits.length,
+				});
 			}
+			return;
+		}
 
+		if (
+			e.key === "Enter" &&
+			state.activeTab === "history" &&
+			!state.selectedCommit
+		) {
+			e.preventDefault();
 			if (
-				e.key === "Enter" &&
-				activeTab === "history" &&
-				!selectedCommit
+				commits.length > 0 &&
+				state.selectedCommitIndex < commits.length
 			) {
+				startTransition(() => {
+					dispatch({
+						type: "selectCommit",
+						commit: commits[state.selectedCommitIndex],
+						index: state.selectedCommitIndex,
+					});
+				});
+			}
+			return;
+		}
+
+		if (state.activeTab === "history" && state.selectedCommit) {
+			if (e.key === "Backspace") {
 				e.preventDefault();
-				const commits = commitsRef.current;
-				if (
-					commits.length > 0 &&
-					selectedCommitIndex < commits.length
-				) {
-					handleCommitSelect(
-						commits[selectedCommitIndex],
-						selectedCommitIndex,
-					);
-				}
+				startTransition(() => {
+					dispatch({ type: "commitBack" });
+				});
 				return;
 			}
-
-			if (activeTab === "history" && selectedCommit) {
-				if (e.key === "Backspace") {
-					e.preventDefault();
-					handleCommitBack();
-					return;
-				}
-				if (e.key === "Escape") {
-					e.preventDefault();
-					e.stopPropagation();
-					handleCommitBack();
-				}
+			if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopPropagation();
+				startTransition(() => {
+					dispatch({ type: "commitBack" });
+				});
 			}
-		},
-		[
-			activeTab,
-			selectedCommit,
-			selectedCommitIndex,
-			changesFileCountRef,
-			commitCountRef,
-			commitFileCountRef,
-			setSelectedFileIndex,
-			setSelectedCommitIndex,
-			setSelectedCommitFileIndex,
-			handleCommitSelect,
-			handleCommitBack,
-		],
-	);
+		}
+	};
 
 	// Auto-focus sidebar on tab change (also covers initial dialog open)
 	useEffect(() => {
@@ -247,123 +218,99 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 			sidebarRef.current?.focus();
 		}, 50);
 		return () => clearTimeout(timer);
-	}, [activeTab]);
+	}, [state.activeTab]);
 
 	// Re-focus sidebar when returning from commit files to commit list
 	useEffect(() => {
-		if (!selectedCommit) {
+		if (!state.selectedCommit) {
 			sidebarRef.current?.focus();
 		}
-	}, [selectedCommit]);
+	}, [state.selectedCommit]);
 
-	const isChanges = activeTab === "changes";
+	const isChanges = state.activeTab === "changes";
+
+	const ctxValue = useMemo(
+		() => ({ state, dispatch, profileId, changesFiles, commits, options }),
+		[state, dispatch, profileId, changesFiles, commits, options],
+	);
 
 	return (
-		<Flex flex="1" overflow="hidden">
-			{/* Sidebar column */}
-			<Flex
-				ref={sidebarRef}
-				direction="column"
-				w="320px"
-				flexShrink={0}
-				overflow="hidden"
-				tabIndex={0}
-				onKeyDown={activeListKeyDown}
-				outline="none"
-			>
-				<Tabs.Root
-					value={activeTab}
-					onValueChange={(e) => handleTabChange(e.value)}
-					size="sm"
-					variant="subtle"
-					flex="1"
-					minH="0"
-					display="flex"
-					flexDirection="column"
+		<GitDiffContext value={ctxValue}>
+			<Flex flex="1" overflow="hidden">
+				{/* Sidebar column */}
+				<Flex
+					ref={sidebarRef}
+					direction="column"
+					w="320px"
+					flexShrink={0}
+					overflow="hidden"
+					tabIndex={0}
+					onKeyDown={activeListKeyDown}
+					outline="none"
 				>
-					<Tabs.List px="3">
-						<Tabs.Trigger value="changes">
-							{m.changes()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="history">
-							{m.history()}
-						</Tabs.Trigger>
-					</Tabs.List>
+					<Tabs.Root
+						value={state.activeTab}
+						onValueChange={(e) => handleTabChange(e.value)}
+						size="sm"
+						variant="subtle"
+						flex="1"
+						minH="0"
+						display="flex"
+						flexDirection="column"
+					>
+						<Tabs.List px="3">
+							<Tabs.Trigger value="changes">
+								{m.changes()}
+							</Tabs.Trigger>
+							<Tabs.Trigger value="history">
+								{m.history()}
+							</Tabs.Trigger>
+						</Tabs.List>
 
-					{/* Changes sidebar */}
-					<Activity mode={isChanges ? "visible" : "hidden"}>
-						<Box
-							flex={isChanges ? "1" : undefined}
-							display={isChanges ? "flex" : "none"}
-							flexDirection="column"
-							overflow="hidden"
-						>
-							<Suspense fallback={null}>
-								<ChangesSidebar
-									profileId={profileId}
-									selectedFileIndex={selectedFileIndex}
-									onFileSelect={setSelectedFileIndex}
-									countRef={changesFileCountRef}
-								/>
-							</Suspense>
-						</Box>
-					</Activity>
+						{/* Changes sidebar */}
+						<Activity mode={isChanges ? "visible" : "hidden"}>
+							<Box
+								flex={isChanges ? "1" : undefined}
+								display={isChanges ? "flex" : "none"}
+								flexDirection="column"
+								overflow="hidden"
+							>
+								<Suspense fallback={null}>
+									<ChangesSidebar />
+								</Suspense>
+							</Box>
+						</Activity>
 
-					{/* History sidebar */}
-					<Activity mode={!isChanges ? "visible" : "hidden"}>
-						<Box
-							flex={!isChanges ? "1" : undefined}
-							display={!isChanges ? "flex" : "none"}
-							flexDirection="column"
-							overflow="hidden"
-						>
-							<Suspense fallback={null}>
-								<HistorySidebar
-									profileId={profileId}
-									selectedCommit={selectedCommit}
-									selectedCommitIndex={selectedCommitIndex}
-									selectedCommitFileIndex={
-										selectedCommitFileIndex
-									}
-									onCommitSelect={handleCommitSelect}
-									onCommitFileSelect={
-										setSelectedCommitFileIndex
-									}
-									onCommitBack={handleCommitBack}
-									commitCountRef={commitCountRef}
-									commitFileCountRef={commitFileCountRef}
-									commitsRef={commitsRef}
-								/>
-							</Suspense>
-						</Box>
-					</Activity>
-				</Tabs.Root>
+						{/* History sidebar */}
+						<Activity mode={!isChanges ? "visible" : "hidden"}>
+							<Box
+								flex={!isChanges ? "1" : undefined}
+								display={!isChanges ? "flex" : "none"}
+								flexDirection="column"
+								overflow="hidden"
+							>
+								<Suspense fallback={null}>
+									<HistorySidebar />
+								</Suspense>
+							</Box>
+						</Activity>
+					</Tabs.Root>
+				</Flex>
+
+				{/* Pane column */}
+				<Activity mode={isChanges ? "visible" : "hidden"}>
+					<Suspense fallback={null}>
+						<ChangesDiffPane visible={isChanges} />
+					</Suspense>
+				</Activity>
+
+				<Activity mode={!isChanges ? "visible" : "hidden"}>
+					<Suspense fallback={null}>
+						<HistoryDiffPane visible={!isChanges} />
+					</Suspense>
+				</Activity>
 			</Flex>
-
-			{/* Pane column */}
-			<Activity mode={isChanges ? "visible" : "hidden"}>
-				<Suspense fallback={null}>
-					<ChangesDiffPane
-						profileId={profileId}
-						selectedFileIndex={selectedFileIndex}
-						options={options}
-						visible={isChanges}
-					/>
-				</Suspense>
-			</Activity>
-
-			<Activity mode={!isChanges ? "visible" : "hidden"}>
-				<Suspense fallback={null}>
-					<HistoryDiffPane
-						profileId={profileId}
-						selectedCommit={selectedCommit}
-						selectedCommitFileIndex={selectedCommitFileIndex}
-						options={options}
-						visible={!isChanges}
-					/>
-				</Suspense>
-			</Activity>
-		</Flex>
+		</GitDiffContext>
 	);
 }
 
@@ -371,21 +318,10 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 // Changes tab components
 // ---------------------------------------------------------------------------
 
-function ChangesSidebar({
-	profileId,
-	selectedFileIndex,
-	onFileSelect,
-	countRef,
-}: {
-	profileId: string;
-	selectedFileIndex: number;
-	onFileSelect: (index: number) => void;
-	countRef: React.RefObject<number>;
-}) {
-	const files = useGitDiffFiles(profileId);
-	countRef.current = files.length;
+function ChangesSidebar() {
+	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 
-	if (files.length === 0) {
+	if (changesFiles.length === 0) {
 		return (
 			<Flex align="center" justify="center" flex="1" p="8">
 				<Box color="fg.muted" fontSize="sm">
@@ -398,29 +334,20 @@ function ChangesSidebar({
 	return (
 		<Box flex="1" overflowY="auto">
 			<ChangesFileList
-				files={files}
-				selectedIndex={selectedFileIndex}
-				onSelect={onFileSelect}
+				files={changesFiles}
+				selectedIndex={state.selectedFileIndex}
+				onSelect={(i) => dispatch({ type: "selectFile", index: i })}
 			/>
 		</Box>
 	);
 }
 
-function ChangesDiffPane({
-	profileId,
-	selectedFileIndex,
-	options,
-	visible,
-}: {
-	profileId: string;
-	selectedFileIndex: number;
-	options: FileDiffOptions<unknown>;
-	visible: boolean;
-}) {
-	const files = useGitDiffFiles(profileId);
+function ChangesDiffPane({ visible }: { visible: boolean }) {
+	const { changesFiles, state, options } = use(GitDiffContext)!;
 	const activeFile =
-		files.length > 0 && selectedFileIndex < files.length
-			? files[selectedFileIndex]
+		changesFiles.length > 0 &&
+		state.selectedFileIndex < changesFiles.length
+			? changesFiles[state.selectedFileIndex]
 			: null;
 
 	return (
@@ -429,7 +356,7 @@ function ChangesDiffPane({
 				activeFile={activeFile}
 				options={options}
 				emptyMessage={
-					files.length === 0
+					changesFiles.length === 0
 						? m.noChangesDetected()
 						: m.selectFileToView()
 				}
@@ -442,35 +369,10 @@ function ChangesDiffPane({
 // History tab components
 // ---------------------------------------------------------------------------
 
-function HistorySidebar({
-	profileId,
-	selectedCommit,
-	selectedCommitIndex,
-	selectedCommitFileIndex,
-	onCommitSelect,
-	onCommitFileSelect,
-	onCommitBack,
-	commitCountRef,
-	commitFileCountRef,
-	commitsRef,
-}: {
-	profileId: string;
-	selectedCommit: GitCommit | null;
-	selectedCommitIndex: number;
-	selectedCommitFileIndex: number;
-	onCommitSelect: (commit: GitCommit, index: number) => void;
-	onCommitFileSelect: (index: number) => void;
-	onCommitBack: () => void;
-	commitCountRef: React.RefObject<number>;
-	commitFileCountRef: React.RefObject<number>;
-	commitsRef: React.RefObject<GitCommit[]>;
-}) {
-	const { data: logData } = useGitLog(profileId);
-	const commits = logData ?? [];
-	commitsRef.current = commits;
-	commitCountRef.current = commits.length;
+function HistorySidebar() {
+	const { commits, state, dispatch } = use(GitDiffContext)!;
 
-	if (selectedCommit) {
+	if (state.selectedCommit) {
 		return (
 			<Box
 				flex="1"
@@ -479,14 +381,7 @@ function HistorySidebar({
 				minH="0"
 				overflow="hidden"
 			>
-				<CommitFileSidebar
-					profileId={profileId}
-					commit={selectedCommit}
-					selectedCommitFileIndex={selectedCommitFileIndex}
-					onCommitFileSelect={onCommitFileSelect}
-					onCommitBack={onCommitBack}
-					countRef={commitFileCountRef}
-				/>
+				<CommitFileSidebar />
 			</Box>
 		);
 	}
@@ -504,55 +399,46 @@ function HistorySidebar({
 	return (
 		<CommitList
 			commits={commits}
-			selectedIndex={selectedCommitIndex}
-			onCommitSelect={onCommitSelect}
+			selectedIndex={state.selectedCommitIndex}
+			onCommitSelect={(commit, index) =>
+				startTransition(() => {
+					dispatch({ type: "selectCommit", commit, index });
+				})
+			}
 		/>
 	);
 }
 
-function CommitFileSidebar({
-	profileId,
-	commit,
-	selectedCommitFileIndex,
-	onCommitFileSelect,
-	onCommitBack,
-	countRef,
-}: {
-	profileId: string;
-	commit: GitCommit;
-	selectedCommitFileIndex: number;
-	onCommitFileSelect: (index: number) => void;
-	onCommitBack: () => void;
-	countRef: React.RefObject<number>;
-}) {
+function CommitFileSidebar() {
+	const { profileId, state, dispatch } = use(GitDiffContext)!;
+	const commit = state.selectedCommit!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
-	countRef.current = files.length;
+
+	useEffect(() => {
+		dispatch({ type: "setCommitFileCount", count: files.length });
+	}, [dispatch, files.length]);
 
 	return (
 		<HistoryFileList
 			commit={commit}
 			files={files}
-			selectedIndex={selectedCommitFileIndex}
-			onFileSelect={onCommitFileSelect}
-			onBack={onCommitBack}
+			selectedIndex={state.selectedCommitFileIndex}
+			onFileSelect={(i) =>
+				dispatch({ type: "selectCommitFile", index: i })
+			}
+			onBack={() =>
+				startTransition(() => {
+					dispatch({ type: "commitBack" });
+				})
+			}
 		/>
 	);
 }
 
-function HistoryDiffPane({
-	profileId,
-	selectedCommit,
-	selectedCommitFileIndex,
-	options,
-	visible,
-}: {
-	profileId: string;
-	selectedCommit: GitCommit | null;
-	selectedCommitFileIndex: number;
-	options: FileDiffOptions<unknown>;
-	visible: boolean;
-}) {
-	if (!selectedCommit) {
+function HistoryDiffPane({ visible }: { visible: boolean }) {
+	const { state, options } = use(GitDiffContext)!;
+
+	if (!state.selectedCommit) {
 		return (
 			<Box flex="1" display={visible ? "flex" : "none"}>
 				<GitDiffPane
@@ -564,34 +450,16 @@ function HistoryDiffPane({
 		);
 	}
 
-	return (
-		<CommitDiffViewer
-			profileId={profileId}
-			commit={selectedCommit}
-			selectedCommitFileIndex={selectedCommitFileIndex}
-			options={options}
-			visible={visible}
-		/>
-	);
+	return <CommitDiffViewer visible={visible} />;
 }
 
-function CommitDiffViewer({
-	profileId,
-	commit,
-	selectedCommitFileIndex,
-	options,
-	visible,
-}: {
-	profileId: string;
-	commit: GitCommit;
-	selectedCommitFileIndex: number;
-	options: FileDiffOptions<unknown>;
-	visible: boolean;
-}) {
+function CommitDiffViewer({ visible }: { visible: boolean }) {
+	const { profileId, state, options } = use(GitDiffContext)!;
+	const commit = state.selectedCommit!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
 	const activeFile =
-		files.length > 0 && selectedCommitFileIndex < files.length
-			? files[selectedCommitFileIndex]
+		files.length > 0 && state.selectedCommitFileIndex < files.length
+			? files[state.selectedCommitFileIndex]
 			: null;
 
 	return (
