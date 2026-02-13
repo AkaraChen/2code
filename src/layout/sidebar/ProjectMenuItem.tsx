@@ -7,7 +7,7 @@ import {
 	Portal,
 	Text,
 } from "@chakra-ui/react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	RiArrowDownSLine,
 	RiArrowRightSLine,
@@ -45,13 +45,13 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const [expanded, setExpanded] = useState(isAnyActive);
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
-	const wasActiveRef = useRef(isAnyActive);
 
-	// Auto-expand only on transition from inactive → active
-	if (isAnyActive && !wasActiveRef.current) {
-		setExpanded(true);
+	// Auto-expand on inactive → active transition (derived state during render)
+	const [wasActive, setWasActive] = useState(isAnyActive);
+	if (wasActive !== isAnyActive) {
+		setWasActive(isAnyActive);
+		if (isAnyActive) setExpanded(true);
 	}
-	wasActiveRef.current = isAnyActive;
 
 	return (
 		<>
