@@ -46,7 +46,7 @@ export default function DeleteProjectDialog({
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
 							<Button colorPalette="red" onClick={handleDelete}>
-								{m["delete"]()}
+								{m.delete()}
 							</Button>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>

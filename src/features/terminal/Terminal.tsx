@@ -1,4 +1,5 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useMemo, useRef } from "react";
@@ -110,7 +111,7 @@ export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 			);
 
 			const unlistenExit = await listen(`pty-exit-${sessionId}`, () => {
-				term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+				term.write("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
 			});
 
 			if (disposed) {

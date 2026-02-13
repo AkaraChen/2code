@@ -181,7 +181,7 @@ export default function DebugLogDialog({
 
 						<Flex px="4" py="2" justify="end">
 							<Text fontSize="xs" color="fg.muted">
-								{filtered.length} / {logs.length}
+								{filtered.length} /{logs.length}
 							</Text>
 						</Flex>
 					</Dialog.Content>

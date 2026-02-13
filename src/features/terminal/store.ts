@@ -5,8 +5,8 @@ import { useShallow } from "zustand/react/shallow";
 import type { ProjectWithProfiles } from "@/generated";
 import {
 	createPtySession,
-	listProjectSessions,
 	listProjects,
+	listProjectSessions,
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -25,18 +25,18 @@ interface ProjectTerminalState {
 
 interface TerminalStore {
 	profiles: Record<string, ProjectTerminalState>;
-	addTab(
+	addTab: (
 		profileId: string,
 		sessionId: string,
 		title: string,
 		restoreFrom?: string,
-	): void;
-	closeTab(profileId: string, tabId: string): void;
-	setActiveTab(profileId: string, tabId: string): void;
-	clearRestore(profileId: string, tabId: string): void;
-	removeProfile(profileId: string): void;
-	updateTabTitle(profileId: string, tabId: string, title: string): void;
-	removeStaleProfiles(validIds: Set<string>): void;
+	) => void;
+	closeTab: (profileId: string, tabId: string) => void;
+	setActiveTab: (profileId: string, tabId: string) => void;
+	clearRestore: (profileId: string, tabId: string) => void;
+	removeProfile: (profileId: string) => void;
+	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
+	removeStaleProfiles: (validIds: Set<string>) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>()(

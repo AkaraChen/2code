@@ -1,6 +1,7 @@
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalTheme } from "./hooks";
-import { type TerminalThemeId, terminalThemes } from "./themes";
+import type { TerminalThemeId } from "./themes";
+import { terminalThemes } from "./themes";
 
 const lines = [
 	{ prompt: true, text: "whoami" },

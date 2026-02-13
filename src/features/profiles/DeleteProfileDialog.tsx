@@ -53,7 +53,7 @@ export default function DeleteProfileDialog({
 								loading={deleteProfile.isPending}
 								onClick={handleDelete}
 							>
-								{m["delete"]()}
+								{m.delete()}
 							</Button>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>

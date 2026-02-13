@@ -88,8 +88,12 @@ src-tauri/src/
 
 ```toml
 portable-pty = "0.9"
-tokio = { version = "1", features = ["rt", "sync", "macros"] }
-uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = [
+  "rt",
+  "sync",
+  "macros"
+] }
+uuid = { version = "1", features = [ "v4" ] }
 ```
 
 Tauri 2 already bundles tokio, but we need explicit features for `spawn_blocking` and `Mutex`. `serde` is already present.

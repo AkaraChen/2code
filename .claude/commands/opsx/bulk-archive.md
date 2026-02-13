@@ -89,12 +89,14 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    ```
 
    For conflicts, show the resolution:
+
    ```
    * Conflict resolution:
      - auth spec: Will apply add-oauth then add-jwt (both implemented, chronological order)
    ```
 
    For incomplete changes, show warnings:
+
    ```
    Warnings:
    - add-verify-skill: 1 incomplete artifact, 3 incomplete tasks
@@ -103,7 +105,6 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
 7. **Confirm batch operation**
 
    Use **AskUserQuestion tool** with a single confirmation:
-
    - "Archive N changes?" with options based on status
    - Options might include:
      - "Archive all N changes"
@@ -122,6 +123,7 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    - Track if sync was done
 
    b. **Perform the archive**:
+
    ```bash
    mkdir -p openspec/changes/archive
    mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
@@ -153,6 +155,7 @@ This skill allows you to batch-archive changes, handling spec conflicts intellig
    ```
 
    If any failures:
+
    ```
    Failed 1 change:
    - some-change: Archive directory already exists

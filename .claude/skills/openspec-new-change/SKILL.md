@@ -18,6 +18,7 @@ Start a new change using the experimental artifact-driven approach.
 1. **If no clear input provided, ask what they want to build**
 
    Use the **AskUserQuestion tool** (open-ended, no preset options) to ask:
+
    > "What change do you want to work on? Describe what you want to build or fix."
 
    From their description, derive a kebab-case name (e.g., "add user authentication" → `add-user-auth`).
@@ -35,24 +36,30 @@ Start a new change using the experimental artifact-driven approach.
    **Otherwise**: Omit `--schema` to use the default.
 
 3. **Create the change directory**
+
    ```bash
    openspec new change "<name>"
    ```
+
    Add `--schema <name>` only if the user requested a specific workflow.
    This creates a scaffolded change at `openspec/changes/<name>/` with the selected schema.
 
 4. **Show the artifact status**
+
    ```bash
    openspec status --change "<name>"
    ```
+
    This shows which artifacts need to be created and which are ready (dependencies satisfied).
 
 5. **Get instructions for the first artifact**
    The first artifact depends on the schema (e.g., `proposal` for spec-driven).
    Check the status output to find the first artifact with status "ready".
+
    ```bash
    openspec instructions <first-artifact-id> --change "<name>"
    ```
+
    This outputs the template and context for creating the first artifact.
 
 6. **STOP and wait for user direction**

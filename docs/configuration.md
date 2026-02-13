@@ -129,14 +129,14 @@ Managed by Diesel, embedded at compile time via `embed_migrations!("migrations")
 
 ```json
 {
-    "baseLocale": "en",
-    "locales": ["en", "zh"],
-    "modules": [
-        "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"
-    ],
-    "plugin.inlang.messageFormat": {
-        "pathPattern": "./messages/{locale}.json"
-    }
+  "baseLocale": "en",
+  "locales": ["en", "zh"],
+  "modules": [
+    "https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"
+  ],
+  "plugin.inlang.messageFormat": {
+    "pathPattern": "./messages/{locale}.json"
+  }
 }
 ```
 
@@ -148,8 +148,8 @@ Optional per-project config file in the project root:
 
 ```json
 {
-    "setup_script": ["npm install"],
-    "teardown_script": ["rm -rf node_modules"]
+  "setup_script": ["npm install"],
+  "teardown_script": ["rm -rf node_modules"]
 }
 ```
 

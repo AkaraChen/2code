@@ -12,8 +12,8 @@ import {
 import type { FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
-	Suspense,
 	startTransition,
+	Suspense,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -77,7 +77,7 @@ export default function GitDiffDialog({
 					>
 						<Dialog.Header py="2" px="4">
 							<Dialog.Title fontSize="sm">
-								<HStack gap="1.5" alignItems={"center"}>
+								<HStack gap="1.5" alignItems="center">
 									<Icon fontSize="md">
 										<RiGitBranchLine />
 									</Icon>
@@ -223,7 +223,6 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 					e.preventDefault();
 					e.stopPropagation();
 					handleCommitBack();
-					return;
 				}
 			}
 		},

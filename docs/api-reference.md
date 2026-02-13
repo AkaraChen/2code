@@ -46,34 +46,34 @@ Git commands resolve the working directory through the profile's `worktree_path`
 
 ```typescript
 interface Project {
-    id: string;          // UUID
-    name: string;
-    folder: string;      // Absolute path
-    created_at: string;  // ISO timestamp
+  id: string // UUID
+  name: string
+  folder: string // Absolute path
+  created_at: string // ISO timestamp
 }
 
 interface ProjectWithProfiles {
-    id: string;
-    name: string;
-    folder: string;
-    created_at: string;
-    profiles: Profile[];
+  id: string
+  name: string
+  folder: string
+  created_at: string
+  profiles: Profile[]
 }
 
 interface GitCommit {
-    hash: string;          // Short hash (7 chars)
-    full_hash: string;     // Full SHA-1
-    author: GitAuthor;
-    date: string;          // ISO 8601
-    message: string;
-    files_changed: number;
-    insertions: number;
-    deletions: number;
+  hash: string // Short hash (7 chars)
+  full_hash: string // Full SHA-1
+  author: GitAuthor
+  date: string // ISO 8601
+  message: string
+  files_changed: number
+  insertions: number
+  deletions: number
 }
 
 interface GitAuthor {
-    name: string;
-    email: string;
+  name: string
+  email: string
 }
 ```
 
@@ -88,12 +88,12 @@ interface GitAuthor {
 
 ```typescript
 interface Profile {
-    id: string;            // UUID
-    project_id: string;
-    branch_name: string;   // Sanitized (CJK → pinyin, special chars stripped)
-    worktree_path: string; // ~/.2code/workspace/{id} (or project folder for defaults)
-    created_at: string;
-    is_default: boolean;   // true for the auto-created project profile
+  id: string // UUID
+  project_id: string
+  branch_name: string // Sanitized (CJK → pinyin, special chars stripped)
+  worktree_path: string // ~/.2code/workspace/{id} (or project folder for defaults)
+  created_at: string
+  is_default: boolean // true for the auto-created project profile
 }
 ```
 
@@ -118,25 +118,25 @@ interface Profile {
 
 ```typescript
 interface PtySessionMeta {
-    profile_id: string;   // Profile this session belongs to
-    title: string;
+  profile_id: string // Profile this session belongs to
+  title: string
 }
 
 interface PtyConfig {
-    shell: string;    // e.g. "/bin/zsh"
-    cwd: string;      // Working directory
-    rows: number;
-    cols: number;
+  shell: string // e.g. "/bin/zsh"
+  cwd: string // Working directory
+  rows: number
+  cols: number
 }
 
 interface PtySessionRecord {
-    id: string;
-    profile_id: string;
-    title: string;
-    shell: string;
-    cwd: string;
-    created_at: string;
-    closed_at: string | null;
+  id: string
+  profile_id: string
+  title: string
+  shell: string
+  cwd: string
+  created_at: string
+  closed_at: string | null
 }
 ```
 
@@ -152,8 +152,8 @@ interface PtySessionRecord {
 
 ```typescript
 interface SystemFont {
-    family: string;
-    is_mono: boolean;
+  family: string
+  is_mono: boolean
 }
 ```
 
@@ -172,7 +172,7 @@ Uses Tauri's `Channel` for push-based streaming (not request/response). The back
 
 ```typescript
 interface WatchEvent {
-    project_id: string;
+  project_id: string
 }
 ```
 
@@ -185,10 +185,10 @@ interface WatchEvent {
 
 ```typescript
 interface LogEntry {
-    timestamp: number;   // Unix millis
-    level: string;       // "ERROR", "WARN", "INFO"
-    source: string;      // tracing target (e.g. "pty", "watcher")
-    message: string;
+  timestamp: number // Unix millis
+  level: string // "ERROR", "WARN", "INFO"
+  source: string // tracing target (e.g. "pty", "watcher")
+  message: string
 }
 ```
 
@@ -199,13 +199,13 @@ PTY output uses Tauri's event system for real-time streaming (not request/respon
 ```typescript
 // Frontend: Listen for PTY output
 const unlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
-    term.write(event.payload);
-});
+  term.write(event.payload)
+})
 
 // Frontend: Listen for process exit
 const unlistenExit = await listen(`pty-exit-${sessionId}`, () => {
-    term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
-});
+  term.write('\r\n\x1B[90m[Process exited]\x1B[0m\r\n')
+})
 ```
 
 ```rust

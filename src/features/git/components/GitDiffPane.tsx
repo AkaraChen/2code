@@ -20,8 +20,8 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 			userSelect="none"
 			gap="3"
 			align="center"
-			bg={"bg.panel"}
-			roundedTop={"md"}
+			bg="bg.panel"
+			roundedTop="md"
 		>
 			<Badge
 				bg={`${badge.colorPalette}.solid`}
