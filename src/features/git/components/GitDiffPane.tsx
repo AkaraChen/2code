@@ -23,12 +23,7 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 			bg="bg.panel"
 			roundedTop="md"
 		>
-			<Badge
-				bg={`${badge.colorPalette}.solid`}
-				color="white"
-				fontSize="xs"
-				fontFamily="mono"
-			>
+			<Badge size="xs" colorPalette={badge.colorPalette} variant="subtle">
 				{badge.label}
 			</Badge>
 			<Text fontSize="sm" fontFamily="mono" flex="1" truncate>
