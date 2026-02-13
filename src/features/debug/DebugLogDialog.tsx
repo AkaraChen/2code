@@ -171,8 +171,8 @@ export default function DebugLogDialog({
 											</Text>
 										</Flex>
 									) : (
-										filtered.map((entry, i) => (
-											<LogRow key={i} entry={entry} />
+										filtered.map((entry) => (
+											<LogRow key={entry.timestamp} entry={entry} />
 										))
 									)}
 								</VStack>

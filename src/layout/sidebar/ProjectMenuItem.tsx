@@ -45,13 +45,13 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const [expanded, setExpanded] = useState(isAnyActive);
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
-	const wasActive = useRef(isAnyActive);
+	const wasActiveRef = useRef(isAnyActive);
 
 	// Auto-expand only on transition from inactive → active
-	if (isAnyActive && !wasActive.current) {
+	if (isAnyActive && !wasActiveRef.current) {
 		setExpanded(true);
 	}
-	wasActive.current = isAnyActive;
+	wasActiveRef.current = isAnyActive;
 
 	return (
 		<>

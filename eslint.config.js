@@ -6,4 +6,9 @@ export default antfu({
 	imports: false,
 }).overrideRules({
 	"perfectionist/sort-imports": "off",
-});
+}).append({
+	ignores: [
+		"**/*.md",
+		"./src-tauri/target/**"
+	]
+})
