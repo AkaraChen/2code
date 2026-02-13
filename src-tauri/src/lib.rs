@@ -27,6 +27,7 @@ pub fn run() {
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
 	let read_threads_for_exit = read_threads.clone();
+	let flush_senders = service::pty::create_flush_senders();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
 
@@ -37,6 +38,7 @@ pub fn run() {
 		.plugin(tauri_plugin_store::Builder::default().build())
 		.manage(sessions)
 		.manage(read_threads)
+		.manage(flush_senders)
 		.manage(shutdown_flag)
 		.manage(layer_handle)
 		.setup(|app| {
@@ -68,6 +70,7 @@ pub fn run() {
 			handler::pty::list_project_sessions,
 			handler::pty::get_pty_session_history,
 			handler::pty::delete_pty_session_record,
+			handler::pty::flush_pty_output,
 			handler::project::create_project_temporary,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,

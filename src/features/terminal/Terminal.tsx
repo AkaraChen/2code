@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { resizePty, writeToPty } from "@/generated";
+import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -94,9 +94,6 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				consola.log(
 					`[pty-restore] wrote ${tab.pendingHistory.length} chars of history to xterm`,
 				);
-				useTerminalStore
-					.getState()
-					.consumeHistory(profileId, sessionId);
 			}
 
 			// 3. Register Tauri listeners (async, fire-and-forget with disposed guard)
@@ -122,6 +119,14 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 					unlistenOutput();
 					unlistenExit();
 					return;
+				}
+
+				// Consume history only after confirming this mount is stable
+				// (not a throwaway StrictMode mount that will be immediately disposed)
+				if (tab?.pendingHistory) {
+					useTerminalStore
+						.getState()
+						.consumeHistory(profileId, sessionId);
 				}
 
 				consola.log(
@@ -163,6 +168,9 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 					`[pty-terminal] unmount sessionId=${sessionId}`,
 				);
 				disposed = true;
+
+				// Flush buffered PTY output to DB before teardown (best-effort)
+				flushPtyOutput({ sessionId }).catch(() => {});
 				resizeObserver.disconnect();
 				onDataDisposable.dispose();
 				onResizeDisposable.dispose();

@@ -4,6 +4,7 @@ use crate::error::AppError;
 use crate::infra::db::DbPool;
 use crate::infra::pty::{self as session, PtySessionMap};
 use crate::model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
+use crate::service::pty::PtyFlushSenders;
 
 #[tauri::command]
 pub fn create_pty_session(
@@ -68,4 +69,12 @@ pub fn delete_pty_session_record(
 ) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	crate::service::pty::delete_session(conn, &session_id)
+}
+
+#[tauri::command]
+pub fn flush_pty_output(
+	session_id: String,
+	state: State<'_, PtyFlushSenders>,
+) -> Result<(), AppError> {
+	crate::service::pty::flush_output(state.inner(), &session_id)
 }

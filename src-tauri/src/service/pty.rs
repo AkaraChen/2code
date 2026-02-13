@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::io::Read;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use diesel::prelude::*;
 use tauri::{AppHandle, Emitter, Manager};
@@ -10,6 +12,18 @@ use crate::infra::pty::{self as session, PtySessionMap};
 use crate::model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
 };
+
+pub(crate) enum PersistMsg {
+	Data(Vec<u8>),
+	Flush,
+}
+
+pub type PtyFlushSenders =
+	Arc<Mutex<HashMap<String, mpsc::Sender<PersistMsg>>>>;
+
+pub fn create_flush_senders() -> PtyFlushSenders {
+	Arc::new(Mutex::new(HashMap::new()))
+}
 
 const FLUSH_THRESHOLD: usize = 32 * 1024; // 32KB
 const MAX_OUTPUT_PER_SESSION: usize = 1024 * 1024; // 1MB
@@ -90,8 +104,9 @@ pub fn create_session(
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
 	let app_handle = app.clone();
+	let flush_senders = app.state::<PtyFlushSenders>().inner().clone();
 	let handle = std::thread::spawn(move || {
-		read_pty_output(app_handle, id, reader, db);
+		read_pty_output(app_handle, id, reader, db, flush_senders);
 	});
 
 	// Track the thread handle so it can be joined on app exit,
@@ -151,6 +166,19 @@ pub fn mark_all_closed(db: &DbPool) {
 	crate::repo::pty::mark_all_open_closed(&mut conn);
 }
 
+/// Send a flush signal to the persistence thread for the given session.
+/// Best-effort: silently ignores errors (session already closed, lock poisoned, etc.).
+pub fn flush_output(
+	senders: &PtyFlushSenders,
+	session_id: &str,
+) -> Result<(), AppError> {
+	let map = senders.lock().map_err(|_| AppError::LockError)?;
+	if let Some(tx) = map.get(session_id) {
+		let _ = tx.send(PersistMsg::Flush);
+	}
+	Ok(())
+}
+
 /// Find the byte position up to which the data forms complete UTF-8 sequences.
 /// Any trailing incomplete multi-byte sequence is excluded from the boundary.
 pub fn find_utf8_boundary(bytes: &[u8]) -> usize {
@@ -188,6 +216,7 @@ fn read_pty_output(
 	session_id: String,
 	mut reader: Box<dyn Read + Send>,
 	db: DbPool,
+	flush_senders: PtyFlushSenders,
 ) {
 	let event_name = format!("pty-output-{}", session_id);
 	let exit_event = format!("pty-exit-{}", session_id);
@@ -195,12 +224,17 @@ fn read_pty_output(
 	let mut utf8_remainder: Vec<u8> = Vec::new();
 
 	// Decouple persistence into a separate thread via channel
-	let (tx, rx) = mpsc::channel::<Vec<u8>>();
+	let (tx, rx) = mpsc::channel::<PersistMsg>();
 	let persist_db = db.clone();
 	let persist_id = session_id.clone();
 	let persist_thread = std::thread::spawn(move || {
 		persist_pty_output(rx, persist_db, &persist_id);
 	});
+
+	// Store a clone of the sender so the frontend can trigger flushes
+	if let Ok(mut map) = flush_senders.lock() {
+		map.insert(session_id.clone(), tx.clone());
+	}
 
 	loop {
 		match reader.read(&mut buf) {
@@ -210,7 +244,7 @@ fn read_pty_output(
 				let raw = &buf[..n];
 
 				// Send raw bytes to persistence thread (non-blocking)
-				let _ = tx.send(raw.to_vec());
+				let _ = tx.send(PersistMsg::Data(raw.to_vec()));
 
 				// Prepend any leftover bytes from incomplete UTF-8 sequence
 				let combined;
@@ -240,6 +274,11 @@ fn read_pty_output(
 		}
 	}
 
+	// Remove from flush senders map, then drop our sender
+	if let Ok(mut map) = flush_senders.lock() {
+		map.remove(&session_id);
+	}
+
 	// Signal persistence thread to finish and wait
 	tracing::info!(target: "pty", %session_id, "read: EOF, waiting for persist thread");
 	drop(tx);
@@ -256,24 +295,39 @@ fn read_pty_output(
 
 /// Persistence thread: receives raw bytes from channel, buffers, and flushes to DB.
 fn persist_pty_output(
-	rx: mpsc::Receiver<Vec<u8>>,
+	rx: mpsc::Receiver<PersistMsg>,
 	db: DbPool,
 	session_id: &str,
 ) {
 	let mut buffer: Vec<u8> = Vec::new();
 	let mut total_written: usize = 0;
 
-	while let Ok(data) = rx.recv() {
-		tracing::info!(target: "pty", %session_id, n = data.len(), buf_len = buffer.len() + data.len(), "persist: received chunk");
-		buffer.extend_from_slice(&data);
-		if buffer.len() >= FLUSH_THRESHOLD {
-			tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: buffer reached threshold, flushing");
-			flush_output_buffer(
-				&db,
-				session_id,
-				&mut buffer,
-				&mut total_written,
-			);
+	while let Ok(msg) = rx.recv() {
+		match msg {
+			PersistMsg::Data(data) => {
+				tracing::info!(target: "pty", %session_id, n = data.len(), buf_len = buffer.len() + data.len(), "persist: received chunk");
+				buffer.extend_from_slice(&data);
+				if buffer.len() >= FLUSH_THRESHOLD {
+					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: buffer reached threshold, flushing");
+					flush_output_buffer(
+						&db,
+						session_id,
+						&mut buffer,
+						&mut total_written,
+					);
+				}
+			}
+			PersistMsg::Flush => {
+				if !buffer.is_empty() {
+					tracing::info!(target: "pty", %session_id, buf_len = buffer.len(), "persist: flush signal received, flushing");
+					flush_output_buffer(
+						&db,
+						session_id,
+						&mut buffer,
+						&mut total_written,
+					);
+				}
+			}
 		}
 	}
 
