@@ -171,6 +171,7 @@ export function Terminal({ profileId, sessionId, restoreFrom }: TerminalProps) {
 			termRef.current = null;
 			fitAddonRef.current = null;
 		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [profileId, sessionId, restoreFrom]);
 
 	const containerStyle = useMemo(
