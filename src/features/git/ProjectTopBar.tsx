@@ -1,6 +1,12 @@
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
+import { Command } from "@tauri-apps/plugin-shell";
 import { Suspense } from "react";
-import { RiGitBranchLine, RiGitPullRequestLine } from "react-icons/ri";
+import {
+	RiCodeSSlashLine,
+	RiGitBranchLine,
+	RiGitPullRequestLine,
+	RiGithubLine,
+} from "react-icons/ri";
 import { useGitBranch } from "@/features/projects/hooks";
 import type { Profile } from "@/generated";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -77,14 +83,32 @@ export default function ProjectTopBar({
 					)}
 				</Box>
 			</HStack>
-			<IconButton
-				aria-label="Git diff"
-				size="2xs"
-				variant="outline"
-				onClick={diffDialog.onOpen}
-			>
-				<RiGitPullRequestLine />
-			</IconButton>
+			<HStack gap="1">
+				<IconButton
+					aria-label="Open in GitHub Desktop"
+					size="2xs"
+					variant="outline"
+					onClick={() => Command.create("github", [profile.worktree_path]).execute()}
+				>
+					<RiGithubLine />
+				</IconButton>
+				<IconButton
+					aria-label="Open in VS Code"
+					size="2xs"
+					variant="outline"
+					onClick={() => Command.create("code", [profile.worktree_path]).execute()}
+				>
+					<RiCodeSSlashLine />
+				</IconButton>
+				<IconButton
+					aria-label="Git diff"
+					size="2xs"
+					variant="outline"
+					onClick={diffDialog.onOpen}
+				>
+					<RiGitPullRequestLine />
+				</IconButton>
+			</HStack>
 			{profile.is_default ? (
 				<Suspense>
 					<GitBranchDiffDialog
