@@ -1,4 +1,4 @@
-import { Box, Button, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
+import { Box, Button, Circle, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { useShallow } from "zustand/react/shallow";
 import * as m from "@/paraglide/messages.js";
@@ -17,6 +17,7 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 			(s) => s.profiles[profileId] ?? { tabs: [], activeTabId: null },
 		),
 	);
+	const notifiedTabs = useTerminalStore((s) => s.notifiedTabs);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
@@ -36,6 +37,9 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 							<RiTerminalBoxLine />
 							<HStack gap="2">
 								{tab.title}
+								{notifiedTabs.has(tab.id) && tab.id !== activeTabId && (
+									<Circle size="2" bg="green.500" />
+								)}
 								<CloseButton
 									as="span"
 									role="button"

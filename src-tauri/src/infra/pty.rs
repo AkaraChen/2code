@@ -51,6 +51,7 @@ pub fn create_session(
 	if let Some(bin) = helper_bin {
 		cmd.env("_2CODE_HELPER", bin);
 	}
+	cmd.env("_2CODE_SESSION_ID", session_id);
 
 	// Inject shell init via ZDOTDIR
 	if let Some(dir) = init_dir {

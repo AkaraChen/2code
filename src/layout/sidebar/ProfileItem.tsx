@@ -1,7 +1,8 @@
-import { HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
+import { Circle, HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
+import { useProfileHasNotification } from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -16,6 +17,7 @@ export function ProfileItem({
 	isActive: boolean;
 }) {
 	const deleteDialog = useDialogState();
+	const hasNotification = useProfileHasNotification(profile.id);
 
 	return (
 		<>
@@ -41,6 +43,9 @@ export function ProfileItem({
 								<RiGitBranchLine />
 							</Icon>
 							<Text truncate>{profile.branch_name}</Text>
+							{hasNotification && (
+								<Circle size="2" bg="green.500" flexShrink={0} />
+							)}
 						</NavLink>
 					</HStack>
 				</Menu.ContextTrigger>

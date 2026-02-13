@@ -19,7 +19,11 @@ fn main() {
 		Commands::Notify => {
 			let url = std::env::var("_2CODE_HELPER_URL")
 				.expect("_2CODE_HELPER_URL not set");
-			match ureq::get(&format!("{url}/notify")).call() {
+			let notify_url = match std::env::var("_2CODE_SESSION_ID").ok() {
+				Some(sid) => format!("{url}/notify?session_id={sid}"),
+				None => format!("{url}/notify"),
+			};
+			match ureq::get(&notify_url).call() {
 				Ok(mut resp) => {
 					let body: shared::NotifyResponse = resp
 						.body_mut()

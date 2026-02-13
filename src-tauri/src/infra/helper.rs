@@ -2,10 +2,12 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
 
-use axum::extract::State;
+use std::collections::HashMap;
+
+use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::Json;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 pub struct HelperState {
@@ -40,8 +42,12 @@ fn resolve_sidecar_path() -> PathBuf {
 
 async fn notify_handler(
 	State(app): State<AppHandle>,
+	Query(params): Query<HashMap<String, String>>,
 ) -> Json<shared::NotifyResponse> {
 	let played = try_play_notification(&app);
+	if let Some(session_id) = params.get("session_id") {
+		let _ = app.emit("pty-notify", session_id.as_str());
+	}
 	Json(shared::NotifyResponse { played })
 }
 

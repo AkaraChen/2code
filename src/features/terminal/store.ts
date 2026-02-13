@@ -1,4 +1,6 @@
 import { QueryObserver } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
+import { enableMapSet } from "immer";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
@@ -10,6 +12,8 @@ import {
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
+
+enableMapSet();
 
 interface TerminalTab {
 	id: string;
@@ -25,6 +29,7 @@ interface ProjectTerminalState {
 
 interface TerminalStore {
 	profiles: Record<string, ProjectTerminalState>;
+	notifiedTabs: Set<string>;
 	addTab: (
 		profileId: string,
 		sessionId: string,
@@ -37,11 +42,14 @@ interface TerminalStore {
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
 	removeStaleProfiles: (validIds: Set<string>) => void;
+	markNotified: (sessionId: string) => void;
+	markRead: (sessionId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>()(
 	immer((set) => ({
 		profiles: {},
+		notifiedTabs: new Set<string>(),
 
 		addTab(profileId, sessionId, title, restoreFrom?) {
 			set((state) => {
@@ -64,6 +72,8 @@ export const useTerminalStore = create<TerminalStore>()(
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 
+				state.notifiedTabs.delete(tabId);
+
 				const idx = profile.tabs.findIndex((t) => t.id === tabId);
 				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
 
@@ -84,6 +94,7 @@ export const useTerminalStore = create<TerminalStore>()(
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				profile.activeTabId = tabId;
+				state.notifiedTabs.delete(tabId);
 			});
 		},
 
@@ -118,12 +129,33 @@ export const useTerminalStore = create<TerminalStore>()(
 				}
 			});
 		},
+
+		markNotified(sessionId) {
+			set((state) => {
+				state.notifiedTabs.add(sessionId);
+			});
+		},
+
+		markRead(sessionId) {
+			set((state) => {
+				state.notifiedTabs.delete(sessionId);
+			});
+		},
 	})),
 );
 
 /** IDs of profiles that currently have terminal tabs open. */
 export function useTerminalProfileIds() {
 	return useTerminalStore(useShallow((s) => Object.keys(s.profiles)));
+}
+
+/** Whether a profile has any tab with an unread notification. */
+export function useProfileHasNotification(profileId: string): boolean {
+	return useTerminalStore((s) => {
+		const profile = s.profiles[profileId];
+		if (!profile) return false;
+		return profile.tabs.some((t) => s.notifiedTabs.has(t.id));
+	});
 }
 
 // Sync store with projects query — removes terminals for deleted profiles.
@@ -185,3 +217,8 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 		),
 	);
 }
+
+// Module-level listener for notification events from the backend
+listen<string>("pty-notify", (event) => {
+	useTerminalStore.getState().markNotified(event.payload);
+});
