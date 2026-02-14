@@ -1,15 +1,15 @@
 use tauri::ipc::Channel;
 use tauri::State;
 
-use crate::infra::logger::ChannelLayerHandle;
-use crate::model::debug::LogEntry;
+use infra::logger::ChannelLayerHandle;
+use model::debug::LogEntry;
 
 #[tauri::command]
 pub fn start_debug_log(
 	on_event: Channel<LogEntry>,
 	handle: State<'_, ChannelLayerHandle>,
 ) {
-	handle.attach(on_event);
+	handle.attach(move |entry| on_event.send(entry).is_ok());
 }
 
 #[tauri::command]

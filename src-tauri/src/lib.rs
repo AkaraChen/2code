@@ -1,10 +1,6 @@
-pub mod error;
+mod bridge;
 mod handler;
-pub mod infra;
-pub mod model;
-pub mod repo;
-pub mod schema;
-pub mod service;
+mod helper;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -58,7 +54,7 @@ pub fn run() {
 			app.manage(pool);
 
 			// Start helper HTTP server (for CLI sidecar communication)
-			let helper = infra::helper::start(app.handle());
+			let helper = helper::start(app.handle());
 			app.manage(helper);
 
 			Ok(())

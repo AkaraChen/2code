@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::error::AppError;
+use model::error::AppError;
 
 const DEFAULT_INIT: &str = include_str!("../scripts/default_init.sh");
 

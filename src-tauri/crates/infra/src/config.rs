@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
 
-use crate::error::AppError;
+use model::error::AppError;
 
 #[derive(Debug, Deserialize, Default, PartialEq)]
 pub struct ProjectConfig {
@@ -33,7 +33,7 @@ pub fn load_project_config(
 
 pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 	if !cwd.exists() {
-		log::warn!("Script cwd does not exist: {}", cwd.display());
+		tracing::warn!("Script cwd does not exist: {}", cwd.display());
 		return;
 	}
 
@@ -47,11 +47,11 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 		match result {
 			Ok(output) if !output.status.success() => {
 				let stderr = String::from_utf8_lossy(&output.stderr);
-				log::warn!("Script failed: {script} — {stderr}");
+				tracing::warn!("Script failed: {script} — {stderr}");
 				return;
 			}
 			Err(e) => {
-				log::warn!("Script execution error: {script} — {e}");
+				tracing::warn!("Script execution error: {script} — {e}");
 				return;
 			}
 			_ => {}
@@ -137,14 +137,12 @@ mod tests {
 		let dir = TempDir::new().unwrap();
 		let scripts = vec!["echo hello".to_string()];
 		execute_scripts(&scripts, dir.path());
-		// No panic = success
 	}
 
 	#[test]
 	fn execute_scripts_missing_cwd() {
 		let scripts = vec!["echo hello".to_string()];
 		execute_scripts(&scripts, Path::new("/nonexistent/path"));
-		// Should log warning and return, not panic
 	}
 
 	#[test]
@@ -152,7 +150,6 @@ mod tests {
 		let dir = TempDir::new().unwrap();
 		let scripts = vec!["exit 1".to_string()];
 		execute_scripts(&scripts, dir.path());
-		// Should log warning but not panic
 	}
 
 	#[test]
@@ -164,7 +161,6 @@ mod tests {
 			format!("touch {}", marker.display()),
 		];
 		execute_scripts(&scripts, dir.path());
-		// Second script should not have run
 		assert!(
 			!marker.exists(),
 			"second script should not execute after first fails"
@@ -175,6 +171,5 @@ mod tests {
 	fn execute_scripts_empty_list() {
 		let dir = TempDir::new().unwrap();
 		execute_scripts(&[], dir.path());
-		// Should not panic
 	}
 }

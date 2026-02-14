@@ -2,7 +2,6 @@ mod common;
 
 use diesel::prelude::*;
 
-use code_lib::service;
 use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo, setup_db};
 
 // ============================================================
@@ -284,7 +283,7 @@ fn delete_cascades_to_profiles_and_sessions() {
 	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
 
 	// Insert a PTY session on the default profile
-	let session_record = code_lib::model::pty::NewPtySessionRecord {
+	let session_record = model::pty::NewPtySessionRecord {
 		id: "sess-1",
 		profile_id: &default_profile.id,
 		title: "bash",
@@ -293,7 +292,7 @@ fn delete_cascades_to_profiles_and_sessions() {
 		cols: 80,
 		rows: 24,
 	};
-	code_lib::repo::pty::insert_session(&mut conn, &session_record).unwrap();
+	repo::pty::insert_session(&mut conn, &session_record).unwrap();
 
 	// Verify session exists
 	let sessions =
@@ -482,7 +481,7 @@ fn delete_profile_cascades_sessions() {
 		service::profile::create(&mut conn, &project.id, "cascade-test").unwrap();
 
 	// Insert session for this profile
-	let session_record = code_lib::model::pty::NewPtySessionRecord {
+	let session_record = model::pty::NewPtySessionRecord {
 		id: "sess-cascade",
 		profile_id: &profile.id,
 		title: "bash",
@@ -491,7 +490,7 @@ fn delete_profile_cascades_sessions() {
 		cols: 80,
 		rows: 24,
 	};
-	code_lib::repo::pty::insert_session(&mut conn, &session_record).unwrap();
+	repo::pty::insert_session(&mut conn, &session_record).unwrap();
 
 	// Delete profile — should cascade to session
 	service::profile::delete(&mut conn, &profile.id).unwrap();

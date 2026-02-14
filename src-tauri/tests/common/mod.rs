@@ -5,9 +5,9 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
-use code_lib::infra::db::MIGRATIONS;
-use code_lib::model::profile::Profile;
-use code_lib::model::project::Project;
+use infra::db::MIGRATIONS;
+use model::profile::Profile;
+use model::project::Project;
 
 /// Create an in-memory SQLite connection with migrations and foreign keys enabled.
 pub fn setup_db() -> SqliteConnection {
@@ -74,7 +74,7 @@ pub fn create_project_with_git_repo(
 	add_commit(&dir, "README.md", "# Test", "Initial commit");
 
 	let folder = dir.to_string_lossy().to_string();
-	let project = code_lib::service::project::create_from_folder(
+	let project = service::project::create_from_folder(
 		conn,
 		"Test Project",
 		&folder,
@@ -82,7 +82,7 @@ pub fn create_project_with_git_repo(
 	.expect("create project from folder");
 
 	let projects_with_profiles =
-		code_lib::service::project::list(conn).expect("list projects");
+		service::project::list(conn).expect("list projects");
 	let pwp = projects_with_profiles
 		.into_iter()
 		.find(|p| p.id == project.id)

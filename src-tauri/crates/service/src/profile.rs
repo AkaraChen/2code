@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use diesel::SqliteConnection;
 use uuid::Uuid;
 
-use crate::error::AppError;
-use crate::model::profile::Profile;
+use model::error::AppError;
+use model::profile::Profile;
 
 /// Sanitize user input into a valid git branch name.
 /// Splits on `/` to preserve namespace separators (e.g. "feature/auth"),
@@ -12,7 +12,7 @@ use crate::model::profile::Profile;
 fn sanitize_branch_name(input: &str) -> String {
 	input
 		.split('/')
-		.map(crate::infra::slug::slugify_cjk)
+		.map(infra::slug::slugify_cjk)
 		.filter(|s| !s.is_empty())
 		.collect::<Vec<_>>()
 		.join("/")
@@ -34,7 +34,7 @@ pub fn create(
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
 	let project_folder =
-		crate::repo::profile::get_project_folder(conn, project_id)?;
+		repo::profile::get_project_folder(conn, project_id)?;
 
 	let branch_name = sanitize_branch_name(branch_name);
 	if branch_name.is_empty() {
@@ -47,13 +47,13 @@ pub fn create(
 	let worktree_path = worktree_base.join(&id);
 	let worktree_str = worktree_path.to_string_lossy().to_string();
 
-	crate::infra::git::worktree_add(
+	infra::git::worktree_add(
 		&project_folder,
 		&branch_name,
 		&worktree_str,
 	)?;
 
-	let profile = crate::repo::profile::insert(
+	let profile = repo::profile::insert(
 		conn,
 		&id,
 		project_id,
@@ -61,9 +61,8 @@ pub fn create(
 		&worktree_str,
 	)?;
 
-	if let Ok(cfg) = crate::infra::config::load_project_config(&project_folder)
-	{
-		crate::infra::config::execute_scripts(
+	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
+		infra::config::execute_scripts(
 			&cfg.setup_script,
 			&worktree_path,
 		);
@@ -73,19 +72,18 @@ pub fn create(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	let (profile, project_folder) = crate::repo::profile::delete(conn, id)?;
+	let (profile, project_folder) = repo::profile::delete(conn, id)?;
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 
-	if let Ok(cfg) = crate::infra::config::load_project_config(&project_folder)
-	{
-		crate::infra::config::execute_scripts(
+	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
+		infra::config::execute_scripts(
 			&cfg.teardown_script,
 			&worktree_path,
 		);
 	}
 
-	crate::infra::git::worktree_remove(&project_folder, &profile.worktree_path);
-	crate::infra::git::branch_delete(&project_folder, &profile.branch_name);
+	infra::git::worktree_remove(&project_folder, &profile.worktree_path);
+	infra::git::branch_delete(&project_folder, &profile.branch_name);
 
 	Ok(())
 }

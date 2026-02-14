@@ -1,19 +1,19 @@
 use tauri::{AppHandle, State};
 
-use crate::error::AppError;
-use crate::infra::db::DbPool;
-use crate::infra::pty::{self as session, PtySessionMap};
-use crate::model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
-use crate::service::pty::PtyFlushSenders;
+use infra::db::DbPool;
+use infra::pty::{self as session, PtySessionMap};
+use model::error::AppError;
+use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
+use service::pty::PtyFlushSenders;
 
 #[tauri::command]
 pub fn create_pty_session(
 	app: AppHandle,
-	sessions: State<'_, PtySessionMap>,
 	meta: PtySessionMeta,
 	config: PtyConfig,
 ) -> Result<String, AppError> {
-	crate::service::pty::create_session(&app, sessions.inner(), &meta, &config)
+	let ctx = crate::bridge::build_pty_context(&app);
+	service::pty::create_session(&ctx, &meta, &config)
 }
 
 #[tauri::command]
@@ -36,18 +36,18 @@ pub fn resize_pty(
 	session::resize_pty(&sessions, &session_id, rows, cols)?;
 
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	crate::repo::pty::update_dimensions(conn, &session_id, cols, rows);
+	repo::pty::update_dimensions(conn, &session_id, cols, rows);
 
 	Ok(())
 }
 
 #[tauri::command]
 pub fn close_pty_session(
-	app: AppHandle,
+	db: State<'_, DbPool>,
 	sessions: State<'_, PtySessionMap>,
 	session_id: String,
 ) -> Result<(), AppError> {
-	crate::service::pty::close_session(&app, sessions.inner(), &session_id)
+	service::pty::close_session(db.inner(), sessions.inner(), &session_id)
 }
 
 #[tauri::command]
@@ -56,7 +56,7 @@ pub fn list_project_sessions(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::pty::list_project_sessions(conn, &project_id)
+	service::pty::list_project_sessions(conn, &project_id)
 }
 
 #[tauri::command]
@@ -65,7 +65,7 @@ pub fn get_pty_session_history(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<u8>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::pty::get_history(conn, &session_id)
+	service::pty::get_history(conn, &session_id)
 }
 
 #[tauri::command]
@@ -74,24 +74,18 @@ pub fn delete_pty_session_record(
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::pty::delete_session(conn, &session_id)
+	service::pty::delete_session(conn, &session_id)
 }
 
 #[tauri::command]
 pub fn restore_pty_session(
 	app: AppHandle,
-	sessions: State<'_, PtySessionMap>,
 	old_session_id: String,
 	meta: PtySessionMeta,
 	config: PtyConfig,
-) -> Result<crate::model::pty::RestoreResult, AppError> {
-	crate::service::pty::restore_session(
-		&app,
-		sessions.inner(),
-		&old_session_id,
-		&meta,
-		&config,
-	)
+) -> Result<RestoreResult, AppError> {
+	let ctx = crate::bridge::build_pty_context(&app);
+	service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
 }
 
 #[tauri::command]
@@ -99,5 +93,5 @@ pub fn flush_pty_output(
 	session_id: String,
 	state: State<'_, PtyFlushSenders>,
 ) -> Result<(), AppError> {
-	crate::service::pty::flush_output(state.inner(), &session_id)
+	service::pty::flush_output(state.inner(), &session_id)
 }

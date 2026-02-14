@@ -3,15 +3,14 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::ipc::Channel;
 use tracing::field::{Field, Visit};
 use tracing::Level;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
 
-use crate::model::debug::LogEntry;
+use model::debug::LogEntry;
 
-/// A tracing Layer that forwards log events to a Tauri Channel when active.
+/// A tracing Layer that forwards log events to an attached sink when active.
 pub struct ChannelLayer {
 	tx: Arc<Mutex<Option<mpsc::Sender<LogEntry>>>>,
 }
@@ -30,9 +29,13 @@ impl ChannelLayer {
 }
 
 impl ChannelLayerHandle {
-	/// Start forwarding log events to the given Tauri channel.
-	/// Spawns a thread that reads from the internal mpsc and sends to the Channel.
-	pub fn attach(&self, channel: Channel<LogEntry>) {
+	/// Start forwarding log events to the given sink function.
+	/// Spawns a thread that reads from the internal mpsc and calls the sink.
+	/// The sink should return `true` to continue, `false` to stop.
+	pub fn attach(
+		&self,
+		sink: impl Fn(LogEntry) -> bool + Send + 'static,
+	) {
 		let (sender, receiver) = mpsc::channel::<LogEntry>();
 
 		// Set the sender so the Layer starts forwarding
@@ -43,7 +46,7 @@ impl ChannelLayerHandle {
 		// Spawn forwarder thread
 		std::thread::spawn(move || {
 			while let Ok(entry) = receiver.recv() {
-				if channel.send(entry).is_err() {
+				if !sink(entry) {
 					break;
 				}
 			}

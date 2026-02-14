@@ -6,7 +6,7 @@ use std::thread::JoinHandle;
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
-use crate::error::AppError;
+use model::error::AppError;
 
 pub struct PtySession {
 	pub master: Box<dyn MasterPty + Send>,

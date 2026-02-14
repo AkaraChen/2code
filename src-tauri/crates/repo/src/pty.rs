@@ -1,10 +1,8 @@
 use diesel::prelude::*;
 
-use crate::error::AppError;
-use crate::model::pty::{
-	NewPtySessionOutput, NewPtySessionRecord, PtySessionRecord,
-};
-use crate::schema::{profiles, pty_session_output, pty_sessions};
+use model::error::AppError;
+use model::pty::{NewPtySessionOutput, NewPtySessionRecord, PtySessionRecord};
+use model::schema::{profiles, pty_session_output, pty_sessions};
 
 pub fn insert_session(
 	conn: &mut SqliteConnection,

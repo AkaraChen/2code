@@ -1,0 +1,18 @@
+[package]
+name = "service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+model = { path = "../model" }
+repo = { path = "../repo" }
+infra = { path = "../infra" }
+diesel = { version = "2", features = ["sqlite"] }
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+notify = "8"
+vt100 = "0.16"
+tracing = "0.1"
+
+[dev-dependencies]
+diesel_migrations = "2"

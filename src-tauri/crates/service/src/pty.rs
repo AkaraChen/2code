@@ -4,14 +4,16 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use diesel::SqliteConnection;
-use tauri::{AppHandle, Emitter, Manager};
 
-use crate::error::AppError;
-use crate::infra::db::DbPool;
-use crate::infra::pty::{self as session, PtySessionMap};
-use crate::model::pty::{
+use model::error::AppError;
+use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
+	RestoreResult,
 };
+use infra::db::DbPool;
+use infra::pty::{self as session, PtySessionMap, PtyReadThreads};
+
+use crate::PtyEventEmitter;
 
 pub enum PersistMsg {
 	Data(Vec<u8>),
@@ -24,6 +26,17 @@ pub type PtyFlushSenders =
 
 pub fn create_flush_senders() -> PtyFlushSenders {
 	Arc::new(Mutex::new(HashMap::new()))
+}
+
+/// All dependencies needed to create a PTY session, fully decoupled from Tauri.
+pub struct PtyContext {
+	pub db: DbPool,
+	pub sessions: PtySessionMap,
+	pub flush_senders: PtyFlushSenders,
+	pub read_threads: PtyReadThreads,
+	pub emitter: Arc<dyn PtyEventEmitter>,
+	pub helper_url: Option<String>,
+	pub helper_bin: Option<String>,
 }
 
 const VT100_SCROLLBACK: usize = 10000;
@@ -127,21 +140,19 @@ fn is_visually_empty(line: &[u8]) -> bool {
 }
 
 pub fn create_session(
-	app: &AppHandle,
-	sessions: &PtySessionMap,
+	ctx: &PtyContext,
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
 ) -> Result<String, AppError> {
 	// 1. Resolve project folder and load init_script from 2code.json
 	let project_init_scripts = {
-		let db = app.state::<DbPool>().inner().clone();
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let profile = crate::repo::profile::find_by_id(conn, &meta.profile_id)?;
-		let folder = crate::repo::profile::get_project_folder(
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		let profile = repo::profile::find_by_id(conn, &meta.profile_id)?;
+		let folder = repo::profile::get_project_folder(
 			conn,
 			&profile.project_id,
 		)?;
-		crate::infra::config::load_project_config(&folder)
+		infra::config::load_project_config(&folder)
 			.map(|c| c.init_script)
 			.unwrap_or_default()
 	};
@@ -150,7 +161,7 @@ pub fn create_session(
 	let session_id = uuid::Uuid::new_v4().to_string();
 
 	// 3. Prepare shell init directory (graceful degradation on failure)
-	let init_dir = crate::infra::shell_init::prepare_init_dir(
+	let init_dir = infra::shell_init::prepare_init_dir(
 		&session_id,
 		&project_init_scripts,
 	);
@@ -158,34 +169,22 @@ pub fn create_session(
 		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
 	}
 
-	// 4. Read helper URL and binary path from managed state
-	let (helper_url, helper_bin) = app
-		.try_state::<crate::infra::helper::HelperState>()
-		.map(|s| {
-			(
-				format!("http://127.0.0.1:{}", s.port),
-				s.sidecar_path.to_string_lossy().to_string(),
-			)
-		})
-		.unzip();
-
-	// 5. Create PTY session
+	// 4. Create PTY session
 	let reader = session::create_session(
-		sessions,
+		&ctx.sessions,
 		&session_id,
 		&config.shell,
 		&config.cwd,
 		config.rows,
 		config.cols,
 		init_dir.as_deref().ok(),
-		helper_url.as_deref(),
-		helper_bin.as_deref(),
+		ctx.helper_url.as_deref(),
+		ctx.helper_bin.as_deref(),
 	)?;
 
 	// Insert session record into database
-	let db = app.state::<DbPool>().inner().clone();
 	{
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let new_record = NewPtySessionRecord {
 			id: &session_id,
 			profile_id: &meta.profile_id,
@@ -195,42 +194,38 @@ pub fn create_session(
 			cols: config.cols as i32,
 			rows: config.rows as i32,
 		};
-		crate::repo::pty::insert_session(conn, &new_record)?;
+		repo::pty::insert_session(conn, &new_record)?;
 	}
 
 	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, "session created");
 
 	// Spawn a background thread to read PTY output and emit events
 	let id = session_id.clone();
-	let app_handle = app.clone();
-	let flush_senders = app.state::<PtyFlushSenders>().inner().clone();
+	let emitter = ctx.emitter.clone();
+	let db = ctx.db.clone();
+	let flush_senders = ctx.flush_senders.clone();
 	let handle = std::thread::spawn(move || {
-		read_pty_output(app_handle, id, reader, db, flush_senders);
+		read_pty_output(emitter, id, reader, db, flush_senders);
 	});
 
-	// Track the thread handle so it can be joined on app exit,
-	// ensuring the persistence sub-thread flushes its buffer.
-	if let Some(threads) = app.try_state::<crate::infra::pty::PtyReadThreads>()
-	{
-		if let Ok(mut guard) = threads.lock() {
-			guard.push(handle);
-		}
+	// Track the thread handle so it can be joined on app exit
+	if let Ok(mut guard) = ctx.read_threads.lock() {
+		guard.push(handle);
 	}
 
 	Ok(session_id)
 }
 
 pub fn close_session(
-	app: &AppHandle,
+	db: &DbPool,
 	sessions: &PtySessionMap,
 	session_id: &str,
 ) -> Result<(), AppError> {
 	session::close_session(sessions, session_id)?;
 
 	// Mark session as closed in DB
-	let db = app.state::<DbPool>().inner().clone();
 	if let Ok(mut conn) = db.lock() {
-		crate::repo::pty::mark_closed(&mut conn, session_id);
+		repo::pty::mark_closed(&mut conn, session_id);
 	}
 
 	Ok(())
@@ -240,44 +235,42 @@ pub fn list_project_sessions(
 	conn: &mut SqliteConnection,
 	project_id: &str,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
-	crate::repo::pty::list_by_project(conn, project_id)
+	repo::pty::list_by_project(conn, project_id)
 }
 
 pub fn get_history(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<Vec<u8>, AppError> {
-	crate::repo::pty::get_session_history(conn, session_id)
+	repo::pty::get_session_history(conn, session_id)
 }
 
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	crate::repo::pty::delete_session(conn, session_id)
+	repo::pty::delete_session(conn, session_id)
 }
 
 /// Mark all open sessions (NULL closed_at) as closed. Called on startup for orphans
 /// and on exit for any still-running sessions.
 pub fn mark_all_closed(db: &DbPool) {
 	let Ok(mut conn) = db.lock() else { return };
-	crate::repo::pty::mark_all_open_closed(&mut conn);
+	repo::pty::mark_all_open_closed(&mut conn);
 }
 
 /// Atomically restore a PTY session: read history → create new PTY → delete old record.
 /// DB lock is acquired/released carefully to avoid deadlock with `create_session`.
 pub fn restore_session(
-	app: &AppHandle,
-	sessions: &PtySessionMap,
+	ctx: &PtyContext,
 	old_session_id: &str,
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
-) -> Result<crate::model::pty::RestoreResult, AppError> {
+) -> Result<RestoreResult, AppError> {
 	// 1. Read raw history (acquire lock → read → release)
 	let raw_history = {
-		let db = app.state::<DbPool>().inner().clone();
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		crate::repo::pty::get_session_history(conn, old_session_id)?
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		repo::pty::get_session_history(conn, old_session_id)?
 	};
 	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), "restore: loaded raw history");
 
@@ -286,17 +279,16 @@ pub fn restore_session(
 	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), clean_bytes = history.len(), "restore: sanitized history");
 
 	// 3. Create new PTY (manages its own lock internally)
-	let new_session_id = create_session(app, sessions, meta, config)?;
+	let new_session_id = create_session(ctx, meta, config)?;
 	tracing::info!(target: "pty", %old_session_id, %new_session_id, "restore: new session created");
 
 	// 4. Delete old record (re-acquire lock — only after new session succeeds)
 	{
-		let db = app.state::<DbPool>().inner().clone();
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		crate::repo::pty::delete_session(conn, old_session_id)?;
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		repo::pty::delete_session(conn, old_session_id)?;
 	}
 
-	Ok(crate::model::pty::RestoreResult {
+	Ok(RestoreResult {
 		new_session_id,
 		history,
 	})
@@ -361,14 +353,12 @@ pub fn find_utf8_boundary(bytes: &[u8]) -> usize {
 }
 
 fn read_pty_output(
-	app: AppHandle,
+	emitter: Arc<dyn PtyEventEmitter>,
 	session_id: String,
 	mut reader: Box<dyn Read + Send>,
 	db: DbPool,
 	flush_senders: PtyFlushSenders,
 ) {
-	let event_name = format!("pty-output-{}", session_id);
-	let exit_event = format!("pty-exit-{}", session_id);
 	let mut buf = [0u8; 4096];
 	let mut utf8_remainder: Vec<u8> = Vec::new();
 
@@ -417,7 +407,7 @@ fn read_pty_output(
 				let boundary = find_utf8_boundary(to_decode);
 				if boundary > 0 {
 					let text = String::from_utf8_lossy(&to_decode[..boundary]);
-					if app.emit(&event_name, text.as_ref()).is_err() {
+					if !emitter.emit_output(&session_id, text.as_ref()) {
 						break;
 					}
 				}
@@ -444,10 +434,10 @@ fn read_pty_output(
 
 	// Mark session closed in DB
 	if let Ok(mut conn) = db.lock() {
-		crate::repo::pty::mark_closed(&mut conn, &session_id);
+		repo::pty::mark_closed(&mut conn, &session_id);
 	}
 	tracing::info!(target: "pty", %session_id, "session exited");
-	let _ = app.emit(&exit_event, ());
+	emitter.emit_exit(&session_id);
 }
 
 /// Persistence thread: receives raw bytes from channel and writes to DB immediately.
@@ -461,7 +451,7 @@ fn persist_pty_output(
 			PersistMsg::Data(data) => {
 				let Ok(mut conn) = db.lock() else { continue };
 				let n = data.len();
-				match crate::repo::pty::append_output(&mut conn, session_id, &data)
+				match repo::pty::append_output(&mut conn, session_id, &data)
 				{
 					Ok(()) => {
 						tracing::info!(target: "pty", %session_id, n, "persist: appended");
@@ -475,7 +465,7 @@ fn persist_pty_output(
 			PersistMsg::Clear => {
 				tracing::info!(target: "pty", %session_id, "persist: clear scrollback");
 				if let Ok(mut conn) = db.lock() {
-					crate::repo::pty::clear_output(&mut conn, session_id);
+					repo::pty::clear_output(&mut conn, session_id);
 				}
 			}
 		}
@@ -872,7 +862,7 @@ mod tests {
 
 	// --- persist_pty_output ---
 
-	fn setup_test_db() -> crate::infra::db::DbPool {
+	fn setup_test_db() -> infra::db::DbPool {
 		use diesel::prelude::*;
 		use diesel_migrations::MigrationHarness;
 
@@ -881,17 +871,17 @@ mod tests {
 		diesel::sql_query("PRAGMA foreign_keys=ON;")
 			.execute(&mut conn)
 			.ok();
-		conn.run_pending_migrations(crate::infra::db::MIGRATIONS)
+		conn.run_pending_migrations(infra::db::MIGRATIONS)
 			.expect("run migrations");
 
 		Arc::new(Mutex::new(conn))
 	}
 
 	fn insert_test_project_and_session(
-		db: &crate::infra::db::DbPool,
+		db: &infra::db::DbPool,
 		session_id: &str,
 	) {
-		use crate::model::pty::NewPtySessionRecord;
+		use model::pty::NewPtySessionRecord;
 		use diesel::RunQueryDsl;
 		let mut conn = db.lock().unwrap();
 		// Insert a minimal project + profile + session
@@ -914,7 +904,7 @@ mod tests {
 			cols: 80,
 			rows: 24,
 		};
-		crate::repo::pty::insert_session(&mut conn, &record).unwrap();
+		repo::pty::insert_session(&mut conn, &record).unwrap();
 	}
 
 	#[test]
@@ -935,7 +925,7 @@ mod tests {
 
 		let mut conn = db.lock().unwrap();
 		let history =
-			crate::repo::pty::get_session_history(&mut conn, "s-persist-data")
+			repo::pty::get_session_history(&mut conn, "s-persist-data")
 				.unwrap();
 		assert_eq!(history, b"hello persist");
 	}
@@ -957,7 +947,7 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = crate::repo::pty::get_session_history(
+		let history = repo::pty::get_session_history(
 			&mut conn,
 			"s-persist-clear",
 		)
@@ -983,7 +973,7 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = crate::repo::pty::get_session_history(
+		let history = repo::pty::get_session_history(
 			&mut conn,
 			"s-persist-flush",
 		)

@@ -1,8 +1,8 @@
 use tauri::State;
 
-use crate::error::AppError;
-use crate::infra::db::DbPool;
-use crate::model::project::{GitCommit, Project, ProjectWithProfiles};
+use infra::db::DbPool;
+use model::error::AppError;
+use model::project::{GitCommit, Project, ProjectWithProfiles};
 
 #[tauri::command]
 pub fn create_project_temporary(
@@ -10,7 +10,7 @@ pub fn create_project_temporary(
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::create_temporary(conn, name)
+	service::project::create_temporary(conn, name)
 }
 
 #[tauri::command]
@@ -20,7 +20,7 @@ pub fn create_project_from_folder(
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::create_from_folder(conn, &name, &folder)
+	service::project::create_from_folder(conn, &name, &folder)
 }
 
 #[tauri::command]
@@ -28,7 +28,7 @@ pub fn list_projects(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::list(conn)
+	service::project::list(conn)
 }
 
 #[tauri::command]
@@ -39,12 +39,12 @@ pub fn update_project(
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::update(conn, &id, name, folder)
+	service::project::update(conn, &id, name, folder)
 }
 
 #[tauri::command]
 pub fn get_git_branch(folder: String) -> Result<String, AppError> {
-	crate::service::project::get_branch(&folder)
+	service::project::get_branch(&folder)
 }
 
 #[tauri::command]
@@ -53,7 +53,7 @@ pub fn get_git_diff(
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_diff(conn, &profile_id)
+	service::project::get_diff(conn, &profile_id)
 }
 
 #[tauri::command]
@@ -63,7 +63,7 @@ pub fn get_git_log(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitCommit>, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
+	service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
 }
 
 #[tauri::command]
@@ -73,7 +73,7 @@ pub fn get_commit_diff(
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+	service::project::get_commit_diff(conn, &profile_id, &commit_hash)
 }
 
 #[tauri::command]
@@ -82,5 +82,5 @@ pub fn delete_project(
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::project::delete(conn, &id)
+	service::project::delete(conn, &id)
 }

@@ -603,15 +603,14 @@ dependencies = [
  "core-text",
  "diesel",
  "diesel_migrations",
- "dirs",
- "log",
- "notify",
- "pinyin",
+ "infra",
+ "model",
  "portable-pty",
+ "repo",
  "serde",
  "serde_json",
+ "service",
  "shared",
- "slug",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -619,13 +618,10 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-shell",
  "tauri-plugin-store",
- "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",
- "vt100",
 ]
 
 [[package]]
@@ -2082,6 +2078,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "infra"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "diesel_migrations",
+ "model",
+ "notify",
+ "pinyin",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "slug",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "inotify"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2499,6 +2514,16 @@ dependencies = [
  "log",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "model"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3548,6 +3573,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 
 [[package]]
+name = "repo"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "diesel_migrations",
+ "infra",
+ "model",
+ "tracing",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3972,6 +4008,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
+]
+
+[[package]]
+name = "service"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "diesel_migrations",
+ "dirs",
+ "infra",
+ "model",
+ "notify",
+ "repo",
+ "tracing",
+ "uuid",
+ "vt100",
 ]
 
 [[package]]

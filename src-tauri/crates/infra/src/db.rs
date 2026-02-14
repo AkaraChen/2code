@@ -5,7 +5,7 @@ use diesel_migrations::{
 };
 use std::sync::{Arc, Mutex};
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../../migrations");
 
 pub type DbPool = Arc<Mutex<SqliteConnection>>;
 
@@ -22,12 +22,12 @@ pub fn init_db(app_data_dir: &std::path::Path) -> Result<DbPool, String> {
 	if let Err(e) =
 		diesel::sql_query("PRAGMA journal_mode=WAL;").execute(&mut conn)
 	{
-		log::warn!("Failed to set journal_mode=WAL: {e}");
+		tracing::warn!("Failed to set journal_mode=WAL: {e}");
 	}
 	if let Err(e) =
 		diesel::sql_query("PRAGMA foreign_keys=ON;").execute(&mut conn)
 	{
-		log::warn!("Failed to set foreign_keys=ON: {e}");
+		tracing::warn!("Failed to set foreign_keys=ON: {e}");
 	}
 
 	conn.run_pending_migrations(MIGRATIONS)

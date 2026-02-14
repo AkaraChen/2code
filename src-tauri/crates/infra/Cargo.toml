@@ -1,0 +1,21 @@
+[package]
+name = "infra"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+model = { path = "../model" }
+diesel = { version = "2", features = ["sqlite"] }
+diesel_migrations = "2"
+portable-pty = "0.9"
+notify = "8"
+tempfile = "3"
+pinyin = "0.11"
+slug = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+uuid = { version = "1", features = ["v4"] }

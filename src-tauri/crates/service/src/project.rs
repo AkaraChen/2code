@@ -3,14 +3,14 @@ use std::path::Path;
 use diesel::SqliteConnection;
 use uuid::Uuid;
 
-use crate::error::AppError;
-use crate::model::project::{GitCommit, Project, ProjectWithProfiles};
+use model::error::AppError;
+use model::project::{GitCommit, Project, ProjectWithProfiles};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
 	match name {
 		Some(n) if !n.trim().is_empty() => {
-			let slug = crate::infra::slug::slugify_cjk(n);
+			let slug = infra::slug::slugify_cjk(n);
 			if slug.is_empty() {
 				uuid.to_string()
 			} else {
@@ -31,7 +31,7 @@ pub fn create_temporary(
 
 	std::fs::create_dir_all(&dir)?;
 
-	if let Err(e) = crate::infra::git::init(&dir) {
+	if let Err(e) = infra::git::init(&dir) {
 		let _ = std::fs::remove_dir_all(&dir);
 		return Err(e);
 	}
@@ -39,14 +39,17 @@ pub fn create_temporary(
 	let project_name = name.unwrap_or_else(|| "Untitled".to_string());
 	let dir_str = dir.to_string_lossy();
 
+	let branch_name = infra::git::branch(&dir_str).unwrap_or_default();
+
 	let project =
-		crate::repo::project::insert(conn, &id, &project_name, &dir_str)?;
+		repo::project::insert(conn, &id, &project_name, &dir_str)?;
 
 	let default_profile_id = format!("default-{id}");
-	crate::repo::profile::insert_default(
+	repo::profile::insert_default(
 		conn,
 		&default_profile_id,
 		&id,
+		&branch_name,
 		&dir_str,
 	)?;
 
@@ -63,13 +66,16 @@ pub fn create_from_folder(
 	}
 
 	let id = Uuid::new_v4().to_string();
-	let project = crate::repo::project::insert(conn, &id, name, folder)?;
+	let project = repo::project::insert(conn, &id, name, folder)?;
+
+	let branch_name = infra::git::branch(folder).unwrap_or_default();
 
 	let default_profile_id = format!("default-{id}");
-	crate::repo::profile::insert_default(
+	repo::profile::insert_default(
 		conn,
 		&default_profile_id,
 		&id,
+		&branch_name,
 		folder,
 	)?;
 
@@ -79,7 +85,7 @@ pub fn create_from_folder(
 pub fn list(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	crate::repo::project::list_all_with_profiles(conn)
+	repo::project::list_all_with_profiles(conn)
 }
 
 pub fn update(
@@ -88,23 +94,23 @@ pub fn update(
 	name: Option<String>,
 	folder: Option<String>,
 ) -> Result<Project, AppError> {
-	crate::repo::project::update(conn, id, name, folder)
+	repo::project::update(conn, id, name, folder)
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	crate::repo::project::delete(conn, id)
+	repo::project::delete(conn, id)
 }
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
-	crate::infra::git::branch(folder)
+	infra::git::branch(folder)
 }
 
 pub fn get_diff(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
-	crate::infra::git::diff(&profile.worktree_path)
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::diff(&profile.worktree_path)
 }
 
 pub fn get_log(
@@ -112,8 +118,8 @@ pub fn get_log(
 	profile_id: &str,
 	limit: u32,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
-	crate::infra::git::log(&profile.worktree_path, limit)
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::log(&profile.worktree_path, limit)
 }
 
 pub fn get_commit_diff(
@@ -121,8 +127,8 @@ pub fn get_commit_diff(
 	profile_id: &str,
 	commit_hash: &str,
 ) -> Result<String, AppError> {
-	let profile = crate::repo::profile::find_by_id(conn, profile_id)?;
-	crate::infra::git::show(&profile.worktree_path, commit_hash)
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::show(&profile.worktree_path, commit_hash)
 }
 
 #[cfg(test)]

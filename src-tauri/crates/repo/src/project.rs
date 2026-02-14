@@ -2,12 +2,10 @@ use diesel::prelude::*;
 
 use std::collections::HashMap;
 
-use crate::error::AppError;
-use crate::model::profile::Profile;
-use crate::model::project::{
-	NewProject, Project, ProjectWithProfiles, UpdateProject,
-};
-use crate::schema::{profiles, projects};
+use model::error::AppError;
+use model::profile::Profile;
+use model::project::{NewProject, Project, ProjectWithProfiles, UpdateProject};
+use model::schema::{profiles, projects};
 
 pub fn insert(
 	conn: &mut SqliteConnection,
@@ -115,10 +113,10 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::infra::db::MIGRATIONS;
-	use crate::model::profile::NewProfile;
-	use crate::model::pty::NewPtySessionRecord;
-	use crate::schema::{profiles, pty_sessions};
+	use infra::db::MIGRATIONS;
+	use model::profile::NewProfile;
+	use model::pty::NewPtySessionRecord;
+	use model::schema::{profiles, pty_sessions};
 	use diesel_migrations::MigrationHarness;
 
 	fn setup_db() -> SqliteConnection {

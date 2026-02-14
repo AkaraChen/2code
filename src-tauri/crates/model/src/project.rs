@@ -1,4 +1,4 @@
-use crate::model::profile::Profile;
+use crate::profile::Profile;
 use crate::schema::projects;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};

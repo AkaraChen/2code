@@ -1,6 +1,5 @@
 mod common;
 
-use code_lib::service;
 use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo, setup_db};
 
 // ============================================================

@@ -1,0 +1,13 @@
+[package]
+name = "repo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+model = { path = "../model" }
+diesel = { version = "2", features = ["sqlite"] }
+tracing = "0.1"
+
+[dev-dependencies]
+infra = { path = "../infra" }
+diesel_migrations = "2"

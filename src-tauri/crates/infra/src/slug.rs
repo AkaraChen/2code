@@ -34,9 +34,7 @@ mod tests {
 
 	#[test]
 	fn slugify_emoji_only() {
-		// Emoji are not CJK — they go through the else branch
 		let result = slugify_cjk("🚀🔥");
-		// slug crate strips unknown chars, result may be empty
 		assert!(result.is_empty() || result.chars().all(|c| c.is_ascii()));
 	}
 

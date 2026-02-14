@@ -5,11 +5,12 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use notify::{recommended_watcher, Event, EventKind, RecursiveMode, Watcher};
-use tauri::ipc::Channel;
 
-use crate::infra::db::DbPool;
-use crate::infra::watcher::WatcherShutdownFlag;
-use crate::model::watcher::WatchEvent;
+use infra::db::DbPool;
+use infra::watcher::WatcherShutdownFlag;
+use model::watcher::WatchEvent;
+
+use crate::WatchEventSender;
 
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const RECV_TIMEOUT: Duration = Duration::from_millis(100);
@@ -21,17 +22,17 @@ struct ProjectWatcher {
 }
 
 pub fn start(
-	channel: Channel<WatchEvent>,
+	sender: Box<dyn WatchEventSender>,
 	db: DbPool,
 	shutdown: WatcherShutdownFlag,
 ) {
 	std::thread::spawn(move || {
-		run_coordinator(channel, db, shutdown);
+		run_coordinator(sender, db, shutdown);
 	});
 }
 
 fn run_coordinator(
-	channel: Channel<WatchEvent>,
+	sender: Box<dyn WatchEventSender>,
 	db: DbPool,
 	shutdown: WatcherShutdownFlag,
 ) {
@@ -65,7 +66,7 @@ fn run_coordinator(
 					last_event.insert(project_id.clone(), now);
 					tracing::info!(target: "watcher", %project_id, "file changed");
 					let event = WatchEvent { project_id };
-					if channel.send(event).is_err() {
+					if !sender.send(event) {
 						// Channel closed — frontend dropped it
 						break;
 					}
@@ -83,10 +84,10 @@ fn reconcile_watchers(
 	watchers: &mut HashMap<String, ProjectWatcher>,
 ) {
 	let projects = match db.lock() {
-		Ok(mut conn) => match crate::repo::project::list_all(&mut conn) {
+		Ok(mut conn) => match repo::project::list_all(&mut conn) {
 			Ok(p) => p,
 			Err(e) => {
-				log::warn!("Watcher: failed to list projects: {e}");
+				tracing::warn!("Watcher: failed to list projects: {e}");
 				return;
 			}
 		},
@@ -135,7 +136,7 @@ fn reconcile_watchers(
 				let path = std::path::Path::new(&folder);
 				if path.exists() {
 					if let Err(e) = w.watch(path, RecursiveMode::Recursive) {
-						log::warn!("Watcher: failed to watch {folder}: {e}");
+						tracing::warn!("Watcher: failed to watch {folder}: {e}");
 						continue;
 					}
 					watchers.insert(
@@ -147,7 +148,7 @@ fn reconcile_watchers(
 				}
 			}
 			Err(e) => {
-				log::warn!(
+				tracing::warn!(
 					"Watcher: failed to create watcher for {folder}: {e}"
 				);
 			}

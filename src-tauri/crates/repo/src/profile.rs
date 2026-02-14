@@ -1,8 +1,8 @@
 use diesel::prelude::*;
 
-use crate::error::AppError;
-use crate::model::profile::{NewProfile, Profile};
-use crate::schema::{profiles, projects};
+use model::error::AppError;
+use model::profile::{NewProfile, Profile};
+use model::schema::{profiles, projects};
 
 pub fn insert(
 	conn: &mut SqliteConnection,
@@ -33,15 +33,14 @@ pub fn insert_default(
 	conn: &mut SqliteConnection,
 	id: &str,
 	project_id: &str,
+	branch_name: &str,
 	worktree_path: &str,
 ) -> Result<Profile, AppError> {
-	let branch_name = crate::infra::git::branch(worktree_path)
-		.unwrap_or_else(|_| "main".to_string());
 	diesel::insert_into(profiles::table)
 		.values(&NewProfile {
 			id,
 			project_id,
-			branch_name: &branch_name,
+			branch_name,
 			worktree_path,
 			is_default: true,
 		})
@@ -103,8 +102,8 @@ pub fn get_project_folder(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::infra::db::MIGRATIONS;
-	use crate::model::project::NewProject;
+	use infra::db::MIGRATIONS;
+	use model::project::NewProject;
 	use diesel_migrations::MigrationHarness;
 
 	fn setup_db() -> SqliteConnection {
@@ -124,7 +123,7 @@ mod tests {
 		id: &str,
 		folder: &str,
 	) {
-		diesel::insert_into(crate::schema::projects::table)
+		diesel::insert_into(projects::table)
 			.values(&NewProject {
 				id,
 				name: "Test Project",
@@ -225,7 +224,7 @@ mod tests {
 		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
 		insert(&mut conn, "p2", "proj-1", "dev", "/w/p2").unwrap();
 
-		diesel::delete(crate::schema::projects::table.find("proj-1"))
+		diesel::delete(projects::table.find("proj-1"))
 			.execute(&mut conn)
 			.unwrap();
 

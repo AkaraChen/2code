@@ -1,8 +1,7 @@
 mod common;
 
-use code_lib::model::pty::NewPtySessionRecord;
-use code_lib::repo::pty;
-use code_lib::service;
+use model::pty::NewPtySessionRecord;
+use repo::pty;
 use common::{cleanup, create_project_with_git_repo, setup_db};
 
 /// Helper: insert a session record for a given profile.

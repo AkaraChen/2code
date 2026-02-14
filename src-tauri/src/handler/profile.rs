@@ -1,8 +1,8 @@
 use tauri::State;
 
-use crate::error::AppError;
-use crate::infra::db::DbPool;
-use crate::model::profile::Profile;
+use infra::db::DbPool;
+use model::error::AppError;
+use model::profile::Profile;
 
 #[tauri::command]
 pub fn create_profile(
@@ -11,7 +11,7 @@ pub fn create_profile(
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::profile::create(conn, &project_id, &branch_name)
+	service::profile::create(conn, &project_id, &branch_name)
 }
 
 #[tauri::command]
@@ -20,5 +20,5 @@ pub fn delete_profile(
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	crate::service::profile::delete(conn, &id)
+	service::profile::delete(conn, &id)
 }

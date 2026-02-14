@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::error::AppError;
-use crate::model::project::{GitAuthor, GitCommit};
+use model::error::AppError;
+use model::project::{GitAuthor, GitCommit};
 
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
@@ -189,10 +189,10 @@ pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
 	match output {
 		Ok(o) if !o.status.success() => {
 			let stderr = String::from_utf8_lossy(&o.stderr);
-			log::warn!("git worktree remove failed: {stderr}");
+			tracing::warn!("git worktree remove failed: {stderr}");
 		}
 		Err(e) => {
-			log::warn!("git worktree remove error: {e}");
+			tracing::warn!("git worktree remove error: {e}");
 		}
 		_ => {}
 	}
@@ -207,10 +207,10 @@ pub fn branch_delete(project_folder: &str, branch_name: &str) {
 	match output {
 		Ok(o) if !o.status.success() => {
 			let stderr = String::from_utf8_lossy(&o.stderr);
-			log::warn!("git branch delete failed: {stderr}");
+			tracing::warn!("git branch delete failed: {stderr}");
 		}
 		Err(e) => {
-			log::warn!("git branch delete error: {e}");
+			tracing::warn!("git branch delete error: {e}");
 		}
 		_ => {}
 	}
@@ -441,7 +441,6 @@ mod tests {
 
 	#[test]
 	fn parse_log_commit_without_stat() {
-		// merge commits or empty commits may lack shortstat
 		let output = "abc123def456abc123def456abc123def456abc1\x1fabc123d\x1fJohn\x1fjohn@example.com\x1f2024-01-01T00:00:00+00:00\x1fEmpty commit\n";
 		let commits = parse_git_log(output);
 		assert_eq!(commits.len(), 1);
@@ -544,7 +543,6 @@ mod tests {
 		std::fs::create_dir_all(&dir).unwrap();
 		let result = branch(&dir.to_string_lossy());
 		let _ = std::fs::remove_dir_all(&dir);
-		// Non-git dir: both rev-parse and symbolic-ref fail, falls back to "main"
 		assert_eq!(result.unwrap(), "main");
 	}
 
@@ -623,7 +621,6 @@ mod tests {
 		let result = diff(&dir.to_string_lossy());
 		let _ = std::fs::remove_dir_all(&dir);
 
-		// Empty repo (no HEAD) should return empty string, not an error
 		match result {
 			Ok(diff) => assert_eq!(diff, ""),
 			Err(e) => panic!("diff returned error: {e:?}"),
@@ -638,7 +635,6 @@ mod tests {
 		let result = diff(&dir.to_string_lossy());
 		let _ = std::fs::remove_dir_all(&dir);
 
-		// No changes should return empty string
 		assert!(result.is_ok());
 		assert_eq!(result.unwrap(), "");
 	}
@@ -648,7 +644,6 @@ mod tests {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "a.txt", "hello", "Init");
 
-		// Modify file without staging
 		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
 
 		let result = diff(&dir.to_string_lossy());
@@ -666,7 +661,6 @@ mod tests {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "a.txt", "hello", "Init");
 
-		// Modify and stage file
 		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
 		Command::new("git")
 			.args(["add", "a.txt"])
@@ -690,7 +684,6 @@ mod tests {
 		add_commit(&dir, "a.txt", "hello", "Init");
 		add_commit(&dir, "b.txt", "foo", "Add b");
 
-		// Stage changes to a.txt
 		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
 		Command::new("git")
 			.args(["add", "a.txt"])
@@ -698,7 +691,6 @@ mod tests {
 			.output()
 			.unwrap();
 
-		// Unstaged changes to b.txt
 		std::fs::write(dir.join("b.txt"), "bar").unwrap();
 
 		let result = diff(&dir.to_string_lossy());
@@ -706,7 +698,6 @@ mod tests {
 
 		assert!(result.is_ok());
 		let diff_output = result.unwrap();
-		// Should show both staged and unstaged changes
 		assert!(diff_output.contains("a.txt"));
 		assert!(diff_output.contains("b.txt"));
 		assert!(diff_output.contains("-hello"));
@@ -720,7 +711,6 @@ mod tests {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "a.txt", "hello", "Init");
 
-		// Create new untracked file
 		std::fs::write(dir.join("new.txt"), "new content").unwrap();
 
 		let result = diff(&dir.to_string_lossy());
@@ -728,7 +718,6 @@ mod tests {
 
 		assert!(result.is_ok());
 		let diff_output = result.unwrap();
-		// Should show new file (as if it were added)
 		assert!(diff_output.contains("new.txt"));
 		assert!(diff_output.contains("+new content"));
 	}
