@@ -1,22 +1,22 @@
 import { Button, Stack, Text } from "@chakra-ui/react";
 import {
-	DndContext,
-	DragOverlay,
-	PointerSensor,
 	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	DragOverlay,
+	type DragStartEvent,
+	PointerSensor,
 	useSensor,
 	useSensors,
-	type DragEndEvent,
-	type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
-import { TopBarPreview } from "./TopBarPreview";
 import { controlRegistry } from "./registry";
 import { useTopBarStore } from "./store";
+import { TopBarPreview } from "./TopBarPreview";
 import type { ControlId } from "./types";
 
 export function TopBarSettings() {
@@ -53,9 +53,7 @@ export function TopBarSettings() {
 			// Reorder within preview
 			if (activeControlId === overControlId) return;
 			const oldIndex = activeControls.indexOf(activeControlId);
-			const newIndex = activeControls.indexOf(
-				overControlId as ControlId,
-			);
+			const newIndex = activeControls.indexOf(overControlId as ControlId);
 			if (newIndex !== -1) {
 				setActiveControls(
 					arrayMove(activeControls, oldIndex, newIndex),
@@ -98,10 +96,7 @@ export function TopBarSettings() {
 				<AvailableControls activeControls={activeControls} />
 				<DragOverlay>
 					{activeDef ? (
-						<DraggableControl
-							definition={activeDef}
-							isOverlay
-						/>
+						<DraggableControl definition={activeDef} isOverlay />
 					) : null}
 				</DragOverlay>
 			</DndContext>

@@ -1,12 +1,12 @@
 import { Box, HStack, Text } from "@chakra-ui/react";
-import {
-	SortableContext,
-	horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
+import {
+	horizontalListSortingStrategy,
+	SortableContext,
+} from "@dnd-kit/sortable";
 import * as m from "@/paraglide/messages.js";
-import { allControlIds, controlRegistry } from "./registry";
 import { DraggableControl } from "./DraggableControl";
+import { allControlIds, controlRegistry } from "./registry";
 import type { ControlId } from "./types";
 
 interface AvailableControlsProps {
@@ -47,10 +47,7 @@ export function AvailableControls({ activeControls }: AvailableControlsProps) {
 							const def = controlRegistry.get(id);
 							if (!def) return null;
 							return (
-								<DraggableControl
-									key={id}
-									definition={def}
-								/>
+								<DraggableControl key={id} definition={def} />
 							);
 						})
 					)}

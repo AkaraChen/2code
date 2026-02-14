@@ -46,7 +46,12 @@ pub fn create_temp_git_repo() -> PathBuf {
 }
 
 /// Add a file and commit it in the given git repo directory.
-pub fn add_commit(dir: &std::path::Path, filename: &str, content: &str, msg: &str) {
+pub fn add_commit(
+	dir: &std::path::Path,
+	filename: &str,
+	content: &str,
+	msg: &str,
+) {
 	std::fs::write(dir.join(filename), content).unwrap();
 	Command::new("git")
 		.args(["add", filename])
@@ -74,12 +79,9 @@ pub fn create_project_with_git_repo(
 	add_commit(&dir, "README.md", "# Test", "Initial commit");
 
 	let folder = dir.to_string_lossy().to_string();
-	let project = service::project::create_from_folder(
-		conn,
-		"Test Project",
-		&folder,
-	)
-	.expect("create project from folder");
+	let project =
+		service::project::create_from_folder(conn, "Test Project", &folder)
+			.expect("create project from folder");
 
 	let projects_with_profiles =
 		service::project::list(conn).expect("list projects");

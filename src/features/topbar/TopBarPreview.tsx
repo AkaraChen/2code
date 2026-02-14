@@ -1,13 +1,13 @@
 import { Box, Flex, HStack, Text } from "@chakra-ui/react";
-import {
-	SortableContext,
-	horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
+import {
+	horizontalListSortingStrategy,
+	SortableContext,
+} from "@dnd-kit/sortable";
 import { RiGitBranchLine } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
-import { controlRegistry } from "./registry";
 import { DraggableControl } from "./DraggableControl";
+import { controlRegistry } from "./registry";
 import type { ControlId } from "./types";
 
 interface TopBarPreviewProps {

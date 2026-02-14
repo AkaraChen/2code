@@ -102,9 +102,9 @@ pub fn get_project_folder(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use diesel_migrations::MigrationHarness;
 	use infra::db::MIGRATIONS;
 	use model::project::NewProject;
-	use diesel_migrations::MigrationHarness;
 
 	fn setup_db() -> SqliteConnection {
 		let mut conn =

@@ -1,8 +1,8 @@
 mod common;
 
+use common::{cleanup, create_project_with_git_repo, setup_db};
 use model::pty::NewPtySessionRecord;
 use repo::pty;
-use common::{cleanup, create_project_with_git_repo, setup_db};
 
 /// Helper: insert a session record for a given profile.
 fn insert_session(
@@ -30,12 +30,14 @@ fn insert_session(
 #[test]
 fn list_sessions_joins_via_profiles() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s1", &default_profile.id, "bash");
 
 	// Frontend calls with projectId, backend JOINs through profiles
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert_eq!(sessions.len(), 1);
 	assert_eq!(sessions[0].id, "s1");
 	assert_eq!(sessions[0].profile_id, default_profile.id);
@@ -46,11 +48,13 @@ fn list_sessions_joins_via_profiles() {
 #[test]
 fn list_sessions_returns_correct_shape() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-shape", &default_profile.id, "zsh");
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	let s = &sessions[0];
 
 	assert_eq!(s.id, "s-shape");
@@ -69,15 +73,18 @@ fn list_sessions_returns_correct_shape() {
 #[test]
 fn list_sessions_across_multiple_profiles() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let profile2 =
-		service::profile::create(&mut conn, &project.id, "second-branch").unwrap();
+		service::profile::create(&mut conn, &project.id, "second-branch")
+			.unwrap();
 
 	insert_session(&mut conn, "s1", &default_profile.id, "bash");
 	insert_session(&mut conn, "s2", &profile2.id, "bash");
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert_eq!(sessions.len(), 2);
 
 	service::profile::delete(&mut conn, &profile2.id).unwrap();
@@ -87,13 +94,15 @@ fn list_sessions_across_multiple_profiles() {
 #[test]
 fn list_sessions_ordered_by_created_at() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-first", &default_profile.id, "first");
 	insert_session(&mut conn, "s-second", &default_profile.id, "second");
 	insert_session(&mut conn, "s-third", &default_profile.id, "third");
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert_eq!(sessions.len(), 3);
 	assert_eq!(sessions[0].id, "s-first");
 	assert_eq!(sessions[1].id, "s-second");
@@ -107,7 +116,8 @@ fn list_sessions_empty_project() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert!(sessions.is_empty());
 
 	cleanup(&dir);
@@ -122,7 +132,8 @@ fn list_sessions_nonexistent_project_returns_empty() {
 	let mut conn = setup_db();
 	// JOIN results in empty set, not an error
 	let sessions =
-		service::pty::list_project_sessions(&mut conn, "nonexistent-project").unwrap();
+		service::pty::list_project_sessions(&mut conn, "nonexistent-project")
+			.unwrap();
 	assert!(sessions.is_empty());
 }
 
@@ -135,11 +146,13 @@ fn list_sessions_excludes_other_projects() {
 	insert_session(&mut conn, "s-p1", &profile1.id, "bash");
 	insert_session(&mut conn, "s-p2", &profile2.id, "bash");
 
-	let sessions1 = service::pty::list_project_sessions(&mut conn, &project1.id).unwrap();
+	let sessions1 =
+		service::pty::list_project_sessions(&mut conn, &project1.id).unwrap();
 	assert_eq!(sessions1.len(), 1);
 	assert_eq!(sessions1[0].id, "s-p1");
 
-	let sessions2 = service::pty::list_project_sessions(&mut conn, &project2.id).unwrap();
+	let sessions2 =
+		service::pty::list_project_sessions(&mut conn, &project2.id).unwrap();
 	assert_eq!(sessions2.len(), 1);
 	assert_eq!(sessions2[0].id, "s-p2");
 
@@ -154,7 +167,8 @@ fn list_sessions_excludes_other_projects() {
 #[test]
 fn history_starts_empty() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-empty", &default_profile.id, "bash");
 
@@ -167,7 +181,8 @@ fn history_starts_empty() {
 #[test]
 fn append_and_read_history() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-append", &default_profile.id, "bash");
 
@@ -182,7 +197,8 @@ fn append_and_read_history() {
 #[test]
 fn clear_output_resets_history() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-clear", &default_profile.id, "bash");
 	pty::append_output(&mut conn, "s-clear", b"some data").unwrap();
@@ -197,7 +213,8 @@ fn clear_output_resets_history() {
 #[test]
 fn output_capped_at_1mb() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-cap", &default_profile.id, "bash");
 
@@ -231,13 +248,15 @@ fn history_nonexistent_session_returns_error() {
 #[test]
 fn append_empty_data() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-empty-append", &default_profile.id, "bash");
 	let result = pty::append_output(&mut conn, "s-empty-append", &[]);
 	assert!(result.is_ok());
 
-	let history = service::pty::get_history(&mut conn, "s-empty-append").unwrap();
+	let history =
+		service::pty::get_history(&mut conn, "s-empty-append").unwrap();
 	assert!(history.is_empty());
 
 	cleanup(&dir);
@@ -246,7 +265,8 @@ fn append_empty_data() {
 #[test]
 fn append_binary_data() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-binary", &default_profile.id, "bash");
 
@@ -262,7 +282,8 @@ fn append_binary_data() {
 #[test]
 fn multiple_appends_concatenated_correctly() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-multi", &default_profile.id, "bash");
 
@@ -283,12 +304,14 @@ fn multiple_appends_concatenated_correctly() {
 #[test]
 fn resize_updates_dimensions_in_db() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-resize", &default_profile.id, "bash");
 	pty::update_dimensions(&mut conn, "s-resize", 200, 50);
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	let s = sessions.iter().find(|s| s.id == "s-resize").unwrap();
 	assert_eq!(s.cols, 200);
 	assert_eq!(s.rows, 50);
@@ -299,12 +322,14 @@ fn resize_updates_dimensions_in_db() {
 #[test]
 fn mark_closed_sets_closed_at() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-close", &default_profile.id, "bash");
 	pty::mark_closed(&mut conn, "s-close");
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	let s = sessions.iter().find(|s| s.id == "s-close").unwrap();
 	assert!(s.closed_at.is_some());
 
@@ -314,7 +339,8 @@ fn mark_closed_sets_closed_at() {
 #[test]
 fn mark_all_open_closed() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-open-1", &default_profile.id, "bash");
 	insert_session(&mut conn, "s-open-2", &default_profile.id, "bash");
@@ -325,7 +351,8 @@ fn mark_all_open_closed() {
 	// Batch close all remaining open
 	pty::mark_all_open_closed(&mut conn);
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	for s in &sessions {
 		assert!(s.closed_at.is_some(), "session {} should be closed", s.id);
 	}
@@ -356,7 +383,8 @@ fn insert_session_for_nonexistent_profile_returns_error() {
 #[test]
 fn insert_duplicate_session_id_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-dup", &default_profile.id, "bash");
 	let record = NewPtySessionRecord {
@@ -381,14 +409,16 @@ fn insert_duplicate_session_id_returns_error() {
 #[test]
 fn delete_removes_session_and_output() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-del", &default_profile.id, "bash");
 	pty::append_output(&mut conn, "s-del", b"data").unwrap();
 
 	service::pty::delete_session(&mut conn, "s-del").unwrap();
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert!(sessions.is_empty());
 
 	// History should also be gone
@@ -401,7 +431,8 @@ fn delete_removes_session_and_output() {
 #[test]
 fn close_then_delete_flow() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	insert_session(&mut conn, "s-flow", &default_profile.id, "bash");
 	pty::append_output(&mut conn, "s-flow", b"output data").unwrap();
@@ -421,7 +452,8 @@ fn close_then_delete_flow() {
 #[test]
 fn restoration_flow_db_side() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// 1. Old session with history
 	insert_session(&mut conn, "s-old", &default_profile.id, "bash");
@@ -455,7 +487,8 @@ fn restoration_flow_db_side() {
 fn delete_nonexistent_session_succeeds() {
 	let mut conn = setup_db();
 	// Deleting a session that doesn't exist should return Ok (0 rows affected)
-	let result = service::pty::delete_session(&mut conn, "nonexistent-session-id");
+	let result =
+		service::pty::delete_session(&mut conn, "nonexistent-session-id");
 	assert!(result.is_ok());
 }
 

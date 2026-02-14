@@ -41,8 +41,7 @@ pub fn create_temporary(
 
 	let branch_name = infra::git::branch(&dir_str).unwrap_or_default();
 
-	let project =
-		repo::project::insert(conn, &id, &project_name, &dir_str)?;
+	let project = repo::project::insert(conn, &id, &project_name, &dir_str)?;
 
 	let default_profile_id = format!("default-{id}");
 	repo::profile::insert_default(

@@ -2,7 +2,7 @@ start:
     nr start
 
 fmt:
-    fama "./src/**/*.{ts,tsx}"
+    fama ./src/**/*.{ts,tsx}
     cd src-tauri && cargo fmt
 
 # Build CLI sidecar (src-tauri/bins/2code-helper)

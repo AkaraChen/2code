@@ -5,13 +5,13 @@ use std::sync::{Arc, Mutex};
 
 use diesel::SqliteConnection;
 
+use infra::db::DbPool;
+use infra::pty::{self as session, PtyReadThreads, PtySessionMap};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
 	RestoreResult,
 };
-use infra::db::DbPool;
-use infra::pty::{self as session, PtySessionMap, PtyReadThreads};
 
 use crate::PtyEventEmitter;
 
@@ -148,10 +148,8 @@ pub fn create_session(
 	let project_init_scripts = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let profile = repo::profile::find_by_id(conn, &meta.profile_id)?;
-		let folder = repo::profile::get_project_folder(
-			conn,
-			&profile.project_id,
-		)?;
+		let folder =
+			repo::profile::get_project_folder(conn, &profile.project_id)?;
 		infra::config::load_project_config(&folder)
 			.map(|c| c.init_script)
 			.unwrap_or_default()
@@ -161,10 +159,8 @@ pub fn create_session(
 	let session_id = uuid::Uuid::new_v4().to_string();
 
 	// 3. Prepare shell init directory (graceful degradation on failure)
-	let init_dir = infra::shell_init::prepare_init_dir(
-		&session_id,
-		&project_init_scripts,
-	);
+	let init_dir =
+		infra::shell_init::prepare_init_dir(&session_id, &project_init_scripts);
 	if let Err(ref e) = init_dir {
 		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
 	}
@@ -383,11 +379,13 @@ fn read_pty_output(
 				let raw = &buf[..n];
 
 				// Detect clear-scrollback sequence and notify persistence thread
-				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ) {
+				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ)
+				{
 					let after = pos + CLEAR_SCROLLBACK_SEQ.len();
 					let _ = tx.send(PersistMsg::Clear);
 					if after < n {
-						let _ = tx.send(PersistMsg::Data(raw[after..].to_vec()));
+						let _ =
+							tx.send(PersistMsg::Data(raw[after..].to_vec()));
 					}
 				} else {
 					let _ = tx.send(PersistMsg::Data(raw.to_vec()));
@@ -451,8 +449,7 @@ fn persist_pty_output(
 			PersistMsg::Data(data) => {
 				let Ok(mut conn) = db.lock() else { continue };
 				let n = data.len();
-				match repo::pty::append_output(&mut conn, session_id, &data)
-				{
+				match repo::pty::append_output(&mut conn, session_id, &data) {
 					Ok(()) => {
 						tracing::info!(target: "pty", %session_id, n, "persist: appended");
 					}
@@ -730,7 +727,9 @@ mod tests {
 		let input = b"\x1b[31mred text\x1b[0m";
 		let result = sanitize_history(input, 24, 80);
 		// Output should contain SGR sequences (not be plain text)
-		assert!(result.windows(4).any(|w| w == b"\x1b[31" || w == b"\x1b[0m"));
+		assert!(result
+			.windows(4)
+			.any(|w| w == b"\x1b[31" || w == b"\x1b[0m"));
 		let text = strip_ansi(&result);
 		assert!(text.contains("red text"));
 	}
@@ -881,8 +880,8 @@ mod tests {
 		db: &infra::db::DbPool,
 		session_id: &str,
 	) {
-		use model::pty::NewPtySessionRecord;
 		use diesel::RunQueryDsl;
+		use model::pty::NewPtySessionRecord;
 		let mut conn = db.lock().unwrap();
 		// Insert a minimal project + profile + session
 		diesel::sql_query(
@@ -947,11 +946,9 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = repo::pty::get_session_history(
-			&mut conn,
-			"s-persist-clear",
-		)
-		.unwrap();
+		let history =
+			repo::pty::get_session_history(&mut conn, "s-persist-clear")
+				.unwrap();
 		assert!(history.is_empty());
 	}
 
@@ -973,11 +970,9 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = repo::pty::get_session_history(
-			&mut conn,
-			"s-persist-flush",
-		)
-		.unwrap();
+		let history =
+			repo::pty::get_session_history(&mut conn, "s-persist-flush")
+				.unwrap();
 		assert_eq!(history, b"data before flush");
 	}
 }

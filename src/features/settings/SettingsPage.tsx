@@ -16,6 +16,7 @@ import { Suspense, use, useMemo, useState } from "react";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
+import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
 import { getLocale, setLocale } from "@/paraglide/runtime.js";
@@ -26,7 +27,6 @@ import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
 import { NotificationSettings } from "./NotificationSettings";
-import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 
 const localeCollection = createListCollection({
@@ -72,15 +72,11 @@ export default function SettingsPage() {
 						<Tabs.Trigger value="notification">
 							{m.notification()}
 						</Tabs.Trigger>
-						<Tabs.Trigger value="topbar">
-							{m.topbar()}
-						</Tabs.Trigger>
+						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
 						<Tabs.Trigger value="profile">
 							{m.profile()}
 						</Tabs.Trigger>
-						<Tabs.Trigger value="agents">
-							{m.agents()}
-						</Tabs.Trigger>
+						<Tabs.Trigger value="agents">{m.agents()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">

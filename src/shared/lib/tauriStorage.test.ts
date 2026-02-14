@@ -88,9 +88,9 @@ describe("tauriStorage", () => {
 
 		it("handles special characters in key names", async () => {
 			await tauriStorage.setItem("key/with:special.chars!", '"v"');
-			expect(
-				await tauriStorage.getItem("key/with:special.chars!"),
-			).toBe('"v"');
+			expect(await tauriStorage.getItem("key/with:special.chars!")).toBe(
+				'"v"',
+			);
 		});
 
 		it("overwrites existing key on setItem", async () => {

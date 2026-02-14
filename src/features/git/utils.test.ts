@@ -146,9 +146,7 @@ describe("getLineStats", () => {
 	it("handles change with both arrays empty", () => {
 		const file = makeFile([
 			{
-				hunkContent: [
-					{ type: "change", additions: [], deletions: [] },
-				],
+				hunkContent: [{ type: "change", additions: [], deletions: [] }],
 			},
 		]);
 		expect(getLineStats(file)).toEqual({ additions: 0, deletions: 0 });
@@ -179,7 +177,11 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: ["a", "b", "c"], deletions: [] },
+					{
+						type: "change",
+						additions: ["a", "b", "c"],
+						deletions: [],
+					},
 				],
 			},
 			{

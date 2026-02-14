@@ -16,11 +16,7 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
-import {
-	detectCredentials,
-	installAgent,
-	listAgentStatus,
-} from "@/generated";
+import { detectCredentials, installAgent, listAgentStatus } from "@/generated";
 import type { AgentStatusInfo, CredentialEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -95,9 +91,7 @@ function AgentSummaryBar({
 					<ProgressCircle.Root
 						size="sm"
 						value={percent}
-						colorPalette={
-							readyCount === total ? "green" : "blue"
-						}
+						colorPalette={readyCount === total ? "green" : "blue"}
 					>
 						<ProgressCircle.Circle>
 							<ProgressCircle.Track />
@@ -118,9 +112,7 @@ function AgentSummaryBar({
 							<Status.Indicator />
 							Anthropic
 						</Status.Root>
-						<Status.Root
-							colorPalette={openai ? "green" : "gray"}
-						>
+						<Status.Root colorPalette={openai ? "green" : "gray"}>
 							<Status.Indicator />
 							OpenAI
 						</Status.Root>
@@ -146,11 +138,7 @@ function CredentialCard({
 						{entry?.provider ?? provider}
 					</Text>
 					{entry ? (
-						<Badge
-							colorPalette="green"
-							variant="subtle"
-							size="sm"
-						>
+						<Badge colorPalette="green" variant="subtle" size="sm">
 							{entry.auth_type === "oauth"
 								? m.agentOAuth()
 								: m.agentApiKey()}
@@ -255,10 +243,7 @@ function AgentCard({ agent }: { agent: AgentStatusInfo }) {
 									</Badge>
 								)}
 							</HStack>
-							<Separator
-								orientation="vertical"
-								height="3"
-							/>
+							<Separator orientation="vertical" height="3" />
 							<HStack gap="1.5">
 								<Text fontSize="xs" color="fg.muted">
 									{m.agentAcpBridge()}
@@ -267,18 +252,14 @@ function AgentCard({ agent }: { agent: AgentStatusInfo }) {
 									size="sm"
 									variant="subtle"
 									colorPalette={
-										agent.acp_installed
-											? "green"
-											: "gray"
+										agent.acp_installed ? "green" : "gray"
 									}
 								>
-									{agent.acp_version ??
-										m.agentNotInstalled()}
+									{agent.acp_version ?? m.agentNotInstalled()}
 								</Badge>
 							</HStack>
 						</HStack>
-						{(!agent.native_required ||
-							agent.native_installed) && (
+						{(!agent.native_required || agent.native_installed) && (
 							<Button
 								size="xs"
 								variant="outline"

@@ -1,10 +1,10 @@
-import { renderHook, act } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "@tauri-apps/api/event";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	useTerminalStore,
-	useTerminalProfileIds,
 	useProfileHasNotification,
+	useTerminalProfileIds,
+	useTerminalStore,
 } from "./store";
 
 function resetStore() {
@@ -127,7 +127,9 @@ describe("useTerminalStore", () => {
 		});
 
 		it("no-ops when profile does not exist", () => {
-			expect(() => getState().closeTab("nonexistent", "s1")).not.toThrow();
+			expect(() =>
+				getState().closeTab("nonexistent", "s1"),
+			).not.toThrow();
 		});
 
 		it("handles closing second tab when active is second of two", () => {
@@ -172,9 +174,7 @@ describe("useTerminalStore", () => {
 		});
 
 		it("no-ops when profile does not exist", () => {
-			expect(() =>
-				getState().removeProfile("nonexistent"),
-			).not.toThrow();
+			expect(() => getState().removeProfile("nonexistent")).not.toThrow();
 		});
 	});
 
@@ -457,9 +457,7 @@ describe("useTerminalStore", () => {
 	describe("removeStaleProfiles edge cases", () => {
 		it("validIds with extra IDs that don't exist in profiles is fine", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().removeStaleProfiles(
-				new Set(["p1", "p99", "p100"]),
-			);
+			getState().removeStaleProfiles(new Set(["p1", "p99", "p100"]));
 			expect(getState().profiles.p1).toBeDefined();
 			expect(Object.keys(getState().profiles)).toHaveLength(1);
 		});

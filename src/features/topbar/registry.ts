@@ -1,9 +1,15 @@
-import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
+import {
+	SiCursor,
+	SiGit,
+	SiGithub,
+	SiVscodium,
+	SiWindsurf,
+} from "@icons-pack/react-simple-icons";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
-	GithubDesktopControl,
 	GitDiffControl,
+	GithubDesktopControl,
 	VscodeControl,
 	WindsurfControl,
 } from "./controls";

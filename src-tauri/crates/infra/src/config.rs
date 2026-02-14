@@ -156,10 +156,8 @@ mod tests {
 	fn execute_scripts_stops_on_first_failure() {
 		let dir = TempDir::new().unwrap();
 		let marker = dir.path().join("marker.txt");
-		let scripts = vec![
-			"exit 1".to_string(),
-			format!("touch {}", marker.display()),
-		];
+		let scripts =
+			vec!["exit 1".to_string(), format!("touch {}", marker.display())];
 		execute_scripts(&scripts, dir.path());
 		assert!(
 			!marker.exists(),

@@ -7,270 +7,239 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-import type { Channel } from '@tauri-apps/api/core';
-
+import type { Channel } from "@tauri-apps/api/core";
 
 export interface SystemFont {
-  family: string;
-  is_mono: boolean;
+	family: string;
+	is_mono: boolean;
 }
 
 export interface PtySessionMeta {
-  profileId: string;
-  title: string;
+	profileId: string;
+	title: string;
 }
 
 export interface GitAuthor {
-  name: string;
-  email: string;
+	name: string;
+	email: string;
 }
 
 export interface CredentialEntry {
-  source: string;
-  provider: string;
-  auth_type: string;
-  key_preview: string;
+	source: string;
+	provider: string;
+	auth_type: string;
+	key_preview: string;
 }
 
 export interface CredentialInfo {
-  anthropic?: CredentialEntry | null;
-  openai?: CredentialEntry | null;
+	anthropic?: CredentialEntry | null;
+	openai?: CredentialEntry | null;
 }
 
 export interface Profile {
-  id: string;
-  project_id: string;
-  branch_name: string;
-  worktree_path: string;
-  created_at: string;
-  is_default: boolean;
+	id: string;
+	project_id: string;
+	branch_name: string;
+	worktree_path: string;
+	created_at: string;
+	is_default: boolean;
 }
 
 export interface LogEntry {
-  timestamp: number;
-  level: string;
-  source: string;
-  message: string;
+	timestamp: number;
+	level: string;
+	source: string;
+	message: string;
 }
 
 export interface Project {
-  id: string;
-  name: string;
-  folder: string;
-  created_at: string;
+	id: string;
+	name: string;
+	folder: string;
+	created_at: string;
 }
 
 export interface ProjectWithProfiles {
-  id: string;
-  name: string;
-  folder: string;
-  created_at: string;
-  profiles: Profile[];
+	id: string;
+	name: string;
+	folder: string;
+	created_at: string;
+	profiles: Profile[];
 }
 
 export interface RestoreResult {
-  newSessionId: string;
-  history: number[];
+	newSessionId: string;
+	history: number[];
 }
 
 export interface PtyConfig {
-  shell: string;
-  cwd: string;
-  rows: number;
-  cols: number;
+	shell: string;
+	cwd: string;
+	rows: number;
+	cols: number;
 }
 
 export interface WatchEvent {
-  project_id: string;
+	project_id: string;
 }
 
 export interface GitCommit {
-  hash: string;
-  full_hash: string;
-  author: GitAuthor;
-  date: string;
-  message: string;
-  files_changed: number;
-  insertions: number;
-  deletions: number;
+	hash: string;
+	full_hash: string;
+	author: GitAuthor;
+	date: string;
+	message: string;
+	files_changed: number;
+	insertions: number;
+	deletions: number;
 }
 
 export interface PtySessionRecord {
-  id: string;
-  profile_id: string;
-  title: string;
-  shell: string;
-  cwd: string;
-  created_at: string;
-  closed_at?: string | null;
-  cols: number;
-  rows: number;
+	id: string;
+	profile_id: string;
+	title: string;
+	shell: string;
+	cwd: string;
+	created_at: string;
+	closed_at?: string | null;
+	cols: number;
+	rows: number;
 }
 
 export interface AgentStatusInfo {
-  id: string;
-  display_name: string;
-  native_required: boolean;
-  native_installed: boolean;
-  native_version?: string | null;
-  acp_installed: boolean;
-  acp_version?: string | null;
-  ready: boolean;
+	id: string;
+	display_name: string;
+	native_required: boolean;
+	native_installed: boolean;
+	native_version?: string | null;
+	acp_installed: boolean;
+	acp_version?: string | null;
+	ready: boolean;
 }
-
 
 export interface CreateProjectTemporaryParams {
-  name?: string | null;
-  [key: string]: unknown;
+	name?: string | null;
+	[key: string]: unknown;
 }
-
 
 export interface CreateProjectFromFolderParams {
-  name: string;
-  folder: string;
-  [key: string]: unknown;
+	name: string;
+	folder: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface UpdateProjectParams {
-  id: string;
-  name?: string | null;
-  folder?: string | null;
-  [key: string]: unknown;
+	id: string;
+	name?: string | null;
+	folder?: string | null;
+	[key: string]: unknown;
 }
-
 
 export interface GetGitBranchParams {
-  folder: string;
-  [key: string]: unknown;
+	folder: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetGitDiffParams {
-  profileId: string;
-  [key: string]: unknown;
+	profileId: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetGitLogParams {
-  profileId: string;
-  limit?: number | null;
-  [key: string]: unknown;
+	profileId: string;
+	limit?: number | null;
+	[key: string]: unknown;
 }
-
 
 export interface GetCommitDiffParams {
-  profileId: string;
-  commitHash: string;
-  [key: string]: unknown;
+	profileId: string;
+	commitHash: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteProjectParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface InstallAgentParams {
-  agent: string;
-  [key: string]: unknown;
+	agent: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface CreatePtySessionParams {
-  meta: PtySessionMeta;
-  config: PtyConfig;
-  [key: string]: unknown;
+	meta: PtySessionMeta;
+	config: PtyConfig;
+	[key: string]: unknown;
 }
-
 
 export interface WriteToPtyParams {
-  sessionId: string;
-  data: string;
-  [key: string]: unknown;
+	sessionId: string;
+	data: string;
+	[key: string]: unknown;
 }
-
 
 export interface ResizePtyParams {
-  sessionId: string;
-  rows: number;
-  cols: number;
-  [key: string]: unknown;
+	sessionId: string;
+	rows: number;
+	cols: number;
+	[key: string]: unknown;
 }
-
 
 export interface ClosePtySessionParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface ListProjectSessionsParams {
-  projectId: string;
-  [key: string]: unknown;
+	projectId: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetPtySessionHistoryParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeletePtySessionRecordParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface RestorePtySessionParams {
-  oldSessionId: string;
-  meta: PtySessionMeta;
-  config: PtyConfig;
-  [key: string]: unknown;
+	oldSessionId: string;
+	meta: PtySessionMeta;
+	config: PtyConfig;
+	[key: string]: unknown;
 }
-
 
 export interface FlushPtyOutputParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface PlaySystemSoundParams {
-  name: string;
-  [key: string]: unknown;
+	name: string;
+	[key: string]: unknown;
 }
-
 
 export interface WatchProjectsParams {
-  onEvent: Channel<WatchEvent>;
-  [key: string]: unknown;
+	onEvent: Channel<WatchEvent>;
+	[key: string]: unknown;
 }
-
 
 export interface CreateProfileParams {
-  projectId: string;
-  branchName: string;
-  [key: string]: unknown;
+	projectId: string;
+	branchName: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteProfileParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
 
 export interface StartDebugLogParams {
-  onEvent: Channel<LogEntry>;
-  [key: string]: unknown;
+	onEvent: Channel<LogEntry>;
+	[key: string]: unknown;
 }
-
-
-

@@ -1,7 +1,13 @@
 import { IconButton, Portal, Tooltip } from "@chakra-ui/react";
-import type { ComponentType } from "react";
-import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
+import {
+	SiCursor,
+	SiGit,
+	SiGithub,
+	SiVscodium,
+	SiWindsurf,
+} from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
+import type { ComponentType } from "react";
 import { Suspense } from "react";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitBranch } from "@/features/projects/hooks";
@@ -43,19 +49,47 @@ function EditorButton({
 }
 
 export function GithubDesktopControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarGithubDesktop()} cmd="github" icon={SiGithub} />;
+	return (
+		<EditorButton
+			{...props}
+			label={m.topbarGithubDesktop()}
+			cmd="github"
+			icon={SiGithub}
+		/>
+	);
 }
 
 export function VscodeControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarVscode()} cmd="code" icon={SiVscodium} />;
+	return (
+		<EditorButton
+			{...props}
+			label={m.topbarVscode()}
+			cmd="code"
+			icon={SiVscodium}
+		/>
+	);
 }
 
 export function WindsurfControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarWindsurf()} cmd="windsurf" icon={SiWindsurf} />;
+	return (
+		<EditorButton
+			{...props}
+			label={m.topbarWindsurf()}
+			cmd="windsurf"
+			icon={SiWindsurf}
+		/>
+	);
 }
 
 export function CursorControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarCursor()} cmd="cursor" icon={SiCursor} />;
+	return (
+		<EditorButton
+			{...props}
+			label={m.topbarCursor()}
+			cmd="cursor"
+			icon={SiCursor}
+		/>
+	);
 }
 
 function GitDiffBranchDialog({
