@@ -4,7 +4,7 @@ import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
 
-export type CreateTabParams =
+type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }
 	| { type: "agent"; profileId: string; cwd: string; agent: string };
 

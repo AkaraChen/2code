@@ -38,12 +38,6 @@ export async function listProjectSessions(
 	return invoke("list_project_sessions", params);
 }
 
-export async function getPtySessionHistory(
-	params: types.GetPtySessionHistoryParams,
-): Promise<number[]> {
-	return invoke("get_pty_session_history", params);
-}
-
 export async function deletePtySessionRecord(
 	params: types.DeletePtySessionRecordParams,
 ): Promise<void> {

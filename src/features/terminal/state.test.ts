@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapWithLimit } from "./state";
+import { mapWithLimit } from "@/features/tabs/restore";
 
 describe("mapWithLimit", () => {
 	it("processes all items", async () => {

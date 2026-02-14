@@ -152,11 +152,6 @@ export interface ListProjectSessionsParams {
 	[key: string]: unknown;
 }
 
-export interface GetPtySessionHistoryParams {
-	sessionId: string;
-	[key: string]: unknown;
-}
-
 export interface DeletePtySessionRecordParams {
 	sessionId: string;
 	[key: string]: unknown;

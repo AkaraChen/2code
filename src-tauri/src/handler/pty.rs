@@ -60,15 +60,6 @@ pub fn list_project_sessions(
 }
 
 #[tauri::command]
-pub fn get_pty_session_history(
-	session_id: String,
-	state: State<'_, DbPool>,
-) -> Result<Vec<u8>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::pty::get_history(conn, &session_id)
-}
-
-#[tauri::command]
 pub fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,

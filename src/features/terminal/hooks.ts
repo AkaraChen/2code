@@ -5,12 +5,6 @@ import { ThemeContext } from "@/shared/providers/themeContext";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
-// Re-export unified tab hooks as terminal-specific aliases
-export {
-	useCloseTab as useCloseTerminalTab,
-	useCreateTab as useCreateTerminalTab,
-} from "@/features/tabs/hooks";
-
 export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = use(ThemeContext);
 	const darkTerminalTheme = useTerminalSettingsStore(
