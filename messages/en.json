@@ -74,5 +74,15 @@
 	"debugLog": "Debug Log",
 	"debugSearchPlaceholder": "Search logs...",
 	"debugClear": "Clear",
-	"debugNoLogs": "No log entries yet"
+	"debugNoLogs": "No log entries yet",
+	"topbar": "Top Bar",
+	"topbarPreview": "Current Controls",
+	"topbarAvailable": "Available Controls",
+	"topbarDragHint": "Drag controls to reorder or move between areas.",
+	"topbarResetDefaults": "Reset to Defaults",
+	"topbarGithubDesktop": "GitHub Desktop",
+	"topbarVscode": "VS Code",
+	"topbarGitDiff": "Git Diff",
+	"topbarNoControls": "No controls in the top bar. Drag controls here from below.",
+	"topbarAllControlsActive": "All controls are active."
 }

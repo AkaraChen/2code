@@ -74,5 +74,15 @@
 	"debugLog": "调试日志",
 	"debugSearchPlaceholder": "搜索日志...",
 	"debugClear": "清除",
-	"debugNoLogs": "暂无日志"
+	"debugNoLogs": "暂无日志",
+	"topbar": "顶栏",
+	"topbarPreview": "当前控件",
+	"topbarAvailable": "可用控件",
+	"topbarDragHint": "拖拽控件以重新排序或移动到其他区域。",
+	"topbarResetDefaults": "恢复默认",
+	"topbarGithubDesktop": "GitHub Desktop",
+	"topbarVscode": "VS Code",
+	"topbarGitDiff": "Git Diff",
+	"topbarNoControls": "顶栏暂无控件。从下方拖拽控件到此处。",
+	"topbarAllControlsActive": "所有控件已激活。"
 }

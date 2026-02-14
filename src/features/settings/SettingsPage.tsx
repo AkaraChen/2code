@@ -25,6 +25,7 @@ import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
 import { NotificationSettings } from "./NotificationSettings";
+import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 
 const localeCollection = createListCollection({
@@ -69,6 +70,9 @@ export default function SettingsPage() {
 						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
 							{m.notification()}
+						</Tabs.Trigger>
+						<Tabs.Trigger value="topbar">
+							{m.topbar()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="profile">
 							{m.profile()}
@@ -197,6 +201,9 @@ export default function SettingsPage() {
 					</Tabs.Content>
 					<Tabs.Content value="notification">
 						<NotificationSettings />
+					</Tabs.Content>
+					<Tabs.Content value="topbar">
+						<TopBarSettings />
 					</Tabs.Content>
 					<Tabs.Content value="profile" />
 				</Tabs.Root>
