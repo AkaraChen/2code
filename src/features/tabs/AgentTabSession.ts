@@ -1,3 +1,4 @@
+import type { AgentNotification } from "@agentclientprotocol/sdk";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { closeAgentSession, spawnAgentSession } from "@/generated";
@@ -37,7 +38,7 @@ export class AgentTabSession extends TabSession {
 	}
 
 	private async registerListeners(): Promise<void> {
-		const unlistenEvent = await listen<unknown>(
+		const unlistenEvent = await listen<AgentNotification>(
 			`agent-event-${this.id}`,
 			(e) => {
 				useAgentStore.getState().handleAgentEvent(this.id, e.payload);

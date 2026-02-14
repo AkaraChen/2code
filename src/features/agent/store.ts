@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import type {
+	AgentNotification,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 
 export interface AgentMessage {
 	role: "user" | "assistant";
@@ -21,7 +25,7 @@ interface AgentStore {
 	addUserMessage: (sessionId: string, content: string) => void;
 	setStreaming: (sessionId: string, streaming: boolean) => void;
 	appendStreamContent: (sessionId: string, content: string) => void;
-	handleAgentEvent: (sessionId: string, payload: unknown) => void;
+	handleAgentEvent: (sessionId: string, payload: AgentNotification) => void;
 	handleTurnComplete: (sessionId: string, payload: unknown) => void;
 	handleError: (sessionId: string, error: string) => void;
 }
@@ -85,31 +89,22 @@ export const useAgentStore = create<AgentStore>()(
 		handleAgentEvent(sessionId, payload) {
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
-				// Parse JSON-RPC notification from agent
-				// The payload is the raw JSON-RPC envelope
-				const data = payload as Record<string, unknown>;
-				const method = data?.method as string | undefined;
-				const params = data?.params as Record<string, unknown> | undefined;
 
-				if (method === "notifications/message" && params) {
-					// Extract text content from notification
-					const content = params.content;
-					if (typeof content === "string") {
-						session.streamContent += content;
-					} else if (Array.isArray(content)) {
-						for (const part of content) {
-							if (
-								typeof part === "object" &&
-								part !== null &&
-								"type" in part &&
-								(part as { type: string }).type === "text" &&
-								"text" in part
-							) {
-								session.streamContent += (
-									part as { text: string }
-								).text;
+				if (payload.method === "session/update" && payload.params) {
+					const { update } =
+						payload.params as SessionNotification;
+
+					switch (update.sessionUpdate) {
+						case "agent_message_chunk":
+							if (update.content.type === "text") {
+								session.streamContent += update.content.text;
 							}
-						}
+							break;
+						case "agent_thought_chunk":
+						case "tool_call":
+						case "tool_call_update":
+						case "plan":
+							break;
 					}
 				}
 			});
@@ -180,7 +175,7 @@ export const useAgentStore = create<AgentStore>()(
 				if (session.streamContent) {
 					session.messages.push({
 						role: "assistant",
-						content: session.streamContent + "\n\n[Error: " + error + "]",
+						content: `${session.streamContent  }\n\n[Error: ${  error  }]`,
 						timestamp: Date.now(),
 					});
 					session.streamContent = "";
