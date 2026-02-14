@@ -112,27 +112,16 @@ export default function ProjectTopBar({
 				{/* New Agent button with dropdown */}
 				{readyAgents.length > 0 && (
 					<Menu.Root>
-						<Tooltip.Root>
-							<Tooltip.Trigger asChild>
-								<Menu.Trigger asChild>
-									<Button
-										size="2xs"
-										variant="ghost"
-										disabled={createTab.isPending}
-									>
-										<RiRobot2Line />
-										<RiAddLine />
-									</Button>
-								</Menu.Trigger>
-							</Tooltip.Trigger>
-							<Portal>
-								<Tooltip.Positioner>
-									<Tooltip.Content>
-										New Agent Session
-									</Tooltip.Content>
-								</Tooltip.Positioner>
-							</Portal>
-						</Tooltip.Root>
+						<Menu.Trigger asChild>
+							<Button
+								size="2xs"
+								variant="ghost"
+								disabled={createTab.isPending}
+							>
+								<RiRobot2Line />
+								<RiAddLine />
+							</Button>
+						</Menu.Trigger>
 						<Portal>
 							<Menu.Positioner>
 								<Menu.Content>
