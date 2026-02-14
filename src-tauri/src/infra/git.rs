@@ -20,9 +20,17 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 		.current_dir(folder)
 		.output()?;
 	if !output.status.success() {
-		return Err(AppError::GitError(
-			String::from_utf8_lossy(&output.stderr).trim().to_string(),
-		));
+		// Empty repo (no commits) — try symbolic-ref which works without commits
+		let sym_output = Command::new("git")
+			.args(["symbolic-ref", "--short", "HEAD"])
+			.current_dir(folder)
+			.output()?;
+		if sym_output.status.success() {
+			return Ok(String::from_utf8_lossy(&sym_output.stdout)
+				.trim()
+				.to_string());
+		}
+		return Ok("main".to_string());
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
@@ -518,13 +526,26 @@ mod tests {
 	}
 
 	#[test]
+	fn branch_empty_repo() {
+		let dir = create_temp_git_repo();
+		let result = branch(&dir.to_string_lossy());
+		let _ = std::fs::remove_dir_all(&dir);
+		let b = result.unwrap();
+		assert!(
+			b == "main" || b == "master",
+			"expected main or master, got: {b}"
+		);
+	}
+
+	#[test]
 	fn branch_non_git_dir() {
 		let dir = std::env::temp_dir()
 			.join(format!("no-git-infra-{}", uuid::Uuid::new_v4()));
 		std::fs::create_dir_all(&dir).unwrap();
 		let result = branch(&dir.to_string_lossy());
 		let _ = std::fs::remove_dir_all(&dir);
-		assert!(result.is_err());
+		// Non-git dir: both rev-parse and symbolic-ref fail, falls back to "main"
+		assert_eq!(result.unwrap(), "main");
 	}
 
 	#[test]
