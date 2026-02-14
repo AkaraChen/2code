@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { useTerminalStore } from "./store";
+import { renderHook, act } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { listen } from "@tauri-apps/api/event";
+import {
+	useTerminalStore,
+	useTerminalProfileIds,
+	useProfileHasNotification,
+} from "./store";
 
 function resetStore() {
 	useTerminalStore.setState({ profiles: {}, notifiedTabs: new Set() });
@@ -249,6 +255,238 @@ describe("useTerminalStore", () => {
 
 		it("is idempotent (removing non-existent ID)", () => {
 			expect(() => getState().markRead("nonexistent")).not.toThrow();
+		});
+	});
+
+	describe("closeTab edge cases", () => {
+		it("closing a tabId that does not exist in tabs array is a no-op", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().closeTab("p1", "ghost");
+			// Tabs unchanged
+			expect(getState().profiles.p1.tabs).toHaveLength(2);
+			expect(getState().profiles.p1.activeTabId).toBe("s2");
+		});
+
+		it("closing all tabs one by one removes the profile", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().addTab("p1", "s3", "T3");
+			getState().closeTab("p1", "s3");
+			getState().closeTab("p1", "s2");
+			getState().closeTab("p1", "s1");
+			expect(getState().profiles.p1).toBeUndefined();
+		});
+
+		it("closing tabs from one profile does not affect another", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p2", "s2", "T2");
+			getState().closeTab("p1", "s1");
+			expect(getState().profiles.p1).toBeUndefined();
+			expect(getState().profiles.p2).toBeDefined();
+			expect(getState().profiles.p2.tabs).toHaveLength(1);
+		});
+
+		it("clears notified state even when closing the last tab (profile deleted)", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().markNotified("s1");
+			getState().closeTab("p1", "s1");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().profiles.p1).toBeUndefined();
+		});
+	});
+
+	describe("addTab edge cases", () => {
+		it("empty string IDs are valid", () => {
+			getState().addTab("", "", "");
+			expect(getState().profiles[""]).toBeDefined();
+			expect(getState().profiles[""].tabs[0]).toEqual({
+				id: "",
+				title: "",
+			});
+		});
+
+		it("counter persists after closing tabs and adding new ones", () => {
+			getState().addTab("p1", "s1", "T1"); // counter=1
+			getState().addTab("p1", "s2", "T2"); // counter=2
+			getState().closeTab("p1", "s1");
+			getState().addTab("p1", "s3", "T3"); // counter=3
+			expect(getState().profiles.p1.counter).toBe(3);
+		});
+
+		it("adding a tab with duplicate sessionId creates duplicate entries", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s1", "T2");
+			// No dedup — both entries exist
+			expect(getState().profiles.p1.tabs).toHaveLength(2);
+			expect(getState().profiles.p1.tabs[0].id).toBe("s1");
+			expect(getState().profiles.p1.tabs[1].id).toBe("s1");
+		});
+	});
+
+	describe("notification edge cases", () => {
+		it("multiple notifications on different tabs", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().markNotified("s1");
+			getState().markNotified("s2");
+			expect(getState().notifiedTabs.size).toBe(2);
+		});
+
+		it("markNotified for non-existent session does not throw", () => {
+			expect(() => getState().markNotified("ghost")).not.toThrow();
+			expect(getState().notifiedTabs.has("ghost")).toBe(true);
+		});
+
+		it("closing notified tab and re-adding it starts without notification", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().markNotified("s1");
+			getState().closeTab("p1", "s1");
+			getState().addTab("p1", "s1-new", "T1 New");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().notifiedTabs.has("s1-new")).toBe(false);
+		});
+
+		it("setActiveTab on already-active tab still clears notification", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().markNotified("s1");
+			// s1 is already active, but markNotified added it back
+			getState().setActiveTab("p1", "s1");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
+		});
+	});
+
+	describe("useTerminalProfileIds", () => {
+		it("returns empty array when no profiles exist", () => {
+			const { result } = renderHook(() => useTerminalProfileIds());
+			expect(result.current).toEqual([]);
+		});
+
+		it("returns profile IDs when profiles exist", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p2", "s2", "T2");
+			const { result } = renderHook(() => useTerminalProfileIds());
+			expect(result.current).toEqual(
+				expect.arrayContaining(["p1", "p2"]),
+			);
+			expect(result.current).toHaveLength(2);
+		});
+
+		it("reflects changes after adding/removing profiles", () => {
+			getState().addTab("p1", "s1", "T1");
+			const { result } = renderHook(() => useTerminalProfileIds());
+			expect(result.current).toEqual(["p1"]);
+
+			act(() => {
+				getState().addTab("p2", "s2", "T2");
+			});
+			expect(result.current).toEqual(
+				expect.arrayContaining(["p1", "p2"]),
+			);
+		});
+	});
+
+	describe("useProfileHasNotification", () => {
+		it("returns false when profile does not exist", () => {
+			const { result } = renderHook(() =>
+				useProfileHasNotification("nonexistent"),
+			);
+			expect(result.current).toBe(false);
+		});
+
+		it("returns false when profile has no notified tabs", () => {
+			getState().addTab("p1", "s1", "T1");
+			const { result } = renderHook(() =>
+				useProfileHasNotification("p1"),
+			);
+			expect(result.current).toBe(false);
+		});
+
+		it("returns true when profile has a notified tab", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().markNotified("s1");
+			const { result } = renderHook(() =>
+				useProfileHasNotification("p1"),
+			);
+			expect(result.current).toBe(true);
+		});
+
+		it("returns true when any tab in profile is notified", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().markNotified("s2");
+			const { result } = renderHook(() =>
+				useProfileHasNotification("p1"),
+			);
+			expect(result.current).toBe(true);
+		});
+
+		it("returns false after notification is cleared", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().markNotified("s1");
+			getState().markRead("s1");
+			const { result } = renderHook(() =>
+				useProfileHasNotification("p1"),
+			);
+			expect(result.current).toBe(false);
+		});
+	});
+
+	describe("pty-notify listener", () => {
+		it("calls markNotified when pty-notify event fires", () => {
+			// The listen mock was called at module load time
+			const listenMock = vi.mocked(listen);
+			expect(listenMock).toHaveBeenCalledWith(
+				"pty-notify",
+				expect.any(Function),
+			);
+
+			// Extract the callback that was registered
+			const callback = listenMock.mock.calls.find(
+				(call) => call[0] === "pty-notify",
+			)?.[1] as (event: { payload: string }) => void;
+			expect(callback).toBeDefined();
+
+			// Fire the callback and verify markNotified is triggered
+			callback({ payload: "session-xyz" });
+			expect(getState().notifiedTabs.has("session-xyz")).toBe(true);
+		});
+	});
+
+	describe("removeStaleProfiles edge cases", () => {
+		it("validIds with extra IDs that don't exist in profiles is fine", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().removeStaleProfiles(
+				new Set(["p1", "p99", "p100"]),
+			);
+			expect(getState().profiles.p1).toBeDefined();
+			expect(Object.keys(getState().profiles)).toHaveLength(1);
+		});
+
+		it("called on empty profiles is a no-op", () => {
+			expect(() =>
+				getState().removeStaleProfiles(new Set(["p1"])),
+			).not.toThrow();
+			expect(Object.keys(getState().profiles)).toHaveLength(0);
+		});
+	});
+
+	describe("updateTabTitle edge cases", () => {
+		it("can set title to empty string", () => {
+			getState().addTab("p1", "s1", "Old");
+			getState().updateTabTitle("p1", "s1", "");
+			expect(getState().profiles.p1.tabs[0].title).toBe("");
+		});
+
+		it("updates only the targeted tab when multiple exist", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().addTab("p1", "s3", "T3");
+			getState().updateTabTitle("p1", "s2", "Updated");
+			expect(getState().profiles.p1.tabs[0].title).toBe("T1");
+			expect(getState().profiles.p1.tabs[1].title).toBe("Updated");
+			expect(getState().profiles.p1.tabs[2].title).toBe("T3");
 		});
 	});
 });

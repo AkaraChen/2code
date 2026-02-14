@@ -53,6 +53,7 @@
 		"@types/react": "^19.1.8",
 		"@types/react-dom": "^19.1.6",
 		"@vitejs/plugin-react": "^4.6.0",
+		"@vitest/coverage-v8": "4.0.18",
 		"babel-plugin-react-compiler": "^1.0.0",
 		"eslint": "^9.39.2",
 		"eslint-plugin-format": "^1.4.0",

@@ -65,6 +65,48 @@ describe("useDebugLogStore", () => {
 		});
 	});
 
+	describe("addLog edge cases", () => {
+		it("at exactly MAX_LOGS (1000) does not trim", () => {
+			for (let i = 0; i < 1000; i++) {
+				getState().addLog(makeEntry(i));
+			}
+			expect(getState().logs).toHaveLength(1000);
+			expect(getState().logs[0].timestamp).toBe(0);
+		});
+
+		it("at MAX_LOGS+1 (1001) trims exactly one", () => {
+			for (let i = 0; i < 1001; i++) {
+				getState().addLog(makeEntry(i));
+			}
+			expect(getState().logs).toHaveLength(1000);
+			expect(getState().logs[0].timestamp).toBe(1);
+			expect(getState().logs[999].timestamp).toBe(1000);
+		});
+
+		it("preserves all log fields", () => {
+			const entry = {
+				timestamp: 42,
+				level: "error" as const,
+				source: "my-module",
+				message: "something broke",
+			};
+			getState().addLog(entry);
+			expect(getState().logs[0]).toEqual(entry);
+		});
+
+		it("clear then addLog cycle works correctly", () => {
+			for (let i = 0; i < 500; i++) {
+				getState().addLog(makeEntry(i));
+			}
+			getState().clear();
+			expect(getState().logs).toHaveLength(0);
+
+			getState().addLog(makeEntry(9999));
+			expect(getState().logs).toHaveLength(1);
+			expect(getState().logs[0].timestamp).toBe(9999);
+		});
+	});
+
 	describe("clear", () => {
 		it("resets logs to empty array", () => {
 			getState().addLog(makeEntry(1));

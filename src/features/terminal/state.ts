@@ -112,7 +112,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	consola.info("[pty-restore] complete");
 }
 
-async function mapWithLimit<T>(
+export async function mapWithLimit<T>(
 	items: T[],
 	limit: number,
 	fn: (item: T) => Promise<void>,

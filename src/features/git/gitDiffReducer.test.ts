@@ -380,6 +380,178 @@ describe("gitDiffReducer", () => {
 		});
 	});
 
+	describe("stepIndex edge cases", () => {
+		it("negative delta with large magnitude clamps to 0", () => {
+			const state: GitDiffState = {
+				...initialState,
+				selectedFileIndex: 3,
+			};
+			const next = gitDiffReducer(state, {
+				type: "stepIndex",
+				target: "file",
+				delta: -100,
+				count: 10,
+			});
+			expect(next.selectedFileIndex).toBe(0);
+		});
+
+		it("delta of 0 does not change index", () => {
+			const state: GitDiffState = {
+				...initialState,
+				selectedFileIndex: 5,
+			};
+			const next = gitDiffReducer(state, {
+				type: "stepIndex",
+				target: "file",
+				delta: 0,
+				count: 10,
+			});
+			expect(next.selectedFileIndex).toBe(5);
+		});
+
+		it("negative count results in clamped 0", () => {
+			// clamp(0 + 1, 0, -2) = Math.max(0, Math.min(1, -2)) = 0
+			const next = gitDiffReducer(initialState, {
+				type: "stepIndex",
+				target: "file",
+				delta: 1,
+				count: -1,
+			});
+			expect(next.selectedFileIndex).toBe(0);
+		});
+
+		it("very large count does not cause issues", () => {
+			const state: GitDiffState = {
+				...initialState,
+				selectedCommitIndex: 5,
+			};
+			const next = gitDiffReducer(state, {
+				type: "stepIndex",
+				target: "commit",
+				delta: 1,
+				count: 999999,
+			});
+			expect(next.selectedCommitIndex).toBe(6);
+		});
+
+		it("step from non-zero index in empty list clamps to 0", () => {
+			// Simulates state where index was set before list became empty
+			const state: GitDiffState = {
+				...initialState,
+				selectedFileIndex: 5,
+			};
+			const next = gitDiffReducer(state, {
+				type: "stepIndex",
+				target: "file",
+				delta: -1,
+				count: 0,
+			});
+			// clamp(5 + (-1), 0, -1) = clamp(4, 0, -1) = Math.max(0, Math.min(4, -1)) = 0
+			expect(next.selectedFileIndex).toBe(0);
+		});
+	});
+
+	describe("action sequences", () => {
+		it("switchTab → selectCommit → stepIndex → commitBack → full state integrity", () => {
+			let state = initialState;
+			state = gitDiffReducer(state, {
+				type: "switchTab",
+				tab: "history",
+			});
+			expect(state.activeTab).toBe("history");
+
+			state = gitDiffReducer(state, {
+				type: "selectCommit",
+				commit: mockCommit,
+				index: 2,
+			});
+			expect(state.selectedCommit).toEqual(mockCommit);
+			expect(state.selectedCommitIndex).toBe(2);
+
+			state = gitDiffReducer(state, {
+				type: "stepIndex",
+				target: "commitFile",
+				delta: 1,
+				count: 5,
+			});
+			expect(state.selectedCommitFileIndex).toBe(1);
+
+			state = gitDiffReducer(state, { type: "commitBack" });
+			expect(state.selectedCommit).toBeNull();
+			expect(state.selectedCommitFileIndex).toBe(0);
+			expect(state.commitFileCount).toBe(0);
+			// selectedCommitIndex is preserved by commitBack
+			expect(state.selectedCommitIndex).toBe(2);
+			expect(state.activeTab).toBe("history");
+		});
+
+		it("rapid stepIndex increments stay within bounds", () => {
+			let state: GitDiffState = { ...initialState };
+			for (let i = 0; i < 20; i++) {
+				state = gitDiffReducer(state, {
+					type: "stepIndex",
+					target: "file",
+					delta: 1,
+					count: 5,
+				});
+			}
+			expect(state.selectedFileIndex).toBe(4);
+		});
+
+		it("rapid stepIndex decrements stay within bounds", () => {
+			let state: GitDiffState = {
+				...initialState,
+				selectedFileIndex: 4,
+			};
+			for (let i = 0; i < 20; i++) {
+				state = gitDiffReducer(state, {
+					type: "stepIndex",
+					target: "file",
+					delta: -1,
+					count: 5,
+				});
+			}
+			expect(state.selectedFileIndex).toBe(0);
+		});
+	});
+
+	describe("selectFile edge cases", () => {
+		it("accepts negative index (no validation)", () => {
+			const next = gitDiffReducer(initialState, {
+				type: "selectFile",
+				index: -1,
+			});
+			// The reducer blindly sets the index — no clamping for selectFile
+			expect(next.selectedFileIndex).toBe(-1);
+		});
+
+		it("accepts very large index (no validation)", () => {
+			const next = gitDiffReducer(initialState, {
+				type: "selectFile",
+				index: 999999,
+			});
+			expect(next.selectedFileIndex).toBe(999999);
+		});
+	});
+
+	describe("setCommitFileCount edge cases", () => {
+		it("accepts 0", () => {
+			const next = gitDiffReducer(initialState, {
+				type: "setCommitFileCount",
+				count: 0,
+			});
+			expect(next.commitFileCount).toBe(0);
+		});
+
+		it("accepts negative count (no validation)", () => {
+			const next = gitDiffReducer(initialState, {
+				type: "setCommitFileCount",
+				count: -5,
+			});
+			expect(next.commitFileCount).toBe(-5);
+		});
+	});
+
 	describe("immutability", () => {
 		it("returns a new object reference when state changes", () => {
 			const next = gitDiffReducer(initialState, {

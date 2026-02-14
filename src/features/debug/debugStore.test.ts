@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { startDebugLog, stopDebugLog } from "@/generated";
 import { useDebugStore } from "./debugStore";
+import { useDebugLogStore } from "./debugLogStore";
 
 function resetStore() {
 	useDebugStore.setState({ enabled: false, panelOpen: false });
+	useDebugLogStore.setState({ logs: [] });
 	vi.mocked(startDebugLog).mockClear();
 	vi.mocked(stopDebugLog).mockClear();
 }
@@ -77,6 +79,30 @@ describe("useDebugStore", () => {
 			vi.mocked(startDebugLog).mockClear();
 			getState().setEnabled(false);
 			expect(stopDebugLog).toHaveBeenCalled();
+		});
+
+		it("routes channel messages to debugLogStore via onmessage", () => {
+			getState().setEnabled(true);
+
+			// Extract the channel passed to startDebugLog
+			const call = vi.mocked(startDebugLog).mock.calls[0];
+			const channel = (call[0] as { onEvent: { onmessage: ((msg: unknown) => void) | null } }).onEvent;
+			expect(channel).toBeDefined();
+			expect(channel.onmessage).toBeTypeOf("function");
+
+			// Simulate a message from the backend
+			const entry = {
+				timestamp: 123,
+				level: "info" as const,
+				source: "test-module",
+				message: "hello from channel",
+			};
+			channel.onmessage!(entry);
+
+			// Verify it was forwarded to debugLogStore
+			const logs = useDebugLogStore.getState().logs;
+			expect(logs).toHaveLength(1);
+			expect(logs[0]).toEqual(entry);
 		});
 	});
 });

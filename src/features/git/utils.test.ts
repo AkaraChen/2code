@@ -153,4 +153,64 @@ describe("getLineStats", () => {
 		]);
 		expect(getLineStats(file)).toEqual({ additions: 0, deletions: 0 });
 	});
+
+	it("handles hunk with empty hunkContent array", () => {
+		const file = makeFile([{ hunkContent: [] }]);
+		expect(getLineStats(file)).toEqual({ additions: 0, deletions: 0 });
+	});
+
+	it("handles large number of hunks", () => {
+		const hunks = Array.from({ length: 100 }, () => ({
+			hunkContent: [
+				{
+					type: "change" as const,
+					additions: ["a"],
+					deletions: ["b", "c"],
+				},
+			],
+		}));
+		expect(getLineStats(makeFile(hunks))).toEqual({
+			additions: 100,
+			deletions: 200,
+		});
+	});
+
+	it("handles only-additions file (no deletions anywhere)", () => {
+		const file = makeFile([
+			{
+				hunkContent: [
+					{ type: "change", additions: ["a", "b", "c"], deletions: [] },
+				],
+			},
+			{
+				hunkContent: [
+					{ type: "change", additions: ["d"], deletions: [] },
+				],
+			},
+		]);
+		expect(getLineStats(file)).toEqual({ additions: 4, deletions: 0 });
+	});
+
+	it("handles only-deletions file (no additions anywhere)", () => {
+		const file = makeFile([
+			{
+				hunkContent: [
+					{ type: "change", additions: [], deletions: ["a", "b"] },
+				],
+			},
+		]);
+		expect(getLineStats(file)).toEqual({ additions: 0, deletions: 2 });
+	});
+
+	it("handles unknown content type gracefully (ignored)", () => {
+		const file = makeFile([
+			{
+				hunkContent: [
+					{ type: "unknown-type" } as never,
+					{ type: "change", additions: ["a"], deletions: [] },
+				],
+			},
+		]);
+		expect(getLineStats(file)).toEqual({ additions: 1, deletions: 0 });
+	});
 });

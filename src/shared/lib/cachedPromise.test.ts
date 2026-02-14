@@ -41,4 +41,35 @@ describe("createCachedPromise", () => {
 		expect(r1).toBe("async-data");
 		expect(r2).toBe("async-data");
 	});
+
+	it("factory that throws synchronously propagates as rejected promise", async () => {
+		const getter = createCachedPromise(() => {
+			throw new Error("sync boom");
+		});
+		// createCachedPromise calls fn() which throws — the throw escapes the getter
+		expect(() => getter()).toThrow("sync boom");
+	});
+
+	it("multiple instances are independent", async () => {
+		const getter1 = createCachedPromise(() => Promise.resolve("a"));
+		const getter2 = createCachedPromise(() => Promise.resolve("b"));
+		expect(await getter1()).toBe("a");
+		expect(await getter2()).toBe("b");
+		expect(getter1()).not.toBe(getter2());
+	});
+
+	it("resolves with undefined if factory returns Promise.resolve()", async () => {
+		const getter = createCachedPromise(() => Promise.resolve(undefined));
+		await expect(getter()).resolves.toBeUndefined();
+		// Still cached — second call returns same promise
+		expect(getter()).toBe(getter());
+	});
+
+	it("caches even when resolved value is null", async () => {
+		const factory = vi.fn(() => Promise.resolve(null));
+		const getter = createCachedPromise(factory);
+		await expect(getter()).resolves.toBeNull();
+		getter(); // second call
+		expect(factory).toHaveBeenCalledTimes(1);
+	});
 });

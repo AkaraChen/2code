@@ -99,4 +99,50 @@ describe("useTopBarStore", () => {
 			expect(getState().activeControls).toEqual(defaultActiveControls);
 		});
 	});
+
+	describe("setControlOption edge cases", () => {
+		it("stores null as a value", () => {
+			getState().setControlOption("vscode", "path", null);
+			expect(getState().controlOptions.vscode.path).toBeNull();
+		});
+
+		it("stores undefined as a value", () => {
+			getState().setControlOption("vscode", "path", undefined);
+			expect(getState().controlOptions.vscode.path).toBeUndefined();
+		});
+
+		it("stores complex objects as values", () => {
+			const complex = { nested: { arr: [1, 2, 3] } };
+			getState().setControlOption("vscode", "config", complex);
+			expect(getState().controlOptions.vscode.config).toEqual(complex);
+		});
+
+		it("handles rapid sequential updates to the same key", () => {
+			for (let i = 0; i < 100; i++) {
+				getState().setControlOption("vscode", "count", i);
+			}
+			expect(getState().controlOptions.vscode.count).toBe(99);
+		});
+
+		it("spreading undefined controlOptions[controlId] does not throw", () => {
+			// First time setting an option for a control — ...state.controlOptions[controlId] is ...undefined
+			expect(() =>
+				getState().setControlOption("windsurf", "path", "/bin/ws"),
+			).not.toThrow();
+			expect(getState().controlOptions.windsurf).toEqual({
+				path: "/bin/ws",
+			});
+		});
+	});
+
+	describe("setActiveControls edge cases", () => {
+		it("accepts duplicate entries", () => {
+			getState().setActiveControls(["vscode", "vscode", "vscode"]);
+			expect(getState().activeControls).toEqual([
+				"vscode",
+				"vscode",
+				"vscode",
+			]);
+		});
+	});
 });
