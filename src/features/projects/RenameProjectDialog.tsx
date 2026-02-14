@@ -6,7 +6,6 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import * as m from "@/paraglide/messages.js";
 import { useRenameProject } from "./hooks";
@@ -33,11 +32,6 @@ export default function RenameProjectDialog({
 	});
 	const renameProject = useRenameProject();
 
-	// Reset to current name when dialog opens (initName may change between opens)
-	useEffect(() => {
-		if (isOpen) form.reset({ name: initName });
-	}, [isOpen, initName, form]);
-
 	const handleRename = form.handleSubmit(async (data) => {
 		const trimmed = data.name.trim();
 		if (!trimmed || trimmed === initName) {
@@ -53,6 +47,7 @@ export default function RenameProjectDialog({
 	return (
 		<Dialog.Root
 			lazyMount
+			unmountOnExit
 			open={isOpen}
 			onOpenChange={(e) => {
 				if (!e.open) onClose();

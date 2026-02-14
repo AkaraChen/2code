@@ -72,11 +72,6 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 	);
 	const error = useAgentStore((s) => s.sessions[sessionId]?.error ?? null);
 
-	// Initialize session state
-	useEffect(() => {
-		useAgentStore.getState().initSession(sessionId);
-	}, [sessionId]);
-
 	// Auto-scroll to bottom
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -159,7 +159,9 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 					type: "stepIndex",
 					target: "commitFile",
 					delta,
-					count: state.commitFileCount,
+					count:
+						sidebarRef.current?.querySelectorAll("[data-index]")
+							.length ?? 0,
 				});
 			} else {
 				dispatch({
@@ -411,10 +413,6 @@ function CommitFileSidebar() {
 	const { profileId, state, dispatch } = use(GitDiffContext)!;
 	const commit = state.selectedCommit!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
-
-	useEffect(() => {
-		dispatch({ type: "setCommitFileCount", count: files.length });
-	}, [dispatch, files.length]);
 
 	return (
 		<HistoryFileList

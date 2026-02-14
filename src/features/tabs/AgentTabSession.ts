@@ -33,6 +33,7 @@ export class AgentTabSession extends TabSession {
 			`${agent} session`,
 			agent,
 		);
+		useAgentStore.getState().initSession(info.id);
 		await session.registerListeners();
 		return session;
 	}

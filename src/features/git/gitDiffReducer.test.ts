@@ -25,7 +25,6 @@ describe("initialState", () => {
 			selectedFileIndex: 0,
 			selectedCommitIndex: 0,
 			selectedCommitFileIndex: 0,
-			commitFileCount: 0,
 		});
 	});
 });
@@ -58,7 +57,6 @@ describe("gitDiffReducer", () => {
 				selectedFileIndex: 5,
 				selectedCommitIndex: 3,
 				selectedCommitFileIndex: 2,
-				commitFileCount: 10,
 			};
 			const next = gitDiffReducer(state, {
 				type: "switchTab",
@@ -67,7 +65,6 @@ describe("gitDiffReducer", () => {
 			expect(next.selectedFileIndex).toBe(0);
 			expect(next.selectedCommitIndex).toBe(0);
 			expect(next.selectedCommitFileIndex).toBe(0);
-			expect(next.commitFileCount).toBe(0);
 		});
 
 		it("switching to same tab still resets all state", () => {
@@ -199,15 +196,6 @@ describe("gitDiffReducer", () => {
 			expect(next.selectedCommitFileIndex).toBe(0);
 		});
 
-		it("resets commitFileCount to 0", () => {
-			const state: GitDiffState = {
-				...initialState,
-				commitFileCount: 10,
-			};
-			const next = gitDiffReducer(state, { type: "commitBack" });
-			expect(next.commitFileCount).toBe(0);
-		});
-
 		it("preserves selectedCommitIndex", () => {
 			const state: GitDiffState = {
 				...initialState,
@@ -216,16 +204,6 @@ describe("gitDiffReducer", () => {
 			};
 			const next = gitDiffReducer(state, { type: "commitBack" });
 			expect(next.selectedCommitIndex).toBe(4);
-		});
-	});
-
-	describe("setCommitFileCount", () => {
-		it("sets commitFileCount to the given count", () => {
-			const next = gitDiffReducer(initialState, {
-				type: "setCommitFileCount",
-				count: 15,
-			});
-			expect(next.commitFileCount).toBe(15);
 		});
 	});
 
@@ -479,7 +457,6 @@ describe("gitDiffReducer", () => {
 			state = gitDiffReducer(state, { type: "commitBack" });
 			expect(state.selectedCommit).toBeNull();
 			expect(state.selectedCommitFileIndex).toBe(0);
-			expect(state.commitFileCount).toBe(0);
 			// selectedCommitIndex is preserved by commitBack
 			expect(state.selectedCommitIndex).toBe(2);
 			expect(state.activeTab).toBe("history");
@@ -531,24 +508,6 @@ describe("gitDiffReducer", () => {
 				index: 999999,
 			});
 			expect(next.selectedFileIndex).toBe(999999);
-		});
-	});
-
-	describe("setCommitFileCount edge cases", () => {
-		it("accepts 0", () => {
-			const next = gitDiffReducer(initialState, {
-				type: "setCommitFileCount",
-				count: 0,
-			});
-			expect(next.commitFileCount).toBe(0);
-		});
-
-		it("accepts negative count (no validation)", () => {
-			const next = gitDiffReducer(initialState, {
-				type: "setCommitFileCount",
-				count: -5,
-			});
-			expect(next.commitFileCount).toBe(-5);
 		});
 	});
 

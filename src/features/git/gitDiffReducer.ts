@@ -11,7 +11,6 @@ export interface GitDiffState {
 	selectedFileIndex: number;
 	selectedCommitIndex: number;
 	selectedCommitFileIndex: number;
-	commitFileCount: number;
 }
 
 type GitDiffAction =
@@ -20,7 +19,6 @@ type GitDiffAction =
 	| { type: "selectCommit"; commit: GitCommit; index: number }
 	| { type: "selectCommitFile"; index: number }
 	| { type: "commitBack" }
-	| { type: "setCommitFileCount"; count: number }
 	| {
 			type: "stepIndex";
 			target: "file" | "commit" | "commitFile";
@@ -34,7 +32,6 @@ export const initialState: GitDiffState = {
 	selectedFileIndex: 0,
 	selectedCommitIndex: 0,
 	selectedCommitFileIndex: 0,
-	commitFileCount: 0,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -56,7 +53,6 @@ export const gitDiffReducer = produce(
 				draft.selectedFileIndex = 0;
 				draft.selectedCommitIndex = 0;
 				draft.selectedCommitFileIndex = 0;
-				draft.commitFileCount = 0;
 				break;
 			case "selectFile":
 				draft.selectedFileIndex = action.index;
@@ -72,10 +68,6 @@ export const gitDiffReducer = produce(
 			case "commitBack":
 				draft.selectedCommit = null;
 				draft.selectedCommitFileIndex = 0;
-				draft.commitFileCount = 0;
-				break;
-			case "setCommitFileCount":
-				draft.commitFileCount = action.count;
 				break;
 			case "stepIndex": {
 				const key = stepKeyMap[action.target];
