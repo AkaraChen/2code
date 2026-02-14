@@ -86,5 +86,21 @@
 	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
 	"topbarNoControls": "顶栏暂无控件。从下方拖拽控件到此处。",
-	"topbarAllControlsActive": "所有控件已激活。"
+	"topbarAllControlsActive": "所有控件已激活。",
+	"agents": "代理",
+	"agentCredentials": "凭证",
+	"agentCredentialsDetected": "通过 {source} 检测到",
+	"agentCredentialsNone": "未配置",
+	"agentReady": "就绪",
+	"agentNotInstalled": "未安装",
+	"agentPartial": "部分安装",
+	"agentInstall": "安装",
+	"agentReinstall": "重新安装",
+	"agentNativeNotInstalled": "未找到原生 CLI",
+	"agentSummary": "{ready}/{total} 个代理就绪",
+	"agentNativeCli": "原生 CLI",
+	"agentAcpBridge": "ACP 桥接",
+	"agentNativeNotRequired": "不需要",
+	"agentApiKey": "API 密钥",
+	"agentOAuth": "OAuth"
 }

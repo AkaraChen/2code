@@ -86,5 +86,21 @@
 	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
 	"topbarNoControls": "No controls in the top bar. Drag controls here from below.",
-	"topbarAllControlsActive": "All controls are active."
+	"topbarAllControlsActive": "All controls are active.",
+	"agents": "Agents",
+	"agentCredentials": "Credentials",
+	"agentCredentialsDetected": "detected via {source}",
+	"agentCredentialsNone": "Not configured",
+	"agentReady": "Ready",
+	"agentNotInstalled": "Not Installed",
+	"agentPartial": "Partial",
+	"agentInstall": "Install",
+	"agentReinstall": "Reinstall",
+	"agentNativeNotInstalled": "Native CLI not found",
+	"agentSummary": "{ready} of {total} agents ready",
+	"agentNativeCli": "Native CLI",
+	"agentAcpBridge": "ACP Bridge",
+	"agentNativeNotRequired": "Not required",
+	"agentApiKey": "API Key",
+	"agentOAuth": "OAuth"
 }
