@@ -23,5 +23,11 @@ build-helper-dev:
     cp -f target/debug/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
 
+coverage:
+    cd src-tauri && cargo llvm-cov --lib --tests --html --output-dir coverage/
+
+coverage-summary:
+    cd src-tauri && cargo llvm-cov --lib --tests
+
 cloc:
     cloc --include-lang="TypeScript,Rust,JavaScript,CSS" . --exclude-dir=node_modules,dist,target --fullpath --not-match-d='(src-tauri/target|src/generated|src/paraglide)'
