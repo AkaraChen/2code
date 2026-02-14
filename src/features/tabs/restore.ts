@@ -85,9 +85,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 			useTabStore
 				.getState()
 				.addTab(session.profile_id, tabSession.toTab());
-			consola.info(
-				`[tab-restore] ${session.id} → ${tabSession.id}`,
-			);
+			consola.info(`[tab-restore] ${session.id} → ${tabSession.id}`);
 		} catch (e) {
 			consola.error(`[tab-restore] failed: ${session.id}`, e);
 		}

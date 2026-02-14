@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
 use agent_client_protocol_schema::{
-	ContentBlock, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
-	SessionNotification,
+	ContentBlock, NewSessionRequest, NewSessionResponse, PromptRequest,
+	PromptResponse, SessionNotification,
 };
 use futures::Stream;
 use sandbox_agent_agent_management::agents::AgentProcessLaunchSpec;
@@ -33,9 +33,14 @@ impl ManagedAgentSession {
 		launch_spec: AgentProcessLaunchSpec,
 		extra_env: HashMap<String, String>,
 	) -> Result<Self, AgentSessionError> {
-		let session =
-			AgentSession::spawn(agent, cwd.clone(), extra_env, launch_spec, DEFAULT_TIMEOUT)
-				.await?;
+		let session = AgentSession::spawn(
+			agent,
+			cwd.clone(),
+			extra_env,
+			launch_spec,
+			DEFAULT_TIMEOUT,
+		)
+		.await?;
 
 		let local_id = session.id.clone();
 
@@ -62,26 +67,27 @@ impl ManagedAgentSession {
 
 		// Extract sessionId from JSON-RPC response using SDK type
 		let result_value = response.get("result").cloned().unwrap_or(response);
-		let acp_session_id = match serde_json::from_value::<NewSessionResponse>(result_value) {
-			Ok(new_session) => {
-				tracing::info!(
-					local_id = %local_id,
-					acp_session_id = %new_session.session_id,
-					modes = ?new_session.modes,
-					config_options = ?new_session.config_options,
-					"acp session/new parsed successfully"
-				);
-				new_session.session_id.to_string()
-			}
-			Err(e) => {
-				tracing::warn!(
-					local_id = %local_id,
-					error = %e,
-					"failed to parse NewSessionResponse, falling back to local_id"
-				);
-				local_id.clone()
-			}
-		};
+		let acp_session_id =
+			match serde_json::from_value::<NewSessionResponse>(result_value) {
+				Ok(new_session) => {
+					tracing::info!(
+						local_id = %local_id,
+						acp_session_id = %new_session.session_id,
+						modes = ?new_session.modes,
+						config_options = ?new_session.config_options,
+						"acp session/new parsed successfully"
+					);
+					new_session.session_id.to_string()
+				}
+				Err(e) => {
+					tracing::warn!(
+						local_id = %local_id,
+						error = %e,
+						"failed to parse NewSessionResponse, falling back to local_id"
+					);
+					local_id.clone()
+				}
+			};
 
 		tracing::info!(
 			local_id = %local_id,
@@ -134,34 +140,35 @@ impl ManagedAgentSession {
 
 		// Parse the response using SDK type
 		let result_value = response.get("result").cloned().unwrap_or(response);
-		let prompt_result = match serde_json::from_value::<PromptResponse>(result_value) {
-			Ok(resp) => {
-				tracing::info!(
-					local_id = %self.local_id,
-					acp_session_id = %self.acp_session_id,
-					stop_reason = ?resp.stop_reason,
-					"acp session/prompt parsed successfully"
-				);
-				PromptResult {
-					session_id: self.acp_session_id.clone(),
-					stop_reason: format!("{:?}", resp.stop_reason),
-					messages: vec![],
+		let prompt_result =
+			match serde_json::from_value::<PromptResponse>(result_value) {
+				Ok(resp) => {
+					tracing::info!(
+						local_id = %self.local_id,
+						acp_session_id = %self.acp_session_id,
+						stop_reason = ?resp.stop_reason,
+						"acp session/prompt parsed successfully"
+					);
+					PromptResult {
+						session_id: self.acp_session_id.clone(),
+						stop_reason: format!("{:?}", resp.stop_reason),
+						messages: vec![],
+					}
 				}
-			}
-			Err(e) => {
-				tracing::warn!(
-					local_id = %self.local_id,
-					acp_session_id = %self.acp_session_id,
-					error = %e,
-					"failed to parse PromptResponse"
-				);
-				PromptResult {
-					session_id: self.acp_session_id.clone(),
-					stop_reason: "unknown".to_string(),
-					messages: vec![],
+				Err(e) => {
+					tracing::warn!(
+						local_id = %self.local_id,
+						acp_session_id = %self.acp_session_id,
+						error = %e,
+						"failed to parse PromptResponse"
+					);
+					PromptResult {
+						session_id: self.acp_session_id.clone(),
+						stop_reason: "unknown".to_string(),
+						messages: vec![],
+					}
 				}
-			}
-		};
+			};
 
 		Ok(prompt_result)
 	}
@@ -177,8 +184,9 @@ impl ManagedAgentSession {
 			"acp incoming notification (raw)"
 		);
 
-		let parsed = params
-			.and_then(|p| serde_json::from_value::<SessionNotification>(p.clone()).ok());
+		let parsed = params.and_then(|p| {
+			serde_json::from_value::<SessionNotification>(p.clone()).ok()
+		});
 
 		if let Some(ref notif) = parsed {
 			tracing::info!(

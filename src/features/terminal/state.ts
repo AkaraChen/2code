@@ -1,6 +1,6 @@
 // Re-export from the unified tab restore module for backward compatibility
 export {
-	sessionHistory,
-	restorationPromise,
 	mapWithLimit,
+	restorationPromise,
+	sessionHistory,
 } from "@/features/tabs/restore";

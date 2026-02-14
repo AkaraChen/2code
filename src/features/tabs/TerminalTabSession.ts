@@ -1,7 +1,7 @@
 import {
 	closePtySession,
-	deletePtySessionRecord,
 	createPtySession,
+	deletePtySessionRecord,
 	restorePtySession,
 } from "@/generated";
 import { TabSession } from "./session";

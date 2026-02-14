@@ -49,11 +49,12 @@ pub async fn spawn_agent_session(
 
 	// Resolve launch spec (blocking I/O)
 	let agent_clone = agent.clone();
-	let launch_spec =
-		tokio::task::spawn_blocking(move || manager.resolve_launch(&agent_clone))
-			.await
-			.map_err(|e| e.to_string())?
-			.map_err(|e| format!("{e}"))?;
+	let launch_spec = tokio::task::spawn_blocking(move || {
+		manager.resolve_launch(&agent_clone)
+	})
+	.await
+	.map_err(|e| e.to_string())?
+	.map_err(|e| format!("{e}"))?;
 
 	// Create managed session (spawn process + ACP session/new)
 	let session = ManagedAgentSession::create(
@@ -70,7 +71,10 @@ pub async fn spawn_agent_session(
 	let local_id = info.id.clone();
 
 	// Store session
-	sessions.lock().await.insert(local_id.clone(), session.clone());
+	sessions
+		.lock()
+		.await
+		.insert(local_id.clone(), session.clone());
 
 	// Spawn notification stream listener
 	let app_for_notifications = app.clone();
@@ -98,8 +102,7 @@ pub async fn spawn_agent_session(
 				);
 			}
 
-			let event_name =
-				format!("agent-event-{}", id_for_notifications);
+			let event_name = format!("agent-event-{}", id_for_notifications);
 			if let Err(e) =
 				app_for_notifications.emit(&event_name, &notification)
 			{
@@ -152,9 +155,7 @@ pub async fn send_agent_prompt(
 			}
 			Err(e) => {
 				let event_name = format!("agent-error-{sid}");
-				if let Err(emit_err) =
-					app.emit(&event_name, &format!("{e}"))
-				{
+				if let Err(emit_err) = app.emit(&event_name, &format!("{e}")) {
 					tracing::warn!(
 						session_id = %sid,
 						error = %emit_err,

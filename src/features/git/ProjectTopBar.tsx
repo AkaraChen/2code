@@ -1,4 +1,13 @@
-import { Box, Button, Flex, HStack, Portal, Text, Tooltip } from "@chakra-ui/react";
+import {
+	Box,
+	Button,
+	Flex,
+	HStack,
+	Menu,
+	Portal,
+	Text,
+	Tooltip,
+} from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import {
@@ -13,7 +22,6 @@ import { controlRegistry } from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import { listAgentStatus } from "@/generated";
-import { Menu } from "@chakra-ui/react";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);

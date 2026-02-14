@@ -11,7 +11,9 @@ use tokio::sync::Mutex;
 pub use manager::{
 	AgentManagerWrapper, AgentStatusInfo, CredentialEntry, CredentialInfo,
 };
-pub use models::{AgentSessionEvent, AgentSessionInfo, ContentPart, PromptResult};
+pub use models::{
+	AgentSessionEvent, AgentSessionInfo, ContentPart, PromptResult,
+};
 pub use runtime::{AgentSession, AgentSessionError};
 pub use session::ManagedAgentSession;
 

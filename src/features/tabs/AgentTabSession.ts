@@ -48,9 +48,7 @@ export class AgentTabSession extends TabSession {
 		const unlistenComplete = await listen<unknown>(
 			`agent-turn-complete-${this.id}`,
 			(e) => {
-				useAgentStore
-					.getState()
-					.handleTurnComplete(this.id, e.payload);
+				useAgentStore.getState().handleTurnComplete(this.id, e.payload);
 			},
 		);
 

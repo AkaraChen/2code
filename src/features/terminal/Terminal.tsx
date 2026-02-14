@@ -7,10 +7,10 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
-import { useTerminalTheme } from "./hooks";
 import { sessionHistory } from "@/features/tabs/restore";
 import { useTabStore } from "@/features/tabs/store";
+import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
+import { useTerminalTheme } from "./hooks";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {

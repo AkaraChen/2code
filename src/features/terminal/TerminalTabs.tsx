@@ -73,7 +73,10 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 						{tab.type === "agent" ? (
 							<AgentChat sessionId={tab.id} />
 						) : (
-							<Terminal profileId={profileId} sessionId={tab.id} />
+							<Terminal
+								profileId={profileId}
+								sessionId={tab.id}
+							/>
 						)}
 					</Box>
 				))}

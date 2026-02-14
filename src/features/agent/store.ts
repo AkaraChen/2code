@@ -1,9 +1,9 @@
-import { create } from "zustand";
-import { immer } from "zustand/middleware/immer";
 import type {
 	AgentNotification,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import { create } from "zustand";
+import { immer } from "zustand/middleware/immer";
 
 export interface AgentMessage {
 	role: "user" | "assistant";
@@ -91,8 +91,7 @@ export const useAgentStore = create<AgentStore>()(
 				const session = ensureSession(state.sessions, sessionId);
 
 				if (payload.method === "session/update" && payload.params) {
-					const { update } =
-						payload.params as SessionNotification;
+					const { update } = payload.params as SessionNotification;
 
 					switch (update.sessionUpdate) {
 						case "agent_message_chunk":
@@ -175,7 +174,7 @@ export const useAgentStore = create<AgentStore>()(
 				if (session.streamContent) {
 					session.messages.push({
 						role: "assistant",
-						content: `${session.streamContent  }\n\n[Error: ${  error  }]`,
+						content: `${session.streamContent}\n\n[Error: ${error}]`,
 						timestamp: Date.now(),
 					});
 					session.streamContent = "";

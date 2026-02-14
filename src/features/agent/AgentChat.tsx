@@ -70,9 +70,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 	const streamContent = useAgentStore(
 		(s) => s.sessions[sessionId]?.streamContent ?? "",
 	);
-	const error = useAgentStore(
-		(s) => s.sessions[sessionId]?.error ?? null,
-	);
+	const error = useAgentStore((s) => s.sessions[sessionId]?.error ?? null);
 
 	// Initialize session state
 	useEffect(() => {
@@ -118,12 +116,10 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 							</Text>
 						</Flex>
 					)}
-					{messages.map((msg, i) => (
-						<MessageBubble key={i} message={msg} />
+					{messages.map((msg) => (
+						<MessageBubble key={msg.timestamp} message={msg} />
 					))}
-					{isStreaming && (
-						<StreamingBubble content={streamContent} />
-					)}
+					{isStreaming && <StreamingBubble content={streamContent} />}
 					{error && !isStreaming && (
 						<Box
 							px="4"
