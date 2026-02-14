@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType } from "react";
 import type { Profile } from "@/generated";
 
 export type ControlId = "github-desktop" | "vscode" | "windsurf" | "cursor" | "git-diff";
@@ -11,13 +11,15 @@ export interface ControlOptionField {
 	placeholder?: string;
 }
 
+export interface ControlProps {
+	profile: Profile;
+	options: Record<string, unknown>;
+}
+
 export interface ControlDefinition {
 	id: ControlId;
 	label: () => string;
 	icon: ComponentType<{ size?: number | string }>;
 	optionFields: ControlOptionField[];
-	render: (ctx: {
-		profile: Profile;
-		options: Record<string, unknown>;
-	}) => ReactNode;
+	component: ComponentType<ControlProps>;
 }
