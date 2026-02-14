@@ -82,6 +82,8 @@
 	"topbarResetDefaults": "恢复默认",
 	"topbarGithubDesktop": "GitHub Desktop",
 	"topbarVscode": "VS Code",
+	"topbarWindsurf": "Windsurf",
+	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
 	"topbarNoControls": "顶栏暂无控件。从下方拖拽控件到此处。",
 	"topbarAllControlsActive": "所有控件已激活。"

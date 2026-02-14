@@ -82,6 +82,8 @@
 	"topbarResetDefaults": "Reset to Defaults",
 	"topbarGithubDesktop": "GitHub Desktop",
 	"topbarVscode": "VS Code",
+	"topbarWindsurf": "Windsurf",
+	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
 	"topbarNoControls": "No controls in the top bar. Drag controls here from below.",
 	"topbarAllControlsActive": "All controls are active."

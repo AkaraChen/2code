@@ -1,4 +1,4 @@
-import { Box, HStack, Icon, Text } from "@chakra-ui/react";
+import { Box, HStack, Icon, Portal, Tooltip } from "@chakra-ui/react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { RiDraggable } from "react-icons/ri";
@@ -31,30 +31,35 @@ export function DraggableControl({
 	};
 
 	return (
-		<Box
-			ref={setNodeRef}
-			style={style}
-			{...attributes}
-			{...listeners}
-			bg="bg.muted"
-			rounded="md"
-			px="3"
-			py="2"
-			cursor={isOverlay ? "grabbing" : "grab"}
-			borderWidth="1px"
-			borderColor={isDragging ? "border.emphasized" : "border"}
-			_hover={{ borderColor: "border.emphasized" }}
-			userSelect="none"
-		>
-			<HStack gap="2">
-				<Icon color="fg.muted" fontSize="sm">
-					<RiDraggable />
-				</Icon>
-				<definition.icon size={DRAG_ICON_SIZE} />
-				<Text fontSize="sm" fontWeight="medium">
-					{definition.label()}
-				</Text>
-			</HStack>
-		</Box>
+		<Tooltip.Root openDelay={300}>
+			<Tooltip.Trigger asChild>
+				<Box
+					ref={setNodeRef}
+					style={style}
+					{...attributes}
+					{...listeners}
+					bg="bg.muted"
+					rounded="md"
+					p="2"
+					cursor={isOverlay ? "grabbing" : "grab"}
+					borderWidth="1px"
+					borderColor={isDragging ? "border.emphasized" : "border"}
+					_hover={{ borderColor: "border.emphasized" }}
+					userSelect="none"
+				>
+					<HStack gap="1.5">
+						<Icon color="fg.muted" fontSize="sm">
+							<RiDraggable />
+						</Icon>
+						<definition.icon size={DRAG_ICON_SIZE} />
+					</HStack>
+				</Box>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{definition.label()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
 	);
 }

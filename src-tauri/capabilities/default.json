@@ -29,6 +29,16 @@
 					"name": "code",
 					"cmd": "code",
 					"args": true
+				},
+				{
+					"name": "windsurf",
+					"cmd": "windsurf",
+					"args": true
+				},
+				{
+					"name": "cursor",
+					"cmd": "cursor",
+					"args": true
 				}
 			]
 		}
