@@ -17,4 +17,8 @@ export const queryKeys = {
 		commitDiff: (profileId: string, hash: string) =>
 			["git-commit-diff", profileId, hash] as const,
 	},
+	agent: {
+		status: () => ["agent-status"] as const,
+		credentials: () => ["agent-credentials"] as const,
+	},
 };

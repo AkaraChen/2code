@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod debug;
 pub mod font;
 pub mod profile;

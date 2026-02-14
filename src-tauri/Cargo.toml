@@ -26,6 +26,7 @@ model = { path = "crates/model" }
 repo = { path = "crates/repo" }
 infra = { path = "crates/infra" }
 service = { path = "crates/service" }
+agent = { path = "crates/agent" }
 
 # Tauri framework
 tauri = { version = "2", features = [  ] }
@@ -43,6 +44,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [ "env-filter" ] }
 axum = "0.8"
 tokio = { version = "1", features = [ "net" ] }
+dirs = "6"
 
 [dev-dependencies]
 diesel = { version = "2", features = ["sqlite"] }

@@ -20,6 +20,15 @@ pub fn run() {
 	}
 
 	let sessions = infra::pty::create_session_map();
+	let agent_manager = std::sync::Arc::new(
+		agent::AgentManagerWrapper::new(
+			dirs::cache_dir()
+				.unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+				.join("2code")
+				.join("agents"),
+		)
+		.expect("failed to initialize agent manager"),
+	);
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
 	let read_threads_for_exit = read_threads.clone();
@@ -38,6 +47,7 @@ pub fn run() {
 		.manage(flush_senders)
 		.manage(shutdown_flag)
 		.manage(layer_handle)
+		.manage(agent_manager)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -86,6 +96,9 @@ pub fn run() {
 			handler::watcher::watch_projects,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
+			handler::agent::list_agent_status,
+			handler::agent::install_agent,
+			handler::agent::detect_credentials,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

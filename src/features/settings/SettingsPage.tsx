@@ -21,6 +21,7 @@ import type { Locale } from "@/paraglide/runtime.js";
 import { getLocale, setLocale } from "@/paraglide/runtime.js";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { AccentColorPicker } from "./AccentColorPicker";
+import { AgentSettings } from "./AgentSettings";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
@@ -76,6 +77,9 @@ export default function SettingsPage() {
 						</Tabs.Trigger>
 						<Tabs.Trigger value="profile">
 							{m.profile()}
+						</Tabs.Trigger>
+						<Tabs.Trigger value="agents">
+							{m.agents()}
 						</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
@@ -206,6 +210,11 @@ export default function SettingsPage() {
 						<TopBarSettings />
 					</Tabs.Content>
 					<Tabs.Content value="profile" />
+					<Tabs.Content value="agents">
+						<Suspense fallback={<Skeleton height="200px" />}>
+							<AgentSettings />
+						</Suspense>
+					</Tabs.Content>
 				</Tabs.Root>
 			</Stack>
 		</Box>
