@@ -17,6 +17,8 @@ pub enum AgentSessionError {
 	Spawn(#[from] AdapterError),
 	#[error("unexpected response type")]
 	UnexpectedResponse,
+	#[error("failed to parse response: {0}")]
+	ParseError(#[from] serde_json::Error),
 }
 
 pub struct AgentSession {
@@ -83,9 +85,34 @@ impl AgentSession {
 			"params": params,
 		});
 
+		tracing::debug!(
+			session_id = %self.id,
+			method = method,
+			rpc_id = id,
+			payload = %payload,
+			"acp rpc request"
+		);
+
 		match self.runtime.post(payload).await? {
-			PostOutcome::Response(value) => Ok(value),
-			PostOutcome::Accepted => Err(AgentSessionError::UnexpectedResponse),
+			PostOutcome::Response(value) => {
+				tracing::debug!(
+					session_id = %self.id,
+					method = method,
+					rpc_id = id,
+					response = %value,
+					"acp rpc response"
+				);
+				Ok(value)
+			}
+			PostOutcome::Accepted => {
+				tracing::warn!(
+					session_id = %self.id,
+					method = method,
+					rpc_id = id,
+					"acp rpc unexpected accepted (expected response)"
+				);
+				Err(AgentSessionError::UnexpectedResponse)
+			}
 		}
 	}
 
@@ -100,6 +127,13 @@ impl AgentSession {
 			"method": method,
 			"params": params,
 		});
+
+		tracing::debug!(
+			session_id = %self.id,
+			method = method,
+			payload = %payload,
+			"acp rpc notification (fire-and-forget)"
+		);
 
 		self.runtime.post(payload).await?;
 		Ok(())
