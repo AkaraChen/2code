@@ -1,193 +1,199 @@
 # Data Flow
 
-## IPC Request Lifecycle
-
-All frontend-to-backend communication uses Tauri IPC via auto-generated bindings in `src/generated/`.
+## Primary Flow: Creating a Terminal Tab
 
 ```mermaid
 sequenceDiagram
-    participant C as React Component
-    participant TQ as TanStack Query
-    participant Gen as Generated Bindings
-    participant H as Handler (Rust)
-    participant S as Service (Rust)
-    participant R as Repo (Rust)
+    participant User
+    participant UI as TerminalTabs
+    participant Hook as useCreateTerminalTab
+    participant IPC as Tauri IPC
+    participant Handler as handler::pty
+    participant Bridge as bridge.rs
+    participant Service as service::pty
+    participant Infra as infra::pty
     participant DB as SQLite
-
-    C->>TQ: useQuery / useMutation
-    TQ->>Gen: invoke command
-    Gen->>H: Tauri IPC
-    H->>H: Extract State, acquire DB lock
-    H->>S: Delegate to service
-    S->>R: Database operations
-    R->>DB: Diesel query
-    DB-->>R: Result
-    R-->>S: Domain objects
-    S-->>H: Result<T, AppError>
-    H-->>Gen: Serialized response
-    Gen-->>TQ: Typed result
-    TQ-->>C: Re-render with data
-```
-
-## PTY Session Lifecycle
-
-### Creation
-
-1. Frontend calls `createPtySession({ meta, config })` via TanStack Query mutation
-2. Handler delegates to `service::pty::create_session()`
-3. Service loads project config (`2code.json`) for init scripts
-4. Service prepares ZDOTDIR temp directory with shell init script
-5. Service reads helper HTTP server state (port + sidecar path)
-6. `infra::pty::create_session()` spawns PTY with env vars:
-   - `TERM=xterm-256color`
-   - `_2CODE_HELPER_URL=http://127.0.0.1:{port}`
-   - `_2CODE_HELPER={sidecar_path}`
-   - `_2CODE_SESSION_ID={session_id}`
-   - `ZDOTDIR={init_dir}` (for shell init injection)
-7. Session record inserted into `pty_sessions` table
-8. Background reader thread spawned for output streaming
-
-### Output Streaming
-
-```mermaid
-sequenceDiagram
     participant PTY as PTY Process
-    participant RT as Reader Thread
-    participant PT as Persist Thread
-    participant FE as Frontend (xterm.js)
-    participant DB as SQLite
 
-    loop Every 4KB read
-        PTY->>RT: Raw bytes
-        RT->>RT: UTF-8 boundary detection
-        RT->>FE: emit("pty-output-{id}", text)
-        RT->>PT: mpsc channel (raw bytes)
+    User->>UI: Click "New Tab"
+    UI->>Hook: mutate({ profileId, cwd })
+    Hook->>IPC: createPtySession({ meta, config })
+    IPC->>Handler: create_pty_session()
+    Handler->>Bridge: build_pty_context()
+    Bridge->>Service: create_session(ctx, meta, config)
+    Service->>Service: Load init_script from 2code.json
+    Service->>Infra: create_init_dir(scripts)
+    Infra-->>Service: ZDOTDIR temp path
+    Service->>Infra: spawn(shell, cwd, env, size)
+    Infra->>PTY: Fork PTY process
+    Infra-->>Service: (master_fd, child_pid)
+    Service->>DB: Insert pty_sessions + pty_session_output records
+    Service->>Service: Start read thread
+    Service->>Service: Start persistence thread
+    Service-->>Handler: session_id
+    Handler-->>IPC: session_id
+    IPC-->>Hook: session_id
+    Hook->>Hook: store.addTab(profileId, sessionId)
+    Hook-->>UI: Re-render with new tab
+
+    loop PTY Output Stream
+        PTY->>Infra: Read 4KB chunk
+        Infra->>Infra: UTF-8 boundary check
+        Infra->>IPC: emit pty-output-{id}
+        IPC->>UI: xterm.write(data)
+        Infra->>DB: Append to BLOB (via mpsc)
     end
-
-    loop Buffer >= 32KB
-        PT->>DB: Insert output chunk
-        PT->>PT: Prune if > 1MB total
-    end
-
-    PTY->>RT: EOF / Error
-    RT->>PT: Drop channel (signal flush)
-    PT->>DB: Flush remaining buffer
-    RT->>DB: Mark session closed
-    RT->>FE: emit("pty-exit-{id}")
 ```
 
-Key details:
-
-- Reader thread reads 4KB chunks from PTY
-- UTF-8 boundary detection (`find_utf8_boundary`) prevents partial character output to frontend
-- Persistence runs on a separate thread via mpsc channel (non-blocking)
-- 32KB flush threshold for DB writes
-- 1MB cap per session with oldest-chunk pruning
-
-### Session Restoration (App Startup)
+## Session Restoration on App Start
 
 ```mermaid
 sequenceDiagram
-    participant Store as Terminal Store
-    participant QO as QueryObserver
-    participant BE as Backend
+    participant App as main.tsx
+    participant Layer as TerminalLayer
+    participant State as state.ts
+    participant Query as QueryObserver
+    participant IPC as Tauri IPC
+    participant Service as service::pty
     participant DB as SQLite
+    participant VT as vt100 Parser
 
-    Note over BE: mark_all_open_sessions_closed()
-    QO->>BE: listProjects()
-    BE-->>QO: ProjectWithProfiles[]
-    QO->>Store: removeStaleProfiles()
+    App->>Layer: Render (Suspense boundary)
+    Layer->>State: use(restorationPromise)
+    Note over State: Promise created at module load
+
+    State->>Query: Observe queryKeys.projects.all
+    Query-->>State: Projects data available
+
+    State->>State: Clean stale profiles from store
 
     loop For each project
-        Store->>BE: listProjectSessions(projectId)
-        BE-->>Store: PtySessionRecord[]
+        State->>IPC: listProjectSessions(projectId)
+        IPC->>Service: list_project_sessions()
+        Service->>DB: Query sessions via profiles join
+        DB-->>State: Vec of PtySessionRecord
     end
 
-    loop For each old session
-        Store->>BE: createPtySession(same metadata)
-        BE-->>Store: newSessionId
-        Store->>Store: addTab(profileId, newSessionId, title, restoreFrom=oldId)
+    loop For each session (max 3 concurrent)
+        State->>IPC: restorePtySession(oldId, meta, config)
+        IPC->>Service: restore_session()
+        Service->>DB: Read raw output BLOB
+        Service->>VT: Parse through vt100 (10K scrollback)
+        VT-->>Service: Sanitized SGR text
+        Service->>Service: Trim trailing empty lines
+        Service->>Service: Create new PTY session
+        Service->>DB: Delete old session record
+        Service-->>State: RestoreResult { newSessionId, history }
     end
 
-    Note over Store: Terminal component fetches history from old session,<br/>writes to xterm, then deletes old record
+    State->>State: Store history in sessionHistory Map
+    State->>State: Add tabs to Zustand store
+    State-->>Layer: Promise resolves
+    Layer->>Layer: Render all terminal containers
+    Layer->>Layer: xterm.write(sessionHistory.get(id))
 ```
 
-This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/store.ts`.
+## File Watcher to Git Diff Refresh
+
+```mermaid
+sequenceDiagram
+    participant FS as File System
+    participant Watcher as infra::watcher
+    participant Service as service::watcher
+    participant Channel as Tauri Channel
+    participant FW as fileWatcher.ts
+    participant QC as QueryClient
+    participant Git as useGitDiffFiles
+
+    Note over Service: Polls DB every 3s for project list
+    Note over Service: Reconciles watchers (add new, remove deleted)
+
+    FS->>Watcher: File change event
+    Watcher->>Service: Debounce 500ms per project
+    Service->>Service: Filter: skip .git internals
+    Service->>Channel: WatchEvent { project_id }
+    Channel->>FW: onmessage callback
+    FW->>QC: invalidateQueries(["git-diff"])
+    FW->>QC: invalidateQueries(["git-log"])
+    QC->>Git: Refetch active queries
+    Git->>Git: UI updates with new diff
+```
 
 ## Notification Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant Shell as User Shell
-    participant CLI as 2code-helper
-    participant HTTP as Axum Server
-    participant Store as Tauri Plugin Store
-    participant App as Tauri App
-    participant FE as Frontend Store
+    participant Shell as PTY Shell
+    participant Helper as 2code-helper
+    participant Axum as Axum Server
+    participant Store as Tauri plugin-store
+    participant Sound as afplay
+    participant Event as Tauri Event
+    participant ZStore as Zustand Store
+    participant UI as Terminal Tab UI
 
-    Shell->>CLI: $_2CODE_HELPER notify
-    CLI->>CLI: Read $_2CODE_HELPER_URL, $_2CODE_SESSION_ID
-    CLI->>HTTP: GET /notify?session_id={sid}
-    HTTP->>Store: Read notification-settings
-    Store-->>HTTP: {enabled, sound}
+    Shell->>Shell: Command completes
+    Shell->>Helper: $_2CODE_HELPER notify
+    Note over Helper: Reads $_2CODE_HELPER_URL<br/>and $_2CODE_SESSION_ID
+
+    Helper->>Axum: GET /notify?session_id={sid}
+    Axum->>Store: Read notification settings
+    Store-->>Axum: { enabled, sound }
 
     alt Notifications enabled
-        HTTP->>HTTP: afplay /System/Library/Sounds/{sound}.aiff
-        HTTP->>App: app.emit("pty-notify", session_id)
-        HTTP-->>CLI: {played: true}
-        App->>FE: listen("pty-notify")
-        FE->>FE: markNotified(sessionId)
-        Note over FE: Green dot on terminal tab + sidebar profile
-    else Notifications disabled
-        HTTP-->>CLI: {played: false}
-        CLI->>CLI: exit(1)
-    end
-```
-
-Clearing notifications:
-
-- `setActiveTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
-- `closeTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
-
-## Git Operations & Context ID Resolution
-
-Git operations accept a `profileId` that resolves polymorphically:
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant S as Service
-    participant R as Repo
-
-    FE->>S: get_git_diff(profileId)
-    S->>R: resolve_context_folder(profileId)
-
-    alt Profile found
-        R-->>S: profile.worktree_path
-    else Fallback to project
-        R-->>S: project.folder
+        Axum->>Sound: afplay /System/Library/Sounds/{sound}.aiff
+        Axum->>Event: emit pty-notify { session_id }
+        Event->>ZStore: markNotified(sessionId)
+        ZStore->>UI: Green dot on tab + sidebar
     end
 
-    S->>S: Execute git diff in resolved folder
-    S-->>FE: Diff string
+    Axum-->>Helper: { played: true/false }
+
+    Note over UI: User focuses the tab
+    UI->>ZStore: markRead(sessionId)
+    ZStore->>UI: Green dot removed
 ```
 
-## File System Watching
+## State Management
 
-The `watch_projects` command starts a background watcher thread using the `notify` crate. It watches all project folders and emits `watch-event` Tauri events on file changes. The frontend `fileWatcher.ts` module subscribes and invalidates relevant TanStack Query cache entries.
+### Zustand Stores (Client State)
 
-## Profile System (Git Worktrees)
+| Store | File | Persistence | Purpose |
+|-------|------|-------------|---------|
+| `terminalStore` | `features/terminal/store.ts` | None (rebuilt from DB) | Terminal tabs per profile, notification dots |
+| `terminalSettingsStore` | `features/settings/stores/terminalSettingsStore.ts` | localStorage | Font family, font size, terminal themes |
+| `themeStore` | `features/settings/stores/themeStore.ts` | localStorage | Accent color, border radius |
+| `notificationStore` | `features/settings/stores/notificationStore.ts` | Tauri plugin-store | Sound name, enabled flag |
+| `debugStore` | `features/debug/debugStore.ts` | localStorage (partial) | Debug mode toggle, panel state |
+| `debugLogStore` | `features/debug/debugLogStore.ts` | None | Log buffer (max 500 entries) |
+| `topBarStore` | `features/topbar/store.ts` | localStorage | Active controls, per-control options |
 
-### Creation Flow
+**Module-level side effects:**
+- `terminalStore` registers `pty-notify` event listener at import time
+- `terminalSettingsStore` syncs `--chakra-fonts-mono` CSS variable via subscription
+- `themeStore` syncs `--chakra-radii-l1/l2/l3` CSS variables via subscription
 
-1. Frontend calls `createProfile(projectId, branchName)`
-2. Service sanitizes branch name (CJK → pinyin via `slug.rs`)
-3. Service runs `git worktree add ~/.2code/workspace/{profile_id} -b {branch}`
-4. Profile record inserted into `profiles` table
-5. If `2code.json` has `setup_script`, execute in worktree directory
+### TanStack Query (Server State)
 
-### Deletion Flow
+```typescript
+queryKeys = {
+  projects: { all: ["projects"] },
+  git: {
+    branch: (folder) => ["git-branch", folder],
+    diff:   (profileId) => ["git-diff", profileId],
+    log:    (profileId) => ["git-log", profileId],
+    commitDiff: (profileId, hash) => ["git-commit-diff", profileId, hash]
+  },
+  agent: {
+    status:      () => ["agent-status"],
+    credentials: () => ["agent-credentials"]
+  }
+}
+```
 
-1. If `2code.json` has `teardown_script`, execute in worktree directory
-2. Run `git worktree remove` and `git branch -D`
-3. Delete profile record from DB (cascades to sessions)
+**Query defaults:** `staleTime: 30s`, `refetchOnWindowFocus: false`, `retry: 1`
+
+**Invalidation patterns:**
+- Project/profile mutations → invalidate `queryKeys.projects.all`
+- File watcher events → invalidate all `git-diff` and `git-log` queries (prefix match)
+- Agent install → invalidate `queryKeys.agent.status()`

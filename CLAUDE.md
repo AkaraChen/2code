@@ -42,6 +42,15 @@ just build-helper-dev
 
 # Format code
 just fmt               # runs 'fama'
+
+# Rust test coverage (HTML report in src-tauri/coverage/)
+just coverage
+
+# Rust test coverage (summary only)
+just coverage-summary
+
+# Count lines of code
+just cloc
 ```
 
 ## Architecture
@@ -84,24 +93,32 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 
 Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 
-**Layered architecture** (4 layers):
+**Layered architecture** (5 layers):
 
 1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
-2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
-3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
+2. **Bridge** (`bridge.rs`) — Adapts Tauri framework types to service-layer trait abstractions. `TauriPtyEmitter` implements `PtyEventEmitter`, `TauriWatchSender` implements `WatchEventSender`, and `build_pty_context()` extracts managed state into a framework-agnostic `PtyContext`. This follows dependency inversion — the service layer defines interfaces, the bridge provides Tauri-specific implementations.
+3. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
+4. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
+5. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
-**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions`, `pty_output_chunks`.
+**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions`, `pty_session_output`.
 
 **Database migrations:** Diesel migrations in `src-tauri/migrations/`, embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`. Schema auto-generated in `src/schema.rs`.
 
-**PTY output streaming:** Background thread reads 4KB chunks → emits Tauri events (`pty-output-{id}`, `pty-exit-{id}`). Separate persistence thread via mpsc channel with 32KB flush buffer. UTF-8 boundary detection prevents partial character output. 1MB cap per session with oldest-chunk pruning.
+**PTY output streaming:** Background thread reads 4KB chunks → emits Tauri events (`pty-output-{id}`, `pty-exit-{id}`). Separate persistence thread via mpsc channel with 32KB flush buffer. UTF-8 boundary detection prevents partial character output. Output is stored as a single BLOB per session in `pty_session_output` (1MB cap, overwritten on flush). Clear-scrollback detection (ESC[3J) resets the stored blob.
 
-**Workspace crates:** `shared/` (types shared between main app and sidecar: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `2code-helper/` (CLI sidecar binary).
+**Workspace crates** (under `crates/`): `model/` (Diesel models, schema, DTOs), `repo/` (database access), `service/` (business logic), `infra/` (infrastructure), `agent/` (AI agent management via ACP). Also: `shared/` (types shared between main app and sidecar: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `twocode-helper/` (CLI sidecar binary).
 
 **CLI sidecar & notification pipeline:** The `2code-helper` binary is a small CLI that PTY shells invoke (via `$_2CODE_HELPER notify`) to trigger notifications. Flow: PTY env vars (`_2CODE_HELPER_URL`, `_2CODE_HELPER`, `_2CODE_SESSION_ID`) → sidecar sends HTTP GET `/notify?session_id=<sid>` → Axum server in `infra/helper.rs` plays sound + emits `pty-notify` Tauri event → frontend `terminalStore.markNotified(sessionId)` → green dot on terminal tab + sidebar profile. Focusing the tab clears the dot. Sidecar is bundled via `externalBin` in `tauri.conf.json`.
+
+**Agent system** (`crates/agent/`): Wraps `rivet-dev/sandbox-agent` for AI code assistant management via ACP (Agent Communication Protocol). Two sub-modules:
+
+- **Manager** (`manager.rs`) — Lists agent status, installs ACP bridges, detects API credentials (Anthropic/OpenAI). Supported agents: Claude Code, Codex, Opencode, Amp, Pi, Cursor.
+- **Runtime** (`runtime.rs`) — HTTP-based JSON-RPC 2.0 agent sessions: spawn, send (request/response), notify (fire-and-forget), receive push notifications, and shutdown.
+
+Frontend: `AgentSettings.tsx` in settings tab with credential detection and install UI. Handler commands: `list_agent_status`, `install_agent`, `detect_credentials`.
 
 ### IPC Pattern (Frontend ↔ Backend)
 
@@ -145,10 +162,15 @@ Profiles create isolated branch workspaces using `git worktree add`. Each profil
 Projects can include a `2code.json` in their root folder:
 
 ```json
-{ "setup_script": ["npm install"], "teardown_script": ["rm -rf node_modules"] }
+{
+  "setup_script": ["npm install"],
+  "teardown_script": ["rm -rf node_modules"],
+  "init_script": ["export FOO=bar", "alias ll='ls -la'"]
+}
 ```
 
-Scripts execute via `sh -c` in the project/worktree directory. Used automatically during profile creation/deletion.
+- `setup_script` / `teardown_script` — Execute via `sh -c` in the project/worktree directory during profile creation/deletion.
+- `init_script` — Injected into every new terminal session via ZDOTDIR-based shell init. The infrastructure writes these commands to a temporary `.zshrc` that zsh sources on startup, so they run as if typed into the shell.
 
 ### Zustand Store Convention
 
