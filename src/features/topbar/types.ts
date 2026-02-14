@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import type { IconType } from "react-icons";
+import type { ComponentType, ReactNode } from "react";
 import type { Profile } from "@/generated";
 
 export type ControlId = "github-desktop" | "vscode" | "git-diff";
@@ -15,7 +14,7 @@ export interface ControlOptionField {
 export interface ControlDefinition {
 	id: ControlId;
 	label: () => string;
-	icon: IconType;
+	icon: ComponentType<{ size?: number | string }>;
 	optionFields: ControlOptionField[];
 	render: (ctx: {
 		profile: Profile;

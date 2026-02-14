@@ -4,6 +4,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { RiDraggable } from "react-icons/ri";
 import type { ControlDefinition } from "./types";
 
+const DRAG_ICON_SIZE = 16;
+
 interface DraggableControlProps {
 	definition: ControlDefinition;
 	isOverlay?: boolean;
@@ -48,9 +50,7 @@ export function DraggableControl({
 				<Icon color="fg.muted" fontSize="sm">
 					<RiDraggable />
 				</Icon>
-				<Icon fontSize="md">
-					<definition.icon />
-				</Icon>
+				<definition.icon size={DRAG_ICON_SIZE} />
 				<Text fontSize="sm" fontWeight="medium">
 					{definition.label()}
 				</Text>

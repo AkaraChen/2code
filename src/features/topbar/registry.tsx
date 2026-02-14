@@ -1,10 +1,6 @@
 import { IconButton } from "@chakra-ui/react";
+import { SiGit, SiGithub, SiVscodium } from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
-import {
-	RiCodeSSlashLine,
-	RiGitPullRequestLine,
-	RiGithubLine,
-} from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
 import type { ControlDefinition, ControlId } from "./types";
 
@@ -12,7 +8,7 @@ const definitions: ControlDefinition[] = [
 	{
 		id: "github-desktop",
 		label: () => m.topbarGithubDesktop(),
-		icon: RiGithubLine,
+		icon: SiGithub,
 		optionFields: [],
 		render: ({ profile }) => (
 			<IconButton
@@ -25,14 +21,14 @@ const definitions: ControlDefinition[] = [
 					]).execute()
 				}
 			>
-				<RiGithubLine />
+				<SiGithub size={14} />
 			</IconButton>
 		),
 	},
 	{
 		id: "vscode",
 		label: () => m.topbarVscode(),
-		icon: RiCodeSSlashLine,
+		icon: SiVscodium,
 		optionFields: [],
 		render: ({ profile }) => (
 			<IconButton
@@ -45,14 +41,14 @@ const definitions: ControlDefinition[] = [
 					]).execute()
 				}
 			>
-				<RiCodeSSlashLine />
+				<SiVscodium size={14} />
 			</IconButton>
 		),
 	},
 	{
 		id: "git-diff",
 		label: () => m.topbarGitDiff(),
-		icon: RiGitPullRequestLine,
+		icon: SiGit,
 		optionFields: [],
 		render: ({ options }) => (
 			<IconButton
@@ -61,7 +57,7 @@ const definitions: ControlDefinition[] = [
 				variant="subtle"
 				onClick={options.__onOpenDiff as () => void}
 			>
-				<RiGitPullRequestLine />
+				<SiGit size={14} />
 			</IconButton>
 		),
 	},
