@@ -1,10 +1,10 @@
-mod error;
+pub mod error;
 mod handler;
-mod infra;
-mod model;
-mod repo;
-mod schema;
-mod service;
+pub mod infra;
+pub mod model;
+pub mod repo;
+pub mod schema;
+pub mod service;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

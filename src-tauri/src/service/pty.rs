@@ -13,7 +13,7 @@ use crate::model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
 };
 
-pub(crate) enum PersistMsg {
+pub enum PersistMsg {
 	Data(Vec<u8>),
 	Flush,
 	Clear,
