@@ -25,10 +25,10 @@ fn main() {
 			};
 			match ureq::get(&notify_url).call() {
 				Ok(mut resp) => {
-					let body: shared::NotifyResponse = resp
+					let body: model::notification::NotifyResponse = resp
 						.body_mut()
 						.read_json()
-						.unwrap_or(shared::NotifyResponse { played: false });
+						.unwrap_or(model::notification::NotifyResponse { played: false });
 					if !body.played {
 						std::process::exit(1);
 					}

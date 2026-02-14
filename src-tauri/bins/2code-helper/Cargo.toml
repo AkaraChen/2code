@@ -10,5 +10,5 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4", features = [ "derive" ] }
 ureq = { version = "3", features = [ "json" ] }
-shared = { path = "../shared" }
+model = { path = "../../crates/model" }
 serde_json = "1"

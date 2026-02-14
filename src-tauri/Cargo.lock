@@ -610,7 +610,6 @@ dependencies = [
  "serde",
  "serde_json",
  "service",
- "shared",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -4057,13 +4056,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "shared_child"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5155,8 +5147,8 @@ name = "twocode-helper"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "model",
  "serde_json",
- "shared",
  "ureq",
 ]
 

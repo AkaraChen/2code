@@ -5,6 +5,7 @@ fmt:
     fama "./src/**/*.{ts,tsx}"
     cd src-tauri && cargo fmt
 
+# Build CLI sidecar (src-tauri/bins/2code-helper)
 build-helper:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -14,6 +15,7 @@ build-helper:
     cp -f target/release/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
 
+# Build CLI sidecar in debug mode (src-tauri/bins/2code-helper)
 build-helper-dev:
     #!/usr/bin/env bash
     set -euo pipefail

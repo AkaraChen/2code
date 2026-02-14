@@ -1,5 +1,6 @@
 pub mod debug;
 pub mod error;
+pub mod notification;
 pub mod profile;
 pub mod project;
 pub mod pty;

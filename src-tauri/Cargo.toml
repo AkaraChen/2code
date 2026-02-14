@@ -1,5 +1,5 @@
 [workspace]
-members = [ "shared", "2code-helper", "crates/*" ]
+members = [ "bins/*", "crates/*" ]
 
 [package]
 name = "code"
@@ -26,7 +26,6 @@ model = { path = "crates/model" }
 repo = { path = "crates/repo" }
 infra = { path = "crates/infra" }
 service = { path = "crates/service" }
-shared = { path = "shared" }
 
 # Tauri framework
 tauri = { version = "2", features = [  ] }

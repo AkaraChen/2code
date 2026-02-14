@@ -44,12 +44,12 @@ fn resolve_sidecar_path() -> PathBuf {
 async fn notify_handler(
 	State(app): State<AppHandle>,
 	Query(params): Query<HashMap<String, String>>,
-) -> Json<shared::NotifyResponse> {
+) -> Json<model::notification::NotifyResponse> {
 	let played = try_play_notification(&app);
 	if let Some(session_id) = params.get("session_id") {
 		let _ = app.emit("pty-notify", session_id.as_str());
 	}
-	Json(shared::NotifyResponse { played })
+	Json(model::notification::NotifyResponse { played })
 }
 
 fn try_play_notification(app: &AppHandle) -> bool {
@@ -63,7 +63,7 @@ fn try_play_notification(app: &AppHandle) -> bool {
 		None => return false,
 	};
 
-	let entry: shared::NotificationEntry = match serde_json::from_value(val) {
+	let entry: model::notification::NotificationEntry = match serde_json::from_value(val) {
 		Ok(e) => e,
 		Err(_) => return false,
 	};
