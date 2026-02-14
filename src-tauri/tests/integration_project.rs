@@ -1,5 +1,7 @@
 mod common;
 
+use diesel::prelude::*;
+
 use code_lib::service;
 use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo, setup_db};
 
@@ -506,4 +508,43 @@ fn delete_nonexistent_profile_returns_error() {
 	let mut conn = setup_db();
 	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
 	assert!(result.is_err());
+}
+
+// ============================================================
+// Profile Creation (non-git folder)
+// ============================================================
+
+#[test]
+fn create_profile_in_non_git_folder_fails() {
+	let mut conn = setup_db();
+	// Create a plain directory (no git init)
+	let dir = std::env::temp_dir().join(format!(
+		"2code-no-git-{}",
+		uuid::Uuid::new_v4()
+	));
+	std::fs::create_dir_all(&dir).unwrap();
+	std::fs::write(dir.join("file.txt"), "hello").unwrap();
+
+	let folder = dir.to_string_lossy().to_string();
+	// Manually insert a project pointing to the non-git dir
+	// (create_from_folder would itself succeed since it just stores the path)
+	diesel::sql_query(
+		"INSERT INTO projects (id, name, folder, created_at) VALUES ('p-nogit', 'NoGit', ?, datetime('now'))",
+	)
+	.bind::<diesel::sql_types::Text, _>(&folder)
+	.execute(&mut conn)
+	.unwrap();
+	// Insert a default profile so the project is valid
+	diesel::sql_query(
+		"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr-nogit', 'p-nogit', 'main', ?, datetime('now'), 1)",
+	)
+	.bind::<diesel::sql_types::Text, _>(&folder)
+	.execute(&mut conn)
+	.unwrap();
+
+	// Attempting to create a profile (worktree) in a non-git folder should fail
+	let result = service::profile::create(&mut conn, "p-nogit", "feature-branch");
+	assert!(result.is_err(), "should fail for non-git folder");
+
+	cleanup(&dir);
 }

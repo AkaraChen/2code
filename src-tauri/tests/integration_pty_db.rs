@@ -447,3 +447,22 @@ fn restoration_flow_db_side() {
 
 	cleanup(&dir);
 }
+
+// ============================================================
+// Repo Edge Cases
+// ============================================================
+
+#[test]
+fn delete_nonexistent_session_succeeds() {
+	let mut conn = setup_db();
+	// Deleting a session that doesn't exist should return Ok (0 rows affected)
+	let result = service::pty::delete_session(&mut conn, "nonexistent-session-id");
+	assert!(result.is_ok());
+}
+
+#[test]
+fn clear_output_nonexistent_session_no_panic() {
+	let mut conn = setup_db();
+	// Clearing output for a non-existent session should not panic
+	pty::clear_output(&mut conn, "nonexistent-session-id");
+}

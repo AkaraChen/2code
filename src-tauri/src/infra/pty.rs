@@ -226,4 +226,32 @@ mod tests {
 		let sessions = create_session_map();
 		close_all_sessions(&sessions); // should not panic
 	}
+
+	#[test]
+	fn create_thread_tracker_starts_empty() {
+		let tracker = create_thread_tracker();
+		let inner = tracker.lock().unwrap();
+		assert!(inner.is_empty());
+	}
+
+	#[test]
+	fn join_all_read_threads_with_real_threads() {
+		let tracker = create_thread_tracker();
+		{
+			let mut guard = tracker.lock().unwrap();
+			for _ in 0..3 {
+				guard.push(std::thread::spawn(|| {}));
+			}
+			assert_eq!(guard.len(), 3);
+		}
+		join_all_read_threads(&tracker);
+		let guard = tracker.lock().unwrap();
+		assert!(guard.is_empty(), "Vec should be drained after join");
+	}
+
+	#[test]
+	fn join_all_read_threads_empty() {
+		let tracker = create_thread_tracker();
+		join_all_read_threads(&tracker); // should not panic
+	}
 }

@@ -869,4 +869,125 @@ mod tests {
 			lines.len()
 		);
 	}
+
+	// --- persist_pty_output ---
+
+	fn setup_test_db() -> crate::infra::db::DbPool {
+		use diesel::prelude::*;
+		use diesel_migrations::MigrationHarness;
+
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		diesel::sql_query("PRAGMA foreign_keys=ON;")
+			.execute(&mut conn)
+			.ok();
+		conn.run_pending_migrations(crate::infra::db::MIGRATIONS)
+			.expect("run migrations");
+
+		Arc::new(Mutex::new(conn))
+	}
+
+	fn insert_test_project_and_session(
+		db: &crate::infra::db::DbPool,
+		session_id: &str,
+	) {
+		use crate::model::pty::NewPtySessionRecord;
+		use diesel::RunQueryDsl;
+		let mut conn = db.lock().unwrap();
+		// Insert a minimal project + profile + session
+		diesel::sql_query(
+			"INSERT INTO projects (id, name, folder, created_at) VALUES ('p1', 'Test', '/tmp', datetime('now'))",
+		)
+		.execute(&mut *conn)
+		.unwrap();
+		diesel::sql_query(
+			"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr1', 'p1', 'main', '/tmp', datetime('now'), 1)",
+		)
+		.execute(&mut *conn)
+		.unwrap();
+		let record = NewPtySessionRecord {
+			id: session_id,
+			profile_id: "pr1",
+			title: "test",
+			shell: "/bin/sh",
+			cwd: "/tmp",
+			cols: 80,
+			rows: 24,
+		};
+		crate::repo::pty::insert_session(&mut conn, &record).unwrap();
+	}
+
+	#[test]
+	fn persist_pty_output_writes_data_to_db() {
+		let db = setup_test_db();
+		insert_test_project_and_session(&db, "s-persist-data");
+
+		let (tx, rx) = mpsc::channel();
+		let persist_db = db.clone();
+		let handle = std::thread::spawn(move || {
+			persist_pty_output(rx, persist_db, "s-persist-data");
+		});
+
+		tx.send(PersistMsg::Data(b"hello persist".to_vec()))
+			.unwrap();
+		drop(tx);
+		handle.join().unwrap();
+
+		let mut conn = db.lock().unwrap();
+		let history =
+			crate::repo::pty::get_session_history(&mut conn, "s-persist-data")
+				.unwrap();
+		assert_eq!(history, b"hello persist");
+	}
+
+	#[test]
+	fn persist_pty_output_clear_resets_output() {
+		let db = setup_test_db();
+		insert_test_project_and_session(&db, "s-persist-clear");
+
+		let (tx, rx) = mpsc::channel();
+		let persist_db = db.clone();
+		let handle = std::thread::spawn(move || {
+			persist_pty_output(rx, persist_db, "s-persist-clear");
+		});
+
+		tx.send(PersistMsg::Data(b"some data".to_vec())).unwrap();
+		tx.send(PersistMsg::Clear).unwrap();
+		drop(tx);
+		handle.join().unwrap();
+
+		let mut conn = db.lock().unwrap();
+		let history = crate::repo::pty::get_session_history(
+			&mut conn,
+			"s-persist-clear",
+		)
+		.unwrap();
+		assert!(history.is_empty());
+	}
+
+	#[test]
+	fn persist_pty_output_flush_is_noop() {
+		let db = setup_test_db();
+		insert_test_project_and_session(&db, "s-persist-flush");
+
+		let (tx, rx) = mpsc::channel();
+		let persist_db = db.clone();
+		let handle = std::thread::spawn(move || {
+			persist_pty_output(rx, persist_db, "s-persist-flush");
+		});
+
+		tx.send(PersistMsg::Data(b"data before flush".to_vec()))
+			.unwrap();
+		tx.send(PersistMsg::Flush).unwrap();
+		drop(tx);
+		handle.join().unwrap();
+
+		let mut conn = db.lock().unwrap();
+		let history = crate::repo::pty::get_session_history(
+			&mut conn,
+			"s-persist-flush",
+		)
+		.unwrap();
+		assert_eq!(history, b"data before flush");
+	}
 }

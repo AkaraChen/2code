@@ -22,3 +22,34 @@ pub fn slugify_cjk(input: &str) -> String {
 	}
 	slugify(parts.join(" "))
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn slugify_empty_string() {
+		assert_eq!(slugify_cjk(""), "");
+	}
+
+	#[test]
+	fn slugify_emoji_only() {
+		// Emoji are not CJK — they go through the else branch
+		let result = slugify_cjk("🚀🔥");
+		// slug crate strips unknown chars, result may be empty
+		assert!(result.is_empty() || result.chars().all(|c| c.is_ascii()));
+	}
+
+	#[test]
+	fn slugify_ascii_only() {
+		assert_eq!(slugify_cjk("hello world"), "hello-world");
+	}
+
+	#[test]
+	fn slugify_mixed_cjk_and_ascii() {
+		let result = slugify_cjk("你好world");
+		assert!(result.contains("ni"));
+		assert!(result.contains("hao"));
+		assert!(result.contains("world"));
+	}
+}

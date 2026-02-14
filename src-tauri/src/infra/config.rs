@@ -146,4 +146,35 @@ mod tests {
 		execute_scripts(&scripts, Path::new("/nonexistent/path"));
 		// Should log warning and return, not panic
 	}
+
+	#[test]
+	fn execute_scripts_failing_script() {
+		let dir = TempDir::new().unwrap();
+		let scripts = vec!["exit 1".to_string()];
+		execute_scripts(&scripts, dir.path());
+		// Should log warning but not panic
+	}
+
+	#[test]
+	fn execute_scripts_stops_on_first_failure() {
+		let dir = TempDir::new().unwrap();
+		let marker = dir.path().join("marker.txt");
+		let scripts = vec![
+			"exit 1".to_string(),
+			format!("touch {}", marker.display()),
+		];
+		execute_scripts(&scripts, dir.path());
+		// Second script should not have run
+		assert!(
+			!marker.exists(),
+			"second script should not execute after first fails"
+		);
+	}
+
+	#[test]
+	fn execute_scripts_empty_list() {
+		let dir = TempDir::new().unwrap();
+		execute_scripts(&[], dir.path());
+		// Should not panic
+	}
 }
