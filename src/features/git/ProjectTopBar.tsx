@@ -83,27 +83,27 @@ export default function ProjectTopBar({
 					)}
 				</Box>
 			</HStack>
-			<HStack gap="1">
+			<HStack gap="2">
 				<IconButton
 					aria-label="Open in GitHub Desktop"
-					size="2xs"
-					variant="outline"
+					size="xs"
+					variant="subtle"
 					onClick={() => Command.create("github", [profile.worktree_path]).execute()}
 				>
 					<RiGithubLine />
 				</IconButton>
 				<IconButton
 					aria-label="Open in VS Code"
-					size="2xs"
-					variant="outline"
+					size="xs"
+					variant="subtle"
 					onClick={() => Command.create("code", [profile.worktree_path]).execute()}
 				>
 					<RiCodeSSlashLine />
 				</IconButton>
 				<IconButton
 					aria-label="Git diff"
-					size="2xs"
-					variant="outline"
+					size="xs"
+					variant="subtle"
 					onClick={diffDialog.onOpen}
 				>
 					<RiGitPullRequestLine />
