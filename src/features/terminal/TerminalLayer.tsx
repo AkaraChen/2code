@@ -3,11 +3,11 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { use, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
+import { useTabProfileIds } from "@/features/tabs/store";
+import { restorationPromise } from "@/features/tabs/restore";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { restorationPromise } from "./state";
-import { useTerminalProfileIds } from "./store";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -19,7 +19,7 @@ export default function TerminalLayer() {
 		queryFn: listProjects,
 	});
 
-	const terminalProfileIds = useTerminalProfileIds();
+	const tabProfileIds = useTabProfileIds();
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -50,7 +50,7 @@ export default function TerminalLayer() {
 
 	return (
 		<>
-			{terminalProfileIds.map((profileId) => {
+			{tabProfileIds.map((profileId) => {
 				const profile = profileMap.get(profileId);
 				if (!profile) return null;
 				const project = projectMap.get(profile.project_id);
@@ -69,10 +69,7 @@ export default function TerminalLayer() {
 							profile={profile}
 						/>
 						<Box flex="1" minH="0">
-							<TerminalTabs
-								profileId={profileId}
-								cwd={profile.worktree_path}
-							/>
+							<TerminalTabs profileId={profileId} />
 						</Box>
 					</Flex>
 				);

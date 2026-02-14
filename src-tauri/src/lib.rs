@@ -29,6 +29,8 @@ pub fn run() {
 		)
 		.expect("failed to initialize agent manager"),
 	);
+	let agent_sessions = agent::create_agent_session_map();
+	let agent_sessions_for_exit = agent_sessions.clone();
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
 	let read_threads_for_exit = read_threads.clone();
@@ -48,6 +50,7 @@ pub fn run() {
 		.manage(shutdown_flag)
 		.manage(layer_handle)
 		.manage(agent_manager)
+		.manage(agent_sessions)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -99,6 +102,9 @@ pub fn run() {
 			handler::agent::list_agent_status,
 			handler::agent::install_agent,
 			handler::agent::detect_credentials,
+			handler::agent::spawn_agent_session,
+			handler::agent::send_agent_prompt,
+			handler::agent::close_agent_session,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
@@ -110,6 +116,19 @@ pub fn run() {
 		match event {
 			tauri::RunEvent::Exit => {
 				shutdown_for_exit.store(true, Ordering::Relaxed);
+
+				// Shut down all agent sessions
+				let agent_sessions = agent_sessions_for_exit.clone();
+				tokio::task::block_in_place(|| {
+					tokio::runtime::Handle::current().block_on(async {
+						let mut map = agent_sessions.lock().await;
+						for (id, session) in map.drain() {
+							tracing::info!(session_id = %id, "exit: shutting down agent session");
+							session.shutdown().await;
+						}
+					});
+				});
+
 				infra::pty::close_all_sessions(&sessions_for_exit);
 				tracing::info!(target: "pty", "exit: joining read threads...");
 				infra::pty::join_all_read_threads(&read_threads_for_exit);

@@ -1,6 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 
-const store = new LazyStore("settings.json", { autoSave: true });
+const store = new LazyStore("settings.json", { defaults: {}, autoSave: true });
 
 export const tauriStorage = {
 	getItem: async (name: string) => {

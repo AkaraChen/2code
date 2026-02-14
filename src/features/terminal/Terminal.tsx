@@ -9,8 +9,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
-import { sessionHistory } from "./state";
-import { useTerminalStore } from "./store";
+import { sessionHistory } from "@/features/tabs/restore";
+import { useTabStore } from "@/features/tabs/store";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -164,7 +164,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			});
 
 			term.onTitleChange((title) => {
-				useTerminalStore
+				useTabStore
 					.getState()
 					.updateTabTitle(profileId, sessionId, title);
 			});

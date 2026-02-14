@@ -4,8 +4,8 @@ import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import { useProject, useProjectProfiles } from "@/features/projects/hooks";
-import { useCreateTerminalTab } from "@/features/terminal/hooks";
-import { useTerminalStore } from "@/features/terminal/store";
+import { useCreateTab } from "@/features/tabs/hooks";
+import { useTabStore } from "@/features/tabs/store";
 import * as m from "@/paraglide/messages.js";
 
 export default function ProjectDetailPage() {
@@ -20,10 +20,10 @@ export default function ProjectDetailPage() {
 		[profiles, profileId],
 	);
 
-	const hasTabs = useTerminalStore(
+	const hasTabs = useTabStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
 	);
-	const createTab = useCreateTerminalTab();
+	const createTab = useCreateTab();
 
 	if (!project || !profile) {
 		return <Navigate to="/" replace />;
@@ -53,6 +53,7 @@ export default function ProjectDetailPage() {
 							disabled={createTab.isPending}
 							onClick={() =>
 								createTab.mutate({
+									type: "terminal",
 									profileId: profile.id,
 									cwd: profile.worktree_path,
 								})
