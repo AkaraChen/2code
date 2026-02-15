@@ -15,6 +15,9 @@ pub use models::{
 	AgentSessionEvent, AgentSessionInfo, ContentPart, PromptResult,
 };
 pub use runtime::{AgentSession, AgentSessionError};
+pub use sandbox_agent_agent_management::agents::{
+	AgentProcessLaunchSpec, InstallSource,
+};
 pub use session::ManagedAgentSession;
 
 /// Map of local session ID → active ManagedAgentSession.

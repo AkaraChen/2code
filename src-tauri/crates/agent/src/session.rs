@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
 use agent_client_protocol_schema::{
-	ContentBlock, NewSessionRequest, NewSessionResponse, PromptRequest,
-	PromptResponse, SessionNotification,
+	ContentBlock, LoadSessionRequest, LoadSessionResponse, NewSessionRequest,
+	NewSessionResponse, PromptRequest, PromptResponse, SessionNotification,
 };
 use futures::Stream;
 use sandbox_agent_agent_management::agents::AgentProcessLaunchSpec;
@@ -99,6 +99,92 @@ impl ManagedAgentSession {
 		Ok(Self {
 			inner: session,
 			acp_session_id,
+			local_id,
+			agent: agent.to_string(),
+			event_counter: AtomicI32::new(0),
+		})
+	}
+
+	/// Spawn an agent process, then call ACP `session/load` to restore an existing session.
+	pub async fn load(
+		agent: &str,
+		cwd: PathBuf,
+		acp_session_id: &str,
+		launch_spec: AgentProcessLaunchSpec,
+		extra_env: HashMap<String, String>,
+	) -> Result<Self, AgentSessionError> {
+		let session = AgentSession::spawn(
+			agent,
+			cwd.clone(),
+			extra_env,
+			launch_spec,
+			DEFAULT_TIMEOUT,
+		)
+		.await?;
+
+		let local_id = session.id.clone();
+
+		// Call ACP session/load to restore the existing session
+		let req = LoadSessionRequest::new(acp_session_id.to_string(), &cwd);
+		let params = serde_json::to_value(&req)?;
+
+		tracing::info!(
+			local_id = %local_id,
+			agent = agent,
+			acp_session_id = acp_session_id,
+			cwd = %cwd.display(),
+			"acp session/load request"
+		);
+
+		let response = session.send("session/load", params).await?;
+
+		tracing::info!(
+			local_id = %local_id,
+			agent = agent,
+			response = %response,
+			"acp session/load response"
+		);
+
+		// Check for JSON-RPC error
+		if let Some(err) = response.get("error") {
+			tracing::warn!(
+				local_id = %local_id,
+				error = %err,
+				"acp session/load returned error"
+			);
+			return Err(AgentSessionError::UnexpectedResponse);
+		}
+
+		// Parse LoadSessionResponse (mostly for logging; the key info is that load succeeded)
+		let result_value = response.get("result").cloned().unwrap_or(response);
+		match serde_json::from_value::<LoadSessionResponse>(result_value) {
+			Ok(load_resp) => {
+				tracing::info!(
+					local_id = %local_id,
+					acp_session_id = acp_session_id,
+					modes = ?load_resp.modes,
+					"acp session/load parsed successfully"
+				);
+			}
+			Err(e) => {
+				tracing::warn!(
+					local_id = %local_id,
+					error = %e,
+					"failed to parse LoadSessionResponse (continuing anyway)"
+				);
+			}
+		}
+
+		tracing::info!(
+			local_id = %local_id,
+			acp_session_id = acp_session_id,
+			agent = agent,
+			"managed agent session loaded"
+		);
+
+		Ok(Self {
+			inner: session,
+			acp_session_id: acp_session_id.to_string(),
 			local_id,
 			agent: agent.to_string(),
 			event_counter: AtomicI32::new(0),
@@ -227,5 +313,90 @@ impl ManagedAgentSession {
 			"shutting down managed agent session"
 		);
 		self.inner.shutdown().await;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use serde_json::json;
+
+	#[test]
+	fn test_parse_notification_valid() {
+		// A valid JSON-RPC notification with SessionNotification as params
+		let value = json!({
+			"jsonrpc": "2.0",
+			"method": "session/update",
+			"params": {
+				"sessionId": "mock-session-001",
+				"update": {
+					"sessionUpdate": "agent_message_chunk",
+					"content": {
+						"type": "text",
+						"text": "Hello"
+					}
+				}
+			}
+		});
+		let result = ManagedAgentSession::parse_notification(&value);
+		assert!(result.is_some());
+		let notif = result.unwrap();
+		assert_eq!(notif.session_id.to_string(), "mock-session-001");
+	}
+
+	#[test]
+	fn test_parse_notification_missing_params() {
+		// No "params" key at all
+		let value = json!({
+			"jsonrpc": "2.0",
+			"method": "session/update"
+		});
+		let result = ManagedAgentSession::parse_notification(&value);
+		assert!(result.is_none());
+	}
+
+	#[test]
+	fn test_parse_notification_invalid_params() {
+		// "params" is present but not a valid SessionNotification
+		let value = json!({
+			"jsonrpc": "2.0",
+			"method": "session/update",
+			"params": {
+				"invalid": "data"
+			}
+		});
+		let result = ManagedAgentSession::parse_notification(&value);
+		assert!(result.is_none());
+	}
+
+	#[test]
+	fn test_parse_notification_no_method() {
+		// No "method" key, but valid params — should still parse
+		let value = json!({
+			"jsonrpc": "2.0",
+			"params": {
+				"sessionId": "mock-session-001",
+				"update": {
+					"sessionUpdate": "agent_message_chunk",
+					"content": {
+						"type": "text",
+						"text": "Hello"
+					}
+				}
+			}
+		});
+		let result = ManagedAgentSession::parse_notification(&value);
+		assert!(result.is_some());
+	}
+
+	#[test]
+	fn test_parse_notification_null_params() {
+		let value = json!({
+			"jsonrpc": "2.0",
+			"method": "session/update",
+			"params": null
+		});
+		let result = ManagedAgentSession::parse_notification(&value);
+		assert!(result.is_none());
 	}
 }

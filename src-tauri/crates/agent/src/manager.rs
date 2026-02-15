@@ -148,8 +148,116 @@ mod tests {
 	}
 
 	#[test]
+	fn test_mask_key_edge_cases() {
+		assert_eq!(mask_key(""), "");
+		assert_eq!(mask_key("a"), "*");
+		assert_eq!(mask_key("ab"), "**");
+		assert_eq!(mask_key("abcd"), "****");
+		assert_eq!(mask_key("abcdefghi"), "abcd...fghi");
+	}
+
+	#[test]
 	fn test_display_name() {
 		assert_eq!(display_name(AgentId::Claude), "Claude Code");
 		assert_eq!(display_name(AgentId::Codex), "Codex");
+	}
+
+	#[test]
+	fn test_display_name_all_agents() {
+		assert_eq!(display_name(AgentId::Opencode), "OpenCode");
+		assert_eq!(display_name(AgentId::Amp), "Amp");
+		assert_eq!(display_name(AgentId::Pi), "Pi");
+		assert_eq!(display_name(AgentId::Cursor), "Cursor");
+		assert_eq!(display_name(AgentId::Mock), "Mock");
+	}
+
+	#[test]
+	fn test_parse_agent_id_valid() {
+		assert!(parse_agent_id("claude").is_ok());
+		assert!(parse_agent_id("codex").is_ok());
+		assert!(parse_agent_id("opencode").is_ok());
+		assert!(parse_agent_id("amp").is_ok());
+		assert!(parse_agent_id("pi").is_ok());
+		assert!(parse_agent_id("cursor").is_ok());
+	}
+
+	#[test]
+	fn test_parse_agent_id_invalid() {
+		assert!(parse_agent_id("nonexistent").is_err());
+		assert!(parse_agent_id("").is_err());
+		assert!(parse_agent_id("Claude").is_err()); // case-sensitive
+	}
+
+	#[test]
+	fn test_to_status_info_ready_when_acp_installed_no_native_required() {
+		let status = AgentInstallStatus {
+			agent: AgentId::Claude,
+			native_required: false,
+			native_installed: false,
+			native_version: None,
+			agent_process_installed: true,
+			agent_process_source: None,
+			agent_process_version: Some("1.0.0".to_string()),
+			unstable_enabled: false,
+		};
+		let info = to_status_info(status);
+		assert!(info.ready);
+		assert_eq!(info.id, "claude");
+		assert_eq!(info.display_name, "Claude Code");
+		assert!(info.acp_installed);
+		assert_eq!(info.acp_version, Some("1.0.0".to_string()));
+	}
+
+	#[test]
+	fn test_to_status_info_not_ready_missing_acp() {
+		let status = AgentInstallStatus {
+			agent: AgentId::Codex,
+			native_required: false,
+			native_installed: false,
+			native_version: None,
+			agent_process_installed: false,
+			agent_process_source: None,
+			agent_process_version: None,
+			unstable_enabled: false,
+		};
+		let info = to_status_info(status);
+		assert!(!info.ready);
+		assert!(!info.acp_installed);
+	}
+
+	#[test]
+	fn test_to_status_info_not_ready_missing_native() {
+		let status = AgentInstallStatus {
+			agent: AgentId::Codex,
+			native_required: true,
+			native_installed: false,
+			native_version: None,
+			agent_process_installed: true,
+			agent_process_source: None,
+			agent_process_version: Some("1.0.0".to_string()),
+			unstable_enabled: false,
+		};
+		let info = to_status_info(status);
+		assert!(!info.ready);
+		assert!(info.native_required);
+		assert!(!info.native_installed);
+	}
+
+	#[test]
+	fn test_to_status_info_ready_with_native() {
+		let status = AgentInstallStatus {
+			agent: AgentId::Codex,
+			native_required: true,
+			native_installed: true,
+			native_version: Some("2.0.0".to_string()),
+			agent_process_installed: true,
+			agent_process_source: None,
+			agent_process_version: Some("1.0.0".to_string()),
+			unstable_enabled: false,
+		};
+		let info = to_status_info(status);
+		assert!(info.ready);
+		assert!(info.native_installed);
+		assert_eq!(info.native_version, Some("2.0.0".to_string()));
 	}
 }

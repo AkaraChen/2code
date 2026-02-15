@@ -46,9 +46,12 @@ axum = "0.8"
 tokio = { version = "1", features = [ "net", "rt" ] }
 futures = "0.3"
 dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+diesel = { version = "2", features = ["sqlite"] }
 
 [dev-dependencies]
 diesel = { version = "2", features = ["sqlite"] }
 diesel_migrations = "2"
 uuid = { version = "1", features = ["v4"] }
 portable-pty = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

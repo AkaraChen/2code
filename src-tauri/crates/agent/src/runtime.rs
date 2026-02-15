@@ -154,3 +154,33 @@ impl AgentSession {
 		self.runtime.shutdown().await;
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_agent_session_error_display_spawn() {
+		// We can't easily construct an AdapterError, but we can test
+		// the other variants directly.
+		let err = AgentSessionError::UnexpectedResponse;
+		assert_eq!(err.to_string(), "unexpected response type");
+	}
+
+	#[test]
+	fn test_agent_session_error_display_parse() {
+		let bad_json: Result<serde_json::Value, _> =
+			serde_json::from_str("not json");
+		let serde_err = bad_json.unwrap_err();
+		let err = AgentSessionError::ParseError(serde_err);
+		assert!(err.to_string().starts_with("failed to parse response:"));
+	}
+
+	#[test]
+	fn test_agent_session_error_is_send_sync() {
+		fn assert_send<T: Send>() {}
+		fn assert_sync<T: Sync>() {}
+		assert_send::<AgentSessionError>();
+		assert_sync::<AgentSessionError>();
+	}
+}
