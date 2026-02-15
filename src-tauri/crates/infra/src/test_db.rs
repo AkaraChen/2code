@@ -61,21 +61,19 @@ mod tests {
 
 	#[test]
 	fn test_create_test_db() {
-		let conn = create_test_db();
+		let mut conn = create_test_db();
 		// Verify we can run a basic query
-		let result: Result<i32, _> =
-			diesel::sql_query("SELECT 1 as value").get_result(&conn);
+		let result = diesel::sql_query("SELECT 1 as value").execute(&mut conn);
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_create_file_test_db() {
 		let path = "./test_temp.db";
-		let conn = create_file_test_db(path);
+		let mut conn = create_file_test_db(path);
 
 		// Verify we can run a basic query
-		let result: Result<i32, _> =
-			diesel::sql_query("SELECT 1 as value").get_result(&conn);
+		let result = diesel::sql_query("SELECT 1 as value").execute(&mut conn);
 		assert!(result.is_ok());
 
 		// Cleanup
