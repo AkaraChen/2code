@@ -13,7 +13,7 @@ export interface GitDiffState {
 	selectedCommitFileIndex: number;
 }
 
-type GitDiffAction =
+export type GitDiffAction =
 	| { type: "switchTab"; tab: Tab }
 	| { type: "selectFile"; index: number }
 	| { type: "selectCommit"; commit: GitCommit; index: number }
