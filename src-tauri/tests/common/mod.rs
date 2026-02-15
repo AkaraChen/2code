@@ -22,6 +22,26 @@ pub fn setup_db() -> SqliteConnection {
 	conn
 }
 
+/// Create a file-based SQLite connection for inspection with sqlite3 CLI.
+/// Deletes any existing file at the path first.
+pub fn setup_file_db(path: &str) -> SqliteConnection {
+	// Delete existing file if present
+	let _ = std::fs::remove_file(path);
+
+	let mut conn = SqliteConnection::establish(path)
+		.unwrap_or_else(|_| panic!("Failed to create db at {path}"));
+
+	diesel::sql_query("PRAGMA foreign_keys=ON;")
+		.execute(&mut conn)
+		.expect("enable foreign keys");
+
+	conn.run_pending_migrations(MIGRATIONS)
+		.expect("run migrations");
+
+	eprintln!("✅ Test database created at: {path}");
+	conn
+}
+
 /// Create an in-memory DbPool (Arc<Mutex<SqliteConnection>>).
 pub fn setup_db_pool() -> infra::db::DbPool {
 	Arc::new(Mutex::new(setup_db()))

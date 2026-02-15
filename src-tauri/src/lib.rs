@@ -72,6 +72,11 @@ pub fn run() {
 			service::pty::mark_all_closed(&pool);
 			tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
 
+			// Mark any orphaned agent sessions as destroyed
+			if let Ok(count) = service::agent::mark_all_destroyed(&pool) {
+				tracing::info!(target: "agent", count, "startup: marked orphaned agent sessions destroyed");
+			}
+
 			app.manage(pool);
 
 			// Start helper HTTP server (for CLI sidecar communication)
@@ -112,6 +117,11 @@ pub fn run() {
 			handler::agent::spawn_agent_session,
 			handler::agent::send_agent_prompt,
 			handler::agent::close_agent_session,
+			handler::agent::create_agent_session_persistent,
+			handler::agent::restore_agent_session,
+			handler::agent::list_project_agent_sessions,
+			handler::agent::delete_agent_session_record,
+			handler::agent::persist_agent_event,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
@@ -146,6 +156,11 @@ pub fn run() {
 
 			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 				service::pty::mark_all_closed(&db);
+
+				// Mark all active agent sessions as destroyed
+				if let Ok(count) = service::agent::mark_all_destroyed(&db) {
+					tracing::info!(target: "agent", count, "exit: marked agent sessions destroyed");
+				}
 			}
 		}
 	});

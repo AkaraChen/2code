@@ -47,6 +47,14 @@ pub struct NewAgentSessionEvent<'a> {
 	pub payload_json: &'a str,
 }
 
+/// Input metadata for creating an agent session.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionMeta {
+	pub profile_id: String,
+	pub agent: String,
+}
+
 /// Lightweight info returned to the frontend for restored sessions.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

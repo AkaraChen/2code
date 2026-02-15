@@ -4491,6 +4491,7 @@ dependencies = [
 name = "service"
 version = "0.1.0"
 dependencies = [
+ "agent",
  "diesel",
  "diesel_migrations",
  "dirs 6.0.0",
@@ -4498,6 +4499,7 @@ dependencies = [
  "model",
  "notify",
  "repo",
+ "tokio",
  "tracing",
  "uuid",
  "vt100",

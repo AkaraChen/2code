@@ -4,6 +4,8 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { persistAgentEvent } from "@/generated";
+import type { AgentSessionEventRecord } from "@/generated";
 
 export interface AgentMessage {
 	role: "user" | "assistant";
@@ -28,6 +30,10 @@ interface AgentStore {
 	handleAgentEvent: (sessionId: string, payload: AgentNotification) => void;
 	handleTurnComplete: (sessionId: string, payload: unknown) => void;
 	handleError: (sessionId: string, error: string) => void;
+	restoreFromEvents: (
+		sessionId: string,
+		events: AgentSessionEventRecord[],
+	) => void;
 }
 
 function ensureSession(
@@ -64,10 +70,25 @@ export const useAgentStore = create<AgentStore>()(
 		addUserMessage(sessionId, content) {
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
+				const eventIndex = session.messages.length;
+
 				session.messages.push({
 					role: "user",
 					content,
 					timestamp: Date.now(),
+				});
+
+				// Persist user message to database (fire-and-forget)
+				persistAgentEvent({
+					sessionId,
+					eventIndex,
+					sender: "user",
+					payload: JSON.stringify({ text: content }),
+				}).catch((err) => {
+					console.error(
+						`Failed to persist user message for ${sessionId}:`,
+						err,
+					);
 				});
 			});
 		},
@@ -181,5 +202,73 @@ export const useAgentStore = create<AgentStore>()(
 				}
 			});
 		},
+
+		/**
+		 * Restore session state from persisted events.
+		 * Called during session restoration to rebuild message history.
+		 */
+		restoreFromEvents(sessionId, events) {
+			set((state) => {
+				const session = ensureSession(state.sessions, sessionId);
+
+				// Rebuild messages from events
+				for (const event of events) {
+					try {
+						const payload = JSON.parse(event.payload_json);
+
+						if (event.sender === "user" && payload.text) {
+							session.messages.push({
+								role: "user",
+								content: payload.text,
+								timestamp: event.created_at * 1000, // Convert to ms
+							});
+						} else if (event.sender === "agent") {
+							// Agent events are complex - try to extract text content
+							const content = extractAgentContent(payload);
+							if (content) {
+								session.messages.push({
+									role: "assistant",
+									content,
+									timestamp: event.created_at * 1000,
+								});
+							}
+						}
+					} catch (err) {
+						console.warn(
+							`Failed to parse event ${event.id}:`,
+							err,
+						);
+					}
+				}
+			});
+		},
 	})),
 );
+
+/**
+ * Extract readable text content from agent notification payload.
+ * Agent events can be complex session updates with various formats.
+ */
+function extractAgentContent(payload: unknown): string | null {
+	if (typeof payload !== "object" || payload === null) return null;
+
+	const obj = payload as Record<string, unknown>;
+
+	// Try to extract from session update
+	if (obj.method === "session/update" && obj.params) {
+		const params = obj.params as Record<string, unknown>;
+		const update = params.update as Record<string, unknown> | undefined;
+
+		if (update?.content && typeof update.content === "object") {
+			const content = update.content as Record<string, unknown>;
+			if (content.type === "text" && typeof content.text === "string") {
+				return content.text;
+			}
+		}
+	}
+
+	// Fallback: if there's a direct text field
+	if (typeof obj.text === "string") return obj.text;
+
+	return null;
+}

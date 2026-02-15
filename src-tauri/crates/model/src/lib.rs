@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod debug;
 pub mod error;
 pub mod notification;

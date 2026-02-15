@@ -1,9 +1,14 @@
 import { QueryObserver } from "@tanstack/react-query";
 import consola from "consola";
 import type { ProjectWithProfiles } from "@/generated";
-import { listProjectSessions, listProjects } from "@/generated";
+import {
+	listProjectAgentSessions,
+	listProjectSessions,
+	listProjects,
+} from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { AgentTabSession } from "./AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
@@ -61,35 +66,80 @@ function createRestorationPipeline(): Promise<void> {
 async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	consola.info(`[tab-restore] starting for ${projects.length} projects`);
 
-	const projectSessions = await Promise.all(
+	// Fetch both PTY and Agent sessions in parallel
+	const projectData = await Promise.all(
 		projects.map(async (p) => ({
 			project: p,
-			sessions: await listProjectSessions({ projectId: p.id }),
+			ptySessions: await listProjectSessions({ projectId: p.id }),
+			agentSessions: await listProjectAgentSessions({ projectId: p.id }),
 		})),
 	);
 
-	const allSessions = projectSessions.flatMap(({ sessions }) => sessions);
-	consola.info(`[tab-restore] found ${allSessions.length} sessions`);
-	if (allSessions.length === 0) return;
+	const allPtySessions = projectData.flatMap(({ ptySessions }) => ptySessions);
+	const allAgentSessions = projectData.flatMap(
+		({ agentSessions }) => agentSessions,
+	);
 
-	await mapWithLimit(allSessions, 3, async (session) => {
-		try {
-			const { session: tabSession, history } =
-				await TerminalTabSession.restore(session);
-			sessionRegistry.set(tabSession.id, tabSession);
+	consola.info(
+		`[tab-restore] found ${allPtySessions.length} PTY sessions, ${allAgentSessions.length} agent sessions`,
+	);
 
-			if (history.length > 0) {
-				sessionHistory.set(tabSession.id, history);
+	// Restore PTY sessions
+	if (allPtySessions.length > 0) {
+		await mapWithLimit(allPtySessions, 3, async (session) => {
+			try {
+				const { session: tabSession, history } =
+					await TerminalTabSession.restore(session);
+				sessionRegistry.set(tabSession.id, tabSession);
+
+				if (history.length > 0) {
+					sessionHistory.set(tabSession.id, history);
+				}
+
+				useTabStore
+					.getState()
+					.addTab(session.profile_id, tabSession.toTab());
+				consola.info(`[tab-restore] PTY ${session.id} → ${tabSession.id}`);
+			} catch (e) {
+				consola.error(`[tab-restore] PTY failed: ${session.id}`, e);
 			}
+		});
+	}
 
-			useTabStore
-				.getState()
-				.addTab(session.profile_id, tabSession.toTab());
-			consola.info(`[tab-restore] ${session.id} → ${tabSession.id}`);
-		} catch (e) {
-			consola.error(`[tab-restore] failed: ${session.id}`, e);
+	// Restore Agent sessions
+	if (allAgentSessions.length > 0) {
+		// Find default profile for each project to use as cwd
+		const profileCwdMap = new Map<string, string>();
+		for (const { project } of projectData) {
+			const defaultProfile = project.profiles.find((p) => p.is_default);
+			if (defaultProfile) {
+				for (const profile of project.profiles) {
+					// Use default profile's worktree as cwd for all profiles in project
+					profileCwdMap.set(profile.id, defaultProfile.worktree_path);
+				}
+			}
 		}
-	});
+
+		await mapWithLimit(allAgentSessions, 3, async (record) => {
+			try {
+				const cwd = profileCwdMap.get(record.profile_id) || "/tmp";
+				const { session: tabSession } = await AgentTabSession.restore(
+					record,
+					cwd,
+				);
+				sessionRegistry.set(tabSession.id, tabSession);
+
+				useTabStore
+					.getState()
+					.addTab(record.profile_id, tabSession.toTab());
+				consola.info(
+					`[tab-restore] Agent ${record.id} → ${tabSession.id}`,
+				);
+			} catch (e) {
+				consola.error(`[tab-restore] Agent failed: ${record.id}`, e);
+			}
+		});
+	}
 
 	consola.info("[tab-restore] complete");
 }

@@ -5,4 +5,5 @@ pub mod logger;
 pub mod pty;
 pub mod shell_init;
 pub mod slug;
+pub mod test_db;
 pub mod watcher;

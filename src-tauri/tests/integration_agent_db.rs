@@ -304,7 +304,11 @@ fn profile_delete_blocked_by_agent_session() {
 	// Attach an agent session to this profile
 	insert_session(&mut conn, "as1", "pr-extra", "claude-code");
 
-	// Trying to delete the profile should fail because agent_sessions FK has no CASCADE
+	// Verify session exists
+	let session = agent::get_session(&mut conn, "as1").unwrap();
+	assert_eq!(session.profile_id, "pr-extra");
+
+	// Delete the profile - should cascade delete agent_sessions
 	let result = diesel::delete(
 		model::schema::profiles::table
 			.filter(model::schema::profiles::id.eq("pr-extra")),
@@ -312,8 +316,15 @@ fn profile_delete_blocked_by_agent_session() {
 	.execute(&mut conn);
 
 	assert!(
-		result.is_err(),
-		"profile delete should be blocked by agent_session FK (no CASCADE)"
+		result.is_ok(),
+		"profile delete should succeed with CASCADE delete of agent sessions"
+	);
+
+	// Verify agent session was cascade deleted
+	let session_result = agent::get_session(&mut conn, "as1");
+	assert!(
+		session_result.is_err(),
+		"agent session should be cascade deleted when profile is deleted"
 	);
 }
 
