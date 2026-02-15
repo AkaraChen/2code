@@ -16,7 +16,7 @@ use tokio_stream::StreamExt;
 
 use crate::error::{AdapterError, Result};
 
-const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_REQUEST_TIMEOUT: Option<Duration> = None; // No timeout by default
 
 #[derive(Debug)]
 pub struct AcpClient {
@@ -26,7 +26,7 @@ pub struct AcpClient {
 	notification_tx: broadcast::Sender<Value>,
 	shutting_down: Arc<AtomicBool>,
 	request_id: AtomicU64,
-	request_timeout: Duration,
+	request_timeout: Option<Duration>,
 }
 
 impl AcpClient {
@@ -41,11 +41,12 @@ impl AcpClient {
 	}
 
 	/// Spawn a new ACP process with custom request timeout
+	/// Pass None for request_timeout to wait indefinitely
 	pub async fn spawn_with_timeout(
 		program: PathBuf,
 		args: Vec<String>,
 		env: HashMap<String, String>,
-		request_timeout: Duration,
+		request_timeout: Option<Duration>,
 	) -> Result<Self> {
 		tracing::info!(
 			program = %program.display(),
@@ -131,27 +132,56 @@ impl AcpClient {
 			"sent JSON-RPC request, waiting for response"
 		);
 
-		// Wait for response with timeout
-		match tokio::time::timeout(self.request_timeout, rx).await {
-			Ok(Ok(response)) => {
-				tracing::debug!(method = method, id = id, "received response");
-				Ok(response)
+		// Wait for response with optional timeout
+		if let Some(timeout) = self.request_timeout {
+			// With timeout
+			match tokio::time::timeout(timeout, rx).await {
+				Ok(Ok(response)) => {
+					tracing::debug!(method = method, id = id, "received response");
+					Ok(response)
+				}
+				Ok(Err(_)) => {
+					// Channel was dropped (process exited?)
+					self.pending.lock().await.remove(&id_key);
+					Err(AdapterError::Timeout(timeout))
+				}
+				Err(_) => {
+					// Timeout
+					self.pending.lock().await.remove(&id_key);
+					tracing::error!(
+						method = method,
+						id = id,
+						timeout = ?timeout,
+						"request timed out"
+					);
+					Err(AdapterError::Timeout(timeout))
+				}
 			}
-			Ok(Err(_)) => {
-				// Channel was dropped (process exited?)
-				self.pending.lock().await.remove(&id_key);
-				Err(AdapterError::Timeout(self.request_timeout))
-			}
-			Err(_) => {
-				// Timeout
-				self.pending.lock().await.remove(&id_key);
-				tracing::error!(
-					method = method,
-					id = id,
-					timeout = ?self.request_timeout,
-					"request timed out"
-				);
-				Err(AdapterError::Timeout(self.request_timeout))
+		} else {
+			// No timeout - wait indefinitely
+			tracing::debug!(
+				method = method,
+				id = id,
+				"waiting for response (no timeout)"
+			);
+
+			match rx.await {
+				Ok(response) => {
+					tracing::debug!(method = method, id = id, "received response");
+					Ok(response)
+				}
+				Err(_) => {
+					// Channel was dropped (process exited?)
+					self.pending.lock().await.remove(&id_key);
+					tracing::error!(
+						method = method,
+						id = id,
+						"channel dropped (process may have exited)"
+					);
+					Err(AdapterError::InvalidMessage(
+						"response channel dropped".to_string(),
+					))
+				}
 			}
 		}
 	}

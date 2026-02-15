@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::models::{AgentSessionInfo, ContentPart, PromptResult};
 use crate::runtime::{AgentSession, AgentSessionError};
 
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
+const DEFAULT_TIMEOUT: Option<Duration> = None; // No timeout - wait indefinitely
 
 /// A managed agent session that wraps AgentSession with ACP session lifecycle.
 pub struct ManagedAgentSession {

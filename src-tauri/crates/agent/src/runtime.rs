@@ -33,7 +33,7 @@ impl AgentSession {
 		cwd: PathBuf,
 		extra_env: HashMap<String, String>,
 		launch_spec: AgentProcessLaunchSpec,
-		timeout: Duration,
+		timeout: Option<Duration>,
 	) -> Result<Self, AgentSessionError> {
 		let mut env = launch_spec.env;
 		env.insert("PWD".to_string(), cwd.display().to_string());
