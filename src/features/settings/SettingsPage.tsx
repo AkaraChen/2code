@@ -1,60 +1,17 @@
-import {
-	Box,
-	createListCollection,
-	Field,
-	Flex,
-	Heading,
-	Portal,
-	Select,
-	Skeleton,
-	Stack,
-	Switch,
-	Tabs,
-	Text,
-} from "@chakra-ui/react";
-import { Suspense, use, useMemo, useState } from "react";
-import { useDebugStore } from "@/features/debug/debugStore";
-import { TerminalPreview } from "@/features/terminal/TerminalPreview";
-import type { TerminalThemeId } from "@/features/terminal/themes";
+import { Box, Heading, Skeleton, Stack, Tabs } from "@chakra-ui/react";
+import { Suspense } from "react";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import * as m from "@/paraglide/messages.js";
-import type { Locale } from "@/paraglide/runtime.js";
-import { getLocale, setLocale } from "@/paraglide/runtime.js";
-import { ThemeContext } from "@/shared/providers/themeContext";
-import { AccentColorPicker } from "./AccentColorPicker";
 import { AgentSettings } from "./AgentSettings";
-import { BorderRadiusPicker } from "./BorderRadiusPicker";
-import { FontPicker } from "./FontPicker";
-import { FontSizePicker } from "./FontSizePicker";
 import { NotificationSettings } from "./NotificationSettings";
-import { TerminalThemePicker } from "./TerminalThemePicker";
+import { GeneralSettings } from "./tabs/GeneralSettings";
+import { TerminalSettings } from "./tabs/TerminalSettings";
 
-const localeCollection = createListCollection({
-	items: [
-		{ value: "en", label: "English" },
-		{ value: "zh", label: "中文" },
-	],
-});
-
+/**
+ * 设置页面主容器
+ * 提供标签页导航,组合各个设置选项卡
+ */
 export default function SettingsPage() {
-	const { preference, setPreference } = use(ThemeContext);
-	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
-		useDebugStore();
-	const [previewThemeId, setPreviewThemeId] =
-		useState<TerminalThemeId | null>(null);
-
-	const themeCollection = useMemo(
-		() =>
-			createListCollection({
-				items: [
-					{ value: "system", label: m.themeSystem() },
-					{ value: "light", label: m.themeLight() },
-					{ value: "dark", label: m.themeDark() },
-				],
-			}),
-		[],
-	);
-
 	return (
 		<Box p="8" pt="16">
 			<Stack gap="6">
@@ -80,124 +37,10 @@ export default function SettingsPage() {
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">
-						<Stack gap="6" maxW="md">
-							<Field.Root>
-								<Field.Label>{m.language()}</Field.Label>
-								<Select.Root
-									collection={localeCollection}
-									defaultValue={[getLocale()]}
-									onValueChange={(e) =>
-										setLocale(e.value[0] as Locale)
-									}
-									size="sm"
-								>
-									<Select.HiddenSelect />
-									<Select.Control>
-										<Select.Trigger>
-											<Select.ValueText />
-										</Select.Trigger>
-										<Select.IndicatorGroup>
-											<Select.Indicator />
-										</Select.IndicatorGroup>
-									</Select.Control>
-									<Portal>
-										<Select.Positioner>
-											<Select.Content>
-												{localeCollection.items.map(
-													(item) => (
-														<Select.Item
-															item={item}
-															key={item.value}
-														>
-															{item.label}
-															<Select.ItemIndicator />
-														</Select.Item>
-													),
-												)}
-											</Select.Content>
-										</Select.Positioner>
-									</Portal>
-								</Select.Root>
-							</Field.Root>
-							<Field.Root>
-								<Field.Label>{m.theme()}</Field.Label>
-								<Select.Root
-									collection={themeCollection}
-									value={[preference]}
-									onValueChange={(e) =>
-										setPreference(
-											e.value[0] as
-												| "system"
-												| "light"
-												| "dark",
-										)
-									}
-									size="sm"
-								>
-									<Select.HiddenSelect />
-									<Select.Control>
-										<Select.Trigger>
-											<Select.ValueText />
-										</Select.Trigger>
-										<Select.IndicatorGroup>
-											<Select.Indicator />
-										</Select.IndicatorGroup>
-									</Select.Control>
-									<Portal>
-										<Select.Positioner>
-											<Select.Content>
-												{themeCollection.items.map(
-													(item) => (
-														<Select.Item
-															item={item}
-															key={item.value}
-														>
-															{item.label}
-															<Select.ItemIndicator />
-														</Select.Item>
-													),
-												)}
-											</Select.Content>
-										</Select.Positioner>
-									</Portal>
-								</Select.Root>
-							</Field.Root>
-							<AccentColorPicker />
-							<BorderRadiusPicker />
-							<Field.Root>
-								<Field.Label>{m.debugMode()}</Field.Label>
-								<Switch.Root
-									checked={debugEnabled}
-									onCheckedChange={(e) =>
-										setDebugEnabled(!!e.checked)
-									}
-								>
-									<Switch.HiddenInput />
-									<Switch.Control />
-									<Switch.Label>
-										<Text fontSize="sm" color="fg.muted">
-											{m.debugModeDescription()}
-										</Text>
-									</Switch.Label>
-								</Switch.Root>
-							</Field.Root>
-						</Stack>
+						<GeneralSettings />
 					</Tabs.Content>
 					<Tabs.Content value="terminal">
-						<Flex gap="8" align="flex-start">
-							<Stack gap="6" flex="1" minW="0" maxW="md">
-								<TerminalThemePicker
-									onPreview={setPreviewThemeId}
-								/>
-								<Suspense fallback={<Skeleton height="70px" />}>
-									<FontPicker />
-								</Suspense>
-								<FontSizePicker />
-							</Stack>
-							<Box flex="1" minW="0">
-								<TerminalPreview themeId={previewThemeId} />
-							</Box>
-						</Flex>
+						<TerminalSettings />
 					</Tabs.Content>
 					<Tabs.Content value="notification">
 						<NotificationSettings />
