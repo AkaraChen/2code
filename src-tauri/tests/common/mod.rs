@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
 use infra::db::MIGRATIONS;
-use model::profile::Profile;
-use model::project::Project;
+use model::profile::{NewProfile, Profile};
+use model::project::{NewProject, Project};
 
 /// Create an in-memory SQLite connection with migrations and foreign keys enabled.
 pub fn setup_db() -> SqliteConnection {
@@ -19,6 +20,40 @@ pub fn setup_db() -> SqliteConnection {
 	conn.run_pending_migrations(MIGRATIONS)
 		.expect("run migrations");
 	conn
+}
+
+/// Create an in-memory DbPool (Arc<Mutex<SqliteConnection>>).
+pub fn setup_db_pool() -> infra::db::DbPool {
+	Arc::new(Mutex::new(setup_db()))
+}
+
+/// Insert a bare project + default profile into the DB without touching the filesystem.
+/// Returns (project_id, profile_id). The project `folder` is set to the provided path.
+pub fn insert_bare_project_and_profile(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+	profile_id: &str,
+	folder: &str,
+) {
+	diesel::insert_into(model::schema::projects::table)
+		.values(&NewProject {
+			id: project_id,
+			name: "Test Project",
+			folder,
+		})
+		.execute(conn)
+		.expect("insert project");
+
+	diesel::insert_into(model::schema::profiles::table)
+		.values(&NewProfile {
+			id: profile_id,
+			project_id,
+			branch_name: "main",
+			worktree_path: folder,
+			is_default: true,
+		})
+		.execute(conn)
+		.expect("insert default profile");
 }
 
 /// Create a temporary git repository with user config set.
