@@ -42,16 +42,12 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
 
-	const [expanded, setExpanded] = useState(isAnyActive);
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
 
-	// Auto-expand on inactive → active transition (derived state during render)
-	const [wasActive, setWasActive] = useState(isAnyActive);
-	if (wasActive !== isAnyActive) {
-		setWasActive(isAnyActive);
-		if (isAnyActive) setExpanded(true);
-	}
+	// 三态逻辑:用户未操作时跟随激活状态,操作后尊重用户选择
+	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+	const expanded = userExpanded !== null ? userExpanded : isAnyActive;
 
 	return (
 		<>
@@ -81,7 +77,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							onClick={(e) => {
 								e.preventDefault();
 								e.stopPropagation();
-								setExpanded((v) => !v);
+								setUserExpanded((prev) =>
+									prev === null ? !expanded : !prev,
+								);
 							}}
 						>
 							{expanded ? (
