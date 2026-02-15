@@ -125,5 +125,17 @@
 	"agentDescPi": "Lightweight terminal-first agent",
 	"agentDescCursor": "AI-first code editor agent",
 	"topbarExampleProject": "My Project",
-	"topbarExampleBranch": "main"
+	"topbarExampleBranch": "main",
+	"agentThinking": "Thinking...",
+	"agentPlan": "Execution Plan",
+	"agentToolInput": "Input",
+	"agentToolOutput": "Output",
+	"agentToolLocations": "Affected Files",
+	"agentStatusPending": "Pending",
+	"agentStatusInProgress": "In Progress",
+	"agentStatusCompleted": "Completed",
+	"agentStatusFailed": "Failed",
+	"agentPriorityHigh": "High",
+	"agentPriorityMedium": "Medium",
+	"agentPriorityLow": "Low"
 }

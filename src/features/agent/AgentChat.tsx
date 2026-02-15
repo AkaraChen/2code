@@ -17,13 +17,13 @@ interface AgentChatProps {
 export function AgentChat({ sessionId }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
 
-	const { messages, isStreaming, streamContent, error } = useAgentStore(
+	const { turns, isStreaming, streamingTurn, error } = useAgentStore(
 		useShallow((s) => {
 			const session = s.sessions[sessionId];
 			return {
-				messages: session?.messages,
+				turns: session?.turns,
 				isStreaming: session?.isStreaming,
-				streamContent: session?.streamContent,
+				streamingTurn: session?.streamingTurn,
 				error: session?.error,
 			};
 		}),
@@ -39,9 +39,9 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 	return (
 		<Flex direction="column" h="full" w="full" bg="bg">
 			<MessageList
-				messages={messages}
+				turns={turns}
 				isStreaming={isStreaming ?? false}
-				streamContent={streamContent}
+				streamingTurn={streamingTurn}
 				error={error ?? undefined}
 			/>
 			<ChatInput onSend={handleSend} disabled={isStreaming ?? false} />

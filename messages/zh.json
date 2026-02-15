@@ -125,5 +125,17 @@
 	"agentDescPi": "轻量级终端优先代理",
 	"agentDescCursor": "AI 优先的代码编辑器代理",
 	"topbarExampleProject": "我的项目",
-	"topbarExampleBranch": "main"
+	"topbarExampleBranch": "main",
+	"agentThinking": "思考中...",
+	"agentPlan": "执行计划",
+	"agentToolInput": "输入",
+	"agentToolOutput": "输出",
+	"agentToolLocations": "影响的文件",
+	"agentStatusPending": "等待中",
+	"agentStatusInProgress": "进行中",
+	"agentStatusCompleted": "已完成",
+	"agentStatusFailed": "失败",
+	"agentPriorityHigh": "高",
+	"agentPriorityMedium": "中",
+	"agentPriorityLow": "低"
 }
