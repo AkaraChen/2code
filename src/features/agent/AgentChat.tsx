@@ -4,6 +4,7 @@ import {
 	Button,
 	Code,
 	CodeBlock,
+	createShikiAdapter,
 	Flex,
 	Heading,
 	HStack,
@@ -13,8 +14,8 @@ import {
 	Table,
 	Text,
 	Textarea,
-	createShikiAdapter,
 } from "@chakra-ui/react";
+import { open } from "@tauri-apps/plugin-shell";
 import type { ComponentPropsWithoutRef } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiSendPlaneLine } from "react-icons/ri";
@@ -26,24 +27,38 @@ import { useSendAgentPrompt } from "./hooks";
 import type { AgentMessage } from "./store";
 import { useAgentStore } from "./store";
 
-// Shiki 适配器
+const SHIKI_LANGS = [
+	"typescript",
+	"javascript",
+	"python",
+	"rust",
+	"go",
+	"bash",
+	"json",
+	"html",
+	"css",
+	"markdown",
+	"tsx",
+	"jsx",
+] as const;
+
 const shikiAdapter = createShikiAdapter<HighlighterGeneric<any, any>>({
 	async load() {
 		const { createHighlighter } = await import("shiki");
 		return createHighlighter({
-			langs: ["typescript", "javascript", "python", "rust", "go", "bash", "json", "html", "css", "markdown", "tsx", "jsx"],
+			langs: [...SHIKI_LANGS],
 			themes: ["github-dark", "github-light"],
 		});
 	},
-	theme: {
-		light: "github-light",
-		dark: "github-dark",
-	},
+	theme: { light: "github-light", dark: "github-dark" },
 });
 
-// Streamdown 自定义组件映射（使用 Chakra UI 组件）
+function openExternalLink(href: string | undefined): void {
+	if (!href) return;
+	open(href).catch((err) => console.error("Failed to open link:", err));
+}
+
 const streamdownComponents = {
-	// 标题
 	h1: (props: ComponentPropsWithoutRef<"h1">) => (
 		<Heading as="h1" size="2xl" mt="6" mb="4" {...props} />
 	),
@@ -62,23 +77,21 @@ const streamdownComponents = {
 	h6: (props: ComponentPropsWithoutRef<"h6">) => (
 		<Heading as="h6" size="xs" mt="3" mb="2" {...props} />
 	),
-	// 段落
 	p: (props: ComponentPropsWithoutRef<"p">) => <Text my="3" {...props} />,
-	// 行内代码
 	code: (props: ComponentPropsWithoutRef<"code">) => {
-		// 如果在 pre 标签内，不做处理（由 pre 渲染）
 		if (props.className?.includes("language-")) {
 			return <code {...props} />;
 		}
-		// 行内代码使用 Chakra UI Code 组件
 		return <Code fontSize="0.9em" px="1" {...props} />;
 	},
-	// 代码块（使用 Chakra UI CodeBlock + Shiki）
 	pre: ({ children }: ComponentPropsWithoutRef<"pre">) => {
 		const codeElement = (children as any)?.props;
 		const className = codeElement?.className || "";
 		const language = className.replace("language-", "") || "text";
-		const code = typeof codeElement?.children === "string" ? codeElement.children.trim() : "";
+		const code =
+			typeof codeElement?.children === "string"
+				? codeElement.children.trim()
+				: "";
 
 		if (!code) {
 			return (
@@ -106,15 +119,25 @@ const streamdownComponents = {
 			</CodeBlock.Root>
 		);
 	},
-	// 引用块
 	blockquote: (props: ComponentPropsWithoutRef<"blockquote">) => (
 		<Blockquote.Root my="4" {...props}>
 			<Blockquote.Content>{props.children}</Blockquote.Content>
 		</Blockquote.Root>
 	),
-	// 链接
-	a: (props: ComponentPropsWithoutRef<"a">) => <Link {...props} />,
-	// 列表
+	a: ({ href, children, ...props }: ComponentPropsWithoutRef<"a">) => (
+		<Link
+			{...props}
+			onClick={(e) => {
+				e.preventDefault();
+				openExternalLink(href);
+			}}
+			color="blue.500"
+			textDecoration="underline"
+			cursor="pointer"
+		>
+			{children}
+		</Link>
+	),
 	ul: (props: ComponentPropsWithoutRef<"ul">) => (
 		<List.Root as="ul" my="3" ps="6" {...props} />
 	),
@@ -124,18 +147,15 @@ const streamdownComponents = {
 	li: (props: ComponentPropsWithoutRef<"li">) => (
 		<List.Item my="1" {...props} />
 	),
-	// 分隔线
 	hr: (props: ComponentPropsWithoutRef<"hr">) => (
 		<Box as="hr" my="6" borderColor="border" {...props} />
 	),
-	// 强调
 	strong: (props: ComponentPropsWithoutRef<"strong">) => (
 		<Box as="strong" fontWeight="semibold" {...props} />
 	),
 	em: (props: ComponentPropsWithoutRef<"em">) => (
 		<Box as="em" fontStyle="italic" {...props} />
 	),
-	// 表格
 	table: (props: ComponentPropsWithoutRef<"table">) => (
 		<Table.Root size="sm" variant="outline" my="4" {...props} />
 	),
@@ -152,55 +172,69 @@ const streamdownComponents = {
 	td: (props: ComponentPropsWithoutRef<"td">) => <Table.Cell {...props} />,
 };
 
-interface AgentChatProps {
-	sessionId: string;
+interface BubbleProps {
+	content: string;
+	align?: "flex-start" | "flex-end";
+	bg?: string;
+	isAnimating?: boolean;
+	children?: React.ReactNode;
 }
 
-function MessageBubble({ message }: { message: AgentMessage }) {
-	const isUser = message.role === "user";
+function ChatBubble({
+	content,
+	align = "flex-start",
+	bg = "bg.muted",
+	isAnimating = false,
+	children,
+}: BubbleProps) {
 	return (
-		<Flex justify={isUser ? "flex-end" : "flex-start"} w="full">
+		<Flex justify={align} w="full">
 			<Box
 				maxW="80%"
 				px="4"
 				py="2"
 				borderRadius="lg"
-				bg={isUser ? "colorPalette.subtle" : "bg.muted"}
+				bg={bg}
 				fontSize="sm"
 				overflow="auto"
 			>
 				<CodeBlock.AdapterProvider value={shikiAdapter}>
-					<Streamdown animated isAnimating={false} components={streamdownComponents}>
-						{message.content}
+					<Streamdown
+						animated
+						isAnimating={isAnimating}
+						components={streamdownComponents}
+					>
+						{content}
 					</Streamdown>
 				</CodeBlock.AdapterProvider>
+				{children}
 			</Box>
 		</Flex>
+	);
+}
+
+function MessageBubble({ message }: { message: AgentMessage }) {
+	const isUser = message.role === "user";
+	return (
+		<ChatBubble
+			content={message.content}
+			align={isUser ? "flex-end" : "flex-start"}
+			bg={isUser ? "colorPalette.subtle" : "bg.muted"}
+		/>
 	);
 }
 
 function StreamingBubble({ content }: { content: string }) {
 	if (!content) return null;
 	return (
-		<Flex justify="flex-start" w="full">
-			<Box
-				maxW="80%"
-				px="4"
-				py="2"
-				borderRadius="lg"
-				bg="bg.muted"
-				fontSize="sm"
-				overflow="auto"
-			>
-				<CodeBlock.AdapterProvider value={shikiAdapter}>
-					<Streamdown animated isAnimating={true} components={streamdownComponents}>
-						{content}
-					</Streamdown>
-				</CodeBlock.AdapterProvider>
-				<Spinner size="xs" ml="2" />
-			</Box>
-		</Flex>
+		<ChatBubble content={content} isAnimating>
+			<Spinner size="xs" ml="2" />
+		</ChatBubble>
 	);
+}
+
+interface AgentChatProps {
+	sessionId: string;
 }
 
 export function AgentChat({ sessionId }: AgentChatProps) {
@@ -208,17 +242,18 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const sendPrompt = useSendAgentPrompt();
 
-	// 合并成单个选择器，使用 useShallow 避免无限循环
 	const { messages, isStreaming, streamContent, error } = useAgentStore(
-		useShallow((s) => ({
-			messages: s.sessions[sessionId]?.messages,
-			isStreaming: s.sessions[sessionId]?.isStreaming,
-			streamContent: s.sessions[sessionId]?.streamContent,
-			error: s.sessions[sessionId]?.error,
-		})),
+		useShallow((s) => {
+			const session = s.sessions[sessionId];
+			return {
+				messages: session?.messages,
+				isStreaming: session?.isStreaming,
+				streamContent: session?.streamContent,
+				error: session?.error,
+			};
+		}),
 	);
 
-	// Auto-scroll to bottom
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages, streamContent]);
@@ -242,7 +277,6 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 
 	return (
 		<Flex direction="column" h="full" w="full" bg="bg">
-			{/* Message list */}
 			<Box flex="1" overflowY="auto" px="4" py="4">
 				<Flex direction="column" gap="3" minH="full" justify="flex-end">
 					{messages?.length === 0 && !isStreaming && (
@@ -258,7 +292,9 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 					{messages?.map((msg) => (
 						<MessageBubble key={msg.timestamp} message={msg} />
 					))}
-					{isStreaming && <StreamingBubble content={streamContent} />}
+					{isStreaming && (
+						<StreamingBubble content={streamContent ?? ""} />
+					)}
 					{error && !isStreaming && (
 						<Box
 							px="4"
@@ -274,7 +310,6 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 				</Flex>
 			</Box>
 
-			{/* Input area */}
 			<Box
 				px="4"
 				py="3"
