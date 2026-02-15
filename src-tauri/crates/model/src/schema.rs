@@ -8,6 +8,7 @@ diesel::table! {
 		created_at -> Integer,
 		sender -> Text,
 		payload_json -> Text,
+		turn_index -> Integer,
 	}
 }
 

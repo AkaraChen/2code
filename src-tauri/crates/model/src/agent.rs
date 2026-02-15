@@ -35,6 +35,7 @@ pub struct AgentSessionEventRecord {
 	pub created_at: i32,
 	pub sender: String,
 	pub payload_json: String,
+	pub turn_index: i32,
 }
 
 #[derive(Insertable)]
@@ -45,6 +46,7 @@ pub struct NewAgentSessionEvent<'a> {
 	pub session_id: &'a str,
 	pub sender: &'a str,
 	pub payload_json: &'a str,
+	pub turn_index: i32,
 }
 
 /// Input metadata for creating an agent session.

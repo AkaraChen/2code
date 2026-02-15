@@ -37,7 +37,6 @@ pub fn list_by_project(
 	let sessions = agent_sessions::table
 		.inner_join(profiles::table.on(profiles::id.eq(agent_sessions::profile_id)))
 		.filter(profiles::project_id.eq(project_id))
-		.filter(agent_sessions::destroyed_at.is_null())
 		.select(AgentSessionRecord::as_select())
 		.order(agent_sessions::created_at.asc())
 		.load(conn)
@@ -318,6 +317,7 @@ mod tests {
 			session_id: "sess1",
 			sender: "user",
 			payload_json: r#"{"text":"hello"}"#,
+			turn_index: 1,
 		};
 		let e2 = NewAgentSessionEvent {
 			id: "evt2",
@@ -325,6 +325,7 @@ mod tests {
 			session_id: "sess1",
 			sender: "agent",
 			payload_json: r#"{"text":"hi there"}"#,
+			turn_index: 1,
 		};
 
 		append_event(&mut conn, &e1).unwrap();
@@ -358,9 +359,9 @@ mod tests {
 		let retrieved = get_session(&mut conn, "sess1").unwrap();
 		assert!(retrieved.destroyed_at.is_some());
 
-		// Should not appear in list_by_project
+		// Should still appear in list_by_project (destroyed sessions are returned for restoration)
 		let sessions = list_by_project(&mut conn, "proj1").unwrap();
-		assert_eq!(sessions.len(), 0);
+		assert_eq!(sessions.len(), 1);
 	}
 
 	#[test]
@@ -390,8 +391,9 @@ mod tests {
 		let count = mark_all_active_destroyed(&mut conn).unwrap();
 		assert_eq!(count, 2);
 
+		// Both sessions should still appear (for restoration)
 		let sessions = list_by_project(&mut conn, "proj1").unwrap();
-		assert_eq!(sessions.len(), 0);
+		assert_eq!(sessions.len(), 2);
 	}
 
 	#[test]
@@ -415,6 +417,7 @@ mod tests {
 			session_id: "sess1",
 			sender: "user",
 			payload_json: r#"{"text":"hello"}"#,
+			turn_index: 1,
 		};
 		append_event(&mut conn, &event).unwrap();
 

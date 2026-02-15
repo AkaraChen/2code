@@ -4,8 +4,8 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { persistAgentEvent } from "@/generated";
 import type { AgentSessionEventRecord } from "@/generated";
+import consola from "consola";
 
 export interface AgentMessage {
 	role: "user" | "assistant";
@@ -70,7 +70,6 @@ export const useAgentStore = create<AgentStore>()(
 		addUserMessage(sessionId, content) {
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
-				const eventIndex = session.messages.length;
 
 				session.messages.push({
 					role: "user",
@@ -78,18 +77,7 @@ export const useAgentStore = create<AgentStore>()(
 					timestamp: Date.now(),
 				});
 
-				// Persist user message to database (fire-and-forget)
-				persistAgentEvent({
-					sessionId,
-					eventIndex,
-					sender: "user",
-					payload: JSON.stringify({ text: content }),
-				}).catch((err) => {
-					console.error(
-						`Failed to persist user message for ${sessionId}:`,
-						err,
-					);
-				});
+				// Note: User message persistence is now handled by backend in send_agent_prompt
 			});
 		},
 
@@ -205,41 +193,102 @@ export const useAgentStore = create<AgentStore>()(
 
 		/**
 		 * Restore session state from persisted events.
-		 * Called during session restoration to rebuild message history.
+		 * Uses turn-based grouping to reconstruct conversation history.
+		 * Each turn consists of a user message followed by agent response chunks.
 		 */
 		restoreFromEvents(sessionId, events) {
+			consola.log(
+				`[AgentStore] restoreFromEvents for ${sessionId}, ${events.length} events`,
+			);
+
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
 
-				// Rebuild messages from events
-				for (const event of events) {
-					try {
-						const payload = JSON.parse(event.payload_json);
+				// Group events by turn_index
+				const turnGroups = events.reduce(
+					(acc, event) => {
+						const turnIdx = event.turn_index;
+						if (!acc[turnIdx]) acc[turnIdx] = [];
+						acc[turnIdx].push(event);
+						return acc;
+					},
+					{} as Record<number, AgentSessionEventRecord[]>,
+				);
 
-						if (event.sender === "user" && payload.text) {
-							session.messages.push({
-								role: "user",
-								content: payload.text,
-								timestamp: event.created_at * 1000, // Convert to ms
-							});
-						} else if (event.sender === "agent") {
-							// Agent events are complex - try to extract text content
-							const content = extractAgentContent(payload);
-							if (content) {
+				let restoredMessages = 0;
+
+				// Process each turn in order
+				for (const turnIdxStr of Object.keys(turnGroups).sort(
+					(a, b) => Number(a) - Number(b),
+				)) {
+					const turnIdx = Number(turnIdxStr);
+					const turnEvents = turnGroups[turnIdx];
+
+					// Find user message (should be exactly one per turn)
+					const userEvent = turnEvents.find(
+						(e) => e.sender === "user",
+					);
+					if (userEvent) {
+						try {
+							const payload = JSON.parse(
+								userEvent.payload_json,
+							);
+							if (payload.text) {
 								session.messages.push({
-									role: "assistant",
-									content,
-									timestamp: event.created_at * 1000,
+									role: "user",
+									content: payload.text,
+									timestamp: userEvent.created_at * 1000,
 								});
+								restoredMessages++;
+							}
+						} catch (err) {
+							consola.warn(
+								`Failed to parse user event ${userEvent.id}:`,
+								err,
+							);
+						}
+					}
+
+					// Find all agent events and merge chunks into one message
+					const agentEvents = turnEvents
+						.filter((e) => e.sender === "agent")
+						.sort((a, b) => a.event_index - b.event_index);
+
+					if (agentEvents.length > 0) {
+						const chunks: string[] = [];
+						for (const event of agentEvents) {
+							try {
+								const payload = JSON.parse(
+									event.payload_json,
+								);
+								const content = extractAgentContent(payload);
+								if (content) {
+									chunks.push(content);
+								}
+							} catch (err) {
+								consola.warn(
+									`Failed to parse agent event ${event.id}:`,
+									err,
+								);
 							}
 						}
-					} catch (err) {
-						console.warn(
-							`Failed to parse event ${event.id}:`,
-							err,
-						);
+
+						if (chunks.length > 0) {
+							session.messages.push({
+								role: "assistant",
+								content: chunks.join(""), // Merge all chunks
+								timestamp:
+									agentEvents[agentEvents.length - 1]
+										.created_at * 1000,
+							});
+							restoredMessages++;
+						}
 					}
 				}
+
+				consola.log(
+					`[AgentStore] restored ${restoredMessages} messages from ${Object.keys(turnGroups).length} turns for ${sessionId}`,
+				);
 			});
 		},
 	})),

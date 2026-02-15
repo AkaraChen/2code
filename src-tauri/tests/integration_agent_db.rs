@@ -106,7 +106,7 @@ fn list_by_project_filters_correctly() {
 }
 
 #[test]
-fn list_by_project_excludes_destroyed() {
+fn list_by_project_includes_destroyed() {
 	let mut conn = setup_db();
 	insert_bare_project_and_profile(&mut conn, "p1", "pr1", "/tmp/p1");
 
@@ -115,9 +115,9 @@ fn list_by_project_excludes_destroyed() {
 
 	agent::mark_destroyed(&mut conn, "as-dead");
 
+	// Both sessions should be returned (destroyed ones are needed for restoration)
 	let sessions = agent::list_by_project(&mut conn, "p1").unwrap();
-	assert_eq!(sessions.len(), 1);
-	assert_eq!(sessions[0].id, "as-active");
+	assert_eq!(sessions.len(), 2);
 }
 
 #[test]

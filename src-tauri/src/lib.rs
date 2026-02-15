@@ -34,6 +34,10 @@ pub fn run() {
 		std::sync::Arc::new(tokio::sync::Mutex::new(
 			std::collections::HashMap::new(),
 		));
+	let turn_index_map: handler::agent::TurnIndexMap =
+		std::sync::Arc::new(tokio::sync::Mutex::new(
+			std::collections::HashMap::new(),
+		));
 	let read_threads = infra::pty::create_thread_tracker();
 	let flush_senders = service::pty::create_flush_senders();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
@@ -59,6 +63,7 @@ pub fn run() {
 		.manage(agent_manager)
 		.manage(agent_sessions)
 		.manage(notification_tasks)
+		.manage(turn_index_map)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app

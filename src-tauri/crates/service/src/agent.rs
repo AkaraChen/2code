@@ -170,6 +170,7 @@ pub fn persist_event(
 	event_index: i32,
 	sender: &str,
 	payload_json: &str,
+	turn_index: i32,
 ) -> Result<(), AppError> {
 	let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
@@ -187,6 +188,7 @@ pub fn persist_event(
 		session_id,
 		sender,
 		payload_json,
+		turn_index,
 	};
 
 	repo::agent::append_event(&mut conn, &record)

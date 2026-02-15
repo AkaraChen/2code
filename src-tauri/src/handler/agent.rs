@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +13,9 @@ use infra::db::DbPool;
 use model::agent::{AgentRestoreResult, AgentSessionMeta, AgentSessionRecord};
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
+
+/// Maps session_id to current turn_index counter
+pub type TurnIndexMap = Arc<tokio::sync::Mutex<HashMap<String, Arc<AtomicI32>>>>;
 
 #[tauri::command]
 pub fn list_agent_status(
@@ -130,6 +134,8 @@ pub async fn send_agent_prompt(
 	content: String,
 	app: AppHandle,
 	sessions: State<'_, AgentSessionMap>,
+	turn_index_map: State<'_, TurnIndexMap>,
+	db: State<'_, DbPool>,
 ) -> Result<(), String> {
 	let session = {
 		let map = sessions.lock().await;
@@ -137,6 +143,42 @@ pub async fn send_agent_prompt(
 			.cloned()
 			.ok_or_else(|| format!("session not found: {session_id}"))?
 	};
+
+	// Increment turn index for this session
+	let turn_idx = {
+		let mut map = turn_index_map.lock().await;
+		let counter = map
+			.entry(session_id.clone())
+			.or_insert_with(|| Arc::new(AtomicI32::new(0)));
+		counter.fetch_add(1, Ordering::SeqCst) + 1
+	};
+
+	// Get next event index
+	let event_idx = {
+		let mut conn = db
+			.lock()
+			.map_err(|_| "Failed to acquire DB lock".to_string())?;
+		repo::agent::next_event_index(&mut conn, &session_id)
+			.map_err(|e| format!("{e}"))?
+	};
+
+	// Persist user message with turn_index
+	let payload = serde_json::json!({ "text": content }).to_string();
+	if let Err(e) = service::agent::persist_event(
+		db.inner(),
+		&session_id,
+		event_idx,
+		"user",
+		&payload,
+		turn_idx,
+	) {
+		tracing::warn!(
+			session_id = %session_id,
+			turn_index = turn_idx,
+			error = %e,
+			"failed to persist user message"
+		);
+	}
 
 	// Spawn async task for the prompt so we return immediately
 	let sid = session_id.clone();
@@ -176,6 +218,8 @@ pub async fn close_agent_session(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
+	turn_index_map: State<'_, TurnIndexMap>,
+	db: State<'_, DbPool>,
 ) -> Result<(), String> {
 	// Step 1: Abort notification task and WAIT for exit
 	// This immediately interrupts stream.next().await and releases Arc reference
@@ -192,6 +236,24 @@ pub async fn close_agent_session(
 
 	// Step 2: Remove session from map
 	let session = sessions.lock().await.remove(&session_id);
+
+	// Step 2.5: Remove turn index counter
+	turn_index_map.lock().await.remove(&session_id);
+
+	// Step 2.6: Mark session as destroyed in database
+	if let Err(e) = service::agent::close_session(
+		db.inner(),
+		&sessions,
+		&session_id,
+	)
+	.await
+	{
+		tracing::warn!(
+			session_id = %session_id,
+			error = %e,
+			"failed to mark session as destroyed in database"
+		);
+	}
 
 	// Step 3: Shutdown session with timeout (external dependency may deadlock)
 	if let Some(session) = session {
@@ -230,6 +292,7 @@ pub async fn create_agent_session_persistent(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
+	turn_index_map: State<'_, TurnIndexMap>,
 ) -> Result<AgentSessionInfo, String> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
@@ -266,11 +329,18 @@ pub async fn create_agent_session_persistent(
 	};
 	let info = session.info();
 
+	// Initialize turn index counter for this session
+	{
+		let mut map = turn_index_map.lock().await;
+		map.insert(session_id.clone(), Arc::new(AtomicI32::new(0)));
+	}
+
 	// Spawn notification stream listener
 	let notif_app = app.clone();
 	let notif_session = session.clone();
 	let notif_id = session_id.clone();
 	let notif_db = db_pool.clone();
+	let notif_turn_map = turn_index_map.inner().clone();
 
 	let task_handle = tokio::spawn(async move {
 		let mut event_index = 0i32;
@@ -295,6 +365,14 @@ pub async fn create_agent_session_persistent(
 				);
 			}
 
+			// Get current turn index
+			let turn_idx = {
+				let map = notif_turn_map.lock().await;
+				map.get(&notif_id)
+					.map(|counter| counter.load(Ordering::SeqCst))
+					.unwrap_or(0)
+			};
+
 			// Persist event to database
 			let payload_json = notification.to_string();
 			if let Err(e) = service::agent::persist_event(
@@ -303,10 +381,12 @@ pub async fn create_agent_session_persistent(
 				event_index,
 				"agent",
 				&payload_json,
+				turn_idx,
 			) {
 				tracing::warn!(
 					session_id = %notif_id,
 					event_index,
+					turn_index = turn_idx,
 					error = %e,
 					"failed to persist agent event"
 				);
@@ -343,6 +423,7 @@ pub async fn restore_agent_session(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
+	turn_index_map: State<'_, TurnIndexMap>,
 ) -> Result<AgentRestoreResult, String> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
@@ -380,6 +461,21 @@ pub async fn restore_agent_session(
 
 	let new_session_id = restore_result.info.id.clone();
 
+	// Set turn index to max(turn_index) + 1 from restored events
+	let max_turn_idx = restore_result
+		.events
+		.iter()
+		.map(|e| e.turn_index)
+		.max()
+		.unwrap_or(0);
+	{
+		let mut map = turn_index_map.lock().await;
+		map.insert(
+			new_session_id.clone(),
+			Arc::new(AtomicI32::new(max_turn_idx)),
+		);
+	}
+
 	// Get session and spawn notification listener
 	let session = {
 		let map = sessions_clone.lock().await;
@@ -395,6 +491,7 @@ pub async fn restore_agent_session(
 	let notif_session = session.clone();
 	let notif_id = new_session_id.clone();
 	let notif_db = db_pool.clone();
+	let notif_turn_map = turn_index_map.inner().clone();
 
 	// Start event_index from where we left off
 	let mut event_index = restore_result.events.len() as i32;
@@ -421,6 +518,14 @@ pub async fn restore_agent_session(
 				);
 			}
 
+			// Get current turn index
+			let turn_idx = {
+				let map = notif_turn_map.lock().await;
+				map.get(&notif_id)
+					.map(|counter| counter.load(Ordering::SeqCst))
+					.unwrap_or(0)
+			};
+
 			// Persist event to database
 			let payload_json = notification.to_string();
 			if let Err(e) = service::agent::persist_event(
@@ -429,10 +534,12 @@ pub async fn restore_agent_session(
 				event_index,
 				"agent",
 				&payload_json,
+				turn_idx,
 			) {
 				tracing::warn!(
 					session_id = %notif_id,
 					event_index,
+					turn_index = turn_idx,
 					error = %e,
 					"failed to persist agent event"
 				);
@@ -486,6 +593,7 @@ pub fn persist_agent_event(
 	event_index: i32,
 	sender: String,
 	payload: String,
+	turn_index: i32,
 	db: State<'_, DbPool>,
 ) -> Result<(), String> {
 	service::agent::persist_event(
@@ -494,6 +602,7 @@ pub fn persist_agent_event(
 		event_index,
 		&sender,
 		&payload,
+		turn_index,
 	)
 	.map_err(|e| format!("{e}"))
 }
