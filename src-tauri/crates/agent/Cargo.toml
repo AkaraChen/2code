@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 sandbox-agent-agent-management = { git = "https://github.com/rivet-dev/sandbox-agent", package = "sandbox-agent-agent-management" }
-acp-http-adapter = { git = "https://github.com/rivet-dev/sandbox-agent", package = "acp-http-adapter" }
+acp-client = { path = "../acp-client" }
 sandbox-agent-agent-credentials = { git = "https://github.com/rivet-dev/sandbox-agent", package = "sandbox-agent-agent-credentials" }
 tokio = { version = "1", features = ["sync", "time", "process"] }
 serde = { version = "1", features = ["derive"] }

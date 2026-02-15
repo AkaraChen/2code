@@ -3,6 +3,7 @@ import { AgentTabSession } from "./AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
+import { markPending, clearPending } from "./pendingDeletions";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }
@@ -45,10 +46,19 @@ export function useCreateTab() {
 export function useCloseTab() {
 	return useMutation({
 		mutationFn: async ({ tabId }: { profileId: string; tabId: string }) => {
-			const session = sessionRegistry.get(tabId);
-			if (session) {
-				await session.close();
-				sessionRegistry.delete(tabId);
+			// Atomic check-and-set to prevent double-close
+			if (!markPending(tabId)) {
+				throw new Error(`Tab ${tabId} is already being closed`);
+			}
+
+			try {
+				const session = sessionRegistry.get(tabId);
+				if (session) {
+					await session.close();
+					sessionRegistry.delete(tabId);
+				}
+			} finally {
+				clearPending(tabId);
 			}
 		},
 		onSettled: (_data, _err, { profileId, tabId }) => {

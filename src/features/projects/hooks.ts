@@ -13,6 +13,7 @@ import {
 	updateProject,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { closeAllTabsForProfiles } from "@/features/tabs/utils";
 
 export function useProjects() {
 	return useSuspenseQuery({
@@ -73,8 +74,20 @@ export function useRenameProject() {
 
 export function useDeleteProject() {
 	const queryClient = useQueryClient();
+	const { data: projects } = useProjects();
+
 	return useMutation({
-		mutationFn: (id: string) => deleteProject({ id }),
+		mutationFn: async (id: string) => {
+			// Step 1: Find all profiles for this project
+			const project = projects?.find((p) => p.id === id);
+			const profileIds = project?.profiles?.map((p) => p.id) ?? [];
+
+			// Step 2: Close all tabs for each profile
+			await closeAllTabsForProfiles(profileIds);
+
+			// Step 3: Delete project from backend
+			await deleteProject({ id });
+		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},

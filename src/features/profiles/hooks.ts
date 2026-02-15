@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useTerminalStore } from "@/features/terminal/store";
 import { createProfile, deleteProfile } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { closeAllTabsForProfile } from "@/features/tabs/utils";
 
 export function useCreateProfile() {
 	const queryClient = useQueryClient();
@@ -22,10 +22,20 @@ export function useCreateProfile() {
 export function useDeleteProfile() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: ({ id }: { id: string; projectId: string }) =>
-			deleteProfile({ id }),
-		onSuccess: (_data, { id }) => {
-			useTerminalStore.getState().removeProfile(id);
+		mutationFn: async ({
+			id,
+			projectId: _projectId,
+		}: {
+			id: string;
+			projectId: string;
+		}) => {
+			// Step 1: Close all tabs for this profile
+			await closeAllTabsForProfile(id);
+
+			// Step 2: Delete profile from backend
+			await deleteProfile({ id });
+		},
+		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
 	});

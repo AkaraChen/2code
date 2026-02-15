@@ -1,32 +1,29 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use acp_http_adapter::process::{AdapterError, AdapterRuntime, PostOutcome};
-use acp_http_adapter::registry::LaunchSpec;
+use acp_client::{AcpClient, AdapterError};
 use futures::Stream;
 use sandbox_agent_agent_management::agents::AgentProcessLaunchSpec;
-use serde_json::{json, Value};
+use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AgentSessionError {
 	#[error("failed to spawn agent: {0}")]
 	Spawn(#[from] AdapterError),
-	#[error("unexpected response type")]
-	UnexpectedResponse,
 	#[error("failed to parse response: {0}")]
 	ParseError(#[from] serde_json::Error),
+	#[error("unexpected response from agent")]
+	UnexpectedResponse,
 }
 
 pub struct AgentSession {
 	pub id: String,
 	pub agent: String,
 	pub cwd: PathBuf,
-	runtime: Arc<AdapterRuntime>,
-	request_id: AtomicU64,
+	runtime: Arc<AcpClient>,
 }
 
 impl AgentSession {
@@ -43,19 +40,21 @@ impl AgentSession {
 		// Extra env (API keys etc.) override launch_spec env
 		env.extend(extra_env);
 
-		let launch = LaunchSpec {
-			program: launch_spec.program,
-			args: launch_spec.args,
-			env,
-		};
-
 		tracing::info!(
 			agent = agent,
 			cwd = %cwd.display(),
 			"spawning agent session"
 		);
 
-		let runtime = Arc::new(AdapterRuntime::start(launch, timeout).await?);
+		let runtime = Arc::new(
+			AcpClient::spawn_with_timeout(
+				launch_spec.program,
+				launch_spec.args,
+				env,
+				timeout,
+			)
+			.await?,
+		);
 		let id = uuid::Uuid::new_v4().to_string();
 
 		Ok(Self {
@@ -63,12 +62,7 @@ impl AgentSession {
 			agent: agent.to_string(),
 			cwd,
 			runtime,
-			request_id: AtomicU64::new(1),
 		})
-	}
-
-	fn next_id(&self) -> u64 {
-		self.request_id.fetch_add(1, Ordering::Relaxed)
 	}
 
 	/// Send a JSON-RPC request and wait for the response.
@@ -77,43 +71,21 @@ impl AgentSession {
 		method: &str,
 		params: Value,
 	) -> Result<Value, AgentSessionError> {
-		let id = self.next_id();
-		let payload = json!({
-			"jsonrpc": "2.0",
-			"id": id,
-			"method": method,
-			"params": params,
-		});
+		tracing::debug!(
+			session_id = %self.id,
+			method = method,
+			"sending acp request"
+		);
+
+		let response = self.runtime.request(method, params).await?;
 
 		tracing::debug!(
 			session_id = %self.id,
 			method = method,
-			rpc_id = id,
-			payload = %payload,
-			"acp rpc request"
+			"received acp response"
 		);
 
-		match self.runtime.post(payload).await? {
-			PostOutcome::Response(value) => {
-				tracing::debug!(
-					session_id = %self.id,
-					method = method,
-					rpc_id = id,
-					response = %value,
-					"acp rpc response"
-				);
-				Ok(value)
-			}
-			PostOutcome::Accepted => {
-				tracing::warn!(
-					session_id = %self.id,
-					method = method,
-					rpc_id = id,
-					"acp rpc unexpected accepted (expected response)"
-				);
-				Err(AgentSessionError::UnexpectedResponse)
-			}
-		}
+		Ok(response)
 	}
 
 	/// Send a JSON-RPC notification (fire-and-forget, no response expected).
@@ -122,26 +94,19 @@ impl AgentSession {
 		method: &str,
 		params: Value,
 	) -> Result<(), AgentSessionError> {
-		let payload = json!({
-			"jsonrpc": "2.0",
-			"method": method,
-			"params": params,
-		});
-
 		tracing::debug!(
 			session_id = %self.id,
 			method = method,
-			payload = %payload,
-			"acp rpc notification (fire-and-forget)"
+			"sending acp notification"
 		);
 
-		self.runtime.post(payload).await?;
+		self.runtime.notify(method, params).await?;
 		Ok(())
 	}
 
 	/// Get a stream of notifications pushed by the agent.
 	pub async fn notifications(&self) -> impl Stream<Item = Value> {
-		self.runtime.clone().value_stream(None).await
+		self.runtime.notifications()
 	}
 
 	/// Gracefully shut down the agent process.
@@ -158,14 +123,6 @@ impl AgentSession {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn test_agent_session_error_display_spawn() {
-		// We can't easily construct an AdapterError, but we can test
-		// the other variants directly.
-		let err = AgentSessionError::UnexpectedResponse;
-		assert_eq!(err.to_string(), "unexpected response type");
-	}
 
 	#[test]
 	fn test_agent_session_error_display_parse() {

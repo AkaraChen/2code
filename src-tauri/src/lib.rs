@@ -31,6 +31,10 @@ pub fn run() {
 	);
 	let agent_sessions = agent::create_agent_session_map();
 	let agent_sessions_for_exit = agent_sessions.clone();
+	let notification_tasks: std::sync::Arc<
+		tokio::sync::Mutex<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
+	> = std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+	let notification_tasks_for_exit = notification_tasks.clone();
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
 	let read_threads_for_exit = read_threads.clone();
@@ -51,6 +55,7 @@ pub fn run() {
 		.manage(layer_handle)
 		.manage(agent_manager)
 		.manage(agent_sessions)
+		.manage(notification_tasks)
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -116,10 +121,20 @@ pub fn run() {
 			tauri::RunEvent::Exit => {
 				shutdown_for_exit.store(true, Ordering::Relaxed);
 
-				// Shut down all agent sessions
+				// Abort all notification tasks and shut down all agent sessions
 				let agent_sessions = agent_sessions_for_exit.clone();
+				let notification_tasks = notification_tasks_for_exit.clone();
 				tokio::task::block_in_place(|| {
 					tokio::runtime::Handle::current().block_on(async {
+						// Abort all notification tasks first
+						let mut tasks_map = notification_tasks.lock().await;
+						for (id, task) in tasks_map.drain() {
+							tracing::info!(session_id = %id, "exit: aborting notification task");
+							task.abort();
+						}
+						drop(tasks_map);
+
+						// Shut down agent sessions
 						let mut map = agent_sessions.lock().await;
 						for (id, session) in map.drain() {
 							tracing::info!(session_id = %id, "exit: shutting down agent session");

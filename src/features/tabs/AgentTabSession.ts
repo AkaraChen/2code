@@ -64,9 +64,17 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async close(): Promise<void> {
+		// Unlisten first (always succeeds)
 		for (const unlisten of this.unlisteners) unlisten();
 		this.unlisteners = [];
-		await closeAgentSession({ sessionId: this.id });
+
+		try {
+			await closeAgentSession({ sessionId: this.id });
+		} catch (err) {
+			console.error(`Failed to close agent session ${this.id}:`, err);
+			// Continue with state cleanup even if backend fails
+		}
+
 		useAgentStore.getState().removeSession(this.id);
 	}
 

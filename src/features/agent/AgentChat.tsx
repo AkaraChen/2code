@@ -9,6 +9,12 @@ import {
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiSendPlaneLine } from "react-icons/ri";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import { useShallow } from "zustand/react/shallow";
+import "highlight.js/styles/github-dark.css";
+import { Prose } from "@/components/ui/prose";
 import * as m from "@/paraglide/messages.js";
 import { useSendAgentPrompt } from "./hooks";
 import type { AgentMessage } from "./store";
@@ -28,10 +34,14 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 				py="2"
 				borderRadius="lg"
 				bg={isUser ? "colorPalette.subtle" : "bg.muted"}
-				whiteSpace="pre-wrap"
 				fontSize="sm"
+				overflow="auto"
 			>
-				<Text>{message.content}</Text>
+				<Prose maxW="none" my="0">
+					<Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+						{message.content}
+					</Markdown>
+				</Prose>
 			</Box>
 		</Flex>
 	);
@@ -47,10 +57,14 @@ function StreamingBubble({ content }: { content: string }) {
 				py="2"
 				borderRadius="lg"
 				bg="bg.muted"
-				whiteSpace="pre-wrap"
 				fontSize="sm"
+				overflow="auto"
 			>
-				<Text>{content}</Text>
+				<Prose maxW="none" my="0">
+					<Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+						{content}
+					</Markdown>
+				</Prose>
 				<Spinner size="xs" ml="2" />
 			</Box>
 		</Flex>
@@ -62,16 +76,15 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const sendPrompt = useSendAgentPrompt();
 
-	const messages = useAgentStore(
-		(s) => s.sessions[sessionId]?.messages ?? [],
+	// 合并成单个选择器，使用 useShallow 避免无限循环
+	const { messages, isStreaming, streamContent, error } = useAgentStore(
+		useShallow((s) => ({
+			messages: s.sessions[sessionId]?.messages,
+			isStreaming: s.sessions[sessionId]?.isStreaming,
+			streamContent: s.sessions[sessionId]?.streamContent,
+			error: s.sessions[sessionId]?.error,
+		})),
 	);
-	const isStreaming = useAgentStore(
-		(s) => s.sessions[sessionId]?.isStreaming ?? false,
-	);
-	const streamContent = useAgentStore(
-		(s) => s.sessions[sessionId]?.streamContent ?? "",
-	);
-	const error = useAgentStore((s) => s.sessions[sessionId]?.error ?? null);
 
 	// Auto-scroll to bottom
 	useEffect(() => {
@@ -100,7 +113,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 			{/* Message list */}
 			<Box flex="1" overflowY="auto" px="4" py="4">
 				<Flex direction="column" gap="3" minH="full" justify="flex-end">
-					{messages.length === 0 && !isStreaming && (
+					{messages?.length === 0 && !isStreaming && (
 						<Flex
 							align="center"
 							justify="center"
@@ -112,7 +125,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 							</Text>
 						</Flex>
 					)}
-					{messages.map((msg) => (
+					{messages?.map((msg) => (
 						<MessageBubble key={msg.timestamp} message={msg} />
 					))}
 					{isStreaming && <StreamingBubble content={streamContent} />}

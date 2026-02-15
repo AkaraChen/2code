@@ -1,6 +1,29 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+	agent_session_events (id) {
+		id -> Text,
+		event_index -> Integer,
+		session_id -> Text,
+		created_at -> Integer,
+		sender -> Text,
+		payload_json -> Text,
+	}
+}
+
+diesel::table! {
+	agent_sessions (id) {
+		id -> Text,
+		agent -> Text,
+		acp_session_id -> Text,
+		profile_id -> Text,
+		created_at -> Integer,
+		destroyed_at -> Nullable<Integer>,
+		session_init_json -> Nullable<Text>,
+	}
+}
+
+diesel::table! {
 	profiles (id) {
 		id -> Text,
 		project_id -> Text,
@@ -41,11 +64,15 @@ diesel::table! {
 	}
 }
 
+diesel::joinable!(agent_session_events -> agent_sessions (session_id));
+diesel::joinable!(agent_sessions -> profiles (profile_id));
 diesel::joinable!(profiles -> projects (project_id));
 diesel::joinable!(pty_session_output -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+	agent_session_events,
+	agent_sessions,
 	profiles,
 	projects,
 	pty_session_output,

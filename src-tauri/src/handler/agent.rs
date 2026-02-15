@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agent::{
 	AgentManagerWrapper, AgentSessionInfo, AgentSessionMap, AgentStatusInfo,
@@ -8,6 +9,11 @@ use agent::{
 };
 use futures::StreamExt;
 use tauri::{AppHandle, Emitter, State};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
+
+type NotificationTaskMap = Arc<Mutex<HashMap<String, JoinHandle<()>>>>;
 
 #[tauri::command]
 pub fn list_agent_status(
@@ -43,6 +49,7 @@ pub async fn spawn_agent_session(
 	app: AppHandle,
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
+	tasks: State<'_, NotificationTaskMap>,
 ) -> Result<AgentSessionInfo, String> {
 	let manager = manager.inner().clone();
 	let sessions = sessions.inner().clone();
@@ -80,7 +87,7 @@ pub async fn spawn_agent_session(
 	let app_for_notifications = app.clone();
 	let session_for_notifications = session.clone();
 	let id_for_notifications = local_id.clone();
-	tokio::spawn(async move {
+	let task_handle = tokio::spawn(async move {
 		let mut stream =
 			std::pin::pin!(session_for_notifications.notifications().await);
 		while let Some(notification) = stream.next().await {
@@ -118,6 +125,9 @@ pub async fn spawn_agent_session(
 			"agent notification stream ended"
 		);
 	});
+
+	// Store task handle for later abortion
+	tasks.lock().await.insert(local_id.clone(), task_handle);
 
 	Ok(info)
 }
@@ -173,14 +183,45 @@ pub async fn send_agent_prompt(
 pub async fn close_agent_session(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
+	tasks: State<'_, NotificationTaskMap>,
 ) -> Result<(), String> {
+	// Step 1: Abort notification task and WAIT for exit
+	// This immediately interrupts stream.next().await and releases Arc reference
+	if let Some(task) = tasks.lock().await.remove(&session_id) {
+		task.abort();
+		// CRITICAL: Wait for the task to fully exit to ensure
+		// all Arc references (session_for_notifications, stream) are dropped
+		let _ = task.await;
+		tracing::info!(
+			session_id = %session_id,
+			"notification stream task aborted and fully exited"
+		);
+	}
+
+	// Step 2: Remove session from map
 	let session = {
 		let mut map = sessions.lock().await;
 		map.remove(&session_id)
 	};
 
+	// Step 3: Shutdown session with timeout (external dependency may deadlock)
 	if let Some(session) = session {
-		session.shutdown().await;
+		match timeout(Duration::from_secs(3), session.shutdown()).await {
+			Ok(_) => {
+				tracing::info!(
+					session_id = %session_id,
+					"agent session shutdown completed"
+				);
+			}
+			Err(_) => {
+				tracing::warn!(
+					session_id = %session_id,
+					"agent session shutdown timed out after 3s, forcing cleanup"
+				);
+				// Session is already removed from map, so it won't be reused
+				// The timeout prevents blocking the frontend
+			}
+		}
 	}
 
 	Ok(())

@@ -3,6 +3,7 @@ import { RiRobot2Line, RiTerminalBoxLine } from "react-icons/ri";
 import { useShallow } from "zustand/react/shallow";
 import { AgentChat } from "@/features/agent/AgentChat";
 import { useCloseTab } from "@/features/tabs/hooks";
+import { isPending } from "@/features/tabs/pendingDeletions";
 import { useTabStore } from "@/features/tabs/store";
 import { Terminal } from "./Terminal";
 
@@ -47,12 +48,15 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 									as="span"
 									role="button"
 									size="2xs"
+									disabled={isPending(tab.id)}
 									onClick={(e) => {
 										e.stopPropagation();
-										closeTab.mutate({
-											profileId,
-											tabId: tab.id,
-										});
+										if (!isPending(tab.id)) {
+											closeTab.mutate({
+												profileId,
+												tabId: tab.id,
+											});
+										}
 									}}
 								/>
 							</HStack>
