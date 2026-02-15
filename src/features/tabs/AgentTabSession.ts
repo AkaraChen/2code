@@ -11,6 +11,7 @@ import type { AgentRestoreResult, AgentSessionRecord } from "@/generated";
 import { useAgentStore } from "../agent/store";
 import { TabSession } from "./session";
 import type { AgentTab } from "./types";
+import consola from "consola";
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
@@ -62,10 +63,20 @@ export class AgentTabSession extends TabSession {
 		session: AgentTabSession;
 		events: AgentRestoreResult["events"];
 	}> {
+		consola.log(
+			`[AgentTabSession] restoring session ${record.id}, agent: ${record.agent}, cwd: ${cwd}`,
+		);
+
 		const result: AgentRestoreResult = await restoreAgentSession({
 			oldSessionId: record.id,
 			cwd,
 		});
+
+		consola.log(
+			`[AgentTabSession] restore result:`,
+			result.info,
+			`events count: ${result.events.length}`,
+		);
 
 		const session = new AgentTabSession(
 			result.info.id,
@@ -74,12 +85,28 @@ export class AgentTabSession extends TabSession {
 			result.info.agent,
 		);
 
+		consola.log(
+			`[AgentTabSession] created session instance: ${session.id}`,
+		);
+
 		// Initialize store and rebuild messages from events
+		consola.log(
+			`[AgentTabSession] initializing store for ${result.info.id}`,
+		);
 		useAgentStore.getState().initSession(result.info.id);
+
+		consola.log(
+			`[AgentTabSession] restoring ${result.events.length} events`,
+		);
 		useAgentStore.getState().restoreFromEvents(result.info.id, result.events);
 
 		// Register event listeners for new messages
+		consola.log(`[AgentTabSession] registering listeners`);
 		await session.registerListeners();
+
+		consola.log(
+			`[AgentTabSession] restore complete for ${session.id}`,
+		);
 
 		return {
 			session,
@@ -124,7 +151,7 @@ export class AgentTabSession extends TabSession {
 				deleteAgentSessionRecord({ sessionId: this.id }),
 			]);
 		} catch (err) {
-			console.error(`Failed to close agent session ${this.id}:`, err);
+			consola.error(`Failed to close agent session ${this.id}:`, err);
 			// Continue with state cleanup even if backend fails
 		}
 

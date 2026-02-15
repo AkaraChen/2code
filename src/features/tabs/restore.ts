@@ -68,11 +68,21 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 
 	// Fetch both PTY and Agent sessions in parallel
 	const projectData = await Promise.all(
-		projects.map(async (p) => ({
-			project: p,
-			ptySessions: await listProjectSessions({ projectId: p.id }),
-			agentSessions: await listProjectAgentSessions({ projectId: p.id }),
-		})),
+		projects.map(async (p) => {
+			consola.log(`[tab-restore] fetching sessions for project ${p.id}`);
+			const ptySessions = await listProjectSessions({ projectId: p.id });
+			const agentSessions = await listProjectAgentSessions({
+				projectId: p.id,
+			});
+			consola.log(
+				`[tab-restore] project ${p.id}: ${ptySessions.length} PTY, ${agentSessions.length} agent`,
+			);
+			return {
+				project: p,
+				ptySessions,
+				agentSessions,
+			};
+		}),
 	);
 
 	const allPtySessions = projectData.flatMap(({ ptySessions }) => ptySessions);
@@ -83,6 +93,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	consola.info(
 		`[tab-restore] found ${allPtySessions.length} PTY sessions, ${allAgentSessions.length} agent sessions`,
 	);
+	consola.log("[tab-restore] all agent sessions:", allAgentSessions);
 
 	// Restore PTY sessions
 	if (allPtySessions.length > 0) {
@@ -108,30 +119,54 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 
 	// Restore Agent sessions
 	if (allAgentSessions.length > 0) {
+		consola.log("[tab-restore] starting agent session restoration");
+
 		// Find default profile for each project to use as cwd
 		const profileCwdMap = new Map<string, string>();
 		for (const { project } of projectData) {
 			const defaultProfile = project.profiles.find((p) => p.is_default);
 			if (defaultProfile) {
+				consola.log(
+					`[tab-restore] project ${project.id} default profile: ${defaultProfile.id}, cwd: ${defaultProfile.worktree_path}`,
+				);
 				for (const profile of project.profiles) {
 					// Use default profile's worktree as cwd for all profiles in project
 					profileCwdMap.set(profile.id, defaultProfile.worktree_path);
 				}
+			} else {
+				consola.warn(
+					`[tab-restore] project ${project.id} has no default profile!`,
+				);
 			}
 		}
 
 		await mapWithLimit(allAgentSessions, 3, async (record) => {
 			try {
 				const cwd = profileCwdMap.get(record.profile_id) || "/tmp";
+				consola.log(
+					`[tab-restore] restoring agent session ${record.id}, profile: ${record.profile_id}, cwd: ${cwd}`,
+				);
+
 				const { session: tabSession } = await AgentTabSession.restore(
 					record,
 					cwd,
 				);
+
+				consola.log(
+					`[tab-restore] agent session restored: ${tabSession.id}`,
+				);
 				sessionRegistry.set(tabSession.id, tabSession);
+
+				const tab = tabSession.toTab();
+				consola.log(
+					`[tab-restore] adding agent tab to store:`,
+					tab,
+				);
 
 				useTabStore
 					.getState()
-					.addTab(record.profile_id, tabSession.toTab());
+					.addTab(record.profile_id, tab);
+
 				consola.info(
 					`[tab-restore] Agent ${record.id} → ${tabSession.id}`,
 				);
@@ -139,6 +174,8 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 				consola.error(`[tab-restore] Agent failed: ${record.id}`, e);
 			}
 		});
+	} else {
+		consola.log("[tab-restore] no agent sessions to restore");
 	}
 
 	consola.info("[tab-restore] complete");
