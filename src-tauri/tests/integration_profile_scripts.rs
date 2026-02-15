@@ -6,8 +6,11 @@ use common::{add_commit, cleanup, create_temp_git_repo, setup_db};
 fn create_project_with_config(
 	conn: &mut diesel::SqliteConnection,
 	config_json: &str,
-) -> (model::project::Project, model::profile::Profile, std::path::PathBuf)
-{
+) -> (
+	model::project::Project,
+	model::profile::Profile,
+	std::path::PathBuf,
+) {
 	let dir = create_temp_git_repo();
 	add_commit(&dir, "README.md", "# Test", "Initial commit");
 
@@ -46,8 +49,7 @@ fn profile_create_runs_setup_script() {
 		create_project_with_config(&mut conn, config);
 
 	let profile =
-		service::profile::create(&mut conn, &project.id, "setup-test")
-			.unwrap();
+		service::profile::create(&mut conn, &project.id, "setup-test").unwrap();
 
 	// The setup script should have created marker.txt in the worktree
 	let worktree = std::path::Path::new(&profile.worktree_path);
@@ -89,10 +91,8 @@ fn profile_delete_runs_teardown_script() {
 	let mut conn = setup_db();
 
 	// Use a unique temp file path for the teardown marker
-	let marker_path = std::env::temp_dir().join(format!(
-		"2code-teardown-marker-{}",
-		uuid::Uuid::new_v4()
-	));
+	let marker_path = std::env::temp_dir()
+		.join(format!("2code-teardown-marker-{}", uuid::Uuid::new_v4()));
 	let marker_str = marker_path.to_string_lossy().to_string();
 
 	let config = format!(r#"{{"teardown_script": ["touch {marker_str}"]}}"#);
@@ -140,10 +140,8 @@ fn profile_create_setup_script_failure_no_block() {
 fn profile_create_with_init_script_not_executed() {
 	let mut conn = setup_db();
 
-	let marker_path = std::env::temp_dir().join(format!(
-		"2code-init-marker-{}",
-		uuid::Uuid::new_v4()
-	));
+	let marker_path = std::env::temp_dir()
+		.join(format!("2code-init-marker-{}", uuid::Uuid::new_v4()));
 	let marker_str = marker_path.to_string_lossy().to_string();
 
 	let config = format!(r#"{{"init_script": ["touch {marker_str}"]}}"#);
@@ -167,8 +165,7 @@ fn profile_create_with_init_script_not_executed() {
 #[test]
 fn profile_create_multiple_setup_scripts() {
 	let mut conn = setup_db();
-	let config =
-		r#"{"setup_script": ["touch first.txt", "touch second.txt"]}"#;
+	let config = r#"{"setup_script": ["touch first.txt", "touch second.txt"]}"#;
 	let (project, _default, dir) =
 		create_project_with_config(&mut conn, config);
 

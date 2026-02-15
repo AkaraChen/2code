@@ -145,10 +145,7 @@ fn mark_destroyed_sets_timestamp() {
 	agent::mark_destroyed(&mut conn, "as1");
 
 	let session = agent::get_session(&mut conn, "as1").unwrap();
-	assert!(
-		session.destroyed_at.is_some(),
-		"destroyed_at should be set"
-	);
+	assert!(session.destroyed_at.is_some(), "destroyed_at should be set");
 }
 
 #[test]
@@ -190,14 +187,7 @@ fn delete_session_cascades_events() {
 	insert_bare_project_and_profile(&mut conn, "p1", "pr1", "/tmp/p1");
 	insert_session(&mut conn, "as1", "pr1", "claude-code");
 	insert_event(&mut conn, "ev1", "as1", 0, "user", r#"{"text":"hi"}"#);
-	insert_event(
-		&mut conn,
-		"ev2",
-		"as1",
-		1,
-		"agent",
-		r#"{"text":"hello"}"#,
-	);
+	insert_event(&mut conn, "ev2", "as1", 1, "agent", r#"{"text":"hello"}"#);
 
 	// Events exist
 	let events = agent::list_events(&mut conn, "as1").unwrap();

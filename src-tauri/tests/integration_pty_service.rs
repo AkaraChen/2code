@@ -2,9 +2,7 @@ mod common;
 
 use std::sync::{Arc, Mutex};
 
-use common::{
-	add_commit, cleanup, create_temp_git_repo, setup_db_pool,
-};
+use common::{add_commit, cleanup, create_temp_git_repo, setup_db_pool};
 use model::pty::{PtyConfig, PtySessionMeta};
 use service::PtyEventEmitter;
 
@@ -61,9 +59,7 @@ fn build_test_ctx(
 /// Returns the profile_id.
 fn setup_project_in_pool(db: &infra::db::DbPool, folder: &str) -> String {
 	let mut conn = db.lock().unwrap();
-	common::insert_bare_project_and_profile(
-		&mut conn, "p1", "pr1", folder,
-	);
+	common::insert_bare_project_and_profile(&mut conn, "p1", "pr1", folder);
 	"pr1".to_string()
 }
 

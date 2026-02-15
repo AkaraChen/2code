@@ -37,9 +37,7 @@ fn mock_launch_spec() -> AgentProcessLaunchSpec {
 /// waiting, so shutdown() can never acquire the lock to kill the process.
 /// By telling the mock agent to exit first, the exit watcher releases the lock.
 async fn graceful_end(session: &AgentSession) {
-	let _ = session
-		.send("session/end", serde_json::json!({}))
-		.await;
+	let _ = session.send("session/end", serde_json::json!({})).await;
 	// Give the process a moment to exit so the exit watcher releases the lock
 	tokio::time::sleep(Duration::from_millis(100)).await;
 }
@@ -61,14 +59,10 @@ async fn test_agent_session_full_lifecycle() {
 	let launch_spec = mock_launch_spec();
 
 	// Create session
-	let session = ManagedAgentSession::create(
-		"mock",
-		cwd,
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.expect("should create session");
+	let session =
+		ManagedAgentSession::create("mock", cwd, launch_spec, HashMap::new())
+			.await
+			.expect("should create session");
 
 	// Verify session info
 	let info = session.info();
@@ -102,14 +96,10 @@ async fn test_agent_session_map_operations() {
 	let map: AgentSessionMap = agent::create_agent_session_map();
 
 	// Create and insert a session
-	let session = ManagedAgentSession::create(
-		"mock",
-		cwd,
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.expect("should create session");
+	let session =
+		ManagedAgentSession::create("mock", cwd, launch_spec, HashMap::new())
+			.await
+			.expect("should create session");
 
 	let local_id = session.local_id.clone();
 	let session_arc = Arc::new(session);
@@ -176,8 +166,7 @@ async fn test_multiple_sessions_concurrent() {
 	}
 
 	// Each session should have a unique local_id
-	let ids: Vec<&str> =
-		sessions.iter().map(|s| s.local_id.as_str()).collect();
+	let ids: Vec<&str> = sessions.iter().map(|s| s.local_id.as_str()).collect();
 	for i in 0..ids.len() {
 		for j in (i + 1)..ids.len() {
 			assert_ne!(ids[i], ids[j], "session IDs should be unique");
@@ -210,14 +199,10 @@ async fn test_session_prompt_and_notifications() {
 	let cwd = std::env::temp_dir();
 	let launch_spec = mock_launch_spec();
 
-	let session = ManagedAgentSession::create(
-		"mock",
-		cwd,
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.expect("should create session");
+	let session =
+		ManagedAgentSession::create("mock", cwd, launch_spec, HashMap::new())
+			.await
+			.expect("should create session");
 
 	// Start listening to notifications before sending prompt
 	let notif_stream = session.notifications().await;
@@ -239,10 +224,7 @@ async fn test_session_prompt_and_notifications() {
 		// Parse as SessionNotification
 		let parsed = ManagedAgentSession::parse_notification(&value);
 		if let Some(notif) = parsed {
-			assert_eq!(
-				notif.session_id.to_string(),
-				"mock-session-001"
-			);
+			assert_eq!(notif.session_id.to_string(), "mock-session-001");
 		}
 	}
 	// Note: the notification may have already been consumed by the runtime's
@@ -274,14 +256,10 @@ async fn test_session_info_correctness() {
 	let cwd = std::env::temp_dir();
 	let launch_spec = mock_launch_spec();
 
-	let session = ManagedAgentSession::create(
-		"mock",
-		cwd,
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.expect("should create session");
+	let session =
+		ManagedAgentSession::create("mock", cwd, launch_spec, HashMap::new())
+			.await
+			.expect("should create session");
 
 	let info = session.info();
 

@@ -163,8 +163,7 @@ mod tests {
 	#[test]
 	fn test_new_session_result_deserialization() {
 		let json = json!({"session_id": "mock-001"});
-		let result: NewSessionResult =
-			serde_json::from_value(json).unwrap();
+		let result: NewSessionResult = serde_json::from_value(json).unwrap();
 		assert_eq!(result.session_id, "mock-001");
 	}
 

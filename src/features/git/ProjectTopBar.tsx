@@ -1,4 +1,12 @@
-import { Box, Button, Flex, HStack, Portal, Text, Tooltip } from "@chakra-ui/react";
+import {
+	Box,
+	Button,
+	Flex,
+	HStack,
+	Portal,
+	Text,
+	Tooltip,
+} from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { RiAddLine, RiGitBranchLine, RiTerminalBoxLine } from "react-icons/ri";
