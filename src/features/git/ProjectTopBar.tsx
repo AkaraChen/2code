@@ -87,8 +87,8 @@ export default function ProjectTopBar({
 				<Tooltip.Root>
 					<Tooltip.Trigger asChild>
 						<Button
-							size="2xs"
-							variant="ghost"
+							size="xs"
+							variant={"subtle"}
 							disabled={createTab.isPending}
 							onClick={() =>
 								createTab.mutate({
@@ -114,8 +114,8 @@ export default function ProjectTopBar({
 					<Menu.Root>
 						<Menu.Trigger asChild>
 							<Button
-								size="2xs"
-								variant="ghost"
+								size="xs"
+								variant={"subtle"}
 								disabled={createTab.isPending}
 							>
 								<RiRobot2Line />
