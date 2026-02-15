@@ -9,6 +9,7 @@ import {
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiSendPlaneLine } from "react-icons/ri";
+import * as m from "@/paraglide/messages.js";
 import { useSendAgentPrompt } from "./hooks";
 import type { AgentMessage } from "./store";
 import { useAgentStore } from "./store";
@@ -107,7 +108,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 							color="fg.muted"
 						>
 							<Text fontSize="sm">
-								Send a message to start the conversation.
+								{m.agentChatEmptyState()}
 							</Text>
 						</Flex>
 					)}
@@ -143,7 +144,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 						value={input}
 						onChange={(e) => setInput(e.target.value)}
 						onKeyDown={handleKeyDown}
-						placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+						placeholder={m.agentChatPlaceholder()}
 						size="sm"
 						resize="none"
 						rows={1}

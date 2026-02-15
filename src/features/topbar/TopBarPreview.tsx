@@ -37,11 +37,11 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 				>
 					<HStack gap="2">
 						<Text as="span" fontWeight="semibold" fontSize="sm">
-							My Project
+							{m.topbarExampleProject()}
 						</Text>
 						<HStack gap="1" color="fg.muted" fontSize="sm">
 							<RiGitBranchLine />
-							<Text as="span">main</Text>
+							<Text as="span">{m.topbarExampleBranch()}</Text>
 						</HStack>
 					</HStack>
 					<SortableContext

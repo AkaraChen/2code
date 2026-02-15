@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { RiAddLine, RiGitBranchLine, RiTerminalBoxLine } from "react-icons/ri";
+import * as m from "@/paraglide/messages.js";
 import AgentMenu from "@/features/git/AgentMenu";
 import { useGitBranch } from "@/features/projects/hooks";
 import { useCreateTab } from "@/features/tabs/hooks";
@@ -99,7 +100,7 @@ export default function ProjectTopBar({
 					</Tooltip.Trigger>
 					<Portal>
 						<Tooltip.Positioner>
-							<Tooltip.Content>New Terminal</Tooltip.Content>
+							<Tooltip.Content>{m.newTerminal()}</Tooltip.Content>
 						</Tooltip.Positioner>
 					</Portal>
 				</Tooltip.Root>

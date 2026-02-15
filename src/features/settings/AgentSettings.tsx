@@ -21,27 +21,33 @@ import type { AgentStatusInfo, CredentialEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
-const AGENT_META: Record<string, { provider: string; description: string }> = {
+const AGENT_META: Record<
+	string,
+	{ provider: () => string; description: () => string }
+> = {
 	claude: {
-		provider: "Anthropic",
-		description: "Agentic coding by Anthropic",
+		provider: () => m.agentProviderAnthropic(),
+		description: () => m.agentDescClaude(),
 	},
-	codex: { provider: "OpenAI", description: "OpenAI's coding agent" },
+	codex: {
+		provider: () => m.agentProviderOpenAI(),
+		description: () => m.agentDescCodex(),
+	},
 	opencode: {
-		provider: "Open Source",
-		description: "Open-source terminal coding agent",
+		provider: () => m.agentProviderOpenSource(),
+		description: () => m.agentDescOpencode(),
 	},
 	amp: {
-		provider: "Sourcegraph",
-		description: "Sourcegraph's AI coding agent",
+		provider: () => m.agentProviderSourcegraph(),
+		description: () => m.agentDescAmp(),
 	},
 	pi: {
-		provider: "Open Source",
-		description: "Lightweight terminal-first agent",
+		provider: () => m.agentProviderOpenSource(),
+		description: () => m.agentDescPi(),
 	},
 	cursor: {
-		provider: "Anysphere",
-		description: "AI-first code editor agent",
+		provider: () => m.agentProviderAnysphere(),
+		description: () => m.agentDescCursor(),
 	},
 };
 
@@ -110,11 +116,11 @@ function AgentSummaryBar({
 							colorPalette={anthropic ? "green" : "gray"}
 						>
 							<Status.Indicator />
-							Anthropic
+							{m.agentProviderAnthropic()}
 						</Status.Root>
 						<Status.Root colorPalette={openai ? "green" : "gray"}>
 							<Status.Indicator />
-							OpenAI
+							{m.agentProviderOpenAI()}
 						</Status.Root>
 					</HStack>
 				</HStack>
@@ -203,7 +209,7 @@ function AgentCard({ agent }: { agent: AgentStatusInfo }) {
 									size="sm"
 									colorPalette="gray"
 								>
-									{meta.provider}
+									{meta.provider()}
 								</Badge>
 							)}
 						</HStack>
@@ -212,7 +218,7 @@ function AgentCard({ agent }: { agent: AgentStatusInfo }) {
 
 					{meta && (
 						<Text fontSize="xs" color="fg.muted">
-							{meta.description}
+							{meta.description()}
 						</Text>
 					)}
 

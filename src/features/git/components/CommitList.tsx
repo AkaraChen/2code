@@ -1,5 +1,6 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { RiGitCommitLine } from "react-icons/ri";
+import * as m from "@/paraglide/messages.js";
 import type { GitCommit } from "@/generated";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 
@@ -8,17 +9,17 @@ function formatRelativeTime(isoDate: string): string {
 	const then = new Date(isoDate).getTime();
 	const diffSec = Math.floor((now - then) / 1000);
 
-	if (diffSec < 60) return "just now";
+	if (diffSec < 60) return m.timeJustNow();
 	const diffMin = Math.floor(diffSec / 60);
-	if (diffMin < 60) return `${diffMin}m ago`;
+	if (diffMin < 60) return m.timeMinutesAgo({ n: String(diffMin) });
 	const diffHr = Math.floor(diffMin / 60);
-	if (diffHr < 24) return `${diffHr}h ago`;
+	if (diffHr < 24) return m.timeHoursAgo({ n: String(diffHr) });
 	const diffDay = Math.floor(diffHr / 24);
-	if (diffDay < 30) return `${diffDay}d ago`;
+	if (diffDay < 30) return m.timeDaysAgo({ n: String(diffDay) });
 	const diffMonth = Math.floor(diffDay / 30);
-	if (diffMonth < 12) return `${diffMonth}mo ago`;
+	if (diffMonth < 12) return m.timeMonthsAgo({ n: String(diffMonth) });
 	const diffYear = Math.floor(diffMonth / 12);
-	return `${diffYear}y ago`;
+	return m.timeYearsAgo({ n: String(diffYear) });
 }
 
 interface CommitListProps {
@@ -81,7 +82,7 @@ export default function CommitList({
 						{commit.files_changed > 0 && (
 							<Text color="fg.muted">
 								{commit.files_changed}{" "}
-								{commit.files_changed === 1 ? "file" : "files"}
+								{commit.files_changed === 1 ? m.fileChanged() : m.filesChanged()}
 							</Text>
 						)}
 						{commit.insertions > 0 && (
