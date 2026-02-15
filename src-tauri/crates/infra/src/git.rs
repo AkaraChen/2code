@@ -181,36 +181,32 @@ pub fn worktree_add(
 }
 
 pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
-	let output = Command::new("git")
-		.args(["worktree", "remove", worktree_path, "--force"])
-		.current_dir(project_folder)
-		.output();
-
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git worktree remove failed: {stderr}");
-		}
-		Err(e) => {
-			tracing::warn!("git worktree remove error: {e}");
-		}
-		_ => {}
-	}
+	run_best_effort(
+		"worktree remove",
+		Command::new("git")
+			.args(["worktree", "remove", worktree_path, "--force"])
+			.current_dir(project_folder),
+	);
 }
 
 pub fn branch_delete(project_folder: &str, branch_name: &str) {
-	let output = Command::new("git")
-		.args(["branch", "-D", branch_name])
-		.current_dir(project_folder)
-		.output();
+	run_best_effort(
+		"branch delete",
+		Command::new("git")
+			.args(["branch", "-D", branch_name])
+			.current_dir(project_folder),
+	);
+}
 
-	match output {
+/// Run a git command, logging warnings on failure without propagating errors.
+fn run_best_effort(label: &str, cmd: &mut Command) {
+	match cmd.output() {
 		Ok(o) if !o.status.success() => {
 			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git branch delete failed: {stderr}");
+			tracing::warn!("git {label} failed: {stderr}");
 		}
 		Err(e) => {
-			tracing::warn!("git branch delete error: {e}");
+			tracing::warn!("git {label} error: {e}");
 		}
 		_ => {}
 	}

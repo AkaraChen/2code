@@ -5,15 +5,11 @@ use std::time::Duration;
 
 use agent::{
 	AgentManagerWrapper, AgentSessionInfo, AgentSessionMap, AgentStatusInfo,
-	ContentPart, CredentialInfo, ManagedAgentSession,
+	ContentPart, CredentialInfo, ManagedAgentSession, NotificationTaskMap,
 };
 use futures::StreamExt;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
-
-type NotificationTaskMap = Arc<Mutex<HashMap<String, JoinHandle<()>>>>;
 
 #[tauri::command]
 pub fn list_agent_status(
@@ -84,46 +80,40 @@ pub async fn spawn_agent_session(
 		.insert(local_id.clone(), session.clone());
 
 	// Spawn notification stream listener
-	let app_for_notifications = app.clone();
-	let session_for_notifications = session.clone();
-	let id_for_notifications = local_id.clone();
+	let notif_app = app.clone();
+	let notif_session = session.clone();
+	let notif_id = local_id.clone();
 	let task_handle = tokio::spawn(async move {
 		let mut stream =
-			std::pin::pin!(session_for_notifications.notifications().await);
+			std::pin::pin!(notif_session.notifications().await);
 		while let Some(notification) = stream.next().await {
-			// Try to parse as structured ACP notification for logging
 			if let Some(parsed) =
 				ManagedAgentSession::parse_notification(&notification)
 			{
 				tracing::info!(
-					session_id = %id_for_notifications,
+					session_id = %notif_id,
 					acp_session_id = %parsed.session_id,
 					update = ?parsed.update,
 					"agent notification (structured)"
 				);
 			} else {
 				tracing::info!(
-					session_id = %id_for_notifications,
+					session_id = %notif_id,
 					raw = %notification,
 					"agent notification (raw, unrecognized)"
 				);
 			}
 
-			let event_name = format!("agent-event-{}", id_for_notifications);
-			if let Err(e) =
-				app_for_notifications.emit(&event_name, &notification)
-			{
+			let event_name = format!("agent-event-{notif_id}");
+			if let Err(e) = notif_app.emit(&event_name, &notification) {
 				tracing::warn!(
-					session_id = %id_for_notifications,
+					session_id = %notif_id,
 					error = %e,
 					"failed to emit agent notification event"
 				);
 			}
 		}
-		tracing::info!(
-			session_id = %id_for_notifications,
-			"agent notification stream ended"
-		);
+		tracing::info!(session_id = %notif_id, "agent notification stream ended");
 	});
 
 	// Store task handle for later abortion
@@ -199,10 +189,7 @@ pub async fn close_agent_session(
 	}
 
 	// Step 2: Remove session from map
-	let session = {
-		let mut map = sessions.lock().await;
-		map.remove(&session_id)
-	};
+	let session = sessions.lock().await.remove(&session_id);
 
 	// Step 3: Shutdown session with timeout (external dependency may deadlock)
 	if let Some(session) = session {

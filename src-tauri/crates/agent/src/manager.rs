@@ -118,11 +118,8 @@ fn parse_agent_id(agent_str: &str) -> Result<AgentId, AgentError> {
 }
 
 fn to_status_info(s: AgentInstallStatus) -> AgentStatusInfo {
-	let ready = if s.native_required {
-		s.native_installed && s.agent_process_installed
-	} else {
-		s.agent_process_installed
-	};
+	let ready =
+		s.agent_process_installed && (!s.native_required || s.native_installed);
 	AgentStatusInfo {
 		id: s.agent.as_str().to_string(),
 		display_name: display_name(s.agent).to_string(),

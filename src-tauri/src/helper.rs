@@ -51,21 +51,15 @@ async fn notify_handler(
 }
 
 fn try_play_notification(app: &AppHandle) -> bool {
-	let store = match app.store("settings.json") {
-		Ok(s) => s,
-		Err(_) => return false,
-	};
+	let store = app.store("settings.json").ok();
+	let val = store.as_ref().and_then(|s| s.get("notification-settings"));
+	let Some(val) = val else { return false };
 
-	let val = match store.get("notification-settings") {
-		Some(v) => v,
-		None => return false,
+	let Ok(entry) =
+		serde_json::from_value::<model::notification::NotificationEntry>(val)
+	else {
+		return false;
 	};
-
-	let entry: model::notification::NotificationEntry =
-		match serde_json::from_value(val) {
-			Ok(e) => e,
-			Err(_) => return false,
-		};
 
 	if !entry.state.enabled {
 		return false;
@@ -74,11 +68,8 @@ fn try_play_notification(app: &AppHandle) -> bool {
 	let sound_path =
 		format!("/System/Library/Sounds/{}.aiff", entry.state.sound);
 
-	if !std::path::Path::new(&sound_path).exists() {
-		return false;
-	}
-
-	Command::new("afplay").arg(&sound_path).spawn().is_ok()
+	std::path::Path::new(&sound_path).exists()
+		&& Command::new("afplay").arg(&sound_path).spawn().is_ok()
 }
 
 async fn health_handler() -> &'static str {

@@ -57,17 +57,14 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok((project_id, _path)) => {
 				let now = Instant::now();
-				let should_send = last_event
+				let debounced = last_event
 					.get(&project_id)
-					.map(|t| now.duration_since(*t) >= DEBOUNCE_DURATION)
-					.unwrap_or(true);
+					.is_some_and(|t| now.duration_since(*t) < DEBOUNCE_DURATION);
 
-				if should_send {
+				if !debounced {
 					last_event.insert(project_id.clone(), now);
 					tracing::info!(target: "watcher", %project_id, "file changed");
-					let event = WatchEvent { project_id };
-					if !sender.send(event) {
-						// Channel closed — frontend dropped it
+					if !sender.send(WatchEvent { project_id }) {
 						break;
 					}
 				}

@@ -24,6 +24,10 @@ pub use session::ManagedAgentSession;
 pub type AgentSessionMap =
 	Arc<Mutex<HashMap<String, Arc<ManagedAgentSession>>>>;
 
+/// Map of session ID → notification stream task handle for cleanup on exit.
+pub type NotificationTaskMap =
+	Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>;
+
 pub fn create_agent_session_map() -> AgentSessionMap {
 	Arc::new(Mutex::new(HashMap::new()))
 }

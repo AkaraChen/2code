@@ -21,6 +21,27 @@ fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	}
 }
 
+/// Insert a project and its default profile in one step.
+fn insert_with_default_profile(
+	conn: &mut SqliteConnection,
+	id: &str,
+	name: &str,
+	folder: &str,
+) -> Result<Project, AppError> {
+	let project = repo::project::insert(conn, id, name, folder)?;
+	let branch_name = infra::git::branch(folder).unwrap_or_default();
+	let default_profile_id = format!("default-{id}");
+	repo::profile::insert(
+		conn,
+		&default_profile_id,
+		id,
+		&branch_name,
+		folder,
+		true,
+	)?;
+	Ok(project)
+}
+
 pub fn create_temporary(
 	conn: &mut SqliteConnection,
 	name: Option<String>,
@@ -39,21 +60,7 @@ pub fn create_temporary(
 	let project_name = name.unwrap_or_else(|| "Untitled".to_string());
 	let dir_str = dir.to_string_lossy();
 
-	let branch_name = infra::git::branch(&dir_str).unwrap_or_default();
-
-	let project = repo::project::insert(conn, &id, &project_name, &dir_str)?;
-
-	let default_profile_id = format!("default-{id}");
-	repo::profile::insert(
-		conn,
-		&default_profile_id,
-		&id,
-		&branch_name,
-		&dir_str,
-		true,
-	)?;
-
-	Ok(project)
+	insert_with_default_profile(conn, &id, &project_name, &dir_str)
 }
 
 pub fn create_from_folder(
@@ -66,21 +73,7 @@ pub fn create_from_folder(
 	}
 
 	let id = Uuid::new_v4().to_string();
-	let project = repo::project::insert(conn, &id, name, folder)?;
-
-	let branch_name = infra::git::branch(folder).unwrap_or_default();
-
-	let default_profile_id = format!("default-{id}");
-	repo::profile::insert(
-		conn,
-		&default_profile_id,
-		&id,
-		&branch_name,
-		folder,
-		true,
-	)?;
-
-	Ok(project)
+	insert_with_default_profile(conn, &id, name, folder)
 }
 
 pub fn list(
@@ -106,12 +99,19 @@ pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
 }
 
+/// Resolve a profile's worktree path for git operations.
+fn resolve_worktree(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
+}
+
 pub fn get_diff(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::diff(&profile.worktree_path)
+	infra::git::diff(&resolve_worktree(conn, profile_id)?)
 }
 
 pub fn get_log(
@@ -119,8 +119,7 @@ pub fn get_log(
 	profile_id: &str,
 	limit: u32,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::log(&profile.worktree_path, limit)
+	infra::git::log(&resolve_worktree(conn, profile_id)?, limit)
 }
 
 pub fn get_commit_diff(
@@ -128,8 +127,7 @@ pub fn get_commit_diff(
 	profile_id: &str,
 	commit_hash: &str,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::show(&profile.worktree_path, commit_hash)
+	infra::git::show(&resolve_worktree(conn, profile_id)?, commit_hash)
 }
 
 #[cfg(test)]

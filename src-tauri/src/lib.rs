@@ -30,23 +30,20 @@ pub fn run() {
 		.expect("failed to initialize agent manager"),
 	);
 	let agent_sessions = agent::create_agent_session_map();
-	let agent_sessions_for_exit = agent_sessions.clone();
-	type NotificationTaskMap = std::sync::Arc<
-		tokio::sync::Mutex<
-			std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
-		>,
-	>;
-	let notification_tasks: NotificationTaskMap =
+	let notification_tasks: agent::NotificationTaskMap =
 		std::sync::Arc::new(tokio::sync::Mutex::new(
 			std::collections::HashMap::new(),
 		));
-	let notification_tasks_for_exit = notification_tasks.clone();
-	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
-	let read_threads_for_exit = read_threads.clone();
 	let flush_senders = service::pty::create_flush_senders();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
-	let shutdown_for_exit = shutdown_flag.clone();
+
+	// Clone handles needed by the exit handler
+	let exit_agent_sessions = agent_sessions.clone();
+	let exit_notification_tasks = notification_tasks.clone();
+	let exit_sessions = sessions.clone();
+	let exit_read_threads = read_threads.clone();
+	let exit_shutdown = shutdown_flag.clone();
 
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_opener::init())
@@ -124,33 +121,27 @@ pub fn run() {
 		use tauri::Manager;
 
 		if let tauri::RunEvent::Exit = event {
-			shutdown_for_exit.store(true, Ordering::Relaxed);
+			exit_shutdown.store(true, Ordering::Relaxed);
 
 			// Abort all notification tasks and shut down all agent sessions
-			let agent_sessions = agent_sessions_for_exit.clone();
-			let notification_tasks = notification_tasks_for_exit.clone();
+			let agent_sessions = exit_agent_sessions.clone();
+			let notification_tasks = exit_notification_tasks.clone();
 			tokio::task::block_in_place(|| {
 				tokio::runtime::Handle::current().block_on(async {
-					// Abort all notification tasks first
-					let mut tasks_map = notification_tasks.lock().await;
-					for (id, task) in tasks_map.drain() {
+					for (id, task) in notification_tasks.lock().await.drain() {
 						tracing::info!(session_id = %id, "exit: aborting notification task");
 						task.abort();
 					}
-					drop(tasks_map);
-
-					// Shut down agent sessions
-					let mut map = agent_sessions.lock().await;
-					for (id, session) in map.drain() {
+					for (id, session) in agent_sessions.lock().await.drain() {
 						tracing::info!(session_id = %id, "exit: shutting down agent session");
 						session.shutdown().await;
 					}
 				});
 			});
 
-			infra::pty::close_all_sessions(&sessions_for_exit);
+			infra::pty::close_all_sessions(&exit_sessions);
 			tracing::info!(target: "pty", "exit: joining read threads...");
-			infra::pty::join_all_read_threads(&read_threads_for_exit);
+			infra::pty::join_all_read_threads(&exit_read_threads);
 			tracing::info!(target: "pty", "exit: all read threads joined");
 
 			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
