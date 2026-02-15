@@ -34,17 +34,18 @@ impl WatchEventSender for TauriWatchSender {
 
 /// Build a PtyContext from the Tauri AppHandle by extracting all managed state.
 pub fn build_pty_context(app: &AppHandle) -> PtyContext {
+	let helper = app.try_state::<crate::helper::HelperState>();
 	PtyContext {
 		db: app.state::<DbPool>().inner().clone(),
 		sessions: app.state::<PtySessionMap>().inner().clone(),
 		flush_senders: app.state::<PtyFlushSenders>().inner().clone(),
 		read_threads: app.state::<PtyReadThreads>().inner().clone(),
 		emitter: Arc::new(TauriPtyEmitter(app.clone())),
-		helper_url: app
-			.try_state::<crate::helper::HelperState>()
+		helper_url: helper
+			.as_ref()
 			.map(|s| format!("http://127.0.0.1:{}", s.port)),
-		helper_bin: app
-			.try_state::<crate::helper::HelperState>()
+		helper_bin: helper
+			.as_ref()
 			.map(|s| s.sidecar_path.to_string_lossy().to_string()),
 	}
 }

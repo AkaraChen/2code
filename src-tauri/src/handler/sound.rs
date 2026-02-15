@@ -7,9 +7,11 @@ const SOUNDS_DIR: &str = "/System/Library/Sounds";
 #[tauri::command]
 pub fn list_system_sounds() -> Vec<String> {
 	let sounds_path = Path::new(SOUNDS_DIR);
-	let mut sounds: Vec<String> = fs::read_dir(sounds_path)
-		.into_iter()
-		.flatten()
+	let entries = match fs::read_dir(sounds_path) {
+		Ok(entries) => entries,
+		Err(_) => return Vec::new(),
+	};
+	let mut sounds: Vec<String> = entries
 		.filter_map(|entry| {
 			let entry = entry.ok()?;
 			let name = entry.file_name().into_string().ok()?;

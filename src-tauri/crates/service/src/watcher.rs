@@ -112,13 +112,13 @@ fn reconcile_watchers(
 
 		let watcher = recommended_watcher(move |res: Result<Event, _>| {
 			if let Ok(event) = res {
-				let dominated = matches!(
+				let is_change = matches!(
 					event.kind,
 					EventKind::Modify(_)
 						| EventKind::Create(_)
 						| EventKind::Remove(_)
 				);
-				if dominated {
+				if is_change {
 					for path in &event.paths {
 						// Skip .git internal files to reduce noise
 						if path.components().any(|c| c.as_os_str() == ".git") {

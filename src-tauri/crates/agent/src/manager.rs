@@ -81,7 +81,7 @@ impl AgentManagerWrapper {
 			.list_status()
 			.into_iter()
 			.filter(|s| s.agent != AgentId::Mock)
-			.map(|s| to_status_info(s))
+			.map(to_status_info)
 			.collect()
 	}
 

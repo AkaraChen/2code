@@ -44,12 +44,13 @@ pub fn create_temporary(
 	let project = repo::project::insert(conn, &id, &project_name, &dir_str)?;
 
 	let default_profile_id = format!("default-{id}");
-	repo::profile::insert_default(
+	repo::profile::insert(
 		conn,
 		&default_profile_id,
 		&id,
 		&branch_name,
 		&dir_str,
+		true,
 	)?;
 
 	Ok(project)
@@ -70,12 +71,13 @@ pub fn create_from_folder(
 	let branch_name = infra::git::branch(folder).unwrap_or_default();
 
 	let default_profile_id = format!("default-{id}");
-	repo::profile::insert_default(
+	repo::profile::insert(
 		conn,
 		&default_profile_id,
 		&id,
 		&branch_name,
 		folder,
+		true,
 	)?;
 
 	Ok(project)

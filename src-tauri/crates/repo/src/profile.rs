@@ -10,6 +10,7 @@ pub fn insert(
 	project_id: &str,
 	branch_name: &str,
 	worktree_path: &str,
+	is_default: bool,
 ) -> Result<Profile, AppError> {
 	diesel::insert_into(profiles::table)
 		.values(&NewProfile {
@@ -17,32 +18,7 @@ pub fn insert(
 			project_id,
 			branch_name,
 			worktree_path,
-			is_default: false,
-		})
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	profiles::table
-		.find(id)
-		.select(Profile::as_select())
-		.first(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))
-}
-
-pub fn insert_default(
-	conn: &mut SqliteConnection,
-	id: &str,
-	project_id: &str,
-	branch_name: &str,
-	worktree_path: &str,
-) -> Result<Profile, AppError> {
-	diesel::insert_into(profiles::table)
-		.values(&NewProfile {
-			id,
-			project_id,
-			branch_name,
-			worktree_path,
-			is_default: true,
+			is_default,
 		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
@@ -156,6 +132,7 @@ mod tests {
 			"proj-1",
 			"feature/login",
 			"/home/user/.2code/workspace/prof-1",
+			false,
 		)
 		.unwrap();
 
@@ -176,7 +153,7 @@ mod tests {
 	fn get_found() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
+		insert(&mut conn, "p1", "proj-1", "main", "/w/p1", false).unwrap();
 
 		let profile = find_by_id(&mut conn, "p1").unwrap();
 		assert_eq!(profile.id, "p1");
@@ -194,7 +171,7 @@ mod tests {
 	fn delete_success() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
+		insert(&mut conn, "p1", "proj-1", "main", "/w/p1", false).unwrap();
 
 		let (profile, folder) = delete(&mut conn, "p1").unwrap();
 		assert_eq!(profile.id, "p1");
@@ -221,8 +198,8 @@ mod tests {
 	fn cascade_delete_removes_profiles() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
-		insert(&mut conn, "p2", "proj-1", "dev", "/w/p2").unwrap();
+		insert(&mut conn, "p1", "proj-1", "main", "/w/p1", false).unwrap();
+		insert(&mut conn, "p2", "proj-1", "dev", "/w/p2", false).unwrap();
 
 		diesel::delete(projects::table.find("proj-1"))
 			.execute(&mut conn)

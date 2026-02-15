@@ -31,13 +31,15 @@ pub fn run() {
 	);
 	let agent_sessions = agent::create_agent_session_map();
 	let agent_sessions_for_exit = agent_sessions.clone();
-	let notification_tasks: std::sync::Arc<
+	type NotificationTaskMap = std::sync::Arc<
 		tokio::sync::Mutex<
 			std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
 		>,
-	> = std::sync::Arc::new(tokio::sync::Mutex::new(
-		std::collections::HashMap::new(),
-	));
+	>;
+	let notification_tasks: NotificationTaskMap =
+		std::sync::Arc::new(tokio::sync::Mutex::new(
+			std::collections::HashMap::new(),
+		));
 	let notification_tasks_for_exit = notification_tasks.clone();
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
@@ -121,43 +123,39 @@ pub fn run() {
 		use std::sync::atomic::Ordering;
 		use tauri::Manager;
 
-		match event {
-			tauri::RunEvent::Exit => {
-				shutdown_for_exit.store(true, Ordering::Relaxed);
+		if let tauri::RunEvent::Exit = event {
+			shutdown_for_exit.store(true, Ordering::Relaxed);
 
-				// Abort all notification tasks and shut down all agent sessions
-				let agent_sessions = agent_sessions_for_exit.clone();
-				let notification_tasks = notification_tasks_for_exit.clone();
-				tokio::task::block_in_place(|| {
-					tokio::runtime::Handle::current().block_on(async {
-						// Abort all notification tasks first
-						let mut tasks_map = notification_tasks.lock().await;
-						for (id, task) in tasks_map.drain() {
-							tracing::info!(session_id = %id, "exit: aborting notification task");
-							task.abort();
-						}
-						drop(tasks_map);
+			// Abort all notification tasks and shut down all agent sessions
+			let agent_sessions = agent_sessions_for_exit.clone();
+			let notification_tasks = notification_tasks_for_exit.clone();
+			tokio::task::block_in_place(|| {
+				tokio::runtime::Handle::current().block_on(async {
+					// Abort all notification tasks first
+					let mut tasks_map = notification_tasks.lock().await;
+					for (id, task) in tasks_map.drain() {
+						tracing::info!(session_id = %id, "exit: aborting notification task");
+						task.abort();
+					}
+					drop(tasks_map);
 
-						// Shut down agent sessions
-						let mut map = agent_sessions.lock().await;
-						for (id, session) in map.drain() {
-							tracing::info!(session_id = %id, "exit: shutting down agent session");
-							session.shutdown().await;
-						}
-					});
+					// Shut down agent sessions
+					let mut map = agent_sessions.lock().await;
+					for (id, session) in map.drain() {
+						tracing::info!(session_id = %id, "exit: shutting down agent session");
+						session.shutdown().await;
+					}
 				});
+			});
 
-				infra::pty::close_all_sessions(&sessions_for_exit);
-				tracing::info!(target: "pty", "exit: joining read threads...");
-				infra::pty::join_all_read_threads(&read_threads_for_exit);
-				tracing::info!(target: "pty", "exit: all read threads joined");
+			infra::pty::close_all_sessions(&sessions_for_exit);
+			tracing::info!(target: "pty", "exit: joining read threads...");
+			infra::pty::join_all_read_threads(&read_threads_for_exit);
+			tracing::info!(target: "pty", "exit: all read threads joined");
 
-				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
-					service::pty::mark_all_closed(&db);
-				}
+			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
+				service::pty::mark_all_closed(&db);
 			}
-
-			_ => {}
 		}
 	});
 }

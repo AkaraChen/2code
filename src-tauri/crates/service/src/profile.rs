@@ -54,6 +54,7 @@ pub fn create(
 		project_id,
 		&branch_name,
 		&worktree_str,
+		false,
 	)?;
 
 	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {

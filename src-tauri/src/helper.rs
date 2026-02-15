@@ -1,8 +1,7 @@
+use std::collections::HashMap;
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::Command;
-
-use std::collections::HashMap;
 
 use axum::extract::{Query, State};
 use axum::routing::get;
@@ -35,10 +34,9 @@ fn resolve_sidecar_path() -> PathBuf {
 	}
 
 	// Dev: in the binaries/ directory relative to CARGO_MANIFEST_DIR
-	let manifest_dir =
-		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
-	let dev_path = manifest_dir.join(format!("2code-helper-{target}"));
-	dev_path
+	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+		.join("binaries")
+		.join(format!("2code-helper-{target}"))
 }
 
 async fn notify_handler(
