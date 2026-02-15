@@ -1,21 +1,8 @@
-import {
-	Box,
-	Button,
-	Flex,
-	HStack,
-	Menu,
-	Portal,
-	Text,
-	Tooltip,
-} from "@chakra-ui/react";
+import { Box, Button, Flex, HStack, Portal, Text, Tooltip } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
-import {
-	RiAddLine,
-	RiGitBranchLine,
-	RiRobot2Line,
-	RiTerminalBoxLine,
-} from "react-icons/ri";
+import { RiAddLine, RiGitBranchLine, RiTerminalBoxLine } from "react-icons/ri";
+import AgentMenu from "@/features/git/AgentMenu";
 import { useGitBranch } from "@/features/projects/hooks";
 import { useCreateTab } from "@/features/tabs/hooks";
 import { controlRegistry } from "@/features/topbar/registry";
@@ -110,43 +97,12 @@ export default function ProjectTopBar({
 				</Tooltip.Root>
 
 				{/* New Agent button with dropdown */}
-				{readyAgents.length > 0 && (
-					<Menu.Root>
-						<Menu.Trigger asChild>
-							<Button
-								size="xs"
-								variant={"subtle"}
-								disabled={createTab.isPending}
-							>
-								<RiRobot2Line />
-								<RiAddLine />
-							</Button>
-						</Menu.Trigger>
-						<Portal>
-							<Menu.Positioner>
-								<Menu.Content>
-									{readyAgents.map((agent) => (
-										<Menu.Item
-											key={agent.id}
-											value={agent.id}
-											onClick={() =>
-												createTab.mutate({
-													type: "agent",
-													profileId: profile.id,
-													cwd: profile.worktree_path,
-													agent: agent.id,
-												})
-											}
-										>
-											<RiRobot2Line />
-											{agent.display_name}
-										</Menu.Item>
-									))}
-								</Menu.Content>
-							</Menu.Positioner>
-						</Portal>
-					</Menu.Root>
-				)}
+				<AgentMenu
+					agents={readyAgents}
+					profile={profile}
+					isPending={createTab.isPending}
+					onCreateTab={createTab.mutate}
+				/>
 
 				{/* Existing registry controls */}
 				{activeControls.map((controlId) => {
