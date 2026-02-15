@@ -10,8 +10,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RiSendPlaneLine } from "react-icons/ri";
 import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
 import { useShallow } from "zustand/react/shallow";
 import "highlight.js/styles/github-dark.css";
 import { Prose } from "@/components/ui/prose";
@@ -38,7 +38,10 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 				overflow="auto"
 			>
 				<Prose maxW="none" my="0">
-					<Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+					<Markdown
+						remarkPlugins={[remarkGfm]}
+						rehypePlugins={[rehypeHighlight]}
+					>
 						{message.content}
 					</Markdown>
 				</Prose>
@@ -61,7 +64,10 @@ function StreamingBubble({ content }: { content: string }) {
 				overflow="auto"
 			>
 				<Prose maxW="none" my="0">
-					<Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+					<Markdown
+						remarkPlugins={[remarkGfm]}
+						rehypePlugins={[rehypeHighlight]}
+					>
 						{content}
 					</Markdown>
 				</Prose>
@@ -120,9 +126,7 @@ export function AgentChat({ sessionId }: AgentChatProps) {
 							flex="1"
 							color="fg.muted"
 						>
-							<Text fontSize="sm">
-								{m.agentChatEmptyState()}
-							</Text>
+							<Text fontSize="sm">{m.agentChatEmptyState()}</Text>
 						</Flex>
 					)}
 					{messages?.map((msg) => (

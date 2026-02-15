@@ -1,7 +1,7 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { RiGitCommitLine } from "react-icons/ri";
-import * as m from "@/paraglide/messages.js";
 import type { GitCommit } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 
 function formatRelativeTime(isoDate: string): string {
@@ -82,7 +82,9 @@ export default function CommitList({
 						{commit.files_changed > 0 && (
 							<Text color="fg.muted">
 								{commit.files_changed}{" "}
-								{commit.files_changed === 1 ? m.fileChanged() : m.filesChanged()}
+								{commit.files_changed === 1
+									? m.fileChanged()
+									: m.filesChanged()}
 							</Text>
 						)}
 						{commit.insertions > 0 && (

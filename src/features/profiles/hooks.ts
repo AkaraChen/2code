@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { closeAllTabsForProfile } from "@/features/tabs/utils";
 import { createProfile, deleteProfile } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { closeAllTabsForProfile } from "@/features/tabs/utils";
 
 export function useCreateProfile() {
 	const queryClient = useQueryClient();

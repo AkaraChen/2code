@@ -4,6 +4,7 @@ import {
 	useSuspenseQuery,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { closeAllTabsForProfiles } from "@/features/tabs/utils";
 import {
 	createProjectFromFolder,
 	createProjectTemporary,
@@ -13,7 +14,6 @@ import {
 	updateProject,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { closeAllTabsForProfiles } from "@/features/tabs/utils";
 
 export function useProjects() {
 	return useSuspenseQuery({

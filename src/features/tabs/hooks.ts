@@ -1,9 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { AgentTabSession } from "./AgentTabSession";
+import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
-import { markPending, clearPending } from "./pendingDeletions";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }

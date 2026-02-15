@@ -9,7 +9,9 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{broadcast, oneshot, Mutex};
-use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
+use tokio_stream::wrappers::{
+	errors::BroadcastStreamRecvError, BroadcastStream,
+};
 use tokio_stream::StreamExt;
 
 use crate::error::{AdapterError, Result};
@@ -34,7 +36,8 @@ impl AcpClient {
 		args: Vec<String>,
 		env: HashMap<String, String>,
 	) -> Result<Self> {
-		Self::spawn_with_timeout(program, args, env, DEFAULT_REQUEST_TIMEOUT).await
+		Self::spawn_with_timeout(program, args, env, DEFAULT_REQUEST_TIMEOUT)
+			.await
 	}
 
 	/// Spawn a new ACP process with custom request timeout
@@ -171,8 +174,11 @@ impl AcpClient {
 
 	/// Subscribe to notifications from the ACP process
 	pub fn notifications(&self) -> impl Stream<Item = Value> {
-		BroadcastStream::new(self.notification_tx.subscribe())
-			.filter_map(|result: std::result::Result<Value, BroadcastStreamRecvError>| result.ok())
+		BroadcastStream::new(self.notification_tx.subscribe()).filter_map(
+			|result: std::result::Result<Value, BroadcastStreamRecvError>| {
+				result.ok()
+			},
+		)
 	}
 
 	/// Gracefully shutdown the ACP process
@@ -183,10 +189,7 @@ impl AcpClient {
 	/// 3. Then acquiring child lock to kill process
 	pub async fn shutdown(&self) {
 		// Check if already shutting down
-		if self
-			.shutting_down
-			.swap(true, Ordering::SeqCst)
-		{
+		if self.shutting_down.swap(true, Ordering::SeqCst) {
 			tracing::debug!("already shutting down, skipping");
 			return;
 		}
@@ -276,7 +279,8 @@ impl AcpClient {
 				// Check if it's a response (has "id" field) or notification
 				if let Some(id_value) = value.get("id") {
 					// It's a response
-					let id_key = id_value.to_string().trim_matches('"').to_string();
+					let id_key =
+						id_value.to_string().trim_matches('"').to_string();
 
 					if let Some(tx) = pending.lock().await.remove(&id_key) {
 						tracing::debug!(id = %id_key, "matched response to pending request");
@@ -291,10 +295,7 @@ impl AcpClient {
 				}
 			}
 
-			tracing::info!(
-				total_lines = line_count,
-				"stdout stream ended"
-			);
+			tracing::info!(total_lines = line_count, "stdout stream ended");
 		});
 	}
 

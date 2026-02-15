@@ -10,7 +10,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { RiAddLine, RiGitBranchLine, RiTerminalBoxLine } from "react-icons/ri";
-import * as m from "@/paraglide/messages.js";
 import AgentMenu from "@/features/git/AgentMenu";
 import { useGitBranch } from "@/features/projects/hooks";
 import { useCreateTab } from "@/features/tabs/hooks";
@@ -18,6 +17,7 @@ import { controlRegistry } from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import { listAgentStatus } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);

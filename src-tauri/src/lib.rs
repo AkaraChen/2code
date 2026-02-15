@@ -32,8 +32,12 @@ pub fn run() {
 	let agent_sessions = agent::create_agent_session_map();
 	let agent_sessions_for_exit = agent_sessions.clone();
 	let notification_tasks: std::sync::Arc<
-		tokio::sync::Mutex<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
-	> = std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
+		tokio::sync::Mutex<
+			std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
+		>,
+	> = std::sync::Arc::new(tokio::sync::Mutex::new(
+		std::collections::HashMap::new(),
+	));
 	let notification_tasks_for_exit = notification_tasks.clone();
 	let sessions_for_exit = sessions.clone();
 	let read_threads = infra::pty::create_thread_tracker();
