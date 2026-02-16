@@ -222,6 +222,17 @@ impl ManagedAgentSession {
 			"acp session/prompt response"
 		);
 
+		// Check for JSON-RPC error
+		if let Some(err) = response.get("error") {
+			tracing::warn!(
+				local_id = %self.local_id,
+				acp_session_id = %self.acp_session_id,
+				error = %err,
+				"acp session/prompt returned error"
+			);
+			return Err(AgentSessionError::UnexpectedResponse);
+		}
+
 		self.event_counter.fetch_add(1, Ordering::Relaxed);
 
 		// Parse the response using SDK type
