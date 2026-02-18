@@ -1,19 +1,19 @@
 import { Box, Collapsible, Flex, Icon, Text } from "@chakra-ui/react";
 import { useState } from "react";
-import * as m from "@/paraglide/messages.js";
 import {
+	LuBrain,
 	LuChevronDown,
 	LuChevronRight,
+	LuCircle,
+	LuDownload,
 	LuFileText,
+	LuMove,
 	LuPencil,
-	LuTrash2,
 	LuSearch,
 	LuTerminal,
-	LuBrain,
-	LuDownload,
-	LuMove,
-	LuCircle,
+	LuTrash2,
 } from "react-icons/lu";
+import * as m from "@/paraglide/messages.js";
 import type { ToolCall } from "../types";
 import { FileLocationsList } from "./FileLocationsList";
 import { StatusBadge } from "./StatusBadge";

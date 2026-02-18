@@ -95,19 +95,3 @@ async function populateTabs(projects: ProjectWithProfiles[]) {
 
 	consola.info("[tab-restore] complete");
 }
-
-export async function mapWithLimit<T>(
-	items: T[],
-	limit: number,
-	fn: (item: T) => Promise<void>,
-) {
-	const executing = new Set<Promise<void>>();
-	for (const item of items) {
-		const p = fn(item).then(() => {
-			executing.delete(p);
-		});
-		executing.add(p);
-		if (executing.size >= limit) await Promise.race(executing);
-	}
-	await Promise.all(executing);
-}

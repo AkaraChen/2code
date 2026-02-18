@@ -243,12 +243,10 @@ pub async fn close_agent_session(
 	turn_index_map: State<'_, TurnIndexMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), String> {
-	// Step 1: Abort notification task and WAIT for exit
-	// This immediately interrupts stream.next().await and releases Arc reference
+	// Abort notification task first — this interrupts stream.next().await
+	// and releases Arc references before we remove the session.
 	if let Some(task) = tasks.lock().await.remove(&session_id) {
 		task.abort();
-		// CRITICAL: Wait for the task to fully exit to ensure
-		// all Arc references (session_for_notifications, stream) are dropped
 		let _ = task.await;
 		tracing::info!(
 			session_id = %session_id,
@@ -256,13 +254,12 @@ pub async fn close_agent_session(
 		);
 	}
 
-	// Step 2: Remove session from map
+	// Remove session from runtime map and clean up turn index
 	let session = sessions.lock().await.remove(&session_id);
-
-	// Step 2.5: Remove turn index counter
 	turn_index_map.lock().await.remove(&session_id);
 
-	// Step 2.6: Mark session as destroyed in database
+	// Mark session as destroyed in database (the service call's map-remove
+	// is a no-op here since we already removed the session above)
 	if let Err(e) = service::agent::close_session(
 		db.inner(),
 		&sessions,
@@ -277,7 +274,7 @@ pub async fn close_agent_session(
 		);
 	}
 
-	// Step 3: Shutdown session with timeout (external dependency may deadlock)
+	// Shutdown session with timeout (external dependency may deadlock)
 	if let Some(session) = session {
 		match timeout(Duration::from_secs(3), session.shutdown()).await {
 			Ok(_) => {

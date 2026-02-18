@@ -2,7 +2,7 @@ import { Circle, HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
-import { useProfileHasNotification } from "@/features/terminal/store";
+import { useProfileHasNotification } from "@/features/tabs/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";

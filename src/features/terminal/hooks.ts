@@ -7,18 +7,10 @@ import { terminalThemes } from "./themes";
 
 export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = use(ThemeContext);
-	const darkTerminalTheme = useTerminalSettingsStore(
-		(s) => s.darkTerminalTheme,
-	);
-	const lightTerminalTheme = useTerminalSettingsStore(
-		(s) => s.lightTerminalTheme,
-	);
-	const syncTerminalTheme = useTerminalSettingsStore(
-		(s) => s.syncTerminalTheme,
-	);
-
-	if (syncTerminalTheme) return darkTerminalTheme;
-	return isDark ? darkTerminalTheme : lightTerminalTheme;
+	return useTerminalSettingsStore((s) => {
+		if (s.syncTerminalTheme) return s.darkTerminalTheme;
+		return isDark ? s.darkTerminalTheme : s.lightTerminalTheme;
+	});
 }
 
 export function useTerminalTheme(): ITheme {

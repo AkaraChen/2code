@@ -1,7 +1,7 @@
 import { Box, Collapsible, Flex, Icon, Text } from "@chakra-ui/react";
 import { useState } from "react";
-import * as m from "@/paraglide/messages.js";
 import { LuChevronDown, LuChevronRight } from "react-icons/lu";
+import * as m from "@/paraglide/messages.js";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ThoughtBlockProps {

@@ -78,14 +78,9 @@ export function useDeleteProject() {
 
 	return useMutation({
 		mutationFn: async (id: string) => {
-			// Step 1: Find all profiles for this project
 			const project = projects?.find((p) => p.id === id);
 			const profileIds = project?.profiles?.map((p) => p.id) ?? [];
-
-			// Step 2: Close all tabs for each profile
 			await closeAllTabsForProfiles(profileIds);
-
-			// Step 3: Delete project from backend
 			await deleteProject({ id });
 		},
 		onSuccess: () => {

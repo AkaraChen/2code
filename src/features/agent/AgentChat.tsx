@@ -1,13 +1,13 @@
 import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
-import * as m from "@/paraglide/messages.js";
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import { AgentTabSession } from "@/features/tabs/AgentTabSession";
-import { useSendAgentPrompt } from "./hooks";
-import { useAgentStore } from "./store";
+import { sessionRegistry } from "@/features/tabs/sessionRegistry";
+import * as m from "@/paraglide/messages.js";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
+import { useSendAgentPrompt } from "./hooks";
+import { useAgentStore } from "./store";
 
 interface AgentChatProps {
 	sessionId: string;

@@ -2,10 +2,10 @@ import type {
 	AgentNotification,
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
+import consola from "consola";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AgentSessionEventRecord } from "@/generated";
-import consola from "consola";
 import type {
 	AgentTurn,
 	StreamingTurn,

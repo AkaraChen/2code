@@ -24,21 +24,26 @@ export function AgentCard({ agent }: AgentCardProps) {
 	const { mutate: install, isPending } = useAgentInstall();
 	const meta = AGENT_META[agent.id];
 
-	const statusBadge = agent.ready ? (
-		<Badge colorPalette="green" variant="subtle" size="sm">
-			{m.agentReady()}
-		</Badge>
-	) : agent.native_required && !agent.native_installed ? (
-		<Badge colorPalette="red" variant="subtle" size="sm">
-			{m.agentNativeNotInstalled()}
-		</Badge>
-	) : agent.acp_installed ? (
-		<Badge colorPalette="yellow" variant="subtle" size="sm">
-			{m.agentPartial()}
-		</Badge>
-	) : (
-		<Badge colorPalette="gray" variant="subtle" size="sm">
-			{m.agentNotInstalled()}
+	let statusColor: string;
+	let statusLabel: string;
+
+	if (agent.ready) {
+		statusColor = "green";
+		statusLabel = m.agentReady();
+	} else if (agent.native_required && !agent.native_installed) {
+		statusColor = "red";
+		statusLabel = m.agentNativeNotInstalled();
+	} else if (agent.acp_installed) {
+		statusColor = "yellow";
+		statusLabel = m.agentPartial();
+	} else {
+		statusColor = "gray";
+		statusLabel = m.agentNotInstalled();
+	}
+
+	const statusBadge = (
+		<Badge colorPalette={statusColor} variant="subtle" size="sm">
+			{statusLabel}
 		</Badge>
 	);
 

@@ -22,17 +22,8 @@ export function useCreateProfile() {
 export function useDeleteProfile() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: async ({
-			id,
-			projectId: _projectId,
-		}: {
-			id: string;
-			projectId: string;
-		}) => {
-			// Step 1: Close all tabs for this profile
+		mutationFn: async ({ id }: { id: string; projectId: string }) => {
 			await closeAllTabsForProfile(id);
-
-			// Step 2: Delete profile from backend
 			await deleteProfile({ id });
 		},
 		onSuccess: () => {

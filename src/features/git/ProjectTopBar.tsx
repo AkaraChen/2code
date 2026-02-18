@@ -18,6 +18,7 @@ import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import { listAgentStatus } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { queryKeys } from "@/shared/lib/queryKeys";
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -44,9 +45,8 @@ export default function ProjectTopBar({
 	const createTab = useCreateTab();
 
 	const { data: agents } = useQuery({
-		queryKey: ["agent-status"],
+		queryKey: queryKeys.agent.status(),
 		queryFn: listAgentStatus,
-		staleTime: 30_000,
 	});
 
 	const readyAgents = agents?.filter((a) => a.ready) ?? [];
@@ -84,7 +84,7 @@ export default function ProjectTopBar({
 					<Tooltip.Trigger asChild>
 						<Button
 							size="xs"
-							variant={"subtle"}
+							variant="subtle"
 							disabled={createTab.isPending}
 							onClick={() =>
 								createTab.mutate({

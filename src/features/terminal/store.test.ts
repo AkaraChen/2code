@@ -3,9 +3,9 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	useProfileHasNotification,
-	useTerminalProfileIds,
-	useTerminalStore,
-} from "./store";
+	useTabProfileIds as useTerminalProfileIds,
+	useTabStore as useTerminalStore,
+} from "@/features/tabs/store";
 
 /** Helper to create a terminal tab descriptor. */
 function termTab(id: string, title: string) {
