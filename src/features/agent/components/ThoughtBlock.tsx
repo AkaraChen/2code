@@ -36,7 +36,7 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 								{open ? <LuChevronDown /> : <LuChevronRight />}
 							</Icon>
 							<Text fontSize="sm" color="purple.fg" fontWeight="medium">
-								Thinking...
+								{m.agentThinking()}
 							</Text>
 						</Flex>
 					</Collapsible.Trigger>

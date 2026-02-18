@@ -30,7 +30,7 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 						<LuClipboardList />
 					</Icon>
 					<Text fontSize="sm" fontWeight="semibold" color="blue.fg">
-						Execution Plan
+						{m.agentPlan()}
 					</Text>
 				</Flex>
 

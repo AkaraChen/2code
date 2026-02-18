@@ -1,4 +1,5 @@
 import { Box, Link, Text } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import type { ToolCallContent } from "../types";
 import { DiffRenderer } from "./DiffRenderer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -27,7 +28,7 @@ export function ToolCallContentRenderer({
 					<Box my="2">
 						<img
 							src={`data:${content.content.mimeType};base64,${content.content.data}`}
-							alt="Tool output"
+							alt={m.agentToolOutputAlt()}
 							style={{ maxWidth: "100%", borderRadius: "4px" }}
 						/>
 					</Box>
@@ -65,7 +66,7 @@ export function ToolCallContentRenderer({
 					fontFamily="mono"
 				>
 					<Text color="fg.muted">
-						Terminal: {content.terminalId}
+						{m.agentTerminal({ id: content.terminalId })}
 					</Text>
 				</Box>
 			);

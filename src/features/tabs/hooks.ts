@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import * as m from "@/paraglide/messages.js";
 import { AgentTabSession } from "./AgentTabSession";
 import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
@@ -21,7 +22,7 @@ export function useCreateTab() {
 					session = await TerminalTabSession.create(
 						params.profileId,
 						params.cwd,
-						`Terminal ${counter + 1}`,
+						m.terminalTabTitle({ n: counter + 1 }),
 					);
 					break;
 				}

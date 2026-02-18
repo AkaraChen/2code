@@ -1,4 +1,5 @@
 import type { AgentNotification } from "@agentclientprotocol/sdk";
+import * as m from "@/paraglide/messages.js";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -52,7 +53,7 @@ export class AgentTabSession extends TabSession {
 		const session = new AgentTabSession(
 			info.id,
 			profileId,
-			`${agent} session`,
+			m.agentTabTitle({ agent }),
 			agent,
 		);
 		useAgentStore.getState().initSession(info.id);

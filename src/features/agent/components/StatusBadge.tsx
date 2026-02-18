@@ -1,4 +1,5 @@
 import { Badge } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import type { ToolCallStatus } from "../types";
 
 interface StatusBadgeProps {
@@ -8,19 +9,19 @@ interface StatusBadgeProps {
 export function StatusBadge({ status }: StatusBadgeProps) {
 	const statusConfig = {
 		pending: {
-			label: "Pending",
+			label: m.agentStatusPending(),
 			colorPalette: "gray" as const,
 		},
 		in_progress: {
-			label: "In Progress",
+			label: m.agentStatusInProgress(),
 			colorPalette: "blue" as const,
 		},
 		completed: {
-			label: "Completed",
+			label: m.agentStatusCompleted(),
 			colorPalette: "green" as const,
 		},
 		failed: {
-			label: "Failed",
+			label: m.agentStatusFailed(),
 			colorPalette: "red" as const,
 		},
 	};

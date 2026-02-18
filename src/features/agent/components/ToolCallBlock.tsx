@@ -77,7 +77,7 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 								{kindIcon[toolCall.kind ?? "other"]}
 							</Icon>
 							<Text flex="1" fontSize="sm" fontWeight="medium">
-								{toolCall.title ?? toolCall.kind ?? "Tool Call"}
+								{toolCall.title ?? toolCall.kind ?? m.agentToolCall()}
 							</Text>
 							<StatusBadge status={status} />
 							<Icon fontSize="xs" color="fg.muted">
@@ -112,7 +112,7 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 												color="fg.muted"
 												mb="1"
 											>
-												Input:
+												{m.agentToolInput()}:
 											</Text>
 											<Box
 												px="3"
@@ -137,7 +137,7 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 												color="fg.muted"
 												mb="1"
 											>
-												Output:
+												{m.agentToolOutput()}:
 											</Text>
 											<Box
 												px="3"

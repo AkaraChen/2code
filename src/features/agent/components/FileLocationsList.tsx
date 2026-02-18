@@ -1,4 +1,5 @@
 import { Flex, Text, VStack } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import type { ToolCallLocation } from "../types";
 
 interface FileLocationsListProps {
@@ -11,7 +12,7 @@ export function FileLocationsList({ locations }: FileLocationsListProps) {
 	return (
 		<VStack align="stretch" gap="1" mb="2">
 			<Text fontSize="xs" fontWeight="medium" color="fg.muted">
-				Affected Files:
+				{m.agentToolLocations()}:
 			</Text>
 			{locations.map((loc) => (
 				<Flex
