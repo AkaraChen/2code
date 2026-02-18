@@ -4,78 +4,93 @@
 
 ## Overview
 
-**2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions. It provides a unified workspace where developers can organize projects, create branch-isolated profiles via git worktrees, and run persistent PTY terminal sessions with scrollback restoration. The app features git diff/commit browsing, AI agent management via ACP, and full i18n support (English + Chinese).
+**2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions and AI agent support. It combines a React 19 frontend with a Rust backend to provide project management, git worktree-based profile isolation, persistent PTY terminal sessions with scrollback restoration, git diff/history browsing, AI agent chat via ACP (Agent Communication Protocol), and i18n support. The application targets macOS and uses SQLite for local data persistence.
 
-The frontend is a React 19 SPA communicating with a Rust backend through auto-generated typed IPC bindings. All terminal sessions persist across app restarts, and the UI preserves xterm.js state by never unmounting terminal components.
+The frontend is a React 19 SPA communicating with a Rust backend through auto-generated typed IPC bindings (`tauri-typegen`). All terminal sessions persist across app restarts, and the UI preserves xterm.js state by never unmounting terminal components (CSS `display: none` toggling).
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Language (Frontend) | TypeScript 5.6 |
-| Language (Backend) | Rust (2021 edition) |
-| Framework | Tauri 2 |
-| UI Library | React 19 + Chakra UI v3 |
-| State (Client) | Zustand 5 (with immer) |
+| Frontend | React 19, TypeScript 5.8, Vite 7 |
+| UI Framework | Chakra UI v3, Emotion, next-themes |
+| State (Client) | Zustand 5 + Immer |
 | State (Server) | TanStack Query 5 |
-| Terminal | xterm.js 6 |
-| Database | SQLite (Diesel ORM 2) |
+| Routing | react-router v7 |
+| Terminal | xterm.js 6 (+ fit, web-links addons) |
+| AI Agent | ACP SDK 0.14, Streamdown, Shiki |
+| Backend | Rust (edition 2021), Tauri 2 |
+| Database | SQLite via Diesel ORM 2 |
 | PTY | portable-pty 0.9 |
 | Git | CLI subprocess (`git`) |
-| i18n | Paraglide.js v2 |
-| Build | Vite 6 + Cargo |
-| Package Manager | Bun |
-| Agent Integration | rivet-dev/sandbox-agent (ACP) |
+| IPC | tauri-typegen auto-generated TypeScript bindings |
+| i18n | Paraglide.js v2 (English + Chinese) |
+| Build | Bun, Vite, Cargo, Just |
+| Testing | Vitest 4 (frontend), Cargo test (backend) |
+| Linting | ESLint 9 (@antfu/eslint-config), Knip |
+| DnD | dnd-kit (sortable topbar controls) |
 
 ## Module Structure
 
 ```
 2code/
-├── src/                          # Frontend (React 19 + TypeScript)
-│   ├── main.tsx                  # Entry point, provider stack
-│   ├── App.tsx                   # Routing + error boundary
-│   ├── generated/                # Auto-generated Tauri IPC bindings (gitignored)
-│   ├── features/                 # Feature modules
-│   │   ├── terminal/             # PTY terminal sessions + xterm.js
-│   │   ├── projects/             # Project CRUD + detail page
-│   │   ├── profiles/             # Git worktree profile management
-│   │   ├── git/                  # Diff viewer + commit history
-│   │   ├── settings/             # Settings page + Zustand stores
-│   │   ├── topbar/               # Customizable top bar controls
-│   │   ├── watcher/              # File system watcher (query invalidation)
-│   │   └── debug/                # Debug panel + log viewer
-│   ├── layout/                   # AppSidebar + sidebar sub-components
-│   └── shared/                   # Providers, hooks, query keys, fallbacks
-├── src-tauri/                    # Backend (Rust)
-│   ├── src/                      # Main app layer
-│   │   ├── lib.rs                # Tauri builder + setup
-│   │   ├── bridge.rs             # Tauri → service trait adapters
-│   │   └── handler/              # IPC command handlers (8 modules)
-│   ├── crates/                   # Workspace crates (layered architecture)
-│   │   ├── model/                # Diesel models, schema, DTOs
-│   │   ├── repo/                 # Database access (CRUD)
-│   │   ├── service/              # Business logic orchestration
-│   │   ├── infra/                # PTY, git, DB, config, watcher, shell init
-│   │   └── agent/                # AI agent management (ACP)
-│   ├── bins/2code-helper/        # CLI sidecar for notifications
-│   └── migrations/               # Diesel SQL migrations (6)
-├── messages/                     # i18n source files (en.json, zh.json)
-├── justfile                      # Task runner commands
-└── docs/                         # This documentation
+├── src/                           # Frontend (React 19 + TypeScript)
+│   ├── main.tsx                   # Entry: provider stack mount
+│   ├── App.tsx                    # Root layout + routing + debug toggle
+│   ├── features/                  # Feature-based modules
+│   │   ├── agent/                 #   AI agent chat (ACP integration)
+│   │   ├── debug/                 #   Debug panel (Cmd+Shift+D)
+│   │   ├── git/                   #   Git diff/history viewer
+│   │   ├── home/                  #   Landing page
+│   │   ├── profiles/              #   Profile (worktree) management
+│   │   ├── projects/              #   Project CRUD + detail page
+│   │   ├── settings/              #   App settings, pickers, Zustand stores
+│   │   ├── tabs/                  #   Unified tab session abstraction
+│   │   ├── terminal/              #   xterm.js terminal components
+│   │   ├── topbar/                #   Configurable top bar controls
+│   │   └── watcher/               #   File system watcher
+│   ├── generated/                 # Auto-generated Tauri IPC bindings (gitignored)
+│   ├── layout/                    # AppSidebar + sidebar components
+│   ├── paraglide/                 # i18n generated files (gitignored)
+│   └── shared/                    # Query client, providers, components, hooks
+│
+├── src-tauri/                     # Backend (Rust + Tauri 2)
+│   ├── src/
+│   │   ├── main.rs                # Tauri bootstrap
+│   │   ├── lib.rs                 # Command registration + plugin setup
+│   │   ├── bridge.rs              # Adapts Tauri types → service interfaces
+│   │   ├── handler/               # Tauri command handlers (thin layer)
+│   │   └── schema.rs              # Diesel auto-generated schema
+│   ├── crates/
+│   │   ├── model/                 # Diesel models + DTOs
+│   │   ├── repo/                  # Database access layer (CRUD)
+│   │   ├── service/               # Business logic orchestration
+│   │   ├── infra/                 # Infrastructure (PTY, git, DB, watcher, shell init)
+│   │   ├── agent/                 # AI agent management (ACP)
+│   │   └── shared/                # Types shared with sidecar
+│   ├── bins/
+│   │   └── twocode-helper/        # CLI sidecar for notifications
+│   └── migrations/                # Diesel SQLite migrations (9 total)
+│
+├── messages/                      # i18n source messages (en.json, zh.json)
+├── project.inlang/                # Paraglide.js config
+├── justfile                       # Task runner commands
+├── package.json                   # Frontend dependencies + scripts
+└── docs/                          # This documentation
 ```
 
 ## Documentation Index
 
-- [Architecture](./architecture.md) — System architecture diagram, layered pattern, component map, design decisions
-- [Data Flow](./data-flow.md) — Terminal lifecycle, session restoration, notification pipeline, state management
-- [API Reference](./api-reference.md) — All 28 Tauri IPC commands + event channels
-- [Configuration](./configuration.md) — Config files, environment variables, build pipeline, i18n, migrations
+- [Architecture](./architecture.md) — System architecture, layered design, component map, design decisions
+- [Data Flow](./data-flow.md) — Terminal session lifecycle, PTY streaming, agent communication, state management
+- [API Reference](./api-reference.md) — All IPC commands, Tauri events, and communication protocols
+- [Configuration](./configuration.md) — Config files, environment variables, database schema, build setup
 
 ### Component Deep Dives
 
-- [Terminal System](./components/terminal-system.md) — PTY lifecycle, persistence, ZDOTDIR init, output streaming
-- [Agent System](./components/agent-system.md) — ACP integration, manager, runtime, credential detection
-- [Git Integration](./components/git-integration.md) — Temp index diff, worktree profiles, context ID resolution
+- [Terminal System](./components/terminal.md) — PTY lifecycle, persistence, xterm.js integration, output streaming
+- [Agent System](./components/agent.md) — ACP integration, session management, streaming UI
+- [Tab System](./components/tabs.md) — Unified tab abstraction, session registry, restoration
 
 ## Quick Start
 
@@ -102,11 +117,8 @@ just fmt
 # Code coverage
 just coverage                     # HTML report
 just coverage-summary             # Terminal summary
-
-# Count lines of code
-just cloc
 ```
 
 ## Summary
 
-2code demonstrates a clean layered architecture with trait-based dependency inversion between the Tauri framework and business logic. Notable patterns include CSS-based terminal persistence (never unmounting xterm.js), vt100-sanitized session restoration, ZDOTDIR-based shell initialization injection, and a temp-index git diff strategy that avoids modifying the user's staging area. The workspace crate structure ensures clear separation between data models, repository access, business logic, and infrastructure concerns.
+2code follows a clean layered architecture with strict separation between Tauri command handlers, business logic services, and database repositories. The frontend uses a feature-based module structure with Zustand for client state and TanStack Query for server state, connected to the Rust backend via auto-generated typed IPC bindings. Notable patterns include CSS-based terminal persistence (never unmounting xterm.js), UTF-8 boundary-aware PTY output streaming, ZDOTDIR-based shell initialization injection, and a unified tab session abstraction that supports both terminal and AI agent tabs.

@@ -126,24 +126,56 @@ SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>
 | `session_id` | TEXT | PRIMARY KEY, FK → pty_sessions(id) ON DELETE CASCADE |
 | `data` | BLOB | NOT NULL, DEFAULT X'' |
 
+#### `agent_sessions`
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | TEXT | PRIMARY KEY |
+| `agent` | TEXT | NOT NULL |
+| `acp_session_id` | TEXT | NOT NULL |
+| `profile_id` | TEXT | NOT NULL, FK → profiles(id) ON DELETE CASCADE |
+| `created_at` | INTEGER | NOT NULL, DEFAULT epoch seconds |
+| `destroyed_at` | INTEGER | NULLABLE |
+| `session_init_json` | TEXT | NULLABLE |
+
+#### `agent_session_events`
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| `id` | TEXT | PRIMARY KEY |
+| `event_index` | INTEGER | NOT NULL |
+| `session_id` | TEXT | NOT NULL, FK → agent_sessions(id) ON DELETE CASCADE |
+| `created_at` | INTEGER | NOT NULL, DEFAULT epoch seconds |
+| `sender` | TEXT | NOT NULL |
+| `payload_json` | TEXT | NOT NULL |
+| `turn_index` | INTEGER | NOT NULL, DEFAULT 0 |
+
+**Indexes:**
+- `idx_agent_events_session` on `(session_id, event_index)`
+- `idx_agent_events_turn` on `(session_id, turn_index, event_index)`
+
 ### Relationships
 
 ```
 projects 1──* profiles 1──* pty_sessions 1──1 pty_session_output
+                       1──* agent_sessions 1──* agent_session_events
 ```
 
 All foreign keys use `ON DELETE CASCADE`.
 
 ### Migrations
 
-| Migration | Date | Description |
-|-----------|------|-------------|
-| `create_projects` | 2026-02-10 | Create `projects` table |
-| `create_pty_tables` | 2026-02-11 | Create `pty_sessions` + `pty_output_chunks` (initial chunked design) |
-| `create_profiles` | 2026-02-11 | Create `profiles` table |
-| `profile_first_refactor` | 2026-02-13 | Add `is_default` to profiles, migrate `pty_sessions` FK from project to profile |
-| `add_pty_dimensions` | 2026-02-13 | Add `cols` and `rows` to `pty_sessions` |
-| `single_blob_output` | 2026-02-14 | Replace `pty_output_chunks` (1:N) with `pty_session_output` (1:1 BLOB) |
+| # | Migration | Date | Description |
+|---|-----------|------|-------------|
+| 1 | `create_projects` | 2026-02-10 | Create `projects` table |
+| 2 | `create_pty_tables` | 2026-02-11 | Create `pty_sessions` + `pty_output_chunks` (initial chunked design) |
+| 3 | `create_profiles` | 2026-02-11 | Create `profiles` table |
+| 4 | `profile_first_refactor` | 2026-02-13 | Add `is_default` to profiles, migrate `pty_sessions` FK from project to profile |
+| 5 | `add_pty_dimensions` | 2026-02-13 | Add `cols` and `rows` to `pty_sessions` |
+| 6 | `single_blob_output` | 2026-02-14 | Replace `pty_output_chunks` (1:N) with `pty_session_output` (1:1 BLOB) |
+| 7 | `create_agent_sessions` | 2026-02-14 | Create `agent_sessions` + `agent_session_events` tables |
+| 8 | `fix_agent_session_cascade` | 2026-02-15 | Add ON DELETE CASCADE to agent_sessions profile FK |
+| 9 | `add_turn_index` | 2026-02-15 | Add `turn_index` column to `agent_session_events` |
 
 Migrations are embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`.
 
@@ -167,7 +199,7 @@ Optional file in project root folder:
 
 ## Internationalization (i18n)
 
-Paraglide.js v2 with inlang message format plugin. Source messages in `messages/{locale}.json` (106 keys each for English and Chinese).
+Paraglide.js v2 with inlang message format plugin. Source messages in `messages/{locale}.json` (147 keys each for English and Chinese).
 
 **Critical requirement:** `project.inlang/settings.json` must include the modules array:
 
@@ -184,6 +216,8 @@ Paraglide.js v2 with inlang message format plugin. Source messages in `messages/
 Without this, paraglide compiles but generates empty message files.
 
 **Usage:** `import * as m from "@/paraglide/messages.js"` → `m.home()`
+
+**Parameterized messages:** `m.changedFiles({ count: 5 })`, `m.agentSummary({ ready: 3, total: 6 })`
 
 ## Tauri Plugins
 
@@ -205,6 +239,7 @@ Without this, paraglide compiles but generates empty message files.
 | Dev URL | `http://localhost:1420` |
 | External binaries | `binaries/2code-helper` |
 | Bundle targets | All platforms |
+| CSP | Disabled (null) |
 
 ## Error Handling
 

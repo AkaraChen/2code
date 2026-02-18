@@ -27,30 +27,30 @@ The Mock agent is filtered from the public API.
 ```mermaid
 graph TD
     subgraph Frontend
+        Chat["AgentChat.tsx<br/>+ useAgentStore"]
         Settings["AgentSettings.tsx"]
+        TabSession["AgentTabSession.ts<br/>(features/tabs)"]
     end
 
     subgraph Handler
-        H["handler/agent.rs<br/>3 commands"]
+        H["handler/agent.rs<br/>10 commands"]
     end
 
     subgraph AgentCrate["crates/agent/"]
         Manager["AgentManagerWrapper<br/>manager.rs"]
-        Runtime["AgentSession<br/>runtime.rs"]
+        Runtime["AcpStdioAdapter<br/>runtime.rs"]
     end
 
-    subgraph SandboxAgent["rivet-dev/sandbox-agent"]
-        AM["agent-management"]
-        AH["acp-http-adapter"]
-        AC["agent-credentials"]
+    subgraph External
+        ACP["ACP Subprocess<br/>stdin/stdout JSON-RPC 2.0"]
     end
 
+    Chat -->|Tauri events| TabSession
+    TabSession -->|IPC| H
     Settings -->|IPC| H
     H --> Manager
     H --> Runtime
-    Manager --> AM
-    Manager --> AC
-    Runtime --> AH
+    Runtime -->|stdio| ACP
 ```
 
 ## Manager (`manager.rs`)
@@ -102,54 +102,110 @@ Checks environment variables, config files (`.zshrc`, `.env`), and system creden
 
 ## Runtime (`runtime.rs`)
 
-### AgentSession
+### AcpStdioAdapter
 
-Manages a running ACP agent process:
+Manages communication with ACP subprocesses via stdin/stdout JSON-RPC 2.0:
 
 ```rust
-pub struct AgentSession {
-    pub id: String,           // UUID
-    pub agent: String,        // Agent identifier
-    pub cwd: PathBuf,         // Working directory
-    runtime: Arc<AdapterRuntime>,  // acp-http-adapter
-    request_id: AtomicU64,    // Monotonic JSON-RPC request ID
+pub struct AcpStdioAdapter {
+    stdin: Arc<Mutex<ChildStdin>>,
+    child: Arc<Mutex<Child>>,
+    pending: Arc<Mutex<HashMap<String, oneshot::Sender<Value>>>>,
+    notification_tx: broadcast::Sender<Value>,
+    shutting_down: Arc<AtomicBool>,
+    request_id: AtomicU64,
+    request_timeout: Option<Duration>,
 }
 ```
 
-### `spawn(agent, cwd, env) -> Result<AgentSession>`
+### `spawn(binary, args, env, timeout) -> Result<AcpStdioAdapter>`
 
-Starts an ACP agent process:
-1. Resolve agent binary from `AgentManager`
-2. Set environment variables (working directory, credentials)
-3. Launch process via `acp-http-adapter`
-4. Return session handle
+Starts an ACP subprocess:
+1. Spawn child process with `stdin`/`stdout` piped, `stderr` inherited
+2. Start background stdout reader task (dispatches responses and notifications)
+3. Return adapter handle
 
-### `send(method, params) -> Result<Value>`
+### `request(method, params) -> Result<Value>`
 
 JSON-RPC 2.0 request/response:
 1. Increment atomic request ID
-2. Send JSON-RPC request via HTTP adapter
-3. Wait for response
-4. Return result or propagate error
+2. Create oneshot response channel and register in `pending` map
+3. Write JSON-RPC request to subprocess stdin (newline-delimited)
+4. Wait for response (with optional timeout)
+5. On timeout or channel drop: clean up pending entry
 
 ### `notify(method, params) -> Result<()>`
 
 JSON-RPC 2.0 notification (fire-and-forget):
-1. Send notification via HTTP adapter
-2. No response expected
+1. Write notification to subprocess stdin
+2. No response expected (no `id` field)
 
 ### `notifications() -> Stream<Value>`
 
-Returns a stream of push notifications from the agent process. Used for progress updates, tool calls, and other agent-initiated messages.
+Returns a `BroadcastStream` of push notifications from the subprocess. The stdout reader task dispatches messages without an `id` field to this broadcast channel.
 
-### `shutdown() -> Result<()>`
+### `shutdown()`
 
 Graceful process termination:
-1. Send shutdown signal via adapter
-2. Wait for process to exit
-3. Clean up resources
+1. Set `shutting_down` flag (prevents new requests)
+2. Clear all pending requests
+3. Kill subprocess and wait for exit
 
-## Frontend Integration
+## Frontend Chat System
+
+### AgentChat (`src/features/agent/AgentChat.tsx`)
+
+Main chat component rendered inside `TerminalTabs` for agent-type tabs:
+
+- **Lazy reconnection**: When `isActive && needsReconnection(sessionId)`, renders `AwaitReconnection` which calls `use(getReconnectPromise(sessionId))` — suspending until `AgentTabSession.reconnect()` resolves
+- **Normal state**: Renders `MessageList` + `ChatInput`
+
+### useAgentStore (`src/features/agent/store.ts`)
+
+Zustand store (immer middleware) for agent session state:
+
+```typescript
+interface AgentSessionState {
+  turns: AgentTurn[]           // Completed turns
+  isStreaming: boolean         // Currently receiving a response
+  streamingTurn: StreamingTurn | null  // In-progress turn
+  error: string | null
+}
+```
+
+**Key actions:**
+- `handleAgentEvent(sessionId, event)` — Uses `ts-pattern` exhaustive match on ACP event types: `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`, `plan`
+- `handleTurnComplete(sessionId)` — Moves `streamingTurn` → `turns`, clears streaming state
+- `restoreFromEvents(sessionId, events)` — Reconstructs conversation history by grouping `AgentSessionEventRecord[]` by `turn_index` and replaying them
+
+### AgentTabSession (`src/features/tabs/AgentTabSession.ts`)
+
+Extends `TabSession` base class:
+- `static create()` — Calls `createAgentSessionPersistent`, registers Tauri event listeners
+- `reconnect()` — Calls `reconnectAgentSession`, loads events from DB, restores store state
+- `registerListeners()` — Subscribes to `agent-event-{id}`, `agent-turn-complete-{id}`, `agent-error-{id}`
+- `close()` — Unlistens all events, calls `closeAgentSession` + `deleteAgentSessionRecord`
+
+### Message UI Components
+
+| Component | Responsibility |
+|-----------|---------------|
+| `MessageList` | Scrollable message container |
+| `MessageBubble` | User message display |
+| `StreamingBubble` | In-progress agent response |
+| `TurnRenderer` | Dispatches content blocks for a completed turn |
+| `StreamingTurnRenderer` | Dispatches content blocks for streaming turn |
+| `AgentResponseGroup` | Groups agent content blocks visually |
+| `ThoughtBlock` | Agent thinking/reasoning display |
+| `PlanBlock` | Agent plan display |
+| `ToolCallBlock` | Tool call with status indicator |
+| `ToolCallContentRenderer` | Renders tool call results (diff, file locations) |
+| `DiffRenderer` | Syntax-highlighted diff display (Shiki) |
+| `MarkdownRenderer` | Markdown rendering via Streamdown |
+| `ChatInput` | Text input with submit handling |
+| `StatusBadge` | Streaming/error status indicator |
+
+## Frontend Settings
 
 ### AgentSettings (`src/features/settings/AgentSettings.tsx`)
 

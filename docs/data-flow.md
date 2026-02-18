@@ -6,7 +6,8 @@
 sequenceDiagram
     participant User
     participant UI as TerminalTabs
-    participant Hook as useCreateTerminalTab
+    participant Hook as useCreateTab
+    participant Registry as sessionRegistry
     participant IPC as Tauri IPC
     participant Handler as handler::pty
     participant Bridge as bridge.rs
@@ -15,8 +16,9 @@ sequenceDiagram
     participant DB as SQLite
     participant PTY as PTY Process
 
-    User->>UI: Click "New Tab"
-    UI->>Hook: mutate({ profileId, cwd })
+    User->>UI: Click "New Terminal"
+    UI->>Hook: mutate({ type: "terminal", profileId })
+    Hook->>Hook: TerminalTabSession.create(profileId, cwd)
     Hook->>IPC: createPtySession({ meta, config })
     IPC->>Handler: create_pty_session()
     Handler->>Bridge: build_pty_context()
@@ -28,21 +30,73 @@ sequenceDiagram
     Infra->>PTY: Fork PTY process
     Infra-->>Service: (master_fd, child_pid)
     Service->>DB: Insert pty_sessions + pty_session_output records
-    Service->>Service: Start read thread
-    Service->>Service: Start persistence thread
+    Service->>Service: Start read thread (4KB chunks)
+    Service->>Service: Start persistence thread (32KB flush buffer)
     Service-->>Handler: session_id
     Handler-->>IPC: session_id
     IPC-->>Hook: session_id
-    Hook->>Hook: store.addTab(profileId, sessionId)
+    Hook->>Registry: Register TerminalTabSession
+    Hook->>Hook: useTabStore.addTab(profileId, tab)
     Hook-->>UI: Re-render with new tab
 
     loop PTY Output Stream
         PTY->>Infra: Read 4KB chunk
-        Infra->>Infra: UTF-8 boundary check
+        Infra->>Infra: UTF-8 boundary check (find_utf8_boundary)
         Infra->>IPC: emit pty-output-{id}
         IPC->>UI: xterm.write(data)
-        Infra->>DB: Append to BLOB (via mpsc)
+        Infra->>DB: Append to BLOB (via mpsc, 32KB flush)
     end
+```
+
+## Agent Tab Creation and Messaging
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as AgentChat
+    participant Hook as useCreateTab
+    participant Session as AgentTabSession
+    participant IPC as Tauri IPC
+    participant Handler as handler::agent
+    participant Agent as agent::runtime
+    participant ACP as ACP Subprocess
+    participant DB as SQLite
+    participant Store as useAgentStore
+
+    User->>UI: Click "New Agent" (via AgentMenu)
+    UI->>Hook: mutate({ type: "agent", profileId })
+    Hook->>Session: AgentTabSession.create(profileId, agent)
+    Session->>IPC: createAgentSessionPersistent({ meta })
+    IPC->>Handler: create_agent_session_persistent()
+    Handler->>Agent: AcpStdioAdapter::spawn(binary, args)
+    Agent->>ACP: Start subprocess (stdin/stdout JSON-RPC)
+    Agent-->>Handler: AgentSessionInfo { id, acp_session_id }
+    Handler->>DB: Insert agent_sessions record
+    Handler-->>Session: AgentSessionInfo
+    Session->>Session: registerListeners() for Tauri events
+    Session->>Store: initSession(sessionId)
+
+    User->>UI: Type prompt in ChatInput
+    UI->>Store: addUserMessage(sessionId, prompt)
+    UI->>IPC: sendAgentPrompt({ sessionId, prompt })
+    IPC->>Handler: send_agent_prompt()
+    Handler->>Agent: adapter.notify("session/sendPrompt", { prompt })
+    Agent->>ACP: JSON-RPC notification
+
+    loop Streaming Response
+        ACP->>Agent: JSON-RPC notification (session/update)
+        Agent->>IPC: emit agent-event-{id}
+        IPC->>Session: Tauri event listener
+        Session->>Store: handleAgentEvent(sessionId, event)
+        Note over Store: ts-pattern match on event type:<br/>agent_message_chunk, agent_thought_chunk,<br/>tool_call, tool_call_update, plan
+        Store->>UI: Re-render streaming content
+    end
+
+    ACP->>Agent: Turn complete notification
+    Agent->>IPC: emit agent-turn-complete-{id}
+    IPC->>Session: Tauri event listener
+    Session->>Store: handleTurnComplete(sessionId)
+    Session->>DB: Persist events to agent_session_events
 ```
 
 ## Session Restoration on App Start
@@ -51,46 +105,47 @@ sequenceDiagram
 sequenceDiagram
     participant App as main.tsx
     participant Layer as TerminalLayer
-    participant State as state.ts
+    participant Restore as restore.ts
     participant Query as QueryObserver
     participant IPC as Tauri IPC
-    participant Service as service::pty
     participant DB as SQLite
-    participant VT as vt100 Parser
+    participant Registry as sessionRegistry
+    participant Store as useTabStore
 
     App->>Layer: Render (Suspense boundary)
-    Layer->>State: use(restorationPromise)
-    Note over State: Promise created at module load
+    Layer->>Restore: use(restorationPromise)
+    Note over Restore: Promise created at module load
 
-    State->>Query: Observe queryKeys.projects.all
-    Query-->>State: Projects data available
+    Restore->>Query: Observe queryKeys.projects.all
+    Query-->>Restore: Projects data available
 
-    State->>State: Clean stale profiles from store
+    Restore->>Store: removeStaleProfiles()
 
     loop For each project
-        State->>IPC: listProjectSessions(projectId)
-        IPC->>Service: list_project_sessions()
-        Service->>DB: Query sessions via profiles join
-        DB-->>State: Vec of PtySessionRecord
+        Restore->>IPC: listProjectSessions(projectId)
+        IPC-->>Restore: PtySessionRecord[]
+        Restore->>IPC: listProjectAgentSessions(projectId)
+        IPC-->>Restore: AgentSessionRecord[]
     end
 
-    loop For each session (max 3 concurrent)
-        State->>IPC: restorePtySession(oldId, meta, config)
-        IPC->>Service: restore_session()
-        Service->>DB: Read raw output BLOB
-        Service->>VT: Parse through vt100 (10K scrollback)
-        VT-->>Service: Sanitized SGR text
-        Service->>Service: Trim trailing empty lines
-        Service->>Service: Create new PTY session
-        Service->>DB: Delete old session record
-        Service-->>State: RestoreResult { newSessionId, history }
+    loop For each PTY session
+        Restore->>Registry: Create TerminalTabSession (lazy, no PTY spawn)
+        Restore->>Store: addTab(profileId, terminalTab)
     end
 
-    State->>State: Store history in sessionHistory Map
-    State->>State: Add tabs to Zustand store
-    State-->>Layer: Promise resolves
-    Layer->>Layer: Render all terminal containers
-    Layer->>Layer: xterm.write(sessionHistory.get(id))
+    loop For each agent session
+        Restore->>Registry: Create AgentTabSession (lazy, no reconnect yet)
+        Restore->>Store: addTab(profileId, agentTab)
+    end
+
+    Restore-->>Layer: Promise resolves
+    Layer->>Layer: Render all profile containers
+
+    Note over Layer: When user focuses an agent tab:
+    Layer->>Registry: AgentTabSession.reconnect()
+    Registry->>IPC: reconnectAgentSession(sessionId)
+    IPC->>DB: Load agent_session_events
+    Registry->>Store: restoreFromEvents(events)
 ```
 
 ## File Watcher to Git Diff Refresh
@@ -103,7 +158,7 @@ sequenceDiagram
     participant Channel as Tauri Channel
     participant FW as fileWatcher.ts
     participant QC as QueryClient
-    participant Git as useGitDiffFiles
+    participant Git as useGitDiff
 
     Note over Service: Polls DB every 3s for project list
     Note over Service: Reconciles watchers (add new, remove deleted)
@@ -129,7 +184,7 @@ sequenceDiagram
     participant Store as Tauri plugin-store
     participant Sound as afplay
     participant Event as Tauri Event
-    participant ZStore as Zustand Store
+    participant ZStore as useTabStore
     participant UI as Terminal Tab UI
 
     Shell->>Shell: Command completes
@@ -160,16 +215,17 @@ sequenceDiagram
 
 | Store | File | Persistence | Purpose |
 |-------|------|-------------|---------|
-| `terminalStore` | `features/terminal/store.ts` | None (rebuilt from DB) | Terminal tabs per profile, notification dots |
-| `terminalSettingsStore` | `features/settings/stores/terminalSettingsStore.ts` | localStorage | Font family, font size, terminal themes |
-| `themeStore` | `features/settings/stores/themeStore.ts` | localStorage | Accent color, border radius |
-| `notificationStore` | `features/settings/stores/notificationStore.ts` | Tauri plugin-store | Sound name, enabled flag |
-| `debugStore` | `features/debug/debugStore.ts` | localStorage (partial) | Debug mode toggle, panel state |
-| `debugLogStore` | `features/debug/debugLogStore.ts` | None | Log buffer (max 500 entries) |
-| `topBarStore` | `features/topbar/store.ts` | localStorage | Active controls, per-control options |
+| `useTabStore` | `features/tabs/store.ts` | None (rebuilt from DB) | Tab collections per profile, active tab, notification dots |
+| `useAgentStore` | `features/agent/store.ts` | None | Agent session state (turns, streaming chunks, errors) per session |
+| `terminalSettingsStore` | `features/settings/stores/terminalSettingsStore.ts` | localStorage (`"font-settings"`) | Font family, font size, dark/light terminal themes, sync toggle |
+| `themeStore` | `features/settings/stores/themeStore.ts` | localStorage (`"theme-settings"`) | Accent color, border radius |
+| `notificationStore` | `features/settings/stores/notificationStore.ts` | Tauri plugin-store (`settings.json`) | Sound name, enabled flag |
+| `debugStore` | `features/debug/debugStore.ts` | localStorage (`"debug-settings"`, partial) | Debug mode toggle, panel state |
+| `debugLogStore` | `features/debug/debugLogStore.ts` | None | Log buffer (max 1000 entries) |
+| `topBarStore` | `features/topbar/store.ts` | localStorage (`"topbar-settings"`) | Active controls, per-control options |
 
 **Module-level side effects:**
-- `terminalStore` registers `pty-notify` event listener at import time
+- `useTabStore` registers `pty-notify` event listener at import time
 - `terminalSettingsStore` syncs `--chakra-fonts-mono` CSS variable via subscription
 - `themeStore` syncs `--chakra-radii-l1/l2/l3` CSS variables via subscription
 
@@ -197,3 +253,11 @@ queryKeys = {
 - Project/profile mutations → invalidate `queryKeys.projects.all`
 - File watcher events → invalidate all `git-diff` and `git-log` queries (prefix match)
 - Agent install → invalidate `queryKeys.agent.status()`
+
+### Cross-cutting Data Flows
+
+1. **PTY notifications**: Tauri `pty-notify` event → `useTabStore.markNotified(sessionId)` → `useProfileHasNotification` selector → green dots in `ProfileItem` and `TerminalTabs`
+2. **Tab restore**: module-level `restorationPromise` (from `QueryObserver`) → `populateTabs()` → fills `sessionRegistry` and `useTabStore` → `TerminalLayer` suspends on this promise
+3. **File watching**: `fileWatcher.ts` side-effect import in `main.tsx` → invalidates git queries on file change
+4. **Theme propagation**: `useThemeStore.borderRadius` → CSS variables `--chakra-radii-l1/l2/l3`. `useThemeStore.accentColor` → Chakra `colorPalette` prop. `useTerminalSettingsStore.fontFamily` → CSS variable `--chakra-fonts-mono`
+5. **Agent events**: Tauri events `agent-event-{id}`, `agent-turn-complete-{id}`, `agent-error-{id}` → `useAgentStore` actions → `AgentChat` re-renders via Zustand subscription

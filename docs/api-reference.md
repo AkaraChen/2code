@@ -14,9 +14,9 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 | `update_project` | `id: string, name?: string, folder?: string` | `Project` | Update project name or folder |
 | `delete_project` | `id: string` | — | Delete project (cascades to profiles, sessions, output) |
 | `get_git_branch` | `folder: string` | `string` | Get current git branch name |
-| `get_git_diff` | `profile_id: string` | `string` | Unified diff (staged + unstaged) via temp git index |
-| `get_git_log` | `profile_id: string, limit?: number` | `GitCommit[]` | Commit history (default 50) |
-| `get_commit_diff` | `profile_id: string, commit_hash: string` | `string` | Diff for specific commit |
+| `get_git_diff` | `context_id: string` | `string` | Unified diff (staged + unstaged) via temp git index |
+| `get_git_log` | `context_id: string, limit?: number` | `GitCommit[]` | Commit history (default 50) |
+| `get_commit_diff` | `context_id: string, commit_hash: string` | `string` | Diff for specific commit |
 
 ### PTY Commands (`handler/pty.rs`)
 
@@ -27,9 +27,8 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 | `resize_pty` | `session_id: string, rows: u16, cols: u16` | — | Resize terminal dimensions |
 | `close_pty_session` | `session_id: string` | — | Kill PTY process and mark closed |
 | `list_project_sessions` | `project_id: string` | `PtySessionRecord[]` | List all sessions for a project (via profiles join) |
-| `get_pty_session_history` | `session_id: string` | `Vec<u8>` | Fetch raw output BLOB for scrollback restoration |
+| `get_session_output` | `session_id: string` | `number[]` (bytes) | Fetch raw output BLOB for scrollback restoration |
 | `delete_pty_session_record` | `session_id: string` | — | Delete session record and output data |
-| `restore_pty_session` | `old_session_id: string, meta: PtySessionMeta, config: PtyConfig` | `RestoreResult` | Atomically restore: read history, vt100 sanitize, create new session, delete old |
 | `flush_pty_output` | `session_id: string` | — | Force persistence thread flush (best-effort) |
 
 ### Profile Commands (`handler/profile.rs`)
@@ -46,6 +45,13 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 | `list_agent_status` | — | `AgentStatusInfo[]` | List all agents with native + ACP install status |
 | `install_agent` | `agent: string` | — | Install ACP bridge for agent (async, blocking pool) |
 | `detect_credentials` | — | `CredentialInfo` | Scan for Anthropic/OpenAI API keys |
+| `send_agent_prompt` | `session_id: string, prompt: string` | — | Send user prompt to active agent session |
+| `close_agent_session` | `session_id: string` | — | Shutdown ACP subprocess and mark destroyed |
+| `create_agent_session_persistent` | `meta: AgentSessionMeta` | `AgentSessionInfo` | Spawn ACP subprocess, persist session record |
+| `reconnect_agent_session` | `session_id: string` | `AgentSessionInfo` | Respawn ACP subprocess for existing session |
+| `list_project_agent_sessions` | `project_id: string` | `AgentSessionRecord[]` | List agent sessions for a project |
+| `delete_agent_session_record` | `session_id: string` | — | Delete session and all events |
+| `list_agent_session_events` | `session_id: string` | `AgentSessionEventRecord[]` | List all events for session (for restoration) |
 
 ### Watcher Commands (`handler/watcher.rs`)
 
@@ -82,10 +88,13 @@ Events emitted from backend to frontend via `app.emit()` or Tauri `Channel`.
 | `pty-output-{id}` | `string` (UTF-8 text) | `service/pty.rs` reader thread | Terminal output for a specific session |
 | `pty-exit-{id}` | `()` | `service/pty.rs` reader thread | Session exited (EOF or error) |
 | `pty-notify` | `string` (session ID) | `infra/helper.rs` notify handler | Notification triggered from shell via sidecar |
+| `agent-event-{id}` | ACP event JSON | `handler/agent.rs` | Agent session update (message chunk, tool call, etc.) |
+| `agent-turn-complete-{id}` | `()` | `handler/agent.rs` | Agent finished processing a turn |
+| `agent-error-{id}` | `string` (error message) | `handler/agent.rs` | Agent session error |
 | `WatchEvent` | `{ project_id: string }` | `service/watcher.rs` via Channel | File system change detected |
-| `LogEntry` | `{ timestamp, level, target, message }` | `infra/logger.rs` via Channel | Tracing log entry for debug panel |
+| `LogEntry` | `{ timestamp, level, source, message }` | `infra/logger.rs` via Channel | Tracing log entry for debug panel |
 
-## Sidecar HTTP API (`src-tauri/src/helper.rs`)
+## Sidecar HTTP API (`infra/helper.rs`)
 
 Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY child processes via env vars.
 
@@ -108,10 +117,16 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 { shell: string; cwd: string; rows: number; cols: number }
 ```
 
-### `RestoreResult`
+### `AgentSessionMeta`
 
 ```typescript
-{ sessionId: string; history: number[] /* Uint8Array */ }
+{ profileId: string; agent: string }
+```
+
+### `AgentSessionInfo`
+
+```typescript
+{ id: string; agent: string; acp_session_id: string }
 ```
 
 ### `Project`
@@ -138,10 +153,28 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 { id: string; profile_id: string; title: string; shell: string; cwd: string; created_at: string; closed_at: string | null; cols: number; rows: number }
 ```
 
+### `AgentSessionRecord`
+
+```typescript
+{ id: string; agent: string; acp_session_id: string; profile_id: string; created_at: number; destroyed_at: number | null; session_init_json: string | null }
+```
+
+### `AgentSessionEventRecord`
+
+```typescript
+{ id: string; event_index: number; session_id: string; created_at: number; sender: string; payload_json: string; turn_index: number }
+```
+
 ### `GitCommit`
 
 ```typescript
-{ hash: string; short_hash: string; subject: string; body: string; author: GitAuthor; date: string; files_changed: number; insertions: number; deletions: number }
+{ hash: string; full_hash: string; author: GitAuthor; date: string; message: string; files_changed: number; insertions: number; deletions: number }
+```
+
+### `GitAuthor`
+
+```typescript
+{ name: string; email: string }
 ```
 
 ### `AgentStatusInfo`
@@ -162,10 +195,28 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 { source: string; provider: string; auth_type: string; key_preview: string }
 ```
 
+### `SystemFont`
+
+```typescript
+{ family: string; is_mono: boolean }
+```
+
+### `WatchEvent`
+
+```typescript
+{ project_id: string }
+```
+
+### `LogEntry`
+
+```typescript
+{ timestamp: string; level: string; source: string; message: string }
+```
+
 ## Query Keys (`shared/lib/queryKeys.ts`)
 
-| Key | Pattern | Used By |
-|-----|---------|---------|
+| Key | Pattern | IPC Command |
+|-----|---------|-------------|
 | Projects list | `["projects"]` | `listProjects` |
 | Git branch | `["git-branch", folder]` | `getGitBranch` |
 | Git diff | `["git-diff", profileId]` | `getGitDiff` |
@@ -173,3 +224,12 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 | Commit diff | `["git-commit-diff", profileId, hash]` | `getCommitDiff` |
 | Agent status | `["agent-status"]` | `listAgentStatus` |
 | Agent credentials | `["agent-credentials"]` | `detectCredentials` |
+
+## Context ID Resolution
+
+Git commands (`get_git_diff`, `get_git_log`, `get_commit_diff`) accept a `context_id` parameter that resolves polymorphically via `repo::project::resolve_context_folder()`:
+
+- **Profile ID** → profile's `worktree_path`
+- **Project ID** → project's `folder`
+
+This enables git operations to work seamlessly with both regular project folders and profile worktrees.

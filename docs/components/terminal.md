@@ -130,18 +130,22 @@ Generated for every session:
 
 ### TerminalLayer (`src/features/terminal/TerminalLayer.tsx`)
 
-Renders as a persistent absolute-positioned overlay across all routes. Uses React 19 `use()` hook with `restorationPromise` for Suspense integration.
+Renders as a persistent absolute-positioned overlay across all routes. Uses React 19 `use()` hook with `restorationPromise` (from `features/tabs/restore.ts`) for Suspense integration.
 
 ```
 TerminalLayer
 ├── for each profile with tabs:
-│   ├── ProjectTopBar (git branch + custom controls)
+│   ├── ProjectTopBar (git branch + custom controls + AgentMenu)
 │   └── TerminalTabs
 │       ├── Tab bar (with notification dots)
-│       └── Terminal components (all mounted, hidden via CSS)
+│       └── Tab content panels (all mounted, hidden via CSS)
+│           ├── Terminal (for terminal tabs)
+│           └── AgentChat (for agent tabs)
 ```
 
 **Visibility:** Uses `display: flex | none` based on current route match. Active profile gets `flex`, all others get `none`. Terminals never unmount.
+
+**Tab type dispatch:** `TerminalTabs` uses `ts-pattern` exhaustive matching on the tab's `type` field to render either a `Terminal` or `AgentChat` component.
 
 ### Terminal (`src/features/terminal/Terminal.tsx`)
 
@@ -154,34 +158,28 @@ Wraps xterm.js in a React component:
 - Auto-resizes via `ResizeObserver` on container element
 - Font/theme/size changes update xterm options dynamically (no remount needed)
 
-### Terminal Store (`src/features/terminal/store.ts`)
+### Tab Store and Session Registry
 
-```typescript
-interface TerminalStore {
-  profiles: Record<string, ProjectTerminalState>  // profileId → tabs
-  notifiedTabs: Set<string>                       // sessionIds with unread notifications
-  addTab, closeTab, setActiveTab, removeProfile
-  updateTabTitle, removeStaleProfiles
-  markNotified, markRead
-}
-```
+Terminal tabs are managed through the unified [Tab System](./tabs.md):
 
-Uses `immer` middleware with `enableMapSet()` for `Set` support. Module-level event listener for `pty-notify` events automatically calls `markNotified()`.
+- **`useTabStore`** (`features/tabs/store.ts`) — Zustand store holding per-profile tab collections, active tab, notification dots
+- **`sessionRegistry`** (`features/tabs/sessionRegistry.ts`) — Module-level `Map<string, TabSession>` tracking all active session objects
+- **`TerminalTabSession`** (`features/tabs/TerminalTabSession.ts`) — `TabSession` subclass for terminal tabs; creates/closes PTY sessions
 
-**Derived hooks:**
-- `useTerminalProfileIds()` — Returns all profile IDs that have tabs
+**Derived selectors:**
+- `useTabProfileIds()` — Returns all profile IDs that have tabs
 - `useProfileHasNotification(profileId)` — Whether any tab in a profile has unread notification
 
-### Restoration Pipeline (`src/features/terminal/state.ts`)
+### Restoration Pipeline (`features/tabs/restore.ts`)
 
 Module-level `restorationPromise` created at import time:
 
 1. `QueryObserver` watches `queryKeys.projects.all`
 2. On first data: clean stale profiles from store
-3. Fetch all sessions via `listProjectSessions` per project
-4. Restore each session with `restorePtySession` (max 3 concurrent via semaphore)
-5. Store scrollback in `sessionHistory` Map (session ID → `Uint8Array`)
-6. Add tabs to Zustand store
+3. Fetch all PTY sessions via `listProjectSessions` per project
+4. Fetch all agent sessions via `listProjectAgentSessions` per project
+5. Create `TerminalTabSession` / `AgentTabSession` instances (lazy, no process spawned)
+6. Register in `sessionRegistry` and add tabs to `useTabStore`
 7. Promise resolves → `TerminalLayer` renders via Suspense
 
 ### Terminal Themes (`src/features/terminal/themes.ts`)
