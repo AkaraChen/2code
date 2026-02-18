@@ -54,7 +54,7 @@ export const useThemeStore = create<ThemeStore>()(
 			setAccentColor: (color) => set({ accentColor: color }),
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
 		}),
-		{ name: "theme-settings" },
+		{ name: "theme-settings", version: 1 },
 	),
 );
 

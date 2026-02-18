@@ -20,38 +20,33 @@ import { FileLocationsList } from "./FileLocationsList";
 import { StatusBadge } from "./StatusBadge";
 import { ToolCallContentRenderer } from "./ToolCallContentRenderer";
 
+const KIND_ICONS = {
+	read: <LuFileText />,
+	edit: <LuPencil />,
+	delete: <LuTrash2 />,
+	move: <LuMove />,
+	search: <LuSearch />,
+	execute: <LuTerminal />,
+	think: <LuBrain />,
+	fetch: <LuDownload />,
+	switch_mode: <LuCircle />,
+	other: <LuCircle />,
+};
+
+const STATUS_BORDER_COLOR = {
+	pending: "gray.solid",
+	in_progress: "blue.solid",
+	completed: "green.solid",
+	failed: "red.solid",
+};
+
 interface ToolCallBlockProps {
 	toolCall: ToolCall;
 }
 
 export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
-	// 确保有默认的 status
 	const status = toolCall.status ?? "pending";
-
-	// 失败的工具调用自动展开
 	const [expanded, setExpanded] = useState(status === "failed");
-
-	// 工具类型图标映射
-	const kindIcon = {
-		read: <LuFileText />,
-		edit: <LuPencil />,
-		delete: <LuTrash2 />,
-		move: <LuMove />,
-		search: <LuSearch />,
-		execute: <LuTerminal />,
-		think: <LuBrain />,
-		fetch: <LuDownload />,
-		switch_mode: <LuCircle />,
-		other: <LuCircle />,
-	};
-
-	// 状态边框颜色
-	const statusBorderColor = {
-		pending: "gray.solid",
-		in_progress: "blue.solid",
-		completed: "green.solid",
-		failed: "red.solid",
-	};
 
 	return (
 		<Flex justify="flex-start" w="full">
@@ -66,7 +61,7 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							py="2"
 							bg="bg.muted"
 							borderLeft="3px solid"
-							borderColor={statusBorderColor[status]}
+							borderColor={STATUS_BORDER_COLOR[status]}
 							borderRadius="md"
 							cursor="pointer"
 							align="center"
@@ -75,7 +70,7 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							transition="background 0.2s"
 						>
 							<Icon fontSize="md" color="fg.default">
-								{kindIcon[toolCall.kind ?? "other"]}
+								{KIND_ICONS[toolCall.kind ?? "other"]}
 							</Icon>
 							<Text flex="1" fontSize="sm" fontWeight="medium">
 								{toolCall.title ?? toolCall.kind ?? m.agentToolCall()}

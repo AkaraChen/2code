@@ -33,7 +33,7 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 			setLightTerminalTheme: (id) => set({ lightTerminalTheme: id }),
 			setSyncTerminalTheme: (sync) => set({ syncTerminalTheme: sync }),
 		}),
-		{ name: "font-settings" },
+		{ name: "font-settings", version: 1 },
 	),
 );
 

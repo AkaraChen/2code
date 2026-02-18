@@ -19,7 +19,6 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 		),
 	);
 	const notifiedTabs = useTabStore((s) => s.notifiedTabs);
-	const setActiveTab = useTabStore((s) => s.setActiveTab);
 	const closeTab = useCloseTab();
 
 	if (tabs.length === 0) return null;
@@ -29,7 +28,7 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 			<Tabs.Root
 				size="sm"
 				value={activeTabId}
-				onValueChange={(e) => setActiveTab(profileId, e.value)}
+				onValueChange={(e) => useTabStore.getState().setActiveTab(profileId, e.value)}
 			>
 				<Tabs.List>
 					{tabs.map((tab) => (

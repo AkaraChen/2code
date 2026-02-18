@@ -87,13 +87,13 @@ export class AgentTabSession extends TabSession {
 				this.agentType,
 			);
 
-			// Load transferred events into the store
-			const events = await listAgentSessionEvents({
-				sessionId: info.id,
-			});
+			// Load transferred events and register listeners in parallel
+			const [events] = await Promise.all([
+				listAgentSessionEvents({ sessionId: info.id }),
+				newSession.registerListeners(),
+			]);
 			useAgentStore.getState().initSession(info.id);
 			useAgentStore.getState().restoreFromEvents(info.id, events);
-			await newSession.registerListeners();
 			newSession._connected = true;
 
 			// Replace in registry

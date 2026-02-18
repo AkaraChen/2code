@@ -7,7 +7,6 @@ import { useDebugStore } from "./debugStore";
 export default function DebugFloat() {
 	const enabled = useDebugStore((s) => s.enabled);
 	const panelOpen = useDebugStore((s) => s.panelOpen);
-	const setPanelOpen = useDebugStore((s) => s.setPanelOpen);
 
 	if (!enabled) return null;
 
@@ -23,13 +22,13 @@ export default function DebugFloat() {
 				size="sm"
 				colorPalette="orange"
 				variant="solid"
-				onClick={() => setPanelOpen(true)}
+				onClick={() => useDebugStore.getState().setPanelOpen(true)}
 			>
 				<RiBugLine />
 			</IconButton>
 			<DebugLogDialog
 				isOpen={panelOpen}
-				onClose={() => setPanelOpen(false)}
+				onClose={() => useDebugStore.getState().setPanelOpen(false)}
 			/>
 		</>
 	);

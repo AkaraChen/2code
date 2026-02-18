@@ -19,6 +19,7 @@ export const useNotificationStore = create<NotificationStore>()(
 		}),
 		{
 			name: "notification-settings",
+			version: 1,
 			storage: createJSONStorage(() => tauriStorage),
 		},
 	),

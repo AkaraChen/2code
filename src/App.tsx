@@ -1,14 +1,15 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
 import HomePage from "./features/home/HomePage";
-import ProjectDetailPage from "./features/projects/ProjectDetailPage";
-import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
+
+const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage"));
+const SettingsPage = lazy(() => import("./features/settings/SettingsPage"));
 import AppSidebar from "./layout/AppSidebar";
 import {
 	PageError,

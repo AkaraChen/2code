@@ -22,8 +22,6 @@ import type { ControlId } from "./types";
 
 export function TopBarSettings() {
 	const activeControls = useTopBarStore((s) => s.activeControls);
-	const setActiveControls = useTopBarStore((s) => s.setActiveControls);
-	const resetToDefaults = useTopBarStore((s) => s.resetToDefaults);
 	const [activeId, setActiveId] = useState<ControlId | null>(null);
 
 	const sensors = useSensors(
@@ -61,7 +59,7 @@ export function TopBarSettings() {
 						overControlId as ControlId,
 					);
 					if (newIndex !== -1) {
-						setActiveControls(
+						useTopBarStore.getState().setActiveControls(
 							arrayMove(activeControls, oldIndex, newIndex),
 						);
 					}
@@ -70,7 +68,7 @@ export function TopBarSettings() {
 			.with(
 				{ isActiveInPreview: true, isOverAvailableArea: true },
 				() => {
-					setActiveControls(
+					useTopBarStore.getState().setActiveControls(
 						activeControls.filter(
 							(id) => id !== activeControlId,
 						),
@@ -81,7 +79,7 @@ export function TopBarSettings() {
 				{ isActiveInPreview: false, isOverPreviewArea: true },
 				() => {
 					if (overControlId === "preview-area") {
-						setActiveControls([
+						useTopBarStore.getState().setActiveControls([
 							...activeControls,
 							activeControlId,
 						]);
@@ -91,7 +89,7 @@ export function TopBarSettings() {
 						);
 						const newList = [...activeControls];
 						newList.splice(overIndex, 0, activeControlId);
-						setActiveControls(newList);
+						useTopBarStore.getState().setActiveControls(newList);
 					}
 				},
 			)
@@ -123,7 +121,7 @@ export function TopBarSettings() {
 				variant="outline"
 				size="sm"
 				alignSelf="flex-start"
-				onClick={resetToDefaults}
+				onClick={() => useTopBarStore.getState().resetToDefaults()}
 			>
 				{m.topbarResetDefaults()}
 			</Button>

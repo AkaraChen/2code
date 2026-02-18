@@ -7,7 +7,7 @@ import {
 	Switch,
 	Text,
 } from "@chakra-ui/react";
-import { use, useMemo } from "react";
+import { use } from "react";
 import { useDebugStore } from "@/features/debug/debugStore";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
@@ -32,17 +32,13 @@ export function GeneralSettings() {
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
 
-	const themeCollection = useMemo(
-		() =>
-			createListCollection({
-				items: [
-					{ value: "system", label: m.themeSystem() },
-					{ value: "light", label: m.themeLight() },
-					{ value: "dark", label: m.themeDark() },
-				],
-			}),
-		[],
-	);
+	const themeCollection = createListCollection({
+		items: [
+			{ value: "system", label: m.themeSystem() },
+			{ value: "light", label: m.themeLight() },
+			{ value: "dark", label: m.themeDark() },
+		],
+	});
 
 	return (
 		<Stack gap="6" maxW="md">

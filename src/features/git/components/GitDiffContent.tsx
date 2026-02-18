@@ -44,7 +44,7 @@ export default function GitDiffContent({ profileId }: GitDiffContentProps) {
 
 	const changesFiles = useGitDiffFiles(profileId);
 	const { data: logData } = useGitLog(profileId);
-	const commits = useMemo(() => logData ?? [], [logData]);
+	const commits = logData ?? [];
 
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({

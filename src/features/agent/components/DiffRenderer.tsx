@@ -4,6 +4,8 @@ import { FileDiff } from "@pierre/diffs/react";
 import { useMemo } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 
+const EMPTY_OPTIONS = {};
+
 interface DiffRendererProps {
 	path: string;
 	oldText?: string | null;
@@ -34,8 +36,6 @@ export function DiffRenderer({
 		} as FileDiffMetadata;
 	}, [path, oldText, newText]);
 
-	const options = useMemo(() => ({}), []);
-
 	return (
 		<Box
 			my="2"
@@ -46,7 +46,7 @@ export function DiffRenderer({
 				"--diffs-font-size": `${fontSize}px`,
 			}}
 		>
-			<FileDiff fileDiff={fileDiff} options={options} />
+			<FileDiff fileDiff={fileDiff} options={EMPTY_OPTIONS} />
 		</Box>
 	);
 }

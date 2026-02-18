@@ -1,9 +1,8 @@
 import { Button, Center, EmptyState, Flex, VStack } from "@chakra-ui/react";
-import { useMemo } from "react";
 import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
-import { useProject, useProjectProfiles } from "@/features/projects/hooks";
+import { useProject } from "@/features/projects/hooks";
 import { useCreateTab } from "@/features/tabs/hooks";
 import { useTabStore } from "@/features/tabs/store";
 import * as m from "@/paraglide/messages.js";
@@ -14,11 +13,7 @@ export default function ProjectDetailPage() {
 		profileId: string;
 	}>();
 	const project = useProject(id!);
-	const profiles = useProjectProfiles(id!);
-	const profile = useMemo(
-		() => profiles.find((p) => p.id === profileId),
-		[profiles, profileId],
-	);
+	const profile = project?.profiles?.find((p) => p.id === profileId);
 
 	const hasTabs = useTabStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
