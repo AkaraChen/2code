@@ -3,12 +3,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use agent::{AgentProcessLaunchSpec, AgentSessionMap, ManagedAgentSession};
+use agent::{
+	AgentManagerWrapper, AgentProcessLaunchSpec, AgentSessionMap,
+	ManagedAgentSession,
+};
 
 use infra::db::DbPool;
 use model::agent::{
-	AgentRestoreResult, AgentSessionRecord, AgentSessionRestoreInfo,
-	NewAgentSession, NewAgentSessionEvent,
+	AgentSessionRecord, NewAgentSession, NewAgentSessionEvent,
 };
 use model::error::AppError;
 
@@ -75,92 +77,118 @@ pub async fn create_session(
 	Ok(local_id)
 }
 
-/// Restore an agent session from a persisted record.
-///
-/// Flow:
-/// 1. Read old session record and events
-/// 2. Spawn agent process + ACP session/load (reuse acp_session_id)
-/// 3. Create new session record
-/// 4. Delete old session record
-/// 5. Store in runtime map
-///
-/// Returns info + events for frontend reconstruction.
-pub async fn restore_session(
+/// Restore all destroyed agent sessions at startup.
+/// For each: spawn process → create new record → transfer events → delete old record.
+pub async fn restore_all_sessions(
 	db: &DbPool,
 	sessions: &AgentSessionMap,
-	old_session_id: &str,
-	cwd: PathBuf,
-	launch_spec: AgentProcessLaunchSpec,
-	extra_env: HashMap<String, String>,
-) -> Result<AgentRestoreResult, AppError> {
-	// Read old session and events
-	let (old_session, events) = {
-		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
-
-		let old = repo::agent::get_session(&mut conn, old_session_id)?;
-		let evts = repo::agent::get_session_events(&mut conn, old_session_id)?;
-
-		(old, evts)
+	manager: &AgentManagerWrapper,
+) -> usize {
+	let all_sessions = {
+		let Ok(mut conn) = db.lock() else { return 0 };
+		repo::agent::list_all(&mut conn).unwrap_or_default()
 	};
 
-	// Create managed session with session/load to restore ACP session state
+	if all_sessions.is_empty() {
+		return 0;
+	}
+
+	tracing::info!(target: "agent", count = all_sessions.len(), "restore_all: found sessions to restore");
+	let mut restored = 0;
+
+	for old in &all_sessions {
+		match restore_single_agent_session(db, sessions, manager, old).await {
+			Ok(_) => {
+				restored += 1;
+			}
+			Err(e) => {
+				tracing::warn!(
+					target: "agent",
+					session_id = %old.id,
+					error = %e,
+					"restore_all: failed, deleting stale record"
+				);
+				if let Ok(mut conn) = db.lock() {
+					let _ = repo::agent::delete_session(&mut conn, &old.id);
+				}
+			}
+		}
+	}
+
+	restored
+}
+
+async fn restore_single_agent_session(
+	db: &DbPool,
+	sessions: &AgentSessionMap,
+	manager: &AgentManagerWrapper,
+	old: &AgentSessionRecord,
+) -> Result<(), AppError> {
+	// 1. Resolve cwd from profile's worktree_path
+	let cwd = {
+		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
+		let profile = repo::profile::find_by_id(&mut conn, &old.profile_id)?;
+		PathBuf::from(&profile.worktree_path)
+	};
+
+	// 2. Resolve launch spec
+	let launch_spec = manager
+		.resolve_launch(&old.agent)
+		.map_err(|e| AppError::PtyError(format!("Failed to resolve agent launch: {e}")))?;
+
+	// 3. Spawn agent process with ACP session/load
 	let managed_session = ManagedAgentSession::load(
-		&old_session.agent,
+		&old.agent,
 		cwd,
-		&old_session.acp_session_id,
+		&old.acp_session_id,
 		launch_spec,
-		extra_env,
+		HashMap::new(),
 	)
 	.await
-	.map_err(|e| {
-		AppError::PtyError(format!("Failed to restore agent session: {e}"))
-	})?;
+	.map_err(|e| AppError::PtyError(format!("Failed to restore agent session: {e}")))?;
 
-	let new_local_id = managed_session.local_id.clone();
+	let new_id = managed_session.local_id.clone();
 	let acp_session_id = managed_session.acp_session_id.clone();
 
-	// Insert new session record
+	// 4. Insert new record, transfer events, delete old record
 	{
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
 		let new_record = NewAgentSession {
-			id: &new_local_id,
-			agent: &old_session.agent,
+			id: &new_id,
+			agent: &old.agent,
 			acp_session_id: &acp_session_id,
-			profile_id: &old_session.profile_id,
-			session_init_json: old_session.session_init_json.as_deref(),
+			profile_id: &old.profile_id,
+			session_init_json: old.session_init_json.as_deref(),
 		};
-
 		repo::agent::insert_session(&mut conn, &new_record)?;
 
-		// Delete old session record (cascade deletes events)
-		repo::agent::delete_session(&mut conn, old_session_id)?;
+		// Transfer events to new session ID before deleting old record
+		let event_count =
+			repo::agent::transfer_events(&mut conn, &old.id, &new_id)?;
+		tracing::info!(
+			target: "agent",
+			old_id = %old.id, %new_id, event_count,
+			"restore: transferred events"
+		);
+
+		repo::agent::delete_session(&mut conn, &old.id)?;
 	}
 
-	// Store in runtime map
+	// 5. Store live session in runtime map
 	sessions
 		.lock()
 		.await
-		.insert(new_local_id.clone(), Arc::new(managed_session));
+		.insert(new_id.clone(), Arc::new(managed_session));
 
 	tracing::info!(
 		target: "agent",
-		old_session_id = %old_session_id,
-		new_session_id = %new_local_id,
-		acp_session_id = %acp_session_id,
-		agent = %old_session.agent,
-		event_count = events.len(),
-		"service: restored agent session"
+		old_id = %old.id, %new_id, %acp_session_id,
+		agent = %old.agent,
+		"restore_all: restored agent session"
 	);
 
-	Ok(AgentRestoreResult {
-		info: AgentSessionRestoreInfo {
-			id: new_local_id,
-			agent: old_session.agent,
-			acp_session_id,
-		},
-		events,
-	})
+	Ok(())
 }
 
 /// Persist a single event to the database.

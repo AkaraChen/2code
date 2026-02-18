@@ -5,9 +5,7 @@ import {
 	closeAgentSession,
 	createAgentSessionPersistent,
 	deleteAgentSessionRecord,
-	restoreAgentSession,
 } from "@/generated";
-import type { AgentRestoreResult, AgentSessionRecord } from "@/generated";
 import { useAgentStore } from "../agent/store";
 import { TabSession } from "./session";
 import type { AgentTab } from "./types";
@@ -52,69 +50,7 @@ export class AgentTabSession extends TabSession {
 		return session;
 	}
 
-	/**
-	 * Restore an agent session from a persisted record.
-	 * Loads conversation history and re-establishes event listeners.
-	 */
-	static async restore(
-		record: AgentSessionRecord,
-		cwd: string,
-	): Promise<{
-		session: AgentTabSession;
-		events: AgentRestoreResult["events"];
-	}> {
-		consola.log(
-			`[AgentTabSession] restoring session ${record.id}, agent: ${record.agent}, cwd: ${cwd}`,
-		);
-
-		const result: AgentRestoreResult = await restoreAgentSession({
-			oldSessionId: record.id,
-			cwd,
-		});
-
-		consola.log(
-			`[AgentTabSession] restore result:`,
-			result.info,
-			`events count: ${result.events.length}`,
-		);
-
-		const session = new AgentTabSession(
-			result.info.id,
-			record.profile_id,
-			`${result.info.agent} session`,
-			result.info.agent,
-		);
-
-		consola.log(
-			`[AgentTabSession] created session instance: ${session.id}`,
-		);
-
-		// Initialize store and rebuild messages from events
-		consola.log(
-			`[AgentTabSession] initializing store for ${result.info.id}`,
-		);
-		useAgentStore.getState().initSession(result.info.id);
-
-		consola.log(
-			`[AgentTabSession] restoring ${result.events.length} events`,
-		);
-		useAgentStore.getState().restoreFromEvents(result.info.id, result.events);
-
-		// Register event listeners for new messages
-		consola.log(`[AgentTabSession] registering listeners`);
-		await session.registerListeners();
-
-		consola.log(
-			`[AgentTabSession] restore complete for ${session.id}`,
-		);
-
-		return {
-			session,
-			events: result.events,
-		};
-	}
-
-	private async registerListeners(): Promise<void> {
+	async registerListeners(): Promise<void> {
 		const unlistenEvent = await listen<AgentNotification>(
 			`agent-event-${this.id}`,
 			(e) => {

@@ -10,7 +10,6 @@ use infra::pty::{self as session, PtyReadThreads, PtySessionMap};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
-	RestoreResult,
 };
 
 use crate::PtyEventEmitter;
@@ -144,6 +143,15 @@ pub fn create_session(
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
 ) -> Result<String, AppError> {
+	create_session_inner(ctx, meta, config, None)
+}
+
+fn create_session_inner(
+	ctx: &PtyContext,
+	meta: &PtySessionMeta,
+	config: &PtyConfig,
+	initial_output: Option<&[u8]>,
+) -> Result<String, AppError> {
 	// 1. Resolve project folder and load init_script from 2code.json
 	let project_init_scripts = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
@@ -191,6 +199,14 @@ pub fn create_session(
 			rows: config.rows as i32,
 		};
 		repo::pty::insert_session(conn, &new_record)?;
+
+		// Pre-write initial output (e.g. sanitized history from restored session)
+		// BEFORE spawning the read thread so it precedes any new PTY output.
+		if let Some(output) = initial_output {
+			if !output.is_empty() {
+				repo::pty::append_output(conn, &session_id, output)?;
+			}
+		}
 	}
 
 	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, "session created");
@@ -255,39 +271,80 @@ pub fn mark_all_closed(db: &DbPool) {
 	repo::pty::mark_all_open_closed(&mut conn);
 }
 
-/// Atomically restore a PTY session: read history → create new PTY → delete old record.
-/// DB lock is acquired/released carefully to avoid deadlock with `create_session`.
-pub fn restore_session(
-	ctx: &PtyContext,
-	old_session_id: &str,
-	meta: &PtySessionMeta,
-	config: &PtyConfig,
-) -> Result<RestoreResult, AppError> {
-	// 1. Read raw history (acquire lock → read → release)
-	let raw_history = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		repo::pty::get_session_history(conn, old_session_id)?
+/// Restore all closed PTY sessions at startup.
+/// For each: read history → sanitize → create new PTY with history pre-written → delete old record.
+pub fn restore_all_sessions(ctx: &PtyContext) -> usize {
+	let sessions = {
+		let Ok(mut conn) = ctx.db.lock() else { return 0 };
+		repo::pty::list_all(&mut conn).unwrap_or_default()
 	};
-	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), "restore: loaded raw history");
 
-	// 2. Sanitize through vt100 virtual terminal emulator
-	let history = sanitize_history(&raw_history, config.rows, config.cols);
-	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), clean_bytes = history.len(), "restore: sanitized history");
-
-	// 3. Create new PTY (manages its own lock internally)
-	let new_session_id = create_session(ctx, meta, config)?;
-	tracing::info!(target: "pty", %old_session_id, %new_session_id, "restore: new session created");
-
-	// 4. Delete old record (re-acquire lock — only after new session succeeds)
-	{
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		repo::pty::delete_session(conn, old_session_id)?;
+	if sessions.is_empty() {
+		return 0;
 	}
 
-	Ok(RestoreResult {
-		new_session_id,
-		history,
-	})
+	tracing::info!(target: "pty", count = sessions.len(), "restore_all: found sessions to restore");
+	let mut restored = 0;
+
+	for old in &sessions {
+		if let Err(e) = restore_single_session(ctx, old) {
+			tracing::warn!(target: "pty", session_id = %old.id, error = %e, "restore_all: failed, deleting stale record");
+			// Clean up the stale record so it doesn't block future startups
+			if let Ok(mut conn) = ctx.db.lock() {
+				let _ = repo::pty::delete_session(&mut conn, &old.id);
+			}
+		} else {
+			restored += 1;
+		}
+	}
+
+	restored
+}
+
+fn restore_single_session(
+	ctx: &PtyContext,
+	old: &PtySessionRecord,
+) -> Result<(), AppError> {
+	// 1. Read raw history
+	let raw_history = {
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		repo::pty::get_session_history(conn, &old.id)?
+	};
+
+	// 2. Sanitize through vt100
+	let history = sanitize_history(&raw_history, old.rows as u16, old.cols as u16);
+	tracing::info!(
+		target: "pty", session_id = %old.id,
+		raw_bytes = raw_history.len(), clean_bytes = history.len(),
+		"restore: sanitized history"
+	);
+
+	// 3. Create new PTY with history pre-written to blob
+	let meta = PtySessionMeta {
+		profile_id: old.profile_id.clone(),
+		title: old.title.clone(),
+	};
+	let config = PtyConfig {
+		shell: old.shell.clone(),
+		cwd: old.cwd.clone(),
+		rows: old.rows as u16,
+		cols: old.cols as u16,
+	};
+	let history_ref = if history.is_empty() {
+		None
+	} else {
+		Some(history.as_slice())
+	};
+	let new_id = create_session_inner(ctx, &meta, &config, history_ref)?;
+	tracing::info!(target: "pty", old_id = %old.id, %new_id, "restore: new session created");
+
+	// 4. Delete old record
+	{
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		repo::pty::delete_session(conn, &old.id)?;
+	}
+
+	Ok(())
 }
 
 /// Send a flush signal to the persistence thread for the given session.

@@ -2,22 +2,18 @@ import { QueryObserver } from "@tanstack/react-query";
 import consola from "consola";
 import type { ProjectWithProfiles } from "@/generated";
 import {
+	listAgentSessionEvents,
 	listProjectAgentSessions,
 	listProjectSessions,
 	listProjects,
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { useAgentStore } from "../agent/store";
 import { AgentTabSession } from "./AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
-
-/**
- * Transient scrollback data for restored sessions.
- * Written during restoration, consumed once by Terminal.tsx on mount, then deleted.
- */
-export const sessionHistory = new Map<string, Uint8Array>();
 
 /**
  * Module-level restoration promise.
@@ -35,10 +31,6 @@ function createRestorationPipeline(): Promise<void> {
 		let restored = false;
 
 		observer.subscribe((result) => {
-			consola.info("[tab-restore] projects query updated", {
-				dataLength: result.data?.length,
-				error: result.error,
-			});
 			if (!result.data) return;
 
 			// Stale profile cleanup
@@ -46,136 +38,70 @@ function createRestorationPipeline(): Promise<void> {
 				result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
 			);
 			useTabStore.getState().removeStaleProfiles(validIds);
-			consola.info("[tab-restore] cleaned up stale profiles", {
-				validCount: validIds.size,
-			});
 
-			// One-shot restoration
+			// One-shot tab population
 			if (!restored) {
 				restored = true;
 				if (result.data.length === 0) {
 					resolve();
 				} else {
-					restoreTerminals(result.data).finally(resolve);
+					populateTabs(result.data).finally(resolve);
 				}
 			}
 		});
 	});
 }
 
-async function restoreTerminals(projects: ProjectWithProfiles[]) {
-	consola.info(`[tab-restore] starting for ${projects.length} projects`);
+/**
+ * Populate tab store from already-live sessions (backend restored them at startup).
+ * Pure reads — no mutations.
+ */
+async function populateTabs(projects: ProjectWithProfiles[]) {
+	consola.info(`[tab-restore] populating tabs for ${projects.length} projects`);
 
-	// Fetch both PTY and Agent sessions in parallel
 	const projectData = await Promise.all(
-		projects.map(async (p) => {
-			consola.log(`[tab-restore] fetching sessions for project ${p.id}`);
-			const ptySessions = await listProjectSessions({ projectId: p.id });
-			const agentSessions = await listProjectAgentSessions({
+		projects.map(async (p) => ({
+			project: p,
+			ptySessions: await listProjectSessions({ projectId: p.id }),
+			agentSessions: await listProjectAgentSessions({
 				projectId: p.id,
-			});
-			consola.log(
-				`[tab-restore] project ${p.id}: ${ptySessions.length} PTY, ${agentSessions.length} agent`,
-			);
-			return {
-				project: p,
-				ptySessions,
-				agentSessions,
-			};
-		}),
+			}),
+		})),
 	);
 
-	const allPtySessions = projectData.flatMap(({ ptySessions }) => ptySessions);
-	const allAgentSessions = projectData.flatMap(
-		({ agentSessions }) => agentSessions,
-	);
-
-	consola.info(
-		`[tab-restore] found ${allPtySessions.length} PTY sessions, ${allAgentSessions.length} agent sessions`,
-	);
-	consola.log("[tab-restore] all agent sessions:", allAgentSessions);
-
-	// Restore PTY sessions
-	if (allPtySessions.length > 0) {
-		await mapWithLimit(allPtySessions, 3, async (session) => {
-			try {
-				const { session: tabSession, history } =
-					await TerminalTabSession.restore(session);
-				sessionRegistry.set(tabSession.id, tabSession);
-
-				if (history.length > 0) {
-					sessionHistory.set(tabSession.id, history);
-				}
-
-				useTabStore
-					.getState()
-					.addTab(session.profile_id, tabSession.toTab());
-				consola.info(`[tab-restore] PTY ${session.id} → ${tabSession.id}`);
-			} catch (e) {
-				consola.error(`[tab-restore] PTY failed: ${session.id}`, e);
-			}
-		});
+	// PTY sessions: wrap in session objects, add to tab store
+	for (const { ptySessions } of projectData) {
+		for (const s of ptySessions) {
+			const ts = new TerminalTabSession(s.id, s.profile_id, s.title);
+			sessionRegistry.set(ts.id, ts);
+			useTabStore.getState().addTab(s.profile_id, ts.toTab());
+			consola.info(`[tab-restore] PTY ${s.id}`);
+		}
 	}
 
-	// Restore Agent sessions
-	if (allAgentSessions.length > 0) {
-		consola.log("[tab-restore] starting agent session restoration");
-
-		// Find default profile for each project to use as cwd
-		const profileCwdMap = new Map<string, string>();
-		for (const { project } of projectData) {
-			const defaultProfile = project.profiles.find((p) => p.is_default);
-			if (defaultProfile) {
-				consola.log(
-					`[tab-restore] project ${project.id} default profile: ${defaultProfile.id}, cwd: ${defaultProfile.worktree_path}`,
+	// Agent sessions: wrap, fetch events (read-only), register listeners
+	for (const { agentSessions } of projectData) {
+		for (const r of agentSessions) {
+			try {
+				const ts = new AgentTabSession(
+					r.id,
+					r.profile_id,
+					`${r.agent} session`,
+					r.agent,
 				);
-				for (const profile of project.profiles) {
-					// Use default profile's worktree as cwd for all profiles in project
-					profileCwdMap.set(profile.id, defaultProfile.worktree_path);
-				}
-			} else {
-				consola.warn(
-					`[tab-restore] project ${project.id} has no default profile!`,
-				);
+				const events = await listAgentSessionEvents({
+					sessionId: r.id,
+				});
+				useAgentStore.getState().initSession(r.id);
+				useAgentStore.getState().restoreFromEvents(r.id, events);
+				await ts.registerListeners();
+				sessionRegistry.set(ts.id, ts);
+				useTabStore.getState().addTab(r.profile_id, ts.toTab());
+				consola.info(`[tab-restore] Agent ${r.id}`);
+			} catch (e) {
+				consola.error(`[tab-restore] Agent failed: ${r.id}`, e);
 			}
 		}
-
-		await mapWithLimit(allAgentSessions, 3, async (record) => {
-			try {
-				const cwd = profileCwdMap.get(record.profile_id) || "/tmp";
-				consola.log(
-					`[tab-restore] restoring agent session ${record.id}, profile: ${record.profile_id}, cwd: ${cwd}`,
-				);
-
-				const { session: tabSession } = await AgentTabSession.restore(
-					record,
-					cwd,
-				);
-
-				consola.log(
-					`[tab-restore] agent session restored: ${tabSession.id}`,
-				);
-				sessionRegistry.set(tabSession.id, tabSession);
-
-				const tab = tabSession.toTab();
-				consola.log(
-					`[tab-restore] adding agent tab to store:`,
-					tab,
-				);
-
-				useTabStore
-					.getState()
-					.addTab(record.profile_id, tab);
-
-				consola.info(
-					`[tab-restore] Agent ${record.id} → ${tabSession.id}`,
-				);
-			} catch (e) {
-				consola.error(`[tab-restore] Agent failed: ${record.id}`, e);
-			}
-		});
-	} else {
-		consola.log("[tab-restore] no agent sessions to restore");
 	}
 
 	consola.info("[tab-restore] complete");

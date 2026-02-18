@@ -180,6 +180,42 @@ pub fn mark_all_destroyed(conn: &mut SqliteConnection) {
 	let _ = mark_all_active_destroyed(conn);
 }
 
+/// List all agent sessions (no project filter).
+pub fn list_all(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<AgentSessionRecord>, AppError> {
+	agent_sessions::table
+		.select(AgentSessionRecord::as_select())
+		.order(agent_sessions::created_at.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+/// Transfer all events from one session to another.
+/// Must be called AFTER inserting the new session record.
+pub fn transfer_events(
+	conn: &mut SqliteConnection,
+	old_session_id: &str,
+	new_session_id: &str,
+) -> Result<usize, AppError> {
+	let count = diesel::update(
+		agent_session_events::table
+			.filter(agent_session_events::session_id.eq(old_session_id)),
+	)
+	.set(agent_session_events::session_id.eq(new_session_id))
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	tracing::info!(
+		target: "agent",
+		%old_session_id,
+		%new_session_id,
+		count,
+		"repo: transfer_events"
+	);
+	Ok(count)
+}
+
 /// Hard delete a session and all its events (cascade delete).
 pub fn delete_session(
 	conn: &mut SqliteConnection,

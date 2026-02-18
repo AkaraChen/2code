@@ -10,7 +10,7 @@ use agent::{
 };
 use futures::StreamExt;
 use infra::db::DbPool;
-use model::agent::{AgentRestoreResult, AgentSessionMeta, AgentSessionRecord};
+use model::agent::{AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord};
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
 
@@ -413,159 +413,6 @@ pub async fn create_agent_session_persistent(
 	Ok(info)
 }
 
-/// Restore an agent session from a persisted record.
-#[tauri::command]
-pub async fn restore_agent_session(
-	old_session_id: String,
-	cwd: String,
-	app: AppHandle,
-	db: State<'_, DbPool>,
-	manager: State<'_, Arc<AgentManagerWrapper>>,
-	sessions: State<'_, AgentSessionMap>,
-	tasks: State<'_, NotificationTaskMap>,
-	turn_index_map: State<'_, TurnIndexMap>,
-) -> Result<AgentRestoreResult, String> {
-	let manager_clone = manager.inner().clone();
-	let db_pool = db.inner().clone();
-	let sessions_clone = sessions.inner().clone();
-
-	// Get old session record to determine agent type
-	let old_session = {
-		let mut conn = db_pool
-			.lock()
-			.map_err(|_| "Failed to acquire DB lock".to_string())?;
-		repo::agent::get_session(&mut conn, &old_session_id)
-			.map_err(|e| format!("{e}"))?
-	};
-
-	// Resolve launch spec
-	let agent_clone = old_session.agent.clone();
-	let launch_spec = tokio::task::spawn_blocking(move || {
-		manager_clone.resolve_launch(&agent_clone)
-	})
-	.await
-	.map_err(|e| e.to_string())?
-	.map_err(|e| format!("{e}"))?;
-
-	// Restore session with database
-	let restore_result = service::agent::restore_session(
-		&db_pool,
-		&sessions_clone,
-		&old_session_id,
-		PathBuf::from(&cwd),
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.map_err(|e| format!("{e}"))?;
-
-	let new_session_id = restore_result.info.id.clone();
-
-	// Set turn index to max(turn_index) + 1 from restored events
-	let max_turn_idx = restore_result
-		.events
-		.iter()
-		.map(|e| e.turn_index)
-		.max()
-		.unwrap_or(0);
-	{
-		let mut map = turn_index_map.lock().await;
-		map.insert(
-			new_session_id.clone(),
-			Arc::new(AtomicI32::new(max_turn_idx)),
-		);
-	}
-
-	// Get session and spawn notification listener
-	let session = {
-		let map = sessions_clone.lock().await;
-		map.get(&new_session_id)
-			.cloned()
-			.ok_or_else(|| {
-				format!("restored session not found: {new_session_id}")
-			})?
-	};
-
-	// Spawn notification stream listener
-	let notif_app = app.clone();
-	let notif_session = session.clone();
-	let notif_id = new_session_id.clone();
-	let notif_db = db_pool.clone();
-	let notif_turn_map = turn_index_map.inner().clone();
-
-	// Start event_index from where we left off
-	let mut event_index = restore_result.events.len() as i32;
-
-	let task_handle = tokio::spawn(async move {
-		let mut stream =
-			std::pin::pin!(notif_session.notifications().await);
-
-		while let Some(notification) = stream.next().await {
-			if let Some(parsed) =
-				ManagedAgentSession::parse_notification(&notification)
-			{
-				tracing::info!(
-					session_id = %notif_id,
-					acp_session_id = %parsed.session_id,
-					update = ?parsed.update,
-					"agent notification (structured)"
-				);
-			} else {
-				tracing::info!(
-					session_id = %notif_id,
-					raw = %notification,
-					"agent notification (raw, unrecognized)"
-				);
-			}
-
-			// Get current turn index
-			let turn_idx = {
-				let map = notif_turn_map.lock().await;
-				map.get(&notif_id)
-					.map(|counter| counter.load(Ordering::SeqCst))
-					.unwrap_or(0)
-			};
-
-			// Persist event to database
-			let payload_json = notification.to_string();
-			if let Err(e) = service::agent::persist_event(
-				&notif_db,
-				&notif_id,
-				event_index,
-				"agent",
-				&payload_json,
-				turn_idx,
-			) {
-				tracing::warn!(
-					session_id = %notif_id,
-					event_index,
-					turn_index = turn_idx,
-					error = %e,
-					"failed to persist agent event"
-				);
-			}
-
-			event_index += 1;
-
-			// Emit event to frontend
-			let event_name = format!("agent-event-{notif_id}");
-			if let Err(e) = notif_app.emit(&event_name, &notification) {
-				tracing::warn!(
-					session_id = %notif_id,
-					error = %e,
-					"failed to emit agent notification event"
-				);
-			}
-		}
-		tracing::info!(session_id = %notif_id, "agent notification stream ended");
-	});
-
-	// Store task handle
-	tasks.lock().await.insert(new_session_id, task_handle);
-
-	Ok(restore_result)
-}
-
 /// List all agent sessions for a project.
 #[tauri::command]
 pub fn list_project_agent_sessions(
@@ -605,4 +452,17 @@ pub fn persist_agent_event(
 		turn_index,
 	)
 	.map_err(|e| format!("{e}"))
+}
+
+/// List all events for an agent session (read-only).
+#[tauri::command]
+pub fn list_agent_session_events(
+	session_id: String,
+	db: State<'_, DbPool>,
+) -> Result<Vec<AgentSessionEventRecord>, String> {
+	let mut conn = db
+		.lock()
+		.map_err(|_| "Failed to acquire DB lock".to_string())?;
+	repo::agent::get_session_events(&mut conn, &session_id)
+		.map_err(|e| format!("{e}"))
 }

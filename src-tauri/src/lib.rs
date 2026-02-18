@@ -88,6 +88,33 @@ pub fn run() {
 			let helper = helper::start(app.handle());
 			app.manage(helper);
 
+			// Restore PTY sessions from previous run
+			{
+				let pty_ctx = crate::bridge::build_pty_context(app.handle());
+				let count = service::pty::restore_all_sessions(&pty_ctx);
+				tracing::info!(target: "pty", count, "startup: restored PTY sessions");
+			}
+
+			// Restore agent sessions from previous run (async)
+			{
+				let db = app.state::<infra::db::DbPool>().inner().clone();
+				let agent_sessions_ref =
+					app.state::<agent::AgentSessionMap>().inner().clone();
+				let agent_mgr = app
+					.state::<std::sync::Arc<agent::AgentManagerWrapper>>()
+					.inner()
+					.clone();
+				let count = tauri::async_runtime::block_on(async {
+					service::agent::restore_all_sessions(
+						&db,
+						&agent_sessions_ref,
+						&agent_mgr,
+					)
+					.await
+				});
+				tracing::info!(target: "agent", count, "startup: restored agent sessions");
+			}
+
 			Ok(())
 		})
 		.invoke_handler(tauri::generate_handler![
@@ -98,7 +125,7 @@ pub fn run() {
 			handler::pty::list_project_sessions,
 			handler::pty::delete_pty_session_record,
 			handler::pty::flush_pty_output,
-			handler::pty::restore_pty_session,
+			handler::pty::get_session_output,
 			handler::project::create_project_temporary,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,
@@ -123,8 +150,8 @@ pub fn run() {
 			handler::agent::send_agent_prompt,
 			handler::agent::close_agent_session,
 			handler::agent::create_agent_session_persistent,
-			handler::agent::restore_agent_session,
 			handler::agent::list_project_agent_sessions,
+			handler::agent::list_agent_session_events,
 			handler::agent::delete_agent_session_record,
 			handler::agent::persist_agent_event,
 		])
@@ -141,8 +168,7 @@ pub fn run() {
 			// Abort all notification tasks and shut down all agent sessions
 			let agent_sessions = exit_agent_sessions.clone();
 			let notification_tasks = exit_notification_tasks.clone();
-			tokio::task::block_in_place(|| {
-				tokio::runtime::Handle::current().block_on(async {
+			tauri::async_runtime::block_on(async {
 					for (id, task) in notification_tasks.lock().await.drain() {
 						tracing::info!(session_id = %id, "exit: aborting notification task");
 						task.abort();
@@ -152,7 +178,6 @@ pub fn run() {
 						session.shutdown().await;
 					}
 				});
-			});
 
 			infra::pty::close_all_sessions(&exit_sessions);
 			tracing::info!(target: "pty", "exit: joining read threads...");

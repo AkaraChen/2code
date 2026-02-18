@@ -69,9 +69,9 @@ vi.mock("@/generated", () => ({
 	deletePtySessionRecord: vi.fn(() => Promise.resolve()),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
-	restorePtySession: vi.fn(() =>
-		Promise.resolve({ newSessionId: "mock-id", history: [] }),
-	),
+	getSessionOutput: vi.fn(() => Promise.resolve([])),
+	listProjectAgentSessions: vi.fn(() => Promise.resolve([])),
+	listAgentSessionEvents: vi.fn(() => Promise.resolve([])),
 }));
 
 // ─── Mock @/generated/types ───

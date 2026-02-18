@@ -7,9 +7,8 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { sessionHistory } from "@/features/tabs/restore";
 import { useTabStore } from "@/features/tabs/store";
-import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
+import { flushPtyOutput, getSessionOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import "@xterm/xterm/css/xterm.css";
 
@@ -133,26 +132,34 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			}
 			void setupListeners();
 
-			// 3. Write history from module-level Map
-			const history = sessionHistory.get(sessionId);
-			if (history && history.length > 0) {
-				consola.info(
-					`[pty-restore] writing ${history.length} bytes of history for session ${sessionId}`,
-				);
-				const renderDisposable = term.onRender(() => {
-					renderDisposable.dispose();
-					term.write(history, () => {
-						sessionHistory.delete(sessionId);
+			// 3. Load initial output from backend (covers both fresh and restored sessions)
+			async function loadInitialOutput() {
+				try {
+					const bytes = await getSessionOutput({ sessionId });
+					if (disposed) return;
+					const output = new Uint8Array(bytes);
+					if (output.length > 0) {
+						consola.info(
+							`[pty-terminal] writing ${output.length} bytes of history for session ${sessionId}`,
+						);
+						const renderDisposable = term.onRender(() => {
+							renderDisposable.dispose();
+							term.write(output, () => {
+								isStreamReadyRef.current = true;
+								for (const payload of pendingEventsRef.current) {
+									term.write(payload);
+								}
+								pendingEventsRef.current = [];
+							});
+						});
+					} else {
 						isStreamReadyRef.current = true;
-						for (const payload of pendingEventsRef.current) {
-							term.write(payload);
-						}
-						pendingEventsRef.current = [];
-					});
-				});
-			} else {
-				isStreamReadyRef.current = true;
+					}
+				} catch {
+					isStreamReadyRef.current = true;
+				}
 			}
+			void loadInitialOutput();
 
 			// 4. Sync handlers
 			term.onData((data) => {
@@ -190,7 +197,6 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				// Flush buffered PTY output to DB before teardown (best-effort)
 				flushPtyOutput({ sessionId }).catch(() => {});
 
-				// Reset stream state (sessionHistory is only deleted after successful write)
 				isStreamReadyRef.current = false;
 				pendingEventsRef.current = [];
 

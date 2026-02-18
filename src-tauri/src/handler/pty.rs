@@ -3,7 +3,7 @@ use tauri::{AppHandle, State};
 use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
-use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
+use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
 use service::pty::PtyFlushSenders;
 
 #[tauri::command]
@@ -69,14 +69,12 @@ pub fn delete_pty_session_record(
 }
 
 #[tauri::command]
-pub fn restore_pty_session(
-	app: AppHandle,
-	old_session_id: String,
-	meta: PtySessionMeta,
-	config: PtyConfig,
-) -> Result<RestoreResult, AppError> {
-	let ctx = crate::bridge::build_pty_context(&app);
-	service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
+pub fn get_session_output(
+	session_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<u8>, AppError> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	service::pty::get_history(conn, &session_id)
 }
 
 #[tauri::command]

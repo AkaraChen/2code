@@ -140,6 +140,16 @@ pub fn get_session_history(
 	Ok(data)
 }
 
+pub fn list_all(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<PtySessionRecord>, AppError> {
+	pty_sessions::table
+		.select(PtySessionRecord::as_select())
+		.order(pty_sessions::created_at.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,

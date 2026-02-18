@@ -57,18 +57,3 @@ pub struct AgentSessionMeta {
 	pub agent: String,
 }
 
-/// Lightweight info returned to the frontend for restored sessions.
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentRestoreResult {
-	pub info: AgentSessionRestoreInfo,
-	pub events: Vec<AgentSessionEventRecord>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentSessionRestoreInfo {
-	pub id: String,
-	pub agent: String,
-	pub acp_session_id: String,
-}
