@@ -1,5 +1,6 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { RiGitCommitLine } from "react-icons/ri";
+import { P, match } from "ts-pattern";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -8,18 +9,19 @@ function formatRelativeTime(isoDate: string): string {
 	const now = Date.now();
 	const then = new Date(isoDate).getTime();
 	const diffSec = Math.floor((now - then) / 1000);
-
-	if (diffSec < 60) return m.timeJustNow();
 	const diffMin = Math.floor(diffSec / 60);
-	if (diffMin < 60) return m.timeMinutesAgo({ n: String(diffMin) });
 	const diffHr = Math.floor(diffMin / 60);
-	if (diffHr < 24) return m.timeHoursAgo({ n: String(diffHr) });
 	const diffDay = Math.floor(diffHr / 24);
-	if (diffDay < 30) return m.timeDaysAgo({ n: String(diffDay) });
 	const diffMonth = Math.floor(diffDay / 30);
-	if (diffMonth < 12) return m.timeMonthsAgo({ n: String(diffMonth) });
 	const diffYear = Math.floor(diffMonth / 12);
-	return m.timeYearsAgo({ n: String(diffYear) });
+
+	return match(diffSec)
+		.with(P.when((s) => s < 60), () => m.timeJustNow())
+		.with(P.when(() => diffMin < 60), () => m.timeMinutesAgo({ n: String(diffMin) }))
+		.with(P.when(() => diffHr < 24), () => m.timeHoursAgo({ n: String(diffHr) }))
+		.with(P.when(() => diffDay < 30), () => m.timeDaysAgo({ n: String(diffDay) }))
+		.with(P.when(() => diffMonth < 12), () => m.timeMonthsAgo({ n: String(diffMonth) }))
+		.otherwise(() => m.timeYearsAgo({ n: String(diffYear) }));
 }
 
 interface CommitListProps {

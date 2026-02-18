@@ -13,6 +13,7 @@ import {
 	LuTerminal,
 	LuTrash2,
 } from "react-icons/lu";
+import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
 import type { ToolCall } from "../types";
 import { FileLocationsList } from "./FileLocationsList";
@@ -96,7 +97,11 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							{/* 工具内容 */}
 							{toolCall.content?.map((content) => (
 								<ToolCallContentRenderer
-									key={content.type === "diff" ? `diff-${content.path}` : content.type === "terminal" ? `terminal-${content.terminalId}` : `content-${content.content.type}`}
+									key={match(content)
+									.with({ type: "diff" }, (c) => `diff-${c.path}`)
+									.with({ type: "terminal" }, (c) => `terminal-${c.terminalId}`)
+									.with({ type: "content" }, (c) => `content-${c.content.type}`)
+									.otherwise(() => "unknown")}
 									content={content}
 								/>
 							))}

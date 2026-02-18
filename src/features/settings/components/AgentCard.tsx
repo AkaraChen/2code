@@ -7,6 +7,7 @@ import {
 	Text,
 	VStack,
 } from "@chakra-ui/react";
+import { match } from "ts-pattern";
 import type { AgentStatusInfo } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { AGENT_META } from "../constants/agentMeta";
@@ -24,22 +25,23 @@ export function AgentCard({ agent }: AgentCardProps) {
 	const { mutate: install, isPending } = useAgentInstall();
 	const meta = AGENT_META[agent.id];
 
-	let statusColor: string;
-	let statusLabel: string;
-
-	if (agent.ready) {
-		statusColor = "green";
-		statusLabel = m.agentReady();
-	} else if (agent.native_required && !agent.native_installed) {
-		statusColor = "red";
-		statusLabel = m.agentNativeNotInstalled();
-	} else if (agent.acp_installed) {
-		statusColor = "yellow";
-		statusLabel = m.agentPartial();
-	} else {
-		statusColor = "gray";
-		statusLabel = m.agentNotInstalled();
-	}
+	const { statusColor, statusLabel } = match(agent)
+		.with({ ready: true }, () => ({
+			statusColor: "green",
+			statusLabel: m.agentReady(),
+		}))
+		.with({ native_required: true, native_installed: false }, () => ({
+			statusColor: "red",
+			statusLabel: m.agentNativeNotInstalled(),
+		}))
+		.with({ acp_installed: true }, () => ({
+			statusColor: "yellow",
+			statusLabel: m.agentPartial(),
+		}))
+		.otherwise(() => ({
+			statusColor: "gray",
+			statusLabel: m.agentNotInstalled(),
+		}));
 
 	const statusBadge = (
 		<Badge colorPalette={statusColor} variant="subtle" size="sm">

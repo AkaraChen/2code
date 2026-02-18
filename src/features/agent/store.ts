@@ -3,6 +3,7 @@ import type {
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
 import consola from "consola";
+import { match } from "ts-pattern";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AgentSessionEventRecord } from "@/generated";
@@ -114,76 +115,7 @@ export const useAgentStore = create<AgentStore>()(
 
 				if (payload.method === "session/update" && payload.params) {
 					const { update } = payload.params as SessionNotification;
-
-					switch (update.sessionUpdate) {
-						case "agent_message_chunk":
-							if (update.content.type === "text") {
-								streamingTurn.textChunks.push(
-									update.content.text,
-								);
-							}
-							break;
-
-						case "agent_thought_chunk":
-							if (update.content.type === "text") {
-								streamingTurn.thoughtChunks.push(
-									update.content.text,
-								);
-							}
-							break;
-
-						case "tool_call": {
-							const toolCall = update as unknown as ToolCall;
-							streamingTurn.toolCalls.set(
-								toolCall.toolCallId,
-								toolCall,
-							);
-							break;
-						}
-
-						case "tool_call_update": {
-							const toolCallUpdate =
-								update as unknown as ToolCallUpdate;
-							const existing = streamingTurn.toolCalls.get(
-								toolCallUpdate.toolCallId,
-							);
-							if (existing) {
-								streamingTurn.toolCalls.set(
-									toolCallUpdate.toolCallId,
-									mergeToolCallUpdate(existing, toolCallUpdate),
-								);
-							} else {
-								// 初始化（以防 update 先于 call 到达）
-								streamingTurn.toolCalls.set(
-									toolCallUpdate.toolCallId,
-									{
-										toolCallId: toolCallUpdate.toolCallId,
-										title: toolCallUpdate.title ?? "Tool Call",
-										status:
-											toolCallUpdate.status ?? "pending",
-										kind: toolCallUpdate.kind ?? undefined,
-										rawInput: toolCallUpdate.rawInput,
-										rawOutput: toolCallUpdate.rawOutput,
-										content: toolCallUpdate.content ?? undefined,
-										locations: toolCallUpdate.locations ?? undefined,
-									},
-								);
-							}
-							break;
-						}
-
-						case "plan": {
-							const plan = update as unknown as {
-								entries: Array<{
-									content: string;
-									status: "pending" | "in_progress" | "completed";
-									priority: "high" | "medium" | "low";
-								}>;
-							};
-							streamingTurn.plan = plan;
-							break;
-						}
-					}
+					applySessionUpdate(streamingTurn, update);
 				}
 			});
 		},
@@ -484,6 +416,67 @@ function mergeToolCallUpdate(
 }
 
 /**
+ * Apply a single session update to a StreamingTurn.
+ * Shared between live event handling and replay-based restoration.
+ */
+function applySessionUpdate(
+	streamingTurn: StreamingTurn,
+	update: SessionNotification["update"],
+) {
+	match(update)
+		.with(
+			{ sessionUpdate: "agent_message_chunk", content: { type: "text" } },
+			(u) => {
+				streamingTurn.textChunks.push(u.content.text);
+			},
+		)
+		.with(
+			{ sessionUpdate: "agent_thought_chunk", content: { type: "text" } },
+			(u) => {
+				streamingTurn.thoughtChunks.push(u.content.text);
+			},
+		)
+		.with({ sessionUpdate: "tool_call" }, (u) => {
+			const toolCall = u as unknown as ToolCall;
+			streamingTurn.toolCalls.set(toolCall.toolCallId, toolCall);
+		})
+		.with({ sessionUpdate: "tool_call_update" }, (u) => {
+			const toolCallUpdate = u as unknown as ToolCallUpdate;
+			const existing = streamingTurn.toolCalls.get(
+				toolCallUpdate.toolCallId,
+			);
+			if (existing) {
+				streamingTurn.toolCalls.set(
+					toolCallUpdate.toolCallId,
+					mergeToolCallUpdate(existing, toolCallUpdate),
+				);
+			} else {
+				streamingTurn.toolCalls.set(toolCallUpdate.toolCallId, {
+					toolCallId: toolCallUpdate.toolCallId,
+					title: toolCallUpdate.title ?? "Tool Call",
+					status: toolCallUpdate.status ?? "pending",
+					kind: toolCallUpdate.kind ?? undefined,
+					rawInput: toolCallUpdate.rawInput,
+					rawOutput: toolCallUpdate.rawOutput,
+					content: toolCallUpdate.content ?? undefined,
+					locations: toolCallUpdate.locations ?? undefined,
+				});
+			}
+		})
+		.with({ sessionUpdate: "plan" }, (u) => {
+			const plan = u as unknown as {
+				entries: Array<{
+					content: string;
+					status: "pending" | "in_progress" | "completed";
+					priority: "high" | "medium" | "low";
+				}>;
+			};
+			streamingTurn.plan = plan;
+		})
+		.otherwise(() => {});
+}
+
+/**
  * 重放 agent 事件到 StreamingTurn（用于恢复）
  */
 function replayAgentEvent(streamingTurn: StreamingTurn, payload: unknown) {
@@ -493,63 +486,6 @@ function replayAgentEvent(streamingTurn: StreamingTurn, payload: unknown) {
 
 	if (obj.method === "session/update" && obj.params) {
 		const params = obj.params as SessionNotification;
-		const update = params.update;
-
-		switch (update.sessionUpdate) {
-			case "agent_message_chunk":
-				if (update.content.type === "text") {
-					streamingTurn.textChunks.push(update.content.text);
-				}
-				break;
-
-			case "agent_thought_chunk":
-				if (update.content.type === "text") {
-					streamingTurn.thoughtChunks.push(update.content.text);
-				}
-				break;
-
-			case "tool_call": {
-				const toolCall = update as unknown as ToolCall;
-				streamingTurn.toolCalls.set(toolCall.toolCallId, toolCall);
-				break;
-			}
-
-			case "tool_call_update": {
-				const toolCallUpdate = update as unknown as ToolCallUpdate;
-				const existing = streamingTurn.toolCalls.get(
-					toolCallUpdate.toolCallId,
-				);
-				if (existing) {
-					streamingTurn.toolCalls.set(
-						toolCallUpdate.toolCallId,
-						mergeToolCallUpdate(existing, toolCallUpdate),
-					);
-				} else {
-					streamingTurn.toolCalls.set(toolCallUpdate.toolCallId, {
-						toolCallId: toolCallUpdate.toolCallId,
-						title: toolCallUpdate.title ?? "Tool Call",
-						status: toolCallUpdate.status ?? "pending",
-						kind: toolCallUpdate.kind ?? undefined,
-						rawInput: toolCallUpdate.rawInput,
-						rawOutput: toolCallUpdate.rawOutput,
-						content: toolCallUpdate.content ?? undefined,
-						locations: toolCallUpdate.locations ?? undefined,
-					});
-				}
-				break;
-			}
-
-			case "plan": {
-				const plan = update as unknown as {
-					entries: Array<{
-						content: string;
-						status: "pending" | "in_progress" | "completed";
-						priority: "high" | "medium" | "low";
-					}>;
-				};
-				streamingTurn.plan = plan;
-				break;
-			}
-		}
+		applySessionUpdate(streamingTurn, params.update);
 	}
 }

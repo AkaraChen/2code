@@ -1,5 +1,6 @@
 import { Box, Circle, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
 import { RiRobot2Line, RiTerminalBoxLine } from "react-icons/ri";
+import { match } from "ts-pattern";
 import { useShallow } from "zustand/react/shallow";
 import { AgentChat } from "@/features/agent/AgentChat";
 import { useCloseTab } from "@/features/tabs/hooks";
@@ -33,11 +34,12 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 				<Tabs.List>
 					{tabs.map((tab) => (
 						<Tabs.Trigger key={tab.id} value={tab.id}>
-							{tab.type === "agent" ? (
-								<RiRobot2Line />
-							) : (
-								<RiTerminalBoxLine />
-							)}
+							{match(tab)
+								.with({ type: "agent" }, () => <RiRobot2Line />)
+								.with({ type: "terminal" }, () => (
+									<RiTerminalBoxLine />
+								))
+								.exhaustive()}
 							<HStack gap="2">
 								{tab.title}
 								{notifiedTabs.has(tab.id) &&
@@ -74,14 +76,20 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 						inset="0"
 						display={tab.id === activeTabId ? "block" : "none"}
 					>
-						{tab.type === "agent" ? (
-							<AgentChat sessionId={tab.id} isActive={tab.id === activeTabId} />
-						) : (
-							<Terminal
-								profileId={profileId}
-								sessionId={tab.id}
-							/>
-						)}
+						{match(tab)
+							.with({ type: "agent" }, (t) => (
+								<AgentChat
+									sessionId={t.id}
+									isActive={t.id === activeTabId}
+								/>
+							))
+							.with({ type: "terminal" }, (t) => (
+								<Terminal
+									profileId={profileId}
+									sessionId={t.id}
+								/>
+							))
+							.exhaustive()}
 					</Box>
 				))}
 			</Box>

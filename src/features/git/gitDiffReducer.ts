@@ -1,6 +1,7 @@
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { produce } from "immer";
 import { createContext } from "react";
+import { match } from "ts-pattern";
 import type { GitCommit } from "@/generated";
 
 export type Tab = "changes" | "history";
@@ -46,39 +47,34 @@ const stepKeyMap = {
 
 export const gitDiffReducer = produce(
 	(draft: GitDiffState, action: GitDiffAction) => {
-		switch (action.type) {
-			case "switchTab":
-				draft.activeTab = action.tab;
+		match(action)
+			.with({ type: "switchTab" }, ({ tab }) => {
+				draft.activeTab = tab;
 				draft.selectedCommit = null;
 				draft.selectedFileIndex = 0;
 				draft.selectedCommitIndex = 0;
 				draft.selectedCommitFileIndex = 0;
-				break;
-			case "selectFile":
-				draft.selectedFileIndex = action.index;
-				break;
-			case "selectCommit":
-				draft.selectedCommit = action.commit;
-				draft.selectedCommitIndex = action.index;
+			})
+			.with({ type: "selectFile" }, ({ index }) => {
+				draft.selectedFileIndex = index;
+			})
+			.with({ type: "selectCommit" }, ({ commit, index }) => {
+				draft.selectedCommit = commit;
+				draft.selectedCommitIndex = index;
 				draft.selectedCommitFileIndex = 0;
-				break;
-			case "selectCommitFile":
-				draft.selectedCommitFileIndex = action.index;
-				break;
-			case "commitBack":
+			})
+			.with({ type: "selectCommitFile" }, ({ index }) => {
+				draft.selectedCommitFileIndex = index;
+			})
+			.with({ type: "commitBack" }, () => {
 				draft.selectedCommit = null;
 				draft.selectedCommitFileIndex = 0;
-				break;
-			case "stepIndex": {
-				const key = stepKeyMap[action.target];
-				draft[key] = clamp(
-					draft[key] + action.delta,
-					0,
-					action.count - 1,
-				);
-				break;
-			}
-		}
+			})
+			.with({ type: "stepIndex" }, ({ target, delta, count }) => {
+				const key = stepKeyMap[target];
+				draft[key] = clamp(draft[key] + delta, 0, count - 1);
+			})
+			.exhaustive();
 	},
 );
 

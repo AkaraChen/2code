@@ -11,6 +11,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useState } from "react";
+import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
@@ -49,34 +50,52 @@ export function TopBarSettings() {
 			(!activeControls.includes(overControlId as ControlId) &&
 				overControlId !== "preview-area");
 
-		if (isActiveInPreview && isOverPreviewArea) {
-			// Reorder within preview
-			if (activeControlId === overControlId) return;
-			const oldIndex = activeControls.indexOf(activeControlId);
-			const newIndex = activeControls.indexOf(overControlId as ControlId);
-			if (newIndex !== -1) {
-				setActiveControls(
-					arrayMove(activeControls, oldIndex, newIndex),
-				);
-			}
-		} else if (isActiveInPreview && isOverAvailableArea) {
-			// Remove from preview
-			setActiveControls(
-				activeControls.filter((id) => id !== activeControlId),
-			);
-		} else if (!isActiveInPreview && isOverPreviewArea) {
-			// Add to preview
-			if (overControlId === "preview-area") {
-				setActiveControls([...activeControls, activeControlId]);
-			} else {
-				const overIndex = activeControls.indexOf(
-					overControlId as ControlId,
-				);
-				const newList = [...activeControls];
-				newList.splice(overIndex, 0, activeControlId);
-				setActiveControls(newList);
-			}
-		}
+		match({ isActiveInPreview, isOverPreviewArea, isOverAvailableArea })
+			.with(
+				{ isActiveInPreview: true, isOverPreviewArea: true },
+				() => {
+					if (activeControlId === overControlId) return;
+					const oldIndex =
+						activeControls.indexOf(activeControlId);
+					const newIndex = activeControls.indexOf(
+						overControlId as ControlId,
+					);
+					if (newIndex !== -1) {
+						setActiveControls(
+							arrayMove(activeControls, oldIndex, newIndex),
+						);
+					}
+				},
+			)
+			.with(
+				{ isActiveInPreview: true, isOverAvailableArea: true },
+				() => {
+					setActiveControls(
+						activeControls.filter(
+							(id) => id !== activeControlId,
+						),
+					);
+				},
+			)
+			.with(
+				{ isActiveInPreview: false, isOverPreviewArea: true },
+				() => {
+					if (overControlId === "preview-area") {
+						setActiveControls([
+							...activeControls,
+							activeControlId,
+						]);
+					} else {
+						const overIndex = activeControls.indexOf(
+							overControlId as ControlId,
+						);
+						const newList = [...activeControls];
+						newList.splice(overIndex, 0, activeControlId);
+						setActiveControls(newList);
+					}
+				},
+			)
+			.otherwise(() => {});
 	}
 
 	const activeDef = activeId ? controlRegistry.get(activeId) : null;

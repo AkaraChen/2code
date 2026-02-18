@@ -1,6 +1,7 @@
 import { startTransition } from "react";
-import type { GitDiffAction, GitDiffState } from "../gitDiffReducer";
+import { P, match } from "ts-pattern";
 import type { GitCommit } from "@/generated";
+import type { GitDiffAction, GitDiffState } from "../gitDiffReducer";
 
 interface UseGitDiffKeyboardParams {
 	state: GitDiffState;
@@ -24,76 +25,97 @@ export function useGitDiffKeyboard({
 	sidebarRef,
 }: UseGitDiffKeyboardParams) {
 	return (e: React.KeyboardEvent<HTMLDivElement>) => {
-		// 处理上下箭头导航
-		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-			e.preventDefault();
-			const delta = e.key === "ArrowDown" ? 1 : -1;
+		const ctx = {
+			key: e.key,
+			activeTab: state.activeTab,
+			hasCommit: state.selectedCommit !== null,
+		};
 
-			if (state.activeTab === "changes") {
-				dispatch({
-					type: "stepIndex",
-					target: "file",
-					delta,
-					count: changesFilesCount,
-				});
-			} else if (state.selectedCommit) {
-				dispatch({
-					type: "stepIndex",
-					target: "commitFile",
-					delta,
-					count:
-						sidebarRef.current?.querySelectorAll("[data-index]")
-							.length ?? 0,
-				});
-			} else {
-				dispatch({
-					type: "stepIndex",
-					target: "commit",
-					delta,
-					count: commits.length,
-				});
-			}
-			return;
-		}
-
-		// 处理 Enter 钻入提交
-		if (
-			e.key === "Enter" &&
-			state.activeTab === "history" &&
-			!state.selectedCommit
-		) {
-			e.preventDefault();
-			if (
-				commits.length > 0 &&
-				state.selectedCommitIndex < commits.length
-			) {
-				startTransition(() => {
+		match(ctx)
+			.with(
+				{ key: P.union("ArrowDown", "ArrowUp"), activeTab: "changes" },
+				({ key }) => {
+					e.preventDefault();
 					dispatch({
-						type: "selectCommit",
-						commit: commits[state.selectedCommitIndex],
-						index: state.selectedCommitIndex,
+						type: "stepIndex",
+						target: "file",
+						delta: key === "ArrowDown" ? 1 : -1,
+						count: changesFilesCount,
 					});
-				});
-			}
-			return;
-		}
-
-		// 处理 Backspace/Escape 返回
-		if (state.activeTab === "history" && state.selectedCommit) {
-			if (e.key === "Backspace") {
-				e.preventDefault();
-				startTransition(() => {
-					dispatch({ type: "commitBack" });
-				});
-				return;
-			}
-			if (e.key === "Escape") {
-				e.preventDefault();
-				e.stopPropagation();
-				startTransition(() => {
-					dispatch({ type: "commitBack" });
-				});
-			}
-		}
+				},
+			)
+			.with(
+				{
+					key: P.union("ArrowDown", "ArrowUp"),
+					activeTab: "history",
+					hasCommit: true,
+				},
+				({ key }) => {
+					e.preventDefault();
+					dispatch({
+						type: "stepIndex",
+						target: "commitFile",
+						delta: key === "ArrowDown" ? 1 : -1,
+						count:
+							sidebarRef.current?.querySelectorAll(
+								"[data-index]",
+							).length ?? 0,
+					});
+				},
+			)
+			.with(
+				{
+					key: P.union("ArrowDown", "ArrowUp"),
+					activeTab: "history",
+					hasCommit: false,
+				},
+				({ key }) => {
+					e.preventDefault();
+					dispatch({
+						type: "stepIndex",
+						target: "commit",
+						delta: key === "ArrowDown" ? 1 : -1,
+						count: commits.length,
+					});
+				},
+			)
+			.with(
+				{ key: "Enter", activeTab: "history", hasCommit: false },
+				() => {
+					e.preventDefault();
+					if (
+						commits.length > 0 &&
+						state.selectedCommitIndex < commits.length
+					) {
+						startTransition(() => {
+							dispatch({
+								type: "selectCommit",
+								commit: commits[state.selectedCommitIndex],
+								index: state.selectedCommitIndex,
+							});
+						});
+					}
+				},
+			)
+			.with(
+				{ key: "Backspace", activeTab: "history", hasCommit: true },
+				() => {
+					e.preventDefault();
+					startTransition(() => {
+						dispatch({ type: "commitBack" });
+					});
+				},
+			)
+			.with(
+				{ key: "Escape", activeTab: "history", hasCommit: true },
+				() => {
+					e.preventDefault();
+					e.stopPropagation();
+					startTransition(() => {
+						dispatch({ type: "commitBack" });
+					});
+				},
+			)
+			.otherwise(() => {});
 	};
 }

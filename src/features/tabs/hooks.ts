@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
 import { AgentTabSession } from "./AgentTabSession";
 import { clearPending, markPending } from "./pendingDeletions";
@@ -13,28 +14,21 @@ type CreateTabParams =
 export function useCreateTab() {
 	return useMutation({
 		mutationFn: async (params: CreateTabParams) => {
-			let session;
-			switch (params.type) {
-				case "terminal": {
+			const session = await match(params)
+				.with({ type: "terminal" }, async (p) => {
 					const counter =
-						useTabStore.getState().profiles[params.profileId]
-							?.counter ?? 0;
-					session = await TerminalTabSession.create(
-						params.profileId,
-						params.cwd,
+						useTabStore.getState().profiles[p.profileId]?.counter ??
+						0;
+					return TerminalTabSession.create(
+						p.profileId,
+						p.cwd,
 						m.terminalTabTitle({ n: counter + 1 }),
 					);
-					break;
-				}
-				case "agent": {
-					session = await AgentTabSession.create(
-						params.profileId,
-						params.cwd,
-						params.agent,
-					);
-					break;
-				}
-			}
+				})
+				.with({ type: "agent" }, (p) =>
+					AgentTabSession.create(p.profileId, p.cwd, p.agent),
+				)
+				.exhaustive();
 			sessionRegistry.set(session.id, session);
 			return session;
 		},
