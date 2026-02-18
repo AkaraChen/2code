@@ -203,7 +203,7 @@ fn create_session_nonexistent_profile_fails() {
 }
 
 #[test]
-fn restore_session_creates_new_deletes_old() {
+fn restore_all_sessions_creates_new_deletes_old() {
 	let db = setup_db_pool();
 	let dir = create_temp_git_repo();
 	add_commit(&dir, "README.md", "# Test", "init");
@@ -230,34 +230,33 @@ fn restore_session_creates_new_deletes_old() {
 	// Wait for background read thread to flush
 	std::thread::sleep(std::time::Duration::from_millis(500));
 
-	// Restore from old session
-	let result = service::pty::restore_session(
-		&ctx,
-		&old_id,
-		&default_meta(&profile_id),
-		&default_config(&folder),
-	)
-	.unwrap();
+	// Mark all closed (as startup would do)
+	service::pty::mark_all_closed(&db);
 
-	assert_ne!(result.new_session_id, old_id);
+	// Restore all sessions (replaces individual restore_session)
+	let count = service::pty::restore_all_sessions(&ctx);
+	assert!(count > 0, "should restore at least one session");
 
 	// Old session should be deleted
 	let mut conn = db.lock().unwrap();
-	let old_result = service::pty::get_history(&mut conn, &old_id);
-	assert!(old_result.is_err(), "old session should be deleted");
-
-	// New session should exist in DB
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, "p1").unwrap();
+
+	// Should have exactly one session (the restored one), not the old one
 	assert!(
-		sessions.iter().any(|s| s.id == result.new_session_id),
-		"new session should be in DB"
+		!sessions.iter().any(|s| s.id == old_id),
+		"old session ID should not exist"
 	);
+	assert!(
+		!sessions.is_empty(),
+		"new restored session should exist"
+	);
+
+	let new_id = &sessions[0].id;
 	drop(conn);
 
 	// Cleanup
-	service::pty::close_session(&db, &ctx.sessions, &result.new_session_id)
-		.unwrap();
+	service::pty::close_session(&db, &ctx.sessions, new_id).unwrap();
 	cleanup(&dir);
 }
 

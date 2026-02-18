@@ -17,6 +17,102 @@ use tokio::time::timeout;
 /// Maps session_id to current turn_index counter
 pub type TurnIndexMap = Arc<tokio::sync::Mutex<HashMap<String, Arc<AtomicI32>>>>;
 
+/// Spawn a notification listener task for an agent session.
+/// This reads ACP notifications from the agent process, persists them to DB,
+/// and emits Tauri events to the frontend.
+///
+/// Must be called after the session is stored in the session map.
+pub fn spawn_notification_listener(
+	session_id: String,
+	session: Arc<ManagedAgentSession>,
+	app: AppHandle,
+	db: DbPool,
+	turn_index_map: TurnIndexMap,
+	notification_tasks: NotificationTaskMap,
+) {
+	let notif_id = session_id.clone();
+	let task_session_id = session_id.clone();
+
+	// Compute initial event_index from existing events in DB
+	let initial_event_index = {
+		if let Ok(mut conn) = db.lock() {
+			repo::agent::next_event_index(&mut conn, &session_id).unwrap_or(0)
+		} else {
+			0
+		}
+	};
+
+	let task_handle = tokio::spawn(async move {
+		let mut event_index = initial_event_index;
+		let mut stream = std::pin::pin!(session.notifications().await);
+
+		while let Some(notification) = stream.next().await {
+			if let Some(parsed) =
+				ManagedAgentSession::parse_notification(&notification)
+			{
+				tracing::info!(
+					session_id = %notif_id,
+					acp_session_id = %parsed.session_id,
+					update = ?parsed.update,
+					"agent notification (structured)"
+				);
+			} else {
+				tracing::info!(
+					session_id = %notif_id,
+					raw = %notification,
+					"agent notification (raw, unrecognized)"
+				);
+			}
+
+			// Get current turn index
+			let turn_idx = {
+				let map = turn_index_map.lock().await;
+				map.get(&notif_id)
+					.map(|counter| counter.load(Ordering::SeqCst))
+					.unwrap_or(0)
+			};
+
+			// Persist event to database
+			let payload_json = notification.to_string();
+			if let Err(e) = service::agent::persist_event(
+				&db,
+				&notif_id,
+				event_index,
+				"agent",
+				&payload_json,
+				turn_idx,
+			) {
+				tracing::warn!(
+					session_id = %notif_id,
+					event_index,
+					turn_index = turn_idx,
+					error = %e,
+					"failed to persist agent event"
+				);
+			}
+
+			event_index += 1;
+
+			// Emit event to frontend
+			let event_name = format!("agent-event-{notif_id}");
+			if let Err(e) = app.emit(&event_name, &notification) {
+				tracing::warn!(
+					session_id = %notif_id,
+					error = %e,
+					"failed to emit agent notification event"
+				);
+			}
+		}
+		tracing::info!(session_id = %notif_id, "agent notification stream ended");
+	});
+
+	// Store task handle (fire-and-forget insertion)
+	let tasks = notification_tasks.clone();
+	tokio::spawn(async move {
+		tasks.lock().await.insert(task_session_id, task_handle);
+	});
+}
+
 #[tauri::command]
 pub fn list_agent_status(
 	state: State<'_, Arc<AgentManagerWrapper>>,
@@ -180,12 +276,22 @@ pub async fn send_agent_prompt(
 		);
 	}
 
+	// Check for pending history injection (first prompt after reconnect)
+	let pending = session.take_pending_history().await;
+
+	// Build prompt content blocks
+	let mut prompt_parts = Vec::new();
+	if let Some(history) = pending {
+		prompt_parts.push(ContentPart::Text { text: history });
+	}
+	prompt_parts.push(ContentPart::Text {
+		text: content.clone(),
+	});
+
 	// Spawn async task for the prompt so we return immediately
 	let sid = session_id.clone();
 	tokio::spawn(async move {
-		let result = session
-			.prompt(vec![ContentPart::Text { text: content }])
-			.await;
+		let result = session.prompt(prompt_parts).await;
 		match result {
 			Ok(prompt_result) => {
 				let event_name = format!("agent-turn-complete-{sid}");
@@ -335,80 +441,79 @@ pub async fn create_agent_session_persistent(
 		map.insert(session_id.clone(), Arc::new(AtomicI32::new(0)));
 	}
 
-	// Spawn notification stream listener
-	let notif_app = app.clone();
-	let notif_session = session.clone();
-	let notif_id = session_id.clone();
-	let notif_db = db_pool.clone();
-	let notif_turn_map = turn_index_map.inner().clone();
+	// Spawn notification stream listener (reuses extracted helper)
+	spawn_notification_listener(
+		session_id,
+		session,
+		app,
+		db_pool,
+		turn_index_map.inner().clone(),
+		tasks.inner().clone(),
+	);
 
-	let task_handle = tokio::spawn(async move {
-		let mut event_index = 0i32;
-		let mut stream =
-			std::pin::pin!(notif_session.notifications().await);
+	Ok(info)
+}
 
-		while let Some(notification) = stream.next().await {
-			if let Some(parsed) =
-				ManagedAgentSession::parse_notification(&notification)
-			{
-				tracing::info!(
-					session_id = %notif_id,
-					acp_session_id = %parsed.session_id,
-					update = ?parsed.update,
-					"agent notification (structured)"
-				);
-			} else {
-				tracing::info!(
-					session_id = %notif_id,
-					raw = %notification,
-					"agent notification (raw, unrecognized)"
-				);
-			}
+/// Reconnect an old (destroyed) agent session on demand.
+/// Called by the frontend when the user opens an agent tab after app restart.
+///
+/// Spawns the agent process, transfers events from old to new session,
+/// sets up the notification listener, and returns the new session info.
+#[tauri::command]
+pub async fn reconnect_agent_session(
+	old_session_id: String,
+	app: AppHandle,
+	db: State<'_, DbPool>,
+	manager: State<'_, Arc<AgentManagerWrapper>>,
+	sessions: State<'_, AgentSessionMap>,
+	tasks: State<'_, NotificationTaskMap>,
+	turn_index_map: State<'_, TurnIndexMap>,
+) -> Result<AgentSessionInfo, String> {
+	let manager_clone = manager.inner().clone();
+	let db_pool = db.inner().clone();
+	let sessions_clone = sessions.inner().clone();
 
-			// Get current turn index
-			let turn_idx = {
-				let map = notif_turn_map.lock().await;
-				map.get(&notif_id)
-					.map(|counter| counter.load(Ordering::SeqCst))
-					.unwrap_or(0)
-			};
+	// Reconnect: spawn process, transfer events, swap DB records
+	let new_session_id = service::agent::reconnect_session(
+		&db_pool,
+		&sessions_clone,
+		&manager_clone,
+		&old_session_id,
+	)
+	.await
+	.map_err(|e| format!("{e}"))?;
 
-			// Persist event to database
-			let payload_json = notification.to_string();
-			if let Err(e) = service::agent::persist_event(
-				&notif_db,
-				&notif_id,
-				event_index,
-				"agent",
-				&payload_json,
-				turn_idx,
-			) {
-				tracing::warn!(
-					session_id = %notif_id,
-					event_index,
-					turn_index = turn_idx,
-					error = %e,
-					"failed to persist agent event"
-				);
-			}
+	// Get session info
+	let session = {
+		let map = sessions_clone.lock().await;
+		map.get(&new_session_id)
+			.cloned()
+			.ok_or_else(|| format!("session not found after reconnect: {new_session_id}"))?
+	};
+	let info = session.info();
 
-			event_index += 1;
+	// Initialize turn index from existing events
+	{
+		let max_turn = {
+			let mut conn = db.lock().map_err(|_| "Failed to acquire DB lock".to_string())?;
+			repo::agent::get_session_events(&mut conn, &new_session_id)
+				.ok()
+				.and_then(|events| events.iter().map(|e| e.turn_index).max())
+				.unwrap_or(0)
+		};
+		let mut map = turn_index_map.lock().await;
+		map.insert(new_session_id.clone(), Arc::new(AtomicI32::new(max_turn)));
+	}
 
-			// Emit event to frontend
-			let event_name = format!("agent-event-{notif_id}");
-			if let Err(e) = notif_app.emit(&event_name, &notification) {
-				tracing::warn!(
-					session_id = %notif_id,
-					error = %e,
-					"failed to emit agent notification event"
-				);
-			}
-		}
-		tracing::info!(session_id = %notif_id, "agent notification stream ended");
-	});
-
-	// Store task handle for later abortion
-	tasks.lock().await.insert(session_id.clone(), task_handle);
+	// Spawn notification listener
+	spawn_notification_listener(
+		new_session_id,
+		session,
+		app,
+		db_pool,
+		turn_index_map.inner().clone(),
+		tasks.inner().clone(),
+	);
 
 	Ok(info)
 }

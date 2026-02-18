@@ -23,6 +23,8 @@ pub struct ManagedAgentSession {
 	pub local_id: String,
 	pub agent: String,
 	event_counter: AtomicI32,
+	/// Conversation history from a previous session, injected on the first prompt after reconnect.
+	pending_history: tokio::sync::Mutex<Option<String>>,
 }
 
 impl ManagedAgentSession {
@@ -102,6 +104,7 @@ impl ManagedAgentSession {
 			local_id,
 			agent: agent.to_string(),
 			event_counter: AtomicI32::new(0),
+			pending_history: tokio::sync::Mutex::new(None),
 		})
 	}
 
@@ -188,6 +191,7 @@ impl ManagedAgentSession {
 			local_id,
 			agent: agent.to_string(),
 			event_counter: AtomicI32::new(0),
+			pending_history: tokio::sync::Mutex::new(None),
 		})
 	}
 
@@ -313,6 +317,16 @@ impl ManagedAgentSession {
 			agent: self.agent.clone(),
 			acp_session_id: self.acp_session_id.clone(),
 		}
+	}
+
+	/// Set pending history to be injected on the next prompt (first prompt after reconnect).
+	pub async fn set_pending_history(&self, history: String) {
+		*self.pending_history.lock().await = Some(history);
+	}
+
+	/// Take pending history (consumed on first call, returns None afterwards).
+	pub async fn take_pending_history(&self) -> Option<String> {
+		self.pending_history.lock().await.take()
 	}
 
 	/// Gracefully shut down the agent session.

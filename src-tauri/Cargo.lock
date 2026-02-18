@@ -4499,6 +4499,7 @@ dependencies = [
  "model",
  "notify",
  "repo",
+ "serde_json",
  "tokio",
  "tracing",
  "uuid",

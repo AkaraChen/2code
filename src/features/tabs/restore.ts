@@ -2,14 +2,12 @@ import { QueryObserver } from "@tanstack/react-query";
 import consola from "consola";
 import type { ProjectWithProfiles } from "@/generated";
 import {
-	listAgentSessionEvents,
 	listProjectAgentSessions,
 	listProjectSessions,
 	listProjects,
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { useAgentStore } from "../agent/store";
 import { AgentTabSession } from "./AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
@@ -79,28 +77,19 @@ async function populateTabs(projects: ProjectWithProfiles[]) {
 		}
 	}
 
-	// Agent sessions: wrap, fetch events (read-only), register listeners
+	// Agent sessions: only create tab entries (no process spawning).
+	// The actual reconnection (spawn + listener) happens lazily on tab focus.
 	for (const { agentSessions } of projectData) {
 		for (const r of agentSessions) {
-			try {
-				const ts = new AgentTabSession(
-					r.id,
-					r.profile_id,
-					`${r.agent} session`,
-					r.agent,
-				);
-				const events = await listAgentSessionEvents({
-					sessionId: r.id,
-				});
-				useAgentStore.getState().initSession(r.id);
-				useAgentStore.getState().restoreFromEvents(r.id, events);
-				await ts.registerListeners();
-				sessionRegistry.set(ts.id, ts);
-				useTabStore.getState().addTab(r.profile_id, ts.toTab());
-				consola.info(`[tab-restore] Agent ${r.id}`);
-			} catch (e) {
-				consola.error(`[tab-restore] Agent failed: ${r.id}`, e);
-			}
+			const ts = new AgentTabSession(
+				r.id,
+				r.profile_id,
+				`${r.agent} session`,
+				r.agent,
+			);
+			sessionRegistry.set(ts.id, ts);
+			useTabStore.getState().addTab(r.profile_id, ts.toTab());
+			consola.info(`[tab-restore] Agent tab ${r.id} (pending reconnect)`);
 		}
 	}
 

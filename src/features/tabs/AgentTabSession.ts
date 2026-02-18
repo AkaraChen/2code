@@ -5,9 +5,13 @@ import {
 	closeAgentSession,
 	createAgentSessionPersistent,
 	deleteAgentSessionRecord,
+	listAgentSessionEvents,
+	reconnectAgentSession,
 } from "@/generated";
 import { useAgentStore } from "../agent/store";
 import { TabSession } from "./session";
+import { sessionRegistry } from "./sessionRegistry";
+import { useTabStore } from "./store";
 import type { AgentTab } from "./types";
 import consola from "consola";
 
@@ -15,6 +19,12 @@ export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
 	readonly agentType: string;
 	private unlisteners: UnlistenFn[] = [];
+	private _connected = false;
+	private _reconnecting = false;
+
+	get connected(): boolean {
+		return this._connected;
+	}
 
 	constructor(
 		id: string,
@@ -47,7 +57,61 @@ export class AgentTabSession extends TabSession {
 		);
 		useAgentStore.getState().initSession(info.id);
 		await session.registerListeners();
+		session._connected = true;
 		return session;
+	}
+
+	/**
+	 * Reconnect a restored session on demand (called when tab is focused).
+	 * Spawns the agent process, transfers events, sets up listeners.
+	 * Returns the new session ID (this session object becomes stale — caller
+	 * must replace it in the registry and tab store).
+	 */
+	async reconnect(): Promise<AgentTabSession> {
+		if (this._connected || this._reconnecting) {
+			return this;
+		}
+		this._reconnecting = true;
+
+		try {
+			const info = await reconnectAgentSession({
+				oldSessionId: this.id,
+			});
+
+			// Create new session object with the new ID
+			const newSession = new AgentTabSession(
+				info.id,
+				this.profileId,
+				this.title,
+				this.agentType,
+			);
+
+			// Load transferred events into the store
+			const events = await listAgentSessionEvents({
+				sessionId: info.id,
+			});
+			useAgentStore.getState().initSession(info.id);
+			useAgentStore.getState().restoreFromEvents(info.id, events);
+			await newSession.registerListeners();
+			newSession._connected = true;
+
+			// Replace in registry
+			sessionRegistry.delete(this.id);
+			sessionRegistry.set(newSession.id, newSession);
+
+			// Update tab store: replace old tab with new one
+			useTabStore
+				.getState()
+				.replaceTab(this.profileId, this.id, newSession.toTab());
+
+			consola.info(
+				`[agent] reconnected ${this.id} → ${info.id}`,
+			);
+			return newSession;
+		} catch (e) {
+			this._reconnecting = false;
+			throw e;
+		}
 	}
 
 	async registerListeners(): Promise<void> {

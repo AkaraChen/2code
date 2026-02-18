@@ -1,7 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Global monotonic counter to guarantee unique event IDs even when
+/// multiple events are persisted within the same millisecond.
+static EVENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use agent::{
 	AgentManagerWrapper, AgentProcessLaunchSpec, AgentSessionMap,
@@ -77,80 +81,87 @@ pub async fn create_session(
 	Ok(local_id)
 }
 
-/// Restore all destroyed agent sessions at startup.
-/// For each: spawn process → create new record → transfer events → delete old record.
-pub async fn restore_all_sessions(
+/// Reconnect a single agent session on demand (called by frontend when user opens a tab).
+///
+/// Flow:
+/// 1. Load the old session record from DB
+/// 2. Spawn agent process (try session/load → fallback to session/create)
+/// 3. Create new DB record, transfer events, delete old record
+/// 4. Store in runtime map
+///
+/// Returns the new session ID (process is live and ready for notifications).
+pub async fn reconnect_session(
 	db: &DbPool,
 	sessions: &AgentSessionMap,
 	manager: &AgentManagerWrapper,
-) -> usize {
-	let all_sessions = {
-		let Ok(mut conn) = db.lock() else { return 0 };
-		repo::agent::list_all(&mut conn).unwrap_or_default()
+	old_session_id: &str,
+) -> Result<String, AppError> {
+	// 1. Load old record
+	let old = {
+		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
+		repo::agent::get_session(&mut conn, old_session_id)?
 	};
 
-	if all_sessions.is_empty() {
-		return 0;
-	}
-
-	tracing::info!(target: "agent", count = all_sessions.len(), "restore_all: found sessions to restore");
-	let mut restored = 0;
-
-	for old in &all_sessions {
-		match restore_single_agent_session(db, sessions, manager, old).await {
-			Ok(_) => {
-				restored += 1;
-			}
-			Err(e) => {
-				tracing::warn!(
-					target: "agent",
-					session_id = %old.id,
-					error = %e,
-					"restore_all: failed, deleting stale record"
-				);
-				if let Ok(mut conn) = db.lock() {
-					let _ = repo::agent::delete_session(&mut conn, &old.id);
-				}
-			}
-		}
-	}
-
-	restored
-}
-
-async fn restore_single_agent_session(
-	db: &DbPool,
-	sessions: &AgentSessionMap,
-	manager: &AgentManagerWrapper,
-	old: &AgentSessionRecord,
-) -> Result<(), AppError> {
-	// 1. Resolve cwd from profile's worktree_path
+	// 2. Resolve cwd from profile's worktree_path
 	let cwd = {
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 		let profile = repo::profile::find_by_id(&mut conn, &old.profile_id)?;
 		PathBuf::from(&profile.worktree_path)
 	};
 
-	// 2. Resolve launch spec
+	// 3. Resolve launch spec
 	let launch_spec = manager
 		.resolve_launch(&old.agent)
 		.map_err(|e| AppError::PtyError(format!("Failed to resolve agent launch: {e}")))?;
 
-	// 3. Spawn agent process with ACP session/load
-	let managed_session = ManagedAgentSession::load(
+	// 4. Spawn agent process — try session/load first, fallback to session/create.
+	//    session/load is optional per ACP spec (requires loadSession capability).
+	//    Agents like claude-code-acp don't support it; we fall back to session/new.
+	let managed_session = match ManagedAgentSession::load(
 		&old.agent,
-		cwd,
+		cwd.clone(),
 		&old.acp_session_id,
-		launch_spec,
+		launch_spec.clone(),
 		HashMap::new(),
 	)
 	.await
-	.map_err(|e| AppError::PtyError(format!("Failed to restore agent session: {e}")))?;
+	{
+		Ok(s) => {
+			tracing::info!(
+				target: "agent",
+				session_id = %old.id,
+				agent = %old.agent,
+				"reconnect: session/load succeeded"
+			);
+			s
+		}
+		Err(e) => {
+			tracing::warn!(
+				target: "agent",
+				session_id = %old.id,
+				agent = %old.agent,
+				error = %e,
+				"reconnect: session/load failed, falling back to session/create"
+			);
+			ManagedAgentSession::create(
+				&old.agent,
+				cwd,
+				launch_spec,
+				HashMap::new(),
+			)
+			.await
+			.map_err(|e2| {
+				AppError::PtyError(format!(
+					"Failed to reconnect agent session (both load and create failed): {e2}"
+				))
+			})?
+		}
+	};
 
 	let new_id = managed_session.local_id.clone();
 	let acp_session_id = managed_session.acp_session_id.clone();
 
-	// 4. Insert new record, transfer events, delete old record
+	// 5. Insert new record, transfer events, delete old record
 	{
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
@@ -163,19 +174,24 @@ async fn restore_single_agent_session(
 		};
 		repo::agent::insert_session(&mut conn, &new_record)?;
 
-		// Transfer events to new session ID before deleting old record
 		let event_count =
 			repo::agent::transfer_events(&mut conn, &old.id, &new_id)?;
 		tracing::info!(
 			target: "agent",
 			old_id = %old.id, %new_id, event_count,
-			"restore: transferred events"
+			"reconnect: transferred events"
 		);
 
 		repo::agent::delete_session(&mut conn, &old.id)?;
 	}
 
-	// 5. Store live session in runtime map
+	// 5.5. Build history from transferred events for first-prompt injection
+	let history = build_history_text(db, &new_id).unwrap_or_default();
+	if !history.is_empty() {
+		managed_session.set_pending_history(history).await;
+	}
+
+	// 6. Store live session in runtime map
 	sessions
 		.lock()
 		.await
@@ -185,10 +201,93 @@ async fn restore_single_agent_session(
 		target: "agent",
 		old_id = %old.id, %new_id, %acp_session_id,
 		agent = %old.agent,
-		"restore_all: restored agent session"
+		"reconnect: agent session reconnected"
 	);
 
-	Ok(())
+	Ok(new_id)
+}
+
+/// Build a conversation history summary from persisted events.
+///
+/// Groups events by `turn_index`, extracts user text and agent message chunks,
+/// and formats them as a readable conversation history. Used to inject context
+/// into the first prompt after session reconnect.
+pub fn build_history_text(
+	db: &DbPool,
+	session_id: &str,
+) -> Result<String, AppError> {
+	let events = {
+		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
+		repo::agent::get_session_events(&mut conn, session_id)?
+	};
+
+	if events.is_empty() {
+		return Ok(String::new());
+	}
+
+	// Group events by turn_index (BTreeMap keeps turns sorted)
+	let mut turns: BTreeMap<i32, Vec<&model::agent::AgentSessionEventRecord>> =
+		BTreeMap::new();
+	for event in &events {
+		turns.entry(event.turn_index).or_default().push(event);
+	}
+
+	let mut history_parts = Vec::new();
+
+	for (_turn_idx, turn_events) in &turns {
+		let mut user_text = String::new();
+		let mut agent_text = String::new();
+
+		for event in turn_events {
+			if event.sender == "user" {
+				// User payload: {"text": "..."}
+				if let Ok(obj) =
+					serde_json::from_str::<serde_json::Value>(&event.payload_json)
+				{
+					if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+						user_text = text.to_string();
+					}
+				}
+			} else if event.sender == "agent" {
+				// Agent payload: JSON-RPC notification
+				// {"method":"session/update","params":{"sessionId":"...","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"..."}}}}
+				if let Ok(obj) =
+					serde_json::from_str::<serde_json::Value>(&event.payload_json)
+				{
+					let update_type = obj
+						.pointer("/params/update/sessionUpdate")
+						.and_then(|v| v.as_str());
+					if update_type == Some("agent_message_chunk") {
+						if let Some(text) = obj
+							.pointer("/params/update/content/text")
+							.and_then(|v| v.as_str())
+						{
+							agent_text.push_str(text);
+						}
+					}
+				}
+			}
+		}
+
+		// Only include turns with both user and agent text
+		if !user_text.is_empty() && !agent_text.is_empty() {
+			history_parts
+				.push(format!("[User]: {user_text}\n[Assistant]: {agent_text}"));
+		} else if !user_text.is_empty() {
+			history_parts.push(format!("[User]: {user_text}"));
+		}
+	}
+
+	if history_parts.is_empty() {
+		return Ok(String::new());
+	}
+
+	let history = format!(
+		"<conversation_history>\n{}\n</conversation_history>\n\nThe above is the conversation history from a previous session. Use it as context for the conversation going forward.",
+		history_parts.join("\n\n")
+	);
+
+	Ok(history)
 }
 
 /// Persist a single event to the database.
@@ -202,13 +301,10 @@ pub fn persist_event(
 ) -> Result<(), AppError> {
 	let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
-	let event_id = format!(
-		"{session_id}-evt-{}",
-		SystemTime::now()
-			.duration_since(UNIX_EPOCH)
-			.unwrap_or_default()
-			.as_millis()
-	);
+	// Use monotonic counter to guarantee uniqueness even when multiple
+	// events are persisted within the same millisecond (common during streaming).
+	let seq = EVENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+	let event_id = format!("{session_id}-evt-{seq}");
 
 	let record = NewAgentSessionEvent {
 		id: &event_id,

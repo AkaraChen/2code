@@ -15,6 +15,7 @@ notify = "8"
 vt100 = "0.16"
 tracing = "0.1"
 tokio = { version = "1", features = ["sync"] }
+serde_json = "1"
 
 [dev-dependencies]
 diesel_migrations = "2"

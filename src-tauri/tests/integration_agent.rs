@@ -290,7 +290,7 @@ async fn test_agent_session_low_level_send() {
 		cwd,
 		HashMap::new(),
 		launch_spec,
-		Duration::from_secs(30),
+		Some(Duration::from_secs(30)),
 	)
 	.await
 	.expect("should spawn");

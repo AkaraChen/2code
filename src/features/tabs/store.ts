@@ -21,6 +21,7 @@ interface TabStore {
 	setActiveTab: (profileId: string, tabId: string) => void;
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
+	replaceTab: (profileId: string, oldTabId: string, newTab: ProfileTab) => void;
 	removeStaleProfiles: (validIds: Set<string>) => void;
 	markNotified: (sessionId: string) => void;
 	markRead: (sessionId: string) => void;
@@ -89,6 +90,19 @@ export const useTabStore = create<TabStore>()(
 				if (!profile) return;
 				const tab = profile.tabs.find((t) => t.id === tabId);
 				if (tab && tab.title !== title) tab.title = title;
+			});
+		},
+
+		replaceTab(profileId, oldTabId, newTab) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				const idx = profile.tabs.findIndex((t) => t.id === oldTabId);
+				if (idx === -1) return;
+				profile.tabs[idx] = newTab;
+				if (profile.activeTabId === oldTabId) {
+					profile.activeTabId = newTab.id;
+				}
 			});
 		},
 

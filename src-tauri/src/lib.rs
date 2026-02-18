@@ -95,25 +95,10 @@ pub fn run() {
 				tracing::info!(target: "pty", count, "startup: restored PTY sessions");
 			}
 
-			// Restore agent sessions from previous run (async)
-			{
-				let db = app.state::<infra::db::DbPool>().inner().clone();
-				let agent_sessions_ref =
-					app.state::<agent::AgentSessionMap>().inner().clone();
-				let agent_mgr = app
-					.state::<std::sync::Arc<agent::AgentManagerWrapper>>()
-					.inner()
-					.clone();
-				let count = tauri::async_runtime::block_on(async {
-					service::agent::restore_all_sessions(
-						&db,
-						&agent_sessions_ref,
-						&agent_mgr,
-					)
-					.await
-				});
-				tracing::info!(target: "agent", count, "startup: restored agent sessions");
-			}
+			// Agent sessions: only DB cleanup at startup.
+			// Actual agent process spawning happens lazily when the frontend
+			// calls reconnect_agent_session for each tab the user opens.
+			tracing::info!(target: "agent", "startup: agent sessions ready for lazy reconnection");
 
 			Ok(())
 		})
@@ -150,6 +135,7 @@ pub fn run() {
 			handler::agent::send_agent_prompt,
 			handler::agent::close_agent_session,
 			handler::agent::create_agent_session_persistent,
+			handler::agent::reconnect_agent_session,
 			handler::agent::list_project_agent_sessions,
 			handler::agent::list_agent_session_events,
 			handler::agent::delete_agent_session_record,
