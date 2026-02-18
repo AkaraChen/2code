@@ -1,4 +1,5 @@
 import { Flex } from "@chakra-ui/react";
+import { useState } from "react";
 import type { StreamingTurn } from "../types";
 import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
@@ -11,6 +12,8 @@ interface StreamingTurnRendererProps {
 }
 
 export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
+	const [timestamp] = useState(() => Date.now());
+
 	return (
 		<Flex direction="column" gap="3">
 			{/* 用户消息 */}
@@ -19,7 +22,7 @@ export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
 					message={{
 						role: "user",
 						content: turn.userMessage,
-						timestamp: Date.now(),
+						timestamp,
 					}}
 				/>
 			)}

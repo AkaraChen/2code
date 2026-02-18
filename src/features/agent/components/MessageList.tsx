@@ -44,8 +44,8 @@ export function MessageList({
 				)}
 
 				{/* 已完成的 turns */}
-				{turns?.map((turn, i) => (
-					<TurnRenderer key={i} turn={turn} />
+				{turns?.map((turn) => (
+					<TurnRenderer key={turn.timestamp} turn={turn} />
 				))}
 
 				{/* 流式 turn */}

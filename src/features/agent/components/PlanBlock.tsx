@@ -34,9 +34,9 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 				</Flex>
 
 				<VStack align="stretch" gap="2">
-					{plan.entries.map((entry, i) => (
+					{plan.entries.map((entry) => (
 						<Flex
-							key={i}
+							key={entry.content}
 							px="3"
 							py="2"
 							bg="bg.panel"

@@ -13,8 +13,3 @@ export function clearPending(tabId: string): void {
 export function isPending(tabId: string): boolean {
 	return pendingDeletions.has(tabId);
 }
-
-// For testing only
-export function __resetForTesting(): void {
-	pendingDeletions.clear();
-}

@@ -13,9 +13,9 @@ export function FileLocationsList({ locations }: FileLocationsListProps) {
 			<Text fontSize="xs" fontWeight="medium" color="fg.muted">
 				Affected Files:
 			</Text>
-			{locations.map((loc, i) => (
+			{locations.map((loc) => (
 				<Flex
-					key={i}
+					key={`${loc.path}:${loc.line ?? ""}`}
 					px="2"
 					py="1"
 					bg="bg.subtle"

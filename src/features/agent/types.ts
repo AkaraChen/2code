@@ -6,17 +6,12 @@
 // ==================== 从 SDK 重新导出核心类型 ====================
 
 export type {
-	ContentBlock,
-	ToolKind,
 	ToolCallStatus,
 	ToolCallLocation,
 	ToolCallContent,
 	ToolCall,
 	ToolCallUpdate,
 	Plan,
-	PlanEntry,
-	PlanEntryStatus,
-	PlanEntryPriority,
 } from "@agentclientprotocol/sdk";
 
 // ==================== 应用层特定类型 ====================

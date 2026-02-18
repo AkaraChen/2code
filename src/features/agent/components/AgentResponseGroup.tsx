@@ -12,12 +12,12 @@ interface AgentResponseGroupProps {
 export function AgentResponseGroup({ content }: AgentResponseGroupProps) {
 	return (
 		<Flex direction="column" gap="2">
-			{content.map((item, i) => {
+			{content.map((item) => {
 				switch (item.type) {
 					case "text":
 						return (
 							<MessageBubble
-								key={i}
+								key={item.text}
 								message={{
 									role: item.role,
 									content: item.text,
@@ -26,11 +26,11 @@ export function AgentResponseGroup({ content }: AgentResponseGroupProps) {
 							/>
 						);
 					case "thought":
-						return <ThoughtBlock key={i} text={item.text} />;
+						return <ThoughtBlock key={item.text} text={item.text} />;
 					case "tool_call":
-						return <ToolCallBlock key={i} toolCall={item.data} />;
+						return <ToolCallBlock key={item.data.toolCallId} toolCall={item.data} />;
 					case "plan":
-						return <PlanBlock key={i} plan={item.data} />;
+						return <PlanBlock key="plan" plan={item.data} />;
 				}
 			})}
 		</Flex>

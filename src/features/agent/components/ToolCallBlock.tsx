@@ -93,8 +93,11 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							)}
 
 							{/* 工具内容 */}
-							{toolCall.content?.map((content, i) => (
-								<ToolCallContentRenderer key={i} content={content} />
+							{toolCall.content?.map((content) => (
+								<ToolCallContentRenderer
+									key={content.type === "diff" ? `diff-${content.path}` : content.type === "terminal" ? `terminal-${content.terminalId}` : `content-${content.content.type}`}
+									content={content}
+								/>
 							))}
 
 							{/* 原始输入/输出（仅在展开时显示） */}
