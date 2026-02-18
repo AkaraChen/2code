@@ -34,14 +34,6 @@ export function useProject(id: string) {
 	return useMemo(() => projects.find((p) => p.id === id), [projects, id]);
 }
 
-export function useProjectProfiles(projectId: string) {
-	const { data: projects } = useProjects();
-	return useMemo(
-		() => projects.find((p) => p.id === projectId)?.profiles ?? [],
-		[projects, projectId],
-	);
-}
-
 export function useCreateProject() {
 	const queryClient = useQueryClient();
 	return useMutation({

@@ -1,5 +1,5 @@
 import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
@@ -14,6 +14,28 @@ interface AgentChatProps {
 	isActive: boolean;
 }
 
+type ReconnectState = {
+	effectiveId: string;
+	reconnecting: boolean;
+	error: string | null;
+};
+
+type ReconnectAction =
+	| { type: "start" }
+	| { type: "success"; id: string }
+	| { type: "failure"; error: string };
+
+function reconnectReducer(state: ReconnectState, action: ReconnectAction): ReconnectState {
+	switch (action.type) {
+		case "start":
+			return { ...state, reconnecting: true, error: null };
+		case "success":
+			return { effectiveId: action.id, reconnecting: false, error: null };
+		case "failure":
+			return { ...state, reconnecting: false, error: action.error };
+	}
+}
+
 /**
  * Agent 聊天界面主容器
  * 组合消息列表和输入框,管理发送逻辑
@@ -23,14 +45,15 @@ interface AgentChatProps {
  */
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
-	const [reconnecting, setReconnecting] = useState(false);
-	const [reconnectError, setReconnectError] = useState<string | null>(null);
-	// Track the effective session ID (changes after reconnect swaps old → new)
-	const [effectiveId, setEffectiveId] = useState(sessionId);
+	const [reconnect, dispatch] = useReducer(reconnectReducer, {
+		effectiveId: sessionId,
+		reconnecting: false,
+		error: null,
+	});
 
 	const { turns, isStreaming, streamingTurn, error } = useAgentStore(
 		useShallow((s) => {
-			const session = s.sessions[effectiveId];
+			const session = s.sessions[reconnect.effectiveId];
 			return {
 				turns: session?.turns,
 				isStreaming: session?.isStreaming,
@@ -57,31 +80,29 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		}
 
 		const agentSession = tabSession as AgentTabSession;
-		setReconnecting(true);
-		setReconnectError(null);
+		dispatch({ type: "start" });
 
 		agentSession
 			.reconnect()
 			.then((newSession) => {
-				setEffectiveId(newSession.id);
-				setReconnecting(false);
+				dispatch({ type: "success", id: newSession.id });
 			})
 			.catch((e) => {
-				setReconnecting(false);
-				setReconnectError(
-					e instanceof Error ? e.message : String(e),
-				);
+				dispatch({
+					type: "failure",
+					error: e instanceof Error ? e.message : String(e),
+				});
 			});
 	}, [sessionId, isActive]);
 
 	const handleSend = useCallback(
 		(content: string) => {
-			sendPrompt.mutate({ sessionId: effectiveId, content });
+			sendPrompt.mutate({ sessionId: reconnect.effectiveId, content });
 		},
-		[sendPrompt, effectiveId],
+		[sendPrompt, reconnect.effectiveId],
 	);
 
-	if (reconnecting) {
+	if (reconnect.reconnecting) {
 		return (
 			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 				<VStack gap="4">
@@ -92,11 +113,11 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		);
 	}
 
-	if (reconnectError) {
+	if (reconnect.error) {
 		return (
 			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 				<VStack gap="4">
-					<Text color="fg.error">{m.agentReconnectFailed({ error: reconnectError })}</Text>
+					<Text color="fg.error">{m.agentReconnectFailed({ error: reconnect.error })}</Text>
 				</VStack>
 			</Flex>
 		);
