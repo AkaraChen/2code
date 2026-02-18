@@ -124,6 +124,23 @@ pub fn next_event_index(
 	Ok(max_index.map(|idx| idx + 1).unwrap_or(0))
 }
 
+/// Get the maximum turn_index for a session.
+/// Returns 0 if no events exist.
+pub fn get_max_turn_index(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> Result<i32, AppError> {
+	use diesel::dsl::max;
+
+	let max_turn: Option<i32> = agent_session_events::table
+		.filter(agent_session_events::session_id.eq(session_id))
+		.select(max(agent_session_events::turn_index))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	Ok(max_turn.unwrap_or(0))
+}
+
 /// Get a single session by ID.
 pub fn get_session(
 	conn: &mut SqliteConnection,
@@ -430,6 +447,63 @@ mod tests {
 		// Both sessions should still appear (for restoration)
 		let sessions = list_by_project(&mut conn, "proj1").unwrap();
 		assert_eq!(sessions.len(), 2);
+	}
+
+	#[test]
+	fn test_get_max_turn_index_empty() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj1");
+		insert_test_profile(&mut conn, "prof1", "proj1");
+
+		let session = NewAgentSession {
+			id: "sess1",
+			agent: "claude",
+			acp_session_id: "acp123",
+			profile_id: "prof1",
+			session_init_json: None,
+		};
+		insert_session(&mut conn, &session).unwrap();
+
+		let max_turn = get_max_turn_index(&mut conn, "sess1").unwrap();
+		assert_eq!(max_turn, 0);
+	}
+
+	#[test]
+	fn test_get_max_turn_index_with_events() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj1");
+		insert_test_profile(&mut conn, "prof1", "proj1");
+
+		let session = NewAgentSession {
+			id: "sess1",
+			agent: "claude",
+			acp_session_id: "acp123",
+			profile_id: "prof1",
+			session_init_json: None,
+		};
+		insert_session(&mut conn, &session).unwrap();
+
+		let e1 = NewAgentSessionEvent {
+			id: "evt1",
+			event_index: 0,
+			session_id: "sess1",
+			sender: "user",
+			payload_json: r#"{"text":"hello"}"#,
+			turn_index: 1,
+		};
+		let e2 = NewAgentSessionEvent {
+			id: "evt2",
+			event_index: 1,
+			session_id: "sess1",
+			sender: "agent",
+			payload_json: r#"{"text":"hi"}"#,
+			turn_index: 3,
+		};
+		append_event(&mut conn, &e1).unwrap();
+		append_event(&mut conn, &e2).unwrap();
+
+		let max_turn = get_max_turn_index(&mut conn, "sess1").unwrap();
+		assert_eq!(max_turn, 3);
 	}
 
 	#[test]

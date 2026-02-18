@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,9 +13,6 @@ use model::agent::{AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
 
-/// Maps session_id to current turn_index counter
-pub type TurnIndexMap = Arc<tokio::sync::Mutex<HashMap<String, Arc<AtomicI32>>>>;
-
 /// Spawn a notification listener task for an agent session.
 /// This reads ACP notifications from the agent process, persists them to DB,
 /// and emits Tauri events to the frontend.
@@ -27,7 +23,6 @@ pub fn spawn_notification_listener(
 	session: Arc<ManagedAgentSession>,
 	app: AppHandle,
 	db: DbPool,
-	turn_index_map: TurnIndexMap,
 	notification_tasks: NotificationTaskMap,
 ) {
 	let notif_id = session_id.clone();
@@ -64,12 +59,14 @@ pub fn spawn_notification_listener(
 				);
 			}
 
-			// Get current turn index
+			// Get current turn index from database
 			let turn_idx = {
-				let map = turn_index_map.lock().await;
-				map.get(&notif_id)
-					.map(|counter| counter.load(Ordering::SeqCst))
-					.unwrap_or(0)
+				if let Ok(mut conn) = db.lock() {
+					repo::agent::get_max_turn_index(&mut conn, &notif_id)
+						.unwrap_or(0)
+				} else {
+					0
+				}
 			};
 
 			// Persist event to database
@@ -146,7 +143,6 @@ pub async fn send_agent_prompt(
 	content: String,
 	app: AppHandle,
 	sessions: State<'_, AgentSessionMap>,
-	turn_index_map: State<'_, TurnIndexMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), String> {
 	let session = {
@@ -156,22 +152,16 @@ pub async fn send_agent_prompt(
 			.ok_or_else(|| format!("session not found: {session_id}"))?
 	};
 
-	// Increment turn index for this session
-	let turn_idx = {
-		let mut map = turn_index_map.lock().await;
-		let counter = map
-			.entry(session_id.clone())
-			.or_insert_with(|| Arc::new(AtomicI32::new(0)));
-		counter.fetch_add(1, Ordering::SeqCst) + 1
-	};
-
-	// Get next event index
-	let event_idx = {
+	// Get next turn index and event index from database in one lock scope
+	let (turn_idx, event_idx) = {
 		let mut conn = db
 			.lock()
 			.map_err(|_| "Failed to acquire DB lock".to_string())?;
-		repo::agent::next_event_index(&mut conn, &session_id)
-			.map_err(|e| format!("{e}"))?
+		let turn = repo::agent::get_max_turn_index(&mut conn, &session_id)
+			.map_err(|e| format!("{e}"))? + 1;
+		let idx = repo::agent::next_event_index(&mut conn, &session_id)
+			.map_err(|e| format!("{e}"))?;
+		(turn, idx)
 	};
 
 	// Persist user message with turn_index
@@ -240,7 +230,6 @@ pub async fn close_agent_session(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
-	turn_index_map: State<'_, TurnIndexMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), String> {
 	// Abort notification task first — this interrupts stream.next().await
@@ -254,9 +243,8 @@ pub async fn close_agent_session(
 		);
 	}
 
-	// Remove session from runtime map and clean up turn index
+	// Remove session from runtime map
 	let session = sessions.lock().await.remove(&session_id);
-	turn_index_map.lock().await.remove(&session_id);
 
 	// Mark session as destroyed in database (the service call's map-remove
 	// is a no-op here since we already removed the session above)
@@ -311,7 +299,6 @@ pub async fn create_agent_session_persistent(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
-	turn_index_map: State<'_, TurnIndexMap>,
 ) -> Result<AgentSessionInfo, String> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
@@ -348,19 +335,12 @@ pub async fn create_agent_session_persistent(
 	};
 	let info = session.info();
 
-	// Initialize turn index counter for this session
-	{
-		let mut map = turn_index_map.lock().await;
-		map.insert(session_id.clone(), Arc::new(AtomicI32::new(0)));
-	}
-
 	// Spawn notification stream listener (reuses extracted helper)
 	spawn_notification_listener(
 		session_id,
 		session,
 		app,
 		db_pool,
-		turn_index_map.inner().clone(),
 		tasks.inner().clone(),
 	);
 
@@ -380,7 +360,6 @@ pub async fn reconnect_agent_session(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
-	turn_index_map: State<'_, TurnIndexMap>,
 ) -> Result<AgentSessionInfo, String> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
@@ -405,26 +384,12 @@ pub async fn reconnect_agent_session(
 	};
 	let info = session.info();
 
-	// Initialize turn index from existing events
-	{
-		let max_turn = {
-			let mut conn = db.lock().map_err(|_| "Failed to acquire DB lock".to_string())?;
-			repo::agent::get_session_events(&mut conn, &new_session_id)
-				.ok()
-				.and_then(|events| events.iter().map(|e| e.turn_index).max())
-				.unwrap_or(0)
-		};
-		let mut map = turn_index_map.lock().await;
-		map.insert(new_session_id.clone(), Arc::new(AtomicI32::new(max_turn)));
-	}
-
 	// Spawn notification listener
 	spawn_notification_listener(
 		new_session_id,
 		session,
 		app,
 		db_pool,
-		turn_index_map.inner().clone(),
 		tasks.inner().clone(),
 	);
 
