@@ -1,5 +1,6 @@
 import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
-import { useCallback, useEffect, useReducer } from "react";
+import { Suspense, use, useCallback } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useShallow } from "zustand/react/shallow";
 import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
@@ -14,46 +15,75 @@ interface AgentChatProps {
 	isActive: boolean;
 }
 
-type ReconnectState = {
-	effectiveId: string;
-	reconnecting: boolean;
-	error: string | null;
-};
+/** Deduplicates concurrent reconnection attempts per session. */
+const reconnectCache = new Map<string, Promise<void>>();
 
-type ReconnectAction =
-	| { type: "start" }
-	| { type: "success"; id: string }
-	| { type: "failure"; error: string };
+function getReconnectPromise(sessionId: string): Promise<void> {
+	const cached = reconnectCache.get(sessionId);
+	if (cached) return cached;
 
-function reconnectReducer(state: ReconnectState, action: ReconnectAction): ReconnectState {
-	switch (action.type) {
-		case "start":
-			return { ...state, reconnecting: true, error: null };
-		case "success":
-			return { effectiveId: action.id, reconnecting: false, error: null };
-		case "failure":
-			return { ...state, reconnecting: false, error: action.error };
-	}
+	const tabSession = sessionRegistry.get(sessionId) as AgentTabSession;
+	const promise = tabSession.reconnect().then(
+		() => { reconnectCache.delete(sessionId); },
+		(err) => {
+			reconnectCache.delete(sessionId);
+			throw err;
+		},
+	);
+	reconnectCache.set(sessionId, promise);
+	return promise;
+}
+
+function needsReconnection(sessionId: string): boolean {
+	if (useAgentStore.getState().sessions[sessionId]) return false;
+	const tabSession = sessionRegistry.get(sessionId);
+	return (
+		!!tabSession &&
+		tabSession.type === "agent" &&
+		!(tabSession as AgentTabSession).connected
+	);
 }
 
 /**
- * Agent 聊天界面主容器
- * 组合消息列表和输入框,管理发送逻辑
- *
- * On mount, if the session store has no data for this sessionId,
- * it means we're restoring from a previous run — trigger lazy reconnection.
+ * Suspends until reconnection completes.
+ * After resolve, reconnect() has already called replaceTab(),
+ * so the parent re-renders with the new sessionId and this component unmounts.
  */
+function AwaitReconnection({ sessionId }: { sessionId: string }) {
+	use(getReconnectPromise(sessionId));
+	return null;
+}
+
+function ReconnectingFallback() {
+	return (
+		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+			<VStack gap="4">
+				<Spinner size="lg" />
+				<Text color="fg.muted">{m.agentReconnecting()}</Text>
+			</VStack>
+		</Flex>
+	);
+}
+
+function ReconnectErrorFallback({ error }: { error: unknown }) {
+	const message = error instanceof Error ? error.message : String(error);
+	return (
+		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+			<VStack gap="4">
+				<Text color="fg.error">
+					{m.agentReconnectFailed({ error: message })}
+				</Text>
+			</VStack>
+		</Flex>
+	);
+}
+
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
-	const [reconnect, dispatch] = useReducer(reconnectReducer, {
-		effectiveId: sessionId,
-		reconnecting: false,
-		error: null,
-	});
 
 	const { turns, isStreaming, streamingTurn, error } = useAgentStore(
 		useShallow((s) => {
-			const session = s.sessions[reconnect.effectiveId];
+			const session = s.sessions[sessionId];
 			return {
 				turns: session?.turns,
 				isStreaming: session?.isStreaming,
@@ -63,63 +93,19 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		}),
 	);
 
-	// Lazy reconnection: only when this tab is focused and store has no session data
-	useEffect(() => {
-		if (!isActive) return;
-
-		const session = useAgentStore.getState().sessions[sessionId];
-		if (session) return; // Already connected/initialized
-
-		const tabSession = sessionRegistry.get(sessionId);
-		if (
-			!tabSession ||
-			tabSession.type !== "agent" ||
-			(tabSession as AgentTabSession).connected
-		) {
-			return;
-		}
-
-		const agentSession = tabSession as AgentTabSession;
-		dispatch({ type: "start" });
-
-		agentSession
-			.reconnect()
-			.then((newSession) => {
-				dispatch({ type: "success", id: newSession.id });
-			})
-			.catch((e) => {
-				dispatch({
-					type: "failure",
-					error: e instanceof Error ? e.message : String(e),
-				});
-			});
-	}, [sessionId, isActive]);
-
 	const handleSend = useCallback(
-		(content: string) => {
-			sendPrompt.mutate({ sessionId: reconnect.effectiveId, content });
-		},
-		[sendPrompt, reconnect.effectiveId],
+		(content: string) => sendPrompt.mutate({ sessionId, content }),
+		[sendPrompt, sessionId],
 	);
 
-	if (reconnect.reconnecting) {
+	// Lazy reconnection: suspend when tab is focused and needs reconnecting
+	if (isActive && needsReconnection(sessionId)) {
 		return (
-			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
-				<VStack gap="4">
-					<Spinner size="lg" />
-					<Text color="fg.muted">{m.agentReconnecting()}</Text>
-				</VStack>
-			</Flex>
-		);
-	}
-
-	if (reconnect.error) {
-		return (
-			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
-				<VStack gap="4">
-					<Text color="fg.error">{m.agentReconnectFailed({ error: reconnect.error })}</Text>
-				</VStack>
-			</Flex>
+			<ErrorBoundary FallbackComponent={ReconnectErrorFallback}>
+				<Suspense fallback={<ReconnectingFallback />}>
+					<AwaitReconnection sessionId={sessionId} />
+				</Suspense>
+			</ErrorBoundary>
 		);
 	}
 
