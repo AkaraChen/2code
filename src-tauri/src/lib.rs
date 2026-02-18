@@ -131,7 +131,6 @@ pub fn run() {
 			handler::agent::list_agent_status,
 			handler::agent::install_agent,
 			handler::agent::detect_credentials,
-			handler::agent::spawn_agent_session,
 			handler::agent::send_agent_prompt,
 			handler::agent::close_agent_session,
 			handler::agent::create_agent_session_persistent,
@@ -139,7 +138,6 @@ pub fn run() {
 			handler::agent::list_project_agent_sessions,
 			handler::agent::list_agent_session_events,
 			handler::agent::delete_agent_session_record,
-			handler::agent::persist_agent_event,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

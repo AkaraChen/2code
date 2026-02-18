@@ -141,90 +141,6 @@ pub fn detect_credentials(
 }
 
 #[tauri::command]
-pub async fn spawn_agent_session(
-	agent: String,
-	cwd: String,
-	app: AppHandle,
-	manager: State<'_, Arc<AgentManagerWrapper>>,
-	sessions: State<'_, AgentSessionMap>,
-	tasks: State<'_, NotificationTaskMap>,
-) -> Result<AgentSessionInfo, String> {
-	let manager = manager.inner().clone();
-	let sessions = sessions.inner().clone();
-
-	// Resolve launch spec (blocking I/O)
-	let agent_clone = agent.clone();
-	let launch_spec = tokio::task::spawn_blocking(move || {
-		manager.resolve_launch(&agent_clone)
-	})
-	.await
-	.map_err(|e| e.to_string())?
-	.map_err(|e| format!("{e}"))?;
-
-	// Create managed session (spawn process + ACP session/new)
-	let session = ManagedAgentSession::create(
-		&agent,
-		PathBuf::from(&cwd),
-		launch_spec,
-		HashMap::new(),
-	)
-	.await
-	.map_err(|e| format!("{e}"))?;
-
-	let session = Arc::new(session);
-	let info = session.info();
-	let local_id = info.id.clone();
-
-	// Store session
-	sessions
-		.lock()
-		.await
-		.insert(local_id.clone(), session.clone());
-
-	// Spawn notification stream listener
-	let notif_app = app.clone();
-	let notif_session = session.clone();
-	let notif_id = local_id.clone();
-	let task_handle = tokio::spawn(async move {
-		let mut stream =
-			std::pin::pin!(notif_session.notifications().await);
-		while let Some(notification) = stream.next().await {
-			if let Some(parsed) =
-				ManagedAgentSession::parse_notification(&notification)
-			{
-				tracing::info!(
-					session_id = %notif_id,
-					acp_session_id = %parsed.session_id,
-					update = ?parsed.update,
-					"agent notification (structured)"
-				);
-			} else {
-				tracing::info!(
-					session_id = %notif_id,
-					raw = %notification,
-					"agent notification (raw, unrecognized)"
-				);
-			}
-
-			let event_name = format!("agent-event-{notif_id}");
-			if let Err(e) = notif_app.emit(&event_name, &notification) {
-				tracing::warn!(
-					session_id = %notif_id,
-					error = %e,
-					"failed to emit agent notification event"
-				);
-			}
-		}
-		tracing::info!(session_id = %notif_id, "agent notification stream ended");
-	});
-
-	// Store task handle for later abortion
-	tasks.lock().await.insert(local_id.clone(), task_handle);
-
-	Ok(info)
-}
-
-#[tauri::command]
 pub async fn send_agent_prompt(
 	session_id: String,
 	content: String,
@@ -536,27 +452,6 @@ pub fn delete_agent_session_record(
 ) -> Result<(), String> {
 	service::agent::delete_session(db.inner(), &session_id)
 		.map_err(|e| format!("{e}"))
-}
-
-/// Persist a single agent event to the database (called from frontend).
-#[tauri::command]
-pub fn persist_agent_event(
-	session_id: String,
-	event_index: i32,
-	sender: String,
-	payload: String,
-	turn_index: i32,
-	db: State<'_, DbPool>,
-) -> Result<(), String> {
-	service::agent::persist_event(
-		db.inner(),
-		&session_id,
-		event_index,
-		&sender,
-		&payload,
-		turn_index,
-	)
-	.map_err(|e| format!("{e}"))
 }
 
 /// List all events for an agent session (read-only).

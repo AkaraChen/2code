@@ -1,4 +1,5 @@
 import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
@@ -85,7 +86,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 				<VStack gap="4">
 					<Spinner size="lg" />
-					<Text color="fg.muted">Reconnecting agent session...</Text>
+					<Text color="fg.muted">{m.agentReconnecting()}</Text>
 				</VStack>
 			</Flex>
 		);
@@ -95,7 +96,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		return (
 			<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 				<VStack gap="4">
-					<Text color="fg.error">Failed to reconnect: {reconnectError}</Text>
+					<Text color="fg.error">{m.agentReconnectFailed({ error: reconnectError })}</Text>
 				</VStack>
 			</Flex>
 		);

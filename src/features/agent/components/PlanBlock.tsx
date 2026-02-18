@@ -1,4 +1,5 @@
 import { Box, Flex, Icon, Text, VStack } from "@chakra-ui/react";
+import * as m from "@/paraglide/messages.js";
 import { LuClipboardList } from "react-icons/lu";
 import type { Plan } from "../types";
 

@@ -137,5 +137,12 @@
 	"agentStatusFailed": "失败",
 	"agentPriorityHigh": "高",
 	"agentPriorityMedium": "中",
-	"agentPriorityLow": "低"
+	"agentPriorityLow": "低",
+	"agentReconnecting": "正在重新连接代理会话...",
+	"agentReconnectFailed": "重新连接失败：{error}",
+	"agentToolCall": "工具调用",
+	"agentTerminal": "终端：{id}",
+	"agentToolOutputAlt": "工具输出",
+	"terminalTabTitle": "终端 {n}",
+	"agentTabTitle": "{agent} 会话"
 }

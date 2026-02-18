@@ -137,5 +137,12 @@
 	"agentStatusFailed": "Failed",
 	"agentPriorityHigh": "High",
 	"agentPriorityMedium": "Medium",
-	"agentPriorityLow": "Low"
+	"agentPriorityLow": "Low",
+	"agentReconnecting": "Reconnecting agent session...",
+	"agentReconnectFailed": "Failed to reconnect: {error}",
+	"agentToolCall": "Tool Call",
+	"agentTerminal": "Terminal: {id}",
+	"agentToolOutputAlt": "Tool output",
+	"terminalTabTitle": "Terminal {n}",
+	"agentTabTitle": "{agent} session"
 }

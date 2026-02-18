@@ -234,7 +234,7 @@ pub fn build_history_text(
 
 	let mut history_parts = Vec::new();
 
-	for (_turn_idx, turn_events) in &turns {
+	for turn_events in turns.values() {
 		let mut user_text = String::new();
 		let mut agent_text = String::new();
 
