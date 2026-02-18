@@ -1,7 +1,7 @@
 import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { AgentTabSession } from "@/features/tabs/AgentTabSession";
+import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
 import { ChatInput } from "./components/ChatInput";

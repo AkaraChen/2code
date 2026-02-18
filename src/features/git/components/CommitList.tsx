@@ -32,12 +32,12 @@ interface CommitItemProps {
 	onSelect: (commit: GitCommit, index: number) => void;
 }
 
-const CommitItem = memo(function CommitItem({
+const CommitItem = memo(({
 	commit,
 	index,
 	isSelected,
 	onSelect,
-}: CommitItemProps) {
+}: CommitItemProps) => {
 	return (
 		<VStack
 			data-index={index}
