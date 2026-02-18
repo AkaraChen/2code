@@ -1,11 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-
-/// Global monotonic counter to guarantee unique event IDs even when
-/// multiple events are persisted within the same millisecond.
-static EVENT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 use agent::{
 	AgentManagerWrapper, AgentProcessLaunchSpec, AgentSessionMap,
@@ -301,10 +296,7 @@ pub fn persist_event(
 ) -> Result<(), AppError> {
 	let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
-	// Use monotonic counter to guarantee uniqueness even when multiple
-	// events are persisted within the same millisecond (common during streaming).
-	let seq = EVENT_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-	let event_id = format!("{session_id}-evt-{seq}");
+	let event_id = format!("{session_id}-{event_index}");
 
 	let record = NewAgentSessionEvent {
 		id: &event_id,
