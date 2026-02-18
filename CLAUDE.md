@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - SQLite database for project/session/profile storage
 - Project-level configuration (`2code.json`) for setup/teardown scripts
 - Git diff/commit history browsing
+- AI agent integration via ACP (Agent Communication Protocol) with persistent sessions
 - i18n support via Paraglide.js (English + Chinese)
 
 ## Commands
@@ -41,7 +42,7 @@ just build-helper
 just build-helper-dev
 
 # Format code
-just fmt               # runs 'fama'
+just fmt               # runs 'nr lint', 'fama', and 'cargo fmt'
 
 # Rust test coverage (HTML report in src-tauri/coverage/)
 just coverage
@@ -67,22 +68,26 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - `features/home/` — HomePage
 - `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, `useProjectProfiles`, etc.) and dialogs (Create/Delete/Rename)
 - `features/profiles/` — Profile hooks (`useCreateProfile`, `useDeleteProfile`) and dialogs
-- `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
+- `features/terminal/` — Terminal hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
+- `features/tabs/` — Unified tab management store (`useTabStore`), supporting both `TerminalTabSession` and `AgentTabSession` types. Handles session lifecycle, pending deletions, and restoration. Replaces the old terminal-centric store.
+- `features/agent/` — AI agent chat UI with streaming renders, tool call blocks, markdown rendering, diff display, and conversation history. Components in `components/` subdirectory, utilities in `utils/`.
+- `features/topbar/` — Configurable top bar control system with drag-and-drop arrangement, control registry, and settings UI
 - `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger), and components (ChangesFileList, CommitList, GitDiffPane, HistoryFileList)
 - `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/terminalSettingsStore`, `stores/themeStore`, `stores/notificationStore`)
-- `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
+- `features/watcher/` — File system watcher side-effect module (`fileWatcher.ts`) for live project updates via Tauri events (imported in `main.tsx`, not a hook)
 - `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
 - `shared/lib/` — Query client config, centralized query keys, cached promise utility
 - `shared/providers/` — ThemeProvider, Toaster
 - `shared/components/` — Fallbacks (PageSkeleton, PageError, SidebarSkeleton), SidebarLink. ErrorBoundary is from `react-error-boundary` package.
+- `shared/hooks/` — Reusable hooks (`useDialogState`, `useScrollIntoView`)
 - `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
 
 **State management:**
 
-- Zustand for client state (terminal tabs per project, font preferences, notification settings)
-- TanStack Query for server state (projects, sessions, profiles)
+- Zustand for client state (tab management for terminal + agent sessions, font preferences, notification settings, topbar config)
+- TanStack Query for server state (projects, sessions, profiles, agent sessions)
 - Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.git.diff(profileId)` pattern
-- `terminalSettingsStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
+- `terminalSettingsStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Tab store (`features/tabs/store.ts`) is rebuilt from DB on startup.
 
 **UI Framework:**
 
@@ -99,26 +104,34 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 2. **Bridge** (`bridge.rs`) — Adapts Tauri framework types to service-layer trait abstractions. `TauriPtyEmitter` implements `PtyEventEmitter`, `TauriWatchSender` implements `WatchEventSender`, and `build_pty_context()` extracts managed state into a framework-agnostic `PtyContext`. This follows dependency inversion — the service layer defines interfaces, the bridge provides Tauri-specific implementations.
 3. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
 4. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-5. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
+5. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `shell_init.rs` (ZDOTDIR-based shell init injection), `test_db.rs` (test helper for in-memory DB).
+
+**App-level modules** (in `src-tauri/src/`): `bridge.rs` (Tauri↔service adapters), `helper.rs` (sidecar HTTP server for CLI notifications via Axum).
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
-**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions`, `pty_session_output`.
+**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions`, `pty_session_output`, `agent_sessions`, `agent_session_events`.
 
 **Database migrations:** Diesel migrations in `src-tauri/migrations/`, embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`. Schema auto-generated in `src/schema.rs`.
 
 **PTY output streaming:** Background thread reads 4KB chunks → emits Tauri events (`pty-output-{id}`, `pty-exit-{id}`). Separate persistence thread via mpsc channel with 32KB flush buffer. UTF-8 boundary detection prevents partial character output. Output is stored as a single BLOB per session in `pty_session_output` (1MB cap, overwritten on flush). Clear-scrollback detection (ESC[3J) resets the stored blob.
 
-**Workspace crates** (under `crates/`): `model/` (Diesel models, schema, DTOs), `repo/` (database access), `service/` (business logic), `infra/` (infrastructure), `agent/` (AI agent management via ACP). Also: `shared/` (types shared between main app and sidecar: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `twocode-helper/` (CLI sidecar binary).
+**Workspace crates** (under `crates/`): `model/` (Diesel models, schema, DTOs — includes notification types: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `repo/` (database access), `service/` (business logic), `infra/` (infrastructure), `agent/` (AI agent management via ACP), `acp-client/` (ACP client adapter). **Sidecar binary**: `bins/2code-helper/` (CLI sidecar, workspace member via `bins/*` glob).
 
 **CLI sidecar & notification pipeline:** The `2code-helper` binary is a small CLI that PTY shells invoke (via `$_2CODE_HELPER notify`) to trigger notifications. Flow: PTY env vars (`_2CODE_HELPER_URL`, `_2CODE_HELPER`, `_2CODE_SESSION_ID`) → sidecar sends HTTP GET `/notify?session_id=<sid>` → Axum server in `infra/helper.rs` plays sound + emits `pty-notify` Tauri event → frontend `terminalStore.markNotified(sessionId)` → green dot on terminal tab + sidebar profile. Focusing the tab clears the dot. Sidecar is bundled via `externalBin` in `tauri.conf.json`.
 
-**Agent system** (`crates/agent/`): Wraps `rivet-dev/sandbox-agent` for AI code assistant management via ACP (Agent Communication Protocol). Two sub-modules:
+**Agent system** (`crates/agent/`): Wraps `rivet-dev/sandbox-agent` for AI code assistant management via ACP (Agent Communication Protocol). Sub-modules:
 
 - **Manager** (`manager.rs`) — Lists agent status, installs ACP bridges, detects API credentials (Anthropic/OpenAI). Supported agents: Claude Code, Codex, Opencode, Amp, Pi, Cursor.
 - **Runtime** (`runtime.rs`) — HTTP-based JSON-RPC 2.0 agent sessions: spawn, send (request/response), notify (fire-and-forget), receive push notifications, and shutdown.
+- **Models** (`models.rs`) — Agent-specific data types and DTOs.
+- **Session** (`session.rs`) — Persistent session management with turn-based event storage.
 
-Frontend: `AgentSettings.tsx` in settings tab with credential detection and install UI. Handler commands: `list_agent_status`, `install_agent`, `detect_credentials`.
+**ACP Client** (`crates/acp-client/`): Adapter layer for the ACP protocol, providing `adapter.rs` and `error.rs`.
+
+Frontend: `features/agent/` provides a full chat UI (streaming, tool call rendering, markdown, diffs). `features/settings/components/` contains `AgentSettings.tsx` with credential detection and install UI.
+
+Handler commands (`handler/agent.rs`): `list_agent_status`, `install_agent`, `detect_credentials`, `send_agent_prompt`, `close_agent_session`, `create_agent_session_persistent`, `reconnect_agent_session`, `list_project_agent_sessions`, `list_agent_session_events`, `delete_agent_session_record`.
 
 ### IPC Pattern (Frontend ↔ Backend)
 
@@ -176,10 +189,10 @@ Projects can include a `2code.json` in their root folder:
 
 ```typescript
 // Direct access in mutations (outside React):
-useTerminalStore.getState().addTab(...)
+useTabStore.getState().addTab(...)
 
 // Reactive subscriptions in components:
-const tabs = useTerminalStore(s => s.profiles[profileId]?.tabs)
+const tabs = useTabStore(s => s.profiles[profileId]?.tabs)
 ```
 
 ### Rust Test Pattern
@@ -224,7 +237,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
-- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`
+- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store`, `tauri-plugin-shell` — all registered in `lib.rs`
 - **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
 - **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
-- **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too
+- **Immer MapSet plugin** — tab store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `features/tabs/store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too
