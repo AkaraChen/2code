@@ -1,3 +1,4 @@
+import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { useCallback, useRef } from "react";
 import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
@@ -56,7 +57,26 @@ export default function AppSidebar() {
 			>
 				<Flex direction="column" h="full" pb="3">
 					{/* macOS traffic light area + drag region */}
-					<Box data-tauri-drag-region h="48px" flexShrink={0} />
+					<Flex
+						data-tauri-drag-region
+						h="48px"
+						flexShrink={0}
+						align="center"
+						justify="end"
+						pe="4"
+					>
+						<Text
+							fontFamily="'Bricolage Grotesque Variable', sans-serif"
+							fontSize="sm"
+							fontWeight="700"
+							color="fg.muted"
+							letterSpacing="tight"
+							userSelect="none"
+							pointerEvents="none"
+						>
+							2Code
+						</Text>
+					</Flex>
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
