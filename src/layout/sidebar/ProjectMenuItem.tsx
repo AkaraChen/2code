@@ -45,9 +45,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
 
-	// 三态逻辑:用户未操作时跟随激活状态,操作后尊重用户选择
+	// 默认展开,用户手动折叠后尊重用户选择
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-	const expanded = userExpanded !== null ? userExpanded : isAnyActive;
+	const expanded = userExpanded !== null ? userExpanded : true;
 
 	return (
 		<>
