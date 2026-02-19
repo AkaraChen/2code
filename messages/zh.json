@@ -146,5 +146,8 @@
 	"terminalTabTitle": "终端 {n}",
 	"agentTabTitle": "{agent} 会话",
 	"agentInstallSuccess": "{name} 安装成功",
-	"agentInstallFailed": "{name} 安装失败"
+	"agentInstallFailed": "{name} 安装失败",
+	"defaultAgent": "默认代理",
+	"defaultAgentDescription": "点击顶栏快速创建按钮时使用的代理",
+	"defaultAgentNone": "无"
 }
