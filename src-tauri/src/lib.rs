@@ -133,6 +133,7 @@ pub fn run() {
 			handler::agent::list_project_agent_sessions,
 			handler::agent::list_agent_session_events,
 			handler::agent::delete_agent_session_record,
+			handler::stats::get_homepage_stats,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

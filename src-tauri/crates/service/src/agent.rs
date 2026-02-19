@@ -357,6 +357,8 @@ pub fn delete_session(
 ) -> Result<(), AppError> {
 	let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
+	// Capture stats before hard delete
+	let _ = crate::stats::capture_agent_stats(&mut conn, session_id);
 	repo::agent::delete_session(&mut conn, session_id)
 }
 

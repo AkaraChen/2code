@@ -25,6 +25,17 @@ diesel::table! {
 }
 
 diesel::table! {
+	daily_activity (date, project_id) {
+		date -> Text,
+		project_id -> Text,
+		terminal_sessions -> Integer,
+		agent_sessions -> Integer,
+		terminal_seconds -> Integer,
+		agent_seconds -> Integer,
+	}
+}
+
+diesel::table! {
 	profiles (id) {
 		id -> Text,
 		project_id -> Text,
@@ -65,6 +76,26 @@ diesel::table! {
 	}
 }
 
+diesel::table! {
+	session_stats (id) {
+		id -> Text,
+		session_type -> Text,
+		profile_id -> Text,
+		project_id -> Text,
+		project_name -> Text,
+		branch_name -> Nullable<Text>,
+		shell -> Nullable<Text>,
+		cwd -> Nullable<Text>,
+		agent -> Nullable<Text>,
+		event_count -> Nullable<Integer>,
+		user_message_count -> Nullable<Integer>,
+		agent_message_count -> Nullable<Integer>,
+		created_at -> Integer,
+		closed_at -> Nullable<Integer>,
+		duration_seconds -> Nullable<Integer>,
+	}
+}
+
 diesel::joinable!(agent_session_events -> agent_sessions (session_id));
 diesel::joinable!(agent_sessions -> profiles (profile_id));
 diesel::joinable!(profiles -> projects (project_id));
@@ -74,8 +105,10 @@ diesel::joinable!(pty_sessions -> profiles (profile_id));
 diesel::allow_tables_to_appear_in_same_query!(
 	agent_session_events,
 	agent_sessions,
+	daily_activity,
 	profiles,
 	projects,
 	pty_session_output,
 	pty_sessions,
+	session_stats,
 );

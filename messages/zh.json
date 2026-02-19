@@ -149,5 +149,21 @@
 	"agentInstallFailed": "{name} 安装失败",
 	"defaultAgent": "默认代理",
 	"defaultAgentDescription": "点击顶栏快速创建按钮时使用的代理",
-	"defaultAgentNone": "无"
+	"defaultAgentNone": "无",
+	"statsOverview": "概览",
+	"statsTotalProjects": "项目总数",
+	"statsSessionsToday": "今日会话",
+	"statsActiveTime": "活跃时长",
+	"statsStreak": "连续天数",
+	"statsStreakDays": "{n} 天",
+	"statsRecentSessions": "最近会话",
+	"statsTopProjects": "最活跃",
+	"statsActivity": "活动",
+	"statsNoDataYet": "暂无活动",
+	"statsNoDataDescription": "使用终端或 Agent 后，你的使用模式将在这里展示。",
+	"statsTerminal": "终端",
+	"statsAgent": "代理",
+	"statsSessions": "{n} 个会话",
+	"allProjects": "所有项目",
+	"statsMessages": "{n} 条消息"
 }

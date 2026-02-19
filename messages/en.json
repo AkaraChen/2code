@@ -149,5 +149,21 @@
 	"agentInstallFailed": "Failed to install {name}",
 	"defaultAgent": "Default Agent",
 	"defaultAgentDescription": "Agent used when clicking the quick-create button in the top bar",
-	"defaultAgentNone": "None"
+	"defaultAgentNone": "None",
+	"statsOverview": "Overview",
+	"statsTotalProjects": "Total Projects",
+	"statsSessionsToday": "Sessions Today",
+	"statsActiveTime": "Active Time",
+	"statsStreak": "Streak",
+	"statsStreakDays": "{n} days",
+	"statsRecentSessions": "Recent Sessions",
+	"statsTopProjects": "Most Active",
+	"statsActivity": "Activity",
+	"statsNoDataYet": "No activity yet",
+	"statsNoDataDescription": "Start using terminals and agents to see your workflow patterns here.",
+	"statsTerminal": "Terminal",
+	"statsAgent": "Agent",
+	"statsSessions": "{n} sessions",
+	"allProjects": "All Projects",
+	"statsMessages": "{n} messages"
 }

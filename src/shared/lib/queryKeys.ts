@@ -21,4 +21,7 @@ export const queryKeys = {
 		status: () => ["agent-status"] as const,
 		credentials: () => ["agent-credentials"] as const,
 	},
+	stats: {
+		homepage: ["stats", "homepage"] as const,
+	},
 };

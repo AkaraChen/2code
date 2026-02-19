@@ -261,6 +261,8 @@ pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<(), AppError> {
+	// Capture stats before hard delete
+	let _ = crate::stats::capture_terminal_stats(conn, session_id);
 	repo::pty::delete_session(conn, session_id)
 }
 
