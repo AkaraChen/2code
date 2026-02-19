@@ -62,12 +62,12 @@ export default function AppSidebar() {
 						h="48px"
 						flexShrink={0}
 						align="center"
-						justify="end"
-						pe="4"
+						justify="start"
+						paddingInline="4"
+						mt={8}
 					>
 						<Text
 							fontFamily="'Bricolage Grotesque Variable', sans-serif"
-							fontSize="sm"
 							fontWeight="700"
 							color="fg.muted"
 							letterSpacing="tight"
