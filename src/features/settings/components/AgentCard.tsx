@@ -125,7 +125,12 @@ export function AgentCard({ agent }: AgentCardProps) {
 								size="xs"
 								variant="outline"
 								loading={isPending}
-								onClick={() => install(agent.id)}
+								onClick={() =>
+									install({
+										id: agent.id,
+										displayName: agent.display_name,
+									})
+								}
 							>
 								{agent.acp_installed
 									? m.agentReinstall()

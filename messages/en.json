@@ -144,5 +144,7 @@
 	"agentTerminal": "Terminal: {id}",
 	"agentToolOutputAlt": "Tool output",
 	"terminalTabTitle": "Terminal {n}",
-	"agentTabTitle": "{agent} session"
+	"agentTabTitle": "{agent} session",
+	"agentInstallSuccess": "{name} installed successfully",
+	"agentInstallFailed": "Failed to install {name}"
 }
