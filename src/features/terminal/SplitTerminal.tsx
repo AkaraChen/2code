@@ -38,12 +38,10 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 		useTabStore.getState().updatePaneTitle(profileId, tab.id, paneSessionId, title);
 	};
 
-	const renderPane = (paneSessionId: string, isActive: boolean) => (
+	const renderPane = (paneSessionId: string) => (
 		<Pane
 			key={paneSessionId}
 			sessionId={paneSessionId}
-			isActive={isActive}
-			showBorder={canClose}
 			canSplit={canSplit}
 			canClose={canClose}
 			onFocus={() => handleFocusPane(paneSessionId)}
@@ -57,7 +55,7 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	if (panes.length === 1) {
 		return (
 			<Box w="full" h="full">
-				{renderPane(panes[0].sessionId, true)}
+				{renderPane(panes[0].sessionId)}
 			</Box>
 		);
 	}
@@ -66,9 +64,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	if (panes.length === 2) {
 		return (
 			<Flex w="full" h="full">
-				{renderPane(panes[0].sessionId, panes[0].sessionId === activePaneId)}
+				{renderPane(panes[0].sessionId)}
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId, panes[1].sessionId === activePaneId)}
+				{renderPane(panes[1].sessionId)}
 			</Flex>
 		);
 	}
@@ -77,11 +75,11 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	if (panes.length === 3) {
 		return (
 			<Flex w="full" h="full">
-				{renderPane(panes[0].sessionId, panes[0].sessionId === activePaneId)}
+				{renderPane(panes[0].sessionId)}
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId, panes[1].sessionId === activePaneId)}
+				{renderPane(panes[1].sessionId)}
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[2].sessionId, panes[2].sessionId === activePaneId)}
+				{renderPane(panes[2].sessionId)}
 			</Flex>
 		);
 	}
@@ -90,15 +88,15 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	return (
 		<Flex direction="column" w="full" h="full">
 			<Flex flex="1" minH="0">
-				{renderPane(panes[0].sessionId, panes[0].sessionId === activePaneId)}
+				{renderPane(panes[0].sessionId)}
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId, panes[1].sessionId === activePaneId)}
+				{renderPane(panes[1].sessionId)}
 			</Flex>
 			<PaneDivider orientation="horizontal" />
 			<Flex flex="1" minH="0">
-				{renderPane(panes[2].sessionId, panes[2].sessionId === activePaneId)}
+				{renderPane(panes[2].sessionId)}
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[3].sessionId, panes[3].sessionId === activePaneId)}
+				{renderPane(panes[3].sessionId)}
 			</Flex>
 		</Flex>
 	);
@@ -106,8 +104,6 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 
 interface PaneProps {
 	sessionId: string;
-	isActive: boolean;
-	showBorder: boolean;
 	canSplit: boolean;
 	canClose: boolean;
 	onFocus: () => void;
@@ -118,8 +114,6 @@ interface PaneProps {
 
 function Pane({
 	sessionId,
-	isActive,
-	showBorder,
 	canSplit,
 	canClose,
 	onFocus,
@@ -134,9 +128,6 @@ function Pane({
 			minW="0"
 			minH="0"
 			onClick={onFocus}
-			borderWidth={showBorder ? "1px" : "0"}
-			borderColor={isActive ? "blue.500/40" : "transparent"}
-			borderStyle="solid"
 			css={{
 				"&:hover .pane-controls": { opacity: 1 },
 			}}
@@ -189,7 +180,7 @@ function Pane({
 
 function PaneDivider({ orientation }: { orientation: "vertical" | "horizontal" }) {
 	if (orientation === "vertical") {
-		return <Box w="1px" bg="border.subtle" flexShrink={0} />;
+		return <Box w="1px" bg="border" flexShrink={0} />;
 	}
-	return <Box h="1px" bg="border.subtle" flexShrink={0} />;
+	return <Box h="1px" bg="border" flexShrink={0} />;
 }
