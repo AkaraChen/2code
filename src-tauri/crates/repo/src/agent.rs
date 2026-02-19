@@ -233,6 +233,29 @@ pub fn transfer_events(
 	Ok(count)
 }
 
+/// Count events by sender for a session. Returns (user_count, agent_count).
+pub fn count_events_by_sender(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> Result<(i64, i64), AppError> {
+	use diesel::dsl::count;
+
+	let total: i64 = agent_session_events::table
+		.filter(agent_session_events::session_id.eq(session_id))
+		.select(count(agent_session_events::id))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let user_count: i64 = agent_session_events::table
+		.filter(agent_session_events::session_id.eq(session_id))
+		.filter(agent_session_events::sender.eq("user"))
+		.select(count(agent_session_events::id))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	Ok((user_count, total - user_count))
+}
+
 /// Hard delete a session and all its events (cascade delete).
 pub fn delete_session(
 	conn: &mut SqliteConnection,

@@ -92,6 +92,8 @@ pub fn update(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
+	// Capture stats for all sessions before cascade delete
+	crate::stats::capture_project_stats(conn, id);
 	repo::project::delete(conn, id)
 }
 

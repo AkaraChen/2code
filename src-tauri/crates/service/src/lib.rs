@@ -4,6 +4,7 @@ pub mod agent;
 pub mod profile;
 pub mod project;
 pub mod pty;
+pub mod stats;
 pub mod watcher;
 
 /// Trait for emitting PTY events to the frontend.

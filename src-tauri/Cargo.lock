@@ -593,8 +593,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fac4744fb15ae8337dc853fee7fb3f4e48c0fbaa23d0afe49c447b4fab126118"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link 0.2.1",
 ]
 
@@ -3891,6 +3893,7 @@ checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 name = "repo"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "diesel",
  "diesel_migrations",
  "infra",
@@ -4492,6 +4495,7 @@ name = "service"
 version = "0.1.0"
 dependencies = [
  "agent",
+ "chrono",
  "diesel",
  "diesel_migrations",
  "dirs 6.0.0",

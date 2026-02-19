@@ -150,6 +150,16 @@ pub fn list_all(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn get_session(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> Result<PtySessionRecord, AppError> {
+	pty_sessions::table
+		.filter(pty_sessions::id.eq(session_id))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,

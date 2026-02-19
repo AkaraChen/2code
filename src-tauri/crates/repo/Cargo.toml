@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 model = { path = "../model" }
 diesel = { version = "2", features = ["sqlite"] }
+chrono = "0.4"
 tracing = "0.1"
 
 [dev-dependencies]
