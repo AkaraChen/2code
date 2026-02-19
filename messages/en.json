@@ -146,5 +146,8 @@
 	"terminalTabTitle": "Terminal {n}",
 	"agentTabTitle": "{agent} session",
 	"agentInstallSuccess": "{name} installed successfully",
-	"agentInstallFailed": "Failed to install {name}"
+	"agentInstallFailed": "Failed to install {name}",
+	"defaultAgent": "Default Agent",
+	"defaultAgentDescription": "Agent used when clicking the quick-create button in the top bar",
+	"defaultAgentNone": "None"
 }
