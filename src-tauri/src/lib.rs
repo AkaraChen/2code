@@ -65,6 +65,7 @@ pub fn run() {
 				.path()
 				.app_data_dir()
 				.expect("failed to resolve app data dir");
+			println!("Using app data dir: {:?}", app_data_dir);
 			let pool = infra::db::init_db(&app_data_dir)
 				.expect("failed to initialize database");
 
