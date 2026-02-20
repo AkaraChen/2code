@@ -15,6 +15,7 @@ import {
 } from "react-icons/ri";
 import { NavLink, useMatch } from "react-router";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
+import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -44,6 +45,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
+	const settingsDialog = useDialogState();
 
 	// 默认展开,用户手动折叠后尊重用户选择
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
@@ -93,6 +95,12 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				<Portal>
 					<Menu.Positioner>
 						<Menu.Content>
+							<Menu.Item
+								value="settings"
+								onClick={settingsDialog.onOpen}
+							>
+								{m.projectSettings()}
+							</Menu.Item>
 							<Menu.Item
 								value="rename"
 								onClick={renameDialog.onOpen}
@@ -154,6 +162,11 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				isOpen={deleteDialog.isOpen}
 				onClose={deleteDialog.onClose}
 				project={project}
+			/>
+			<ProjectSettingsDialog
+				isOpen={settingsDialog.isOpen}
+				onClose={settingsDialog.onClose}
+				projectId={project.id}
 			/>
 		</>
 	);

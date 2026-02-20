@@ -24,6 +24,17 @@ pub fn insert(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn find_by_id(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<Project, AppError> {
+	projects::table
+		.find(id)
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
+}
+
 pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 	projects::table
 		.select(Project::as_select())

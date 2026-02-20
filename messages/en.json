@@ -165,5 +165,14 @@
 	"statsAgent": "Agent",
 	"statsSessions": "{n} sessions",
 	"allProjects": "All Projects",
-	"statsMessages": "{n} messages"
+	"statsMessages": "{n} messages",
+	"projectSettings": "Project Settings",
+	"setupScript": "Setup Script",
+	"teardownScript": "Teardown Script",
+	"initScript": "Init Script",
+	"setupScriptDesc": "Runs when creating a new profile (git worktree)",
+	"teardownScriptDesc": "Runs when deleting a profile (git worktree)",
+	"initScriptDesc": "Injected into every new terminal session",
+	"save": "Save",
+	"scriptPlaceholder": "One command per line..."
 }

@@ -2,7 +2,7 @@ use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::project::{GitCommit, Project, ProjectWithProfiles};
+use model::project::{GitCommit, Project, ProjectConfig, ProjectWithProfiles};
 
 #[tauri::command]
 pub fn create_project_temporary(
@@ -83,4 +83,25 @@ pub fn delete_project(
 ) -> Result<(), AppError> {
 	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
 	service::project::delete(conn, &id)
+}
+
+#[tauri::command]
+pub fn get_project_config(
+	project_id: String,
+	state: State<'_, DbPool>,
+) -> Result<ProjectConfig, AppError> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let project = repo::project::find_by_id(conn, &project_id)?;
+	infra::config::load_project_config(&project.folder)
+}
+
+#[tauri::command]
+pub fn save_project_config(
+	project_id: String,
+	config: ProjectConfig,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let project = repo::project::find_by_id(conn, &project_id)?;
+	infra::config::write_project_config(&project.folder, &config)
 }
