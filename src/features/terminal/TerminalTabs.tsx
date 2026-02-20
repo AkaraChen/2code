@@ -6,13 +6,14 @@ import { AgentChat } from "@/features/agent/AgentChat";
 import { useCloseTab } from "@/features/tabs/hooks";
 import { isPending } from "@/features/tabs/pendingDeletions";
 import { useTabStore } from "@/features/tabs/store";
-import { Terminal } from "./Terminal";
+import { SplitTerminal } from "./SplitTerminal";
 
 interface TerminalTabsProps {
 	profileId: string;
+	cwd: string;
 }
 
-export default function TerminalTabs({ profileId }: TerminalTabsProps) {
+export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTabStore(
 		useShallow(
 			(s) => s.profiles[profileId] ?? { tabs: [], activeTabId: null },
@@ -22,6 +23,14 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 	const closeTab = useCloseTab();
 
 	if (tabs.length === 0) return null;
+
+	const hasTabNotification = (tabId: string) => {
+		const tab = tabs.find((t) => t.id === tabId);
+		if (tab?.type === "terminal") {
+			return tab.panes.some((p) => notifiedTabs.has(p.sessionId));
+		}
+		return notifiedTabs.has(tabId);
+	};
 
 	return (
 		<Flex direction="column" h="full" w="full">
@@ -41,7 +50,7 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 								.exhaustive()}
 							<HStack gap="2">
 								{tab.title}
-								{notifiedTabs.has(tab.id) &&
+								{hasTabNotification(tab.id) &&
 									tab.id !== activeTabId && (
 										<Circle size="2" bg="green.500" />
 									)}
@@ -83,9 +92,10 @@ export default function TerminalTabs({ profileId }: TerminalTabsProps) {
 								/>
 							))
 							.with({ type: "terminal" }, (t) => (
-								<Terminal
+								<SplitTerminal
 									profileId={profileId}
-									sessionId={t.id}
+									tab={t}
+									cwd={cwd}
 								/>
 							))
 							.exhaustive()}

@@ -7,17 +7,16 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { useTabStore } from "@/features/tabs/store";
 import { flushPtyOutput, getSessionOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
-	profileId: string;
 	sessionId: string;
+	onTitleChange?: (title: string) => void;
 }
 
-export function Terminal({ profileId, sessionId }: TerminalProps) {
+export function Terminal({ sessionId, onTitleChange }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const isStreamReadyRef = useRef(false);
@@ -25,6 +24,9 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
+
+	const onTitleChangeRef = useRef(onTitleChange);
+	onTitleChangeRef.current = onTitleChange;
 
 	const initFontFamilyRef = useRef(fontFamily);
 	const initFontSizeRef = useRef(fontSize);
@@ -59,13 +61,12 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			height: "100%",
 			padding: "8px 0 0 8px",
 			background: theme.background,
-			border: "0.5px solid var(--chakra-colors-border-subtle)",
 			boxSizing: "border-box" as const,
 		}),
 		[theme.background],
 	);
 
-	// Stable ref callback — only re-runs when profileId/sessionId changes
+	// Stable ref callback — only re-runs when sessionId changes
 	const terminalRef = useCallback(
 		(container: HTMLDivElement | null) => {
 			if (!container) return;
@@ -171,9 +172,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			});
 
 			term.onTitleChange((title) => {
-				useTabStore
-					.getState()
-					.updateTabTitle(profileId, sessionId, title);
+				onTitleChangeRef.current?.(title);
 			});
 
 			const resizeObserver = new ResizeObserver((entries) => {
@@ -208,7 +207,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				fitAddonRef.current = null;
 			};
 		},
-		[profileId, sessionId],
+		[sessionId],
 	);
 
 	return <div ref={terminalRef} style={containerStyle} />;

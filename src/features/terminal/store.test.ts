@@ -9,7 +9,13 @@ import {
 
 /** Helper to create a terminal tab descriptor. */
 function termTab(id: string, title: string) {
-	return { type: "terminal" as const, id, title };
+	return {
+		type: "terminal" as const,
+		id,
+		title,
+		panes: [{ sessionId: id, title }],
+		activePaneId: id,
+	};
 }
 
 function resetStore() {
@@ -29,7 +35,7 @@ describe("useTerminalStore", () => {
 			const profile = getState().profiles.p1;
 			expect(profile).toBeDefined();
 			expect(profile.tabs).toEqual([
-				{ type: "terminal", id: "s1", title: "Shell" },
+				termTab("s1", "Shell"),
 			]);
 			expect(profile.activeTabId).toBe("s1");
 			expect(profile.counter).toBe(1);
@@ -296,11 +302,7 @@ describe("useTerminalStore", () => {
 		it("empty string IDs are valid", () => {
 			getState().addTab("", termTab("", ""));
 			expect(getState().profiles[""]).toBeDefined();
-			expect(getState().profiles[""].tabs[0]).toEqual({
-				type: "terminal",
-				id: "",
-				title: "",
-			});
+			expect(getState().profiles[""].tabs[0]).toEqual(termTab("", ""));
 		});
 
 		it("counter persists after closing tabs and adding new ones", () => {
