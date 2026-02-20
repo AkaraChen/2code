@@ -4,12 +4,11 @@ import {
 	Dialog,
 	Field,
 	Portal,
-	Skeleton,
 	Stack,
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
-import { useEffect } from "react";
+import { Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 import * as m from "@/paraglide/messages.js";
@@ -37,32 +36,23 @@ function textToScripts(text: string): string[] {
 		.filter(Boolean);
 }
 
-export default function ProjectSettingsDialog({
-	isOpen,
-	onClose,
+function ProjectSettingsForm({
 	projectId,
-}: ProjectSettingsDialogProps) {
-	const { data: config, isLoading } = useProjectConfig(projectId, isOpen);
+	onClose,
+}: {
+	projectId: string;
+	onClose: () => void;
+}) {
+	const { data: config } = useProjectConfig(projectId);
 	const saveConfig = useSaveProjectConfig();
 
 	const form = useForm<FormValues>({
 		defaultValues: {
-			initScript: "",
-			setupScript: "",
-			teardownScript: "",
+			initScript: scriptsToText(config.init_script),
+			setupScript: scriptsToText(config.setup_script),
+			teardownScript: scriptsToText(config.teardown_script),
 		},
 	});
-
-	// Populate form when config loads
-	useEffect(() => {
-		if (config) {
-			form.reset({
-				initScript: scriptsToText(config.init_script),
-				setupScript: scriptsToText(config.setup_script),
-				teardownScript: scriptsToText(config.teardown_script),
-			});
-		}
-	}, [config, form]);
 
 	const handleSave = form.handleSubmit(async (data) => {
 		await saveConfig.mutateAsync({
@@ -76,6 +66,70 @@ export default function ProjectSettingsDialog({
 		onClose();
 	});
 
+	return (
+		<>
+			<Dialog.Body>
+				<Stack gap="5">
+					<Field.Root>
+						<Field.Label>{m.initScript()}</Field.Label>
+						<Text fontSize="xs" color="fg.muted" mb="1">
+							{m.initScriptDesc()}
+						</Text>
+						<Textarea
+							{...form.register("initScript")}
+							placeholder={m.scriptPlaceholder()}
+							rows={4}
+							fontFamily="mono"
+							fontSize="sm"
+						/>
+					</Field.Root>
+
+					<Field.Root>
+						<Field.Label>{m.setupScript()}</Field.Label>
+						<Text fontSize="xs" color="fg.muted" mb="1">
+							{m.setupScriptDesc()}
+						</Text>
+						<Textarea
+							{...form.register("setupScript")}
+							placeholder={m.scriptPlaceholder()}
+							rows={4}
+							fontFamily="mono"
+							fontSize="sm"
+						/>
+					</Field.Root>
+
+					<Field.Root>
+						<Field.Label>{m.teardownScript()}</Field.Label>
+						<Text fontSize="xs" color="fg.muted" mb="1">
+							{m.teardownScriptDesc()}
+						</Text>
+						<Textarea
+							{...form.register("teardownScript")}
+							placeholder={m.scriptPlaceholder()}
+							rows={4}
+							fontFamily="mono"
+							fontSize="sm"
+						/>
+					</Field.Root>
+				</Stack>
+			</Dialog.Body>
+			<Dialog.Footer>
+				<Dialog.ActionTrigger asChild>
+					<Button variant="outline">{m.cancel()}</Button>
+				</Dialog.ActionTrigger>
+				<Button onClick={handleSave} loading={saveConfig.isPending}>
+					{m.save()}
+				</Button>
+			</Dialog.Footer>
+		</>
+	);
+}
+
+export default function ProjectSettingsDialog({
+	isOpen,
+	onClose,
+	projectId,
+}: ProjectSettingsDialogProps) {
 	return (
 		<Dialog.Root
 			lazyMount
@@ -93,76 +147,12 @@ export default function ProjectSettingsDialog({
 						<Dialog.Header>
 							<Dialog.Title>{m.projectSettings()}</Dialog.Title>
 						</Dialog.Header>
-						<Dialog.Body>
-							<Stack gap="5">
-								<Field.Root>
-									<Field.Label>{m.initScript()}</Field.Label>
-									<Text fontSize="xs" color="fg.muted" mb="1">
-										{m.initScriptDesc()}
-									</Text>
-									{isLoading ? (
-										<Skeleton h="20" />
-									) : (
-										<Textarea
-											{...form.register("initScript")}
-											placeholder={m.scriptPlaceholder()}
-											rows={4}
-											fontFamily="mono"
-											fontSize="sm"
-										/>
-									)}
-								</Field.Root>
-
-								<Field.Root>
-									<Field.Label>{m.setupScript()}</Field.Label>
-									<Text fontSize="xs" color="fg.muted" mb="1">
-										{m.setupScriptDesc()}
-									</Text>
-									{isLoading ? (
-										<Skeleton h="20" />
-									) : (
-										<Textarea
-											{...form.register("setupScript")}
-											placeholder={m.scriptPlaceholder()}
-											rows={4}
-											fontFamily="mono"
-											fontSize="sm"
-										/>
-									)}
-								</Field.Root>
-
-								<Field.Root>
-									<Field.Label>
-										{m.teardownScript()}
-									</Field.Label>
-									<Text fontSize="xs" color="fg.muted" mb="1">
-										{m.teardownScriptDesc()}
-									</Text>
-									{isLoading ? (
-										<Skeleton h="20" />
-									) : (
-										<Textarea
-											{...form.register("teardownScript")}
-											placeholder={m.scriptPlaceholder()}
-											rows={4}
-											fontFamily="mono"
-											fontSize="sm"
-										/>
-									)}
-								</Field.Root>
-							</Stack>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								onClick={handleSave}
-								loading={saveConfig.isPending}
-							>
-								{m.save()}
-							</Button>
-						</Dialog.Footer>
+						<Suspense>
+							<ProjectSettingsForm
+								projectId={projectId}
+								onClose={onClose}
+							/>
+						</Suspense>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />
 						</Dialog.CloseTrigger>

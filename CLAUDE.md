@@ -94,6 +94,13 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - Chakra UI v3 (not v2 — breaking API differences)
 - `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
 
+**Data fetching convention:**
+
+- Always use `useSuspenseQuery` (not `useQuery`) for server state. Components must not branch on `isLoading` or check for `undefined` data — data is guaranteed present after suspension.
+- For one-off promises (e.g. session restoration), use React `use(promise)` inside a `<Suspense>` boundary.
+- Every data-fetching component tree must be wrapped in `<Suspense>` (for loading) and `<ErrorBoundary>` (for errors) at an appropriate ancestor. Fallback UI lives in the boundary, not in the component itself.
+- Leaf components stay branch-free: no `if (isLoading)`, no `data?.foo ?? fallback`, no skeleton/spinner logic inline.
+
 ### Backend (`/src-tauri`)
 
 Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.

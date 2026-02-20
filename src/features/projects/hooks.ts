@@ -1,6 +1,5 @@
 import {
 	useMutation,
-	useQuery,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -68,11 +67,10 @@ export function useRenameProject() {
 	});
 }
 
-export function useProjectConfig(projectId: string, enabled = true) {
-	return useQuery({
+export function useProjectConfig(projectId: string) {
+	return useSuspenseQuery({
 		queryKey: queryKeys.projectConfig(projectId),
 		queryFn: () => getProjectConfig({ projectId }),
-		enabled,
 	});
 }
 
