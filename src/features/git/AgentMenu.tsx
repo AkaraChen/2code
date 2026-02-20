@@ -1,6 +1,6 @@
 import { Button, Group, IconButton, Menu, Portal } from "@chakra-ui/react";
 import { SiClaude, SiCursor } from "@icons-pack/react-simple-icons";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { RiAddLine, RiArrowDownSLine, RiRobot2Line } from "react-icons/ri";
 import { SiOpenai } from "react-icons/si";
 import { useAgentSettingsStore } from "@/features/settings/stores/agentSettingsStore";
@@ -16,6 +16,38 @@ function getAgentIcon(agentId: string) {
 	return AGENT_ICONS[agentId] ?? RiRobot2Line;
 }
 
+function AgentDropdown({
+	agents,
+	onSelect,
+	trigger,
+}: {
+	agents: AgentStatusInfo[];
+	onSelect: (agentId: string) => void;
+	trigger: ReactNode;
+}) {
+	if (agents.length === 0) return null;
+	return (
+		<Menu.Root>
+			<Menu.Trigger asChild>{trigger}</Menu.Trigger>
+			<Portal>
+				<Menu.Positioner>
+					<Menu.Content>
+						{agents.map((agent) => {
+							const Icon = getAgentIcon(agent.id);
+							return (
+								<Menu.Item key={agent.id} value={agent.id} onClick={() => onSelect(agent.id)}>
+									<Icon size={16} />
+									{agent.display_name}
+								</Menu.Item>
+							);
+						})}
+					</Menu.Content>
+				</Menu.Positioner>
+			</Portal>
+		</Menu.Root>
+	);
+}
+
 interface AgentMenuProps {
 	agents: AgentStatusInfo[];
 	profile: Profile;
@@ -28,56 +60,28 @@ interface AgentMenuProps {
 	}) => void;
 }
 
-export default function AgentMenu({
-	agents,
-	profile,
-	isPending,
-	onCreateTab,
-}: AgentMenuProps) {
+export default function AgentMenu({ agents, profile, isPending, onCreateTab }: AgentMenuProps) {
 	const defaultAgentId = useAgentSettingsStore((s) => s.defaultAgent);
 
 	if (agents.length === 0) return null;
 
+	const createWith = (agentId: string) =>
+		onCreateTab({ type: "agent", profileId: profile.id, cwd: profile.worktree_path, agent: agentId });
+
 	const defaultAgent = agents.find((a) => a.id === defaultAgentId);
 
-	const createWith = (agentId: string) =>
-		onCreateTab({
-			type: "agent",
-			profileId: profile.id,
-			cwd: profile.worktree_path,
-			agent: agentId,
-		});
-
-	// If no default agent is ready, fall back to dropdown-only
 	if (!defaultAgent) {
 		return (
-			<Menu.Root>
-				<Menu.Trigger asChild>
+			<AgentDropdown
+				agents={agents}
+				onSelect={createWith}
+				trigger={
 					<Button size="xs" variant="subtle" disabled={isPending}>
 						<RiRobot2Line />
 						<RiAddLine />
 					</Button>
-				</Menu.Trigger>
-				<Portal>
-					<Menu.Positioner>
-						<Menu.Content>
-							{agents.map((agent) => {
-								const Icon = getAgentIcon(agent.id);
-								return (
-									<Menu.Item
-										key={agent.id}
-										value={agent.id}
-										onClick={() => createWith(agent.id)}
-									>
-										<Icon size={16} />
-										{agent.display_name}
-									</Menu.Item>
-								);
-							})}
-						</Menu.Content>
-					</Menu.Positioner>
-				</Portal>
-			</Menu.Root>
+				}
+			/>
 		);
 	}
 
@@ -86,48 +90,19 @@ export default function AgentMenu({
 
 	return (
 		<Group attached>
-			<Button
-				size="xs"
-				variant="subtle"
-				disabled={isPending}
-				onClick={() => createWith(defaultAgent.id)}
-			>
+			<Button size="xs" variant="subtle" disabled={isPending} onClick={() => createWith(defaultAgent.id)}>
 				<DefaultIcon size={14} />
 				<RiAddLine />
 			</Button>
-			{otherAgents.length > 0 && (
-				<Menu.Root>
-					<Menu.Trigger asChild>
-						<IconButton
-							size="xs"
-							variant="subtle"
-							disabled={isPending}
-							aria-label="Select agent"
-						>
-							<RiArrowDownSLine />
-						</IconButton>
-					</Menu.Trigger>
-					<Portal>
-						<Menu.Positioner>
-							<Menu.Content>
-								{otherAgents.map((agent) => {
-									const Icon = getAgentIcon(agent.id);
-									return (
-										<Menu.Item
-											key={agent.id}
-											value={agent.id}
-											onClick={() => createWith(agent.id)}
-										>
-											<Icon size={16} />
-											{agent.display_name}
-										</Menu.Item>
-									);
-								})}
-							</Menu.Content>
-						</Menu.Positioner>
-					</Portal>
-				</Menu.Root>
-			)}
+			<AgentDropdown
+				agents={otherAgents}
+				onSelect={createWith}
+				trigger={
+					<IconButton size="xs" variant="subtle" disabled={isPending} aria-label="Select agent">
+						<RiArrowDownSLine />
+					</IconButton>
+				}
+			/>
 		</Group>
 	);
 }
