@@ -46,8 +46,8 @@ function needsReconnection(sessionId: string): boolean {
 
 /**
  * Suspends until reconnection completes.
- * After resolve, reconnect() has already called replaceTab(),
- * so the parent re-renders with the new sessionId and this component unmounts.
+ * After resolve, reconnect() has updated tab.sessionId in the store,
+ * so the parent re-renders this component with the new sessionId prop.
  */
 function AwaitReconnection({ sessionId }: { sessionId: string }) {
 	use(getReconnectPromise(sessionId));

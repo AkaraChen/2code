@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid";
 import {
 	closePtySession,
 	createPtySession,
@@ -33,7 +34,7 @@ export class TerminalTabSession extends TabSession {
 	toTab(): TerminalTab {
 		return {
 			type: "terminal",
-			id: this.id,
+			id: nanoid(),
 			title: this.title,
 			panes: [{ sessionId: this.id, title: this.title }],
 			activePaneId: this.id,

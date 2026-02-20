@@ -2,6 +2,7 @@ import type { AgentNotification } from "@agentclientprotocol/sdk";
 import consola from "consola";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
+import { nanoid } from "nanoid";
 import {
 	closeAgentSession,
 	createAgentSessionPersistent,
@@ -65,8 +66,7 @@ export class AgentTabSession extends TabSession {
 	/**
 	 * Reconnect a restored session on demand (called when tab is focused).
 	 * Spawns the agent process, transfers events, sets up listeners.
-	 * Returns the new session ID (this session object becomes stale — caller
-	 * must replace it in the registry and tab store).
+	 * The tab nanoid id remains stable — only the backend sessionId changes.
 	 */
 	async reconnect(): Promise<AgentTabSession> {
 		if (this._connected || this._reconnecting) {
@@ -79,7 +79,7 @@ export class AgentTabSession extends TabSession {
 				oldSessionId: this.id,
 			});
 
-			// Create new session object with the new ID
+			// Create new session object with the new backend session ID
 			const newSession = new AgentTabSession(
 				info.id,
 				this.profileId,
@@ -100,10 +100,16 @@ export class AgentTabSession extends TabSession {
 			sessionRegistry.delete(this.id);
 			sessionRegistry.set(newSession.id, newSession);
 
-			// Update tab store: replace old tab with new one
-			useTabStore
-				.getState()
-				.replaceTab(this.profileId, this.id, newSession.toTab());
+			// Update the sessionId on the existing tab (nanoid tab id stays stable)
+			const profile = useTabStore.getState().profiles[this.profileId];
+			const agentTab = profile?.tabs.find(
+				(t): t is AgentTab => t.type === "agent" && t.sessionId === this.id,
+			);
+			if (agentTab) {
+				useTabStore
+					.getState()
+					.updateAgentSessionId(this.profileId, agentTab.id, newSession.id);
+			}
 
 			consola.info(
 				`[agent] reconnected ${this.id} → ${info.id}`,
@@ -162,7 +168,8 @@ export class AgentTabSession extends TabSession {
 	toTab(): AgentTab {
 		return {
 			type: "agent",
-			id: this.id,
+			id: nanoid(),
+			sessionId: this.id,
 			title: this.title,
 			agentType: this.agentType,
 		};
