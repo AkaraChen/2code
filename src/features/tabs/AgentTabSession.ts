@@ -122,26 +122,17 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async registerListeners(): Promise<void> {
-		const unlistenEvent = await listen<AgentNotification>(
-			`agent-event-${this.id}`,
-			(e) => {
+		const [unlistenEvent, unlistenComplete, unlistenError] = await Promise.all([
+			listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
 				useAgentStore.getState().handleAgentEvent(this.id, e.payload);
-			},
-		);
-
-		const unlistenComplete = await listen<unknown>(
-			`agent-turn-complete-${this.id}`,
-			(e) => {
+			}),
+			listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
 				useAgentStore.getState().handleTurnComplete(this.id, e.payload);
-			},
-		);
-
-		const unlistenError = await listen<string>(
-			`agent-error-${this.id}`,
-			(e) => {
+			}),
+			listen<string>(`agent-error-${this.id}`, (e) => {
 				useAgentStore.getState().handleError(this.id, e.payload);
-			},
-		);
+			}),
+		]);
 
 		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError];
 	}

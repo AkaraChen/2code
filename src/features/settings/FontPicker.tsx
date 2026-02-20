@@ -18,8 +18,10 @@ const getFontsPromise = createCachedPromise<SystemFont[]>(() =>
 
 export function FontPicker() {
 	const fonts = use(getFontsPromise());
-	const { fontFamily, showAllFonts, setFontFamily, setShowAllFonts } =
-		useTerminalSettingsStore();
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+	const showAllFonts = useTerminalSettingsStore((s) => s.showAllFonts);
+	const setFontFamily = useTerminalSettingsStore((s) => s.setFontFamily);
+	const setShowAllFonts = useTerminalSettingsStore((s) => s.setShowAllFonts);
 
 	const visibleFonts = useMemo(
 		() => (showAllFonts ? fonts : fonts.filter((f) => f.is_mono)),

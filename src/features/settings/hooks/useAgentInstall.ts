@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { installAgent } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { toaster } from "@/shared/providers/Toaster";
+import { toaster } from "@/shared/providers/toaster-instance";
 
 interface InstallAgentParams {
 	id: string;
