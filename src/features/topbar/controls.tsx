@@ -1,4 +1,4 @@
-import { IconButton, Portal, Tooltip } from "@chakra-ui/react";
+import { Button, IconButton, Portal, Text, Tooltip } from "@chakra-ui/react";
 import {
 	SiCursor,
 	SiGit,
@@ -10,6 +10,7 @@ import { Command } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
 import { Suspense } from "react";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
+import { useGitDiffStats } from "@/features/git/hooks";
 import { useGitBranch } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -116,19 +117,30 @@ function GitDiffBranchDialog({
 
 export function GitDiffControl({ profile }: ControlProps) {
 	const dialog = useDialogState();
+	const stats = useGitDiffStats(profile.id);
 
 	return (
 		<>
 			<Tooltip.Root>
 				<Tooltip.Trigger asChild>
-					<IconButton
+					<Button
 						aria-label={m.topbarGitDiff()}
 						size="xs"
 						variant="subtle"
 						onClick={dialog.onOpen}
 					>
 						<SiGit size={14} />
-					</IconButton>
+						{stats && (
+							<>
+								<Text as="span" color="green.400" fontSize="xs">
+									+{stats.additions}
+								</Text>
+								<Text as="span" color="red.400" fontSize="xs">
+									-{stats.deletions}
+								</Text>
+							</>
+						)}
+					</Button>
 				</Tooltip.Trigger>
 				<Portal>
 					<Tooltip.Positioner>
