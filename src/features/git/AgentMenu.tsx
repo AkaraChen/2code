@@ -1,5 +1,6 @@
 import { Button, Group, IconButton, Menu, Portal } from "@chakra-ui/react";
 import { SiClaude, SiCursor } from "@icons-pack/react-simple-icons";
+import { createElement } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { RiAddLine, RiArrowDownSLine, RiRobot2Line } from "react-icons/ri";
 import { SiOpenai } from "react-icons/si";
@@ -85,13 +86,12 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 		);
 	}
 
-	const DefaultIcon = getAgentIcon(defaultAgent.id);
 	const otherAgents = agents.filter((a) => a.id !== defaultAgentId);
 
 	return (
 		<Group attached>
 			<Button size="xs" variant="subtle" disabled={isPending} onClick={() => createWith(defaultAgent.id)}>
-				<DefaultIcon size={14} />
+				{createElement(getAgentIcon(defaultAgent.id), { size: 14 })}
 				<RiAddLine />
 			</Button>
 			<AgentDropdown
