@@ -131,6 +131,7 @@ function Pane({
 			css={{
 				"&:hover .pane-controls": { opacity: 1 },
 			}}
+			overflow="hidden"
 		>
 			<Terminal sessionId={sessionId} onTitleChange={onTitleChange} />
 
