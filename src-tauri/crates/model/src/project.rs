@@ -3,6 +3,16 @@ use crate::schema::projects;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Clone)]
+pub struct ProjectConfig {
+	#[serde(default)]
+	pub setup_script: Vec<String>,
+	#[serde(default)]
+	pub teardown_script: Vec<String>,
+	#[serde(default)]
+	pub init_script: Vec<String>,
+}
+
 #[derive(Queryable, Selectable, Serialize)]
 #[diesel(table_name = projects)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]

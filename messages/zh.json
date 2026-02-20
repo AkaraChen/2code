@@ -165,5 +165,14 @@
 	"statsAgent": "代理",
 	"statsSessions": "{n} 个会话",
 	"allProjects": "所有项目",
-	"statsMessages": "{n} 条消息"
+	"statsMessages": "{n} 条消息",
+	"projectSettings": "项目设置",
+	"setupScript": "安装脚本",
+	"teardownScript": "清理脚本",
+	"initScript": "初始化脚本",
+	"setupScriptDesc": "创建新 Profile（git worktree）时运行",
+	"teardownScriptDesc": "删除 Profile（git worktree）时运行",
+	"initScriptDesc": "注入到每个新终端会话",
+	"save": "保存",
+	"scriptPlaceholder": "每行一条命令..."
 }

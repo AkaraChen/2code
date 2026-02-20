@@ -1,18 +1,8 @@
-use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
 
 use model::error::AppError;
-
-#[derive(Debug, Deserialize, Default, PartialEq)]
-pub struct ProjectConfig {
-	#[serde(default)]
-	pub setup_script: Vec<String>,
-	#[serde(default)]
-	pub teardown_script: Vec<String>,
-	#[serde(default)]
-	pub init_script: Vec<String>,
-}
+pub use model::project::ProjectConfig;
 
 pub fn load_project_config(
 	project_folder: &str,
@@ -29,6 +19,21 @@ pub fn load_project_config(
 			format!("Failed to parse 2code.json: {e}"),
 		))
 	})
+}
+
+pub fn write_project_config(
+	project_folder: &str,
+	config: &ProjectConfig,
+) -> Result<(), AppError> {
+	let config_path = Path::new(project_folder).join("2code.json");
+	let content = serde_json::to_string_pretty(config).map_err(|e| {
+		AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::InvalidData,
+			format!("Failed to serialize 2code.json: {e}"),
+		))
+	})?;
+	std::fs::write(&config_path, content)?;
+	Ok(())
 }
 
 pub fn execute_scripts(scripts: &[String], cwd: &Path) {

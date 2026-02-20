@@ -24,4 +24,6 @@ export const queryKeys = {
 	stats: {
 		homepage: ["stats", "homepage"] as const,
 	},
+	projectConfig: (projectId: string) =>
+		["project-config", projectId] as const,
 };

@@ -10,9 +10,12 @@ import {
 	createProjectTemporary,
 	deleteProject,
 	getGitBranch,
+	getProjectConfig,
 	listProjects,
+	saveProjectConfig,
 	updateProject,
 } from "@/generated";
+import type { ProjectConfig } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 export function useProjects() {
@@ -60,6 +63,31 @@ export function useRenameProject() {
 			updateProject({ id, name }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+		},
+	});
+}
+
+export function useProjectConfig(projectId: string) {
+	return useSuspenseQuery({
+		queryKey: queryKeys.projectConfig(projectId),
+		queryFn: () => getProjectConfig({ projectId }),
+	});
+}
+
+export function useSaveProjectConfig() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			projectId,
+			config,
+		}: {
+			projectId: string;
+			config: ProjectConfig;
+		}) => saveProjectConfig({ projectId, config }),
+		onSuccess: (_, { projectId }) => {
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.projectConfig(projectId),
+			});
 		},
 	});
 }
