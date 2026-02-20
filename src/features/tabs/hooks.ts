@@ -6,6 +6,7 @@ import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
+import type { AgentTab } from "./types";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }
@@ -62,12 +63,13 @@ export function useCloseTab() {
 							}
 						}),
 					);
-				} else {
-					// Agent tabs — single session
-					const session = sessionRegistry.get(tabId);
+				} else if (tab?.type === "agent") {
+					// Agent tabs — look up by sessionId, not nanoid tab id
+					const agentTab = tab as AgentTab;
+					const session = sessionRegistry.get(agentTab.sessionId);
 					if (session) {
 						await session.close();
-						sessionRegistry.delete(tabId);
+						sessionRegistry.delete(agentTab.sessionId);
 					}
 				}
 			} finally {

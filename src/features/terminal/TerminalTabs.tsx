@@ -24,12 +24,14 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 
 	if (tabs.length === 0) return null;
 
-	const hasTabNotification = (tabId: string) => {
+	const hasTabNotification = (tabId: string): boolean => {
 		const tab = tabs.find((t) => t.id === tabId);
-		if (tab?.type === "terminal") {
-			return tab.panes.some((p) => notifiedTabs.has(p.sessionId));
-		}
-		return notifiedTabs.has(tabId);
+		return match(tab)
+			.with({ type: "terminal" }, (t) =>
+				t.panes.some((p) => notifiedTabs.has(p.sessionId)),
+			)
+			.with({ type: "agent" }, (t) => notifiedTabs.has(t.sessionId))
+			.otherwise(() => false);
 	};
 
 	return (
@@ -87,7 +89,7 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 						{match(tab)
 							.with({ type: "agent" }, (t) => (
 								<AgentChat
-									sessionId={t.id}
+									sessionId={t.sessionId}
 									isActive={t.id === activeTabId}
 								/>
 							))

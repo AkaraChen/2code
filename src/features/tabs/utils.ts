@@ -1,5 +1,6 @@
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
+import type { AgentTab } from "./types";
 
 export async function closeAllTabsForProfile(profileId: string): Promise<void> {
 	const tabs = useTabStore.getState().profiles[profileId]?.tabs ?? [];
@@ -20,14 +21,15 @@ export async function closeAllTabsForProfile(profileId: string): Promise<void> {
 				}
 			});
 		}
-		// Agent tabs — single session
-		const session = sessionRegistry.get(tab.id);
+		// Agent tabs — look up by sessionId, not nanoid tab id
+		const agentTab = tab as AgentTab;
+		const session = sessionRegistry.get(agentTab.sessionId);
 		if (!session) return [];
 		return [
 			session
 				.close()
-				.catch((err) => console.error(`Failed to close tab ${tab.id}:`, err))
-				.finally(() => sessionRegistry.delete(tab.id)),
+				.catch((err) => console.error(`Failed to close agent tab ${agentTab.sessionId}:`, err))
+				.finally(() => sessionRegistry.delete(agentTab.sessionId)),
 		];
 	});
 
