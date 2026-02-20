@@ -26,7 +26,7 @@ export function MessageList({
 
 	useEffect(() => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [turns, streamingTurn]);
+	}, [turns?.length, streamingTurn]);
 
 	return (
 		<Box flex="1" overflowY="auto" px="4" py="4">

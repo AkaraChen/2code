@@ -1,4 +1,5 @@
 import { Card, HStack, Text, VStack } from "@chakra-ui/react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import type { ProjectActivitySummary } from "@/generated/types";
@@ -20,6 +21,11 @@ export function TopProjects({
 	const navigate = useNavigate();
 	const { data: allProjects } = useProjects();
 
+	const projectById = useMemo(
+		() => new Map(allProjects.map((p) => [p.id, p])),
+		[allProjects],
+	);
+
 	if (topProjects.length === 0) return null;
 
 	return (
@@ -28,7 +34,7 @@ export function TopProjects({
 				{m.statsTopProjects()}
 			</Text>
 			{topProjects.map((p) => {
-				const project = allProjects.find((pr) => pr.id === p.projectId);
+				const project = projectById.get(p.projectId);
 				const defaultProfile = project?.profiles.find(
 					(pr) => pr.is_default,
 				);

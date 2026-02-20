@@ -1,4 +1,4 @@
-import { startTransition } from "react";
+import { startTransition, useCallback } from "react";
 import { P, match } from "ts-pattern";
 import type { GitCommit } from "@/generated";
 import type { GitDiffAction, GitDiffState } from "../gitDiffReducer";
@@ -24,7 +24,7 @@ export function useGitDiffKeyboard({
 	commits,
 	sidebarRef,
 }: UseGitDiffKeyboardParams) {
-	return (e: React.KeyboardEvent<HTMLDivElement>) => {
+	return useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
 		const ctx = {
 			key: e.key,
 			activeTab: state.activeTab,
@@ -117,5 +117,5 @@ export function useGitDiffKeyboard({
 				},
 			)
 			.otherwise(() => {});
-	};
+	}, [state, dispatch, changesFilesCount, commits, sidebarRef]);
 }

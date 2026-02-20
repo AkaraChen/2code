@@ -1,4 +1,5 @@
 import { Box, HStack, Text, VStack, Portal, Tooltip } from "@chakra-ui/react";
+import { useMemo } from "react";
 import * as m from "@/paraglide/messages.js";
 import type { DailyActivity } from "@/generated/types";
 
@@ -58,13 +59,14 @@ function buildGrid(data: DailyActivity[]) {
 }
 
 export function ActivityHeatmap({ data }: { data: DailyActivity[] }) {
-	const cells = buildGrid(data);
-
-	// Arrange into columns (weeks), each column has 7 days
-	const weeks: (typeof cells)[] = [];
-	for (let i = 0; i < cells.length; i += DAYS_PER_WEEK) {
-		weeks.push(cells.slice(i, i + DAYS_PER_WEEK));
-	}
+	const weeks = useMemo(() => {
+		const cells = buildGrid(data);
+		const result: (typeof cells)[] = [];
+		for (let i = 0; i < cells.length; i += DAYS_PER_WEEK) {
+			result.push(cells.slice(i, i + DAYS_PER_WEEK));
+		}
+		return result;
+	}, [data]);
 
 	return (
 		<VStack align="start" gap="2">
@@ -73,7 +75,7 @@ export function ActivityHeatmap({ data }: { data: DailyActivity[] }) {
 			</Text>
 			<HStack gap={`${CELL_GAP}px`} align="start">
 				{weeks.map((week, wi) => (
-					<VStack key={wi} gap={`${CELL_GAP}px`}>
+					<VStack key={week[0]?.date ?? wi} gap={`${CELL_GAP}px`}>
 						{week.map((cell) => (
 							<Tooltip.Root key={cell.date} openDelay={100}>
 								<Tooltip.Trigger asChild>

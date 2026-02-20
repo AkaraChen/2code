@@ -1,4 +1,5 @@
 import { Box, HStack, Text } from "@chakra-ui/react";
+import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
 	horizontalListSortingStrategy,
@@ -14,8 +15,9 @@ interface AvailableControlsProps {
 }
 
 export function AvailableControls({ activeControls }: AvailableControlsProps) {
-	const available = allControlIds.filter(
-		(id) => !activeControls.includes(id),
+	const available = useMemo(
+		() => allControlIds.filter((id) => !activeControls.includes(id)),
+		[activeControls],
 	);
 	const { setNodeRef } = useDroppable({ id: "available-area" });
 

@@ -5,7 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { flushPtyOutput, getSessionOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
@@ -26,7 +26,9 @@ export function Terminal({ sessionId, onTitleChange }: TerminalProps) {
 	const theme = useTerminalTheme();
 
 	const onTitleChangeRef = useRef(onTitleChange);
-	onTitleChangeRef.current = onTitleChange;
+	useLayoutEffect(() => {
+		onTitleChangeRef.current = onTitleChange;
+	});
 
 	const initFontFamilyRef = useRef(fontFamily);
 	const initFontSizeRef = useRef(fontSize);

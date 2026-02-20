@@ -38,24 +38,19 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 		useTabStore.getState().updatePaneTitle(profileId, tab.id, paneSessionId, title);
 	};
 
-	const renderPane = (paneSessionId: string) => (
-		<Pane
-			key={paneSessionId}
-			sessionId={paneSessionId}
-			canSplit={canSplit}
-			canClose={canClose}
-			onFocus={() => handleFocusPane(paneSessionId)}
-			onSplit={handleSplit}
-			onClose={() => handleClosePane(paneSessionId)}
-			onTitleChange={(title) => handleTitleChange(paneSessionId, title)}
-		/>
-	);
-
 	// 1 pane: full screen
 	if (panes.length === 1) {
 		return (
 			<Box w="full" h="full">
-				{renderPane(panes[0].sessionId)}
+				<Pane
+					sessionId={panes[0].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[0].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[0].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+				/>
 			</Box>
 		);
 	}
@@ -64,9 +59,25 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	if (panes.length === 2) {
 		return (
 			<Flex w="full" h="full">
-				{renderPane(panes[0].sessionId)}
+				<Pane
+					sessionId={panes[0].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[0].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[0].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+				/>
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId)}
+				<Pane
+					sessionId={panes[1].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[1].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[1].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+				/>
 			</Flex>
 		);
 	}
@@ -75,11 +86,35 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	if (panes.length === 3) {
 		return (
 			<Flex w="full" h="full">
-				{renderPane(panes[0].sessionId)}
+				<Pane
+					sessionId={panes[0].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[0].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[0].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+				/>
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId)}
+				<Pane
+					sessionId={panes[1].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[1].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[1].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+				/>
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[2].sessionId)}
+				<Pane
+					sessionId={panes[2].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[2].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[2].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[2].sessionId, title)}
+				/>
 			</Flex>
 		);
 	}
@@ -88,15 +123,47 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 	return (
 		<Flex direction="column" w="full" h="full">
 			<Flex flex="1" minH="0">
-				{renderPane(panes[0].sessionId)}
+				<Pane
+					sessionId={panes[0].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[0].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[0].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+				/>
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[1].sessionId)}
+				<Pane
+					sessionId={panes[1].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[1].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[1].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+				/>
 			</Flex>
 			<PaneDivider orientation="horizontal" />
 			<Flex flex="1" minH="0">
-				{renderPane(panes[2].sessionId)}
+				<Pane
+					sessionId={panes[2].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[2].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[2].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[2].sessionId, title)}
+				/>
 				<PaneDivider orientation="vertical" />
-				{renderPane(panes[3].sessionId)}
+				<Pane
+					sessionId={panes[3].sessionId}
+					canSplit={canSplit}
+					canClose={canClose}
+					onFocus={() => handleFocusPane(panes[3].sessionId)}
+					onSplit={handleSplit}
+					onClose={() => handleClosePane(panes[3].sessionId)}
+					onTitleChange={(title) => handleTitleChange(panes[3].sessionId, title)}
+				/>
 			</Flex>
 		</Flex>
 	);
