@@ -66,7 +66,6 @@ export default function TerminalLayer() {
 					>
 						<ProjectTopBar
 							projectName={project?.name ?? ""}
-							projectId={project?.id ?? ""}
 							profile={profile}
 						/>
 						<Box flex="1" minH="0">

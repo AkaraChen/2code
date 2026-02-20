@@ -3,22 +3,19 @@ import {
 	Button,
 	Flex,
 	HStack,
-	IconButton,
 	Portal,
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import {
 	RiAddLine,
 	RiGitBranchLine,
-	RiSettings3Line,
 	RiTerminalBoxLine,
 } from "react-icons/ri";
 import AgentMenu from "@/features/git/AgentMenu";
 import { useGitBranch } from "@/features/projects/hooks";
-import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import { useCreateTab } from "@/features/tabs/hooks";
 import { controlRegistry } from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
@@ -40,19 +37,16 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 
 interface ProjectTopBarProps {
 	projectName: string;
-	projectId: string;
 	profile: Profile;
 }
 
 export default function ProjectTopBar({
 	projectName,
-	projectId,
 	profile,
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const createTab = useCreateTab();
-	const [settingsOpen, setSettingsOpen] = useState(false);
 
 	const { data: agents } = useQuery({
 		queryKey: queryKeys.agent.status(),
@@ -137,34 +131,8 @@ export default function ProjectTopBar({
 						/>
 					);
 				})}
-
-				{/* Project settings */}
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<IconButton
-							size="xs"
-							variant="subtle"
-							onClick={() => setSettingsOpen(true)}
-						>
-							<RiSettings3Line />
-						</IconButton>
-					</Tooltip.Trigger>
-					<Portal>
-						<Tooltip.Positioner>
-							<Tooltip.Content>
-								{m.projectSettings()}
-							</Tooltip.Content>
-						</Tooltip.Positioner>
-					</Portal>
-				</Tooltip.Root>
 			</HStack>
 		</Flex>
-
-		<ProjectSettingsDialog
-			isOpen={settingsOpen}
-			onClose={() => setSettingsOpen(false)}
-			projectId={projectId}
-		/>
 		</>
 	);
 }

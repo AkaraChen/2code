@@ -29,7 +29,7 @@ export default function ProjectDetailPage() {
 
 	return (
 		<Flex direction="column" h="full">
-			<ProjectTopBar projectName={project.name} projectId={project.id} profile={profile} />
+			<ProjectTopBar projectName={project.name} profile={profile} />
 			<Center flex="1">
 				<EmptyState.Root>
 					<EmptyState.Content>
