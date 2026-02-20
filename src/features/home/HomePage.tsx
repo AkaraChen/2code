@@ -7,8 +7,6 @@ import { EmptyHomeState } from "./components/EmptyHomeState";
 import { OverviewCards } from "./components/OverviewCards";
 import { ProjectList } from "./components/ProjectList";
 import { QuickActions } from "./components/QuickActions";
-import { RecentSessions } from "./components/RecentSessions";
-import { TopProjects } from "./components/TopProjects";
 
 export default function HomePage() {
 	const { data: projects } = useProjects();
@@ -37,12 +35,6 @@ export default function HomePage() {
 			<VStack align="stretch" gap="6">
 				<OverviewCards stats={stats} />
 				<ActivityHeatmap data={stats.dailyActivity} />
-
-				<HStack align="start" gap="6">
-					<RecentSessions sessions={stats.recentSessions} />
-					<TopProjects projects={stats.topProjects} />
-				</HStack>
-
 				<ProjectList />
 			</VStack>
 		</Box>
