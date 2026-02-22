@@ -1,10 +1,12 @@
 import { Flex } from "@chakra-ui/react";
 import { match } from "ts-pattern";
+import * as m from "@/paraglide/messages.js";
 import type { StreamingTurn } from "../types";
 import { Message } from "./Message";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { PlanBlock } from "./PlanBlock";
 import { StreamingBubble } from "./StreamingBubble";
+import { TextShimmer } from "./TextShimmer";
 import { ThoughtBlock } from "./ThoughtBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
 
@@ -32,41 +34,42 @@ export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
 				</Message>
 			)}
 
-			{agentContent.length > 0 && (
-				<Message role="assistant">
-					<Flex direction="column" gap="4">
-						{agentContent.map((item, index) =>
-							match(item)
-								.with({ type: "text" }, (i) =>
-									index === lastTextIndex ? (
-										<StreamingBubble
-											key={`text-${index}`}
-											content={i.text}
-										/>
-									) : (
-										<MarkdownRenderer
-											key={`text-${index}`}
-											content={i.text}
-										/>
-									),
-								)
-								.with({ type: "thought" }, (i) => (
-									<ThoughtBlock key={`thought-${index}`} text={i.text} />
-								))
-								.with({ type: "tool_call" }, (i) => (
-									<ToolCallBlock
-										key={i.data.toolCallId}
-										toolCall={i.data}
+			<Message role="assistant">
+				<Flex direction="column" gap="4">
+					{agentContent.length === 0 && (
+						<TextShimmer>{m.agentThinking()}</TextShimmer>
+					)}
+					{agentContent.map((item, index) =>
+						match(item)
+							.with({ type: "text" }, (i) =>
+								index === lastTextIndex ? (
+									<StreamingBubble
+										key={`text-${index}`}
+										content={i.text}
 									/>
-								))
-								.with({ type: "plan" }, (i) => (
-									<PlanBlock key="plan" plan={i.data} />
-								))
-								.exhaustive(),
-						)}
-					</Flex>
-				</Message>
-			)}
+								) : (
+									<MarkdownRenderer
+										key={`text-${index}`}
+										content={i.text}
+									/>
+								),
+							)
+							.with({ type: "thought" }, (i) => (
+								<ThoughtBlock key={`thought-${index}`} text={i.text} />
+							))
+							.with({ type: "tool_call" }, (i) => (
+								<ToolCallBlock
+									key={i.data.toolCallId}
+									toolCall={i.data}
+								/>
+							))
+							.with({ type: "plan" }, (i) => (
+								<PlanBlock key="plan" plan={i.data} />
+							))
+							.exhaustive(),
+					)}
+				</Flex>
+			</Message>
 		</Flex>
 	);
 }
