@@ -1,10 +1,16 @@
+// Using a const object instead of enum because the TS config here
+// requires `as const` (isolatedModules / verbatimModuleSyntax).
 export const queryNamespaces = {
-	project: "project",
+	projects: "projects",
 	"git-branch": "git-branch",
 	"git-diff": "git-diff",
 	"git-log": "git-log",
 	"git-commit-diff": "git-commit-diff",
-};
+	"agent-status": "agent-status",
+	"agent-credentials": "agent-credentials",
+	stats: "stats",
+	"project-config": "project-config",
+} as const;
 
 export const queryKeys = {
 	projects: {

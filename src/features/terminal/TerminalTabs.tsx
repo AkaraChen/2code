@@ -24,15 +24,13 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 
 	if (tabs.length === 0) return null;
 
-	const hasTabNotification = (tabId: string): boolean => {
-		const tab = tabs.find((t) => t.id === tabId);
-		return match(tab)
+	const hasTabNotification = (tab: (typeof tabs)[number]): boolean =>
+		match(tab)
 			.with({ type: "terminal" }, (t) =>
 				t.panes.some((p) => notifiedTabs.has(p.sessionId)),
 			)
 			.with({ type: "agent" }, (t) => notifiedTabs.has(t.sessionId))
-			.otherwise(() => false);
-	};
+			.exhaustive();
 
 	return (
 		<Flex direction="column" h="full" w="full">
@@ -52,7 +50,7 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 								.exhaustive()}
 							<HStack gap="2">
 								{tab.title}
-								{hasTabNotification(tab.id) &&
+								{hasTabNotification(tab) &&
 									tab.id !== activeTabId && (
 										<Circle size="2" bg="green.500" />
 									)}

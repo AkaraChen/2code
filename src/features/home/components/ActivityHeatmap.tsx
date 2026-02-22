@@ -9,11 +9,11 @@ const CELL_SIZE = 12;
 const CELL_GAP = 2;
 
 function getIntensity(count: number): string {
-	if (count === 0) return "var(--chakra-colors-bg-subtle)";
-	if (count <= 2) return "var(--chakra-colors-green-200)";
-	if (count <= 5) return "var(--chakra-colors-green-400)";
-	if (count <= 10) return "var(--chakra-colors-green-600)";
-	return "var(--chakra-colors-green-800)";
+	if (count === 0) return "bg.subtle";
+	if (count <= 2) return "green.200";
+	if (count <= 5) return "green.400";
+	if (count <= 10) return "green.600";
+	return "green.800";
 }
 
 function buildGrid(data: DailyActivity[]) {

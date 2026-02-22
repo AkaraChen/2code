@@ -15,13 +15,6 @@ import type {
 	AgentMessageContent,
 } from "./types";
 
-// 保留旧的 AgentMessage 类型用于向后兼容
-export interface AgentMessage {
-	role: "user" | "assistant";
-	content: string;
-	timestamp: number;
-}
-
 interface AgentSessionState {
 	turns: AgentTurn[];
 	isStreaming: boolean;
@@ -59,6 +52,41 @@ function ensureSession(
 	return sessions[sessionId];
 }
 
+function flushStreamingTurn(turn: StreamingTurn): AgentMessageContent[] {
+	const content: AgentMessageContent[] = [];
+
+	if (turn.textChunks.length > 0) {
+		content.push({
+			type: "text",
+			text: turn.textChunks.join(""),
+			role: "assistant",
+		});
+	}
+
+	if (turn.thoughtChunks.length > 0) {
+		content.push({
+			type: "thought",
+			text: turn.thoughtChunks.join(""),
+		});
+	}
+
+	for (const toolCall of turn.toolCalls.values()) {
+		content.push({
+			type: "tool_call",
+			data: toolCall,
+		});
+	}
+
+	if (turn.plan) {
+		content.push({
+			type: "plan",
+			data: turn.plan,
+		});
+	}
+
+	return content;
+}
+
 export const useAgentStore = create<AgentStore>()(
 	immer((set) => ({
 		sessions: {},
@@ -79,7 +107,7 @@ export const useAgentStore = create<AgentStore>()(
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
 
-				// 初始化一个新的 streamingTurn
+				// Initialize a new streamingTurn
 				session.streamingTurn = {
 					userMessage: content,
 					textChunks: [],
@@ -103,7 +131,7 @@ export const useAgentStore = create<AgentStore>()(
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
 
-				// 确保有 streamingTurn（防御性编程）
+				// Ensure streamingTurn exists (defensive)
 				if (!session.streamingTurn) {
 					consola.warn(
 						`[AgentStore] Received agent event but no streamingTurn exists for ${sessionId}`,
@@ -133,50 +161,16 @@ export const useAgentStore = create<AgentStore>()(
 
 				const streamingTurn = session.streamingTurn;
 
-				// 将累积的内容转换为 AgentMessageContent 数组
-				const agentContent: AgentMessageContent[] = [];
+				const agentContent = flushStreamingTurn(streamingTurn);
 
-				// 文本消息
-				if (streamingTurn.textChunks.length > 0) {
-					agentContent.push({
-						type: "text",
-						text: streamingTurn.textChunks.join(""),
-						role: "assistant",
-					});
-				}
-
-				// 思考块
-				if (streamingTurn.thoughtChunks.length > 0) {
-					agentContent.push({
-						type: "thought",
-						text: streamingTurn.thoughtChunks.join(""),
-					});
-				}
-
-				// 工具调用
-				for (const toolCall of streamingTurn.toolCalls.values()) {
-					agentContent.push({
-						type: "tool_call",
-						data: toolCall,
-					});
-				}
-
-				// 计划
-				if (streamingTurn.plan) {
-					agentContent.push({
-						type: "plan",
-						data: streamingTurn.plan,
-					});
-				}
-
-				// 创建完整的 turn
+				// Create completed turn
 				session.turns.push({
 					timestamp: Date.now(),
 					userMessage: streamingTurn.userMessage,
 					agentContent,
 				});
 
-				// 清理
+				// Cleanup
 				session.streamingTurn = null;
 				session.isStreaming = false;
 				session.error = null;
@@ -189,55 +183,32 @@ export const useAgentStore = create<AgentStore>()(
 				session.isStreaming = false;
 				session.error = error;
 
-				// 如果有部分内容，仍然保存（但标记错误）
+				// If there is partial content, still save it (but mark the error)
 				if (session.streamingTurn) {
 					const streamingTurn = session.streamingTurn;
-					const agentContent: AgentMessageContent[] = [];
+					const agentContent = flushStreamingTurn(streamingTurn);
 
-					// 保存已收到的文本（带错误标记）
-					if (streamingTurn.textChunks.length > 0) {
-						agentContent.push({
-							type: "text",
-							text: `${streamingTurn.textChunks.join("")}\n\n[Error: ${error}]`,
-							role: "assistant",
-						});
+					// Prepend or append error to text content
+					const textIdx = agentContent.findIndex((c) => c.type === "text");
+					if (textIdx >= 0) {
+						const textItem = agentContent[textIdx] as { type: "text"; text: string; role: string };
+						textItem.text = `${textItem.text}\n\n[Error: ${error}]`;
 					} else {
-						// 如果没有内容，只显示错误
-						agentContent.push({
+						agentContent.unshift({
 							type: "text",
 							text: `[Error: ${error}]`,
 							role: "assistant",
 						});
 					}
 
-					// 保存其他已收到的内容
-					if (streamingTurn.thoughtChunks.length > 0) {
-						agentContent.push({
-							type: "thought",
-							text: streamingTurn.thoughtChunks.join(""),
-						});
-					}
-
-					for (const toolCall of streamingTurn.toolCalls.values()) {
-						// 将不完整的工具调用标记为 failed
-						agentContent.push({
-							type: "tool_call",
-							data: {
-								...toolCall,
-								status:
-									toolCall.status === "pending" ||
-									toolCall.status === "in_progress"
-										? "failed"
-										: toolCall.status,
-							},
-						});
-					}
-
-					if (streamingTurn.plan) {
-						agentContent.push({
-							type: "plan",
-							data: streamingTurn.plan,
-						});
+					// Mark incomplete tool calls as failed
+					for (const item of agentContent) {
+						if (item.type === "tool_call") {
+							const tc = item.data;
+							if (tc.status === "pending" || tc.status === "in_progress") {
+								item.data = { ...tc, status: "failed" };
+							}
+						}
 					}
 
 					session.turns.push({
@@ -304,7 +275,7 @@ export const useAgentStore = create<AgentStore>()(
 						}
 					}
 
-					// 重放所有 agent 事件来重建内容
+					// Replay all agent events to reconstruct content
 					const tempStreamingTurn: StreamingTurn = {
 						userMessage,
 						textChunks: [],
@@ -322,7 +293,7 @@ export const useAgentStore = create<AgentStore>()(
 							const payload = JSON.parse(
 								event.payload_json,
 							);
-							// 重放事件处理逻辑
+							// Replay event handling logic
 							replayAgentEvent(tempStreamingTurn, payload);
 						} catch (err) {
 							consola.warn(
@@ -332,39 +303,9 @@ export const useAgentStore = create<AgentStore>()(
 						}
 					}
 
-					// 刷新为完整的 turn
-					const agentContent: AgentMessageContent[] = [];
+					const agentContent = flushStreamingTurn(tempStreamingTurn);
 
-					if (tempStreamingTurn.textChunks.length > 0) {
-						agentContent.push({
-							type: "text",
-							text: tempStreamingTurn.textChunks.join(""),
-							role: "assistant",
-						});
-					}
-
-					if (tempStreamingTurn.thoughtChunks.length > 0) {
-						agentContent.push({
-							type: "thought",
-							text: tempStreamingTurn.thoughtChunks.join(""),
-						});
-					}
-
-					for (const toolCall of tempStreamingTurn.toolCalls.values()) {
-						agentContent.push({
-							type: "tool_call",
-							data: toolCall,
-						});
-					}
-
-					if (tempStreamingTurn.plan) {
-						agentContent.push({
-							type: "plan",
-							data: tempStreamingTurn.plan,
-						});
-					}
-
-					// 只有在有内容时才创建 turn
+					// Only create a turn if there is content
 					if (userMessage || agentContent.length > 0) {
 						const timestamp = userEvent?.created_at
 							? userEvent.created_at * 1000
@@ -389,7 +330,7 @@ export const useAgentStore = create<AgentStore>()(
 );
 
 /**
- * 合并 ToolCallUpdate 到现有的 ToolCall
+ * Merge a ToolCallUpdate into an existing ToolCall
  */
 function mergeToolCallUpdate(
 	base: ToolCall,
@@ -477,7 +418,7 @@ function applySessionUpdate(
 }
 
 /**
- * 重放 agent 事件到 StreamingTurn（用于恢复）
+ * Replay an agent event into a StreamingTurn (used for restoration)
  */
 function replayAgentEvent(streamingTurn: StreamingTurn, payload: unknown) {
 	if (typeof payload !== "object" || payload === null) return;

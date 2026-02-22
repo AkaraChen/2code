@@ -320,31 +320,22 @@ pub fn list_project_sessions(
 	repo::agent::list_by_project(&mut conn, project_id)
 }
 
-/// Close a session: remove from map, shutdown agent, mark destroyed.
+/// Mark a session as destroyed in the database.
+/// The handler owns the runtime lifecycle (map removal + process shutdown).
 pub async fn close_session(
 	db: &DbPool,
-	sessions: &AgentSessionMap,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	// Remove from runtime map and shutdown
-	let removed = sessions.lock().await.remove(session_id);
-
-	if let Some(session) = removed {
-		// Shutdown agent process (best effort)
-		session.shutdown().await;
-	}
-
 	// Mark destroyed in DB
 	{
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
-
 		repo::agent::mark_destroyed(&mut conn, session_id)?;
 	}
 
 	tracing::info!(
 		target: "agent",
 		%session_id,
-		"service: closed and marked destroyed"
+		"service: marked session destroyed"
 	);
 
 	Ok(())

@@ -8,8 +8,8 @@ import { terminalThemes } from "./themes";
 export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = use(ThemeContext);
 	return useTerminalSettingsStore((s) => {
-		if (s.syncTerminalTheme) return s.darkTerminalTheme;
-		return isDark ? s.darkTerminalTheme : s.lightTerminalTheme;
+		if (s.syncTerminalTheme) return isDark ? s.darkTerminalTheme : s.lightTerminalTheme;
+		return s.darkTerminalTheme;
 	});
 }
 

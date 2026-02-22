@@ -13,8 +13,8 @@ interface MessageListProps {
 }
 
 /**
- * 消息列表组件
- * 显示历史 turns、流式输出和错误状态
+ * Message list component
+ * Displays historical turns, streaming output, and error state
  */
 export function MessageList({
 	turns,
@@ -31,7 +31,7 @@ export function MessageList({
 	return (
 		<Box flex="1" overflowY="auto" px="4" py="4">
 			<Flex direction="column" gap="4" minH="full" justify="flex-end">
-				{/* 空状态 */}
+				{/* Empty state */}
 				{turns?.length === 0 && !isStreaming && (
 					<Flex
 						align="center"
@@ -43,17 +43,17 @@ export function MessageList({
 					</Flex>
 				)}
 
-				{/* 已完成的 turns */}
+				{/* Completed turns */}
 				{turns?.map((turn) => (
 					<TurnRenderer key={turn.timestamp} turn={turn} />
 				))}
 
-				{/* 流式 turn */}
+				{/* Streaming turn */}
 				{isStreaming && streamingTurn && (
 					<StreamingTurnRenderer turn={streamingTurn} />
 				)}
 
-				{/* 错误 */}
+				{/* Error */}
 				{error && !isStreaming && (
 					<Box
 						px="4"

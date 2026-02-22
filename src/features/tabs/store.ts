@@ -8,7 +8,7 @@ import type { ProfileTab, TerminalPane } from "./types";
 
 enableMapSet();
 
-export interface ProfileTabState {
+interface ProfileTabState {
 	tabs: ProfileTab[];
 	activeTabId: string | null;
 	counter: number;

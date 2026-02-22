@@ -1,13 +1,15 @@
-import type { AgentMessage } from "../store";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface MessageBubbleProps {
-	message: AgentMessage;
+	message: {
+		role: "user" | "assistant";
+		content: string;
+	};
 }
 
 /**
- * 单条消息气泡
- * 根据消息角色(用户/助手)自动调整对齐和背景色
+ * Single message bubble.
+ * Adjusts alignment and background based on message role (user/assistant).
  */
 export function MessageBubble({ message }: MessageBubbleProps) {
 	const isUser = message.role === "user";

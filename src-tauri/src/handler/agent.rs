@@ -8,8 +8,9 @@ use agent::{
 	ContentPart, CredentialInfo, ManagedAgentSession, NotificationTaskMap,
 };
 use futures::StreamExt;
-use infra::db::DbPool;
+use infra::db::{DbPool, DbPoolExt};
 use model::agent::{AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord};
+use model::error::AppError;
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
 
@@ -113,7 +114,7 @@ pub fn spawn_notification_listener(
 #[tauri::command]
 pub fn list_agent_status(
 	state: State<'_, Arc<AgentManagerWrapper>>,
-) -> Result<Vec<AgentStatusInfo>, String> {
+) -> Result<Vec<AgentStatusInfo>, AppError> {
 	Ok(state.list_status())
 }
 
@@ -121,12 +122,12 @@ pub fn list_agent_status(
 pub async fn install_agent(
 	agent: String,
 	state: State<'_, Arc<AgentManagerWrapper>>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
 	let manager = state.inner().clone();
 	tokio::task::spawn_blocking(move || manager.install(&agent))
 		.await
-		.map_err(|e| e.to_string())?
-		.map_err(|e| format!("{e}"))?;
+		.map_err(|e| AppError::PtyError(e.to_string()))?
+		.map_err(|e| AppError::PtyError(format!("{e}")))?;
 	Ok(())
 }
 
@@ -144,23 +145,19 @@ pub async fn send_agent_prompt(
 	app: AppHandle,
 	sessions: State<'_, AgentSessionMap>,
 	db: State<'_, DbPool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
 	let session = {
 		let map = sessions.lock().await;
 		map.get(&session_id)
 			.cloned()
-			.ok_or_else(|| format!("session not found: {session_id}"))?
+			.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?
 	};
 
 	// Get next turn index and event index from database in one lock scope
 	let (turn_idx, event_idx) = {
-		let mut conn = db
-			.lock()
-			.map_err(|_| "Failed to acquire DB lock".to_string())?;
-		let turn = repo::agent::get_max_turn_index(&mut conn, &session_id)
-			.map_err(|e| format!("{e}"))? + 1;
-		let idx = repo::agent::next_event_index(&mut conn, &session_id)
-			.map_err(|e| format!("{e}"))?;
+		let mut conn = db.conn()?;
+		let turn = repo::agent::get_max_turn_index(&mut conn, &session_id)? + 1;
+		let idx = repo::agent::next_event_index(&mut conn, &session_id)?;
 		(turn, idx)
 	};
 
@@ -231,7 +228,7 @@ pub async fn close_agent_session(
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
 	db: State<'_, DbPool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
 	// Abort notification task first — this interrupts stream.next().await
 	// and releases Arc references before we remove the session.
 	if let Some(task) = tasks.lock().await.remove(&session_id) {
@@ -246,11 +243,9 @@ pub async fn close_agent_session(
 	// Remove session from runtime map
 	let session = sessions.lock().await.remove(&session_id);
 
-	// Mark session as destroyed in database (the service call's map-remove
-	// is a no-op here since we already removed the session above)
+	// Mark session as destroyed in database
 	if let Err(e) = service::agent::close_session(
 		db.inner(),
-		&sessions,
 		&session_id,
 	)
 	.await
@@ -299,7 +294,7 @@ pub async fn create_agent_session_persistent(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
-) -> Result<AgentSessionInfo, String> {
+) -> Result<AgentSessionInfo, AppError> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
 	let sessions_clone = sessions.inner().clone();
@@ -310,8 +305,8 @@ pub async fn create_agent_session_persistent(
 		manager_clone.resolve_launch(&agent_clone)
 	})
 	.await
-	.map_err(|e| e.to_string())?
-	.map_err(|e| format!("{e}"))?;
+	.map_err(|e| AppError::PtyError(e.to_string()))?
+	.map_err(|e| AppError::PtyError(format!("{e}")))?;
 
 	// Create session with database persistence
 	let session_id = service::agent::create_session(
@@ -323,15 +318,14 @@ pub async fn create_agent_session_persistent(
 		launch_spec,
 		HashMap::new(),
 	)
-	.await
-	.map_err(|e| format!("{e}"))?;
+	.await?;
 
 	// Get session info
 	let session = {
 		let map = sessions_clone.lock().await;
 		map.get(&session_id)
 			.cloned()
-			.ok_or_else(|| format!("session not found: {session_id}"))?
+			.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?
 	};
 	let info = session.info();
 
@@ -360,7 +354,7 @@ pub async fn reconnect_agent_session(
 	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
-) -> Result<AgentSessionInfo, String> {
+) -> Result<AgentSessionInfo, AppError> {
 	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
 	let sessions_clone = sessions.inner().clone();
@@ -372,15 +366,14 @@ pub async fn reconnect_agent_session(
 		&manager_clone,
 		&old_session_id,
 	)
-	.await
-	.map_err(|e| format!("{e}"))?;
+	.await?;
 
 	// Get session info
 	let session = {
 		let map = sessions_clone.lock().await;
 		map.get(&new_session_id)
 			.cloned()
-			.ok_or_else(|| format!("session not found after reconnect: {new_session_id}"))?
+			.ok_or_else(|| AppError::NotFound(format!("session after reconnect: {new_session_id}")))?
 	};
 	let info = session.info();
 
@@ -401,9 +394,8 @@ pub async fn reconnect_agent_session(
 pub fn list_project_agent_sessions(
 	project_id: String,
 	db: State<'_, DbPool>,
-) -> Result<Vec<AgentSessionRecord>, String> {
+) -> Result<Vec<AgentSessionRecord>, AppError> {
 	service::agent::list_project_sessions(db.inner(), &project_id)
-		.map_err(|e| format!("{e}"))
 }
 
 /// Delete an agent session record from the database.
@@ -411,9 +403,8 @@ pub fn list_project_agent_sessions(
 pub fn delete_agent_session_record(
 	session_id: String,
 	db: State<'_, DbPool>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
 	service::agent::delete_session(db.inner(), &session_id)
-		.map_err(|e| format!("{e}"))
 }
 
 /// List all events for an agent session (read-only).
@@ -421,10 +412,7 @@ pub fn delete_agent_session_record(
 pub fn list_agent_session_events(
 	session_id: String,
 	db: State<'_, DbPool>,
-) -> Result<Vec<AgentSessionEventRecord>, String> {
-	let mut conn = db
-		.lock()
-		.map_err(|_| "Failed to acquire DB lock".to_string())?;
+) -> Result<Vec<AgentSessionEventRecord>, AppError> {
+	let mut conn = db.conn()?;
 	repo::agent::get_session_events(&mut conn, &session_id)
-		.map_err(|e| format!("{e}"))
 }
