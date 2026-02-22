@@ -23,13 +23,13 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 	};
 
 	return (
-		<Flex justify="flex-start" w="full">
-			<Box maxW="80%" w="full" px="4" py="3" bg="blue.subtle" borderRadius="md">
+		<Box w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
+			<Box px="4" py="3" bg="bg.muted">
 				<Flex align="center" gap="2" mb="3">
-					<Icon fontSize="md" color="blue.fg">
+					<Icon fontSize="md" color="fg.default">
 						<LuClipboardList />
 					</Icon>
-					<Text fontSize="sm" fontWeight="semibold" color="blue.fg">
+					<Text fontSize="sm" fontWeight="semibold" color="fg.default">
 						{m.agentPlan()}
 					</Text>
 				</Flex>
@@ -41,6 +41,8 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 							px="3"
 							py="2"
 							bg="bg.panel"
+							border="1px solid"
+							borderColor="border.subtle"
 							borderRadius="sm"
 							align="center"
 							gap="3"
@@ -54,6 +56,6 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 					))}
 				</VStack>
 			</Box>
-		</Flex>
+		</Box>
 	);
 }

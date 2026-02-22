@@ -1,7 +1,7 @@
 import { Flex } from "@chakra-ui/react";
 import { match } from "ts-pattern";
 import type { AgentMessageContent } from "../types";
-import { MessageBubble } from "./MessageBubble";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { PlanBlock } from "./PlanBlock";
 import { ThoughtBlock } from "./ThoughtBlock";
 import { ToolCallBlock } from "./ToolCallBlock";
@@ -12,18 +12,11 @@ interface AgentResponseGroupProps {
 
 export function AgentResponseGroup({ content }: AgentResponseGroupProps) {
 	return (
-		<Flex direction="column" gap="2">
+		<Flex direction="column" gap="4">
 			{content.map((item) =>
 				match(item)
 					.with({ type: "text" }, (i) => (
-						<MessageBubble
-							key={i.text}
-							message={{
-								role: i.role,
-								content: i.text,
-								timestamp: 0, // timestamp 在 turn 级别
-							}}
-						/>
+						<MarkdownRenderer key={i.text} content={i.text} />
 					))
 					.with({ type: "thought" }, (i) => (
 						<ThoughtBlock key={i.text} text={i.text} />

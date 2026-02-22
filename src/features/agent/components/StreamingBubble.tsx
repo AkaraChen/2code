@@ -1,4 +1,4 @@
-import { Spinner } from "@chakra-ui/react";
+import { Spinner, Flex } from "@chakra-ui/react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface StreamingBubbleProps {
@@ -12,8 +12,9 @@ interface StreamingBubbleProps {
 export function StreamingBubble({ content }: StreamingBubbleProps) {
 	if (!content) return null;
 	return (
-		<MarkdownRenderer content={content} isAnimating>
-			<Spinner size="xs" ml="2" />
-		</MarkdownRenderer>
+		<Flex align="center" gap="2">
+			<MarkdownRenderer content={content} isAnimating />
+			<Spinner size="xs" color="fg.muted" />
+		</Flex>
 	);
 }

@@ -1,4 +1,4 @@
-import { Box, CodeBlock, createShikiAdapter, Flex } from "@chakra-ui/react";
+import { Box, CodeBlock, createShikiAdapter } from "@chakra-ui/react";
 import type { HighlighterGeneric } from "shiki";
 import { Streamdown } from "streamdown";
 import { streamdownComponents } from "../utils/streamdownComponents";
@@ -31,8 +31,9 @@ const shikiAdapter = createShikiAdapter<HighlighterGeneric<any, any>>({
 
 interface MarkdownRendererProps {
 	content: string;
-	align?: "flex-start" | "flex-end";
 	bg?: string;
+	px?: string | number;
+	py?: string | number;
 	isAnimating?: boolean;
 	children?: React.ReactNode;
 }
@@ -43,33 +44,32 @@ interface MarkdownRendererProps {
  */
 export function MarkdownRenderer({
 	content,
-	align = "flex-start",
-	bg = "bg.muted",
+	bg = "transparent",
+	px = "0",
+	py = "0",
 	isAnimating = false,
 	children,
 }: MarkdownRendererProps) {
 	return (
-		<Flex justify={align} w="full">
-			<Box
-				maxW="80%"
-				px="4"
-				py="2"
-				borderRadius="lg"
-				bg={bg}
-				fontSize="sm"
-				overflow="auto"
-			>
-				<CodeBlock.AdapterProvider value={shikiAdapter}>
-					<Streamdown
-						animated
-						isAnimating={isAnimating}
-						components={streamdownComponents}
-					>
-						{content}
-					</Streamdown>
-				</CodeBlock.AdapterProvider>
-				{children}
-			</Box>
-		</Flex>
+		<Box
+			w="full"
+			px={px}
+			py={py}
+			borderRadius="lg"
+			bg={bg}
+			fontSize="sm"
+			overflow="auto"
+		>
+			<CodeBlock.AdapterProvider value={shikiAdapter}>
+				<Streamdown
+					animated
+					isAnimating={isAnimating}
+					components={streamdownComponents}
+				>
+					{content}
+				</Streamdown>
+			</CodeBlock.AdapterProvider>
+			{children}
+		</Box>
 	);
 }

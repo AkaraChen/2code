@@ -1,6 +1,7 @@
 import { Flex } from "@chakra-ui/react";
 import type { AgentTurn } from "../types";
-import { MessageBubble } from "./MessageBubble";
+import { Message } from "./Message";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { AgentResponseGroup } from "./AgentResponseGroup";
 
 interface TurnRendererProps {
@@ -9,21 +10,19 @@ interface TurnRendererProps {
 
 export function TurnRenderer({ turn }: TurnRendererProps) {
 	return (
-		<Flex direction="column" gap="3">
+		<Flex direction="column">
 			{/* 用户消息 */}
 			{turn.userMessage && (
-				<MessageBubble
-					message={{
-						role: "user",
-						content: turn.userMessage,
-						timestamp: turn.timestamp,
-					}}
-				/>
+				<Message role="user">
+					<MarkdownRenderer content={turn.userMessage} bg="transparent" px="0" py="0" />
+				</Message>
 			)}
 
 			{/* Agent 响应 */}
 			{turn.agentContent.length > 0 && (
-				<AgentResponseGroup content={turn.agentContent} />
+				<Message role="assistant">
+					<AgentResponseGroup content={turn.agentContent} />
+				</Message>
 			)}
 		</Flex>
 	);

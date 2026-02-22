@@ -1,7 +1,8 @@
 import { Flex } from "@chakra-ui/react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { StreamingTurn } from "../types";
-import { MessageBubble } from "./MessageBubble";
+import { Message } from "./Message";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { PlanBlock } from "./PlanBlock";
 import { StreamingBubble } from "./StreamingBubble";
 import { ThoughtBlock } from "./ThoughtBlock";
@@ -12,7 +13,6 @@ interface StreamingTurnRendererProps {
 }
 
 export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
-	const [timestamp] = useState(() => Date.now());
 	const thoughtText = useMemo(
 		() => turn.thoughtChunks.join(""),
 		[turn.thoughtChunks],
@@ -23,28 +23,26 @@ export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
 	);
 
 	return (
-		<Flex direction="column" gap="3">
+		<Flex direction="column">
 			{turn.userMessage && (
-				<MessageBubble
-					message={{
-						role: "user",
-						content: turn.userMessage,
-						timestamp,
-					}}
-				/>
+				<Message role="user">
+					<MarkdownRenderer content={turn.userMessage} />
+				</Message>
 			)}
 
-			<Flex direction="column" gap="2">
-				{thoughtText && <ThoughtBlock text={thoughtText} />}
+			<Message role="assistant">
+				<Flex direction="column" gap="4">
+					{thoughtText && <ThoughtBlock text={thoughtText} />}
 
-				{Array.from(turn.toolCalls.values()).map((toolCall) => (
-					<ToolCallBlock key={toolCall.toolCallId} toolCall={toolCall} />
-				))}
+					{Array.from(turn.toolCalls.values()).map((toolCall) => (
+						<ToolCallBlock key={toolCall.toolCallId} toolCall={toolCall} />
+					))}
 
-				{turn.plan && <PlanBlock plan={turn.plan} />}
+					{turn.plan && <PlanBlock plan={turn.plan} />}
 
-				{textContent && <StreamingBubble content={textContent} />}
-			</Flex>
+					{textContent && <StreamingBubble content={textContent} />}
+				</Flex>
+			</Message>
 		</Flex>
 	);
 }

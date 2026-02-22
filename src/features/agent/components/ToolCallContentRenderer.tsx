@@ -17,7 +17,6 @@ export function ToolCallContentRenderer({
 			<MarkdownRenderer
 				content={c.content.text}
 				bg="transparent"
-				align="flex-start"
 			/>
 		))
 		.with({ type: "content", content: { type: "image" } }, (c) => (
