@@ -30,15 +30,8 @@ fn resolve_project_info(
 	profile_id: &str,
 ) -> Result<(String, String, String), AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	let project = repo::project::list_all(conn)?
-		.into_iter()
-		.find(|p| p.id == profile.project_id);
-	match project {
-		Some(p) => Ok((p.id, p.name, profile.branch_name)),
-		None => Err(AppError::NotFound(format!(
-			"Project for profile: {profile_id}"
-		))),
-	}
+	let project = repo::project::find_by_id(conn, &profile.project_id)?;
+	Ok((project.id, project.name, profile.branch_name))
 }
 
 /// Capture stats for a PTY session before it is hard-deleted.

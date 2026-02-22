@@ -34,7 +34,7 @@ function StatCard({ label, value }: StatCardProps) {
 
 export function OverviewCards({ stats }: { stats: HomepageStats }) {
 	return (
-		<SimpleGrid columns={4} gap="4">
+		<SimpleGrid columns={{ base: 2, md: 4 }} gap="4">
 			<StatCard
 				label={m.statsTotalProjects()}
 				value={stats.totalProjects}

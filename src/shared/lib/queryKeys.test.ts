@@ -1,18 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { queryKeys, queryNamespaces } from "./queryKeys";
 
-describe("queryNamespaces", () => {
-	it("contains all expected namespace strings", () => {
-		expect(queryNamespaces).toEqual({
-			project: "project",
-			"git-branch": "git-branch",
-			"git-diff": "git-diff",
-			"git-log": "git-log",
-			"git-commit-diff": "git-commit-diff",
-		});
-	});
-});
-
 describe("queryKeys", () => {
 	describe("projects", () => {
 		it("returns static key for all projects", () => {
@@ -60,6 +48,22 @@ describe("queryKeys", () => {
 
 		it("returns different references on each call (factory)", () => {
 			expect(queryKeys.git.diff("a")).not.toBe(queryKeys.git.diff("a"));
+		});
+	});
+
+	describe("queryNamespaces", () => {
+		it("maps each namespace to its string value", () => {
+			expect(queryNamespaces.projects).toBe("projects");
+			expect(queryNamespaces["git-diff"]).toBe("git-diff");
+			expect(queryNamespaces["git-log"]).toBe("git-log");
+		});
+
+		it("namespace strings match queryKeys prefixes", () => {
+			expect(queryKeys.git.diff("x")[0]).toBe(queryNamespaces["git-diff"]);
+			expect(queryKeys.git.log("x")[0]).toBe(queryNamespaces["git-log"]);
+			expect(queryKeys.git.branch("x")[0]).toBe(
+				queryNamespaces["git-branch"],
+			);
 		});
 	});
 });

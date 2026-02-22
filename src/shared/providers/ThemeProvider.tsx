@@ -5,9 +5,17 @@ import { useThemeStore } from "@/features/settings/stores/themeStore";
 import type { Preference, ThemeContextValue } from "./themeContext";
 import { ThemeContext } from "./themeContext";
 
+function AccentColorWrapper({ children }: { children: React.ReactNode }) {
+	const accentColor = useThemeStore((s) => s.accentColor);
+	return (
+		<Box colorPalette={accentColor} css={{ display: "contents" }}>
+			{children}
+		</Box>
+	);
+}
+
 function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
-	const accentColor = useThemeStore((s) => s.accentColor);
 
 	const value = useMemo<ThemeContextValue>(
 		() => ({
@@ -20,9 +28,7 @@ function ThemeBridge({ children }: { children: React.ReactNode }) {
 
 	return (
 		<ThemeContext value={value}>
-			<Box colorPalette={accentColor} css={{ display: "contents" }}>
-				{children}
-			</Box>
+			<AccentColorWrapper>{children}</AccentColorWrapper>
 		</ThemeContext>
 	);
 }

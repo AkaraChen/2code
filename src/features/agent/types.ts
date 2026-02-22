@@ -1,9 +1,9 @@
 /**
- * ACP (Agent Communication Protocol) 消息类型定义
- * 重新导出 SDK 类型，并添加应用层特定类型
+ * ACP (Agent Communication Protocol) message type definitions
+ * Re-exports SDK types and adds application-layer specific types
  */
 
-// ==================== 从 SDK 重新导出核心类型 ====================
+// ==================== Re-exported core types from SDK ====================
 
 export type {
 	ToolCallStatus,
@@ -14,12 +14,12 @@ export type {
 	Plan,
 } from "@agentclientprotocol/sdk";
 
-// ==================== 应用层特定类型 ====================
+// ==================== Application-layer specific types ====================
 
 import type { ToolCall, Plan } from "@agentclientprotocol/sdk";
 
 /**
- * 统一的消息内容类型（用于 UI 渲染）
+ * Unified message content type (used for UI rendering)
  */
 export type AgentMessageContent =
 	| { type: "text"; text: string; role: "user" | "assistant" }
@@ -28,7 +28,7 @@ export type AgentMessageContent =
 	| { type: "plan"; data: Plan };
 
 /**
- * Turn 结构 - 一个完整的对话轮次
+ * Turn structure - a complete conversation turn
  */
 export interface AgentTurn {
 	timestamp: number;
@@ -37,7 +37,7 @@ export interface AgentTurn {
 }
 
 /**
- * 流式累积器 - 用于累积流式更新
+ * Streaming accumulator - used to accumulate streaming updates
  */
 export interface StreamingTurn {
 	userMessage: string;

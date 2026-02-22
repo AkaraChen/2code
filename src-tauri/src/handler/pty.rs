@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 
-use infra::db::DbPool;
+use infra::db::{DbPool, DbPoolExt};
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
@@ -35,7 +35,7 @@ pub fn resize_pty(
 ) -> Result<(), AppError> {
 	session::resize_pty(&sessions, &session_id, rows, cols)?;
 
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *db.conn()?;
 	repo::pty::update_dimensions(conn, &session_id, cols, rows);
 
 	Ok(())
@@ -55,7 +55,7 @@ pub fn list_project_sessions(
 	project_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *state.conn()?;
 	service::pty::list_project_sessions(conn, &project_id)
 }
 
@@ -64,7 +64,7 @@ pub fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *state.conn()?;
 	service::pty::delete_session(conn, &session_id)
 }
 
@@ -73,7 +73,7 @@ pub fn get_session_output(
 	session_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<u8>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *state.conn()?;
 	service::pty::get_history(conn, &session_id)
 }
 

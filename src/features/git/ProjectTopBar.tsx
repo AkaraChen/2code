@@ -45,7 +45,6 @@ export default function ProjectTopBar({
 	profile,
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
-	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const createTab = useCreateTab();
 
 	const { data: agents } = useQuery({
@@ -127,7 +126,6 @@ export default function ProjectTopBar({
 						<Comp
 							key={controlId}
 							profile={profile}
-							options={controlOptions[controlId] ?? {}}
 						/>
 					);
 				})}

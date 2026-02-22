@@ -1,12 +1,14 @@
 import { IconButton } from "@chakra-ui/react";
 import { RiBugLine } from "react-icons/ri";
+import { useShallow } from "zustand/react/shallow";
 import * as m from "@/paraglide/messages.js";
 import DebugLogDialog from "./DebugLogDialog";
 import { useDebugStore } from "./debugStore";
 
 export default function DebugFloat() {
-	const enabled = useDebugStore((s) => s.enabled);
-	const panelOpen = useDebugStore((s) => s.panelOpen);
+	const { enabled, panelOpen } = useDebugStore(
+		useShallow((s) => ({ enabled: s.enabled, panelOpen: s.panelOpen })),
+	);
 
 	if (!enabled) return null;
 

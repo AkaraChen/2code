@@ -2,6 +2,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use model::error::AppError;
+
 const SOUNDS_DIR: &str = "/System/Library/Sounds";
 
 #[tauri::command]
@@ -23,15 +25,15 @@ pub fn list_system_sounds() -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn play_system_sound(name: String) -> Result<(), String> {
+pub fn play_system_sound(name: String) -> Result<(), AppError> {
 	let path = Path::new(SOUNDS_DIR).join(format!("{name}.aiff"));
 	if !path.exists() {
-		return Err(format!("Sound not found: {name}"));
+		return Err(AppError::PtyError(format!("Sound not found: {name}")));
 	}
 	Command::new("afplay")
 		.arg(&path)
 		.spawn()
-		.map_err(|e| format!("Failed to play sound: {e}"))?;
+		.map_err(|e| AppError::PtyError(format!("Failed to play sound: {e}")))?;
 	Ok(())
 }
 
@@ -44,7 +46,7 @@ mod tests {
 		let result = play_system_sound("definitely_not_a_real_sound".into());
 		assert!(result.is_err());
 		let err = result.unwrap_err();
-		assert!(err.contains("Sound not found"));
+		assert!(err.to_string().contains("Sound not found"));
 	}
 
 	#[test]

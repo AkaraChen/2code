@@ -3,12 +3,24 @@ use diesel::sqlite::SqliteConnection;
 use diesel_migrations::{
 	embed_migrations, EmbeddedMigrations, MigrationHarness,
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use model::error::AppError;
 
 pub const MIGRATIONS: EmbeddedMigrations =
 	embed_migrations!("../../migrations");
 
 pub type DbPool = Arc<Mutex<SqliteConnection>>;
+
+pub trait DbPoolExt {
+	fn conn(&self) -> Result<MutexGuard<'_, SqliteConnection>, AppError>;
+}
+
+impl DbPoolExt for DbPool {
+	fn conn(&self) -> Result<MutexGuard<'_, SqliteConnection>, AppError> {
+		self.lock().map_err(|_| AppError::LockError)
+	}
+}
 
 pub fn init_db(app_data_dir: &std::path::Path) -> Result<DbPool, String> {
 	std::fs::create_dir_all(app_data_dir)
