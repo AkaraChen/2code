@@ -4,8 +4,8 @@ import { memo, useContext, useMemo } from "react";
 import { ThemeContext } from "@/shared/providers/themeContext";
 
 const COLORS = {
-	light: { base: "#71717a", highlight: "#fff" },
-	dark: { base: "#a1a1aa", highlight: "#fff" },
+	light: { base: "#71717a", highlight: "#ffffff" },
+	dark: { base: "#a1a1aa", highlight: "#09090b" },
 };
 
 interface TextShimmerProps {
@@ -43,7 +43,7 @@ const TextShimmerComponent = ({
 			style={
 				{
 					"--spread": `${dynamicSpread}px`,
-					backgroundImage: `linear-gradient(90deg, transparent calc(50% - var(--spread)), ${colors.highlight}, transparent calc(50% + var(--spread))), linear-gradient(${colors.base}, ${colors.base})`,
+					backgroundImage: `linear-gradient(90deg, #0000 calc(50% - var(--spread)), ${colors.highlight}, #0000 calc(50% + var(--spread))), linear-gradient(${colors.base}, ${colors.base})`,
 					backgroundSize: "250% 100%, auto",
 					backgroundRepeat: "no-repeat, padding-box",
 					backgroundClip: "text",
