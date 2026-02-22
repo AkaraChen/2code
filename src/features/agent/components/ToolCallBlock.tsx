@@ -40,6 +40,27 @@ const STATUS_BORDER_COLOR = {
 	failed: "red.solid",
 };
 
+function RawDataSection({ label, data }: { label: string; data: unknown }) {
+	return (
+		<Box mt="3">
+			<Text fontSize="xs" fontWeight="medium" color="fg.muted" mb="1">
+				{label}:
+			</Text>
+			<Box
+				px="3"
+				py="2"
+				bg="bg.subtle"
+				borderRadius="sm"
+				fontSize="xs"
+				fontFamily="mono"
+				overflowX="auto"
+			>
+				<pre>{JSON.stringify(data, null, 2)}</pre>
+			</Box>
+		</Box>
+	);
+}
+
 interface ToolCallBlockProps {
 	toolCall: ToolCall;
 }
@@ -84,12 +105,10 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 
 					<Collapsible.Content>
 						<Box px="4" py="3" bg="bg.muted" borderRadius="md">
-							{/* 文件位置 */}
 							{toolCall.locations && toolCall.locations.length > 0 && (
 								<FileLocationsList locations={toolCall.locations} />
 							)}
 
-							{/* 工具内容 */}
 							{toolCall.content?.map((content) => (
 								<ToolCallContentRenderer
 									key={match(content)
@@ -101,58 +120,19 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 								/>
 							))}
 
-							{/* 原始输入/输出（仅在展开时显示） */}
 							{expanded && (
 								<>
 									{toolCall.rawInput && (
-										<Box mt="3">
-											<Text
-												fontSize="xs"
-												fontWeight="medium"
-												color="fg.muted"
-												mb="1"
-											>
-												{m.agentToolInput()}:
-											</Text>
-											<Box
-												px="3"
-												py="2"
-												bg="bg.subtle"
-												borderRadius="sm"
-												fontSize="xs"
-												fontFamily="mono"
-												overflowX="auto"
-											>
-												<pre>
-													{JSON.stringify(toolCall.rawInput, null, 2)}
-												</pre>
-											</Box>
-										</Box>
+										<RawDataSection
+											label={m.agentToolInput()}
+											data={toolCall.rawInput}
+										/>
 									)}
 									{toolCall.rawOutput && (
-										<Box mt="3">
-											<Text
-												fontSize="xs"
-												fontWeight="medium"
-												color="fg.muted"
-												mb="1"
-											>
-												{m.agentToolOutput()}:
-											</Text>
-											<Box
-												px="3"
-												py="2"
-												bg="bg.subtle"
-												borderRadius="sm"
-												fontSize="xs"
-												fontFamily="mono"
-												overflowX="auto"
-											>
-												<pre>
-													{JSON.stringify(toolCall.rawOutput, null, 2)}
-												</pre>
-											</Box>
-										</Box>
+										<RawDataSection
+											label={m.agentToolOutput()}
+											data={toolCall.rawOutput}
+										/>
 									)}
 								</>
 							)}

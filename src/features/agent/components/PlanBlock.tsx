@@ -3,25 +3,23 @@ import { LuClipboardList } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
 import type { Plan } from "../types";
 
+const STATUS_ICON = {
+	pending: "⏸️",
+	in_progress: "▶️",
+	completed: "✅",
+};
+
+const PRIORITY_ICON = {
+	high: "🔴",
+	medium: "🟡",
+	low: "🟢",
+};
+
 interface PlanBlockProps {
 	plan: Plan;
 }
 
 export function PlanBlock({ plan }: PlanBlockProps) {
-	// 状态图标
-	const statusIcon = {
-		pending: "⏸️",
-		in_progress: "▶️",
-		completed: "✅",
-	};
-
-	// 优先级图标
-	const priorityIcon = {
-		high: "🔴",
-		medium: "🟡",
-		low: "🟢",
-	};
-
 	return (
 		<Box w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
 			<Box px="4" py="3" bg="bg.muted">
@@ -47,8 +45,8 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 							align="center"
 							gap="3"
 						>
-							<Text fontSize="lg">{statusIcon[entry.status]}</Text>
-							<Text fontSize="lg">{priorityIcon[entry.priority]}</Text>
+							<Text fontSize="lg">{STATUS_ICON[entry.status]}</Text>
+							<Text fontSize="lg">{PRIORITY_ICON[entry.priority]}</Text>
 							<Text flex="1" fontSize="sm">
 								{entry.content}
 							</Text>

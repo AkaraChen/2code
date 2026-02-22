@@ -8,10 +8,6 @@ interface ChatInputProps {
 	disabled?: boolean;
 }
 
-/**
- * 聊天输入框
- * 支持 Enter 发送、Shift+Enter 换行
- */
 export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 	const [input, setInput] = useState("");
 

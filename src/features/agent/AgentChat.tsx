@@ -44,11 +44,6 @@ function needsReconnection(sessionId: string): boolean {
 	);
 }
 
-/**
- * Suspends until reconnection completes.
- * After resolve, reconnect() has updated tab.sessionId in the store,
- * so the parent re-renders this component with the new sessionId prop.
- */
 function AwaitReconnection({ sessionId }: { sessionId: string }) {
 	use(getReconnectPromise(sessionId));
 	return null;
@@ -98,7 +93,6 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		[sendPrompt, sessionId],
 	);
 
-	// Lazy reconnection: suspend when tab is focused and needs reconnecting
 	if (isActive && needsReconnection(sessionId)) {
 		return (
 			<ErrorBoundary FallbackComponent={ReconnectErrorFallback}>

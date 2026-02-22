@@ -9,7 +9,6 @@ interface ThoughtBlockProps {
 }
 
 export function ThoughtBlock({ text }: ThoughtBlockProps) {
-	// 默认折叠，但如果内容很短（< 100 字符）则展开
 	const [open, setOpen] = useState(text.length < 100);
 
 	return (
