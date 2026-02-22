@@ -37,12 +37,11 @@ export interface AgentTurn {
 }
 
 /**
- * Streaming accumulator - used to accumulate streaming updates
+ * Streaming accumulator - uses the same content model as completed turns.
+ * Events are appended in arrival order; text/thought chunks are concatenated
+ * onto the matching tail entry of the array.
  */
 export interface StreamingTurn {
 	userMessage: string;
-	textChunks: string[];
-	thoughtChunks: string[];
-	toolCalls: Map<string, ToolCall>;
-	plan: Plan | null;
+	agentContent: AgentMessageContent[];
 }

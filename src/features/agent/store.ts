@@ -53,38 +53,7 @@ function ensureSession(
 }
 
 function flushStreamingTurn(turn: StreamingTurn): AgentMessageContent[] {
-	const content: AgentMessageContent[] = [];
-
-	if (turn.textChunks.length > 0) {
-		content.push({
-			type: "text",
-			text: turn.textChunks.join(""),
-			role: "assistant",
-		});
-	}
-
-	if (turn.thoughtChunks.length > 0) {
-		content.push({
-			type: "thought",
-			text: turn.thoughtChunks.join(""),
-		});
-	}
-
-	for (const toolCall of turn.toolCalls.values()) {
-		content.push({
-			type: "tool_call",
-			data: toolCall,
-		});
-	}
-
-	if (turn.plan) {
-		content.push({
-			type: "plan",
-			data: turn.plan,
-		});
-	}
-
-	return content;
+	return [...turn.agentContent];
 }
 
 export const useAgentStore = create<AgentStore>()(
@@ -107,13 +76,9 @@ export const useAgentStore = create<AgentStore>()(
 			set((state) => {
 				const session = ensureSession(state.sessions, sessionId);
 
-				// Initialize a new streamingTurn
 				session.streamingTurn = {
 					userMessage: content,
-					textChunks: [],
-					thoughtChunks: [],
-					toolCalls: new Map(),
-					plan: null,
+					agentContent: [],
 				};
 
 				// Note: User message persistence is now handled by backend in send_agent_prompt
@@ -278,10 +243,7 @@ export const useAgentStore = create<AgentStore>()(
 					// Replay all agent events to reconstruct content
 					const tempStreamingTurn: StreamingTurn = {
 						userMessage,
-						textChunks: [],
-						thoughtChunks: [],
-						toolCalls: new Map(),
-						plan: null,
+						agentContent: [],
 					};
 
 					const agentEvents = turnEvents
@@ -359,48 +321,73 @@ function mergeToolCallUpdate(
 /**
  * Apply a single session update to a StreamingTurn.
  * Shared between live event handling and replay-based restoration.
+ * Content is appended in arrival order; text/thought chunks are concatenated
+ * onto the matching tail entry of the array.
  */
 function applySessionUpdate(
 	streamingTurn: StreamingTurn,
 	update: SessionNotification["update"],
 ) {
+	const content = streamingTurn.agentContent;
+
 	match(update)
 		.with(
 			{ sessionUpdate: "agent_message_chunk", content: { type: "text" } },
 			(u) => {
-				streamingTurn.textChunks.push(u.content.text);
+				const last = content[content.length - 1];
+				if (last && last.type === "text") {
+					(last as { type: "text"; text: string; role: string }).text +=
+						u.content.text;
+				} else {
+					content.push({
+						type: "text",
+						text: u.content.text,
+						role: "assistant",
+					});
+				}
 			},
 		)
 		.with(
 			{ sessionUpdate: "agent_thought_chunk", content: { type: "text" } },
 			(u) => {
-				streamingTurn.thoughtChunks.push(u.content.text);
+				const last = content[content.length - 1];
+				if (last && last.type === "thought") {
+					(last as { type: "thought"; text: string }).text +=
+						u.content.text;
+				} else {
+					content.push({
+						type: "thought",
+						text: u.content.text,
+					});
+				}
 			},
 		)
 		.with({ sessionUpdate: "tool_call" }, (u) => {
 			const toolCall = u as unknown as ToolCall;
-			streamingTurn.toolCalls.set(toolCall.toolCallId, toolCall);
+			content.push({ type: "tool_call", data: toolCall });
 		})
 		.with({ sessionUpdate: "tool_call_update" }, (u) => {
 			const toolCallUpdate = u as unknown as ToolCallUpdate;
-			const existing = streamingTurn.toolCalls.get(
-				toolCallUpdate.toolCallId,
+			const existing = content.find(
+				(item): item is { type: "tool_call"; data: ToolCall } =>
+					item.type === "tool_call" &&
+					item.data.toolCallId === toolCallUpdate.toolCallId,
 			);
 			if (existing) {
-				streamingTurn.toolCalls.set(
-					toolCallUpdate.toolCallId,
-					mergeToolCallUpdate(existing, toolCallUpdate),
-				);
+				existing.data = mergeToolCallUpdate(existing.data, toolCallUpdate);
 			} else {
-				streamingTurn.toolCalls.set(toolCallUpdate.toolCallId, {
-					toolCallId: toolCallUpdate.toolCallId,
-					title: toolCallUpdate.title ?? "Tool Call",
-					status: toolCallUpdate.status ?? "pending",
-					kind: toolCallUpdate.kind ?? undefined,
-					rawInput: toolCallUpdate.rawInput,
-					rawOutput: toolCallUpdate.rawOutput,
-					content: toolCallUpdate.content ?? undefined,
-					locations: toolCallUpdate.locations ?? undefined,
+				content.push({
+					type: "tool_call",
+					data: {
+						toolCallId: toolCallUpdate.toolCallId,
+						title: toolCallUpdate.title ?? "Tool Call",
+						status: toolCallUpdate.status ?? "pending",
+						kind: toolCallUpdate.kind ?? undefined,
+						rawInput: toolCallUpdate.rawInput,
+						rawOutput: toolCallUpdate.rawOutput,
+						content: toolCallUpdate.content ?? undefined,
+						locations: toolCallUpdate.locations ?? undefined,
+					},
 				});
 			}
 		})
@@ -412,7 +399,15 @@ function applySessionUpdate(
 					priority: "high" | "medium" | "low";
 				}>;
 			};
-			streamingTurn.plan = plan;
+			const existingPlan = content.find(
+				(item): item is { type: "plan"; data: typeof plan } =>
+					item.type === "plan",
+			);
+			if (existingPlan) {
+				existingPlan.data = plan;
+			} else {
+				content.push({ type: "plan", data: plan });
+			}
 		})
 		.otherwise(() => {});
 }

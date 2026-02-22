@@ -1,5 +1,5 @@
 import { Flex } from "@chakra-ui/react";
-import { useMemo } from "react";
+import { match } from "ts-pattern";
 import type { StreamingTurn } from "../types";
 import { Message } from "./Message";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -13,14 +13,16 @@ interface StreamingTurnRendererProps {
 }
 
 export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
-	const thoughtText = useMemo(
-		() => turn.thoughtChunks.join(""),
-		[turn.thoughtChunks],
-	);
-	const textContent = useMemo(
-		() => turn.textChunks.join(""),
-		[turn.textChunks],
-	);
+	const { agentContent } = turn;
+
+	// Find the last text entry index to render it as StreamingBubble
+	let lastTextIndex = -1;
+	for (let i = agentContent.length - 1; i >= 0; i--) {
+		if (agentContent[i].type === "text") {
+			lastTextIndex = i;
+			break;
+		}
+	}
 
 	return (
 		<Flex direction="column">
@@ -30,19 +32,41 @@ export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
 				</Message>
 			)}
 
-			<Message role="assistant">
-				<Flex direction="column" gap="4">
-					{thoughtText && <ThoughtBlock text={thoughtText} />}
-
-					{Array.from(turn.toolCalls.values()).map((toolCall) => (
-						<ToolCallBlock key={toolCall.toolCallId} toolCall={toolCall} />
-					))}
-
-					{turn.plan && <PlanBlock plan={turn.plan} />}
-
-					{textContent && <StreamingBubble content={textContent} />}
-				</Flex>
-			</Message>
+			{agentContent.length > 0 && (
+				<Message role="assistant">
+					<Flex direction="column" gap="4">
+						{agentContent.map((item, index) =>
+							match(item)
+								.with({ type: "text" }, (i) =>
+									index === lastTextIndex ? (
+										<StreamingBubble
+											key={`text-${index}`}
+											content={i.text}
+										/>
+									) : (
+										<MarkdownRenderer
+											key={`text-${index}`}
+											content={i.text}
+										/>
+									),
+								)
+								.with({ type: "thought" }, (i) => (
+									<ThoughtBlock key={`thought-${index}`} text={i.text} />
+								))
+								.with({ type: "tool_call" }, (i) => (
+									<ToolCallBlock
+										key={i.data.toolCallId}
+										toolCall={i.data}
+									/>
+								))
+								.with({ type: "plan" }, (i) => (
+									<PlanBlock key="plan" plan={i.data} />
+								))
+								.exhaustive(),
+						)}
+					</Flex>
+				</Message>
+			)}
 		</Flex>
 	);
 }
