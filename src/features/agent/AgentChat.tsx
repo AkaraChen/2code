@@ -1,4 +1,4 @@
-import { Flex, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Box, Flex, Spinner, Text, VStack } from "@chakra-ui/react";
 import { Suspense, use, useCallback } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useShallow } from "zustand/react/shallow";
@@ -104,14 +104,19 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	}
 
 	return (
-		<Flex direction="column" h="full" w="full" bg="bg">
+		<Flex direction="column" h="full" w="full" bg="bg" position="relative">
 			<MessageList
 				turns={turns}
 				isStreaming={isStreaming ?? false}
 				streamingTurn={streamingTurn}
 				error={error ?? undefined}
 			/>
-			<ChatInput onSend={handleSend} disabled={isStreaming ?? false} />
+			<Box h="20" flexShrink={0} aria-hidden="true" />
+			<Box position="absolute" bottom="0" left="0" right="0" px="3" pb="3">
+				<Box maxW="2xl" mx="auto">
+					<ChatInput onSend={handleSend} disabled={isStreaming ?? false} />
+				</Box>
+			</Box>
 		</Flex>
 	);
 }

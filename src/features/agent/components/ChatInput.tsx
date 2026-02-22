@@ -1,12 +1,44 @@
 import { Box, Button } from "@chakra-ui/react";
 import { Extension } from "@tiptap/core";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import HighlightExt from "@tiptap/extension-highlight";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useEditor } from "@tiptap/react";
+import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
+import { all, createLowlight } from "lowlight";
 import { useCallback, useEffect, useRef } from "react";
 import { RiSendPlaneLine } from "react-icons/ri";
-import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { Control, RichTextEditor } from "@/components/ui/rich-text-editor";
 import * as m from "@/paraglide/messages.js";
+
+const lowlight = createLowlight(all);
+
+const transformPastedText = (text: string) => {
+	return text
+		.replace(/\r\n/g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+};
+
+const transformPastedHTML = (html: string) => {
+	return html
+		.replace(/<meta[^>]*>/gi, "")
+		.replace(/style="[^"]*"/gi, "")
+		.replace(/class="[^"]*"/gi, "")
+		.replace(/\s*dir="[^"]*"/gi, "")
+		.replace(/\s*id="[^"]*"/gi, "")
+		.replace(/<p>\s*<\/p>/gi, "")
+		.replace(/<div>/gi, "<p>")
+		.replace(/<\/div>/gi, "</p>")
+		.replace(/<font[^>]*>/gi, "")
+		.replace(/<\/font>/gi, "")
+		.replace(/<span[^>]*>/gi, "")
+		.replace(/<\/span>/gi, "")
+		.replace(/<p>(\s|&nbsp;)*<\/p>/gi, "");
+};
 
 interface ChatInputProps {
 	onSend: (content: string) => void;
@@ -23,10 +55,12 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 	const editor = useEditor({
 		extensions: [
 			StarterKit.configure({
-				heading: false,
-				horizontalRule: false,
-				blockquote: false,
+				codeBlock: false,
 			}),
+			CodeBlockLowlight.configure({ lowlight }),
+			HighlightExt.configure({ multicolor: true }),
+			TaskList,
+			TaskItem.configure({ nested: true }),
 			Placeholder.configure({
 				placeholder: m.agentChatPlaceholder(),
 			}),
@@ -34,7 +68,17 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 				name: "submitOnEnter",
 				addKeyboardShortcuts() {
 					return {
-						Enter: () => {
+						Enter: ({ editor: e }) => {
+							// Let Enter work normally inside code blocks, lists, task lists, blockquotes
+							if (
+								e.isActive("codeBlock") ||
+								e.isActive("bulletList") ||
+								e.isActive("orderedList") ||
+								e.isActive("taskList") ||
+								e.isActive("blockquote")
+							)
+								return false;
+
 							if (disabledRef.current) return true;
 							const ed = editorRef.current;
 							if (!ed) return true;
@@ -50,6 +94,10 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 		],
 		immediatelyRender: false,
 		shouldRerenderOnTransaction: true,
+		editorProps: {
+			transformPastedText,
+			transformPastedHTML,
+		},
 	});
 
 	editorRef.current = editor;
@@ -75,6 +123,7 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 		<RichTextEditor.Root
 			editor={editor}
 			disabled={disabled}
+			rounded="xl"
 			css={{
 				borderWidth: "0",
 				"--content-padding-x": "spacing.3",
@@ -87,6 +136,28 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 				},
 			}}
 		>
+			{editor && (
+				<BubbleMenu editor={editor}>
+					<RichTextEditor.Toolbar variant="floating">
+						<RichTextEditor.ControlGroup>
+							<Control.Bold />
+							<Control.Italic />
+							<Control.Strikethrough />
+							<Control.Code />
+							<Control.Highlight />
+						</RichTextEditor.ControlGroup>
+
+						<RichTextEditor.ControlGroup>
+							<Control.CodeBlock />
+							<Control.BulletList />
+							<Control.OrderedList />
+							<Control.TaskList />
+							<Control.Blockquote />
+						</RichTextEditor.ControlGroup>
+					</RichTextEditor.Toolbar>
+				</BubbleMenu>
+			)}
+
 			<RichTextEditor.Footer>
 				<Box flex="1">
 					<RichTextEditor.Content />
