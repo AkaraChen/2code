@@ -5,16 +5,6 @@ import type { ToolCallContent } from "../types";
 import { DiffRenderer } from "./DiffRenderer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
-const terminalBoxStyles = {
-	px: "3",
-	py: "2",
-	my: "2",
-	bg: "bg.subtle",
-	borderRadius: "md",
-	fontSize: "sm",
-	fontFamily: "mono",
-} as const;
-
 interface ToolCallContentRendererProps {
 	content: ToolCallContent;
 }
@@ -53,7 +43,15 @@ export function ToolCallContentRenderer({
 			/>
 		))
 		.with({ type: "terminal" }, (c) => (
-			<Box {...terminalBoxStyles}>
+			<Box
+				px="3"
+				py="2"
+				my="2"
+				bg="bg.subtle"
+				borderRadius="md"
+				fontSize="sm"
+				fontFamily="mono"
+			>
 				<Text color="fg.muted">
 					{m.agentTerminal({ id: c.terminalId })}
 				</Text>

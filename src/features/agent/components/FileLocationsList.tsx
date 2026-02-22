@@ -2,16 +2,6 @@ import { Flex, Text, VStack } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
 import type { ToolCallLocation } from "../types";
 
-const locationItemStyles = {
-	px: "2",
-	py: "1",
-	bg: "bg.subtle",
-	borderRadius: "sm",
-	fontSize: "xs",
-	fontFamily: "mono",
-	gap: "2",
-} as const;
-
 interface FileLocationsListProps {
 	locations: ToolCallLocation[];
 }
@@ -25,7 +15,16 @@ export function FileLocationsList({ locations }: FileLocationsListProps) {
 				{m.agentToolLocations()}:
 			</Text>
 			{locations.map((loc) => (
-				<Flex key={`${loc.path}:${loc.line ?? ""}`} {...locationItemStyles}>
+				<Flex
+					key={`${loc.path}:${loc.line ?? ""}`}
+					px="2"
+					py="1"
+					bg="bg.subtle"
+					borderRadius="sm"
+					fontSize="xs"
+					fontFamily="mono"
+					gap="2"
+				>
 					<Text flex="1" truncate>
 						{loc.path}
 					</Text>

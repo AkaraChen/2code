@@ -5,16 +5,6 @@ import type { AgentTurn, StreamingTurn } from "../types";
 import { TurnRenderer } from "./TurnRenderer";
 import { StreamingTurnRenderer } from "./StreamingTurnRenderer";
 
-const errorBoxStyles = {
-	px: "4",
-	py: "2",
-	mx: "4",
-	my: "2",
-	borderRadius: "lg",
-	bg: "red.subtle",
-	fontSize: "sm",
-} as const;
-
 interface MessageListProps {
 	turns: AgentTurn[] | undefined;
 	isStreaming: boolean;
@@ -52,7 +42,15 @@ export function MessageList({
 				)}
 
 				{error && !isStreaming && (
-					<Box {...errorBoxStyles}>
+					<Box
+						px="4"
+						py="2"
+						mx="4"
+						my="2"
+						borderRadius="lg"
+						bg="red.subtle"
+						fontSize="sm"
+					>
 						<Text color="red.fg">{error}</Text>
 					</Box>
 				)}

@@ -15,15 +15,6 @@ interface AgentChatProps {
 	isActive: boolean;
 }
 
-const fullscreenCenter = {
-	direction: "column",
-	h: "full",
-	w: "full",
-	align: "center",
-	justify: "center",
-	bg: "bg",
-} as const;
-
 /** Deduplicates concurrent reconnection attempts per session. */
 const reconnectCache = new Map<string, Promise<void>>();
 
@@ -60,7 +51,7 @@ function AwaitReconnection({ sessionId }: { sessionId: string }) {
 
 function ReconnectingFallback() {
 	return (
-		<Flex {...fullscreenCenter}>
+		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 			<VStack gap="4">
 				<Spinner size="lg" />
 				<Text color="fg.muted">{m.agentReconnecting()}</Text>
@@ -72,7 +63,7 @@ function ReconnectingFallback() {
 function ReconnectErrorFallback({ error }: { error: unknown }) {
 	const message = error instanceof Error ? error.message : String(error);
 	return (
-		<Flex {...fullscreenCenter}>
+		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
 			<VStack gap="4">
 				<Text color="fg.error">
 					{m.agentReconnectFailed({ error: message })}
