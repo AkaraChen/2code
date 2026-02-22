@@ -8,7 +8,6 @@ function resetStore() {
 		showAllFonts: false,
 		darkTerminalTheme: "github-dark",
 		lightTerminalTheme: "github-light",
-		syncTerminalTheme: false,
 	});
 	localStorage.clear();
 }
@@ -39,10 +38,6 @@ describe("useTerminalSettingsStore", () => {
 
 		it("lightTerminalTheme defaults to 'github-light'", () => {
 			expect(getState().lightTerminalTheme).toBe("github-light");
-		});
-
-		it("syncTerminalTheme defaults to false", () => {
-			expect(getState().syncTerminalTheme).toBe(false);
 		});
 	});
 
@@ -98,13 +93,6 @@ describe("useTerminalSettingsStore", () => {
 		it("updates lightTerminalTheme", () => {
 			getState().setLightTerminalTheme("one-light");
 			expect(getState().lightTerminalTheme).toBe("one-light");
-		});
-	});
-
-	describe("setSyncTerminalTheme", () => {
-		it("updates syncTerminalTheme", () => {
-			getState().setSyncTerminalTheme(true);
-			expect(getState().syncTerminalTheme).toBe(true);
 		});
 	});
 

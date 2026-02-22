@@ -1,5 +1,4 @@
 import {
-	Checkbox,
 	createListCollection,
 	Field,
 	Flex,
@@ -93,48 +92,24 @@ export function TerminalThemePicker({
 	const {
 		darkTerminalTheme,
 		lightTerminalTheme,
-		syncTerminalTheme,
 		setDarkTerminalTheme,
 		setLightTerminalTheme,
-		setSyncTerminalTheme,
 	} = useTerminalSettingsStore();
 
 	return (
 		<>
-			{syncTerminalTheme ? (
-				<ThemeSelect
-					value={darkTerminalTheme}
-					onChange={setDarkTerminalTheme}
-					label={m.terminalTheme()}
-					onPreview={onPreview}
-				/>
-			) : (
-				<>
-					<ThemeSelect
-						value={darkTerminalTheme}
-						onChange={setDarkTerminalTheme}
-						label={m.terminalThemeDark()}
-						onPreview={onPreview}
-					/>
-					<ThemeSelect
-						value={lightTerminalTheme}
-						onChange={setLightTerminalTheme}
-						label={m.terminalThemeLight()}
-						onPreview={onPreview}
-					/>
-				</>
-			)}
-			<Field.Root>
-				<Checkbox.Root
-					size="sm"
-					checked={syncTerminalTheme}
-					onCheckedChange={(e) => setSyncTerminalTheme(!!e.checked)}
-				>
-					<Checkbox.HiddenInput />
-					<Checkbox.Control />
-					<Checkbox.Label>{m.syncTerminalTheme()}</Checkbox.Label>
-				</Checkbox.Root>
-			</Field.Root>
+			<ThemeSelect
+				value={darkTerminalTheme}
+				onChange={setDarkTerminalTheme}
+				label={m.terminalThemeDark()}
+				onPreview={onPreview}
+			/>
+			<ThemeSelect
+				value={lightTerminalTheme}
+				onChange={setLightTerminalTheme}
+				label={m.terminalThemeLight()}
+				onPreview={onPreview}
+			/>
 		</>
 	);
 }

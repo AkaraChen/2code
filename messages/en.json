@@ -37,7 +37,6 @@
 	"terminalTheme": "Terminal Theme",
 	"terminalThemeDark": "Dark Mode Theme",
 	"terminalThemeLight": "Light Mode Theme",
-	"syncTerminalTheme": "Use same theme for both modes",
 	"preview": "Preview",
 	"defaultProfile": "Default",
 	"profiles": "Profiles",
