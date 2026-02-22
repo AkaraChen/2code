@@ -1,7 +1,12 @@
 import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
 import { useCallback, useRef } from "react";
-import { RiAddLine, RiHome4Line, RiSettings3Line } from "react-icons/ri";
+import {
+	RiAddLine,
+	RiArchive2Line,
+	RiHome4Line,
+	RiSettings3Line,
+} from "react-icons/ri";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
@@ -79,6 +84,9 @@ export default function AppSidebar() {
 					</Flex>
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
+					</SidebarLink>
+					<SidebarLink to="/assets" icon={<RiArchive2Line />}>
+						{m.assets()}
 					</SidebarLink>
 
 					<HStack px="4" pt="5" pb="2" justify="space-between">

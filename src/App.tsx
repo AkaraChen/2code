@@ -8,6 +8,7 @@ import { useDebugStore } from "./features/debug/debugStore";
 import HomePage from "./features/home/HomePage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 
+const AssetsPage = lazy(() => import("./features/assets/AssetsPage"));
 const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage"));
 const SettingsPage = lazy(() => import("./features/settings/SettingsPage"));
 import AppSidebar from "./layout/AppSidebar";
@@ -49,6 +50,10 @@ export default function App() {
 						<Suspense fallback={<PageSkeleton />}>
 							<Routes>
 								<Route path="/" element={<HomePage />} />
+								<Route
+									path="/assets"
+									element={<AssetsPage />}
+								/>
 								<Route
 									path="/projects/:id/profiles/:profileId"
 									element={<ProjectDetailPage />}

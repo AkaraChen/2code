@@ -96,6 +96,16 @@ diesel::table! {
 	}
 }
 
+diesel::table! {
+	snippets (id) {
+		id -> Text,
+		name -> Text,
+		trigger -> Text,
+		content -> Text,
+		created_at -> Timestamp,
+	}
+}
+
 diesel::joinable!(agent_session_events -> agent_sessions (session_id));
 diesel::joinable!(agent_sessions -> profiles (profile_id));
 diesel::joinable!(profiles -> projects (project_id));
@@ -111,4 +121,5 @@ diesel::allow_tables_to_appear_in_same_query!(
 	pty_session_output,
 	pty_sessions,
 	session_stats,
+	snippets,
 );

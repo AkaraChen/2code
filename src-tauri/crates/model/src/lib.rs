@@ -6,5 +6,7 @@ pub mod profile;
 pub mod project;
 pub mod pty;
 pub mod schema;
+pub mod skill;
+pub mod snippet;
 pub mod stats;
 pub mod watcher;

@@ -10,6 +10,8 @@ export const queryNamespaces = {
 	"agent-credentials": "agent-credentials",
 	stats: "stats",
 	"project-config": "project-config",
+	snippets: "snippets",
+	skills: "skills",
 } as const;
 
 export const queryKeys = {
@@ -29,6 +31,12 @@ export const queryKeys = {
 	},
 	stats: {
 		homepage: ["stats", "homepage"] as const,
+	},
+	snippets: {
+		all: ["snippets"] as const,
+	},
+	skills: {
+		all: ["skills"] as const,
 	},
 	projectConfig: (projectId: string) =>
 		["project-config", projectId] as const,
