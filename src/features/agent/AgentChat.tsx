@@ -15,6 +15,15 @@ interface AgentChatProps {
 	isActive: boolean;
 }
 
+const fullscreenCenter = {
+	direction: "column",
+	h: "full",
+	w: "full",
+	align: "center",
+	justify: "center",
+	bg: "bg",
+} as const;
+
 /** Deduplicates concurrent reconnection attempts per session. */
 const reconnectCache = new Map<string, Promise<void>>();
 
@@ -44,11 +53,6 @@ function needsReconnection(sessionId: string): boolean {
 	);
 }
 
-/**
- * Suspends until reconnection completes.
- * After resolve, reconnect() has updated tab.sessionId in the store,
- * so the parent re-renders this component with the new sessionId prop.
- */
 function AwaitReconnection({ sessionId }: { sessionId: string }) {
 	use(getReconnectPromise(sessionId));
 	return null;
@@ -56,7 +60,7 @@ function AwaitReconnection({ sessionId }: { sessionId: string }) {
 
 function ReconnectingFallback() {
 	return (
-		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+		<Flex {...fullscreenCenter}>
 			<VStack gap="4">
 				<Spinner size="lg" />
 				<Text color="fg.muted">{m.agentReconnecting()}</Text>
@@ -68,7 +72,7 @@ function ReconnectingFallback() {
 function ReconnectErrorFallback({ error }: { error: unknown }) {
 	const message = error instanceof Error ? error.message : String(error);
 	return (
-		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+		<Flex {...fullscreenCenter}>
 			<VStack gap="4">
 				<Text color="fg.error">
 					{m.agentReconnectFailed({ error: message })}
@@ -98,7 +102,6 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		[sendPrompt, sessionId],
 	);
 
-	// Lazy reconnection: suspend when tab is focused and needs reconnecting
 	if (isActive && needsReconnection(sessionId)) {
 		return (
 			<ErrorBoundary FallbackComponent={ReconnectErrorFallback}>

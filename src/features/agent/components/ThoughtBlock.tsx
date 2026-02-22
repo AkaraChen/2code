@@ -4,32 +4,50 @@ import { LuChevronDown, LuChevronRight, LuBrain } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
+const cardStyles = {
+	w: "full",
+	border: "1px solid",
+	borderColor: "border.subtle",
+	borderRadius: "md",
+	overflow: "hidden",
+} as const;
+
+const triggerStyles = {
+	px: "3",
+	py: "2",
+	bg: "bg.muted",
+	cursor: "pointer",
+	align: "center",
+	gap: "2",
+	userSelect: "none",
+	_hover: { bg: "bg.subtle" },
+	transition: "background 0.2s",
+} as const;
+
+const contentStyles = {
+	px: "4",
+	py: "3",
+	bg: "bg.panel",
+	borderTop: "1px solid",
+	borderColor: "border.subtle",
+	fontSize: "sm",
+} as const;
+
 interface ThoughtBlockProps {
 	text: string;
 }
 
 export function ThoughtBlock({ text }: ThoughtBlockProps) {
-	// 默认折叠，但如果内容很短（< 100 字符）则展开
 	const [open, setOpen] = useState(text.length < 100);
 
 	return (
-		<Box w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
+		<Box {...cardStyles}>
 			<Collapsible.Root
 				open={open}
 				onOpenChange={(e) => setOpen(e.open)}
 			>
 				<Collapsible.Trigger asChild>
-					<Flex
-						px="3"
-						py="2"
-						bg="bg.muted"
-						cursor="pointer"
-						align="center"
-						gap="2"
-						userSelect="none"
-						_hover={{ bg: "bg.subtle" }}
-						transition="background 0.2s"
-					>
+					<Flex {...triggerStyles}>
 						<Icon fontSize="sm" color="fg.muted">
 							{open ? <LuChevronDown /> : <LuChevronRight />}
 						</Icon>
@@ -43,14 +61,7 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 				</Collapsible.Trigger>
 
 				<Collapsible.Content>
-					<Box
-						px="4"
-						py="3"
-						bg="bg.panel"
-						borderTop="1px solid"
-						borderColor="border.subtle"
-						fontSize="sm"
-					>
+					<Box {...contentStyles}>
 						<MarkdownRenderer
 							content={text}
 							bg="transparent"

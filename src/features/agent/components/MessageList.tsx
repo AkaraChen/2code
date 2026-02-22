@@ -5,6 +5,16 @@ import type { AgentTurn, StreamingTurn } from "../types";
 import { TurnRenderer } from "./TurnRenderer";
 import { StreamingTurnRenderer } from "./StreamingTurnRenderer";
 
+const errorBoxStyles = {
+	px: "4",
+	py: "2",
+	mx: "4",
+	my: "2",
+	borderRadius: "lg",
+	bg: "red.subtle",
+	fontSize: "sm",
+} as const;
+
 interface MessageListProps {
 	turns: AgentTurn[] | undefined;
 	isStreaming: boolean;
@@ -12,10 +22,6 @@ interface MessageListProps {
 	error: string | undefined;
 }
 
-/**
- * 消息列表组件
- * 显示历史 turns、流式输出和错误状态
- */
 export function MessageList({
 	turns,
 	isStreaming,
@@ -31,39 +37,22 @@ export function MessageList({
 	return (
 		<Box flex="1" overflowY="auto" py="4">
 			<Flex direction="column" minH="full" justify="flex-end">
-				{/* 空状态 */}
 				{turns?.length === 0 && !isStreaming && (
-					<Flex
-						align="center"
-						justify="center"
-						flex="1"
-						color="fg.muted"
-					>
+					<Flex align="center" justify="center" flex="1" color="fg.muted">
 						<Text fontSize="sm">{m.agentChatEmptyState()}</Text>
 					</Flex>
 				)}
 
-				{/* 已完成的 turns */}
 				{turns?.map((turn) => (
 					<TurnRenderer key={turn.timestamp} turn={turn} />
 				))}
 
-				{/* 流式 turn */}
 				{isStreaming && streamingTurn && (
 					<StreamingTurnRenderer turn={streamingTurn} />
 				)}
 
-				{/* 错误 */}
 				{error && !isStreaming && (
-					<Box
-						px="4"
-						py="2"
-						mx="4"
-						my="2"
-						borderRadius="lg"
-						bg="red.subtle"
-						fontSize="sm"
-					>
+					<Box {...errorBoxStyles}>
 						<Text color="red.fg">{error}</Text>
 					</Box>
 				)}
