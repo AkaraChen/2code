@@ -11,7 +11,8 @@
 		"start": "tauri dev",
 		"lint": "eslint --fix",
 		"test": "vitest run",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.14.1",

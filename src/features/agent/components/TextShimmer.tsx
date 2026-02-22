@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { motion } from "motion/react";
-import { memo, useContext, useMemo } from "react";
+import { memo, use, useMemo } from "react";
 import { ThemeContext } from "@/shared/providers/themeContext";
 
 const COLORS = {
@@ -23,7 +23,7 @@ const TextShimmerComponent = ({
 	duration = 2,
 	spread = 2,
 }: TextShimmerProps) => {
-	const { isDark } = useContext(ThemeContext);
+	const { isDark } = use(ThemeContext);
 	const colors = isDark ? COLORS.dark : COLORS.light;
 
 	const dynamicSpread = useMemo(

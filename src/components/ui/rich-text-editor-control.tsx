@@ -27,8 +27,7 @@ interface BooleanControlOptions {
 }
 
 export function createBooleanControl(options: BooleanControlOptions) {
-  const Control = React.forwardRef<HTMLButtonElement>(
-    function BooleanControl(_props, ref) {
+  const Control = function BooleanControl({ ref }: { ref?: React.RefObject<HTMLButtonElement> }) {
       const { editor } = useRichTextEditorContext()
       if (!editor) return null
       const active = options.isActive(editor)
@@ -43,8 +42,7 @@ export function createBooleanControl(options: BooleanControlOptions) {
           {options.icon}
         </IconButton>
       )
-    },
-  )
+    }
   Control.displayName = options.label
   return Control
 }
