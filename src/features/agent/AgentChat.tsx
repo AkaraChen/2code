@@ -1,5 +1,6 @@
-import { Box, Flex, Spinner, Text, VStack } from "@chakra-ui/react";
-import { Suspense, use, useCallback } from "react";
+import { Box, Flex, HStack, IconButton, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Suspense, use, useCallback, useState } from "react";
+import { LuShrink } from "react-icons/lu";
 import { ErrorBoundary } from "react-error-boundary";
 import { useShallow } from "zustand/react/shallow";
 import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
@@ -88,6 +89,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		}),
 	);
 
+	const [expanded, setExpanded] = useState(false);
+
 	const handleSend = useCallback(
 		(content: string) => sendPrompt.mutate({ sessionId, content }),
 		[sendPrompt, sessionId],
@@ -111,12 +114,55 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				streamingTurn={streamingTurn}
 				error={error ?? undefined}
 			/>
-			<Box h="20" flexShrink={0} aria-hidden="true" />
-			<Box position="absolute" bottom="0" left="0" right="0" px="3" pb="3">
-				<Box maxW="2xl" mx="auto">
-					<ChatInput onSend={handleSend} disabled={isStreaming ?? false} />
-				</Box>
-			</Box>
+
+			{/* Compact floating card */}
+			{!expanded && (
+				<>
+					<Box h="20" flexShrink={0} aria-hidden="true" />
+					<Box position="absolute" bottom="0" left="0" right="0" px="3" pb="3">
+						<Box maxW="2xl" mx="auto">
+							<ChatInput
+								onSend={handleSend}
+								disabled={isStreaming ?? false}
+								onToggleExpand={() => setExpanded(true)}
+							/>
+						</Box>
+					</Box>
+				</>
+			)}
+
+			{/* Sheet panel */}
+			{expanded && (
+				<Flex
+					position="absolute"
+					bottom="0"
+					left="0"
+					right="0"
+					h="50vh"
+					direction="column"
+					bg="bg"
+					borderTopWidth="1px"
+					overflow="hidden"
+				>
+					<HStack px="3" h="10" flexShrink={0} justify="flex-end">
+						<IconButton
+							size="sm"
+							variant="ghost"
+							onClick={() => setExpanded(false)}
+							aria-label="Collapse"
+						>
+							<LuShrink />
+						</IconButton>
+					</HStack>
+					<Box flex="1" overflow="hidden">
+						<ChatInput
+							onSend={handleSend}
+							disabled={isStreaming ?? false}
+							expanded={true}
+						/>
+					</Box>
+				</Flex>
+			)}
 		</Flex>
 	);
 }

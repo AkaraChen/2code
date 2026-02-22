@@ -112,6 +112,7 @@
 	"filesChanged": "files",
 	"agentChatEmptyState": "Send a message to start the conversation.",
 	"agentChatPlaceholder": "Type a message... (Enter to send, Shift+Enter for newline)",
+	"agentChatPlaceholderSheet": "Type a message... (click send button to submit)",
 	"agentProviderAnthropic": "Anthropic",
 	"agentProviderOpenAI": "OpenAI",
 	"agentProviderSourcegraph": "Sourcegraph",

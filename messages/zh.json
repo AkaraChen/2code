@@ -112,6 +112,7 @@
 	"filesChanged": "个文件",
 	"agentChatEmptyState": "发送消息开始对话。",
 	"agentChatPlaceholder": "输入消息... (回车发送，Shift+回车换行)",
+	"agentChatPlaceholderSheet": "输入消息... (点击发送按钮提交)",
 	"agentProviderAnthropic": "Anthropic",
 	"agentProviderOpenAI": "OpenAI",
 	"agentProviderSourcegraph": "Sourcegraph",
