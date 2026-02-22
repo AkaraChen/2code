@@ -147,7 +147,7 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 					<Box flex="1" overflowY="auto">
 						<RichTextEditor.Content />
 					</Box>
-					<HStack px="3" py="2" justify="flex-end" borderTopWidth="1px">
+					<HStack px="3" py="2" justify="flex-end">
 						<IconButton
 							size="sm"
 							onClick={handleSend}
