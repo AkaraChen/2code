@@ -29,50 +29,27 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps) {
 	);
 
 	return (
-		<Box px="4" py="4" bg="bg">
-			<Box
-				border="1px solid"
-				borderColor="border.subtle"
-				borderRadius="xl"
-				bg="bg.panel"
-				_focusWithin={{ borderColor: "colorPalette.solid", boxShadow: "0 0 0 1px var(--chakra-colors-color-palette-solid)" }}
-				transition="all 0.2s"
-				position="relative"
+		<Box display="flex" alignItems="end" gap="2" p="4">
+			<Textarea
+				value={input}
+				onChange={(e) => setInput(e.target.value)}
+				onKeyDown={handleKeyDown}
+				placeholder={m.agentChatPlaceholder()}
+				size="sm"
+				resize="none"
+				rows={1}
+				maxH="200px"
+				disabled={disabled}
+				autoresize
+				flex="1"
+			/>
+			<Button
+				size="sm"
+				onClick={handleSend}
+				disabled={!input.trim() || disabled}
 			>
-				<Textarea
-					value={input}
-					onChange={(e) => setInput(e.target.value)}
-					onKeyDown={handleKeyDown}
-					placeholder={m.agentChatPlaceholder()}
-					size="sm"
-					resize="none"
-					rows={1}
-					maxH="200px"
-					disabled={disabled}
-					autoresize
-					border="none"
-					_focus={{ boxShadow: "none" }}
-					bg="transparent"
-					px="4"
-					py="3"
-					pr="12"
-				/>
-				<Button
-					size="sm"
-					onClick={handleSend}
-					disabled={!input.trim() || disabled}
-					colorPalette="blue"
-					position="absolute"
-					right="2"
-					bottom="2"
-					borderRadius="md"
-					w="8"
-					h="8"
-					p="0"
-				>
-					<RiSendPlaneLine />
-				</Button>
-			</Box>
+				<RiSendPlaneLine />
+			</Button>
 		</Box>
 	);
 }
