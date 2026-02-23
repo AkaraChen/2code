@@ -1,12 +1,16 @@
-import { Box, Collapsible, Flex, Icon, Text } from "@chakra-ui/react";
+import { Badge, Box, Collapsible, Flex, Icon, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import {
 	LuBrain,
 	LuChevronDown,
 	LuChevronRight,
 	LuCircle,
+	LuCircleCheck,
+	LuCircleX,
+	LuClock3,
 	LuDownload,
 	LuFileText,
+	LuLoaderCircle,
 	LuMove,
 	LuPencil,
 	LuSearch,
@@ -15,9 +19,8 @@ import {
 } from "react-icons/lu";
 import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
-import type { ToolCall } from "../types";
+import type { ToolCall, ToolCallStatus } from "../types";
 import { FileLocationsList } from "./FileLocationsList";
-import { StatusBadge } from "./StatusBadge";
 import { ToolCallContentRenderer } from "./ToolCallContentRenderer";
 
 const KIND_ICONS = {
@@ -33,29 +36,55 @@ const KIND_ICONS = {
 	other: <LuCircle />,
 };
 
-const STATUS_BORDER_COLOR = {
-	pending: "gray.solid",
-	in_progress: "blue.solid",
-	completed: "green.solid",
-	failed: "red.solid",
-};
+function ToolStatusBadge({ status }: { status: ToolCallStatus }) {
+	const statusMeta = match(status)
+		.with("pending", () => ({
+			label: m.agentStatusPending(),
+			icon: LuClock3,
+		}))
+		.with("in_progress", () => ({
+			label: m.agentStatusInProgress(),
+			icon: LuLoaderCircle,
+		}))
+		.with("completed", () => ({
+			label: m.agentStatusCompleted(),
+			icon: LuCircleCheck,
+		}))
+		.with("failed", () => ({
+			label: m.agentStatusFailed(),
+			icon: LuCircleX,
+		}))
+		.exhaustive();
 
-function RawDataSection({ label, data }: { label: string; data: unknown }) {
 	return (
-		<Box mt="3">
-			<Text fontSize="xs" fontWeight="medium" color="fg.muted" mb="1">
-				{label}:
+		<Badge size="xs" variant="subtle">
+			<Icon mr="1" fontSize="xs">
+				<statusMeta.icon />
+			</Icon>
+			{statusMeta.label}
+		</Badge>
+	);
+}
+
+function ToolJsonSection({ label, data }: { label: string; data: unknown }) {
+	return (
+		<Box>
+			<Text fontSize="xs" fontWeight="medium">
+				{label}
 			</Text>
 			<Box
-				px="3"
+				as="pre"
+				mt="2"
+				px="2"
 				py="2"
 				bg="bg.subtle"
 				borderRadius="sm"
 				fontSize="xs"
 				fontFamily="mono"
 				overflowX="auto"
+				whiteSpace="pre"
 			>
-				<pre>{JSON.stringify(data, null, 2)}</pre>
+				{JSON.stringify(data, null, 2)}
 			</Box>
 		</Box>
 	);
@@ -67,44 +96,36 @@ interface ToolCallBlockProps {
 
 export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 	const status = toolCall.status ?? "pending";
-	const [expanded, setExpanded] = useState(status === "failed");
+	const [open, setOpen] = useState(status === "failed");
 
 	return (
-		<Flex justify="flex-start" w="full">
-			<Box maxW="80%" w="full">
-				<Collapsible.Root
-					open={expanded}
-					onOpenChange={(e) => setExpanded(e.open)}
-				>
+		<Box maxW="80%" w="full">
+			<Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+				<Box borderWidth="1px" borderRadius="md" overflow="hidden">
 					<Collapsible.Trigger asChild>
 						<Flex
 							px="3"
 							py="2"
 							bg="bg.muted"
-							borderLeft="3px solid"
-							borderColor={STATUS_BORDER_COLOR[status]}
-							borderRadius="md"
 							cursor="pointer"
 							align="center"
-							gap="3"
+							gap="2"
 							_hover={{ bg: "bg.subtle" }}
 							transition="background 0.2s"
 						>
-							<Icon fontSize="md" color="fg.default">
-								{KIND_ICONS[toolCall.kind ?? "other"]}
-							</Icon>
+							<Icon fontSize="md">{KIND_ICONS[toolCall.kind ?? "other"]}</Icon>
 							<Text flex="1" fontSize="sm" fontWeight="medium">
 								{toolCall.title ?? toolCall.kind ?? m.agentToolCall()}
 							</Text>
-							<StatusBadge status={status} />
-							<Icon fontSize="xs" color="fg.muted">
-								{expanded ? <LuChevronDown /> : <LuChevronRight />}
+							<ToolStatusBadge status={status} />
+							<Icon fontSize="xs">
+								{open ? <LuChevronDown /> : <LuChevronRight />}
 							</Icon>
 						</Flex>
 					</Collapsible.Trigger>
 
 					<Collapsible.Content>
-						<Box px="4" py="3" bg="bg.muted" borderRadius="md">
+						<Flex direction="column" gap="3" px="3" py="3">
 							{toolCall.locations && toolCall.locations.length > 0 && (
 								<FileLocationsList locations={toolCall.locations} />
 							)}
@@ -112,34 +133,31 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							{toolCall.content?.map((content) => (
 								<ToolCallContentRenderer
 									key={match(content)
-									.with({ type: "diff" }, (c) => `diff-${c.path}`)
-									.with({ type: "terminal" }, (c) => `terminal-${c.terminalId}`)
-									.with({ type: "content" }, (c) => `content-${c.content.type}`)
-									.otherwise(() => "unknown")}
+										.with({ type: "diff" }, (c) => `diff-${c.path}`)
+										.with({ type: "terminal" }, (c) => `terminal-${c.terminalId}`)
+										.with({ type: "content" }, (c) => `content-${c.content.type}`)
+										.otherwise(() => "unknown")}
 									content={content}
 								/>
 							))}
 
-							{expanded && (
-								<>
-									{toolCall.rawInput && (
-										<RawDataSection
-											label={m.agentToolInput()}
-											data={toolCall.rawInput}
-										/>
-									)}
-									{toolCall.rawOutput && (
-										<RawDataSection
-											label={m.agentToolOutput()}
-											data={toolCall.rawOutput}
-										/>
-									)}
-								</>
+							{toolCall.rawInput !== undefined && toolCall.rawInput !== null && (
+								<ToolJsonSection
+									label={m.agentToolInput()}
+									data={toolCall.rawInput}
+								/>
 							)}
-						</Box>
+
+							{toolCall.rawOutput !== undefined && toolCall.rawOutput !== null && (
+								<ToolJsonSection
+									label={m.agentToolOutput()}
+									data={toolCall.rawOutput}
+								/>
+							)}
+						</Flex>
 					</Collapsible.Content>
-				</Collapsible.Root>
-			</Box>
-		</Flex>
+				</Box>
+			</Collapsible.Root>
+		</Box>
 	);
 }

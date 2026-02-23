@@ -1,4 +1,4 @@
-import { Box, Link, Text } from "@chakra-ui/react";
+import { Box, Image, Link, Text } from "@chakra-ui/react";
 import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
 import type { ToolCallContent } from "../types";
@@ -21,16 +21,17 @@ export function ToolCallContentRenderer({
 		))
 		.with({ type: "content", content: { type: "image" } }, (c) => (
 			<Box my="2">
-				<img
+				<Image
 					src={`data:${c.content.mimeType};base64,${c.content.data}`}
 					alt={m.agentToolOutputAlt()}
-					style={{ maxWidth: "100%", borderRadius: "4px" }}
+					maxW="full"
+					borderRadius="sm"
 				/>
 			</Box>
 		))
 		.with({ type: "content", content: { type: "resource_link" } }, (c) => (
 			<Box my="2" fontSize="sm">
-				<Link href={c.content.uri} color="blue.solid" target="_blank">
+				<Link href={c.content.uri} target="_blank" rel="noreferrer">
 					{c.content.uri}
 				</Link>
 			</Box>
