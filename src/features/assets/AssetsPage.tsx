@@ -7,6 +7,7 @@ import {
 	SegmentGroup,
 	Skeleton,
 	Stack,
+	Tooltip,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import * as m from "@/paraglide/messages.js";
@@ -34,6 +35,14 @@ export default function AssetsPage() {
 	const [mode, setMode] = useState<Mode>("manage");
 	const [filter, setFilter] = useState<Filter>("skills");
 
+	const handleModeChange = (value: Mode) => {
+		setMode(value);
+		// When switching to store mode, default to agents tab
+		if (value === "store") {
+			setFilter("agents");
+		}
+	};
+
 	return (
 		<Box p="8" pt="16">
 			<Stack gap="6">
@@ -51,13 +60,47 @@ export default function AssetsPage() {
 						}
 					>
 						<SegmentGroup.Indicator />
-						<SegmentGroup.Items
-							items={[
-								{ value: "skills", label: m.skills() },
-								{ value: "snippets", label: m.snippets() },
-								{ value: "agents", label: m.agents() },
-							]}
-						/>
+						{mode === "store" ? (
+							<>
+								<Tooltip.Root>
+									<Tooltip.Trigger asChild>
+										<SegmentGroup.Item
+											value="skills"
+											disabled
+										>
+											{m.skills()}
+										</SegmentGroup.Item>
+									</Tooltip.Trigger>
+									<Tooltip.Positioner>
+										<Tooltip.Content>{m.wip()}</Tooltip.Content>
+									</Tooltip.Positioner>
+								</Tooltip.Root>
+								<Tooltip.Root>
+									<Tooltip.Trigger asChild>
+										<SegmentGroup.Item
+											value="snippets"
+											disabled
+										>
+											{m.snippets()}
+										</SegmentGroup.Item>
+									</Tooltip.Trigger>
+									<Tooltip.Positioner>
+										<Tooltip.Content>{m.wip()}</Tooltip.Content>
+									</Tooltip.Positioner>
+								</Tooltip.Root>
+								<SegmentGroup.Item value="agents">
+									{m.agents()}
+								</SegmentGroup.Item>
+							</>
+						) : (
+							<SegmentGroup.Items
+								items={[
+									{ value: "skills", label: m.skills() },
+									{ value: "snippets", label: m.snippets() },
+									{ value: "agents", label: m.agents() },
+								]}
+							/>
+						)}
 					</SegmentGroup.Root>
 
 					<SegmentGroup.Root
@@ -65,7 +108,7 @@ export default function AssetsPage() {
 						width="fit-content"
 						value={mode}
 						onValueChange={(e) =>
-							e.value && setMode(e.value as Mode)
+							e.value && handleModeChange(e.value as Mode)
 						}
 					>
 						<SegmentGroup.Indicator />
