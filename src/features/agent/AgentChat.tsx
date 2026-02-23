@@ -113,6 +113,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				isStreaming={isStreaming ?? false}
 				streamingTurn={streamingTurn}
 				error={error ?? undefined}
+				onSuggestionSelect={handleSend}
 			/>
 
 			{/* Compact floating card */}

@@ -1,4 +1,4 @@
-import { Box, EmptyState, Flex, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, EmptyState, Flex, HStack, Text, VStack } from "@chakra-ui/react";
 import { useEffect, useRef } from "react";
 import { RiRobot2Line } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
@@ -6,11 +6,30 @@ import type { AgentTurn, StreamingTurn } from "../types";
 import { TurnRenderer } from "./TurnRenderer";
 import { StreamingTurnRenderer } from "./StreamingTurnRenderer";
 
+const SUGGESTION_ITEMS = [
+	{
+		label: m.agentChatSuggestionProject,
+		prompt:
+			"What is this project? Please summarize its purpose, architecture, and how to get started.",
+	},
+	{
+		label: m.agentChatSuggestionCodeQuality,
+		prompt:
+			"Scan this codebase for code quality issues, potential bugs, and maintainability risks. Provide prioritized findings with file references.",
+	},
+	{
+		label: m.agentChatSuggestionNextTask,
+		prompt:
+			"Based on this repository, suggest the best next task to work on and explain why it should be prioritized now.",
+	},
+] as const;
+
 interface MessageListProps {
 	turns: AgentTurn[] | undefined;
 	isStreaming: boolean;
 	streamingTurn: StreamingTurn | null | undefined;
 	error: string | undefined;
+	onSuggestionSelect?: (prompt: string) => void;
 }
 
 export function MessageList({
@@ -18,6 +37,7 @@ export function MessageList({
 	isStreaming,
 	streamingTurn,
 	error,
+	onSuggestionSelect,
 }: MessageListProps) {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const hasMessages = (turns?.length ?? 0) > 0 || Boolean(streamingTurn);
@@ -41,10 +61,20 @@ export function MessageList({
 									<EmptyState.Title>
 										{m.agentChatEmptyState()}
 									</EmptyState.Title>
-									<EmptyState.Description>
-										{m.agentChatPlaceholder()}
-									</EmptyState.Description>
 								</VStack>
+								<HStack wrap="wrap" justify="center">
+									{SUGGESTION_ITEMS.map((item) => (
+										<Button
+											key={item.prompt}
+											size="sm"
+											variant="subtle"
+											onClick={() =>
+												onSuggestionSelect?.(item.prompt)}
+										>
+											{item.label()}
+										</Button>
+									))}
+								</HStack>
 							</EmptyState.Content>
 						</EmptyState.Root>
 					</Flex>
