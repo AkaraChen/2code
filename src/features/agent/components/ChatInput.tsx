@@ -54,9 +54,10 @@ interface ChatInputProps {
 	disabled?: boolean;
 	expanded?: boolean;
 	onToggleExpand?: () => void;
+	modelSelector?: React.ReactNode;
 }
 
-export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onToggleExpand }: ChatInputProps & { ref?: React.RefObject<Editor | null | null> }) => {
+export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onToggleExpand, modelSelector }: ChatInputProps & { ref?: React.RefObject<Editor | null | null> }) => {
 	const { data: snippets } = useSuspenseQuery({
 		queryKey: queryKeys.snippets.all,
 		queryFn: listSnippets,
@@ -237,41 +238,53 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 					<Box flex="1" overflowY="auto">
 						<RichTextEditor.Content />
 					</Box>
-					<HStack px="3" py="2" justify="flex-end">
-						<IconButton
-							size="sm"
-							onClick={handleSend}
-							disabled={isEmpty || disabled}
-							aria-label="Send"
-						>
-							<RiSendPlaneLine />
-						</IconButton>
+					<HStack px="3" py="2" gap="2" borderTopWidth="1px">
+						<Box flex="1" minW="0">
+							{modelSelector}
+						</Box>
+						<HStack gap="1" ml="auto">
+							<IconButton
+								size="sm"
+								onClick={handleSend}
+								disabled={isEmpty || disabled}
+								aria-label="Send"
+							>
+								<RiSendPlaneLine />
+							</IconButton>
+						</HStack>
 					</HStack>
 				</Flex>
 			) : (
-				<RichTextEditor.Footer borderTopWidth="0">
-					<Box flex="1">
+				<Flex direction="column">
+					<Box>
 						<RichTextEditor.Content />
 					</Box>
-					{onToggleExpand && (
-						<IconButton
-							size="sm"
-							variant="ghost"
-							onClick={onToggleExpand}
-							aria-label="Expand"
-						>
-							<LuExpand />
-						</IconButton>
-					)}
-					<IconButton
-						size="sm"
-						onClick={handleSend}
-						disabled={isEmpty || disabled}
-						aria-label="Send"
-					>
-						<RiSendPlaneLine />
-					</IconButton>
-				</RichTextEditor.Footer>
+					<HStack px="3" py="2" gap="2">
+						<Box flex="1" minW="0">
+							{modelSelector}
+						</Box>
+						<HStack gap="1" ml="auto">
+							{onToggleExpand && (
+								<IconButton
+									size="sm"
+									variant="ghost"
+									onClick={onToggleExpand}
+									aria-label="Expand"
+								>
+									<LuExpand />
+								</IconButton>
+							)}
+							<IconButton
+								size="sm"
+								onClick={handleSend}
+								disabled={isEmpty || disabled}
+								aria-label="Send"
+							>
+								<RiSendPlaneLine />
+							</IconButton>
+						</HStack>
+					</HStack>
+				</Flex>
 			)}
 
 			{isSnippetMenuOpen && (
