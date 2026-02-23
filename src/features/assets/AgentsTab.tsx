@@ -3,6 +3,7 @@ import {
 	Box,
 	Button,
 	Card,
+	Center,
 	CloseButton,
 	Dialog,
 	EmptyState,
@@ -10,8 +11,10 @@ import {
 	Link,
 	Portal,
 	SimpleGrid,
+	Spinner,
 	Stack,
 	Text,
+	VStack,
 } from "@chakra-ui/react";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import * as React from "react";
@@ -397,9 +400,14 @@ export function AgentsTab({ mode }: { mode: "manage" | "store" }) {
 		return (
 			<MarketplaceQueryBoundary
 				loadingFallback={
-					<Text color="fg.muted" fontSize="sm">
-						{m.marketplaceLoadingRegistry()}
-					</Text>
+					<Center minH="50vh">
+						<VStack gap={4}>
+							<Spinner size="xl" />
+							<Text>
+								{m.marketplaceLoadingRegistry()}
+							</Text>
+						</VStack>
+					</Center>
 				}
 			>
 				<RegistryList />
