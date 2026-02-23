@@ -1,4 +1,12 @@
-import { Box, Circle, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
+import {
+	Box,
+	Circle,
+	CloseButton,
+	Flex,
+	HStack,
+	ScrollArea,
+	Tabs,
+} from "@chakra-ui/react";
 import { RiTerminalBoxLine } from "react-icons/ri";
 import { match } from "ts-pattern";
 import { useShallow } from "zustand/react/shallow";
@@ -40,42 +48,47 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 				value={activeTabId}
 				onValueChange={(e) => useTabStore.getState().setActiveTab(profileId, e.value)}
 			>
-				<Tabs.List>
-					{tabs.map((tab) => (
-						<Tabs.Trigger key={tab.id} value={tab.id}>
-							{match(tab)
-								.with({ type: "agent" }, (t) => (
-									<AgentIcon iconUrl={t.iconUrl} alt={t.title} />
-								))
-								.with({ type: "terminal" }, () => (
-									<RiTerminalBoxLine />
-								))
-								.exhaustive()}
-							<HStack gap="2">
-								{tab.title}
-								{hasTabNotification(tab) &&
-									tab.id !== activeTabId && (
-										<Circle size="2" bg="green.500" />
-									)}
-								<CloseButton
-									as="span"
-									role="button"
-									size="2xs"
-									disabled={isPending(tab.id)}
-									onClick={(e) => {
-										e.stopPropagation();
-										if (!isPending(tab.id)) {
-											closeTab.mutate({
-												profileId,
-												tabId: tab.id,
-											});
-										}
-									}}
-								/>
-							</HStack>
-						</Tabs.Trigger>
-					))}
-				</Tabs.List>
+				<ScrollArea.Root>
+					<ScrollArea.Viewport>
+						<Tabs.List flexWrap="nowrap">
+							{tabs.map((tab) => (
+								<Tabs.Trigger key={tab.id} value={tab.id} flexShrink={0}>
+									{match(tab)
+										.with({ type: "agent" }, (t) => (
+											<AgentIcon iconUrl={t.iconUrl} alt={t.title} />
+										))
+										.with({ type: "terminal" }, () => (
+											<RiTerminalBoxLine />
+										))
+										.exhaustive()}
+									<HStack gap="2">
+										{tab.title}
+										{hasTabNotification(tab) &&
+											tab.id !== activeTabId && (
+												<Circle size="2" bg="green.500" />
+											)}
+										<CloseButton
+											as="span"
+											role="button"
+											size="2xs"
+											disabled={isPending(tab.id)}
+											onClick={(e) => {
+												e.stopPropagation();
+												if (!isPending(tab.id)) {
+													closeTab.mutate({
+														profileId,
+														tabId: tab.id,
+													});
+												}
+											}}
+										/>
+									</HStack>
+								</Tabs.Trigger>
+							))}
+						</Tabs.List>
+					</ScrollArea.Viewport>
+					<ScrollArea.Scrollbar orientation="horizontal" size="xs" />
+				</ScrollArea.Root>
 			</Tabs.Root>
 
 			{/* Content area — all tabs stay mounted, hidden via CSS */}

@@ -190,6 +190,7 @@
 	"save": "Save",
 	"scriptPlaceholder": "One command per line\u2026",
 	"snippets": "Snippets",
+	"snippetsDescription": "In Agent chat, type ! or ！ followed by the trigger to quickly insert preset content.",
 	"noSnippetsYet": "No snippets yet. Create one to get started.",
 	"snippetName": "Name",
 	"snippetTrigger": "Trigger",

@@ -1,4 +1,5 @@
 import {
+	Alert,
 	Button,
 	CloseButton,
 	Code,
@@ -91,6 +92,15 @@ export function SnippetsTab() {
 
 	return (
 		<Stack gap="4">
+			<Alert.Root status="info" size="sm">
+				<Alert.Indicator />
+				<Alert.Content>
+					<Alert.Description>
+						{m.snippetsDescription()}
+					</Alert.Description>
+				</Alert.Content>
+			</Alert.Root>
+
 			<Flex>
 				<Button size="sm" onClick={openCreate}>
 					<LuPlus /> {m.create()}
