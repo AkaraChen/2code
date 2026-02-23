@@ -10,8 +10,9 @@ import {
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import * as m from "@/paraglide/messages.js";
-import { SnippetsTab } from "./SnippetsTab";
+import { AgentsTab } from "./AgentsTab";
 import { SkillsTab } from "./SkillsTab";
+import { SnippetsTab } from "./SnippetsTab";
 
 type Mode = "manage" | "store";
 type Filter = "skills" | "snippets" | "agents";
@@ -88,14 +89,25 @@ export default function AssetsPage() {
 								<SnippetsTab />
 							</Suspense>
 						)}
-						{filter === "agents" && <WipSection />}
+						{filter === "agents" && (
+							<AgentsTab mode="manage" />
+						)}
 					</>
 				)}
 
 				{mode === "store" && (
-					<WipSection
-						title={filters.find((f) => f.value === filter)?.label()}
-					/>
+					<>
+						{filter === "agents" && (
+							<AgentsTab mode="store" />
+						)}
+						{filter !== "agents" && (
+							<WipSection
+								title={filters.find(
+									(f) => f.value === filter,
+								)?.label()}
+							/>
+						)}
+					</>
 				)}
 			</Stack>
 		</Box>

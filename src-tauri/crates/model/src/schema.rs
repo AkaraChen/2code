@@ -97,6 +97,20 @@ diesel::table! {
 }
 
 diesel::table! {
+	marketplace_agents (id) {
+		id -> Text,
+		name -> Text,
+		version -> Text,
+		description -> Nullable<Text>,
+		icon_url -> Nullable<Text>,
+		repository -> Nullable<Text>,
+		license -> Nullable<Text>,
+		authors_json -> Text,
+		added_at -> Timestamp,
+	}
+}
+
+diesel::table! {
 	snippets (id) {
 		id -> Text,
 		name -> Text,
@@ -116,6 +130,7 @@ diesel::allow_tables_to_appear_in_same_query!(
 	agent_session_events,
 	agent_sessions,
 	daily_activity,
+	marketplace_agents,
 	profiles,
 	projects,
 	pty_session_output,

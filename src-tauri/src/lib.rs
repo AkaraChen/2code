@@ -144,6 +144,10 @@ pub fn run() {
 			handler::skill::list_skills,
 			handler::skill::get_skill,
 			handler::skill::delete_skill,
+			handler::marketplace::fetch_agent_registry,
+			handler::marketplace::list_marketplace_agents,
+			handler::marketplace::add_marketplace_agent,
+			handler::marketplace::remove_marketplace_agent,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

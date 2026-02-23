@@ -197,5 +197,15 @@
 	"toggleProjectTree": "Toggle project tree",
 	"management": "Management",
 	"store": "Store",
-	"all": "All"
+	"all": "All",
+	"marketplaceAdd": "Add",
+	"marketplaceAdded": "Added",
+	"marketplaceRemove": "Remove",
+	"marketplaceLoadingRegistry": "Loading agent registry\u2026",
+	"marketplaceNoAgentsInstalled": "No agents added yet. Browse the store to add agents.",
+	"marketplaceRegistryError": "Failed to load registry",
+	"marketplaceBy": "by {authors}",
+	"marketplaceVersion": "v{version}",
+	"confirmRemoveAgent": "Remove this agent from your marketplace?",
+	"removeAgent": "Remove Agent"
 }

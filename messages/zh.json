@@ -197,5 +197,15 @@
 	"toggleProjectTree": "展开/折叠项目树",
 	"management": "管理",
 	"store": "商城",
-	"all": "全部"
+	"all": "全部",
+	"marketplaceAdd": "添加",
+	"marketplaceAdded": "已添加",
+	"marketplaceRemove": "移除",
+	"marketplaceLoadingRegistry": "正在加载代理注册表\u2026",
+	"marketplaceNoAgentsInstalled": "暂无已添加的代理，前往商城添加。",
+	"marketplaceRegistryError": "加载注册表失败",
+	"marketplaceBy": "by {authors}",
+	"marketplaceVersion": "v{version}",
+	"confirmRemoveAgent": "从商城移除此代理？",
+	"removeAgent": "移除代理"
 }

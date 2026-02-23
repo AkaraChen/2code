@@ -1,6 +1,7 @@
 use model::watcher::WatchEvent;
 
 pub mod agent;
+pub mod marketplace;
 pub mod profile;
 pub mod project;
 pub mod pty;

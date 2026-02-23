@@ -12,6 +12,8 @@ export const queryNamespaces = {
 	"project-config": "project-config",
 	snippets: "snippets",
 	skills: "skills",
+	"marketplace-registry": "marketplace-registry",
+	"marketplace-agents": "marketplace-agents",
 } as const;
 
 export const queryKeys = {
@@ -37,6 +39,10 @@ export const queryKeys = {
 	},
 	skills: {
 		all: ["skills"] as const,
+	},
+	marketplace: {
+		registry: ["marketplace-registry"] as const,
+		agents: ["marketplace-agents"] as const,
 	},
 	projectConfig: (projectId: string) =>
 		["project-config", projectId] as const,
