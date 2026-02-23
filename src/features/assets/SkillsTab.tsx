@@ -1,5 +1,4 @@
 import {
-	Badge,
 	Button,
 	Card,
 	CloseButton,
@@ -35,39 +34,26 @@ export function SkillsTab() {
 			) : (
 				<SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
 					{skills.map((skill) => (
-						<Card.Root key={skill.name} size="sm">
-							<Card.Body>
-								<HStack justify="space-between" align="start">
-									<Stack gap="1" flex="1" minW="0">
-										<HStack>
-											<Badge
-												variant="outline"
-												size="sm"
-											>
-												{skill.name}
-											</Badge>
-										</HStack>
-										<Text
-											fontSize="sm"
-											color="fg.muted"
-											lineClamp={2}
-										>
-											{skill.description ||
-												m.noDescription()}
-										</Text>
-									</Stack>
+						<Card.Root key={skill.name}>
+							<Card.Body gap="2">
+								<HStack justify="space-between" align="flex-start">
+									<Card.Title>{skill.name}</Card.Title>
 									<IconButton
 										size="xs"
 										variant="ghost"
 										colorPalette="red"
+										flexShrink={0}
 										onClick={() =>
 											setDeleteTarget(skill.name)
 										}
-										aria-label="Delete"
+										aria-label={m.delete()}
 									>
 										<LuTrash2 />
 									</IconButton>
 								</HStack>
+								<Card.Description lineClamp={2}>
+									{skill.description || m.noDescription()}
+								</Card.Description>
 							</Card.Body>
 						</Card.Root>
 					))}

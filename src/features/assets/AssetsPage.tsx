@@ -2,12 +2,11 @@ import {
 	Badge,
 	Box,
 	EmptyState,
-	HStack,
 	Heading,
 	SegmentGroup,
 	Skeleton,
 	Stack,
-	Tag,
+	Tabs,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import * as m from "@/paraglide/messages.js";
@@ -62,24 +61,20 @@ export default function AssetsPage() {
 					/>
 				</SegmentGroup.Root>
 
-				<HStack gap="2">
-					{filters.map((f) => (
-						<Tag.Root
-							key={f.value}
-							asChild
-							size="xl"
-							variant={filter === f.value ? "solid" : "outline"}
-							cursor="pointer"
-						>
-							<button
-								type="button"
-								onClick={() => setFilter(f.value)}
-							>
-								<Tag.Label>{f.label()}</Tag.Label>
-							</button>
-						</Tag.Root>
-					))}
-				</HStack>
+				<Tabs.Root
+					value={filter}
+					onValueChange={(e) => setFilter(e.value as Filter)}
+					variant="line"
+					size="sm"
+				>
+					<Tabs.List>
+						{filters.map((f) => (
+							<Tabs.Trigger key={f.value} value={f.value}>
+								{f.label()}
+							</Tabs.Trigger>
+						))}
+					</Tabs.List>
+				</Tabs.Root>
 
 				{mode === "manage" && (
 					<>
