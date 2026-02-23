@@ -1,28 +1,11 @@
-import { Button, Group, IconButton, Image, Menu, Portal } from "@chakra-ui/react";
-import { useState } from "react";
+import { Button, Group, IconButton, Menu, Portal } from "@chakra-ui/react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { RiAddLine, RiArrowDownSLine, RiRobot2Line } from "react-icons/ri";
+import { RiAddLine, RiArrowDownSLine } from "react-icons/ri";
 import { useAgentSettingsStore } from "@/features/settings/stores/agentSettingsStore";
 import type { MarketplaceAgent, Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-
-function AgentIcon({ iconUrl, size = 16 }: { iconUrl?: string | null; size?: number }) {
-	const [failed, setFailed] = useState(false);
-	if (iconUrl && !failed) {
-		return (
-			<Image
-				src={iconUrl}
-				width={`${size}px`}
-				height={`${size}px`}
-				objectFit="contain"
-				onError={() => setFailed(true)}
-				alt=""
-			/>
-		);
-	}
-	return <RiRobot2Line size={size} />;
-}
+import { AgentIcon } from "@/shared/components/AgentIcon";
 
 function AgentDropdown({
 	agents,
@@ -95,7 +78,7 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 				aria-label={m.addAgent()}
 				onClick={() => navigate("/assets")}
 			>
-				<RiRobot2Line />
+				<AgentIcon />
 				<RiAddLine />
 			</Button>
 		);

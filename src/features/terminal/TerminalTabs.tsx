@@ -1,11 +1,12 @@
 import { Box, Circle, CloseButton, Flex, HStack, Tabs } from "@chakra-ui/react";
-import { RiRobot2Line, RiTerminalBoxLine } from "react-icons/ri";
+import { RiTerminalBoxLine } from "react-icons/ri";
 import { match } from "ts-pattern";
 import { useShallow } from "zustand/react/shallow";
 import { AgentChat } from "@/features/agent/AgentChat";
 import { useCloseTab } from "@/features/tabs/hooks";
 import { isPending } from "@/features/tabs/pendingDeletions";
 import { useTabStore } from "@/features/tabs/store";
+import { AgentIcon } from "@/shared/components/AgentIcon";
 import { SplitTerminal } from "./SplitTerminal";
 
 interface TerminalTabsProps {
@@ -43,7 +44,9 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 					{tabs.map((tab) => (
 						<Tabs.Trigger key={tab.id} value={tab.id}>
 							{match(tab)
-								.with({ type: "agent" }, () => <RiRobot2Line />)
+								.with({ type: "agent" }, (t) => (
+									<AgentIcon iconUrl={t.iconUrl} alt={t.title} />
+								))
 								.with({ type: "terminal" }, () => (
 									<RiTerminalBoxLine />
 								))

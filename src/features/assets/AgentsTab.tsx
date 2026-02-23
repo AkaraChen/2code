@@ -17,10 +17,10 @@ import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import * as React from "react";
 import { Suspense, useState } from "react";
 import { LuExternalLink, LuTrash2 } from "react-icons/lu";
-import { RiRobot2Line } from "react-icons/ri";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import type { RegistryAgentInfo } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
+import { AgentIcon } from "@/shared/components/AgentIcon";
 import {
 	useAddMarketplaceAgent,
 	useMarketplaceAgents,
@@ -74,55 +74,18 @@ function MarketplaceQueryBoundary({
 	);
 }
 
-// ─── Shared: agent icon with SVG fallback ───────────────────────────────────
-
-const ICON_SIZE = "40px";
-
-function AgentIcon({
-	icon,
-	name,
-}: {
-	icon?: string | null;
-	name: string;
-}) {
-	const [imgError, setImgError] = useState(false);
-
-	const containerStyle = {
-		width: ICON_SIZE,
-		height: ICON_SIZE,
-		flexShrink: 0,
-		borderRadius: "var(--chakra-radii-md)",
-		border: "1px solid var(--chakra-colors-border)",
-		display: "flex",
-		alignItems: "center",
-		justifyContent: "center",
-		padding: "6px",
-		overflow: "hidden",
-	} satisfies React.CSSProperties;
-
-	if (!icon || imgError) {
-		return (
-			<div style={containerStyle}>
-				<RiRobot2Line size={18} />
-			</div>
-		);
-	}
-
-	return (
-		<div style={containerStyle}>
-			<img
-				src={icon}
-				alt={name}
-				onError={() => setImgError(true)}
-				style={{
-					width: "100%",
-					height: "100%",
-					objectFit: "contain",
-				}}
-			/>
-		</div>
-	);
-}
+const ICON_CONTAINER_STYLE = {
+	width: "40px",
+	height: "40px",
+	flexShrink: 0,
+	borderRadius: "var(--chakra-radii-md)",
+	border: "1px solid var(--chakra-colors-border)",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: "6px",
+	overflow: "hidden",
+} satisfies React.CSSProperties;
 
 // ─── Store mode: browse registry ────────────────────────────────────────────
 
@@ -141,7 +104,13 @@ function RegistryAgentCard({
 		<Card.Root>
 			<Card.Body gap="3">
 				<HStack gap="3" align="flex-start">
-					<AgentIcon icon={agent.icon} name={agent.name} />
+					<div style={ICON_CONTAINER_STYLE}>
+						<AgentIcon
+							iconUrl={agent.icon}
+							size={28}
+							alt={agent.name}
+						/>
+					</div>
 					<Stack gap="0" flex="1" minW="0">
 						<HStack justify="space-between" align="flex-start">
 							<Card.Title fontSize="sm" lineClamp={1}>
@@ -280,7 +249,13 @@ function InstalledAgentCard({
 		<Card.Root>
 			<Card.Body gap="3">
 				<HStack gap="3" align="flex-start">
-					<AgentIcon icon={iconUrl} name={name} />
+					<div style={ICON_CONTAINER_STYLE}>
+						<AgentIcon
+							iconUrl={iconUrl}
+							size={28}
+							alt={name}
+						/>
+					</div>
 					<Stack gap="0" flex="1" minW="0">
 						<HStack justify="space-between" align="flex-start">
 							<Card.Title fontSize="sm" lineClamp={1}>
