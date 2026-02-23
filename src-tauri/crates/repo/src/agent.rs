@@ -35,7 +35,9 @@ pub fn list_by_project(
 	project_id: &str,
 ) -> Result<Vec<AgentSessionRecord>, AppError> {
 	let sessions = agent_sessions::table
-		.inner_join(profiles::table.on(profiles::id.eq(agent_sessions::profile_id)))
+		.inner_join(
+			profiles::table.on(profiles::id.eq(agent_sessions::profile_id)),
+		)
 		.filter(profiles::project_id.eq(project_id))
 		.select(AgentSessionRecord::as_select())
 		.order(agent_sessions::created_at.asc())
@@ -162,12 +164,36 @@ pub fn mark_destroyed(
 		.unwrap_or_default()
 		.as_secs() as i32;
 
-	diesel::update(agent_sessions::table.filter(agent_sessions::id.eq(session_id)))
-		.set(agent_sessions::destroyed_at.eq(now))
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+	diesel::update(
+		agent_sessions::table.filter(agent_sessions::id.eq(session_id)),
+	)
+	.set(agent_sessions::destroyed_at.eq(now))
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	tracing::info!(target: "agent", %session_id, "repo: mark_destroyed");
+	Ok(())
+}
+
+/// Update session initialization payload for reconnect restoration.
+pub fn update_session_init_json(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	session_init_json: Option<&str>,
+) -> Result<(), AppError> {
+	diesel::update(
+		agent_sessions::table.filter(agent_sessions::id.eq(session_id)),
+	)
+	.set(agent_sessions::session_init_json.eq(session_init_json))
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	tracing::info!(
+		target: "agent",
+		%session_id,
+		has_init = session_init_json.is_some(),
+		"repo: update_session_init_json"
+	);
 	Ok(())
 }
 
@@ -261,10 +287,11 @@ pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	let rows =
-		diesel::delete(agent_sessions::table.filter(agent_sessions::id.eq(session_id)))
-			.execute(conn)
-			.map_err(|e| AppError::DbError(e.to_string()))?;
+	let rows = diesel::delete(
+		agent_sessions::table.filter(agent_sessions::id.eq(session_id)),
+	)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	tracing::info!(target: "agent", %session_id, rows_deleted = rows, "repo: delete_session");
 	Ok(())

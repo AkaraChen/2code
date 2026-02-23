@@ -7,9 +7,11 @@ import {
 	closeAgentSession,
 	createAgentSessionPersistent,
 	deleteAgentSessionRecord,
+	getAgentSessionModels,
 	listAgentSessionEvents,
 	playSystemSound,
 	reconnectAgentSession,
+	setAgentSessionModel,
 } from "@/generated";
 import { useAgentStore } from "../agent/store";
 import { useNotificationStore } from "../settings/stores/notificationStore";
@@ -70,6 +72,7 @@ export class AgentTabSession extends TabSession {
 		useAgentStore.getState().initSession(info.id);
 		await session.registerListeners();
 		session._connected = true;
+		await session.refreshModelState();
 		return session;
 	}
 
@@ -106,6 +109,7 @@ export class AgentTabSession extends TabSession {
 			useAgentStore.getState().initSession(info.id);
 			useAgentStore.getState().restoreFromEvents(info.id, events);
 			newSession._connected = true;
+			await newSession.refreshModelState();
 
 			// Replace in registry
 			sessionRegistry.delete(this.id);
@@ -152,6 +156,32 @@ export class AgentTabSession extends TabSession {
 		]);
 
 		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError];
+	}
+
+	async refreshModelState(): Promise<void> {
+		useAgentStore.getState().setModelLoading(this.id, true);
+		try {
+			const modelState = await getAgentSessionModels({ sessionId: this.id });
+			useAgentStore.getState().setModelState(this.id, modelState);
+		} catch (err) {
+			consola.warn(`[agent] failed to load model state for ${this.id}:`, err);
+			useAgentStore.getState().setModelState(this.id, null);
+		} finally {
+			useAgentStore.getState().setModelLoading(this.id, false);
+		}
+	}
+
+	async setModel(modelId: string): Promise<void> {
+		useAgentStore.getState().setModelLoading(this.id, true);
+		try {
+			const modelState = await setAgentSessionModel({
+				sessionId: this.id,
+				modelId,
+			});
+			useAgentStore.getState().setModelState(this.id, modelState);
+		} finally {
+			useAgentStore.getState().setModelLoading(this.id, false);
+		}
 	}
 
 	async close(): Promise<void> {

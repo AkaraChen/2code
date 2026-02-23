@@ -1,5 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { sendAgentPrompt } from "@/generated";
+import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
+import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import { useAgentStore } from "./store";
 
 export function useSendAgentPrompt() {
@@ -14,6 +16,24 @@ export function useSendAgentPrompt() {
 			useAgentStore.getState().addUserMessage(sessionId, content);
 			useAgentStore.getState().setStreaming(sessionId, true);
 			await sendAgentPrompt({ sessionId, content });
+		},
+	});
+}
+
+export function useSetAgentModel() {
+	return useMutation({
+		mutationFn: async ({
+			sessionId,
+			modelId,
+		}: {
+			sessionId: string;
+			modelId: string;
+		}) => {
+			const tabSession = sessionRegistry.get(sessionId);
+			if (!tabSession || tabSession.type !== "agent") {
+				throw new Error(`Agent session not found: ${sessionId}`);
+			}
+			await (tabSession as AgentTabSession).setModel(modelId);
 		},
 	});
 }
