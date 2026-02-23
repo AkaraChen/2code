@@ -26,6 +26,15 @@ build-helper-dev:
     cp -f target/debug/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
 
+# Regenerate TypeScript bindings from Rust commands and patch tauri-typegen v0.4.1 unused-import bugs
+typegen:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo tauri-typegen generate
+    sed -i '' 's/import { invoke, Channel }/import { invoke }/' src/generated/commands.ts
+    sed -i '' 's/import { listen, type UnlistenFn, type Event }/import { listen, type UnlistenFn }/' src/generated/events.ts
+    grep -v "^import \* as types from './types'" src/generated/events.ts > /tmp/_events_patched.ts && mv /tmp/_events_patched.ts src/generated/events.ts
+
 coverage:
     cd src-tauri && cargo llvm-cov --lib --tests --html --output-dir coverage/
 

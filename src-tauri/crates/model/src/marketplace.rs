@@ -35,7 +35,8 @@ pub struct NewMarketplaceAgent<'a> {
 
 /// Agent info from the ACP registry CDN.
 /// Used as the return type for `fetch_agent_registry`.
-#[derive(Serialize, Deserialize, Clone)]
+/// `distribution` is a JSON-encoded string of the raw distribution spec.
+#[derive(Serialize, Clone)]
 pub struct RegistryAgentInfo {
 	pub id: String,
 	pub name: String,
@@ -45,14 +46,13 @@ pub struct RegistryAgentInfo {
 	pub icon: Option<String>,
 	pub repository: Option<String>,
 	pub license: Option<String>,
-	#[serde(default)]
 	pub authors: Vec<String>,
-	/// Distribution spec (npx or binary). Stored as raw JSON.
-	#[serde(default)]
-	pub distribution: serde_json::Value,
+	/// Distribution spec serialized as a JSON string (e.g. `{"npx":{...}}`).
+	pub distribution: String,
 }
 
 /// Input for adding an agent to the local marketplace.
+/// `distribution` is the JSON-encoded distribution spec forwarded from the registry.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddMarketplaceAgentInput {
@@ -64,5 +64,5 @@ pub struct AddMarketplaceAgentInput {
 	pub repository: Option<String>,
 	pub license: Option<String>,
 	pub authors: Vec<String>,
-	pub distribution: serde_json::Value,
+	pub distribution: String,
 }

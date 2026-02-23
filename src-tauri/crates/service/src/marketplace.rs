@@ -9,9 +9,25 @@ const REGISTRY_URL: &str =
 /// Fetch the ACP agent registry from the CDN.
 /// Acts as a backend proxy to avoid CORS issues in the frontend.
 pub async fn fetch_registry() -> Result<Vec<RegistryAgentInfo>, AppError> {
+	/// Internal CDN-parsing type; `distribution` is kept as raw JSON value.
+	#[derive(serde::Deserialize)]
+	struct CdnAgent {
+		id: String,
+		name: String,
+		version: String,
+		description: Option<String>,
+		icon: Option<String>,
+		repository: Option<String>,
+		license: Option<String>,
+		#[serde(default)]
+		authors: Vec<String>,
+		#[serde(default)]
+		distribution: serde_json::Value,
+	}
+
 	#[derive(serde::Deserialize)]
 	struct RegistryResponse {
-		agents: Vec<RegistryAgentInfo>,
+		agents: Vec<CdnAgent>,
 	}
 
 	let response = reqwest::get(REGISTRY_URL)
@@ -23,7 +39,27 @@ pub async fn fetch_registry() -> Result<Vec<RegistryAgentInfo>, AppError> {
 		.await
 		.map_err(|e| AppError::PtyError(format!("Registry parse failed: {e}")))?;
 
-	Ok(registry.agents)
+	let agents = registry
+		.agents
+		.into_iter()
+		.map(|a| {
+			let distribution = serde_json::to_string(&a.distribution)
+				.unwrap_or_else(|_| "{}".to_string());
+			RegistryAgentInfo {
+				id: a.id,
+				name: a.name,
+				version: a.version,
+				description: a.description,
+				icon: a.icon,
+				repository: a.repository,
+				license: a.license,
+				authors: a.authors,
+				distribution,
+			}
+		})
+		.collect();
+
+	Ok(agents)
 }
 
 /// Add an agent to the local marketplace database.
@@ -32,8 +68,6 @@ pub fn add_agent(
 	input: &AddMarketplaceAgentInput,
 ) -> Result<MarketplaceAgent, AppError> {
 	let authors_json = serde_json::to_string(&input.authors)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-	let distribution_json = serde_json::to_string(&input.distribution)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	repo::marketplace::insert(
@@ -46,7 +80,7 @@ pub fn add_agent(
 		input.repository.as_deref(),
 		input.license.as_deref(),
 		&authors_json,
-		&distribution_json,
+		&input.distribution,
 	)
 }
 
