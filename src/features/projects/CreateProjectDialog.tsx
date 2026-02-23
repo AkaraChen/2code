@@ -163,6 +163,7 @@ export default function CreateProjectDialog({
 									<Field.Label>{m.projectName()}</Field.Label>
 									<Input
 										placeholder={m.projectNamePlaceholder()}
+										autoComplete="off"
 										{...form.register("name")}
 										onKeyDown={(e) => {
 											if (e.key === "Enter")

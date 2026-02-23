@@ -1,12 +1,11 @@
 import { Button, HStack } from "@chakra-ui/react";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 import { LuPlus, LuSettings } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 
 export function QuickActions() {
-	const navigate = useNavigate();
 	const createDialog = useDialogState();
 
 	return (
@@ -16,13 +15,11 @@ export function QuickActions() {
 					<LuPlus />
 					{m.newProject()}
 				</Button>
-				<Button
-					size="sm"
-					variant="ghost"
-					onClick={() => navigate("/settings")}
-				>
-					<LuSettings />
-					{m.settings()}
+				<Button asChild size="sm" variant="ghost">
+					<Link to="/settings">
+						<LuSettings />
+						{m.settings()}
+					</Link>
 				</Button>
 			</HStack>
 			<CreateProjectDialog

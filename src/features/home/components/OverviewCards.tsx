@@ -23,7 +23,7 @@ function StatCard({ label, value }: StatCardProps) {
 					<Text fontSize="sm" color="fg.muted">
 						{label}
 					</Text>
-					<Text fontSize="2xl" fontWeight="bold">
+					<Text fontSize="2xl" fontWeight="bold" fontVariantNumeric="tabular-nums">
 						{value}
 					</Text>
 				</VStack>

@@ -80,6 +80,7 @@ export function ActivityHeatmap({ data }: { data: DailyActivity[] }) {
 							<Tooltip.Root key={cell.date} openDelay={100}>
 								<Tooltip.Trigger asChild>
 									<Box
+										tabIndex={0}
 										width={`${CELL_SIZE}px`}
 										height={`${CELL_SIZE}px`}
 										borderRadius="sm"
@@ -92,8 +93,8 @@ export function ActivityHeatmap({ data }: { data: DailyActivity[] }) {
 										<Tooltip.Content>
 											<Text fontSize="xs">
 												{cell.date}:{" "}
-												{cell.terminal} terminal,{" "}
-												{cell.agent} agent
+												{cell.terminal} {m.statsTerminal()},{" "}
+												{cell.agent} {m.statsAgent()}
 											</Text>
 										</Tooltip.Content>
 									</Tooltip.Positioner>

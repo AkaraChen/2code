@@ -77,7 +77,7 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 				agents={agents}
 				onSelect={createWith}
 				trigger={
-					<Button size="xs" variant="subtle" disabled={isPending}>
+					<Button size="xs" variant="subtle" disabled={isPending} aria-label="New agent">
 						<RiRobot2Line />
 					</Button>
 				}
@@ -89,7 +89,7 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 
 	return (
 		<Group attached>
-			<Button size="xs" variant="subtle" disabled={isPending} onClick={() => createWith(defaultAgent.id)}>
+			<Button size="xs" variant="subtle" disabled={isPending} aria-label={defaultAgent.display_name} onClick={() => createWith(defaultAgent.id)}>
 				{createElement(getAgentIcon(defaultAgent.id), { size: 14 })}
 			</Button>
 			<AgentDropdown

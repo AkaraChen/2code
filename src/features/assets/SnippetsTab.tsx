@@ -39,6 +39,7 @@ export function SnippetsTab() {
 	const deleteMutation = useDeleteSnippet();
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [dialogOpen, setDialogOpen] = useState(false);
+	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
 	const form = useForm<SnippetFormData>({
 		defaultValues: { name: "", trigger: "", content: "" },
@@ -140,9 +141,7 @@ export function SnippetsTab() {
 											variant="ghost"
 											colorPalette="red"
 											onClick={() =>
-												deleteMutation.mutate(
-													snippet.id,
-												)
+												setDeleteTarget(snippet.id)
 											}
 											aria-label="Delete"
 										>
@@ -156,6 +155,7 @@ export function SnippetsTab() {
 				</Table.Root>
 			)}
 
+			{/* Create/Edit dialog */}
 			<Dialog.Root
 				lazyMount
 				open={dialogOpen}
@@ -183,6 +183,7 @@ export function SnippetsTab() {
 												required: true,
 											})}
 											placeholder={m.snippetNamePlaceholder()}
+											autoComplete="off"
 										/>
 									</Field.Root>
 									<Field.Root>
@@ -194,6 +195,7 @@ export function SnippetsTab() {
 												required: true,
 											})}
 											placeholder={m.snippetTriggerPlaceholder()}
+											autoComplete="off"
 										/>
 									</Field.Root>
 									<Field.Root>
@@ -206,6 +208,7 @@ export function SnippetsTab() {
 											})}
 											placeholder={m.snippetContentPlaceholder()}
 											rows={4}
+											autoComplete="off"
 										/>
 									</Field.Root>
 								</Stack>
@@ -224,6 +227,52 @@ export function SnippetsTab() {
 									}
 								>
 									{editingId ? m.save() : m.create()}
+								</Button>
+							</Dialog.Footer>
+							<Dialog.CloseTrigger asChild>
+								<CloseButton size="sm" />
+							</Dialog.CloseTrigger>
+						</Dialog.Content>
+					</Dialog.Positioner>
+				</Portal>
+			</Dialog.Root>
+
+			{/* Delete confirmation dialog */}
+			<Dialog.Root
+				lazyMount
+				open={deleteTarget !== null}
+				onOpenChange={(e) => {
+					if (!e.open) setDeleteTarget(null);
+				}}
+			>
+				<Portal>
+					<Dialog.Backdrop />
+					<Dialog.Positioner>
+						<Dialog.Content>
+							<Dialog.Header>
+								<Dialog.Title>
+									{m.deleteSnippet()}
+								</Dialog.Title>
+							</Dialog.Header>
+							<Dialog.Body>
+								<Text>{m.confirmDeleteSnippet()}</Text>
+							</Dialog.Body>
+							<Dialog.Footer>
+								<Dialog.ActionTrigger asChild>
+									<Button variant="outline">
+										{m.cancel()}
+									</Button>
+								</Dialog.ActionTrigger>
+								<Button
+									colorPalette="red"
+									onClick={() => {
+										if (deleteTarget) {
+											deleteMutation.mutate(deleteTarget);
+										}
+										setDeleteTarget(null);
+									}}
+								>
+									{m.delete()}
 								</Button>
 							</Dialog.Footer>
 							<Dialog.CloseTrigger asChild>

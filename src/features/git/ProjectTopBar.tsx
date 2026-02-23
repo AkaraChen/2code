@@ -89,6 +89,7 @@ export default function ProjectTopBar({
 						<Button
 							size="xs"
 							variant="subtle"
+							aria-label={m.newTerminal()}
 							disabled={createTab.isPending}
 							onClick={() =>
 								createTab.mutate({

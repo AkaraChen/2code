@@ -40,6 +40,7 @@ export function SkillsTab() {
 	const deleteMutation = useDeleteSkill();
 	const [editingName, setEditingName] = useState<string | null>(null);
 	const [dialogOpen, setDialogOpen] = useState(false);
+	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
 	const form = useForm<SkillFormData>({
 		defaultValues: { name: "", description: "", content: "" },
@@ -132,9 +133,7 @@ export function SkillsTab() {
 											variant="ghost"
 											colorPalette="red"
 											onClick={() =>
-												deleteMutation.mutate(
-													skill.name,
-												)
+												setDeleteTarget(skill.name)
 											}
 											aria-label="Delete"
 										>
@@ -148,6 +147,7 @@ export function SkillsTab() {
 				</SimpleGrid>
 			)}
 
+			{/* Create/Edit dialog */}
 			<Dialog.Root
 				lazyMount
 				open={dialogOpen}
@@ -176,6 +176,7 @@ export function SkillsTab() {
 											})}
 											placeholder={m.skillNamePlaceholder()}
 											disabled={!!editingName}
+											autoComplete="off"
 										/>
 										{!editingName && (
 											<Field.HelperText>
@@ -191,6 +192,7 @@ export function SkillsTab() {
 											{...form.register("description")}
 											placeholder={m.skillDescriptionPlaceholder()}
 											rows={2}
+											autoComplete="off"
 										/>
 									</Field.Root>
 									<Field.Root>
@@ -205,6 +207,7 @@ export function SkillsTab() {
 											rows={10}
 											fontFamily="mono"
 											fontSize="sm"
+											autoComplete="off"
 										/>
 									</Field.Root>
 								</Stack>
@@ -223,6 +226,52 @@ export function SkillsTab() {
 									}
 								>
 									{editingName ? m.save() : m.create()}
+								</Button>
+							</Dialog.Footer>
+							<Dialog.CloseTrigger asChild>
+								<CloseButton size="sm" />
+							</Dialog.CloseTrigger>
+						</Dialog.Content>
+					</Dialog.Positioner>
+				</Portal>
+			</Dialog.Root>
+
+			{/* Delete confirmation dialog */}
+			<Dialog.Root
+				lazyMount
+				open={deleteTarget !== null}
+				onOpenChange={(e) => {
+					if (!e.open) setDeleteTarget(null);
+				}}
+			>
+				<Portal>
+					<Dialog.Backdrop />
+					<Dialog.Positioner>
+						<Dialog.Content>
+							<Dialog.Header>
+								<Dialog.Title>
+									{m.deleteSkill()}
+								</Dialog.Title>
+							</Dialog.Header>
+							<Dialog.Body>
+								<Text>{m.confirmDeleteSkill()}</Text>
+							</Dialog.Body>
+							<Dialog.Footer>
+								<Dialog.ActionTrigger asChild>
+									<Button variant="outline">
+										{m.cancel()}
+									</Button>
+								</Dialog.ActionTrigger>
+								<Button
+									colorPalette="red"
+									onClick={() => {
+										if (deleteTarget) {
+											deleteMutation.mutate(deleteTarget);
+										}
+										setDeleteTarget(null);
+									}}
+								>
+									{m.delete()}
 								</Button>
 							</Dialog.Footer>
 							<Dialog.CloseTrigger asChild>

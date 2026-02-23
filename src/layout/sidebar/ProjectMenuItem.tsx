@@ -76,6 +76,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							as="span"
 							variant="ghost"
 							size="2xs"
+							aria-label={m.toggleProjectTree()}
 							onClick={(e) => {
 								e.preventDefault();
 								e.stopPropagation();

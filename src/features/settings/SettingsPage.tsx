@@ -30,9 +30,6 @@ export default function SettingsPage() {
 							{m.notification()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
-						<Tabs.Trigger value="profile">
-							{m.profile()}
-						</Tabs.Trigger>
 						<Tabs.Trigger value="agents">{m.agents()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
@@ -48,7 +45,6 @@ export default function SettingsPage() {
 					<Tabs.Content value="topbar">
 						<TopBarSettings />
 					</Tabs.Content>
-					<Tabs.Content value="profile" />
 					<Tabs.Content value="agents">
 						<Suspense fallback={<Skeleton height="200px" />}>
 							<AgentSettings />
