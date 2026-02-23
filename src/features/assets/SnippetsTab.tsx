@@ -91,7 +91,7 @@ export function SnippetsTab() {
 
 	return (
 		<Stack gap="4">
-			<Flex justify="flex-end">
+			<Flex>
 				<Button size="sm" onClick={openCreate}>
 					<LuPlus /> {m.create()}
 				</Button>
