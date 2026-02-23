@@ -143,8 +143,6 @@ pub fn run() {
 			handler::snippet::delete_snippet,
 			handler::skill::list_skills,
 			handler::skill::get_skill,
-			handler::skill::create_skill,
-			handler::skill::update_skill,
 			handler::skill::delete_skill,
 		])
 		.build(tauri::generate_context!())
