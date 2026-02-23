@@ -10,7 +10,6 @@ import {
 	listAgentSessionEvents,
 	reconnectAgentSession,
 } from "@/generated";
-import * as m from "@/paraglide/messages.js";
 import { useAgentStore } from "../agent/store";
 import { TabSession } from "./session";
 import { sessionRegistry } from "./sessionRegistry";
@@ -20,6 +19,7 @@ import type { AgentTab } from "./types";
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
 	readonly agentType: string;
+	readonly iconUrl: string | null;
 	private unlisteners: UnlistenFn[] = [];
 	private _connected = false;
 	private _reconnecting = false;
@@ -33,19 +33,26 @@ export class AgentTabSession extends TabSession {
 		profileId: string,
 		title: string,
 		agentType: string,
+		iconUrl?: string | null,
 	) {
 		super(id, profileId, title);
 		this.agentType = agentType;
+		this.iconUrl = iconUrl ?? null;
 	}
 
 	/**
 	 * Create a new persistent agent session.
 	 * Session and events are automatically persisted to the database.
+	 *
+	 * @param agentName Display name from the marketplace agent record (used as tab title).
+	 * @param iconUrl   Icon URL from the marketplace agent record.
 	 */
 	static async create(
 		profileId: string,
 		cwd: string,
 		agent: string,
+		agentName: string,
+		iconUrl?: string | null,
 	): Promise<AgentTabSession> {
 		const info = await createAgentSessionPersistent({
 			meta: { profileId, agent },
@@ -54,8 +61,9 @@ export class AgentTabSession extends TabSession {
 		const session = new AgentTabSession(
 			info.id,
 			profileId,
-			m.agentTabTitle({ agent }),
+			agentName,
 			agent,
+			iconUrl,
 		);
 		useAgentStore.getState().initSession(info.id);
 		await session.registerListeners();
@@ -85,6 +93,7 @@ export class AgentTabSession extends TabSession {
 				this.profileId,
 				this.title,
 				this.agentType,
+				this.iconUrl,
 			);
 
 			// Load transferred events and register listeners in parallel
@@ -163,6 +172,7 @@ export class AgentTabSession extends TabSession {
 			sessionId: this.id,
 			title: this.title,
 			agentType: this.agentType,
+			iconUrl: this.iconUrl,
 		};
 	}
 }

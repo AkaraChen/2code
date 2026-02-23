@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,6 +9,7 @@ use agent::{
 use futures::StreamExt;
 use infra::db::{DbPool, DbPoolExt};
 use model::agent::{AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord};
+use model::distribution::Distribution;
 use model::error::AppError;
 use tauri::{AppHandle, Emitter, State};
 use tokio::time::timeout;
@@ -271,8 +271,6 @@ pub async fn close_agent_session(
 					session_id = %session_id,
 					"agent session shutdown timed out after 3s, forcing cleanup"
 				);
-				// Session is already removed from map, so it won't be reused
-				// The timeout prevents blocking the frontend
 			}
 		}
 	}
@@ -284,39 +282,43 @@ pub async fn close_agent_session(
 // Persistence commands (for agent tab restoration)
 // ============================================================
 
-/// Create a persistent agent session with database storage.
+/// Create a persistent agent session using the marketplace agent's distribution spec.
+///
+/// Looks up `meta.agent` in the `marketplace_agents` table, resolves the
+/// distribution to `(program, args, env)`, spawns the process, and persists
+/// the session to the database.
 #[tauri::command]
 pub async fn create_agent_session_persistent(
 	meta: AgentSessionMeta,
 	cwd: String,
 	app: AppHandle,
 	db: State<'_, DbPool>,
-	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
 ) -> Result<AgentSessionInfo, AppError> {
-	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
 	let sessions_clone = sessions.inner().clone();
 
-	// Resolve launch spec (blocking I/O)
-	let agent_clone = meta.agent.clone();
-	let launch_spec = tokio::task::spawn_blocking(move || {
-		manager_clone.resolve_launch(&agent_clone)
-	})
-	.await
-	.map_err(|e| AppError::PtyError(e.to_string()))?
-	.map_err(|e| AppError::PtyError(format!("{e}")))?;
+	// Look up marketplace agent and resolve launch spec from distribution_json
+	let (program, args, base_env) = {
+		let mut conn = db.conn()?;
+		let agent_record = repo::marketplace::find(&mut conn, &meta.agent)?
+			.ok_or_else(|| {
+				AppError::NotFound(format!("marketplace agent: {}", meta.agent))
+			})?;
+		Distribution::from_json(&agent_record.distribution_json)?.resolve_launch()?
+	};
 
 	// Create session with database persistence
-	let session_id = service::agent::create_session(
+	let session_id = service::agent::create_session_from_raw(
 		&db_pool,
 		&sessions_clone,
 		&meta.agent,
 		&meta.profile_id,
 		PathBuf::from(&cwd),
-		launch_spec,
-		HashMap::new(),
+		program,
+		args,
+		base_env,
 	)
 	.await?;
 
@@ -329,7 +331,7 @@ pub async fn create_agent_session_persistent(
 	};
 	let info = session.info();
 
-	// Spawn notification stream listener (reuses extracted helper)
+	// Spawn notification stream listener
 	spawn_notification_listener(
 		session_id,
 		session,
@@ -344,18 +346,17 @@ pub async fn create_agent_session_persistent(
 /// Reconnect an old (destroyed) agent session on demand.
 /// Called by the frontend when the user opens an agent tab after app restart.
 ///
-/// Spawns the agent process, transfers events from old to new session,
-/// sets up the notification listener, and returns the new session info.
+/// Looks up the marketplace agent's distribution spec from the DB, spawns the
+/// agent process, transfers events from old to new session, sets up the
+/// notification listener, and returns the new session info.
 #[tauri::command]
 pub async fn reconnect_agent_session(
 	old_session_id: String,
 	app: AppHandle,
 	db: State<'_, DbPool>,
-	manager: State<'_, Arc<AgentManagerWrapper>>,
 	sessions: State<'_, AgentSessionMap>,
 	tasks: State<'_, NotificationTaskMap>,
 ) -> Result<AgentSessionInfo, AppError> {
-	let manager_clone = manager.inner().clone();
 	let db_pool = db.inner().clone();
 	let sessions_clone = sessions.inner().clone();
 
@@ -363,7 +364,6 @@ pub async fn reconnect_agent_session(
 	let new_session_id = service::agent::reconnect_session(
 		&db_pool,
 		&sessions_clone,
-		&manager_clone,
 		&old_session_id,
 	)
 	.await?;
@@ -373,7 +373,9 @@ pub async fn reconnect_agent_session(
 		let map = sessions_clone.lock().await;
 		map.get(&new_session_id)
 			.cloned()
-			.ok_or_else(|| AppError::NotFound(format!("session after reconnect: {new_session_id}")))?
+			.ok_or_else(|| {
+				AppError::NotFound(format!("session after reconnect: {new_session_id}"))
+			})?
 	};
 	let info = session.info();
 
@@ -416,3 +418,4 @@ pub fn list_agent_session_events(
 	let mut conn = db.conn()?;
 	repo::agent::get_session_events(&mut conn, &session_id)
 }
+

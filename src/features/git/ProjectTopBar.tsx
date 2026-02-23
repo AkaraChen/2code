@@ -7,7 +7,7 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 import {
 	RiAddLine,
@@ -20,7 +20,7 @@ import { useCreateTab } from "@/features/tabs/hooks";
 import { controlRegistry } from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
-import { listAgentStatus } from "@/generated";
+import { listMarketplaceAgents } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
@@ -47,12 +47,10 @@ export default function ProjectTopBar({
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const createTab = useCreateTab();
 
-	const { data: agents } = useQuery({
-		queryKey: queryKeys.agent.status(),
-		queryFn: listAgentStatus,
+	const { data: agents } = useSuspenseQuery({
+		queryKey: queryKeys.marketplace.agents,
+		queryFn: listMarketplaceAgents,
 	});
-
-	const readyAgents = agents?.filter((a) => a.ready) ?? [];
 
 	return (
 		<>
@@ -112,7 +110,7 @@ export default function ProjectTopBar({
 
 				{/* New Agent button with dropdown */}
 				<AgentMenu
-					agents={readyAgents}
+					agents={agents}
 					profile={profile}
 					isPending={createTab.isPending}
 					onCreateTab={createTab.mutate}

@@ -2,15 +2,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent::{
-	AgentManagerWrapper, AgentProcessLaunchSpec, AgentSessionMap,
-	ManagedAgentSession,
-};
+use agent::{AgentProcessLaunchSpec, AgentSessionMap, ManagedAgentSession};
 
 use infra::db::DbPool;
 use model::agent::{
 	AgentSessionRecord, NewAgentSession, NewAgentSessionEvent,
 };
+use model::distribution::Distribution;
 use model::error::AppError;
 
 /// Create a new agent session with database persistence.
@@ -30,7 +28,6 @@ pub async fn create_session(
 	launch_spec: AgentProcessLaunchSpec,
 	extra_env: HashMap<String, String>,
 ) -> Result<String, AppError> {
-	// Create managed session (spawn process + ACP session/new)
 	let managed_session = ManagedAgentSession::create(
 		agent,
 		cwd.clone(),
@@ -40,10 +37,51 @@ pub async fn create_session(
 	.await
 	.map_err(|e| AppError::PtyError(format!("Failed to create agent session: {e}")))?;
 
+	persist_new_session(db, sessions, managed_session, agent, profile_id, None)
+		.await
+}
+
+/// Create a new agent session from raw distribution params (marketplace path).
+///
+/// Resolves `(program, args, base_env)` from the stored distribution spec,
+/// spawns the agent, and persists the session.
+pub async fn create_session_from_raw(
+	db: &DbPool,
+	sessions: &AgentSessionMap,
+	agent: &str,
+	profile_id: &str,
+	cwd: PathBuf,
+	program: PathBuf,
+	args: Vec<String>,
+	base_env: HashMap<String, String>,
+) -> Result<String, AppError> {
+	let managed_session = ManagedAgentSession::create_from_raw(
+		agent,
+		cwd.clone(),
+		program,
+		args,
+		base_env,
+		HashMap::new(), // extra_env (API keys etc. — empty for marketplace agents for now)
+	)
+	.await
+	.map_err(|e| AppError::PtyError(format!("Failed to create agent session: {e}")))?;
+
+	persist_new_session(db, sessions, managed_session, agent, profile_id, None)
+		.await
+}
+
+/// Internal: insert session record and add to runtime map.
+async fn persist_new_session(
+	db: &DbPool,
+	sessions: &AgentSessionMap,
+	managed_session: ManagedAgentSession,
+	agent: &str,
+	profile_id: &str,
+	session_init_json: Option<&str>,
+) -> Result<String, AppError> {
 	let local_id = managed_session.local_id.clone();
 	let acp_session_id = managed_session.acp_session_id.clone();
 
-	// Persist to database
 	{
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
@@ -52,13 +90,12 @@ pub async fn create_session(
 			agent,
 			acp_session_id: &acp_session_id,
 			profile_id,
-			session_init_json: None, // TODO: capture session init if needed
+			session_init_json,
 		};
 
 		repo::agent::insert_session(&mut conn, &record)?;
 	}
 
-	// Store in runtime map
 	sessions
 		.lock()
 		.await
@@ -78,17 +115,14 @@ pub async fn create_session(
 
 /// Reconnect a single agent session on demand (called by frontend when user opens a tab).
 ///
-/// Flow:
-/// 1. Load the old session record from DB
-/// 2. Spawn agent process (try session/load → fallback to session/create)
-/// 3. Create new DB record, transfer events, delete old record
-/// 4. Store in runtime map
+/// Looks up the marketplace agent's distribution spec from the DB, spawns the
+/// agent process (try session/load → fallback to session/new), transfers events,
+/// and stores the live session in the runtime map.
 ///
-/// Returns the new session ID (process is live and ready for notifications).
+/// Returns the new session ID.
 pub async fn reconnect_session(
 	db: &DbPool,
 	sessions: &AgentSessionMap,
-	manager: &AgentManagerWrapper,
 	old_session_id: &str,
 ) -> Result<String, AppError> {
 	// 1. Load old record
@@ -104,19 +138,25 @@ pub async fn reconnect_session(
 		PathBuf::from(&profile.worktree_path)
 	};
 
-	// 3. Resolve launch spec
-	let launch_spec = manager
-		.resolve_launch(&old.agent)
-		.map_err(|e| AppError::PtyError(format!("Failed to resolve agent launch: {e}")))?;
+	// 3. Resolve launch spec from the marketplace agent's distribution_json
+	let (program, args, base_env) = {
+		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
+		let agent_record = repo::marketplace::find(&mut conn, &old.agent)?
+			.ok_or_else(|| {
+				AppError::NotFound(format!("marketplace agent: {}", old.agent))
+			})?;
+		Distribution::from_json(&agent_record.distribution_json)?.resolve_launch()?
+	};
 
-	// 4. Spawn agent process — try session/load first, fallback to session/create.
+	// 4. Spawn agent process — try session/load first, fallback to session/new.
 	//    session/load is optional per ACP spec (requires loadSession capability).
-	//    Agents like claude-code-acp don't support it; we fall back to session/new.
-	let managed_session = match ManagedAgentSession::load(
+	let managed_session = match ManagedAgentSession::load_from_raw(
 		&old.agent,
 		cwd.clone(),
 		&old.acp_session_id,
-		launch_spec.clone(),
+		program.clone(),
+		args.clone(),
+		base_env.clone(),
 		HashMap::new(),
 	)
 	.await
@@ -138,10 +178,12 @@ pub async fn reconnect_session(
 				error = %e,
 				"reconnect: session/load failed, falling back to session/create"
 			);
-			ManagedAgentSession::create(
+			ManagedAgentSession::create_from_raw(
 				&old.agent,
 				cwd,
-				launch_spec,
+				program,
+				args,
+				base_env,
 				HashMap::new(),
 			)
 			.await
@@ -220,7 +262,6 @@ pub fn build_history_text(
 		return Ok(String::new());
 	}
 
-	// Group events by turn_index (BTreeMap keeps turns sorted)
 	let mut turns: BTreeMap<i32, Vec<&model::agent::AgentSessionEventRecord>> =
 		BTreeMap::new();
 	for event in &events {
@@ -235,7 +276,6 @@ pub fn build_history_text(
 
 		for event in turn_events {
 			if event.sender == "user" {
-				// User payload: {"text": "..."}
 				if let Ok(obj) =
 					serde_json::from_str::<serde_json::Value>(&event.payload_json)
 				{
@@ -244,8 +284,6 @@ pub fn build_history_text(
 					}
 				}
 			} else if event.sender == "agent" {
-				// Agent payload: JSON-RPC notification
-				// {"method":"session/update","params":{"sessionId":"...","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"..."}}}}
 				if let Ok(obj) =
 					serde_json::from_str::<serde_json::Value>(&event.payload_json)
 				{
@@ -264,7 +302,6 @@ pub fn build_history_text(
 			}
 		}
 
-		// Only include turns with both user and agent text
 		if !user_text.is_empty() && !agent_text.is_empty() {
 			history_parts
 				.push(format!("[User]: {user_text}\n[Assistant]: {agent_text}"));
@@ -326,7 +363,6 @@ pub async fn close_session(
 	db: &DbPool,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	// Mark destroyed in DB
 	{
 		let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 		repo::agent::mark_destroyed(&mut conn, session_id)?;
@@ -348,7 +384,6 @@ pub fn delete_session(
 ) -> Result<(), AppError> {
 	let mut conn = db.lock().map_err(|_| AppError::LockError)?;
 
-	// Capture stats before hard delete
 	let _ = crate::stats::capture_agent_stats(&mut conn, session_id);
 	repo::agent::delete_session(&mut conn, session_id)
 }

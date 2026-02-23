@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod debug;
+pub mod distribution;
 pub mod error;
 pub mod marketplace;
 pub mod notification;

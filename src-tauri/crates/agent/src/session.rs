@@ -44,9 +44,41 @@ impl ManagedAgentSession {
 		)
 		.await?;
 
+		Self::init_new_session(session, agent, cwd).await
+	}
+
+	/// Spawn an agent process from raw launch params, then call ACP `session/new`.
+	/// Used for marketplace agents whose distribution spec is stored in the DB.
+	pub async fn create_from_raw(
+		agent: &str,
+		cwd: PathBuf,
+		program: PathBuf,
+		args: Vec<String>,
+		base_env: HashMap<String, String>,
+		extra_env: HashMap<String, String>,
+	) -> Result<Self, AgentSessionError> {
+		let session = AgentSession::spawn_from_raw(
+			agent,
+			cwd.clone(),
+			extra_env,
+			program,
+			args,
+			base_env,
+			DEFAULT_TIMEOUT,
+		)
+		.await?;
+
+		Self::init_new_session(session, agent, cwd).await
+	}
+
+	/// Internal: call ACP `session/new` on an already-spawned session.
+	async fn init_new_session(
+		session: AgentSession,
+		agent: &str,
+		cwd: PathBuf,
+	) -> Result<Self, AgentSessionError> {
 		let local_id = session.id.clone();
 
-		// Call ACP session/new to initialize a session with the agent
 		let req = NewSessionRequest::new(&cwd);
 		let params = serde_json::to_value(&req)?;
 
@@ -67,7 +99,6 @@ impl ManagedAgentSession {
 			"acp session/new response"
 		);
 
-		// Extract sessionId from JSON-RPC response using SDK type
 		let result_value = response.get("result").cloned().unwrap_or(response);
 		let acp_session_id =
 			match serde_json::from_value::<NewSessionResponse>(result_value) {
@@ -125,9 +156,42 @@ impl ManagedAgentSession {
 		)
 		.await?;
 
+		Self::init_load_session(session, agent, cwd, acp_session_id).await
+	}
+
+	/// Spawn an agent process from raw launch params, then call ACP `session/load`.
+	pub async fn load_from_raw(
+		agent: &str,
+		cwd: PathBuf,
+		acp_session_id: &str,
+		program: PathBuf,
+		args: Vec<String>,
+		base_env: HashMap<String, String>,
+		extra_env: HashMap<String, String>,
+	) -> Result<Self, AgentSessionError> {
+		let session = AgentSession::spawn_from_raw(
+			agent,
+			cwd.clone(),
+			extra_env,
+			program,
+			args,
+			base_env,
+			DEFAULT_TIMEOUT,
+		)
+		.await?;
+
+		Self::init_load_session(session, agent, cwd, acp_session_id).await
+	}
+
+	/// Internal: call ACP `session/load` on an already-spawned session.
+	async fn init_load_session(
+		session: AgentSession,
+		agent: &str,
+		cwd: PathBuf,
+		acp_session_id: &str,
+	) -> Result<Self, AgentSessionError> {
 		let local_id = session.id.clone();
 
-		// Call ACP session/load to restore the existing session
 		let req = LoadSessionRequest::new(acp_session_id.to_string(), &cwd);
 		let params = serde_json::to_value(&req)?;
 
@@ -148,7 +212,6 @@ impl ManagedAgentSession {
 			"acp session/load response"
 		);
 
-		// Check for JSON-RPC error
 		if let Some(err) = response.get("error") {
 			tracing::warn!(
 				local_id = %local_id,
@@ -158,7 +221,6 @@ impl ManagedAgentSession {
 			return Err(AgentSessionError::UnexpectedResponse);
 		}
 
-		// Parse LoadSessionResponse (mostly for logging; the key info is that load succeeded)
 		let result_value = response.get("result").cloned().unwrap_or(response);
 		match serde_json::from_value::<LoadSessionResponse>(result_value) {
 			Ok(load_resp) => {
@@ -226,7 +288,6 @@ impl ManagedAgentSession {
 			"acp session/prompt response"
 		);
 
-		// Check for JSON-RPC error
 		if let Some(err) = response.get("error") {
 			tracing::warn!(
 				local_id = %self.local_id,
@@ -239,7 +300,6 @@ impl ManagedAgentSession {
 
 		self.event_counter.fetch_add(1, Ordering::Relaxed);
 
-		// Parse the response using SDK type
 		let result_value = response.get("result").cloned().unwrap_or(response);
 		let prompt_result =
 			match serde_json::from_value::<PromptResponse>(result_value) {
@@ -348,7 +408,6 @@ mod tests {
 
 	#[test]
 	fn test_parse_notification_valid() {
-		// A valid JSON-RPC notification with SessionNotification as params
 		let value = json!({
 			"jsonrpc": "2.0",
 			"method": "session/update",
@@ -371,7 +430,6 @@ mod tests {
 
 	#[test]
 	fn test_parse_notification_missing_params() {
-		// No "params" key at all
 		let value = json!({
 			"jsonrpc": "2.0",
 			"method": "session/update"
@@ -382,7 +440,6 @@ mod tests {
 
 	#[test]
 	fn test_parse_notification_invalid_params() {
-		// "params" is present but not a valid SessionNotification
 		let value = json!({
 			"jsonrpc": "2.0",
 			"method": "session/update",
@@ -396,7 +453,6 @@ mod tests {
 
 	#[test]
 	fn test_parse_notification_no_method() {
-		// No "method" key, but valid params — should still parse
 		let value = json!({
 			"jsonrpc": "2.0",
 			"params": {

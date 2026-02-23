@@ -65,6 +65,41 @@ impl AgentSession {
 		})
 	}
 
+	/// Spawn an agent process from raw `(program, args, base_env)` — no external launch spec needed.
+	/// Used for marketplace agents whose distribution spec is stored in the DB.
+	pub async fn spawn_from_raw(
+		agent: &str,
+		cwd: PathBuf,
+		extra_env: HashMap<String, String>,
+		program: PathBuf,
+		args: Vec<String>,
+		base_env: HashMap<String, String>,
+		timeout: Option<Duration>,
+	) -> Result<Self, AgentSessionError> {
+		let mut env = base_env;
+		env.insert("PWD".to_string(), cwd.display().to_string());
+		env.extend(extra_env);
+
+		tracing::info!(
+			agent = agent,
+			cwd = %cwd.display(),
+			"spawning agent session (raw)"
+		);
+
+		let runtime = Arc::new(
+			AcpClient::spawn_with_timeout(program, args, env, timeout)
+				.await?,
+		);
+		let id = uuid::Uuid::new_v4().to_string();
+
+		Ok(Self {
+			id,
+			agent: agent.to_string(),
+			cwd,
+			runtime,
+		})
+	}
+
 	/// Send a JSON-RPC request and wait for the response.
 	pub async fn send(
 		&self,

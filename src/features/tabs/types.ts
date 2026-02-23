@@ -19,6 +19,8 @@ export interface AgentTab {
 	sessionId: string;
 	title: string;
 	agentType: string;
+	/** Icon URL from the marketplace agent record. */
+	iconUrl?: string | null;
 }
 
 /** Discriminated union of all tab types within a profile. */

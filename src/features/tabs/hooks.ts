@@ -10,7 +10,14 @@ import type { AgentTab } from "./types";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }
-	| { type: "agent"; profileId: string; cwd: string; agent: string };
+	| {
+			type: "agent";
+			profileId: string;
+			cwd: string;
+			agent: string;
+			agentName: string;
+			iconUrl?: string | null;
+	  };
 
 export function useCreateTab() {
 	return useMutation({
@@ -27,7 +34,7 @@ export function useCreateTab() {
 					);
 				})
 				.with({ type: "agent" }, (p) =>
-					AgentTabSession.create(p.profileId, p.cwd, p.agent),
+					AgentTabSession.create(p.profileId, p.cwd, p.agent, p.agentName, p.iconUrl),
 				)
 				.exhaustive();
 			sessionRegistry.set(session.id, session);
