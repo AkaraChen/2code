@@ -112,6 +112,7 @@ pub fn run() {
 			handler::project::update_project,
 			handler::project::delete_project,
 			handler::project::get_git_branch,
+			handler::project::get_github_pr_status,
 			handler::project::get_git_diff,
 			handler::project::get_git_log,
 			handler::project::get_commit_diff,

@@ -27,6 +27,13 @@ describe("queryKeys", () => {
 			]);
 		});
 
+		it("githubPrStatus() includes folder in key", () => {
+			expect(queryKeys.git.githubPrStatus("/path/to/repo")).toEqual([
+				"github-pr-status",
+				"/path/to/repo",
+			]);
+		});
+
 		it("log() includes profileId in key", () => {
 			expect(queryKeys.git.log("profile-1")).toEqual([
 				"git-log",
@@ -54,6 +61,7 @@ describe("queryKeys", () => {
 	describe("queryNamespaces", () => {
 		it("maps each namespace to its string value", () => {
 			expect(queryNamespaces.projects).toBe("projects");
+			expect(queryNamespaces["github-pr-status"]).toBe("github-pr-status");
 			expect(queryNamespaces["git-diff"]).toBe("git-diff");
 			expect(queryNamespaces["git-log"]).toBe("git-log");
 		});
@@ -63,6 +71,9 @@ describe("queryKeys", () => {
 			expect(queryKeys.git.log("x")[0]).toBe(queryNamespaces["git-log"]);
 			expect(queryKeys.git.branch("x")[0]).toBe(
 				queryNamespaces["git-branch"],
+			);
+			expect(queryKeys.git.githubPrStatus("x")[0]).toBe(
+				queryNamespaces["github-pr-status"],
 			);
 		});
 	});

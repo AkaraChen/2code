@@ -20,6 +20,7 @@ describe("useTopBarStore", () => {
 			expect(getState().activeControls).toEqual([
 				"github-desktop",
 				"vscode",
+				"github-pr",
 				"git-diff",
 			]);
 		});

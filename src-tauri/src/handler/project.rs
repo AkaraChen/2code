@@ -2,7 +2,9 @@ use tauri::State;
 
 use infra::db::{DbPool, DbPoolExt};
 use model::error::AppError;
-use model::project::{GitCommit, Project, ProjectConfig, ProjectWithProfiles};
+use model::project::{
+	GitCommit, GithubPrStatus, Project, ProjectConfig, ProjectWithProfiles,
+};
 
 #[tauri::command]
 pub fn create_project_temporary(
@@ -45,6 +47,13 @@ pub fn update_project(
 #[tauri::command]
 pub fn get_git_branch(folder: String) -> Result<String, AppError> {
 	service::project::get_branch(&folder)
+}
+
+#[tauri::command]
+pub fn get_github_pr_status(
+	folder: String,
+) -> Result<GithubPrStatus, AppError> {
+	service::project::get_github_pr_status(&folder)
 }
 
 #[tauri::command]

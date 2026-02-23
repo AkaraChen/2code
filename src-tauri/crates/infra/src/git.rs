@@ -2,7 +2,10 @@ use std::path::Path;
 use std::process::Command;
 
 use model::error::AppError;
-use model::project::{GitAuthor, GitCommit};
+use model::project::{
+	GitAuthor, GitCommit, GithubPrInfo, GithubPrState, GithubPrStatus,
+};
+use serde::Deserialize;
 
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
@@ -33,6 +36,39 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 		return Ok("main".to_string());
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn github_pr_status(folder: &str) -> Result<GithubPrStatus, AppError> {
+	let branch_name = branch(folder).unwrap_or_else(|_| "main".to_string());
+	let (worktree_clean, status_summary) = worktree_status(folder);
+	let Some(repo) = github_repo(folder) else {
+		return Ok(GithubPrStatus {
+			is_github_host: false,
+			branch: branch_name.clone(),
+			is_main_branch: branch_name == "main",
+			worktree_clean,
+			status_summary,
+			pr: None,
+			create_url: None,
+		});
+	};
+
+	let pr = find_github_pr(folder, &repo, &branch_name)
+		.ok()
+		.and_then(|v| v);
+
+	Ok(GithubPrStatus {
+		is_github_host: true,
+		branch: branch_name.clone(),
+		is_main_branch: branch_name == "main",
+		worktree_clean,
+		status_summary,
+		pr,
+		create_url: Some(format!(
+			"https://github.com/{}/{}/compare/main...{}?expand=1",
+			repo.owner, repo.name, branch_name
+		)),
+	})
 }
 
 /// Get the full diff (staged + unstaged) without affecting the real index.
@@ -213,6 +249,186 @@ fn run_best_effort(label: &str, cmd: &mut Command) {
 }
 
 // --- Private helpers ---
+
+#[derive(Debug, Clone)]
+struct GithubRepo {
+	owner: String,
+	name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GhPrItem {
+	number: u64,
+	url: String,
+	state: String,
+	#[serde(rename = "mergedAt")]
+	merged_at: Option<String>,
+}
+
+fn worktree_status(folder: &str) -> (bool, String) {
+	let output = match Command::new("git")
+		.args(["status", "--short", "--branch"])
+		.current_dir(folder)
+		.output()
+	{
+		Ok(output) => output,
+		Err(_) => return (true, String::new()),
+	};
+	if !output.status.success() {
+		return (true, String::new());
+	}
+
+	let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if status.is_empty() {
+		return (true, status);
+	}
+
+	let mut lines = status.lines();
+	let mut dirty_lines = Vec::new();
+
+	if let Some(first) = lines.next() {
+		let first = first.trim();
+		if !first.is_empty() && !first.starts_with("##") {
+			dirty_lines.push(first);
+		}
+	}
+	for line in lines {
+		let line = line.trim();
+		if !line.is_empty() {
+			dirty_lines.push(line);
+		}
+	}
+
+	(dirty_lines.is_empty(), status)
+}
+
+fn find_github_pr(
+	folder: &str,
+	repo: &GithubRepo,
+	branch_name: &str,
+) -> Result<Option<GithubPrInfo>, AppError> {
+	let output = Command::new("gh")
+		.args([
+			"pr",
+			"list",
+			"--state",
+			"all",
+			"--head",
+			branch_name,
+			"--limit",
+			"1",
+			"--json",
+			"number,url,state,mergedAt",
+			"--repo",
+			&format!("{}/{}", repo.owner, repo.name),
+		])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+
+	let prs: Vec<GhPrItem> =
+		serde_json::from_slice(&output.stdout).map_err(|e| {
+			AppError::GitError(format!("Failed to parse gh output: {e}"))
+		})?;
+	let Some(pr) = prs.into_iter().next() else {
+		return Ok(None);
+	};
+
+	let state =
+		if pr.merged_at.is_some() || pr.state.eq_ignore_ascii_case("merged") {
+			GithubPrState::Merged
+		} else if pr.state.eq_ignore_ascii_case("open") {
+			GithubPrState::Open
+		} else {
+			GithubPrState::Closed
+		};
+
+	Ok(Some(GithubPrInfo {
+		number: pr.number,
+		url: pr.url,
+		state,
+	}))
+}
+
+fn github_repo(folder: &str) -> Option<GithubRepo> {
+	let output = Command::new("git")
+		.args(["remote", "get-url", "origin"])
+		.current_dir(folder)
+		.output()
+		.ok()?;
+	if !output.status.success() {
+		return None;
+	}
+
+	let remote = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	parse_github_repo(&remote)
+}
+
+fn parse_github_repo(remote: &str) -> Option<GithubRepo> {
+	let remote = remote.trim().trim_end_matches('/');
+	if remote.is_empty() {
+		return None;
+	}
+
+	if let Some(rest) = remote.strip_prefix("git@") {
+		let (host, path) = rest.split_once(':')?;
+		if !is_github_host(host) {
+			return None;
+		}
+		return parse_github_owner_repo(path);
+	}
+
+	if let Some(rest) = remote.strip_prefix("ssh://") {
+		let rest = rest.strip_prefix("git@").unwrap_or(rest);
+		let (host, path) = rest.split_once('/')?;
+		if !is_github_host(host) {
+			return None;
+		}
+		return parse_github_owner_repo(path);
+	}
+
+	if let Some(rest) = remote
+		.strip_prefix("https://")
+		.or_else(|| remote.strip_prefix("http://"))
+	{
+		let (host, path) = rest.split_once('/')?;
+		if !is_github_host(host) {
+			return None;
+		}
+		return parse_github_owner_repo(path);
+	}
+
+	None
+}
+
+fn is_github_host(host: &str) -> bool {
+	let host = host.rsplit('@').next().unwrap_or(host);
+	let host = host.split(':').next().unwrap_or(host);
+	host.eq_ignore_ascii_case("github.com")
+}
+
+fn parse_github_owner_repo(path: &str) -> Option<GithubRepo> {
+	let path = path.trim_start_matches('/').trim_end_matches('/');
+	let mut parts = path.split('/');
+	let owner = parts.next()?;
+	let repo = parts.next()?;
+	if owner.is_empty() || repo.is_empty() {
+		return None;
+	}
+
+	let repo = repo.trim_end_matches(".git");
+	if repo.is_empty() {
+		return None;
+	}
+
+	Some(GithubRepo {
+		owner: owner.to_string(),
+		name: repo.to_string(),
+	})
+}
 
 pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	if hash.len() < 4 || hash.len() > 40 {
@@ -443,6 +659,32 @@ mod tests {
 		assert_eq!(commits[0].files_changed, 0);
 		assert_eq!(commits[0].insertions, 0);
 		assert_eq!(commits[0].deletions, 0);
+	}
+
+	// --- parse_github_repo ---
+
+	#[test]
+	fn parse_github_repo_https() {
+		let parsed = parse_github_repo("https://github.com/acme/workbench.git");
+		assert!(parsed.is_some());
+		let repo = parsed.unwrap();
+		assert_eq!(repo.owner, "acme");
+		assert_eq!(repo.name, "workbench");
+	}
+
+	#[test]
+	fn parse_github_repo_ssh() {
+		let parsed = parse_github_repo("git@github.com:acme/workbench.git");
+		assert!(parsed.is_some());
+		let repo = parsed.unwrap();
+		assert_eq!(repo.owner, "acme");
+		assert_eq!(repo.name, "workbench");
+	}
+
+	#[test]
+	fn parse_github_repo_rejects_non_github() {
+		let parsed = parse_github_repo("git@gitlab.com:acme/workbench.git");
+		assert!(parsed.is_none());
 	}
 
 	// --- extract_conflicting_ref ---

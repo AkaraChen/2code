@@ -1,7 +1,12 @@
 import { parsePatchFiles } from "@pierre/diffs";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
+import {
+	getCommitDiff,
+	getGitDiff,
+	getGitLog,
+	getGithubPrStatus,
+} from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 function useGitDiff(profileId: string) {
@@ -15,6 +20,16 @@ export function useGitLog(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.log(profileId),
 		queryFn: () => getGitLog({ profileId }),
+	});
+}
+
+export function useGithubPrStatus(folder: string) {
+	return useQuery({
+		queryKey: queryKeys.git.githubPrStatus(folder),
+		queryFn: () => getGithubPrStatus({ folder }),
+		enabled: folder.length > 0,
+		refetchOnWindowFocus: true,
+		refetchInterval: 60_000,
 	});
 }
 

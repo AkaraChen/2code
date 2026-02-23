@@ -6,6 +6,7 @@ export type ControlId =
 	| "vscode"
 	| "windsurf"
 	| "cursor"
+	| "github-pr"
 	| "git-diff";
 
 export interface ControlProps {

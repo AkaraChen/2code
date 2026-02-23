@@ -52,6 +52,10 @@ export async function getGitBranch(params: types.GetGitBranchParams): Promise<st
   return invoke('get_git_branch', params);
 }
 
+export async function getGithubPrStatus(params: types.GetGithubPrStatusParams): Promise<types.GithubPrStatus> {
+  return invoke('get_github_pr_status', params);
+}
+
 
 export async function getGitDiff(params: types.GetGitDiffParams): Promise<string> {
   return invoke('get_git_diff', params);
@@ -274,5 +278,4 @@ export async function removeMarketplaceAgent(params: types.RemoveMarketplaceAgen
 export async function listSystemFonts(): Promise<types.SystemFont[]> {
   return invoke('list_system_fonts');
 }
-
 

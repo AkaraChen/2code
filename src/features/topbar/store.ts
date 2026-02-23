@@ -5,6 +5,7 @@ import type { ControlId } from "./types";
 export const defaultActiveControls: ControlId[] = [
 	"github-desktop",
 	"vscode",
+	"github-pr",
 	"git-diff",
 ];
 
@@ -24,6 +25,6 @@ export const useTopBarStore = create<TopBarStore>()(
 					activeControls: [...defaultActiveControls],
 				}),
 		}),
-		{ name: "topbar-settings", version: 2 },
+		{ name: "topbar-settings", version: 3 },
 	),
 );

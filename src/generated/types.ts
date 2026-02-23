@@ -264,6 +264,24 @@ export interface CredentialInfo {
   openai?: CredentialEntry | null;
 }
 
+export type GithubPrState = "Open" | "Closed" | "Merged";
+
+export interface GithubPrInfo {
+  number: number;
+  url: string;
+  state: GithubPrState;
+}
+
+export interface GithubPrStatus {
+  is_github_host: boolean;
+  branch: string;
+  is_main_branch: boolean;
+  worktree_clean: boolean;
+  status_summary: string;
+  pr?: GithubPrInfo | null;
+  create_url?: string | null;
+}
+
 
 
 export interface PlaySystemSoundParams {
@@ -295,6 +313,11 @@ export interface UpdateProjectParams {
 
 
 export interface GetGitBranchParams {
+  folder: string;
+  [key: string]: unknown;
+}
+
+export interface GetGithubPrStatusParams {
   folder: string;
   [key: string]: unknown;
 }
@@ -529,6 +552,5 @@ export interface RemoveMarketplaceAgentParams {
   id: string;
   [key: string]: unknown;
 }
-
 
 
