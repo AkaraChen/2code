@@ -207,5 +207,6 @@
 	"marketplaceBy": "by {authors}",
 	"marketplaceVersion": "v{version}",
 	"confirmRemoveAgent": "从商城移除此代理？",
-	"removeAgent": "移除代理"
+	"removeAgent": "移除代理",
+	"addAgent": "添加代理"
 }

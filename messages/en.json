@@ -207,5 +207,6 @@
 	"marketplaceBy": "by {authors}",
 	"marketplaceVersion": "v{version}",
 	"confirmRemoveAgent": "Remove this agent from your marketplace?",
-	"removeAgent": "Remove Agent"
+	"removeAgent": "Remove Agent",
+	"addAgent": "Add Agent"
 }
