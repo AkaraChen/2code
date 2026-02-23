@@ -8,9 +8,11 @@ import {
 	createAgentSessionPersistent,
 	deleteAgentSessionRecord,
 	listAgentSessionEvents,
+	playSystemSound,
 	reconnectAgentSession,
 } from "@/generated";
 import { useAgentStore } from "../agent/store";
+import { useNotificationStore } from "../settings/stores/notificationStore";
 import { TabSession } from "./session";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
@@ -137,6 +139,12 @@ export class AgentTabSession extends TabSession {
 			}),
 			listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
 				useAgentStore.getState().handleTurnComplete(this.id, e.payload);
+				const { enabled, sound } = useNotificationStore.getState();
+				if (enabled && sound) {
+					void playSystemSound({ name: sound }).catch((err) => {
+						consola.warn("[agent] failed to play completion sound:", err);
+					});
+				}
 			}),
 			listen<string>(`agent-error-${this.id}`, (e) => {
 				useAgentStore.getState().handleError(this.id, e.payload);
