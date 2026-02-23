@@ -192,6 +192,7 @@ function Pane({
 		<Box
 			position="relative"
 			flex="1"
+			h="full"
 			minW="0"
 			minH="0"
 			onClick={onFocus}
