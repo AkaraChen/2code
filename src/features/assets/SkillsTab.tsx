@@ -32,9 +32,9 @@ export function SkillsTab() {
 					</EmptyState.Content>
 				</EmptyState.Root>
 			) : (
-				<SimpleGrid columns={{ base: 1, md: 2 }} gap="4">
+				<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4">
 					{skills.map((skill) => (
-						<Card.Root key={skill.name}>
+						<Card.Root key={skill.name} size="sm">
 							<Card.Body gap="2">
 								<HStack justify="space-between" align="flex-start">
 									<Card.Title>{skill.name}</Card.Title>
