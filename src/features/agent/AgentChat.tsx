@@ -140,6 +140,50 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		},
 		[selectedModel, sessionId, setAgentModel],
 	);
+	const modelSelector = showModelSelector
+		? (
+			<Select.Root
+				collection={modelCollection}
+				value={selectedModel ? [selectedModel] : []}
+				onValueChange={handleModelChange}
+				size="xs"
+				width={{ base: "120px", md: "150px" }}
+				disabled={modelBusy || (isStreaming ?? false)}
+				aria-label={m.agentModel()}
+			>
+				<Select.HiddenSelect />
+				<Select.Control>
+					<Select.Trigger
+						variant="ghost"
+						h="6"
+						minH="6"
+						px="1"
+						bg="transparent"
+						borderWidth="0"
+						color="fg.muted"
+						_hover={{ bg: "transparent", color: "fg" }}
+					>
+						<Select.ValueText fontSize="xs" truncate />
+					</Select.Trigger>
+					<Select.IndicatorGroup>
+						{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
+					</Select.IndicatorGroup>
+				</Select.Control>
+				<Portal>
+					<Select.Positioner>
+						<Select.Content>
+							{modelCollection.items.map((item) => (
+								<Select.Item item={item} key={item.value}>
+									{item.label}
+									<Select.ItemIndicator />
+								</Select.Item>
+							))}
+						</Select.Content>
+					</Select.Positioner>
+				</Portal>
+			</Select.Root>
+		)
+		: null;
 
 	if (isActive && needsReconnection(sessionId)) {
 		return (
@@ -153,46 +197,6 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 
 	return (
 		<Flex direction="column" h="full" w="full" bg="bg" position="relative">
-			{showModelSelector && (
-				<Flex px="3" pt="2" pb="1" justify="flex-end">
-					<HStack gap="2">
-						<Text fontSize="xs" color="fg.muted">
-							{m.agentModel()}
-						</Text>
-						<Select.Root
-							collection={modelCollection}
-							value={selectedModel ? [selectedModel] : []}
-							onValueChange={handleModelChange}
-							size="xs"
-							width="240px"
-							disabled={modelBusy || (isStreaming ?? false)}
-						>
-							<Select.HiddenSelect />
-							<Select.Control>
-								<Select.Trigger>
-									<Select.ValueText />
-								</Select.Trigger>
-								<Select.IndicatorGroup>
-									{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
-								</Select.IndicatorGroup>
-							</Select.Control>
-							<Portal>
-								<Select.Positioner>
-									<Select.Content>
-										{modelCollection.items.map((item) => (
-											<Select.Item item={item} key={item.value}>
-												{item.label}
-												<Select.ItemIndicator />
-											</Select.Item>
-										))}
-									</Select.Content>
-								</Select.Positioner>
-							</Portal>
-						</Select.Root>
-					</HStack>
-				</Flex>
-			)}
-
 			<MessageList
 				turns={turns}
 				isStreaming={isStreaming ?? false}
@@ -211,6 +215,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 								onSend={handleSend}
 								disabled={isStreaming ?? false}
 								onToggleExpand={() => setExpanded(true)}
+								modelSelector={modelSelector}
 							/>
 						</Box>
 					</Box>
@@ -245,6 +250,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 							onSend={handleSend}
 							disabled={isStreaming ?? false}
 							expanded={true}
+							modelSelector={modelSelector}
 						/>
 					</Box>
 				</Flex>
