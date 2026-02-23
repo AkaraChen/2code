@@ -4,7 +4,7 @@ use diesel::SqliteConnection;
 use uuid::Uuid;
 
 use model::error::AppError;
-use model::project::{GitCommit, Project, ProjectWithProfiles};
+use model::project::{GitCommit, GithubPrStatus, Project, ProjectWithProfiles};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -99,6 +99,10 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
+}
+
+pub fn get_github_pr_status(folder: &str) -> Result<GithubPrStatus, AppError> {
+	infra::git::github_pr_status(folder)
 }
 
 /// Resolve a profile's worktree path for git operations.

@@ -64,3 +64,29 @@ pub struct GitCommit {
 	pub insertions: u32,
 	pub deletions: u32,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GithubPrState {
+	Open,
+	Closed,
+	Merged,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GithubPrInfo {
+	pub number: u64,
+	pub url: String,
+	pub state: GithubPrState,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GithubPrStatus {
+	pub is_github_host: bool,
+	pub branch: String,
+	pub is_main_branch: bool,
+	pub worktree_clean: bool,
+	pub status_summary: String,
+	pub pr: Option<GithubPrInfo>,
+	pub create_url: Option<String>,
+}

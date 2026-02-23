@@ -5,10 +5,12 @@ import {
 	SiVscodium,
 	SiWindsurf,
 } from "@icons-pack/react-simple-icons";
+import { RiGitPullRequestLine } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
 	GitDiffControl,
+	GithubPrControl,
 	GithubDesktopControl,
 	VscodeControl,
 	WindsurfControl,
@@ -39,6 +41,12 @@ const definitions: ControlDefinition[] = [
 		label: () => m.topbarCursor(),
 		icon: SiCursor,
 		component: CursorControl,
+	},
+	{
+		id: "github-pr",
+		label: () => m.topbarGithubPr(),
+		icon: RiGitPullRequestLine,
+		component: GithubPrControl,
 	},
 	{
 		id: "git-diff",
