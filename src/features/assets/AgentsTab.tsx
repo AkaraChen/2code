@@ -13,9 +13,12 @@ import {
 	Stack,
 	Text,
 } from "@chakra-ui/react";
-import React, { Suspense, useState } from "react";
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import * as React from "react";
+import { Suspense, useState } from "react";
 import { LuExternalLink, LuTrash2 } from "react-icons/lu";
 import { RiRobot2Line } from "react-icons/ri";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import type { RegistryAgentInfo } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import {
@@ -24,6 +27,52 @@ import {
 	useRegistryAgents,
 	useRemoveMarketplaceAgent,
 } from "./hooks/useMarketplace";
+
+function MarketplaceErrorFallback({
+	error,
+	resetErrorBoundary,
+}: FallbackProps) {
+	const message = error instanceof Error ? error.message : String(error);
+
+	return (
+		<EmptyState.Root>
+			<EmptyState.Content>
+				<EmptyState.Description>
+					{m.somethingWentWrong()}
+				</EmptyState.Description>
+				<Text fontSize="sm" color="fg.muted">
+					{message}
+				</Text>
+				<Button size="sm" onClick={resetErrorBoundary}>
+					{m.tryAgain()}
+				</Button>
+			</EmptyState.Content>
+		</EmptyState.Root>
+	);
+}
+
+function MarketplaceQueryBoundary({
+	children,
+	loadingFallback,
+}: {
+	children: React.ReactNode;
+	loadingFallback: React.ReactNode;
+}) {
+	return (
+		<QueryErrorResetBoundary>
+			{({ reset }) => (
+				<ErrorBoundary
+					onReset={reset}
+					FallbackComponent={MarketplaceErrorFallback}
+				>
+					<Suspense fallback={loadingFallback}>
+						{children}
+					</Suspense>
+				</ErrorBoundary>
+			)}
+		</QueryErrorResetBoundary>
+	);
+}
 
 // ─── Shared: agent icon with SVG fallback ───────────────────────────────────
 
@@ -371,21 +420,21 @@ function InstalledList() {
 export function AgentsTab({ mode }: { mode: "manage" | "store" }) {
 	if (mode === "store") {
 		return (
-			<Suspense
-				fallback={
+			<MarketplaceQueryBoundary
+				loadingFallback={
 					<Text color="fg.muted" fontSize="sm">
 						{m.marketplaceLoadingRegistry()}
 					</Text>
 				}
 			>
 				<RegistryList />
-			</Suspense>
+			</MarketplaceQueryBoundary>
 		);
 	}
 
 	return (
-		<Suspense fallback={null}>
+		<MarketplaceQueryBoundary loadingFallback={null}>
 			<InstalledList />
-		</Suspense>
+		</MarketplaceQueryBoundary>
 	);
 }
