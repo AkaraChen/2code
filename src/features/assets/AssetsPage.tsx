@@ -3,10 +3,10 @@ import {
 	Box,
 	EmptyState,
 	Heading,
+	HStack,
 	SegmentGroup,
 	Skeleton,
 	Stack,
-	Tabs,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import * as m from "@/paraglide/messages.js";
@@ -16,12 +16,6 @@ import { SnippetsTab } from "./SnippetsTab";
 
 type Mode = "manage" | "store";
 type Filter = "skills" | "snippets" | "agents";
-
-const filters: { value: Filter; label: () => string }[] = [
-	{ value: "skills", label: m.skills },
-	{ value: "snippets", label: m.snippets },
-	{ value: "agents", label: m.agents },
-];
 
 function WipSection({ title }: { title?: string }) {
 	return (
@@ -47,35 +41,42 @@ export default function AssetsPage() {
 					{m.assets()}
 				</Heading>
 
-				<SegmentGroup.Root
-					size="sm"
-					width="fit-content"
-					value={mode}
-					onValueChange={(e) => e.value && setMode(e.value as Mode)}
-				>
-					<SegmentGroup.Indicator />
-					<SegmentGroup.Items
-						items={[
-							{ value: "manage", label: m.management() },
-							{ value: "store", label: m.store() },
-						]}
-					/>
-				</SegmentGroup.Root>
+				<HStack justify="space-between" align="center">
+					<SegmentGroup.Root
+						size="sm"
+						width="fit-content"
+						value={filter}
+						onValueChange={(e) =>
+							e.value && setFilter(e.value as Filter)
+						}
+					>
+						<SegmentGroup.Indicator />
+						<SegmentGroup.Items
+							items={[
+								{ value: "skills", label: m.skills() },
+								{ value: "snippets", label: m.snippets() },
+								{ value: "agents", label: m.agents() },
+							]}
+						/>
+					</SegmentGroup.Root>
 
-				<Tabs.Root
-					value={filter}
-					onValueChange={(e) => setFilter(e.value as Filter)}
-					variant="line"
-					size="sm"
-				>
-					<Tabs.List>
-						{filters.map((f) => (
-							<Tabs.Trigger key={f.value} value={f.value}>
-								{f.label()}
-							</Tabs.Trigger>
-						))}
-					</Tabs.List>
-				</Tabs.Root>
+					<SegmentGroup.Root
+						size="sm"
+						width="fit-content"
+						value={mode}
+						onValueChange={(e) =>
+							e.value && setMode(e.value as Mode)
+						}
+					>
+						<SegmentGroup.Indicator />
+						<SegmentGroup.Items
+							items={[
+								{ value: "manage", label: m.management() },
+								{ value: "store", label: m.store() },
+							]}
+						/>
+					</SegmentGroup.Root>
+				</HStack>
 
 				{mode === "manage" && (
 					<>
@@ -102,9 +103,13 @@ export default function AssetsPage() {
 						)}
 						{filter !== "agents" && (
 							<WipSection
-								title={filters.find(
-									(f) => f.value === filter,
-								)?.label()}
+								title={
+									filter === "skills"
+										? m.skills()
+										: filter === "snippets"
+											? m.snippets()
+											: m.agents()
+								}
 							/>
 						)}
 					</>
