@@ -12,9 +12,15 @@ import { ToolCallBlock } from "./ToolCallBlock";
 
 interface StreamingTurnRendererProps {
 	turn: StreamingTurn;
+	agentIconUrl?: string | null;
+	agentName?: string;
 }
 
-export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
+export function StreamingTurnRenderer({
+	turn,
+	agentIconUrl,
+	agentName,
+}: StreamingTurnRendererProps) {
 	const { agentContent } = turn;
 
 	// Find the last text entry index to render it as StreamingBubble
@@ -34,7 +40,11 @@ export function StreamingTurnRenderer({ turn }: StreamingTurnRendererProps) {
 				</Message>
 			)}
 
-			<Message role="assistant">
+			<Message
+				role="assistant"
+				agentIconUrl={agentIconUrl}
+				agentName={agentName}
+			>
 				<Flex direction="column" gap="4">
 					{agentContent.length === 0 && (
 						<TextShimmer>{m.agentThinking()}</TextShimmer>

@@ -88,6 +88,11 @@ function ReconnectErrorFallback({ error }: { error: unknown }) {
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
 	const setAgentModel = useSetAgentModel();
+	const tabSession = sessionRegistry.get(sessionId) as
+		| AgentTabSession
+		| undefined;
+	const agentIconUrl = tabSession?.iconUrl ?? null;
+	const agentName = tabSession?.title ?? "Agent";
 
 	const { turns, isStreaming, streamingTurn, error, modelState, modelLoading } =
 		useAgentStore(
@@ -198,6 +203,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				isStreaming={isStreaming ?? false}
 				streamingTurn={streamingTurn}
 				error={error ?? undefined}
+				agentIconUrl={agentIconUrl}
+				agentName={agentName}
 				onSuggestionSelect={handleSend}
 			/>
 

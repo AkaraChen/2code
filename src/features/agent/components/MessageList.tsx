@@ -1,7 +1,7 @@
 import { Box, Button, EmptyState, Flex, HStack, Text, VStack } from "@chakra-ui/react";
 import { useEffect, useRef } from "react";
-import { RiRobot2Line } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
+import { AgentIcon } from "@/shared/components/AgentIcon";
 import type { AgentTurn, StreamingTurn } from "../types";
 import { TurnRenderer } from "./TurnRenderer";
 import { StreamingTurnRenderer } from "./StreamingTurnRenderer";
@@ -29,6 +29,8 @@ interface MessageListProps {
 	isStreaming: boolean;
 	streamingTurn: StreamingTurn | null | undefined;
 	error: string | undefined;
+	agentIconUrl?: string | null;
+	agentName?: string;
 	onSuggestionSelect?: (prompt: string) => void;
 }
 
@@ -37,6 +39,8 @@ export function MessageList({
 	isStreaming,
 	streamingTurn,
 	error,
+	agentIconUrl,
+	agentName,
 	onSuggestionSelect,
 }: MessageListProps) {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -55,7 +59,11 @@ export function MessageList({
 						<EmptyState.Root>
 							<EmptyState.Content>
 								<EmptyState.Indicator>
-									<RiRobot2Line />
+									<AgentIcon
+										iconUrl={agentIconUrl}
+										size={24}
+										alt={agentName ?? "Agent"}
+									/>
 								</EmptyState.Indicator>
 								<VStack textAlign="center">
 									<EmptyState.Title>
@@ -81,11 +89,20 @@ export function MessageList({
 				)}
 
 				{turns?.map((turn) => (
-					<TurnRenderer key={turn.timestamp} turn={turn} />
+					<TurnRenderer
+						key={turn.timestamp}
+						turn={turn}
+						agentIconUrl={agentIconUrl}
+						agentName={agentName}
+					/>
 				))}
 
 				{isStreaming && streamingTurn && (
-					<StreamingTurnRenderer turn={streamingTurn} />
+					<StreamingTurnRenderer
+						turn={streamingTurn}
+						agentIconUrl={agentIconUrl}
+						agentName={agentName}
+					/>
 				)}
 
 				{error && !isStreaming && (

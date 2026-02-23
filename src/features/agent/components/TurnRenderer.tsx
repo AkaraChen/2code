@@ -6,9 +6,11 @@ import { AgentResponseGroup } from "./AgentResponseGroup";
 
 interface TurnRendererProps {
 	turn: AgentTurn;
+	agentIconUrl?: string | null;
+	agentName?: string;
 }
 
-export function TurnRenderer({ turn }: TurnRendererProps) {
+export function TurnRenderer({ turn, agentIconUrl, agentName }: TurnRendererProps) {
 	return (
 		<Flex direction="column">
 			{/* 用户消息 */}
@@ -20,7 +22,11 @@ export function TurnRenderer({ turn }: TurnRendererProps) {
 
 			{/* Agent 响应 */}
 			{turn.agentContent.length > 0 && (
-				<Message role="assistant">
+				<Message
+					role="assistant"
+					agentIconUrl={agentIconUrl}
+					agentName={agentName}
+				>
 					<AgentResponseGroup content={turn.agentContent} />
 				</Message>
 			)}
