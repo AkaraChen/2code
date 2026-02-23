@@ -16,6 +16,7 @@ pub struct MarketplaceAgent {
 	pub license: Option<String>,
 	pub authors_json: String,
 	pub added_at: String,
+	pub distribution_json: String,
 }
 
 #[derive(Insertable)]
@@ -29,6 +30,7 @@ pub struct NewMarketplaceAgent<'a> {
 	pub repository: Option<&'a str>,
 	pub license: Option<&'a str>,
 	pub authors_json: &'a str,
+	pub distribution_json: &'a str,
 }
 
 /// Agent info from the ACP registry CDN.
@@ -45,6 +47,9 @@ pub struct RegistryAgentInfo {
 	pub license: Option<String>,
 	#[serde(default)]
 	pub authors: Vec<String>,
+	/// Distribution spec (npx or binary). Stored as raw JSON.
+	#[serde(default)]
+	pub distribution: serde_json::Value,
 }
 
 /// Input for adding an agent to the local marketplace.
@@ -59,4 +64,5 @@ pub struct AddMarketplaceAgentInput {
 	pub repository: Option<String>,
 	pub license: Option<String>,
 	pub authors: Vec<String>,
+	pub distribution: serde_json::Value,
 }

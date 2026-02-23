@@ -33,6 +33,8 @@ pub fn add_agent(
 ) -> Result<MarketplaceAgent, AppError> {
 	let authors_json = serde_json::to_string(&input.authors)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
+	let distribution_json = serde_json::to_string(&input.distribution)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	repo::marketplace::insert(
 		conn,
@@ -44,6 +46,7 @@ pub fn add_agent(
 		input.repository.as_deref(),
 		input.license.as_deref(),
 		&authors_json,
+		&distribution_json,
 	)
 }
 

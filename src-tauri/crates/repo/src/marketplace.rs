@@ -14,6 +14,7 @@ pub fn insert(
 	repository: Option<&str>,
 	license: Option<&str>,
 	authors_json: &str,
+	distribution_json: &str,
 ) -> Result<MarketplaceAgent, AppError> {
 	diesel::insert_into(marketplace_agents::table)
 		.values(&NewMarketplaceAgent {
@@ -25,6 +26,7 @@ pub fn insert(
 			repository,
 			license,
 			authors_json,
+			distribution_json,
 		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;

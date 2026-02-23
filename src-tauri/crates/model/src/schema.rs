@@ -107,6 +107,7 @@ diesel::table! {
 		license -> Nullable<Text>,
 		authors_json -> Text,
 		added_at -> Timestamp,
+		distribution_json -> Text,
 	}
 }
 

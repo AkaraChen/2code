@@ -174,6 +174,7 @@ function RegistryList() {
 			repository: agent.repository,
 			license: agent.license,
 			authors: agent.authors,
+			distribution: agent.distribution,
 		});
 	};
 

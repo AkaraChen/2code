@@ -1,8 +1,6 @@
-import { Box, Heading, Skeleton, Stack, Tabs } from "@chakra-ui/react";
-import { Suspense } from "react";
+import { Box, Heading, Stack, Tabs } from "@chakra-ui/react";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import * as m from "@/paraglide/messages.js";
-import { AgentSettings } from "./AgentSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { GeneralSettings } from "./tabs/GeneralSettings";
 import { TerminalSettings } from "./tabs/TerminalSettings";
@@ -30,7 +28,6 @@ export default function SettingsPage() {
 							{m.notification()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
-						<Tabs.Trigger value="agents">{m.agents()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">
@@ -44,11 +41,6 @@ export default function SettingsPage() {
 					</Tabs.Content>
 					<Tabs.Content value="topbar">
 						<TopBarSettings />
-					</Tabs.Content>
-					<Tabs.Content value="agents">
-						<Suspense fallback={<Skeleton height="200px" />}>
-							<AgentSettings />
-						</Suspense>
 					</Tabs.Content>
 				</Tabs.Root>
 			</Stack>
