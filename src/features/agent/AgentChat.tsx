@@ -155,11 +155,11 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				width={{ base: "120px", md: "150px" }}
 				disabled={modelBusy || (isStreaming ?? false)}
 				aria-label={m.agentModel()}
+				variant={"ghost"}
 			>
 				<Select.HiddenSelect />
 				<Select.Control>
 					<Select.Trigger
-						variant="ghost"
 						h="6"
 						minH="6"
 						px="1"
