@@ -3,12 +3,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent::{
-	AgentManagerWrapper, AgentSessionInfo, AgentSessionMap, AgentStatusInfo,
-	ContentPart, CredentialInfo, ManagedAgentSession, NotificationTaskMap,
+	AgentManagerWrapper, AgentModelState, AgentSessionInfo, AgentSessionMap,
+	AgentStatusInfo, ContentPart, CredentialInfo, ManagedAgentSession,
+	NotificationTaskMap,
 };
 use futures::StreamExt;
 use infra::db::{DbPool, DbPoolExt};
-use model::agent::{AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord};
+use model::agent::{
+	AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord,
+};
 use model::distribution::Distribution;
 use model::error::AppError;
 use tauri::{AppHandle, Emitter, State};
@@ -148,9 +151,9 @@ pub async fn send_agent_prompt(
 ) -> Result<(), AppError> {
 	let session = {
 		let map = sessions.lock().await;
-		map.get(&session_id)
-			.cloned()
-			.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
 	};
 
 	// Get next turn index and event index from database in one lock scope
@@ -223,6 +226,56 @@ pub async fn send_agent_prompt(
 }
 
 #[tauri::command]
+pub async fn get_agent_session_models(
+	session_id: String,
+	sessions: State<'_, AgentSessionMap>,
+) -> Result<AgentModelState, AppError> {
+	let session = {
+		let map = sessions.lock().await;
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
+	};
+
+	Ok(session.model_state().await)
+}
+
+#[tauri::command]
+pub async fn set_agent_session_model(
+	session_id: String,
+	model_id: String,
+	sessions: State<'_, AgentSessionMap>,
+	db: State<'_, DbPool>,
+) -> Result<AgentModelState, AppError> {
+	let session = {
+		let map = sessions.lock().await;
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
+	};
+
+	let model_state = session
+		.set_model(&model_id)
+		.await
+		.map_err(|e| AppError::PtyError(format!("Failed to set model: {e}")))?;
+
+	if let Err(e) = service::agent::set_session_model_init(
+		db.inner(),
+		&session_id,
+		&model_id,
+	) {
+		tracing::warn!(
+			session_id = %session_id,
+			model_id = %model_id,
+			error = %e,
+			"failed to persist selected model"
+		);
+	}
+
+	Ok(model_state)
+}
+
+#[tauri::command]
 pub async fn close_agent_session(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
@@ -244,11 +297,7 @@ pub async fn close_agent_session(
 	let session = sessions.lock().await.remove(&session_id);
 
 	// Mark session as destroyed in database
-	if let Err(e) = service::agent::close_session(
-		db.inner(),
-		&session_id,
-	)
-	.await
+	if let Err(e) = service::agent::close_session(db.inner(), &session_id).await
 	{
 		tracing::warn!(
 			session_id = %session_id,
@@ -306,7 +355,8 @@ pub async fn create_agent_session_persistent(
 			.ok_or_else(|| {
 				AppError::NotFound(format!("marketplace agent: {}", meta.agent))
 			})?;
-		Distribution::from_json(&agent_record.distribution_json)?.resolve_launch()?
+		Distribution::from_json(&agent_record.distribution_json)?
+			.resolve_launch()?
 	};
 
 	// Create session with database persistence
@@ -325,9 +375,9 @@ pub async fn create_agent_session_persistent(
 	// Get session info
 	let session = {
 		let map = sessions_clone.lock().await;
-		map.get(&session_id)
-			.cloned()
-			.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
 	};
 	let info = session.info();
 
@@ -371,11 +421,11 @@ pub async fn reconnect_agent_session(
 	// Get session info
 	let session = {
 		let map = sessions_clone.lock().await;
-		map.get(&new_session_id)
-			.cloned()
-			.ok_or_else(|| {
-				AppError::NotFound(format!("session after reconnect: {new_session_id}"))
-			})?
+		map.get(&new_session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!(
+				"session after reconnect: {new_session_id}"
+			))
+		})?
 	};
 	let info = session.info();
 
@@ -418,4 +468,3 @@ pub fn list_agent_session_events(
 	let mut conn = db.conn()?;
 	repo::agent::get_session_events(&mut conn, &session_id)
 }
-

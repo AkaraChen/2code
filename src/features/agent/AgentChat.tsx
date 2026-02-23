@@ -1,5 +1,16 @@
-import { Box, Flex, HStack, IconButton, Spinner, Text, VStack } from "@chakra-ui/react";
-import { Suspense, use, useCallback, useState } from "react";
+import {
+	Box,
+	createListCollection,
+	Flex,
+	HStack,
+	IconButton,
+	Portal,
+	Select,
+	Spinner,
+	Text,
+	VStack,
+} from "@chakra-ui/react";
+import { Suspense, use, useCallback, useMemo, useState } from "react";
 import { LuShrink } from "react-icons/lu";
 import { ErrorBoundary } from "react-error-boundary";
 import { useShallow } from "zustand/react/shallow";
@@ -8,7 +19,7 @@ import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
-import { useSendAgentPrompt } from "./hooks";
+import { useSendAgentPrompt, useSetAgentModel } from "./hooks";
 import { useAgentStore } from "./store";
 
 interface AgentChatProps {
@@ -76,8 +87,10 @@ function ReconnectErrorFallback({ error }: { error: unknown }) {
 
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
+	const setAgentModel = useSetAgentModel();
 
-	const { turns, isStreaming, streamingTurn, error } = useAgentStore(
+	const { turns, isStreaming, streamingTurn, error, modelState, modelLoading } =
+		useAgentStore(
 		useShallow((s) => {
 			const session = s.sessions[sessionId];
 			return {
@@ -85,6 +98,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				isStreaming: session?.isStreaming,
 				streamingTurn: session?.streamingTurn,
 				error: session?.error,
+				modelState: session?.modelState,
+				modelLoading: session?.modelLoading,
 			};
 		}),
 	);
@@ -94,6 +109,36 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const handleSend = useCallback(
 		(content: string) => sendPrompt.mutate({ sessionId, content }),
 		[sendPrompt, sessionId],
+	);
+
+	const modelItems = useMemo(
+		() =>
+			(modelState?.available_models ?? []).map((model) => ({
+				value: model.model_id,
+				label: model.name,
+			})),
+		[modelState],
+	);
+	const modelCollection = useMemo(
+		() =>
+			createListCollection({
+				items: modelItems,
+			}),
+		[modelItems],
+	);
+	const selectedModel =
+		modelState?.current_model_id ?? modelItems[0]?.value ?? null;
+	const showModelSelector =
+		!!modelState?.supported && modelItems.length > 0;
+	const modelBusy = !!modelLoading || setAgentModel.isPending;
+
+	const handleModelChange = useCallback(
+		(details: { value: string[] }) => {
+			const next = details.value[0];
+			if (!next || next === selectedModel) return;
+			setAgentModel.mutate({ sessionId, modelId: next });
+		},
+		[selectedModel, sessionId, setAgentModel],
 	);
 
 	if (isActive && needsReconnection(sessionId)) {
@@ -108,6 +153,46 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 
 	return (
 		<Flex direction="column" h="full" w="full" bg="bg" position="relative">
+			{showModelSelector && (
+				<Flex px="3" pt="2" pb="1" justify="flex-end">
+					<HStack gap="2">
+						<Text fontSize="xs" color="fg.muted">
+							{m.agentModel()}
+						</Text>
+						<Select.Root
+							collection={modelCollection}
+							value={selectedModel ? [selectedModel] : []}
+							onValueChange={handleModelChange}
+							size="xs"
+							width="240px"
+							disabled={modelBusy || (isStreaming ?? false)}
+						>
+							<Select.HiddenSelect />
+							<Select.Control>
+								<Select.Trigger>
+									<Select.ValueText />
+								</Select.Trigger>
+								<Select.IndicatorGroup>
+									{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
+								</Select.IndicatorGroup>
+							</Select.Control>
+							<Portal>
+								<Select.Positioner>
+									<Select.Content>
+										{modelCollection.items.map((item) => (
+											<Select.Item item={item} key={item.value}>
+												{item.label}
+												<Select.ItemIndicator />
+											</Select.Item>
+										))}
+									</Select.Content>
+								</Select.Positioner>
+							</Portal>
+						</Select.Root>
+					</HStack>
+				</Flex>
+			)}
+
 			<MessageList
 				turns={turns}
 				isStreaming={isStreaming ?? false}

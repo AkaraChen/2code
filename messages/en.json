@@ -146,6 +146,7 @@
 	"agentToolCall": "Tool Call",
 	"agentTerminal": "Terminal: {id}",
 	"agentToolOutputAlt": "Tool output",
+	"agentModel": "Model",
 	"terminalTabTitle": "Terminal {n}",
 	"agentTabTitle": "{agent} session",
 	"agentInstallSuccess": "{name} installed successfully",

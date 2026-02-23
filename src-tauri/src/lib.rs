@@ -30,10 +30,9 @@ pub fn run() {
 		.expect("failed to initialize agent manager"),
 	);
 	let agent_sessions = agent::create_agent_session_map();
-	let notification_tasks: agent::NotificationTaskMap =
-		std::sync::Arc::new(tokio::sync::Mutex::new(
-			std::collections::HashMap::new(),
-		));
+	let notification_tasks: agent::NotificationTaskMap = std::sync::Arc::new(
+		tokio::sync::Mutex::new(std::collections::HashMap::new()),
+	);
 	let read_threads = infra::pty::create_thread_tracker();
 	let flush_senders = service::pty::create_flush_senders();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
@@ -130,6 +129,8 @@ pub fn run() {
 			handler::agent::install_agent,
 			handler::agent::detect_credentials,
 			handler::agent::send_agent_prompt,
+			handler::agent::get_agent_session_models,
+			handler::agent::set_agent_session_model,
 			handler::agent::close_agent_session,
 			handler::agent::create_agent_session_persistent,
 			handler::agent::reconnect_agent_session,

@@ -6,7 +6,7 @@ import consola from "consola";
 import { match } from "ts-pattern";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { AgentSessionEventRecord } from "@/generated";
+import type { AgentModelState, AgentSessionEventRecord } from "@/generated";
 import type {
 	AgentTurn,
 	StreamingTurn,
@@ -20,6 +20,8 @@ interface AgentSessionState {
 	isStreaming: boolean;
 	streamingTurn: StreamingTurn | null;
 	error: string | null;
+	modelState: AgentModelState | null;
+	modelLoading: boolean;
 }
 
 interface AgentStore {
@@ -31,6 +33,8 @@ interface AgentStore {
 	handleAgentEvent: (sessionId: string, payload: AgentNotification) => void;
 	handleTurnComplete: (sessionId: string, payload: unknown) => void;
 	handleError: (sessionId: string, error: string) => void;
+	setModelState: (sessionId: string, modelState: AgentModelState | null) => void;
+	setModelLoading: (sessionId: string, loading: boolean) => void;
 	restoreFromEvents: (
 		sessionId: string,
 		events: AgentSessionEventRecord[],
@@ -47,6 +51,8 @@ function ensureSession(
 			isStreaming: false,
 			streamingTurn: null,
 			error: null,
+			modelState: null,
+			modelLoading: false,
 		};
 	}
 	return sessions[sessionId];
@@ -184,6 +190,20 @@ export const useAgentStore = create<AgentStore>()(
 
 					session.streamingTurn = null;
 				}
+			});
+		},
+
+		setModelState(sessionId, modelState) {
+			set((state) => {
+				const session = ensureSession(state.sessions, sessionId);
+				session.modelState = modelState;
+			});
+		},
+
+		setModelLoading(sessionId, loading) {
+			set((state) => {
+				const session = ensureSession(state.sessions, sessionId);
+				session.modelLoading = loading;
 			});
 		},
 

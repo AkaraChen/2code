@@ -50,6 +50,25 @@ pub struct AgentSessionInfo {
 	pub acp_session_id: String,
 }
 
+/// A selectable model exposed by an agent session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentModelOption {
+	pub model_id: String,
+	pub name: String,
+	#[serde(default)]
+	pub description: Option<String>,
+}
+
+/// Current model state for a managed agent session.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentModelState {
+	pub supported: bool,
+	#[serde(default)]
+	pub current_model_id: Option<String>,
+	#[serde(default)]
+	pub available_models: Vec<AgentModelOption>,
+}
+
 /// A recorded event in an agent session (for persistence and frontend).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSessionEvent {

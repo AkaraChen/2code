@@ -146,6 +146,7 @@
 	"agentToolCall": "工具调用",
 	"agentTerminal": "终端：{id}",
 	"agentToolOutputAlt": "工具输出",
+	"agentModel": "模型",
 	"terminalTabTitle": "终端 {n}",
 	"agentTabTitle": "{agent} 会话",
 	"agentInstallSuccess": "{name} 安装成功",
