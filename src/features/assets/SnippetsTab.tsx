@@ -15,7 +15,7 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { LuPencil, LuPlus, LuTrash2 } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
@@ -40,6 +40,7 @@ export function SnippetsTab() {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+	const lastAutoSyncedNameRef = useRef("");
 
 	const form = useForm<SnippetFormData>({
 		defaultValues: { name: "", trigger: "", content: "" },
@@ -47,6 +48,7 @@ export function SnippetsTab() {
 
 	const openCreate = () => {
 		setEditingId(null);
+		lastAutoSyncedNameRef.current = "";
 		form.reset({ name: "", trigger: "", content: "" });
 		setDialogOpen(true);
 	};
@@ -58,6 +60,7 @@ export function SnippetsTab() {
 		content: string;
 	}) => {
 		setEditingId(snippet.id);
+		lastAutoSyncedNameRef.current = "";
 		form.reset({
 			name: snippet.name,
 			trigger: snippet.trigger,
@@ -65,6 +68,10 @@ export function SnippetsTab() {
 		});
 		setDialogOpen(true);
 	};
+
+	const nameField = form.register("name", { required: true });
+	const triggerField = form.register("trigger", { required: true });
+	const contentField = form.register("content", { required: true });
 
 	const onSubmit = form.handleSubmit(async (data) => {
 		if (editingId) {
@@ -179,9 +186,39 @@ export function SnippetsTab() {
 											{m.snippetName()}
 										</Field.Label>
 										<Input
-											{...form.register("name", {
-												required: true,
-											})}
+											{...nameField}
+											onChange={(event) => {
+												nameField.onChange(event);
+
+												if (editingId !== null) {
+													return;
+												}
+
+												const nextName =
+													event.target.value;
+												const currentContent =
+													form.getValues("content");
+												const shouldSyncContent =
+													currentContent.trim() ===
+														"" ||
+													currentContent ===
+														lastAutoSyncedNameRef.current;
+
+												if (!shouldSyncContent) {
+													return;
+												}
+
+												form.setValue(
+													"content",
+													nextName,
+													{
+														shouldDirty: false,
+														shouldTouch: true,
+													},
+												);
+												lastAutoSyncedNameRef.current =
+													nextName;
+											}}
 											placeholder={m.snippetNamePlaceholder()}
 											autoComplete="off"
 										/>
@@ -191,9 +228,7 @@ export function SnippetsTab() {
 											{m.snippetTrigger()}
 										</Field.Label>
 										<Input
-											{...form.register("trigger", {
-												required: true,
-											})}
+											{...triggerField}
 											placeholder={m.snippetTriggerPlaceholder()}
 											autoComplete="off"
 										/>
@@ -203,9 +238,7 @@ export function SnippetsTab() {
 											{m.snippetContent()}
 										</Field.Label>
 										<Textarea
-											{...form.register("content", {
-												required: true,
-											})}
+											{...contentField}
 											placeholder={m.snippetContentPlaceholder()}
 											rows={4}
 											autoComplete="off"

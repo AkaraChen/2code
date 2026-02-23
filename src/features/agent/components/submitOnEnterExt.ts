@@ -21,6 +21,10 @@ export const submitOnEnterExt = Extension.create({
 		return {
 			Enter: ({ editor }) => {
 				const storage = editor.storage.submitOnEnter as SubmitOnEnterStorage;
+				const snippetTrigger = editor.storage as {
+					snippetTrigger?: { active?: boolean };
+				};
+				if (snippetTrigger.snippetTrigger?.active) return true;
 
 				if (storage.expanded) return false;
 
