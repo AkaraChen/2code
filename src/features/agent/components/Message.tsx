@@ -1,5 +1,6 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { LuUser } from "react-icons/lu";
+import * as m from "@/paraglide/messages.js";
 import { AgentIcon } from "@/shared/components/AgentIcon";
 
 interface MessageProps {
@@ -32,7 +33,7 @@ export function Message({ role, agentIconUrl, agentName, children }: MessageProp
 							<AgentIcon
 								iconUrl={agentIconUrl}
 								size={16}
-								alt={agentName ?? "Agent"}
+								alt={agentName ?? m.agentDefaultName()}
 							/>
 						)}
 			</Flex>

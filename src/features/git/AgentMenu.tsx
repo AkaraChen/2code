@@ -105,7 +105,7 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 				agents={otherAgents}
 				onSelect={createWith}
 				trigger={
-					<IconButton size="xs" variant="subtle" disabled={isPending} aria-label="Select agent">
+					<IconButton size="xs" variant="subtle" disabled={isPending} aria-label={m.agentSelect()}>
 						<RiArrowDownSLine />
 					</IconButton>
 				}

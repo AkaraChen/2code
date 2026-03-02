@@ -149,7 +149,7 @@ export function SnippetsTab() {
 											size="xs"
 											variant="ghost"
 											onClick={() => openEdit(snippet)}
-											aria-label="Edit"
+											aria-label={m.snippetEdit()}
 										>
 											<LuPencil />
 										</IconButton>
@@ -160,7 +160,7 @@ export function SnippetsTab() {
 											onClick={() =>
 												setDeleteTarget(snippet.id)
 											}
-											aria-label="Delete"
+											aria-label={m.snippetDelete()}
 										>
 											<LuTrash2 />
 										</IconButton>

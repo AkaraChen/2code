@@ -247,7 +247,7 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 								size="sm"
 								onClick={handleSend}
 								disabled={isEmpty || disabled}
-								aria-label="Send"
+								aria-label={m.agentSend()}
 							>
 								<RiSendPlaneLine />
 							</IconButton>
@@ -269,7 +269,7 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 									size="sm"
 									variant="ghost"
 									onClick={onToggleExpand}
-									aria-label="Expand"
+									aria-label={m.agentExpand()}
 								>
 									<LuExpand />
 								</IconButton>
@@ -278,7 +278,7 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 								size="sm"
 								onClick={handleSend}
 								disabled={isEmpty || disabled}
-								aria-label="Send"
+								aria-label={m.agentSend()}
 							>
 								<RiSendPlaneLine />
 							</IconButton>

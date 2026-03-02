@@ -18,6 +18,7 @@ import {
   LuRedo2,
   LuSquareCode,
 } from "react-icons/lu"
+import * as m from "@/paraglide/messages.js"
 
 interface BooleanControlOptions {
   icon: React.ReactElement
@@ -58,91 +59,91 @@ export function createSwatchControl(_options: Record<string, unknown>) {
 // Pre-built controls
 
 export const Bold = createBooleanControl({
-  label: "Bold",
+  label: m.richTextBold(),
   icon: <LuBold />,
   isActive: (e) => !!e?.isActive("bold"),
   command: (e) => { e.chain().focus().toggleBold().run() },
 })
 
 export const Italic = createBooleanControl({
-  label: "Italic",
+  label: m.richTextItalic(),
   icon: <LuItalic />,
   isActive: (e) => !!e?.isActive("italic"),
   command: (e) => { e.chain().focus().toggleItalic().run() },
 })
 
 export const Strikethrough = createBooleanControl({
-  label: "Strikethrough",
+  label: m.richTextStrikethrough(),
   icon: <LuStrikethrough />,
   isActive: (e) => !!e?.isActive("strike"),
   command: (e) => { e.chain().focus().toggleStrike().run() },
 })
 
 export const Code = createBooleanControl({
-  label: "Code",
+  label: m.richTextCode(),
   icon: <LuCode />,
   isActive: (e) => !!e?.isActive("code"),
   command: (e) => { e.chain().focus().toggleCode().run() },
 })
 
 export const Highlight = createBooleanControl({
-  label: "Highlight",
+  label: m.richTextHighlight(),
   icon: <LuHighlighter />,
   isActive: (e) => !!e?.isActive("highlight"),
   command: (e) => { e.chain().focus().toggleHighlight().run() },
 })
 
 export const BulletList = createBooleanControl({
-  label: "Bullet List",
+  label: m.richTextBulletList(),
   icon: <LuList />,
   isActive: (e) => !!e?.isActive("bulletList"),
   command: (e) => { e.chain().focus().toggleBulletList().run() },
 })
 
 export const OrderedList = createBooleanControl({
-  label: "Ordered List",
+  label: m.richTextOrderedList(),
   icon: <LuListOrdered />,
   isActive: (e) => !!e?.isActive("orderedList"),
   command: (e) => { e.chain().focus().toggleOrderedList().run() },
 })
 
 export const TaskList = createBooleanControl({
-  label: "Task List",
+  label: m.richTextTaskList(),
   icon: <LuListChecks />,
   isActive: (e) => !!e?.isActive("taskList"),
   command: (e) => { e.chain().focus().toggleTaskList().run() },
 })
 
 export const Blockquote = createBooleanControl({
-  label: "Blockquote",
+  label: m.richTextBlockquote(),
   icon: <LuQuote />,
   isActive: (e) => !!e?.isActive("blockquote"),
   command: (e) => { e.chain().focus().toggleBlockquote().run() },
 })
 
 export const Hr = createBooleanControl({
-  label: "Horizontal Rule",
+  label: m.richTextHr(),
   icon: <LuMinus />,
   isActive: () => false,
   command: (e) => { e.chain().focus().setHorizontalRule().run() },
 })
 
 export const CodeBlock = createBooleanControl({
-  label: "Code Block",
+  label: m.richTextCodeBlock(),
   icon: <LuSquareCode />,
   isActive: (e) => !!e?.isActive("codeBlock"),
   command: (e) => { e.chain().focus().toggleCodeBlock().run() },
 })
 
 export const Undo = createBooleanControl({
-  label: "Undo",
+  label: m.richTextUndo(),
   icon: <LuUndo2 />,
   isActive: () => false,
   command: (e) => { e.chain().focus().undo().run() },
 })
 
 export const Redo = createBooleanControl({
-  label: "Redo",
+  label: m.richTextRedo(),
   icon: <LuRedo2 />,
   isActive: () => false,
   command: (e) => { e.chain().focus().redo().run() },

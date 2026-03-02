@@ -62,7 +62,7 @@ export function MessageList({
 									<AgentIcon
 										iconUrl={agentIconUrl}
 										size={24}
-										alt={agentName ?? "Agent"}
+										alt={agentName ?? m.agentDefaultName()}
 									/>
 								</EmptyState.Indicator>
 								<VStack textAlign="center">

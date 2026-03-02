@@ -92,7 +92,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		| AgentTabSession
 		| undefined;
 	const agentIconUrl = tabSession?.iconUrl ?? null;
-	const agentName = tabSession?.title ?? "Agent";
+	const agentName = tabSession?.title ?? m.agentDefaultName();
 
 	const { turns, isStreaming, streamingTurn, error, modelState, modelLoading } =
 		useAgentStore(
@@ -247,7 +247,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 							size="sm"
 							variant="ghost"
 							onClick={() => setExpanded(false)}
-							aria-label="Collapse"
+							aria-label={m.agentCollapse()}
 						>
 							<LuShrink />
 						</IconButton>

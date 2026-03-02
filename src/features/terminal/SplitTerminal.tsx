@@ -1,5 +1,6 @@
 import { Box, Flex, IconButton } from "@chakra-ui/react";
 import { RiAddLine, RiCloseLine } from "react-icons/ri";
+import * as m from "@/paraglide/messages.js";
 import { useClosePane, useCreatePane } from "@/features/tabs/hooks";
 import { useTabStore } from "@/features/tabs/store";
 import type { TerminalTab } from "@/features/tabs/types";
@@ -217,7 +218,7 @@ function Pane({
 				>
 					{canSplit && (
 						<IconButton
-							aria-label="Split pane"
+							aria-label={m.terminalSplitPane()}
 							size="2xs"
 							variant="ghost"
 							onClick={(e) => {
@@ -230,7 +231,7 @@ function Pane({
 					)}
 					{canClose && (
 						<IconButton
-							aria-label="Close pane"
+							aria-label={m.terminalClosePane()}
 							size="2xs"
 							variant="ghost"
 							onClick={(e) => {
