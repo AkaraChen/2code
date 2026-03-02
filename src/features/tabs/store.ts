@@ -28,7 +28,6 @@ interface TabStore {
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
 	replaceTab: (profileId: string, oldTabId: string, newTab: ProfileTab) => void;
-	removeStaleProfiles: (validIds: Set<string>) => void;
 	markNotified: (sessionId: string) => void;
 	markRead: (sessionId: string) => void;
 	addPane: (profileId: string, tabId: string, pane: TerminalPane) => void;
@@ -147,13 +146,6 @@ export const useTabStore = create<TabStore>()(
 				});
 			},
 
-			removeStaleProfiles(validIds) {
-				set((state) => {
-					for (const id of Object.keys(state.profiles)) {
-						if (!validIds.has(id)) delete state.profiles[id];
-					}
-				});
-			},
 
 			markNotified(sessionId) {
 				set((state) => {

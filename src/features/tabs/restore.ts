@@ -31,12 +31,6 @@ function createRestorationPipeline(): Promise<void> {
 		observer.subscribe((result) => {
 			if (!result.data) return;
 
-			// Stale profile cleanup
-			const validIds = new Set(
-				result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
-			);
-			useTabStore.getState().removeStaleProfiles(validIds);
-
 			// One-shot tab population
 			if (!restored) {
 				restored = true;

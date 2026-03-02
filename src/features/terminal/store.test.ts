@@ -209,32 +209,6 @@ describe("useTerminalStore", () => {
 		});
 	});
 
-	describe("removeStaleProfiles", () => {
-		it("removes profiles whose IDs are not in the valid set", () => {
-			getState().addTab("p1", termTab("s1", "T1"));
-			getState().addTab("p2", termTab("s2", "T2"));
-			getState().addTab("p3", termTab("s3", "T3"));
-			getState().removeStaleProfiles(new Set(["p1", "p3"]));
-			expect(getState().profiles.p1).toBeDefined();
-			expect(getState().profiles.p2).toBeUndefined();
-			expect(getState().profiles.p3).toBeDefined();
-		});
-
-		it("keeps all profiles when all are valid", () => {
-			getState().addTab("p1", termTab("s1", "T1"));
-			getState().addTab("p2", termTab("s2", "T2"));
-			getState().removeStaleProfiles(new Set(["p1", "p2"]));
-			expect(Object.keys(getState().profiles)).toHaveLength(2);
-		});
-
-		it("removes all profiles when valid set is empty", () => {
-			getState().addTab("p1", termTab("s1", "T1"));
-			getState().addTab("p2", termTab("s2", "T2"));
-			getState().removeStaleProfiles(new Set());
-			expect(Object.keys(getState().profiles)).toHaveLength(0);
-		});
-	});
-
 	describe("markNotified", () => {
 		it("adds sessionId to notifiedTabs set", () => {
 			getState().markNotified("s1");
@@ -445,22 +419,6 @@ describe("useTerminalStore", () => {
 
 			callback({ payload: "session-xyz" });
 			expect(getState().notifiedTabs.has("session-xyz")).toBe(true);
-		});
-	});
-
-	describe("removeStaleProfiles edge cases", () => {
-		it("validIds with extra IDs that don't exist in profiles is fine", () => {
-			getState().addTab("p1", termTab("s1", "T1"));
-			getState().removeStaleProfiles(new Set(["p1", "p99", "p100"]));
-			expect(getState().profiles.p1).toBeDefined();
-			expect(Object.keys(getState().profiles)).toHaveLength(1);
-		});
-
-		it("called on empty profiles is a no-op", () => {
-			expect(() =>
-				getState().removeStaleProfiles(new Set(["p1"])),
-			).not.toThrow();
-			expect(Object.keys(getState().profiles)).toHaveLength(0);
 		});
 	});
 
