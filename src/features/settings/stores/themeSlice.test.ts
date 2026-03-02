@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { useSettingsStore } from "./index";
 import {
 	ACCENT_COLORS,
 	BORDER_RADIUS_MAP,
 	type BorderRadius,
 } from "./themeSlice";
-import { useSettingsStore } from "./index";
 
 function resetStore() {
 	useSettingsStore.setState({ accentColor: "blue", borderRadius: "sm" });

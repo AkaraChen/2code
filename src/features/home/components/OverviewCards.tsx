@@ -1,6 +1,6 @@
 import { Card, SimpleGrid, Text, VStack } from "@chakra-ui/react";
-import * as m from "@/paraglide/messages.js";
 import type { HomepageStats } from "@/generated/types";
+import * as m from "@/paraglide/messages.js";
 
 function formatDuration(seconds: number): string {
 	if (seconds < 60) return `${seconds}s`;
@@ -23,7 +23,11 @@ function StatCard({ label, value }: StatCardProps) {
 					<Text fontSize="sm" color="fg.muted">
 						{label}
 					</Text>
-					<Text fontSize="2xl" fontWeight="bold" fontVariantNumeric="tabular-nums">
+					<Text
+						fontSize="2xl"
+						fontWeight="bold"
+						fontVariantNumeric="tabular-nums"
+					>
 						{value}
 					</Text>
 				</VStack>
@@ -49,7 +53,9 @@ export function OverviewCards({ stats }: { stats: HomepageStats }) {
 			/>
 			<StatCard
 				label={m.statsStreak()}
-				value={m.statsStreakDays({ n: String(stats.currentStreakDays) })}
+				value={m.statsStreakDays({
+					n: String(stats.currentStreakDays),
+				})}
 			/>
 		</SimpleGrid>
 	);

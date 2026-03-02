@@ -14,7 +14,10 @@ export async function closeAllTabsForProfile(profileId: string): Promise<void> {
 					try {
 						await session.close();
 					} catch (err) {
-						console.error(`Failed to close pane session ${pane.sessionId}:`, err);
+						console.error(
+							`Failed to close pane session ${pane.sessionId}:`,
+							err,
+						);
 					} finally {
 						sessionRegistry.delete(pane.sessionId);
 					}
@@ -28,7 +31,12 @@ export async function closeAllTabsForProfile(profileId: string): Promise<void> {
 		return [
 			session
 				.close()
-				.catch((err) => console.error(`Failed to close agent tab ${agentTab.sessionId}:`, err))
+				.catch((err) =>
+					console.error(
+						`Failed to close agent tab ${agentTab.sessionId}:`,
+						err,
+					),
+				)
 				.finally(() => sessionRegistry.delete(agentTab.sessionId)),
 		];
 	});

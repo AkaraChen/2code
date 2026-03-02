@@ -10,7 +10,9 @@ import { useSettingsStore } from "./stores";
 
 export function NotificationSettings() {
 	const notificationEnabled = useSettingsStore((s) => s.notificationEnabled);
-	const setNotificationEnabled = useSettingsStore((s) => s.setNotificationEnabled);
+	const setNotificationEnabled = useSettingsStore(
+		(s) => s.setNotificationEnabled,
+	);
 
 	const handleToggle = async (checked: boolean) => {
 		if (checked) {

@@ -1,6 +1,6 @@
 import { Box, Collapsible, Flex, Icon, Text } from "@chakra-ui/react";
 import { useState } from "react";
-import { LuChevronDown, LuChevronRight, LuBrain } from "react-icons/lu";
+import { LuBrain, LuChevronDown, LuChevronRight } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
@@ -12,11 +12,15 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 	const [open, setOpen] = useState(text.length < 100);
 
 	return (
-		<Box maxW="80%" w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
-			<Collapsible.Root
-				open={open}
-				onOpenChange={(e) => setOpen(e.open)}
-			>
+		<Box
+			maxW="80%"
+			w="full"
+			border="1px solid"
+			borderColor="border.subtle"
+			borderRadius="md"
+			overflow="hidden"
+		>
+			<Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
 				<Collapsible.Trigger asChild>
 					<Flex
 						px="3"
@@ -35,7 +39,11 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 						<Icon fontSize="sm" color="fg.muted">
 							<LuBrain />
 						</Icon>
-						<Text fontSize="sm" color="fg.muted" fontWeight="medium">
+						<Text
+							fontSize="sm"
+							color="fg.muted"
+							fontWeight="medium"
+						>
 							{m.agentThinking()}
 						</Text>
 					</Flex>
@@ -50,10 +58,7 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 						borderColor="border.subtle"
 						fontSize="sm"
 					>
-						<MarkdownRenderer
-							content={text}
-							bg="transparent"
-						/>
+						<MarkdownRenderer content={text} bg="transparent" />
 					</Box>
 				</Collapsible.Content>
 			</Collapsible.Root>

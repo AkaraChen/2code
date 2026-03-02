@@ -1,8 +1,8 @@
 import { Badge, Card, HStack, Text, VStack } from "@chakra-ui/react";
 import { Link } from "react-router";
-import * as m from "@/paraglide/messages.js";
 import { useProjects } from "@/features/projects/hooks";
 import type { ProjectWithProfiles } from "@/generated/types";
+import * as m from "@/paraglide/messages.js";
 
 function ProjectRow({ project }: { project: ProjectWithProfiles }) {
 	const defaultProfile = project.profiles.find((p) => p.is_default);
@@ -25,14 +25,22 @@ function ProjectRow({ project }: { project: ProjectWithProfiles }) {
 							<Text fontSize="sm" fontWeight="medium">
 								{project.name}
 							</Text>
-							<Text fontSize="xs" color="fg.muted" truncate maxW="300px">
+							<Text
+								fontSize="xs"
+								color="fg.muted"
+								truncate
+								maxW="300px"
+							>
 								{project.folder}
 							</Text>
 						</HStack>
 						<HStack gap="2">
-							<Badge size="sm" variant="subtle" colorPalette="gray">
-								{project.profiles.length}{" "}
-								{m.profiles()}
+							<Badge
+								size="sm"
+								variant="subtle"
+								colorPalette="gray"
+							>
+								{project.profiles.length} {m.profiles()}
 							</Badge>
 						</HStack>
 					</HStack>

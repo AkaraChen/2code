@@ -2,8 +2,8 @@ import { Flex } from "@chakra-ui/react";
 import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
 import type { StreamingTurn } from "../types";
-import { Message } from "./Message";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { Message } from "./Message";
 import { PlanBlock } from "./PlanBlock";
 import { StreamingBubble } from "./StreamingBubble";
 import { TextShimmer } from "./TextShimmer";
@@ -65,8 +65,10 @@ export function StreamingTurnRenderer({
 								),
 							)
 							.with({ type: "thought" }, (i) => (
-								 
-								<ThoughtBlock key={`thought-${i.text}`} text={i.text} />
+								<ThoughtBlock
+									key={`thought-${i.text}`}
+									text={i.text}
+								/>
 							))
 							.with({ type: "tool_call" }, (i) => (
 								<ToolCallBlock
@@ -75,7 +77,10 @@ export function StreamingTurnRenderer({
 								/>
 							))
 							.with({ type: "plan" }, (i) => (
-								<PlanBlock key={`plan-${i.data.entries.map(e => e.content).join("-")}`} plan={i.data} />
+								<PlanBlock
+									key={`plan-${i.data.entries.map((e) => e.content).join("-")}`}
+									plan={i.data}
+								/>
 							))
 							.exhaustive(),
 					)}

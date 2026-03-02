@@ -1,8 +1,11 @@
+import type {
+	AgentNotification,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 import consola from "consola";
 import type { StateCreator } from "zustand";
 import type { AgentStore } from "../store";
-import type { AgentNotification, SessionNotification } from "@agentclientprotocol/sdk";
-import { ensureSession, applySessionUpdate, flushStreamingTurn } from "./utils";
+import { applySessionUpdate, ensureSession, flushStreamingTurn } from "./utils";
 
 export interface MessageSlice {
 	addUserMessage: (sessionId: string, content: string) => void;
@@ -88,9 +91,15 @@ export const createMessageSlice: StateCreator<
 				const streamingTurn = session.streamingTurn;
 				const agentContent = flushStreamingTurn(streamingTurn);
 
-				const textIdx = agentContent.findIndex((c) => c.type === "text");
+				const textIdx = agentContent.findIndex(
+					(c) => c.type === "text",
+				);
 				if (textIdx >= 0) {
-					const textItem = agentContent[textIdx] as { type: "text"; text: string; role: string };
+					const textItem = agentContent[textIdx] as {
+						type: "text";
+						text: string;
+						role: string;
+					};
 					textItem.text = `${textItem.text}\n\n[Error: ${error}]`;
 				} else {
 					agentContent.unshift({
@@ -103,7 +112,10 @@ export const createMessageSlice: StateCreator<
 				for (const item of agentContent) {
 					if (item.type === "tool_call") {
 						const tc = item.data;
-						if (tc.status === "pending" || tc.status === "in_progress") {
+						if (
+							tc.status === "pending" ||
+							tc.status === "in_progress"
+						) {
 							item.data = { ...tc, status: "failed" };
 						}
 					}

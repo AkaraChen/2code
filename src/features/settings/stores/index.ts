@@ -4,15 +4,18 @@ import { immer } from "zustand/middleware/immer";
 import { tauriStorage } from "@/shared/lib/tauriStorage";
 import { type AgentSlice, createAgentSlice } from "./agentSlice";
 import {
-	type NotificationSlice,
 	createNotificationSlice,
+	type NotificationSlice,
 } from "./notificationSlice";
-import { type TerminalSlice, createTerminalSlice, syncMonoFont } from "./terminalSlice";
 import {
-	type ThemeSlice,
+	createTerminalSlice,
+	syncMonoFont,
+	type TerminalSlice,
+} from "./terminalSlice";
+import {
 	createThemeSlice,
-	BORDER_RADIUS_MAP,
 	syncBorderRadius,
+	type ThemeSlice,
 } from "./themeSlice";
 
 // Re-export types and constants for consumers
@@ -20,9 +23,9 @@ export type { AgentSlice } from "./agentSlice";
 export type { NotificationSlice } from "./notificationSlice";
 export type { TerminalSlice } from "./terminalSlice";
 export type {
-	ThemeSlice,
 	AccentColor,
 	BorderRadius,
+	ThemeSlice,
 } from "./themeSlice";
 export { ACCENT_COLORS, BORDER_RADIUS_MAP } from "./themeSlice";
 

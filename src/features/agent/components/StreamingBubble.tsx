@@ -1,4 +1,4 @@
-import { Spinner, Flex } from "@chakra-ui/react";
+import { Flex, Spinner } from "@chakra-ui/react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface StreamingBubbleProps {

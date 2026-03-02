@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import {
 	getCommitDiff,
 	getGitDiff,
-	getGitLog,
 	getGithubPrStatus,
+	getGitLog,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
@@ -51,7 +51,8 @@ export function useGitDiffStats(profileId: string) {
 		let deletions = 0;
 		for (const line of diff.split("\n")) {
 			if (line.startsWith("+") && !line.startsWith("+++")) additions++;
-			else if (line.startsWith("-") && !line.startsWith("---")) deletions++;
+			else if (line.startsWith("-") && !line.startsWith("---"))
+				deletions++;
 		}
 		if (additions === 0 && deletions === 0) return null;
 		return { additions, deletions };

@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { match } from "ts-pattern";
-import * as m from "@/paraglide/messages.js";
 import { AgentTabSession } from "@/features/agent/AgentTabSession";
+import * as m from "@/paraglide/messages.js";
 import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
@@ -34,7 +34,13 @@ export function useCreateTab() {
 					);
 				})
 				.with({ type: "agent" }, (p) =>
-					AgentTabSession.create(p.profileId, p.cwd, p.agent, p.agentName, p.iconUrl),
+					AgentTabSession.create(
+						p.profileId,
+						p.cwd,
+						p.agent,
+						p.agentName,
+						p.iconUrl,
+					),
 				)
 				.exhaustive();
 			sessionRegistry.set(session.id, session);
@@ -47,18 +53,27 @@ export function useCreateTab() {
 }
 
 export function useCloseTab() {
-	const tabStore = useTabStore();
 	return useMutation({
-		mutationFn: async ({ tabId, profileId }: { profileId: string; tabId: string }) => {
+		mutationFn: async ({
+			tabId,
+			profileId,
+		}: {
+			profileId: string;
+			tabId: string;
+		}) => {
 			// Atomic check-and-set to prevent double-close
 			if (!markPending(tabId)) {
 				throw new Error(`Tab ${tabId} is already being closed`);
 			}
 
 			try {
-				const tab = tabStore.profiles[profileId]?.tabs.find(
+				const state = useTabStore.getState();
+				const tab = state.profiles[profileId]?.tabs.find(
 					(t) => t.id === tabId,
 				);
+
+				// Optimistically close the tab in UI
+				state.closeTab(profileId, tabId);
 
 				if (tab?.type === "terminal") {
 					// Close all pane sessions
@@ -84,9 +99,6 @@ export function useCloseTab() {
 				clearPending(tabId);
 			}
 		},
-		onSettled: (_data, _err, { profileId, tabId }) => {
-			tabStore.closeTab(profileId, tabId);
-		},
 	});
 }
 
@@ -97,8 +109,14 @@ export function useCreatePane() {
 			profileId,
 			tabId,
 			cwd,
-		}: { profileId: string; tabId: string; cwd: string }) => {
-			const tab = tabStore.profiles[profileId]?.tabs.find((t) => t.id === tabId);
+		}: {
+			profileId: string;
+			tabId: string;
+			cwd: string;
+		}) => {
+			const tab = tabStore.profiles[profileId]?.tabs.find(
+				(t) => t.id === tabId,
+			);
 			if (!tab || tab.type !== "terminal") {
 				throw new Error("Tab not found or not a terminal tab");
 			}
@@ -128,7 +146,11 @@ export function useClosePane() {
 	return useMutation({
 		mutationFn: async ({
 			paneSessionId,
-		}: { profileId: string; tabId: string; paneSessionId: string }) => {
+		}: {
+			profileId: string;
+			tabId: string;
+			paneSessionId: string;
+		}) => {
 			const session = sessionRegistry.get(paneSessionId);
 			if (session) {
 				await session.close();

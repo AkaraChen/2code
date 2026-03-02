@@ -1,9 +1,9 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { startTransition, use } from "react";
-import { GitDiffContext } from "../gitDiffReducer";
-import CommitList from "./CommitList";
-import CommitFileSidebar from "./CommitFileSidebar";
 import * as m from "@/paraglide/messages.js";
+import { GitDiffContext } from "../gitDiffReducer";
+import CommitFileSidebar from "./CommitFileSidebar";
+import CommitList from "./CommitList";
 
 export default function HistorySidebar() {
 	const { commits, state, dispatch } = use(GitDiffContext)!;

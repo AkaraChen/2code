@@ -1,11 +1,14 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { enableMapSet } from "immer";
+import { beforeEach, describe, expect, it } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { enableMapSet } from "immer";
 
 enableMapSet();
+import {
+	createNotificationSlice,
+	type NotificationSlice,
+} from "./notificationSlice";
 import { createPaneSlice, type PaneSlice } from "./paneSlice";
-import { type NotificationSlice, createNotificationSlice } from "./notificationSlice";
 
 type TestStore = PaneSlice & NotificationSlice & { profiles: any };
 
@@ -14,7 +17,7 @@ const useMockStore = create<TestStore>()(
 		profiles: {},
 		...(createPaneSlice as any)(...a),
 		...(createNotificationSlice as any)(...a),
-	}))
+	})),
 );
 
 describe("paneSlice", () => {
@@ -29,18 +32,20 @@ describe("paneSlice", () => {
 							id: "tab1",
 							title: "Shell",
 							panes: [],
-							activePaneId: ""
-						}
+							activePaneId: "",
+						},
 					],
 					activeTabId: "tab1",
-					counter: 1
-				}
-			}
+					counter: 1,
+				},
+			},
 		});
 	});
 
 	it("should add a pane", () => {
-		useMockStore.getState().addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
+		useMockStore
+			.getState()
+			.addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
 
 		const tab = useMockStore.getState().profiles.prof1.tabs[0];
 		expect(tab.panes).toHaveLength(1);
@@ -49,8 +54,12 @@ describe("paneSlice", () => {
 	});
 
 	it("should close a pane and switch to adjacent", () => {
-		useMockStore.getState().addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
-		useMockStore.getState().addPane("prof1", "tab1", { sessionId: "s2", title: "t2" });
+		useMockStore
+			.getState()
+			.addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
+		useMockStore
+			.getState()
+			.addPane("prof1", "tab1", { sessionId: "s2", title: "t2" });
 
 		useMockStore.getState().closePane("prof1", "tab1", "s2");
 		const tab = useMockStore.getState().profiles.prof1.tabs[0];
@@ -60,8 +69,10 @@ describe("paneSlice", () => {
 
 	it("should cleanup notifications when closing a pane", () => {
 		useMockStore.setState({ notifiedTabs: new Set(["s1"]) });
-		useMockStore.getState().addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
-		
+		useMockStore
+			.getState()
+			.addPane("prof1", "tab1", { sessionId: "s1", title: "t1" });
+
 		useMockStore.getState().closePane("prof1", "tab1", "s1");
 		expect(useMockStore.getState().notifiedTabs.has("s1")).toBe(false);
 	});

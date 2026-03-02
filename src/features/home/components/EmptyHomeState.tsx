@@ -1,8 +1,8 @@
 import { Button, Text, VStack } from "@chakra-ui/react";
 import { LuPlus } from "react-icons/lu";
+import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
-import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 
 export function EmptyHomeState() {
 	const createDialog = useDialogState();

@@ -293,9 +293,7 @@ export function SnippetsTab() {
 					<Dialog.Positioner>
 						<Dialog.Content>
 							<Dialog.Header>
-								<Dialog.Title>
-									{m.deleteSnippet()}
-								</Dialog.Title>
+								<Dialog.Title>{m.deleteSnippet()}</Dialog.Title>
 							</Dialog.Header>
 							<Dialog.Body>
 								<Text>{m.confirmDeleteSnippet()}</Text>

@@ -19,8 +19,8 @@ import {
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import * as React from "react";
 import { Suspense, useState } from "react";
-import { LuExternalLink, LuTrash2 } from "react-icons/lu";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { LuExternalLink, LuTrash2 } from "react-icons/lu";
 import type { RegistryAgentInfo } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { AgentIcon } from "@/shared/components/AgentIcon";
@@ -68,9 +68,7 @@ function MarketplaceQueryBoundary({
 					onReset={reset}
 					FallbackComponent={MarketplaceErrorFallback}
 				>
-					<Suspense fallback={loadingFallback}>
-						{children}
-					</Suspense>
+					<Suspense fallback={loadingFallback}>{children}</Suspense>
 				</ErrorBoundary>
 			)}
 		</QueryErrorResetBoundary>
@@ -125,7 +123,9 @@ function RegistryAgentCard({
 								flexShrink={0}
 								fontFamily="mono"
 							>
-								{m.marketplaceVersion({ version: agent.version })}
+								{m.marketplaceVersion({
+									version: agent.version,
+								})}
 							</Badge>
 						</HStack>
 						{agent.authors.length > 0 && (
@@ -253,11 +253,7 @@ function InstalledAgentCard({
 			<Card.Body gap="3">
 				<HStack gap="3" align="flex-start">
 					<div style={ICON_CONTAINER_STYLE}>
-						<AgentIcon
-							iconUrl={iconUrl}
-							size={28}
-							alt={name}
-						/>
+						<AgentIcon iconUrl={iconUrl} size={28} alt={name} />
 					</div>
 					<Stack gap="0" flex="1" minW="0">
 						<HStack justify="space-between" align="flex-start">
@@ -357,9 +353,7 @@ function InstalledList() {
 					<Dialog.Positioner>
 						<Dialog.Content>
 							<Dialog.Header>
-								<Dialog.Title>
-									{m.removeAgent()}
-								</Dialog.Title>
+								<Dialog.Title>{m.removeAgent()}</Dialog.Title>
 							</Dialog.Header>
 							<Dialog.Body>
 								<Text>{m.confirmRemoveAgent()}</Text>
@@ -403,9 +397,7 @@ export function AgentsTab({ mode }: { mode: "manage" | "store" }) {
 					<Center minH="50vh">
 						<VStack gap={4}>
 							<Spinner size="xl" />
-							<Text>
-								{m.marketplaceLoadingRegistry()}
-							</Text>
+							<Text>{m.marketplaceLoadingRegistry()}</Text>
 						</VStack>
 					</Center>
 				}

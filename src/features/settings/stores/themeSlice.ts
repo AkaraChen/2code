@@ -59,7 +59,8 @@ export const createThemeSlice: StateCreator<
 });
 
 export function syncBorderRadius(borderRadius: string) {
-	const radii = BORDER_RADIUS_MAP[borderRadius as keyof typeof BORDER_RADIUS_MAP];
+	const radii =
+		BORDER_RADIUS_MAP[borderRadius as keyof typeof BORDER_RADIUS_MAP];
 	if (!radii) return;
 	const root = document.documentElement;
 	root.style.setProperty("--chakra-radii-l1", radii.l1);

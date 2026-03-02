@@ -36,7 +36,10 @@ export function SkillsTab() {
 					{skills.map((skill) => (
 						<Card.Root key={skill.name} size="sm">
 							<Card.Body gap="2">
-								<HStack justify="space-between" align="flex-start">
+								<HStack
+									justify="space-between"
+									align="flex-start"
+								>
 									<Card.Title>{skill.name}</Card.Title>
 									<IconButton
 										size="xs"
@@ -73,9 +76,7 @@ export function SkillsTab() {
 					<Dialog.Positioner>
 						<Dialog.Content>
 							<Dialog.Header>
-								<Dialog.Title>
-									{m.deleteSkill()}
-								</Dialog.Title>
+								<Dialog.Title>{m.deleteSkill()}</Dialog.Title>
 							</Dialog.Header>
 							<Dialog.Body>
 								<Text>{m.confirmDeleteSkill()}</Text>

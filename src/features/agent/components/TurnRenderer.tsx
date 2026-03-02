@@ -1,8 +1,8 @@
 import { Flex } from "@chakra-ui/react";
 import type { AgentTurn } from "../types";
-import { Message } from "./Message";
-import { MarkdownRenderer } from "./MarkdownRenderer";
 import { AgentResponseGroup } from "./AgentResponseGroup";
+import { MarkdownRenderer } from "./MarkdownRenderer";
+import { Message } from "./Message";
 
 interface TurnRendererProps {
 	turn: AgentTurn;
@@ -10,13 +10,22 @@ interface TurnRendererProps {
 	agentName?: string;
 }
 
-export function TurnRenderer({ turn, agentIconUrl, agentName }: TurnRendererProps) {
+export function TurnRenderer({
+	turn,
+	agentIconUrl,
+	agentName,
+}: TurnRendererProps) {
 	return (
 		<Flex direction="column">
 			{/* 用户消息 */}
 			{turn.userMessage && (
 				<Message role="user">
-					<MarkdownRenderer content={turn.userMessage} bg="transparent" px="0" py="0" />
+					<MarkdownRenderer
+						content={turn.userMessage}
+						bg="transparent"
+						px="0"
+						py="0"
+					/>
 				</Message>
 			)}
 

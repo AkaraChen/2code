@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import type { Editor } from "@tiptap/react"
-import { createContext, use } from "react"
+import type { Editor } from "@tiptap/react";
+import { createContext, use } from "react";
 
 interface RichTextEditorContextValue {
-  editor: Editor | null
+	editor: Editor | null;
 }
 
 export const RichTextEditorContext =
-  createContext<RichTextEditorContextValue | null>(null)
+	createContext<RichTextEditorContextValue | null>(null);
 
 export function useRichTextEditorContext() {
-  const context = use(RichTextEditorContext)
-  if (!context) {
-    throw new Error(
-      "useRichTextEditorContext must be used within RichTextEditor.Root",
-    )
-  }
-  return context
+	const context = use(RichTextEditorContext);
+	if (!context) {
+		throw new Error(
+			"useRichTextEditorContext must be used within RichTextEditor.Root",
+		);
+	}
+	return context;
 }

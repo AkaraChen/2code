@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { createHistorySlice, type HistorySlice } from "./stores/historySlice";
+import { createMessageSlice, type MessageSlice } from "./stores/messageSlice";
+import { createModelSlice, type ModelSlice } from "./stores/modelSlice";
+import { createSessionSlice, type SessionSlice } from "./stores/sessionSlice";
 import type { AgentSessionState } from "./types";
-import { type SessionSlice, createSessionSlice } from "./stores/sessionSlice";
-import { type MessageSlice, createMessageSlice } from "./stores/messageSlice";
-import { type ModelSlice, createModelSlice } from "./stores/modelSlice";
-import { type HistorySlice, createHistorySlice } from "./stores/historySlice";
 
 export interface AgentStore
 	extends SessionSlice,

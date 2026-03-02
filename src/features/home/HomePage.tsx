@@ -1,12 +1,12 @@
 import { Box, Heading, HStack, VStack } from "@chakra-ui/react";
-import * as m from "@/paraglide/messages.js";
 import { useProjects } from "@/features/projects/hooks";
-import { useHomepageStats } from "./hooks";
+import * as m from "@/paraglide/messages.js";
 import { ActivityHeatmap } from "./components/ActivityHeatmap";
 import { EmptyHomeState } from "./components/EmptyHomeState";
 import { OverviewCards } from "./components/OverviewCards";
 import { ProjectList } from "./components/ProjectList";
 import { QuickActions } from "./components/QuickActions";
+import { useHomepageStats } from "./hooks";
 
 export default function HomePage() {
 	const { data: projects } = useProjects();

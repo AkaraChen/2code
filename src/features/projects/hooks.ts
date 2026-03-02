@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { closeAllTabsForProfiles } from "@/features/tabs/utils";
+import type { ProjectConfig } from "@/generated";
 import {
 	createProjectFromFolder,
 	createProjectTemporary,
@@ -15,7 +16,6 @@ import {
 	saveProjectConfig,
 	updateProject,
 } from "@/generated";
-import type { ProjectConfig } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 export function useProjects() {

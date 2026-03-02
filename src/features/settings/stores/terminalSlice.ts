@@ -1,6 +1,6 @@
 import type { StateCreator } from "zustand";
-import type { SettingsStore } from "./index";
 import type { TerminalThemeId } from "@/features/terminal/themes";
+import type { SettingsStore } from "./index";
 
 export interface TerminalSlice {
 	fontFamily: string;

@@ -1,9 +1,9 @@
 import { Button, HStack } from "@chakra-ui/react";
-import { Link } from "react-router";
 import { LuPlus, LuSettings } from "react-icons/lu";
+import { Link } from "react-router";
+import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
-import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 
 export function QuickActions() {
 	const createDialog = useDialogState();
@@ -11,7 +11,11 @@ export function QuickActions() {
 	return (
 		<>
 			<HStack gap="2">
-				<Button size="sm" variant="outline" onClick={createDialog.onOpen}>
+				<Button
+					size="sm"
+					variant="outline"
+					onClick={createDialog.onOpen}
+				>
 					<LuPlus />
 					{m.newProject()}
 				</Button>

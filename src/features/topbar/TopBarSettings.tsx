@@ -49,50 +49,49 @@ export function TopBarSettings() {
 				overControlId !== "preview-area");
 
 		match({ isActiveInPreview, isOverPreviewArea, isOverAvailableArea })
-			.with(
-				{ isActiveInPreview: true, isOverPreviewArea: true },
-				() => {
-					if (activeControlId === overControlId) return;
-					const oldIndex =
-						activeControls.indexOf(activeControlId);
-					const newIndex = activeControls.indexOf(
-						overControlId as ControlId,
-					);
-					if (newIndex !== -1) {
-						useTopBarStore.getState().setActiveControls(
+			.with({ isActiveInPreview: true, isOverPreviewArea: true }, () => {
+				if (activeControlId === overControlId) return;
+				const oldIndex = activeControls.indexOf(activeControlId);
+				const newIndex = activeControls.indexOf(
+					overControlId as ControlId,
+				);
+				if (newIndex !== -1) {
+					useTopBarStore
+						.getState()
+						.setActiveControls(
 							arrayMove(activeControls, oldIndex, newIndex),
 						);
-					}
-				},
-			)
+				}
+			})
 			.with(
 				{ isActiveInPreview: true, isOverAvailableArea: true },
 				() => {
-					useTopBarStore.getState().setActiveControls(
-						activeControls.filter(
-							(id) => id !== activeControlId,
-						),
-					);
+					useTopBarStore
+						.getState()
+						.setActiveControls(
+							activeControls.filter(
+								(id) => id !== activeControlId,
+							),
+						);
 				},
 			)
-			.with(
-				{ isActiveInPreview: false, isOverPreviewArea: true },
-				() => {
-					if (overControlId === "preview-area") {
-						useTopBarStore.getState().setActiveControls([
+			.with({ isActiveInPreview: false, isOverPreviewArea: true }, () => {
+				if (overControlId === "preview-area") {
+					useTopBarStore
+						.getState()
+						.setActiveControls([
 							...activeControls,
 							activeControlId,
 						]);
-					} else {
-						const overIndex = activeControls.indexOf(
-							overControlId as ControlId,
-						);
-						const newList = [...activeControls];
-						newList.splice(overIndex, 0, activeControlId);
-						useTopBarStore.getState().setActiveControls(newList);
-					}
-				},
-			)
+				} else {
+					const overIndex = activeControls.indexOf(
+						overControlId as ControlId,
+					);
+					const newList = [...activeControls];
+					newList.splice(overIndex, 0, activeControlId);
+					useTopBarStore.getState().setActiveControls(newList);
+				}
+			})
 			.otherwise(() => {});
 	}
 

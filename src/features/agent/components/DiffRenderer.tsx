@@ -12,11 +12,7 @@ interface DiffRendererProps {
 	newText: string;
 }
 
-export function DiffRenderer({
-	path,
-	oldText,
-	newText,
-}: DiffRendererProps) {
+export function DiffRenderer({ path, oldText, newText }: DiffRendererProps) {
 	const fontFamily = useSettingsStore((s) => s.fontFamily);
 	const fontSize = useSettingsStore((s) => s.fontSize);
 

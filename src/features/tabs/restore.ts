@@ -1,5 +1,6 @@
 import { QueryObserver } from "@tanstack/react-query";
 import consola from "consola";
+import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import type { ProjectWithProfiles } from "@/generated";
 import {
 	listProjectAgentSessions,
@@ -8,7 +9,6 @@ import {
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
@@ -53,7 +53,9 @@ function createRestorationPipeline(): Promise<void> {
  * 2. Add tabs for any sessions that aren't already in the persisted store.
  */
 async function populateTabs(projects: ProjectWithProfiles[]) {
-	consola.info(`[tab-restore] populating tabs for ${projects.length} projects`);
+	consola.info(
+		`[tab-restore] populating tabs for ${projects.length} projects`,
+	);
 
 	const projectData = await Promise.all(
 		projects.map(async (p) => {
@@ -91,20 +93,29 @@ async function populateTabs(projects: ProjectWithProfiles[]) {
 				store.addTab(s.profile_id, ts.toTab());
 				consola.info(`[tab-restore] added new PTY tab ${s.id}`);
 			} else {
-				consola.info(`[tab-restore] registered PTY ${s.id} (already in store)`);
+				consola.info(
+					`[tab-restore] registered PTY ${s.id} (already in store)`,
+				);
 			}
 		}
 
 		// 2. Register Agent session objects + add tabs for unknown sessions
 		for (const r of agentSessions) {
-			const ts = new AgentTabSession(r.id, r.profile_id, `${r.agent} session`, r.agent);
+			const ts = new AgentTabSession(
+				r.id,
+				r.profile_id,
+				`${r.agent} session`,
+				r.agent,
+			);
 			sessionRegistry.set(r.id, ts);
 
 			if (!knownSessionIds.has(r.id)) {
 				store.addTab(r.profile_id, ts.toTab());
 				consola.info(`[tab-restore] added new Agent tab ${r.id}`);
 			} else {
-				consola.info(`[tab-restore] registered Agent ${r.id} (already in store)`);
+				consola.info(
+					`[tab-restore] registered Agent ${r.id} (already in store)`,
+				);
 			}
 		}
 	}

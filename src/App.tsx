@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense, lazy } from "react";
+import { lazy, Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
@@ -9,8 +9,11 @@ import HomePage from "./features/home/HomePage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 
 const AssetsPage = lazy(() => import("./features/assets/AssetsPage"));
-const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage"));
+const ProjectDetailPage = lazy(
+	() => import("./features/projects/ProjectDetailPage"),
+);
 const SettingsPage = lazy(() => import("./features/settings/SettingsPage"));
+
 import AppSidebar from "./layout/AppSidebar";
 import {
 	PageError,

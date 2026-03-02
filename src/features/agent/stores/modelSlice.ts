@@ -1,10 +1,13 @@
 import type { StateCreator } from "zustand";
-import type { AgentStore } from "../store";
 import type { AgentModelState } from "@/generated";
+import type { AgentStore } from "../store";
 import { ensureSession } from "./utils";
 
 export interface ModelSlice {
-	setModelState: (sessionId: string, modelState: AgentModelState | null) => void;
+	setModelState: (
+		sessionId: string,
+		modelState: AgentModelState | null,
+	) => void;
 	setModelLoading: (sessionId: string, loading: boolean) => void;
 }
 

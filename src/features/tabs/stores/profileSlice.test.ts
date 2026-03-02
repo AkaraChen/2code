@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { createProfileSlice, type ProfileSlice } from "./profileSlice";
 import type { ProfileTabState } from "../types";
+import { createProfileSlice, type ProfileSlice } from "./profileSlice";
 
 // Mock store for testing just this slice
 const useMockStore = create<ProfileSlice>()(
-	immer((...a) => (createProfileSlice as any)(...a))
+	immer((...a) => (createProfileSlice as any)(...a)),
 );
 
 describe("profileSlice", () => {
@@ -17,8 +17,8 @@ describe("profileSlice", () => {
 	it("should remove a profile", () => {
 		useMockStore.setState({
 			profiles: {
-				prof1: { tabs: [], activeTabId: null, counter: 0 }
-			}
+				prof1: { tabs: [], activeTabId: null, counter: 0 },
+			},
 		});
 
 		useMockStore.getState().removeProfile("prof1");
@@ -30,7 +30,7 @@ describe("profileSlice", () => {
 		const profileState: ProfileTabState = {
 			tabs: [],
 			activeTabId: "tab1",
-			counter: 5
+			counter: 5,
 		};
 
 		useMockStore.getState().restoreProfile("prof2", profileState);

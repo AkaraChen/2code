@@ -1,10 +1,10 @@
 import { Box, HStack, Text } from "@chakra-ui/react";
-import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
 	horizontalListSortingStrategy,
 	SortableContext,
 } from "@dnd-kit/sortable";
+import { useMemo } from "react";
 import * as m from "@/paraglide/messages.js";
 import { DraggableControl } from "./DraggableControl";
 import { allControlIds, controlRegistry } from "./registry";

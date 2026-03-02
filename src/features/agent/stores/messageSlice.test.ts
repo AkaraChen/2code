@@ -1,16 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import type { AgentSessionState } from "../types";
 import { createMessageSlice, type MessageSlice } from "./messageSlice";
 import { createSessionSlice, type SessionSlice } from "./sessionSlice";
-import type { AgentSessionState } from "../types";
 
-const useMockStore = create<MessageSlice & SessionSlice & { sessions: Record<string, AgentSessionState> }>()(
+const useMockStore = create<
+	MessageSlice &
+		SessionSlice & { sessions: Record<string, AgentSessionState> }
+>()(
 	immer((...a) => ({
 		sessions: {},
 		...(createSessionSlice as any)(...a),
-		...(createMessageSlice as any)(...a)
-	}))
+		...(createMessageSlice as any)(...a),
+	})),
 );
 
 describe("messageSlice", () => {
@@ -21,7 +24,7 @@ describe("messageSlice", () => {
 
 	it("should add user message and prepare streaming turn", () => {
 		useMockStore.getState().addUserMessage("sess1", "Hello");
-		const session = useMockStore.getState().sessions["sess1"];
+		const session = useMockStore.getState().sessions.sess1;
 		expect(session.streamingTurn).toBeDefined();
 		expect(session.streamingTurn?.userMessage).toBe("Hello");
 		expect(session.streamingTurn?.agentContent).toEqual([]);
@@ -29,20 +32,20 @@ describe("messageSlice", () => {
 
 	it("should handle turn completion", () => {
 		useMockStore.getState().addUserMessage("sess1", "Hello");
-		
+
 		useMockStore.getState().handleAgentEvent("sess1", {
 			method: "session/update",
 			params: {
 				update: {
 					sessionUpdate: "agent_message_chunk",
-					content: { type: "text", text: "Hi" }
-				}
-			}
+					content: { type: "text", text: "Hi" },
+				},
+			},
 		} as any);
 
 		useMockStore.getState().handleTurnComplete("sess1", {});
-		
-		const session = useMockStore.getState().sessions["sess1"];
+
+		const session = useMockStore.getState().sessions.sess1;
 		expect(session.streamingTurn).toBeNull();
 		expect(session.isStreaming).toBe(false);
 		expect(session.turns).toHaveLength(1);

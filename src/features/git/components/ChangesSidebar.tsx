@@ -1,8 +1,8 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { use } from "react";
+import * as m from "@/paraglide/messages.js";
 import { GitDiffContext } from "../gitDiffReducer";
 import ChangesFileList from "./ChangesFileList";
-import * as m from "@/paraglide/messages.js";
 
 export default function ChangesSidebar() {
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;

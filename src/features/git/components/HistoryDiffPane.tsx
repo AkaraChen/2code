@@ -1,9 +1,9 @@
 import { Box } from "@chakra-ui/react";
 import { use } from "react";
-import { GitDiffContext } from "../gitDiffReducer";
-import GitDiffPane from "./GitDiffPane";
-import CommitDiffViewer from "./CommitDiffViewer";
 import * as m from "@/paraglide/messages.js";
+import { GitDiffContext } from "../gitDiffReducer";
+import CommitDiffViewer from "./CommitDiffViewer";
+import GitDiffPane from "./GitDiffPane";
 
 interface HistoryDiffPaneProps {
 	visible: boolean;

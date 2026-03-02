@@ -7,14 +7,10 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
-import { homeDir } from "@tauri-apps/api/path";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useState, Suspense } from "react";
-import {
-	RiAddLine,
-	RiGitBranchLine,
-	RiTerminalBoxLine,
-} from "react-icons/ri";
+import { homeDir } from "@tauri-apps/api/path";
+import { Suspense, useEffect, useState } from "react";
+import { RiAddLine, RiGitBranchLine, RiTerminalBoxLine } from "react-icons/ri";
 import AgentMenu from "@/features/git/AgentMenu";
 import { useGitBranch } from "@/features/projects/hooks";
 import { useCreateTab } from "@/features/tabs/hooks";
@@ -43,7 +39,7 @@ function useShortPath(fullPath: string): string {
 	useEffect(() => {
 		homeDir().then((home) => {
 			if (home && fullPath.startsWith(home)) {
-				setShortPath("~" + fullPath.slice(home.length));
+				setShortPath(`~${fullPath.slice(home.length)}`);
 			} else {
 				setShortPath(fullPath);
 			}
@@ -73,96 +69,105 @@ export default function ProjectTopBar({
 
 	return (
 		<>
-		<Flex
-			data-tauri-drag-region
-			align="flex-end"
-			justify="space-between"
-			pl="4"
-			pr="5"
-			pb="1.5"
-			pt="3"
-		>
-			<HStack gap="2">
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<Text as="span" fontWeight="semibold" cursor="default">
-							{projectName}
-						</Text>
-					</Tooltip.Trigger>
-					<Portal>
-						<Tooltip.Positioner>
-							<Tooltip.Content>
-								<Text as="span" fontSize="xs">{profile.worktree_path}</Text>
-							</Tooltip.Content>
-						</Tooltip.Positioner>
-					</Portal>
-				</Tooltip.Root>
-				<Text as="span" color="fg.muted" fontSize="xs" lineClamp={1} maxW="200px">
-					{shortPath}
-				</Text>
-				<Box color="fg.muted">
-					{profile.is_default ? (
-						<Suspense>
-							<GitBranchLabel cwd={profile.worktree_path} />
-						</Suspense>
-					) : (
-						<HStack gap="1">
-							<RiGitBranchLine />
-							<Text as="span">{profile.branch_name}</Text>
-						</HStack>
-					)}
-				</Box>
-			</HStack>
-			<HStack gap="2">
-				{/* New Terminal button */}
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<Button
-							size="xs"
-							variant="subtle"
-							aria-label={m.newTerminal()}
-							disabled={createTab.isPending}
-							onClick={() =>
-								createTab.mutate({
-									type: "terminal",
-									profileId: profile.id,
-									cwd: profile.worktree_path,
-								})
-							}
-						>
-							<RiTerminalBoxLine />
-							<RiAddLine />
-						</Button>
-					</Tooltip.Trigger>
-					<Portal>
-						<Tooltip.Positioner>
-							<Tooltip.Content>{m.newTerminal()}</Tooltip.Content>
-						</Tooltip.Positioner>
-					</Portal>
-				</Tooltip.Root>
+			<Flex
+				data-tauri-drag-region
+				align="flex-end"
+				justify="space-between"
+				pl="4"
+				pr="5"
+				pb="1.5"
+				pt="3"
+			>
+				<HStack gap="2">
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>
+							<Text
+								as="span"
+								fontWeight="semibold"
+								cursor="default"
+							>
+								{projectName}
+							</Text>
+						</Tooltip.Trigger>
+						<Portal>
+							<Tooltip.Positioner>
+								<Tooltip.Content>
+									<Text as="span" fontSize="xs">
+										{profile.worktree_path}
+									</Text>
+								</Tooltip.Content>
+							</Tooltip.Positioner>
+						</Portal>
+					</Tooltip.Root>
+					<Text
+						as="span"
+						color="fg.muted"
+						fontSize="xs"
+						lineClamp={1}
+						maxW="200px"
+					>
+						{shortPath}
+					</Text>
+					<Box color="fg.muted">
+						{profile.is_default ? (
+							<Suspense>
+								<GitBranchLabel cwd={profile.worktree_path} />
+							</Suspense>
+						) : (
+							<HStack gap="1">
+								<RiGitBranchLine />
+								<Text as="span">{profile.branch_name}</Text>
+							</HStack>
+						)}
+					</Box>
+				</HStack>
+				<HStack gap="2">
+					{/* New Terminal button */}
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>
+							<Button
+								size="xs"
+								variant="subtle"
+								aria-label={m.newTerminal()}
+								disabled={createTab.isPending}
+								onClick={() =>
+									createTab.mutate({
+										type: "terminal",
+										profileId: profile.id,
+										cwd: profile.worktree_path,
+									})
+								}
+							>
+								<RiTerminalBoxLine />
+								<RiAddLine />
+							</Button>
+						</Tooltip.Trigger>
+						<Portal>
+							<Tooltip.Positioner>
+								<Tooltip.Content>
+									{m.newTerminal()}
+								</Tooltip.Content>
+							</Tooltip.Positioner>
+						</Portal>
+					</Tooltip.Root>
 
-				{/* New Agent button with dropdown */}
-				<AgentMenu
-					agents={agents}
-					profile={profile}
-					isPending={createTab.isPending}
-					onCreateTab={createTab.mutate}
-				/>
+					{/* New Agent button with dropdown */}
+					<AgentMenu
+						agents={agents}
+						profile={profile}
+						isPending={createTab.isPending}
+						onCreateTab={createTab.mutate}
+					/>
 
-				{/* Existing registry controls */}
-				{activeControls.map((controlId) => {
-					const def = controlRegistry.get(controlId);
-					if (!def) return null;
-					const Comp = def.component;
-					return (
-						<Comp
-							key={controlId}
-							profile={profile}
-						/>
-					);
-				})}
-			</HStack>
-		</Flex>
+					{/* Existing registry controls */}
+					{activeControls.map((controlId) => {
+						const def = controlRegistry.get(controlId);
+						if (!def) return null;
+						const Comp = def.component;
+						return <Comp key={controlId} profile={profile} />;
+					})}
+				</HStack>
+			</Flex>
 		</>
 	);
 }

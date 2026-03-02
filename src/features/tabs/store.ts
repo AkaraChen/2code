@@ -1,14 +1,16 @@
 import { listen } from "@tauri-apps/api/event";
 import { enableMapSet } from "immer";
 import { create } from "zustand";
-import { immer } from "zustand/middleware/immer";
 import { persist } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
-
-import { type ProfileSlice, createProfileSlice } from "./stores/profileSlice";
-import { type TabSlice, createTabSlice } from "./stores/tabSlice";
-import { type PaneSlice, createPaneSlice } from "./stores/paneSlice";
-import { type NotificationSlice, createNotificationSlice } from "./stores/notificationSlice";
+import {
+	createNotificationSlice,
+	type NotificationSlice,
+} from "./stores/notificationSlice";
+import { createPaneSlice, type PaneSlice } from "./stores/paneSlice";
+import { createProfileSlice, type ProfileSlice } from "./stores/profileSlice";
+import { createTabSlice, type TabSlice } from "./stores/tabSlice";
 
 enableMapSet();
 

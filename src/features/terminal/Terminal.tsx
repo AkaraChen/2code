@@ -5,9 +5,20 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+} from "react";
 import { useSettingsStore } from "@/features/settings/stores";
-import { flushPtyOutput, getSessionOutput, resizePty, writeToPty } from "@/generated";
+import {
+	flushPtyOutput,
+	getSessionOutput,
+	resizePty,
+	writeToPty,
+} from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import "@xterm/xterm/css/xterm.css";
 

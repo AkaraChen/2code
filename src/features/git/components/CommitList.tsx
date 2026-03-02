@@ -1,7 +1,7 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { memo } from "react";
 import { RiGitCommitLine } from "react-icons/ri";
-import { P, match } from "ts-pattern";
+import { match, P } from "ts-pattern";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -17,11 +17,26 @@ function formatRelativeTime(isoDate: string): string {
 	const diffYear = Math.floor(diffMonth / 12);
 
 	return match(diffSec)
-		.with(P.when((s) => s < 60), () => m.timeJustNow())
-		.with(P.when(() => diffMin < 60), () => m.timeMinutesAgo({ n: String(diffMin) }))
-		.with(P.when(() => diffHr < 24), () => m.timeHoursAgo({ n: String(diffHr) }))
-		.with(P.when(() => diffDay < 30), () => m.timeDaysAgo({ n: String(diffDay) }))
-		.with(P.when(() => diffMonth < 12), () => m.timeMonthsAgo({ n: String(diffMonth) }))
+		.with(
+			P.when((s) => s < 60),
+			() => m.timeJustNow(),
+		)
+		.with(
+			P.when(() => diffMin < 60),
+			() => m.timeMinutesAgo({ n: String(diffMin) }),
+		)
+		.with(
+			P.when(() => diffHr < 24),
+			() => m.timeHoursAgo({ n: String(diffHr) }),
+		)
+		.with(
+			P.when(() => diffDay < 30),
+			() => m.timeDaysAgo({ n: String(diffDay) }),
+		)
+		.with(
+			P.when(() => diffMonth < 12),
+			() => m.timeMonthsAgo({ n: String(diffMonth) }),
+		)
 		.otherwise(() => m.timeYearsAgo({ n: String(diffYear) }));
 }
 
@@ -32,63 +47,58 @@ interface CommitItemProps {
 	onSelect: (commit: GitCommit, index: number) => void;
 }
 
-const CommitItem = memo(({
-	commit,
-	index,
-	isSelected,
-	onSelect,
-}: CommitItemProps) => {
-	return (
-		<VStack
-			data-index={index}
-			align="stretch"
-			px="3"
-			py="1.5"
-			cursor="pointer"
-			bg={isSelected ? "bg.emphasized" : "transparent"}
-			_hover={{ bg: isSelected ? "bg.emphasized" : "bg.muted" }}
-			onClick={() => onSelect(commit, index)}
-			gap="0.5"
-			userSelect="none"
-		>
-			<Text fontSize="sm" lineClamp={1}>
-				{commit.message}
-			</Text>
-			<HStack gap="2" fontSize="xs" color="fg.muted">
-				<HStack gap="1">
-					<Icon fontSize="xs">
-						<RiGitCommitLine />
-					</Icon>
-					<Text fontFamily="mono">{commit.hash}</Text>
+const CommitItem = memo(
+	({ commit, index, isSelected, onSelect }: CommitItemProps) => {
+		return (
+			<VStack
+				data-index={index}
+				align="stretch"
+				px="3"
+				py="1.5"
+				cursor="pointer"
+				bg={isSelected ? "bg.emphasized" : "transparent"}
+				_hover={{ bg: isSelected ? "bg.emphasized" : "bg.muted" }}
+				onClick={() => onSelect(commit, index)}
+				gap="0.5"
+				userSelect="none"
+			>
+				<Text fontSize="sm" lineClamp={1}>
+					{commit.message}
+				</Text>
+				<HStack gap="2" fontSize="xs" color="fg.muted">
+					<HStack gap="1">
+						<Icon fontSize="xs">
+							<RiGitCommitLine />
+						</Icon>
+						<Text fontFamily="mono">{commit.hash}</Text>
+					</HStack>
+					<Text truncate flex="1">
+						{commit.author.name}
+					</Text>
+					<Text flexShrink={0}>
+						{formatRelativeTime(commit.date)}
+					</Text>
 				</HStack>
-				<Text truncate flex="1">
-					{commit.author.name}
-				</Text>
-				<Text flexShrink={0}>
-					{formatRelativeTime(commit.date)}
-				</Text>
-			</HStack>
-			<HStack gap="2" fontSize="xs">
-				{commit.files_changed > 0 && (
-					<Text color="fg.muted">
-						{commit.files_changed}{" "}
-						{commit.files_changed === 1
-							? m.fileChanged()
-							: m.filesChanged()}
-					</Text>
-				)}
-				{commit.insertions > 0 && (
-					<Text color="green.solid">
-						+{commit.insertions}
-					</Text>
-				)}
-				{commit.deletions > 0 && (
-					<Text color="red.solid">-{commit.deletions}</Text>
-				)}
-			</HStack>
-		</VStack>
-	);
-});
+				<HStack gap="2" fontSize="xs">
+					{commit.files_changed > 0 && (
+						<Text color="fg.muted">
+							{commit.files_changed}{" "}
+							{commit.files_changed === 1
+								? m.fileChanged()
+								: m.filesChanged()}
+						</Text>
+					)}
+					{commit.insertions > 0 && (
+						<Text color="green.solid">+{commit.insertions}</Text>
+					)}
+					{commit.deletions > 0 && (
+						<Text color="red.solid">-{commit.deletions}</Text>
+					)}
+				</HStack>
+			</VStack>
+		);
+	},
+);
 
 interface CommitListProps {
 	commits: GitCommit[];

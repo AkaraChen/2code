@@ -10,8 +10,8 @@ import {
 } from "@chakra-ui/react";
 import { Suspense } from "react";
 import { useForm } from "react-hook-form";
-import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 import * as m from "@/paraglide/messages.js";
+import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 
 interface ProjectSettingsDialogProps {
 	isOpen: boolean;

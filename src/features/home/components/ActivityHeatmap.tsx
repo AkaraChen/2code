@@ -1,7 +1,7 @@
 import { Box, HStack, Text, VStack, Portal, Tooltip } from "@chakra-ui/react";
 import { useMemo } from "react";
-import * as m from "@/paraglide/messages.js";
 import type { DailyActivity } from "@/generated/types";
+import * as m from "@/paraglide/messages.js";
 
 const WEEKS = 13; // ~90 days
 const DAYS_PER_WEEK = 7;
@@ -92,8 +92,8 @@ export function ActivityHeatmap({ data }: { data: DailyActivity[] }) {
 									<Tooltip.Positioner>
 										<Tooltip.Content>
 											<Text fontSize="xs">
-												{cell.date}:{" "}
-												{cell.terminal} {m.statsTerminal()},{" "}
+												{cell.date}: {cell.terminal}{" "}
+												{m.statsTerminal()},{" "}
 												{cell.agent} {m.statsAgent()}
 											</Text>
 										</Tooltip.Content>

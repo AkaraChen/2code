@@ -72,7 +72,9 @@ export default function AssetsPage() {
 										</SegmentGroup.Item>
 									</Tooltip.Trigger>
 									<Tooltip.Positioner>
-										<Tooltip.Content>{m.wip()}</Tooltip.Content>
+										<Tooltip.Content>
+											{m.wip()}
+										</Tooltip.Content>
 									</Tooltip.Positioner>
 								</Tooltip.Root>
 								<Tooltip.Root>
@@ -85,7 +87,9 @@ export default function AssetsPage() {
 										</SegmentGroup.Item>
 									</Tooltip.Trigger>
 									<Tooltip.Positioner>
-										<Tooltip.Content>{m.wip()}</Tooltip.Content>
+										<Tooltip.Content>
+											{m.wip()}
+										</Tooltip.Content>
 									</Tooltip.Positioner>
 								</Tooltip.Root>
 								<SegmentGroup.Item value="agents">
@@ -133,17 +137,13 @@ export default function AssetsPage() {
 								<SnippetsTab />
 							</Suspense>
 						)}
-						{filter === "agents" && (
-							<AgentsTab mode="manage" />
-						)}
+						{filter === "agents" && <AgentsTab mode="manage" />}
 					</>
 				)}
 
 				{mode === "store" && (
 					<>
-						{filter === "agents" && (
-							<AgentsTab mode="store" />
-						)}
+						{filter === "agents" && <AgentsTab mode="store" />}
 						{filter !== "agents" && (
 							<WipSection
 								title={

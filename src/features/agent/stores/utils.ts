@@ -1,10 +1,9 @@
-import consola from "consola";
-import { match } from "ts-pattern";
 import type { SessionNotification } from "@agentclientprotocol/sdk";
+import { match } from "ts-pattern";
 import type {
+	AgentMessageContent,
 	AgentSessionState,
 	StreamingTurn,
-	AgentMessageContent,
 	ToolCall,
 	ToolCallUpdate,
 } from "../types";
@@ -75,8 +74,9 @@ export function applySessionUpdate(
 			(u) => {
 				const last = content[content.length - 1];
 				if (last && last.type === "text") {
-					(last as { type: "text"; text: string; role: string }).text +=
-						u.content.text;
+					(
+						last as { type: "text"; text: string; role: string }
+					).text += u.content.text;
 				} else {
 					content.push({
 						type: "text",
@@ -113,7 +113,10 @@ export function applySessionUpdate(
 					item.data.toolCallId === toolCallUpdate.toolCallId,
 			);
 			if (existing) {
-				existing.data = mergeToolCallUpdate(existing.data, toolCallUpdate);
+				existing.data = mergeToolCallUpdate(
+					existing.data,
+					toolCallUpdate,
+				);
 			} else {
 				content.push({
 					type: "tool_call",
@@ -154,7 +157,10 @@ export function applySessionUpdate(
 /**
  * Replay an agent event into a StreamingTurn (used for restoration)
  */
-export function replayAgentEvent(streamingTurn: StreamingTurn, payload: unknown) {
+export function replayAgentEvent(
+	streamingTurn: StreamingTurn,
+	payload: unknown,
+) {
 	if (typeof payload !== "object" || payload === null) return;
 
 	const obj = payload as Record<string, unknown>;

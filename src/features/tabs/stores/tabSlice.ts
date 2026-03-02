@@ -7,8 +7,16 @@ export interface TabSlice {
 	closeTab: (profileId: string, tabId: string) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
-	replaceTab: (profileId: string, oldTabId: string, newTab: ProfileTab) => void;
-	updateAgentSessionId: (profileId: string, tabId: string, newSessionId: string) => void;
+	replaceTab: (
+		profileId: string,
+		oldTabId: string,
+		newTab: ProfileTab,
+	) => void;
+	updateAgentSessionId: (
+		profileId: string,
+		tabId: string,
+		newSessionId: string,
+	) => void;
 }
 
 export const createTabSlice: StateCreator<

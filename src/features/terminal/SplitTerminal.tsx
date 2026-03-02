@@ -1,9 +1,9 @@
 import { Box, Flex, IconButton } from "@chakra-ui/react";
 import { RiAddLine, RiCloseLine } from "react-icons/ri";
-import * as m from "@/paraglide/messages.js";
 import { useClosePane, useCreatePane } from "@/features/tabs/hooks";
 import { useTabStore } from "@/features/tabs/store";
 import type { TerminalTab } from "@/features/tabs/types";
+import * as m from "@/paraglide/messages.js";
 import { Terminal } from "./Terminal";
 
 interface SplitTerminalProps {
@@ -31,12 +31,16 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 
 	const handleFocusPane = (paneSessionId: string) => {
 		if (paneSessionId !== activePaneId) {
-			useTabStore.getState().setActivePane(profileId, tab.id, paneSessionId);
+			useTabStore
+				.getState()
+				.setActivePane(profileId, tab.id, paneSessionId);
 		}
 	};
 
 	const handleTitleChange = (paneSessionId: string, title: string) => {
-		useTabStore.getState().updatePaneTitle(profileId, tab.id, paneSessionId, title);
+		useTabStore
+			.getState()
+			.updatePaneTitle(profileId, tab.id, paneSessionId, title);
 	};
 
 	// 1 pane: full screen
@@ -50,7 +54,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[0].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[0].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[0].sessionId, title)
+					}
 				/>
 			</Box>
 		);
@@ -67,7 +73,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[0].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[0].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[0].sessionId, title)
+					}
 				/>
 				<PaneDivider orientation="vertical" />
 				<Pane
@@ -77,7 +85,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[1].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[1].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[1].sessionId, title)
+					}
 				/>
 			</Flex>
 		);
@@ -94,7 +104,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[0].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[0].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[0].sessionId, title)
+					}
 				/>
 				<PaneDivider orientation="vertical" />
 				<Pane
@@ -104,7 +116,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[1].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[1].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[1].sessionId, title)
+					}
 				/>
 				<PaneDivider orientation="vertical" />
 				<Pane
@@ -114,7 +128,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[2].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[2].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[2].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[2].sessionId, title)
+					}
 				/>
 			</Flex>
 		);
@@ -131,7 +147,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[0].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[0].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[0].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[0].sessionId, title)
+					}
 				/>
 				<PaneDivider orientation="vertical" />
 				<Pane
@@ -141,7 +159,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[1].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[1].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[1].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[1].sessionId, title)
+					}
 				/>
 			</Flex>
 			<PaneDivider orientation="horizontal" />
@@ -153,7 +173,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[2].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[2].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[2].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[2].sessionId, title)
+					}
 				/>
 				<PaneDivider orientation="vertical" />
 				<Pane
@@ -163,7 +185,9 @@ export function SplitTerminal({ profileId, tab, cwd }: SplitTerminalProps) {
 					onFocus={() => handleFocusPane(panes[3].sessionId)}
 					onSplit={handleSplit}
 					onClose={() => handleClosePane(panes[3].sessionId)}
-					onTitleChange={(title) => handleTitleChange(panes[3].sessionId, title)}
+					onTitleChange={(title) =>
+						handleTitleChange(panes[3].sessionId, title)
+					}
 				/>
 			</Flex>
 		</Flex>
@@ -248,7 +272,11 @@ function Pane({
 	);
 }
 
-function PaneDivider({ orientation }: { orientation: "vertical" | "horizontal" }) {
+function PaneDivider({
+	orientation,
+}: {
+	orientation: "vertical" | "horizontal";
+}) {
 	if (orientation === "vertical") {
 		return <Box w="1px" bg="border" flexShrink={0} />;
 	}

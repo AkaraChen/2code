@@ -21,13 +21,24 @@ interface PlanBlockProps {
 
 export function PlanBlock({ plan }: PlanBlockProps) {
 	return (
-		<Box maxW="80%" w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
+		<Box
+			maxW="80%"
+			w="full"
+			border="1px solid"
+			borderColor="border.subtle"
+			borderRadius="md"
+			overflow="hidden"
+		>
 			<Box px="4" py="3" bg="bg.muted">
 				<Flex align="center" gap="2" mb="3">
 					<Icon fontSize="md" color="fg.default">
 						<LuClipboardList />
 					</Icon>
-					<Text fontSize="sm" fontWeight="semibold" color="fg.default">
+					<Text
+						fontSize="sm"
+						fontWeight="semibold"
+						color="fg.default"
+					>
 						{m.agentPlan()}
 					</Text>
 				</Flex>
@@ -45,8 +56,12 @@ export function PlanBlock({ plan }: PlanBlockProps) {
 							align="center"
 							gap="3"
 						>
-							<Text fontSize="lg">{STATUS_ICON[entry.status]}</Text>
-							<Text fontSize="lg">{PRIORITY_ICON[entry.priority]}</Text>
+							<Text fontSize="lg">
+								{STATUS_ICON[entry.status]}
+							</Text>
+							<Text fontSize="lg">
+								{PRIORITY_ICON[entry.priority]}
+							</Text>
 							<Text flex="1" fontSize="sm">
 								{entry.content}
 							</Text>

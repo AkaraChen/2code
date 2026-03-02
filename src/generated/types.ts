@@ -7,550 +7,498 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-import type { Channel } from '@tauri-apps/api/core';
-
+import type { Channel } from "@tauri-apps/api/core";
 
 export interface HomepageStats {
-  totalProjects: number;
-  sessionsToday: number;
-  activeTimeTodaySeconds: number;
-  currentStreakDays: number;
-  recentSessions: SessionStat[];
-  dailyActivity: DailyActivity[];
-  topProjects: ProjectActivitySummary[];
+	totalProjects: number;
+	sessionsToday: number;
+	activeTimeTodaySeconds: number;
+	currentStreakDays: number;
+	recentSessions: SessionStat[];
+	dailyActivity: DailyActivity[];
+	topProjects: ProjectActivitySummary[];
 }
 
 export interface PtyConfig {
-  shell: string;
-  cwd: string;
-  rows: number;
-  cols: number;
+	shell: string;
+	cwd: string;
+	rows: number;
+	cols: number;
 }
 
 export interface AgentSessionInfo {
-  id: string;
-  agent: string;
-  acp_session_id: string;
+	id: string;
+	agent: string;
+	acp_session_id: string;
 }
 
 export interface SystemFont {
-  family: string;
-  is_mono: boolean;
+	family: string;
+	is_mono: boolean;
 }
 
 export interface ProjectConfig {
-  setup_script: string[];
-  teardown_script: string[];
-  init_script: string[];
+	setup_script: string[];
+	teardown_script: string[];
+	init_script: string[];
 }
 
 export interface Profile {
-  id: string;
-  project_id: string;
-  branch_name: string;
-  worktree_path: string;
-  created_at: string;
-  is_default: boolean;
+	id: string;
+	project_id: string;
+	branch_name: string;
+	worktree_path: string;
+	created_at: string;
+	is_default: boolean;
 }
 
 export interface RegistryAgentInfo {
-  id: string;
-  name: string;
-  version: string;
-  description?: string | null;
-  icon?: string | null;
-  repository?: string | null;
-  license?: string | null;
-  authors: string[];
-  distribution: string;
+	id: string;
+	name: string;
+	version: string;
+	description?: string | null;
+	icon?: string | null;
+	repository?: string | null;
+	license?: string | null;
+	authors: string[];
+	distribution: string;
 }
 
 export interface AgentSessionEventRecord {
-  id: string;
-  event_index: number;
-  session_id: string;
-  created_at: number;
-  sender: string;
-  payload_json: string;
-  turn_index: number;
+	id: string;
+	event_index: number;
+	session_id: string;
+	created_at: number;
+	sender: string;
+	payload_json: string;
+	turn_index: number;
 }
 
 export interface ProjectWithProfiles {
-  id: string;
-  name: string;
-  folder: string;
-  created_at: string;
-  profiles: Profile[];
+	id: string;
+	name: string;
+	folder: string;
+	created_at: string;
+	profiles: Profile[];
 }
 
 export interface Snippet {
-  id: string;
-  name: string;
-  trigger: string;
-  content: string;
-  created_at: string;
+	id: string;
+	name: string;
+	trigger: string;
+	content: string;
+	created_at: string;
 }
 
 export interface MarketplaceAgent {
-  id: string;
-  name: string;
-  version: string;
-  description?: string | null;
-  icon_url?: string | null;
-  repository?: string | null;
-  license?: string | null;
-  authors_json: string;
-  added_at: string;
-  distribution_json: string;
+	id: string;
+	name: string;
+	version: string;
+	description?: string | null;
+	icon_url?: string | null;
+	repository?: string | null;
+	license?: string | null;
+	authors_json: string;
+	added_at: string;
+	distribution_json: string;
 }
 
 export interface SessionStat {
-  id: string;
-  session_type: string;
-  profile_id: string;
-  project_id: string;
-  project_name: string;
-  branch_name?: string | null;
-  shell?: string | null;
-  cwd?: string | null;
-  agent?: string | null;
-  event_count?: number | null;
-  user_message_count?: number | null;
-  agent_message_count?: number | null;
-  created_at: number;
-  closed_at?: number | null;
-  duration_seconds?: number | null;
+	id: string;
+	session_type: string;
+	profile_id: string;
+	project_id: string;
+	project_name: string;
+	branch_name?: string | null;
+	shell?: string | null;
+	cwd?: string | null;
+	agent?: string | null;
+	event_count?: number | null;
+	user_message_count?: number | null;
+	agent_message_count?: number | null;
+	created_at: number;
+	closed_at?: number | null;
+	duration_seconds?: number | null;
 }
 
 export interface WatchEvent {
-  project_id: string;
+	project_id: string;
 }
 
 export interface AgentSessionRecord {
-  id: string;
-  agent: string;
-  acp_session_id: string;
-  profile_id: string;
-  created_at: number;
-  destroyed_at?: number | null;
-  session_init_json?: string | null;
+	id: string;
+	agent: string;
+	acp_session_id: string;
+	profile_id: string;
+	created_at: number;
+	destroyed_at?: number | null;
+	session_init_json?: string | null;
 }
 
 export interface Skill {
-  name: string;
-  description: string;
-  content: string;
+	name: string;
+	description: string;
+	content: string;
 }
 
 export interface ProjectActivitySummary {
-  projectId: string;
-  projectName: string;
-  sessionCount: number;
-  totalSeconds: number;
-  lastActiveAt: number;
+	projectId: string;
+	projectName: string;
+	sessionCount: number;
+	totalSeconds: number;
+	lastActiveAt: number;
 }
 
 export interface AgentSessionMeta {
-  profileId: string;
-  agent: string;
+	profileId: string;
+	agent: string;
 }
 
 export interface Project {
-  id: string;
-  name: string;
-  folder: string;
-  created_at: string;
+	id: string;
+	name: string;
+	folder: string;
+	created_at: string;
 }
 
 export interface GitAuthor {
-  name: string;
-  email: string;
+	name: string;
+	email: string;
 }
 
 export interface PtySessionRecord {
-  id: string;
-  profile_id: string;
-  title: string;
-  shell: string;
-  cwd: string;
-  created_at: string;
-  closed_at?: string | null;
-  cols: number;
-  rows: number;
+	id: string;
+	profile_id: string;
+	title: string;
+	shell: string;
+	cwd: string;
+	created_at: string;
+	closed_at?: string | null;
+	cols: number;
+	rows: number;
 }
 
 export interface AgentModelState {
-  supported: boolean;
-  current_model_id?: string | null;
-  available_models: AgentModelOption[];
+	supported: boolean;
+	current_model_id?: string | null;
+	available_models: AgentModelOption[];
 }
 
 export interface UpdateSnippet {
-  name?: string | null;
-  trigger?: string | null;
-  content?: string | null;
+	name?: string | null;
+	trigger?: string | null;
+	content?: string | null;
 }
 
 export interface DailyActivity {
-  date: string;
-  project_id: string;
-  terminal_sessions: number;
-  agent_sessions: number;
-  terminal_seconds: number;
-  agent_seconds: number;
+	date: string;
+	project_id: string;
+	terminal_sessions: number;
+	agent_sessions: number;
+	terminal_seconds: number;
+	agent_seconds: number;
 }
 
 export interface AgentModelOption {
-  model_id: string;
-  name: string;
-  description?: string | null;
+	model_id: string;
+	name: string;
+	description?: string | null;
 }
 
 export interface AgentStatusInfo {
-  id: string;
-  display_name: string;
-  native_required: boolean;
-  native_installed: boolean;
-  native_version?: string | null;
-  acp_installed: boolean;
-  acp_version?: string | null;
-  ready: boolean;
+	id: string;
+	display_name: string;
+	native_required: boolean;
+	native_installed: boolean;
+	native_version?: string | null;
+	acp_installed: boolean;
+	acp_version?: string | null;
+	ready: boolean;
 }
 
 export interface LogEntry {
-  timestamp: number;
-  level: string;
-  source: string;
-  message: string;
+	timestamp: number;
+	level: string;
+	source: string;
+	message: string;
 }
 
 export interface CredentialEntry {
-  source: string;
-  provider: string;
-  auth_type: string;
-  key_preview: string;
+	source: string;
+	provider: string;
+	auth_type: string;
+	key_preview: string;
 }
 
 export interface AddMarketplaceAgentInput {
-  id: string;
-  name: string;
-  version: string;
-  description?: string | null;
-  iconUrl?: string | null;
-  repository?: string | null;
-  license?: string | null;
-  authors: string[];
-  distribution: string;
+	id: string;
+	name: string;
+	version: string;
+	description?: string | null;
+	iconUrl?: string | null;
+	repository?: string | null;
+	license?: string | null;
+	authors: string[];
+	distribution: string;
 }
 
 export interface GitCommit {
-  hash: string;
-  full_hash: string;
-  author: GitAuthor;
-  date: string;
-  message: string;
-  files_changed: number;
-  insertions: number;
-  deletions: number;
+	hash: string;
+	full_hash: string;
+	author: GitAuthor;
+	date: string;
+	message: string;
+	files_changed: number;
+	insertions: number;
+	deletions: number;
 }
 
 export interface PtySessionMeta {
-  profileId: string;
-  title: string;
+	profileId: string;
+	title: string;
 }
 
 export interface CredentialInfo {
-  anthropic?: CredentialEntry | null;
-  openai?: CredentialEntry | null;
+	anthropic?: CredentialEntry | null;
+	openai?: CredentialEntry | null;
 }
 
 export type GithubPrState = "Open" | "Closed" | "Merged";
 
 export interface GithubPrInfo {
-  number: number;
-  url: string;
-  state: GithubPrState;
+	number: number;
+	url: string;
+	state: GithubPrState;
 }
 
 export interface GithubPrStatus {
-  is_github_host: boolean;
-  branch: string;
-  is_main_branch: boolean;
-  worktree_clean: boolean;
-  status_summary: string;
-  pr?: GithubPrInfo | null;
-  create_url?: string | null;
+	is_github_host: boolean;
+	branch: string;
+	is_main_branch: boolean;
+	worktree_clean: boolean;
+	status_summary: string;
+	pr?: GithubPrInfo | null;
+	create_url?: string | null;
 }
-
-
 
 export interface PlaySystemSoundParams {
-  name: string;
-  [key: string]: unknown;
+	name: string;
+	[key: string]: unknown;
 }
-
 
 export interface CreateProjectTemporaryParams {
-  name?: string | null;
-  [key: string]: unknown;
+	name?: string | null;
+	[key: string]: unknown;
 }
-
 
 export interface CreateProjectFromFolderParams {
-  name: string;
-  folder: string;
-  [key: string]: unknown;
+	name: string;
+	folder: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface UpdateProjectParams {
-  id: string;
-  name?: string | null;
-  folder?: string | null;
-  [key: string]: unknown;
+	id: string;
+	name?: string | null;
+	folder?: string | null;
+	[key: string]: unknown;
 }
 
-
 export interface GetGitBranchParams {
-  folder: string;
-  [key: string]: unknown;
+	folder: string;
+	[key: string]: unknown;
 }
 
 export interface GetGithubPrStatusParams {
-  folder: string;
-  [key: string]: unknown;
+	folder: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetGitDiffParams {
-  profileId: string;
-  [key: string]: unknown;
+	profileId: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetGitLogParams {
-  profileId: string;
-  limit?: number | null;
-  [key: string]: unknown;
+	profileId: string;
+	limit?: number | null;
+	[key: string]: unknown;
 }
-
 
 export interface GetCommitDiffParams {
-  profileId: string;
-  commitHash: string;
-  [key: string]: unknown;
+	profileId: string;
+	commitHash: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteProjectParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetProjectConfigParams {
-  projectId: string;
-  [key: string]: unknown;
+	projectId: string;
+	[key: string]: unknown;
 }
-
 
 export interface SaveProjectConfigParams {
-  projectId: string;
-  config: ProjectConfig;
-  [key: string]: unknown;
+	projectId: string;
+	config: ProjectConfig;
+	[key: string]: unknown;
 }
-
 
 export interface StartDebugLogParams {
-  onEvent: Channel<LogEntry>;
-  [key: string]: unknown;
+	onEvent: Channel<LogEntry>;
+	[key: string]: unknown;
 }
-
-
-
 
 export interface GetSkillParams {
-  name: string;
-  [key: string]: unknown;
+	name: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteSkillParams {
-  name: string;
-  [key: string]: unknown;
+	name: string;
+	[key: string]: unknown;
 }
-
 
 export interface CreatePtySessionParams {
-  meta: PtySessionMeta;
-  config: PtyConfig;
-  [key: string]: unknown;
+	meta: PtySessionMeta;
+	config: PtyConfig;
+	[key: string]: unknown;
 }
-
 
 export interface WriteToPtyParams {
-  sessionId: string;
-  data: string;
-  [key: string]: unknown;
+	sessionId: string;
+	data: string;
+	[key: string]: unknown;
 }
-
 
 export interface ResizePtyParams {
-  sessionId: string;
-  rows: number;
-  cols: number;
-  [key: string]: unknown;
+	sessionId: string;
+	rows: number;
+	cols: number;
+	[key: string]: unknown;
 }
-
 
 export interface ClosePtySessionParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface ListProjectSessionsParams {
-  projectId: string;
-  [key: string]: unknown;
+	projectId: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeletePtySessionRecordParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetSessionOutputParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface FlushPtyOutputParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface CreateSnippetParams {
-  name: string;
-  trigger: string;
-  content: string;
-  [key: string]: unknown;
+	name: string;
+	trigger: string;
+	content: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface UpdateSnippetParams {
-  id: string;
-  changeset: UpdateSnippet;
-  [key: string]: unknown;
+	id: string;
+	changeset: UpdateSnippet;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteSnippetParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
 
 export interface CreateProfileParams {
-  projectId: string;
-  branchName: string;
-  [key: string]: unknown;
+	projectId: string;
+	branchName: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteProfileParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface InstallAgentParams {
-  agent: string;
-  [key: string]: unknown;
+	agent: string;
+	[key: string]: unknown;
 }
-
-
 
 export interface SendAgentPromptParams {
-  sessionId: string;
-  content: string;
-  [key: string]: unknown;
+	sessionId: string;
+	content: string;
+	[key: string]: unknown;
 }
-
 
 export interface GetAgentSessionModelsParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface SetAgentSessionModelParams {
-  sessionId: string;
-  modelId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	modelId: string;
+	[key: string]: unknown;
 }
-
 
 export interface CloseAgentSessionParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface CreateAgentSessionPersistentParams {
-  meta: AgentSessionMeta;
-  cwd: string;
-  [key: string]: unknown;
+	meta: AgentSessionMeta;
+	cwd: string;
+	[key: string]: unknown;
 }
-
 
 export interface ReconnectAgentSessionParams {
-  oldSessionId: string;
-  [key: string]: unknown;
+	oldSessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface ListProjectAgentSessionsParams {
-  projectId: string;
-  [key: string]: unknown;
+	projectId: string;
+	[key: string]: unknown;
 }
-
 
 export interface DeleteAgentSessionRecordParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface ListAgentSessionEventsParams {
-  sessionId: string;
-  [key: string]: unknown;
+	sessionId: string;
+	[key: string]: unknown;
 }
-
 
 export interface WatchProjectsParams {
-  onEvent: Channel<WatchEvent>;
-  [key: string]: unknown;
+	onEvent: Channel<WatchEvent>;
+	[key: string]: unknown;
 }
-
-
-
 
 export interface AddMarketplaceAgentParams {
-  input: AddMarketplaceAgentInput;
-  [key: string]: unknown;
+	input: AddMarketplaceAgentInput;
+	[key: string]: unknown;
 }
-
 
 export interface RemoveMarketplaceAgentParams {
-  id: string;
-  [key: string]: unknown;
+	id: string;
+	[key: string]: unknown;
 }
-
-

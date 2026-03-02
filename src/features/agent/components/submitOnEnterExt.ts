@@ -1,6 +1,6 @@
 import { Extension } from "@tiptap/core";
 
-declare module '@tiptap/core' {
+declare module "@tiptap/core" {
 	interface Storage {
 		submitOnEnter: SubmitOnEnterStorage;
 	}
@@ -20,7 +20,8 @@ export const submitOnEnterExt = Extension.create({
 	addKeyboardShortcuts() {
 		return {
 			Enter: ({ editor }) => {
-				const storage = editor.storage.submitOnEnter as SubmitOnEnterStorage;
+				const storage = editor.storage
+					.submitOnEnter as SubmitOnEnterStorage;
 				const snippetTrigger = editor.storage as {
 					snippetTrigger?: { active?: boolean };
 				};

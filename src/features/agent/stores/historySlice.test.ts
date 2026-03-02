@@ -1,16 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import type { AgentSessionState } from "../types";
 import { createHistorySlice, type HistorySlice } from "./historySlice";
 import { createSessionSlice, type SessionSlice } from "./sessionSlice";
-import type { AgentSessionState } from "../types";
 
-const useMockStore = create<HistorySlice & SessionSlice & { sessions: Record<string, AgentSessionState> }>()(
+const useMockStore = create<
+	HistorySlice &
+		SessionSlice & { sessions: Record<string, AgentSessionState> }
+>()(
 	immer((...a) => ({
 		sessions: {},
 		...(createSessionSlice as any)(...a),
-		...(createHistorySlice as any)(...a)
-	}))
+		...(createHistorySlice as any)(...a),
+	})),
 );
 
 describe("historySlice", () => {
@@ -27,7 +30,7 @@ describe("historySlice", () => {
 			event_index: 0,
 			sender: "user",
 			payload_json: JSON.stringify({ text: "Hello from user" }),
-			created_at: 1000
+			created_at: 1000,
 		};
 
 		const agentEvent = {
@@ -41,16 +44,18 @@ describe("historySlice", () => {
 				params: {
 					update: {
 						sessionUpdate: "agent_message_chunk",
-						content: { type: "text", text: "Hello" }
-					}
-				}
+						content: { type: "text", text: "Hello" },
+					},
+				},
 			}),
-			created_at: 1001
+			created_at: 1001,
 		};
 
-		useMockStore.getState().restoreFromEvents("sess1", [userEvent, agentEvent]);
+		useMockStore
+			.getState()
+			.restoreFromEvents("sess1", [userEvent, agentEvent]);
 
-		const session = useMockStore.getState().sessions["sess1"];
+		const session = useMockStore.getState().sessions.sess1;
 		expect(session.turns).toHaveLength(1);
 		expect(session.turns[0].userMessage).toBe("Hello from user");
 		expect(session.turns[0].agentContent).toHaveLength(1);

@@ -1,5 +1,5 @@
 import { startTransition, useCallback } from "react";
-import { P, match } from "ts-pattern";
+import { match, P } from "ts-pattern";
 import type { GitCommit } from "@/generated";
 import type { GitDiffAction, GitDiffState } from "../gitDiffReducer";
 
@@ -24,98 +24,104 @@ export function useGitDiffKeyboard({
 	commits,
 	sidebarRef,
 }: UseGitDiffKeyboardParams) {
-	return useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-		const ctx = {
-			key: e.key,
-			activeTab: state.activeTab,
-			hasCommit: state.selectedCommit !== null,
-		};
+	return useCallback(
+		(e: React.KeyboardEvent<HTMLDivElement>) => {
+			const ctx = {
+				key: e.key,
+				activeTab: state.activeTab,
+				hasCommit: state.selectedCommit !== null,
+			};
 
-		match(ctx)
-			.with(
-				{ key: P.union("ArrowDown", "ArrowUp"), activeTab: "changes" },
-				({ key }) => {
-					e.preventDefault();
-					dispatch({
-						type: "stepIndex",
-						target: "file",
-						delta: key === "ArrowDown" ? 1 : -1,
-						count: changesFilesCount,
-					});
-				},
-			)
-			.with(
-				{
-					key: P.union("ArrowDown", "ArrowUp"),
-					activeTab: "history",
-					hasCommit: true,
-				},
-				({ key }) => {
-					e.preventDefault();
-					dispatch({
-						type: "stepIndex",
-						target: "commitFile",
-						delta: key === "ArrowDown" ? 1 : -1,
-						count:
-							sidebarRef.current?.querySelectorAll(
-								"[data-index]",
-							).length ?? 0,
-					});
-				},
-			)
-			.with(
-				{
-					key: P.union("ArrowDown", "ArrowUp"),
-					activeTab: "history",
-					hasCommit: false,
-				},
-				({ key }) => {
-					e.preventDefault();
-					dispatch({
-						type: "stepIndex",
-						target: "commit",
-						delta: key === "ArrowDown" ? 1 : -1,
-						count: commits.length,
-					});
-				},
-			)
-			.with(
-				{ key: "Enter", activeTab: "history", hasCommit: false },
-				() => {
-					e.preventDefault();
-					if (
-						commits.length > 0 &&
-						state.selectedCommitIndex < commits.length
-					) {
-						startTransition(() => {
-							dispatch({
-								type: "selectCommit",
-								commit: commits[state.selectedCommitIndex],
-								index: state.selectedCommitIndex,
-							});
+			match(ctx)
+				.with(
+					{
+						key: P.union("ArrowDown", "ArrowUp"),
+						activeTab: "changes",
+					},
+					({ key }) => {
+						e.preventDefault();
+						dispatch({
+							type: "stepIndex",
+							target: "file",
+							delta: key === "ArrowDown" ? 1 : -1,
+							count: changesFilesCount,
 						});
-					}
-				},
-			)
-			.with(
-				{ key: "Backspace", activeTab: "history", hasCommit: true },
-				() => {
-					e.preventDefault();
-					startTransition(() => {
-						dispatch({ type: "commitBack" });
-					});
-				},
-			)
-			.with(
-				{ key: "Escape", activeTab: "history", hasCommit: true },
-				() => {
-					e.preventDefault();
-					e.stopPropagation();
-					startTransition(() => {
-						dispatch({ type: "commitBack" });
-					});
-				},
-			)
-			.otherwise(() => {});
-	}, [state, dispatch, changesFilesCount, commits, sidebarRef]);
+					},
+				)
+				.with(
+					{
+						key: P.union("ArrowDown", "ArrowUp"),
+						activeTab: "history",
+						hasCommit: true,
+					},
+					({ key }) => {
+						e.preventDefault();
+						dispatch({
+							type: "stepIndex",
+							target: "commitFile",
+							delta: key === "ArrowDown" ? 1 : -1,
+							count:
+								sidebarRef.current?.querySelectorAll(
+									"[data-index]",
+								).length ?? 0,
+						});
+					},
+				)
+				.with(
+					{
+						key: P.union("ArrowDown", "ArrowUp"),
+						activeTab: "history",
+						hasCommit: false,
+					},
+					({ key }) => {
+						e.preventDefault();
+						dispatch({
+							type: "stepIndex",
+							target: "commit",
+							delta: key === "ArrowDown" ? 1 : -1,
+							count: commits.length,
+						});
+					},
+				)
+				.with(
+					{ key: "Enter", activeTab: "history", hasCommit: false },
+					() => {
+						e.preventDefault();
+						if (
+							commits.length > 0 &&
+							state.selectedCommitIndex < commits.length
+						) {
+							startTransition(() => {
+								dispatch({
+									type: "selectCommit",
+									commit: commits[state.selectedCommitIndex],
+									index: state.selectedCommitIndex,
+								});
+							});
+						}
+					},
+				)
+				.with(
+					{ key: "Backspace", activeTab: "history", hasCommit: true },
+					() => {
+						e.preventDefault();
+						startTransition(() => {
+							dispatch({ type: "commitBack" });
+						});
+					},
+				)
+				.with(
+					{ key: "Escape", activeTab: "history", hasCommit: true },
+					() => {
+						e.preventDefault();
+						e.stopPropagation();
+						startTransition(() => {
+							dispatch({ type: "commitBack" });
+						});
+					},
+				)
+				.otherwise(() => {});
+		},
+		[state, dispatch, changesFilesCount, commits, sidebarRef],
+	);
 }

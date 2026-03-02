@@ -1,13 +1,17 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { enableMapSet } from "immer";
+import { beforeEach, describe, expect, it } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { enableMapSet } from "immer";
 
 enableMapSet();
-import { createNotificationSlice, type NotificationSlice } from "./notificationSlice";
+
+import {
+	createNotificationSlice,
+	type NotificationSlice,
+} from "./notificationSlice";
 
 const useMockStore = create<NotificationSlice>()(
-	immer((...a) => (createNotificationSlice as any)(...a))
+	immer((...a) => (createNotificationSlice as any)(...a)),
 );
 
 describe("notificationSlice", () => {

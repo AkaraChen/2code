@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
+import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import { sendAgentPrompt } from "@/generated";
 import type { AgentTabSession } from "./AgentTabSession";
-import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import { useAgentStore } from "./store";
 
 export function useSendAgentPrompt() {

@@ -1,7 +1,7 @@
 import type { AgentNotification } from "@agentclientprotocol/sdk";
-import consola from "consola";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
+import consola from "consola";
 import { nanoid } from "nanoid";
 import {
 	closeAgentSession,
@@ -13,10 +13,10 @@ import {
 	reconnectAgentSession,
 	setAgentSessionModel,
 } from "@/generated";
-import { useAgentStore } from "./store";
 import { useSettingsStore } from "../settings/stores";
 import { TabSession } from "../tabs/session";
 import type { AgentTab } from "../tabs/types";
+import { useAgentStore } from "./store";
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
@@ -116,16 +116,18 @@ export class AgentTabSession extends TabSession {
 			// Update the sessionId on the existing tab (nanoid tab id stays stable)
 			const profile = this.tabStore.profiles[this.profileId];
 			const agentTab = profile?.tabs.find(
-				(t): t is AgentTab => t.type === "agent" && t.sessionId === this.id,
+				(t): t is AgentTab =>
+					t.type === "agent" && t.sessionId === this.id,
 			);
 			if (agentTab) {
-				this.tabStore
-					.updateAgentSessionId(this.profileId, agentTab.id, newSession.id);
+				this.tabStore.updateAgentSessionId(
+					this.profileId,
+					agentTab.id,
+					newSession.id,
+				);
 			}
 
-			consola.info(
-				`[agent] reconnected ${this.id} → ${info.id}`,
-			);
+			consola.info(`[agent] reconnected ${this.id} → ${info.id}`);
 			return newSession;
 		} catch (e) {
 			this._reconnecting = false;
@@ -134,23 +136,34 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async registerListeners(): Promise<void> {
-		const [unlistenEvent, unlistenComplete, unlistenError] = await Promise.all([
-			listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
-				useAgentStore.getState().handleAgentEvent(this.id, e.payload);
-			}),
-			listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
-				useAgentStore.getState().handleTurnComplete(this.id, e.payload);
-				const { notificationEnabled, notificationSound } = useSettingsStore.getState();
-				if (notificationEnabled && notificationSound) {
-					void playSystemSound({ name: notificationSound }).catch((err) => {
-						consola.warn("[agent] failed to play completion sound:", err);
-					});
-				}
-			}),
-			listen<string>(`agent-error-${this.id}`, (e) => {
-				useAgentStore.getState().handleError(this.id, e.payload);
-			}),
-		]);
+		const [unlistenEvent, unlistenComplete, unlistenError] =
+			await Promise.all([
+				listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
+					useAgentStore
+						.getState()
+						.handleAgentEvent(this.id, e.payload);
+				}),
+				listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
+					useAgentStore
+						.getState()
+						.handleTurnComplete(this.id, e.payload);
+					const { notificationEnabled, notificationSound } =
+						useSettingsStore.getState();
+					if (notificationEnabled && notificationSound) {
+						void playSystemSound({ name: notificationSound }).catch(
+							(err) => {
+								consola.warn(
+									"[agent] failed to play completion sound:",
+									err,
+								);
+							},
+						);
+					}
+				}),
+				listen<string>(`agent-error-${this.id}`, (e) => {
+					useAgentStore.getState().handleError(this.id, e.payload);
+				}),
+			]);
 
 		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError];
 	}
@@ -158,10 +171,15 @@ export class AgentTabSession extends TabSession {
 	async refreshModelState(): Promise<void> {
 		useAgentStore.getState().setModelLoading(this.id, true);
 		try {
-			const modelState = await getAgentSessionModels({ sessionId: this.id });
+			const modelState = await getAgentSessionModels({
+				sessionId: this.id,
+			});
 			useAgentStore.getState().setModelState(this.id, modelState);
 		} catch (err) {
-			consola.warn(`[agent] failed to load model state for ${this.id}:`, err);
+			consola.warn(
+				`[agent] failed to load model state for ${this.id}:`,
+				err,
+			);
 			useAgentStore.getState().setModelState(this.id, null);
 		} finally {
 			useAgentStore.getState().setModelLoading(this.id, false);

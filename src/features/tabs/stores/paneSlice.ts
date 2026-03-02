@@ -4,9 +4,22 @@ import type { TerminalPane } from "../types";
 
 export interface PaneSlice {
 	addPane: (profileId: string, tabId: string, pane: TerminalPane) => void;
-	closePane: (profileId: string, tabId: string, paneSessionId: string) => void;
-	setActivePane: (profileId: string, tabId: string, paneSessionId: string) => void;
-	updatePaneTitle: (profileId: string, tabId: string, paneSessionId: string, title: string) => void;
+	closePane: (
+		profileId: string,
+		tabId: string,
+		paneSessionId: string,
+	) => void;
+	setActivePane: (
+		profileId: string,
+		tabId: string,
+		paneSessionId: string,
+	) => void;
+	updatePaneTitle: (
+		profileId: string,
+		tabId: string,
+		paneSessionId: string,
+		title: string,
+	) => void;
 }
 
 export const createPaneSlice: StateCreator<
@@ -32,7 +45,9 @@ export const createPaneSlice: StateCreator<
 			const tab = profile.tabs.find((t) => t.id === tabId);
 			if (!tab || tab.type !== "terminal") return;
 
-			const paneIdx = tab.panes.findIndex((p) => p.sessionId === paneSessionId);
+			const paneIdx = tab.panes.findIndex(
+				(p) => p.sessionId === paneSessionId,
+			);
 			if (paneIdx === -1) return;
 
 			tab.panes.splice(paneIdx, 1);

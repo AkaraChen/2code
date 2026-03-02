@@ -1,16 +1,30 @@
-import { Box, Code, Flex, HStack, IconButton, Kbd, Text } from "@chakra-ui/react";
+import {
+	Box,
+	Code,
+	Flex,
+	HStack,
+	IconButton,
+	Kbd,
+	Text,
+} from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import HighlightExt from "@tiptap/extension-highlight";
+import Placeholder from "@tiptap/extension-placeholder";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
-import Placeholder from "@tiptap/extension-placeholder";
 import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { all, createLowlight } from "lowlight";
-import { useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useMemo,
+	useState,
+} from "react";
 import { LuExpand } from "react-icons/lu";
 import { RiSendPlaneLine } from "react-icons/ri";
 import { Control, RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -18,10 +32,13 @@ import { listSnippets, type Snippet } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import {
-	snippetTriggerExt,
 	type SnippetTriggerStorage,
+	snippetTriggerExt,
 } from "./snippetTriggerExt";
-import { submitOnEnterExt, type SubmitOnEnterStorage } from "./submitOnEnterExt";
+import {
+	type SubmitOnEnterStorage,
+	submitOnEnterExt,
+} from "./submitOnEnterExt";
 
 const lowlight = createLowlight(all);
 
@@ -57,7 +74,14 @@ interface ChatInputProps {
 	modelSelector?: React.ReactNode;
 }
 
-export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onToggleExpand, modelSelector }: ChatInputProps & { ref?: React.RefObject<Editor | null | null> }) => {
+export const ChatInput = ({
+	ref,
+	onSend,
+	disabled = false,
+	expanded = false,
+	onToggleExpand,
+	modelSelector,
+}: ChatInputProps & { ref?: React.RefObject<Editor | null | null> }) => {
 	const { data: snippets } = useSuspenseQuery({
 		queryKey: queryKeys.snippets.all,
 		queryFn: listSnippets,
@@ -74,7 +98,8 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 			snippetTriggerExt,
 			Placeholder.configure({
 				placeholder: ({ editor }) =>
-					(editor.storage.submitOnEnter as SubmitOnEnterStorage).expanded
+					(editor.storage.submitOnEnter as SubmitOnEnterStorage)
+						.expanded
 						? m.agentChatPlaceholderSheet()
 						: m.agentChatPlaceholder(),
 			}),
@@ -87,7 +112,9 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 		},
 	});
 
-	useImperativeHandle<Editor | null, Editor | null>(ref, () => editor, [editor]);
+	useImperativeHandle<Editor | null, Editor | null>(ref, () => editor, [
+		editor,
+	]);
 
 	const snippetStorage = editor?.storage.snippetTrigger as
 		| SnippetTriggerStorage
@@ -109,9 +136,10 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 
 		return matched.length > 0 ? matched : snippets;
 	}, [snippets, snippetQuery]);
-	const activeSnippetIndex = filteredSnippets.length === 0
-		? 0
-		: Math.min(selectedSnippetIndex, filteredSnippets.length - 1);
+	const activeSnippetIndex =
+		filteredSnippets.length === 0
+			? 0
+			: Math.min(selectedSnippetIndex, filteredSnippets.length - 1);
 
 	const handleSend = useCallback(() => {
 		if (!editor || disabled) return;
@@ -125,7 +153,8 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 		(snippet: Snippet) => {
 			if (!editor) return;
 
-			const storage = editor.storage.snippetTrigger as SnippetTriggerStorage;
+			const storage = editor.storage
+				.snippetTrigger as SnippetTriggerStorage;
 			if (!storage.range) return;
 
 			editor
@@ -148,7 +177,11 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 		const snippet = filteredSnippets[activeSnippetIndex];
 		if (!snippet) return;
 		replaceSnippetTriggerWithContent(snippet);
-	}, [activeSnippetIndex, filteredSnippets, replaceSnippetTriggerWithContent]);
+	}, [
+		activeSnippetIndex,
+		filteredSnippets,
+		replaceSnippetTriggerWithContent,
+	]);
 
 	useEffect(() => {
 		if (!editor) return;
@@ -333,7 +366,11 @@ export const ChatInput = ({ ref, onSend, disabled = false, expanded = false, onT
 										px="3"
 										py="2"
 										textAlign="left"
-										bg={selected ? "bg.muted" : "transparent"}
+										bg={
+											selected
+												? "bg.muted"
+												: "transparent"
+										}
 										_hover={{ bg: "bg.muted" }}
 										onMouseEnter={() =>
 											setSelectedSnippetIndex(index)

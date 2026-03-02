@@ -11,13 +11,13 @@ import {
 	VStack,
 } from "@chakra-ui/react";
 import { Suspense, use, useCallback, useMemo, useState } from "react";
-import { LuShrink } from "react-icons/lu";
 import { ErrorBoundary } from "react-error-boundary";
+import { LuShrink } from "react-icons/lu";
 import { useShallow } from "zustand/react/shallow";
-import type { AgentTabSession } from "./AgentTabSession";
-import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import { useSettingsStore } from "@/features/settings/stores";
+import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
+import type { AgentTabSession } from "./AgentTabSession";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
 import { useSendAgentPrompt, useSetAgentModel } from "./hooks";
@@ -37,7 +37,9 @@ function getReconnectPromise(sessionId: string): Promise<void> {
 
 	const tabSession = sessionRegistry.get(sessionId) as AgentTabSession;
 	const promise = tabSession.reconnect().then(
-		() => { reconnectCache.delete(sessionId); },
+		() => {
+			reconnectCache.delete(sessionId);
+		},
 		(err) => {
 			reconnectCache.delete(sessionId);
 			throw err;
@@ -64,7 +66,14 @@ function AwaitReconnection({ sessionId }: { sessionId: string }) {
 
 function ReconnectingFallback() {
 	return (
-		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+		<Flex
+			direction="column"
+			h="full"
+			w="full"
+			align="center"
+			justify="center"
+			bg="bg"
+		>
 			<VStack gap="4">
 				<Spinner size="lg" />
 				<Text color="fg.muted">{m.agentReconnecting()}</Text>
@@ -76,7 +85,14 @@ function ReconnectingFallback() {
 function ReconnectErrorFallback({ error }: { error: unknown }) {
 	const message = error instanceof Error ? error.message : String(error);
 	return (
-		<Flex direction="column" h="full" w="full" align="center" justify="center" bg="bg">
+		<Flex
+			direction="column"
+			h="full"
+			w="full"
+			align="center"
+			justify="center"
+			bg="bg"
+		>
 			<VStack gap="4">
 				<Text color="fg.error">
 					{m.agentReconnectFailed({ error: message })}
@@ -96,8 +112,14 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const agentIconUrl = tabSession?.iconUrl ?? null;
 	const agentName = tabSession?.title ?? m.agentDefaultName();
 
-	const { turns, isStreaming, streamingTurn, error, modelState, modelLoading } =
-		useAgentStore(
+	const {
+		turns,
+		isStreaming,
+		streamingTurn,
+		error,
+		modelState,
+		modelLoading,
+	} = useAgentStore(
 		useShallow((s) => {
 			const session = s.sessions[sessionId];
 			return {
@@ -135,8 +157,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	);
 	const selectedModel =
 		modelState?.current_model_id ?? modelItems[0]?.value ?? null;
-	const showModelSelector =
-		!!modelState?.supported && modelItems.length > 0;
+	const showModelSelector = !!modelState?.supported && modelItems.length > 0;
 	const modelBusy = !!modelLoading || setAgentModel.isPending;
 
 	const handleModelChange = useCallback(
@@ -147,50 +168,48 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		},
 		[selectedModel, sessionId, setAgentModel],
 	);
-	const modelSelector = showModelSelector
-		? (
-			<Select.Root
-				collection={modelCollection}
-				value={selectedModel ? [selectedModel] : []}
-				onValueChange={handleModelChange}
-				size="xs"
-				width={{ base: "120px", md: "150px" }}
-				disabled={modelBusy || (isStreaming ?? false)}
-				aria-label={m.agentModel()}
-				variant={"ghost"}
-			>
-				<Select.HiddenSelect />
-				<Select.Control>
-					<Select.Trigger
-						h="6"
-						minH="6"
-						px="1"
-						bg="transparent"
-						borderWidth="0"
-						color="fg.muted"
-						_hover={{ bg: "transparent", color: "fg" }}
-					>
-						<Select.ValueText fontSize="xs" truncate />
-					</Select.Trigger>
-					<Select.IndicatorGroup>
-						{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
-					</Select.IndicatorGroup>
-				</Select.Control>
-				<Portal>
-					<Select.Positioner>
-						<Select.Content>
-							{modelCollection.items.map((item) => (
-								<Select.Item item={item} key={item.value}>
-									{item.label}
-									<Select.ItemIndicator />
-								</Select.Item>
-							))}
-						</Select.Content>
-					</Select.Positioner>
-				</Portal>
-			</Select.Root>
-		)
-		: null;
+	const modelSelector = showModelSelector ? (
+		<Select.Root
+			collection={modelCollection}
+			value={selectedModel ? [selectedModel] : []}
+			onValueChange={handleModelChange}
+			size="xs"
+			width={{ base: "120px", md: "150px" }}
+			disabled={modelBusy || (isStreaming ?? false)}
+			aria-label={m.agentModel()}
+			variant={"ghost"}
+		>
+			<Select.HiddenSelect />
+			<Select.Control>
+				<Select.Trigger
+					h="6"
+					minH="6"
+					px="1"
+					bg="transparent"
+					borderWidth="0"
+					color="fg.muted"
+					_hover={{ bg: "transparent", color: "fg" }}
+				>
+					<Select.ValueText fontSize="xs" truncate />
+				</Select.Trigger>
+				<Select.IndicatorGroup>
+					{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
+				</Select.IndicatorGroup>
+			</Select.Control>
+			<Portal>
+				<Select.Positioner>
+					<Select.Content>
+						{modelCollection.items.map((item) => (
+							<Select.Item item={item} key={item.value}>
+								{item.label}
+								<Select.ItemIndicator />
+							</Select.Item>
+						))}
+					</Select.Content>
+				</Select.Positioner>
+			</Portal>
+		</Select.Root>
+	) : null;
 
 	if (isActive && needsReconnection(sessionId)) {
 		return (
@@ -218,7 +237,14 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			{!expanded && (
 				<>
 					<Box h="20" flexShrink={0} aria-hidden="true" />
-					<Box position="absolute" bottom="0" left="0" right="0" px="3" pb="3">
+					<Box
+						position="absolute"
+						bottom="0"
+						left="0"
+						right="0"
+						px="3"
+						pb="3"
+					>
 						<Box maxW="2xl" mx="auto">
 							<ChatInput
 								onSend={handleSend}

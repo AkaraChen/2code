@@ -14,10 +14,7 @@ export function ToolCallContentRenderer({
 }: ToolCallContentRendererProps) {
 	return match(content)
 		.with({ type: "content", content: { type: "text" } }, (c) => (
-			<MarkdownRenderer
-				content={c.content.text}
-				bg="transparent"
-			/>
+			<MarkdownRenderer content={c.content.text} bg="transparent" />
 		))
 		.with({ type: "content", content: { type: "image" } }, (c) => (
 			<Box my="2">

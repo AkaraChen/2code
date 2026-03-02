@@ -11,7 +11,7 @@
  * Event Listeners
  * Type-safe event listener helpers for Tauri events
  */
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /**
  * Listen for 'pty-notify' events
@@ -19,11 +19,9 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
  * @returns Promise that resolves to an unlisten function
  */
 export async function onPtyNotify(
-  handler: (payload: unknown) => void
+	handler: (payload: unknown) => void,
 ): Promise<UnlistenFn> {
-  return listen<unknown>('pty-notify', (event) => {
-    handler(event.payload);
-  });
+	return listen<unknown>("pty-notify", (event) => {
+		handler(event.payload);
+	});
 }
-
-

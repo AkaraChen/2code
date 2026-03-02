@@ -21,7 +21,9 @@ export function SoundPicker() {
 	const sounds = use(getSoundsPromise());
 	const notificationEnabled = useSettingsStore((s) => s.notificationEnabled);
 	const notificationSound = useSettingsStore((s) => s.notificationSound);
-	const setNotificationSound = useSettingsStore((s) => s.setNotificationSound);
+	const setNotificationSound = useSettingsStore(
+		(s) => s.setNotificationSound,
+	);
 
 	const soundCollection = useMemo(
 		() =>
@@ -47,7 +49,8 @@ export function SoundPicker() {
 					_hover={{ opacity: 1 }}
 					disabled={!notificationEnabled || !notificationSound}
 					onClick={() => {
-						if (notificationSound) playSystemSound({ name: notificationSound });
+						if (notificationSound)
+							playSystemSound({ name: notificationSound });
 					}}
 				>
 					<RiVolumeUpLine />

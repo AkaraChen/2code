@@ -1,8 +1,8 @@
 import { Box } from "@chakra-ui/react";
 import { use } from "react";
+import * as m from "@/paraglide/messages.js";
 import { GitDiffContext } from "../gitDiffReducer";
 import GitDiffPane from "./GitDiffPane";
-import * as m from "@/paraglide/messages.js";
 
 interface ChangesDiffPaneProps {
 	visible: boolean;

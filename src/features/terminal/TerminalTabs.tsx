@@ -46,16 +46,25 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 			<Tabs.Root
 				size="sm"
 				value={activeTabId}
-				onValueChange={(e) => useTabStore.getState().setActiveTab(profileId, e.value)}
+				onValueChange={(e) =>
+					useTabStore.getState().setActiveTab(profileId, e.value)
+				}
 			>
 				<ScrollArea.Root>
 					<ScrollArea.Viewport>
 						<Tabs.List flexWrap="nowrap">
 							{tabs.map((tab) => (
-								<Tabs.Trigger key={tab.id} value={tab.id} flexShrink={0}>
+								<Tabs.Trigger
+									key={tab.id}
+									value={tab.id}
+									flexShrink={0}
+								>
 									{match(tab)
 										.with({ type: "agent" }, (t) => (
-											<AgentIcon iconUrl={t.iconUrl} alt={t.title} />
+											<AgentIcon
+												iconUrl={t.iconUrl}
+												alt={t.title}
+											/>
 										))
 										.with({ type: "terminal" }, () => (
 											<RiTerminalBoxLine />
@@ -65,7 +74,10 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 										{tab.title}
 										{hasTabNotification(tab) &&
 											tab.id !== activeTabId && (
-												<Circle size="2" bg="green.500" />
+												<Circle
+													size="2"
+													bg="green.500"
+												/>
 											)}
 										<CloseButton
 											as="span"

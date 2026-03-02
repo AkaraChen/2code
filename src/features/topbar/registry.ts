@@ -10,8 +10,8 @@ import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
 	GitDiffControl,
-	GithubPrControl,
 	GithubDesktopControl,
+	GithubPrControl,
 	RevealInFinderControl,
 	VscodeControl,
 	WindsurfControl,

@@ -3,13 +3,13 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
+import type { UpdateSnippet } from "@/generated";
 import {
 	createSnippet,
 	deleteSnippet,
 	listSnippets,
 	updateSnippet,
 } from "@/generated";
-import type { UpdateSnippet } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 export function useSnippets() {

@@ -139,7 +139,9 @@ function GithubPrCreateDialog({
 				<Dialog.Positioner>
 					<Dialog.Content>
 						<Dialog.Header>
-							<Dialog.Title>{m.topbarCreatePrConfirmTitle()}</Dialog.Title>
+							<Dialog.Title>
+								{m.topbarCreatePrConfirmTitle()}
+							</Dialog.Title>
 						</Dialog.Header>
 						<Dialog.Body>
 							<Text mb="2">{m.topbarCreatePrConfirmDesc()}</Text>
@@ -172,7 +174,9 @@ function GithubPrCreateDialog({
 							<Dialog.ActionTrigger asChild>
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
-							<Button onClick={onConfirm}>{m.topbarCreatePr()}</Button>
+							<Button onClick={onConfirm}>
+								{m.topbarCreatePr()}
+							</Button>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />
@@ -374,7 +378,7 @@ export function RevealInFinderControl({ profile }: ControlProps) {
 	const handleReveal = async () => {
 		// macOS: open -R reveals the path in Finder
 		// Windows: explorer opens the folder
-		const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+		const isMac = navigator.platform.toUpperCase().includes("MAC");
 		const cmd = isMac ? "open" : "explorer";
 		const args = isMac
 			? ["-R", profile.worktree_path]

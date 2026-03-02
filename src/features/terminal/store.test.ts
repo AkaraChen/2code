@@ -34,9 +34,7 @@ describe("useTerminalStore", () => {
 			getState().addTab("p1", termTab("s1", "Shell"));
 			const profile = getState().profiles.p1;
 			expect(profile).toBeDefined();
-			expect(profile.tabs).toEqual([
-				termTab("s1", "Shell"),
-			]);
+			expect(profile.tabs).toEqual([termTab("s1", "Shell")]);
 			expect(profile.activeTabId).toBe("s1");
 			expect(profile.counter).toBe(1);
 		});

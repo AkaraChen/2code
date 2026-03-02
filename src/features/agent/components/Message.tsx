@@ -10,7 +10,12 @@ interface MessageProps {
 	children: React.ReactNode;
 }
 
-export function Message({ role, agentIconUrl, agentName, children }: MessageProps) {
+export function Message({
+	role,
+	agentIconUrl,
+	agentName,
+	children,
+}: MessageProps) {
 	const isUser = role === "user";
 
 	return (
@@ -27,15 +32,15 @@ export function Message({ role, agentIconUrl, agentName, children }: MessageProp
 				border="1px solid"
 				borderColor={"border.subtle"}
 			>
-				{isUser
-					? <LuUser size={16} />
-					: (
-							<AgentIcon
-								iconUrl={agentIconUrl}
-								size={16}
-								alt={agentName ?? m.agentDefaultName()}
-							/>
-						)}
+				{isUser ? (
+					<LuUser size={16} />
+				) : (
+					<AgentIcon
+						iconUrl={agentIconUrl}
+						size={16}
+						alt={agentName ?? m.agentDefaultName()}
+					/>
+				)}
 			</Flex>
 			<Box flex="1" minW="0" pt="1">
 				{children}

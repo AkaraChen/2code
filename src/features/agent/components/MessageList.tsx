@@ -1,26 +1,31 @@
-import { Box, Button, EmptyState, Flex, HStack, Text, VStack } from "@chakra-ui/react";
+import {
+	Box,
+	Button,
+	EmptyState,
+	Flex,
+	HStack,
+	Text,
+	VStack,
+} from "@chakra-ui/react";
 import { useEffect, useRef } from "react";
 import * as m from "@/paraglide/messages.js";
 import { AgentIcon } from "@/shared/components/AgentIcon";
 import type { AgentTurn, StreamingTurn } from "../types";
-import { TurnRenderer } from "./TurnRenderer";
 import { StreamingTurnRenderer } from "./StreamingTurnRenderer";
+import { TurnRenderer } from "./TurnRenderer";
 
 const SUGGESTION_ITEMS = [
 	{
 		label: m.agentChatSuggestionProject,
-		prompt:
-			"What is this project? Please summarize its purpose, architecture, and how to get started.",
+		prompt: "What is this project? Please summarize its purpose, architecture, and how to get started.",
 	},
 	{
 		label: m.agentChatSuggestionCodeQuality,
-		prompt:
-			"Scan this codebase for code quality issues, potential bugs, and maintainability risks. Provide prioritized findings with file references.",
+		prompt: "Scan this codebase for code quality issues, potential bugs, and maintainability risks. Provide prioritized findings with file references.",
 	},
 	{
 		label: m.agentChatSuggestionNextTask,
-		prompt:
-			"Based on this repository, suggest the best next task to work on and explain why it should be prioritized now.",
+		prompt: "Based on this repository, suggest the best next task to work on and explain why it should be prioritized now.",
 	},
 ] as const;
 
@@ -77,7 +82,10 @@ export function MessageList({
 											size="sm"
 											variant="subtle"
 											onClick={() =>
-												onSuggestionSelect?.(item.prompt)}
+												onSuggestionSelect?.(
+													item.prompt,
+												)
+											}
 										>
 											{item.label()}
 										</Button>

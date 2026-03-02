@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useSettingsStore } from "./index";
 
 function resetStore() {
-	useSettingsStore.setState({ notificationEnabled: false, notificationSound: "Ping" });
+	useSettingsStore.setState({
+		notificationEnabled: false,
+		notificationSound: "Ping",
+	});
 }
 
 function getState() {

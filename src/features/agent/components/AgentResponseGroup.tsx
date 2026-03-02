@@ -22,7 +22,10 @@ export function AgentResponseGroup({ content }: AgentResponseGroupProps) {
 						<ThoughtBlock key={i.text} text={i.text} />
 					))
 					.with({ type: "tool_call" }, (i) => (
-						<ToolCallBlock key={i.data.toolCallId} toolCall={i.data} />
+						<ToolCallBlock
+							key={i.data.toolCallId}
+							toolCall={i.data}
+						/>
 					))
 					.with({ type: "plan" }, (i) => (
 						<PlanBlock key="plan" plan={i.data} />

@@ -72,7 +72,11 @@ vi.mock("@/generated", () => ({
 	getSessionOutput: vi.fn(() => Promise.resolve([])),
 	listProjectAgentSessions: vi.fn(() => Promise.resolve([])),
 	reconnectAgentSession: vi.fn(() =>
-		Promise.resolve({ id: "mock-reconnected-id", agent: "mock", acpSessionId: "acp-mock" }),
+		Promise.resolve({
+			id: "mock-reconnected-id",
+			agent: "mock",
+			acpSessionId: "acp-mock",
+		}),
 	),
 	listAgentSessionEvents: vi.fn(() => Promise.resolve([])),
 }));

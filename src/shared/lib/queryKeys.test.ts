@@ -61,13 +61,17 @@ describe("queryKeys", () => {
 	describe("queryNamespaces", () => {
 		it("maps each namespace to its string value", () => {
 			expect(queryNamespaces.projects).toBe("projects");
-			expect(queryNamespaces["github-pr-status"]).toBe("github-pr-status");
+			expect(queryNamespaces["github-pr-status"]).toBe(
+				"github-pr-status",
+			);
 			expect(queryNamespaces["git-diff"]).toBe("git-diff");
 			expect(queryNamespaces["git-log"]).toBe("git-log");
 		});
 
 		it("namespace strings match queryKeys prefixes", () => {
-			expect(queryKeys.git.diff("x")[0]).toBe(queryNamespaces["git-diff"]);
+			expect(queryKeys.git.diff("x")[0]).toBe(
+				queryNamespaces["git-diff"],
+			);
 			expect(queryKeys.git.log("x")[0]).toBe(queryNamespaces["git-log"]);
 			expect(queryKeys.git.branch("x")[0]).toBe(
 				queryNamespaces["git-branch"],

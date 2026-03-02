@@ -12,13 +12,17 @@ import {
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
-import { GitDiffContext, gitDiffReducer, initialState } from "../gitDiffReducer";
+import {
+	GitDiffContext,
+	gitDiffReducer,
+	initialState,
+} from "../gitDiffReducer";
 import { useGitDiffFiles, useGitLog } from "../hooks";
 import { useGitDiffKeyboard } from "../hooks/useGitDiffKeyboard";
-import ChangesSidebar from "./ChangesSidebar";
 import ChangesDiffPane from "./ChangesDiffPane";
-import HistorySidebar from "./HistorySidebar";
+import ChangesSidebar from "./ChangesSidebar";
 import HistoryDiffPane from "./HistoryDiffPane";
+import HistorySidebar from "./HistorySidebar";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"github-dark": "github-dark",

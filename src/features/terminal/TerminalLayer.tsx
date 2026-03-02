@@ -69,7 +69,10 @@ export default function TerminalLayer() {
 							profile={profile}
 						/>
 						<Box flex="1" minH="0">
-							<TerminalTabs profileId={profileId} cwd={profile.worktree_path} />
+							<TerminalTabs
+								profileId={profileId}
+								cwd={profile.worktree_path}
+							/>
 						</Box>
 					</Flex>
 				);

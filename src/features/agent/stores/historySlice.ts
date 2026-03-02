@@ -1,9 +1,9 @@
 import consola from "consola";
 import type { StateCreator } from "zustand";
-import type { AgentStore } from "../store";
 import type { AgentSessionEventRecord } from "@/generated";
+import type { AgentStore } from "../store";
 import type { StreamingTurn } from "../types";
-import { ensureSession, replayAgentEvent, flushStreamingTurn } from "./utils";
+import { ensureSession, flushStreamingTurn, replayAgentEvent } from "./utils";
 
 export interface HistorySlice {
 	restoreFromEvents: (
@@ -52,7 +52,10 @@ export const createHistorySlice: StateCreator<
 						const payload = JSON.parse(userEvent.payload_json);
 						userMessage = payload.text || "";
 					} catch (err) {
-						consola.warn(`Failed to parse user event ${userEvent.id}:`, err);
+						consola.warn(
+							`Failed to parse user event ${userEvent.id}:`,
+							err,
+						);
 					}
 				}
 
@@ -70,7 +73,10 @@ export const createHistorySlice: StateCreator<
 						const payload = JSON.parse(event.payload_json);
 						replayAgentEvent(tempStreamingTurn, payload);
 					} catch (err) {
-						consola.warn(`Failed to parse agent event ${event.id}:`, err);
+						consola.warn(
+							`Failed to parse agent event ${event.id}:`,
+							err,
+						);
 					}
 				}
 
@@ -79,7 +85,8 @@ export const createHistorySlice: StateCreator<
 				if (userMessage || agentContent.length > 0) {
 					const timestamp = userEvent?.created_at
 						? userEvent.created_at * 1000
-						: agentEvents[agentEvents.length - 1]?.created_at * 1000 || Date.now();
+						: agentEvents[agentEvents.length - 1]?.created_at *
+								1000 || Date.now();
 
 					session.turns.push({
 						timestamp,

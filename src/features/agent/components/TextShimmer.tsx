@@ -1,5 +1,5 @@
-import type { CSSProperties } from "react";
 import { motion } from "motion/react";
+import type { CSSProperties } from "react";
 import { memo, use, useMemo } from "react";
 import { ThemeContext } from "@/shared/providers/themeContext";
 

@@ -9,11 +9,7 @@ interface AgentIconProps {
 	alt?: string;
 }
 
-export function AgentIcon({
-	iconUrl,
-	size = 16,
-	alt = "",
-}: AgentIconProps) {
+export function AgentIcon({ iconUrl, size = 16, alt = "" }: AgentIconProps) {
 	const { isDark } = use(ThemeContext);
 	const [failed, setFailed] = useState(false);
 	const imageSize = typeof size === "number" ? `${size}px` : size;

@@ -1,13 +1,16 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { enableMapSet } from "immer";
+import { beforeEach, describe, expect, it } from "vitest";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { enableMapSet } from "immer";
 
 enableMapSet();
-import { createTabSlice, type TabSlice } from "./tabSlice";
-import { type ProfileSlice, createProfileSlice } from "./profileSlice";
-import { type NotificationSlice, createNotificationSlice } from "./notificationSlice";
 import type { ProfileTab } from "../types";
+import {
+	createNotificationSlice,
+	type NotificationSlice,
+} from "./notificationSlice";
+import { createProfileSlice, type ProfileSlice } from "./profileSlice";
+import { createTabSlice, type TabSlice } from "./tabSlice";
 
 type TestStore = TabSlice & ProfileSlice & NotificationSlice;
 
@@ -16,7 +19,7 @@ const useMockStore = create<TestStore>()(
 		...(createProfileSlice as any)(...a),
 		...(createTabSlice as any)(...a),
 		...(createNotificationSlice as any)(...a),
-	}))
+	})),
 );
 
 describe("tabSlice", () => {
@@ -33,7 +36,7 @@ describe("tabSlice", () => {
 			id: "tab1",
 			title: "Shell",
 			panes: [],
-			activePaneId: "pane1"
+			activePaneId: "pane1",
 		};
 
 		useMockStore.getState().addTab("prof1", tab);
@@ -49,11 +52,19 @@ describe("tabSlice", () => {
 		useMockStore.setState({
 			profiles: {
 				prof1: {
-					tabs: [{ type: "terminal", id: "tab1", title: "Shell", panes: [], activePaneId: "" }],
+					tabs: [
+						{
+							type: "terminal",
+							id: "tab1",
+							title: "Shell",
+							panes: [],
+							activePaneId: "",
+						},
+					],
 					activeTabId: "tab1",
-					counter: 1
-				}
-			}
+					counter: 1,
+				},
+			},
 		});
 
 		useMockStore.getState().closeTab("prof1", "tab1");
@@ -66,17 +77,31 @@ describe("tabSlice", () => {
 			profiles: {
 				prof1: {
 					tabs: [
-						{ type: "terminal", id: "tab1", title: "Shell", panes: [{ sessionId: "session1", title: "t" }], activePaneId: "session1" },
-						{ type: "terminal", id: "tab2", title: "Shell 2", panes: [{ sessionId: "session2", title: "t" }], activePaneId: "session2" }
+						{
+							type: "terminal",
+							id: "tab1",
+							title: "Shell",
+							panes: [{ sessionId: "session1", title: "t" }],
+							activePaneId: "session1",
+						},
+						{
+							type: "terminal",
+							id: "tab2",
+							title: "Shell 2",
+							panes: [{ sessionId: "session2", title: "t" }],
+							activePaneId: "session2",
+						},
 					],
 					activeTabId: "tab1",
-					counter: 2
-				}
-			}
+					counter: 2,
+				},
+			},
 		});
 
 		useMockStore.getState().closeTab("prof1", "tab1");
 		expect(useMockStore.getState().profiles.prof1.tabs).toHaveLength(1);
-		expect(useMockStore.getState().notifiedTabs.has("session1")).toBe(false);
+		expect(useMockStore.getState().notifiedTabs.has("session1")).toBe(
+			false,
+		);
 	});
 });

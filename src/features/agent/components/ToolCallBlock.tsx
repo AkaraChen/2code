@@ -113,9 +113,13 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 							_hover={{ bg: "bg.subtle" }}
 							transition="background 0.2s"
 						>
-							<Icon fontSize="md">{KIND_ICONS[toolCall.kind ?? "other"]}</Icon>
+							<Icon fontSize="md">
+								{KIND_ICONS[toolCall.kind ?? "other"]}
+							</Icon>
 							<Text flex="1" fontSize="sm" fontWeight="medium">
-								{toolCall.title ?? toolCall.kind ?? m.agentToolCall()}
+								{toolCall.title ??
+									toolCall.kind ??
+									m.agentToolCall()}
 							</Text>
 							<ToolStatusBadge status={status} />
 							<Icon fontSize="xs">
@@ -126,34 +130,48 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
 
 					<Collapsible.Content>
 						<Flex direction="column" gap="3" px="3" py="3">
-							{toolCall.locations && toolCall.locations.length > 0 && (
-								<FileLocationsList locations={toolCall.locations} />
-							)}
+							{toolCall.locations &&
+								toolCall.locations.length > 0 && (
+									<FileLocationsList
+										locations={toolCall.locations}
+									/>
+								)}
 
 							{toolCall.content?.map((content) => (
 								<ToolCallContentRenderer
 									key={match(content)
-										.with({ type: "diff" }, (c) => `diff-${c.path}`)
-										.with({ type: "terminal" }, (c) => `terminal-${c.terminalId}`)
-										.with({ type: "content" }, (c) => `content-${c.content.type}`)
+										.with(
+											{ type: "diff" },
+											(c) => `diff-${c.path}`,
+										)
+										.with(
+											{ type: "terminal" },
+											(c) => `terminal-${c.terminalId}`,
+										)
+										.with(
+											{ type: "content" },
+											(c) => `content-${c.content.type}`,
+										)
 										.otherwise(() => "unknown")}
 									content={content}
 								/>
 							))}
 
-							{toolCall.rawInput !== undefined && toolCall.rawInput !== null && (
-								<ToolJsonSection
-									label={m.agentToolInput()}
-									data={toolCall.rawInput}
-								/>
-							)}
+							{toolCall.rawInput !== undefined &&
+								toolCall.rawInput !== null && (
+									<ToolJsonSection
+										label={m.agentToolInput()}
+										data={toolCall.rawInput}
+									/>
+								)}
 
-							{toolCall.rawOutput !== undefined && toolCall.rawOutput !== null && (
-								<ToolJsonSection
-									label={m.agentToolOutput()}
-									data={toolCall.rawOutput}
-								/>
-							)}
+							{toolCall.rawOutput !== undefined &&
+								toolCall.rawOutput !== null && (
+									<ToolJsonSection
+										label={m.agentToolOutput()}
+										data={toolCall.rawOutput}
+									/>
+								)}
 						</Flex>
 					</Collapsible.Content>
 				</Box>

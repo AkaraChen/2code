@@ -1,6 +1,6 @@
-import type { ProfileTab } from "./types";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
+import type { ProfileTab } from "./types";
 
 /** Abstract base class for all tab session types. */
 export abstract class TabSession {
