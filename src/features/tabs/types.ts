@@ -25,3 +25,9 @@ export interface AgentTab {
 
 /** Discriminated union of all tab types within a profile. */
 export type ProfileTab = TerminalTab | AgentTab;
+
+export interface ProfileTabState {
+	tabs: ProfileTab[];
+	activeTabId: string | null;
+	counter: number;
+}

@@ -45,3 +45,14 @@ export interface StreamingTurn {
 	userMessage: string;
 	agentContent: AgentMessageContent[];
 }
+
+import type { AgentModelState } from "@/generated";
+
+export interface AgentSessionState {
+	turns: AgentTurn[];
+	isStreaming: boolean;
+	streamingTurn: StreamingTurn | null;
+	error: string | null;
+	modelState: AgentModelState | null;
+	modelLoading: boolean;
+}

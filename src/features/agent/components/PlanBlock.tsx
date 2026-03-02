@@ -21,7 +21,7 @@ interface PlanBlockProps {
 
 export function PlanBlock({ plan }: PlanBlockProps) {
 	return (
-		<Box w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
+		<Box maxW="80%" w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
 			<Box px="4" py="3" bg="bg.muted">
 				<Flex align="center" gap="2" mb="3">
 					<Icon fontSize="md" color="fg.default">

@@ -12,7 +12,7 @@ export function ThoughtBlock({ text }: ThoughtBlockProps) {
 	const [open, setOpen] = useState(text.length < 100);
 
 	return (
-		<Box w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
+		<Box maxW="80%" w="full" border="1px solid" borderColor="border.subtle" borderRadius="md" overflow="hidden">
 			<Collapsible.Root
 				open={open}
 				onOpenChange={(e) => setOpen(e.open)}
