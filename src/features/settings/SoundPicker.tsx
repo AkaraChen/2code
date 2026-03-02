@@ -45,9 +45,9 @@ export function SoundPicker() {
 					ml="auto"
 					opacity={0.5}
 					_hover={{ opacity: 1 }}
-					disabled={!notificationEnabled || !sound}
+					disabled={!notificationEnabled || !notificationSound}
 					onClick={() => {
-						if (sound) playSystemSound({ name: sound });
+						if (notificationSound) playSystemSound({ name: notificationSound });
 					}}
 				>
 					<RiVolumeUpLine />
