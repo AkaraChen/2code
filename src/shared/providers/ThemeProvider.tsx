@@ -1,12 +1,12 @@
 import { Box } from "@chakra-ui/react";
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
 import { useMemo } from "react";
-import { useThemeStore } from "@/features/settings/stores/themeStore";
+import { useSettingsStore } from "@/features/settings/stores";
 import type { Preference, ThemeContextValue } from "./themeContext";
 import { ThemeContext } from "./themeContext";
 
 function AccentColorWrapper({ children }: { children: React.ReactNode }) {
-	const accentColor = useThemeStore((s) => s.accentColor);
+	const accentColor = useSettingsStore((s) => s.accentColor);
 	return (
 		<Box colorPalette={accentColor} css={{ display: "contents" }}>
 			{children}

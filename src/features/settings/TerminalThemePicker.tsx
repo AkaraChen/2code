@@ -13,7 +13,7 @@ import {
 	terminalThemeNames,
 } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
-import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
+import { useSettingsStore } from "./stores";
 
 const themeCollection = createListCollection({
 	items: terminalThemeIds.map((id) => ({
@@ -94,7 +94,7 @@ export function TerminalThemePicker({
 		lightTerminalTheme,
 		setDarkTerminalTheme,
 		setLightTerminalTheme,
-	} = useTerminalSettingsStore();
+	} = useSettingsStore();
 
 	return (
 		<>

@@ -1,4 +1,4 @@
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { useSettingsStore } from "@/features/settings/stores";
 import { useTerminalTheme } from "./hooks";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
@@ -23,8 +23,8 @@ export function TerminalPreview({
 }: {
 	themeId?: TerminalThemeId | null;
 }) {
-	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
-	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const fontFamily = useSettingsStore((s) => s.fontFamily);
+	const fontSize = useSettingsStore((s) => s.fontSize);
 	const autoTheme = useTerminalTheme();
 	const theme = themeId ? terminalThemes[themeId] : autoTheme;
 

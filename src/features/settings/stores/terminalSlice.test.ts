@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useTerminalSettingsStore } from "./terminalSettingsStore";
+import { useSettingsStore } from "./index";
 
 function resetStore() {
-	useTerminalSettingsStore.setState({
+	useSettingsStore.setState({
 		fontFamily: "JetBrains Mono",
 		fontSize: 13,
 		showAllFonts: false,
@@ -13,10 +13,10 @@ function resetStore() {
 }
 
 function getState() {
-	return useTerminalSettingsStore.getState();
+	return useSettingsStore.getState();
 }
 
-describe("useTerminalSettingsStore", () => {
+describe("terminalSlice", () => {
 	beforeEach(resetStore);
 
 	describe("initial state", () => {

@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { match } from "ts-pattern";
 import * as m from "@/paraglide/messages.js";
-import { AgentTabSession } from "./AgentTabSession";
+import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";

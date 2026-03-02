@@ -2,7 +2,7 @@ import { Badge, Box, Flex, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useMemo } from "react";
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { useSettingsStore } from "@/features/settings/stores";
 import { changeBadge, getLineStats } from "../utils";
 
 function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
@@ -48,8 +48,8 @@ export default function GitDiffPane({
 	options,
 	emptyMessage,
 }: GitDiffPaneProps) {
-	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
-	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const fontFamily = useSettingsStore((s) => s.fontFamily);
+	const fontSize = useSettingsStore((s) => s.fontSize);
 
 	return (
 		<Box

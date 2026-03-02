@@ -14,8 +14,9 @@ import { Suspense, use, useCallback, useMemo, useState } from "react";
 import { LuShrink } from "react-icons/lu";
 import { ErrorBoundary } from "react-error-boundary";
 import { useShallow } from "zustand/react/shallow";
-import type { AgentTabSession } from "@/features/tabs/AgentTabSession";
+import type { AgentTabSession } from "./AgentTabSession";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
+import { useSettingsStore } from "@/features/settings/stores";
 import * as m from "@/paraglide/messages.js";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
@@ -88,6 +89,7 @@ function ReconnectErrorFallback({ error }: { error: unknown }) {
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
 	const setAgentModel = useSetAgentModel();
+	const defaultAgent = useSettingsStore((s) => s.defaultAgent);
 	const tabSession = sessionRegistry.get(sessionId) as
 		| AgentTabSession
 		| undefined;

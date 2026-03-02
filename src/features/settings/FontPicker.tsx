@@ -10,7 +10,7 @@ import type { SystemFont } from "@/generated";
 import { listSystemFonts } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
-import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
+import { useSettingsStore } from "./stores";
 
 const getFontsPromise = createCachedPromise<SystemFont[]>(() =>
 	listSystemFonts(),
@@ -18,10 +18,10 @@ const getFontsPromise = createCachedPromise<SystemFont[]>(() =>
 
 export function FontPicker() {
 	const fonts = use(getFontsPromise());
-	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
-	const showAllFonts = useTerminalSettingsStore((s) => s.showAllFonts);
-	const setFontFamily = useTerminalSettingsStore((s) => s.setFontFamily);
-	const setShowAllFonts = useTerminalSettingsStore((s) => s.setShowAllFonts);
+	const fontFamily = useSettingsStore((s) => s.fontFamily);
+	const showAllFonts = useSettingsStore((s) => s.showAllFonts);
+	const setFontFamily = useSettingsStore((s) => s.setFontFamily);
+	const setShowAllFonts = useSettingsStore((s) => s.setShowAllFonts);
 
 	const visibleFonts = useMemo(
 		() => (showAllFonts ? fonts : fonts.filter((f) => f.is_mono)),

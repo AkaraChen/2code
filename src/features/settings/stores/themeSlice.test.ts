@@ -3,16 +3,16 @@ import {
 	ACCENT_COLORS,
 	BORDER_RADIUS_MAP,
 	type BorderRadius,
-	useThemeStore,
-} from "./themeStore";
+} from "./themeSlice";
+import { useSettingsStore } from "./index";
 
 function resetStore() {
-	useThemeStore.setState({ accentColor: "blue", borderRadius: "sm" });
+	useSettingsStore.setState({ accentColor: "blue", borderRadius: "sm" });
 	localStorage.clear();
 }
 
 function getState() {
-	return useThemeStore.getState();
+	return useSettingsStore.getState();
 }
 
 describe("bORDER_RADIUS_MAP", () => {
@@ -50,7 +50,7 @@ describe("bORDER_RADIUS_MAP", () => {
 	});
 });
 
-describe("useThemeStore", () => {
+describe("themeSlice", () => {
 	beforeEach(resetStore);
 
 	describe("initial state", () => {

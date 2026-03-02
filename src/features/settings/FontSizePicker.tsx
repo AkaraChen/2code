@@ -1,9 +1,9 @@
 import { Field, NumberInput } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
-import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
+import { useSettingsStore } from "./stores";
 
 export function FontSizePicker() {
-	const { fontSize, setFontSize } = useTerminalSettingsStore();
+	const { fontSize, setFontSize } = useSettingsStore();
 
 	return (
 		<Field.Root>

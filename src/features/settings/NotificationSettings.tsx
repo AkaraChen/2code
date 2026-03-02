@@ -6,22 +6,25 @@ import {
 import { Suspense } from "react";
 import * as m from "@/paraglide/messages.js";
 import { SoundPicker } from "./SoundPicker";
-import { useNotificationStore } from "./stores/notificationStore";
+import { useSettingsStore } from "./stores";
 
 export function NotificationSettings() {
-	const { enabled, setEnabled } = useNotificationStore();
+	const notificationEnabled = useSettingsStore((s) => s.notificationEnabled);
+	const setNotificationEnabled = useSettingsStore((s) => s.setNotificationEnabled);
 
 	const handleToggle = async (checked: boolean) => {
 		if (checked) {
-			const granted = await isPermissionGranted();
-			if (!granted) {
-				const permission = await requestPermission();
-				if (permission !== "granted") {
+			const permission = await isPermissionGranted();
+			if (!permission) {
+				const granted = await requestPermission();
+				if (!granted) {
+					console.warn("Notification permission denied");
+					setNotificationEnabled(false);
 					return;
 				}
 			}
 		}
-		setEnabled(checked);
+		setNotificationEnabled(checked);
 	};
 
 	return (
@@ -29,7 +32,7 @@ export function NotificationSettings() {
 			<Field.Root>
 				<Field.Label>{m.notificationEnabled()}</Field.Label>
 				<Switch.Root
-					checked={enabled}
+					checked={notificationEnabled}
 					onCheckedChange={(e) => handleToggle(!!e.checked)}
 				>
 					<Switch.HiddenInput />

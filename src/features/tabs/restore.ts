@@ -8,7 +8,7 @@ import {
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { AgentTabSession } from "./AgentTabSession";
+import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";

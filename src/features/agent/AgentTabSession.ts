@@ -13,12 +13,10 @@ import {
 	reconnectAgentSession,
 	setAgentSessionModel,
 } from "@/generated";
-import { useAgentStore } from "../agent/store";
-import { useNotificationStore } from "../settings/stores/notificationStore";
-import { TabSession } from "./session";
-import { sessionRegistry } from "./sessionRegistry";
-import { useTabStore } from "./store";
-import type { AgentTab } from "./types";
+import { useAgentStore } from "./store";
+import { useSettingsStore } from "../settings/stores";
+import { TabSession } from "../tabs/session";
+import type { AgentTab } from "../tabs/types";
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
@@ -112,17 +110,16 @@ export class AgentTabSession extends TabSession {
 			await newSession.refreshModelState();
 
 			// Replace in registry
-			sessionRegistry.delete(this.id);
-			sessionRegistry.set(newSession.id, newSession);
+			this.unregister();
+			newSession.register();
 
 			// Update the sessionId on the existing tab (nanoid tab id stays stable)
-			const profile = useTabStore.getState().profiles[this.profileId];
+			const profile = this.tabStore.profiles[this.profileId];
 			const agentTab = profile?.tabs.find(
 				(t): t is AgentTab => t.type === "agent" && t.sessionId === this.id,
 			);
 			if (agentTab) {
-				useTabStore
-					.getState()
+				this.tabStore
 					.updateAgentSessionId(this.profileId, agentTab.id, newSession.id);
 			}
 
@@ -143,9 +140,9 @@ export class AgentTabSession extends TabSession {
 			}),
 			listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
 				useAgentStore.getState().handleTurnComplete(this.id, e.payload);
-				const { enabled, sound } = useNotificationStore.getState();
-				if (enabled && sound) {
-					void playSystemSound({ name: sound }).catch((err) => {
+				const { notificationEnabled, notificationSound } = useSettingsStore.getState();
+				if (notificationEnabled && notificationSound) {
+					void playSystemSound({ name: notificationSound }).catch((err) => {
 						consola.warn("[agent] failed to play completion sound:", err);
 					});
 				}

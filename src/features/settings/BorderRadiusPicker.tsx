@@ -1,7 +1,7 @@
 import { Field, SegmentGroup } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
 import type { BorderRadius } from "./stores/themeStore";
-import { useThemeStore } from "./stores/themeStore";
+import { useSettingsStore } from "./stores";
 
 const items: { value: BorderRadius; label: () => string }[] = [
 	{ value: "none", label: () => m.radiusNone() },
@@ -12,8 +12,8 @@ const items: { value: BorderRadius; label: () => string }[] = [
 ];
 
 export function BorderRadiusPicker() {
-	const borderRadius = useThemeStore((s) => s.borderRadius);
-	const setBorderRadius = useThemeStore((s) => s.setBorderRadius);
+	const borderRadius = useSettingsStore((s) => s.borderRadius);
+	const setBorderRadius = useSettingsStore((s) => s.setBorderRadius);
 
 	return (
 		<Field.Root>

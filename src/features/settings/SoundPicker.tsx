@@ -11,7 +11,7 @@ import { RiVolumeUpLine } from "react-icons/ri";
 import { listSystemSounds, playSystemSound } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
-import { useNotificationStore } from "./stores/notificationStore";
+import { useSettingsStore } from "./stores";
 
 const getSoundsPromise = createCachedPromise<string[]>(() =>
 	listSystemSounds(),
@@ -19,7 +19,9 @@ const getSoundsPromise = createCachedPromise<string[]>(() =>
 
 export function SoundPicker() {
 	const sounds = use(getSoundsPromise());
-	const { enabled, sound, setSound } = useNotificationStore();
+	const notificationEnabled = useSettingsStore((s) => s.notificationEnabled);
+	const notificationSound = useSettingsStore((s) => s.notificationSound);
+	const setNotificationSound = useSettingsStore((s) => s.setNotificationSound);
 
 	const soundCollection = useMemo(
 		() =>
@@ -43,7 +45,7 @@ export function SoundPicker() {
 					ml="auto"
 					opacity={0.5}
 					_hover={{ opacity: 1 }}
-					disabled={!enabled || !sound}
+					disabled={!notificationEnabled || !sound}
 					onClick={() => {
 						if (sound) playSystemSound({ name: sound });
 					}}
@@ -53,9 +55,12 @@ export function SoundPicker() {
 			</Flex>
 			<Select.Root
 				collection={soundCollection}
-				value={[sound]}
-				onValueChange={(e) => setSound(e.value[0])}
-				disabled={!enabled}
+				value={notificationSound ? [notificationSound] : []}
+				onValueChange={(e) => {
+					setNotificationSound(e.value[0]);
+					if (e.value[0]) playSystemSound({ name: e.value[0] });
+				}}
+				disabled={!notificationEnabled}
 				size="sm"
 			>
 				<Select.HiddenSelect />

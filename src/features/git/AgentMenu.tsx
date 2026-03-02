@@ -2,7 +2,7 @@ import { Button, Group, IconButton, Menu, Portal } from "@chakra-ui/react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { RiAddLine, RiArrowDownSLine } from "react-icons/ri";
-import { useAgentSettingsStore } from "@/features/settings/stores/agentSettingsStore";
+import { useSettingsStore } from "@/features/settings/stores";
 import type { MarketplaceAgent, Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { AgentIcon } from "@/shared/components/AgentIcon";
@@ -57,7 +57,7 @@ interface AgentMenuProps {
 
 export default function AgentMenu({ agents, profile, isPending, onCreateTab }: AgentMenuProps) {
 	const navigate = useNavigate();
-	const defaultAgentId = useAgentSettingsStore((s) => s.defaultAgent);
+	const defaultAgent = useSettingsStore((s) => s.defaultAgent);
 
 	const createWith = (agent: MarketplaceAgent) =>
 		onCreateTab({
@@ -87,7 +87,7 @@ export default function AgentMenu({ agents, profile, isPending, onCreateTab }: A
 	// Determine which agent is the "primary" action button:
 	// prefer stored default, fall back to first agent (covers the 1-agent case)
 	const primaryAgent =
-		agents.find((a) => a.id === defaultAgentId) ?? agents[0];
+		agents.find((a) => a.id === defaultAgent) ?? agents[0];
 	const otherAgents = agents.filter((a) => a.id !== primaryAgent.id);
 
 	return (

@@ -2,7 +2,7 @@ import { Box } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useMemo } from "react";
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { useSettingsStore } from "@/features/settings/stores";
 
 const EMPTY_OPTIONS = {};
 
@@ -17,8 +17,8 @@ export function DiffRenderer({
 	oldText,
 	newText,
 }: DiffRendererProps) {
-	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
-	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const fontFamily = useSettingsStore((s) => s.fontFamily);
+	const fontSize = useSettingsStore((s) => s.fontSize);
 
 	// 转换为 FileDiffMetadata 格式
 	const fileDiff = useMemo(() => {

@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import type { StateCreator } from "zustand";
+import type { SettingsStore } from "./index";
 
 export type AccentColor =
 	| "gray"
@@ -14,13 +14,6 @@ export type AccentColor =
 	| "pink";
 
 export type BorderRadius = "none" | "sm" | "md" | "lg" | "xl";
-
-interface ThemeStore {
-	accentColor: AccentColor;
-	borderRadius: BorderRadius;
-	setAccentColor: (color: AccentColor) => void;
-	setBorderRadius: (radius: BorderRadius) => void;
-}
 
 export const ACCENT_COLORS: AccentColor[] = [
 	"gray",
@@ -46,28 +39,30 @@ export const BORDER_RADIUS_MAP: Record<
 	xl: { l1: "0.75rem", l2: "1rem", l3: "1.5rem" },
 };
 
-export const useThemeStore = create<ThemeStore>()(
-	persist(
-		(set) => ({
-			accentColor: "blue",
-			borderRadius: "sm",
-			setAccentColor: (color) => set({ accentColor: color }),
-			setBorderRadius: (radius) => set({ borderRadius: radius }),
-		}),
-		{ name: "theme-settings", version: 1 },
-	),
-);
+export interface ThemeSlice {
+	accentColor: AccentColor;
+	borderRadius: BorderRadius;
+	setAccentColor: (color: AccentColor) => void;
+	setBorderRadius: (radius: BorderRadius) => void;
+}
 
-function syncBorderRadius(borderRadius: BorderRadius) {
-	const radii = BORDER_RADIUS_MAP[borderRadius];
+export const createThemeSlice: StateCreator<
+	SettingsStore,
+	[["zustand/immer", never]],
+	[],
+	ThemeSlice
+> = (set) => ({
+	accentColor: "blue",
+	borderRadius: "sm",
+	setAccentColor: (color) => set({ accentColor: color }),
+	setBorderRadius: (radius) => set({ borderRadius: radius }),
+});
+
+export function syncBorderRadius(borderRadius: string) {
+	const radii = BORDER_RADIUS_MAP[borderRadius as keyof typeof BORDER_RADIUS_MAP];
+	if (!radii) return;
 	const root = document.documentElement;
 	root.style.setProperty("--chakra-radii-l1", radii.l1);
 	root.style.setProperty("--chakra-radii-l2", radii.l2);
 	root.style.setProperty("--chakra-radii-l3", radii.l3);
 }
-
-syncBorderRadius(useThemeStore.getState().borderRadius);
-
-useThemeStore.subscribe((s, prev) => {
-	if (s.borderRadius !== prev.borderRadius) syncBorderRadius(s.borderRadius);
-});

@@ -1,15 +1,15 @@
 import type { ITheme } from "@xterm/xterm";
 import { use } from "react";
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { useSettingsStore } from "@/features/settings/stores";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
 export function useTerminalThemeId(): TerminalThemeId {
 	const { isDark } = use(ThemeContext);
-	return useTerminalSettingsStore((s) =>
-		isDark ? s.darkTerminalTheme : s.lightTerminalTheme,
-	);
+	const darkThemeId = useSettingsStore((s) => s.darkTerminalTheme);
+	const lightThemeId = useSettingsStore((s) => s.lightTerminalTheme);
+	return isDark ? darkThemeId : lightThemeId;
 }
 
 export function useTerminalTheme(): ITheme {
