@@ -87,7 +87,7 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 							))}
 						</Tabs.List>
 					</ScrollArea.Viewport>
-					<ScrollArea.Scrollbar orientation="horizontal" size="xs" />
+					<ScrollArea.Scrollbar orientation="horizontal" />
 				</ScrollArea.Root>
 			</Tabs.Root>
 

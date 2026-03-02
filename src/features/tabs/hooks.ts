@@ -47,6 +47,7 @@ export function useCreateTab() {
 }
 
 export function useCloseTab() {
+	const tabStore = useTabStore();
 	return useMutation({
 		mutationFn: async ({ tabId, profileId }: { profileId: string; tabId: string }) => {
 			// Atomic check-and-set to prevent double-close
@@ -55,7 +56,7 @@ export function useCloseTab() {
 			}
 
 			try {
-				const tab = useTabStore.getState().profiles[profileId]?.tabs.find(
+				const tab = tabStore.profiles[profileId]?.tabs.find(
 					(t) => t.id === tabId,
 				);
 
@@ -84,21 +85,20 @@ export function useCloseTab() {
 			}
 		},
 		onSettled: (_data, _err, { profileId, tabId }) => {
-			useTabStore.getState().closeTab(profileId, tabId);
+			tabStore.closeTab(profileId, tabId);
 		},
 	});
 }
 
 export function useCreatePane() {
+	const tabStore = useTabStore();
 	return useMutation({
 		mutationFn: async ({
 			profileId,
 			tabId,
 			cwd,
 		}: { profileId: string; tabId: string; cwd: string }) => {
-			const tab = useTabStore
-				.getState()
-				.profiles[profileId]?.tabs.find((t) => t.id === tabId);
+			const tab = tabStore.profiles[profileId]?.tabs.find((t) => t.id === tabId);
 			if (!tab || tab.type !== "terminal") {
 				throw new Error("Tab not found or not a terminal tab");
 			}
@@ -115,7 +115,7 @@ export function useCreatePane() {
 			return { session, tabId };
 		},
 		onSuccess: ({ session, tabId }, { profileId }) => {
-			useTabStore.getState().addPane(profileId, tabId, {
+			tabStore.addPane(profileId, tabId, {
 				sessionId: session.id,
 				title: session.title,
 			});
@@ -124,6 +124,7 @@ export function useCreatePane() {
 }
 
 export function useClosePane() {
+	const tabStore = useTabStore();
 	return useMutation({
 		mutationFn: async ({
 			paneSessionId,
@@ -135,7 +136,7 @@ export function useClosePane() {
 			}
 		},
 		onSettled: (_data, _err, { profileId, tabId, paneSessionId }) => {
-			useTabStore.getState().closePane(profileId, tabId, paneSessionId);
+			tabStore.closePane(profileId, tabId, paneSessionId);
 		},
 	});
 }
