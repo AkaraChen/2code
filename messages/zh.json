@@ -96,6 +96,7 @@
 	"topbarMergedPr": "已合并 Pull Request",
 	"topbarNoControls": "顶栏暂无控件。从下方拖拽控件到此处。",
 	"topbarAllControlsActive": "所有控件已激活。",
+	"revealInFinder": "在 Finder 中显示",
 	"agents": "代理",
 	"agentCredentials": "凭证",
 	"agentCredentialsDetected": "通过 {source} 检测到",

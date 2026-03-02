@@ -7,7 +7,8 @@ export type ControlId =
 	| "windsurf"
 	| "cursor"
 	| "github-pr"
-	| "git-diff";
+	| "git-diff"
+	| "reveal-in-finder";
 
 export interface ControlProps {
 	profile: Profile;

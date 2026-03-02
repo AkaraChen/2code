@@ -5,13 +5,14 @@ import {
 	SiVscodium,
 	SiWindsurf,
 } from "@icons-pack/react-simple-icons";
-import { RiGitPullRequestLine } from "react-icons/ri";
+import { RiFolderLine, RiGitPullRequestLine } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
 	GitDiffControl,
 	GithubPrControl,
 	GithubDesktopControl,
+	RevealInFinderControl,
 	VscodeControl,
 	WindsurfControl,
 } from "./controls";
@@ -53,6 +54,12 @@ const definitions: ControlDefinition[] = [
 		label: () => m.topbarGitDiff(),
 		icon: SiGit,
 		component: GitDiffControl,
+	},
+	{
+		id: "reveal-in-finder",
+		label: () => m.revealInFinder(),
+		icon: RiFolderLine,
+		component: RevealInFinderControl,
 	},
 ];
 

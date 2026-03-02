@@ -21,6 +21,7 @@ import type { ComponentType } from "react";
 import { Suspense } from "react";
 import {
 	RiArrowRightUpLine,
+	RiFolderLine,
 	RiGitMergeLine,
 	RiGitPullRequestLine,
 } from "react-icons/ri";
@@ -366,5 +367,38 @@ export function GitDiffControl({ profile }: ControlProps) {
 				/>
 			)}
 		</>
+	);
+}
+
+export function RevealInFinderControl({ profile }: ControlProps) {
+	const handleReveal = async () => {
+		// macOS: open -R reveals the path in Finder
+		// Windows: explorer opens the folder
+		const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+		const cmd = isMac ? "open" : "explorer";
+		const args = isMac
+			? ["-R", profile.worktree_path]
+			: [profile.worktree_path];
+		await Command.create(cmd, args).execute();
+	};
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<IconButton
+					aria-label={m.revealInFinder()}
+					size="xs"
+					variant="subtle"
+					onClick={handleReveal}
+				>
+					<RiFolderLine />
+				</IconButton>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{m.revealInFinder()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
 	);
 }

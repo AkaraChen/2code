@@ -96,6 +96,7 @@
 	"topbarMergedPr": "Merged Pull Request",
 	"topbarNoControls": "No controls in the top bar. Drag controls here from below.",
 	"topbarAllControlsActive": "All controls are active.",
+	"revealInFinder": "Reveal in Finder",
 	"agents": "Agents",
 	"agentCredentials": "Credentials",
 	"agentCredentialsDetected": "detected via {source}",

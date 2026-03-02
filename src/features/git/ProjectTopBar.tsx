@@ -7,8 +7,9 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
+import { homeDir } from "@tauri-apps/api/path";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import {
 	RiAddLine,
 	RiGitBranchLine,
@@ -35,6 +36,23 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	);
 }
 
+// Helper hook to shorten path: /Users/name/Projects/foo -> ~/Projects/foo
+function useShortPath(fullPath: string): string {
+	const [shortPath, setShortPath] = useState(fullPath);
+
+	useEffect(() => {
+		homeDir().then((home) => {
+			if (home && fullPath.startsWith(home)) {
+				setShortPath("~" + fullPath.slice(home.length));
+			} else {
+				setShortPath(fullPath);
+			}
+		});
+	}, [fullPath]);
+
+	return shortPath;
+}
+
 interface ProjectTopBarProps {
 	projectName: string;
 	profile: Profile;
@@ -46,6 +64,7 @@ export default function ProjectTopBar({
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const createTab = useCreateTab();
+	const shortPath = useShortPath(profile.worktree_path);
 
 	const { data: agents } = useSuspenseQuery({
 		queryKey: queryKeys.marketplace.agents,
@@ -64,8 +83,22 @@ export default function ProjectTopBar({
 			pt="3"
 		>
 			<HStack gap="2">
-				<Text as="span" fontWeight="semibold">
-					{projectName}
+				<Tooltip.Root>
+					<Tooltip.Trigger asChild>
+						<Text as="span" fontWeight="semibold" cursor="default">
+							{projectName}
+						</Text>
+					</Tooltip.Trigger>
+					<Portal>
+						<Tooltip.Positioner>
+							<Tooltip.Content>
+								<Text as="span" fontSize="xs">{profile.worktree_path}</Text>
+							</Tooltip.Content>
+						</Tooltip.Positioner>
+					</Portal>
+				</Tooltip.Root>
+				<Text as="span" color="fg.muted" fontSize="xs" lineClamp={1} maxW="200px">
+					{shortPath}
 				</Text>
 				<Box color="fg.muted">
 					{profile.is_default ? (
