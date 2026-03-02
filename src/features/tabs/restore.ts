@@ -46,7 +46,7 @@ function createRestorationPipeline(): Promise<void> {
 
 /**
  * Populate tab store from already-live sessions (backend restored them at startup).
- * Pure reads — no mutations.
+ * Reconciles with persisted frontend state to preserve split layouts and prevent duplication.
  */
 async function populateTabs(projects: ProjectWithProfiles[]) {
 	consola.info(`[tab-restore] populating tabs for ${projects.length} projects`);
@@ -61,29 +61,40 @@ async function populateTabs(projects: ProjectWithProfiles[]) {
 		}),
 	);
 
-	// PTY sessions: wrap in session objects, add to tab store
-	for (const { ptySessions } of projectData) {
-		for (const s of ptySessions) {
-			const ts = new TerminalTabSession(s.id, s.profile_id, s.title);
-			sessionRegistry.set(ts.id, ts);
-			useTabStore.getState().addTab(s.profile_id, ts.toTab());
-			consola.info(`[tab-restore] PTY ${s.id}`);
-		}
-	}
+	const store = useTabStore.getState();
 
-	// Agent sessions: only create tab entries (no process spawning).
-	// The actual reconnection (spawn + listener) happens lazily on tab focus.
-	for (const { agentSessions } of projectData) {
-		for (const r of agentSessions) {
-			const ts = new AgentTabSession(
-				r.id,
-				r.profile_id,
-				`${r.agent} session`,
-				r.agent,
-			);
-			sessionRegistry.set(ts.id, ts);
-			useTabStore.getState().addTab(r.profile_id, ts.toTab());
-			consola.info(`[tab-restore] Agent tab ${r.id} (pending reconnect)`);
+	for (const { project, ptySessions, agentSessions } of projectData) {
+		for (const p of project.profiles) {
+			const profilePtySessions = ptySessions.filter(s => s.profile_id === p.id);
+			const profileAgentSessions = agentSessions.filter(s => s.profile_id === p.id);
+
+			if (profilePtySessions.length === 0 && profileAgentSessions.length === 0) continue;
+
+			// 1. Initialize session objects in registry
+			profilePtySessions.forEach(s => {
+				const ts = new TerminalTabSession(s.id, s.profile_id, s.title);
+				sessionRegistry.set(s.id, ts);
+			});
+			profileAgentSessions.forEach(r => {
+				const ts = new AgentTabSession(r.id, r.profile_id, `${r.agent} session`, r.agent);
+				sessionRegistry.set(r.id, ts);
+			});
+
+			// 2. Reconcile if profile exists, otherwise add fresh
+			if (store.profiles[p.id]) {
+				consola.info(`[tab-restore] reconciling profile ${p.id} (${profilePtySessions.length} PTY, ${profileAgentSessions.length} Agent)`);
+				store.reconcileProfile(p.id, profilePtySessions, profileAgentSessions);
+			} else {
+				consola.info(`[tab-restore] populating new profile ${p.id}`);
+				profilePtySessions.forEach(s => {
+					const ts = sessionRegistry.get(s.id) as TerminalTabSession;
+					store.addTab(p.id, ts.toTab());
+				});
+				profileAgentSessions.forEach(r => {
+					const ts = sessionRegistry.get(r.id) as AgentTabSession;
+					store.addTab(p.id, ts.toTab());
+				});
+			}
 		}
 	}
 

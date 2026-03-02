@@ -38,6 +38,15 @@ interface TabStore {
 	restoreProfile: (profileId: string, profileState: ProfileTabState) => void;
 	/** Update the backend sessionId on an agent tab without changing its nanoid tab id. */
 	updateAgentSessionId: (profileId: string, tabId: string, newSessionId: string) => void;
+	/** 
+	 * Reconcile persisted profile state with live backend sessions.
+	 * Positionally matches PTY sessions and ID-matches Agent sessions.
+	 */
+	reconcileProfile: (
+		profileId: string,
+		ptySessions: { id: string; title: string }[],
+		agentSessions: { id: string; agent: string }[],
+	) => void;
 }
 
 export const useTabStore = create<TabStore>()(
@@ -240,6 +249,100 @@ export const useTabStore = create<TabStore>()(
 					const tab = profile.tabs.find((t) => t.id === tabId);
 					if (!tab || tab.type !== "agent") return;
 					tab.sessionId = newSessionId;
+				});
+			},
+
+			reconcileProfile(profileId, ptySessions, agentSessions) {
+				set((state) => {
+					const profile = state.profiles[profileId];
+					if (!profile) return;
+
+					// 1. PTY Reconciliation (Positional)
+					const oldOrder = profile.sessionOrder;
+					const newOrder = ptySessions.map((s) => s.id);
+					const ptyMap = new Map<string, string>();
+					const matchedNewIds = new Set<string>();
+
+					for (let i = 0; i < Math.min(oldOrder.length, newOrder.length); i++) {
+						ptyMap.set(oldOrder[i], newOrder[i]);
+						matchedNewIds.add(newOrder[i]);
+					}
+
+					// Update existing terminal panes
+					profile.tabs.forEach((tab) => {
+						if (tab.type === "terminal") {
+							tab.panes.forEach((pane) => {
+								const nextId = ptyMap.get(pane.sessionId);
+								if (nextId) {
+									pane.sessionId = nextId;
+									// Update title if backend has one (optional, usually they match)
+									const b = ptySessions.find(s => s.id === nextId);
+									if (b) pane.title = b.title;
+								}
+							});
+							const nextActiveId = ptyMap.get(tab.activePaneId);
+							if (nextActiveId) tab.activePaneId = nextActiveId;
+
+							// Remove panes that weren't matched (zombies)
+							tab.panes = tab.panes.filter((p) => matchedNewIds.has(p.sessionId));
+						}
+					});
+
+					// Remove empty terminal tabs
+					profile.tabs = profile.tabs.filter(
+						(t) => t.type !== "terminal" || t.panes.length > 0,
+					);
+
+					profile.sessionOrder = newOrder;
+
+					// 2. Agent Reconciliation (ID-based)
+					const matchedAgentIds = new Set<string>();
+					profile.tabs.forEach((tab) => {
+						if (tab.type === "agent") {
+							const b = agentSessions.find((s) => s.id === tab.sessionId);
+							if (b) {
+								matchedAgentIds.add(b.id);
+							}
+						}
+					});
+
+					// Cleanup zombie agent tabs
+					profile.tabs = profile.tabs.filter(
+						(t) => t.type !== "agent" || matchedAgentIds.has(t.sessionId),
+					);
+
+					// 3. Add orphaned backend sessions as new tabs
+					const matchedPtyIds = new Set(ptyMap.values());
+					ptySessions.forEach((s) => {
+						if (!matchedPtyIds.has(s.id)) {
+							// This is a session the frontend didn't know about
+							// Add it as a new single-pane tab
+							profile.tabs.push({
+								type: "terminal",
+								id: `restored-${s.id}`,
+								title: s.title,
+								panes: [{ sessionId: s.id, title: s.title }],
+								activePaneId: s.id,
+							});
+						}
+					});
+
+					agentSessions.forEach((s) => {
+						if (!matchedAgentIds.has(s.id)) {
+							profile.tabs.push({
+								type: "agent",
+								id: `restored-${s.id}`,
+								sessionId: s.id,
+								title: `${s.agent} session`,
+								agentType: s.agent,
+							});
+						}
+					});
+
+					// Ensure first tab is active if current active is gone
+					if (profile.tabs.length > 0 && (!profile.activeTabId || !profile.tabs.find(t => t.id === profile.activeTabId))) {
+						profile.activeTabId = profile.tabs[0].id;
+					}
 				});
 			},
 		})),
