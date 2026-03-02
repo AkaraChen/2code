@@ -152,6 +152,21 @@ fn create_session_inner(
 	config: &PtyConfig,
 	initial_output: Option<&[u8]>,
 ) -> Result<String, AppError> {
+	let session_id = uuid::Uuid::new_v4().to_string();
+	create_session_with_id(ctx, &session_id, meta, config, initial_output, false)?;
+	Ok(session_id)
+}
+
+/// Core PTY session creation. When `reuse_existing` is true the DB record
+/// already exists and will be updated in-place (used during restore).
+fn create_session_with_id(
+	ctx: &PtyContext,
+	session_id: &str,
+	meta: &PtySessionMeta,
+	config: &PtyConfig,
+	initial_output: Option<&[u8]>,
+	reuse_existing: bool,
+) -> Result<(), AppError> {
 	// 1. Resolve project folder and load init_script from 2code.json
 	let project_init_scripts = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
@@ -163,20 +178,17 @@ fn create_session_inner(
 			.unwrap_or_default()
 	};
 
-	// 2. Generate session ID (needed for init dir name)
-	let session_id = uuid::Uuid::new_v4().to_string();
-
-	// 3. Prepare shell init directory (graceful degradation on failure)
+	// 2. Prepare shell init directory (graceful degradation on failure)
 	let init_dir =
-		infra::shell_init::prepare_init_dir(&session_id, &project_init_scripts);
+		infra::shell_init::prepare_init_dir(session_id, &project_init_scripts);
 	if let Err(ref e) = init_dir {
 		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
 	}
 
-	// 4. Create PTY session
+	// 3. Create PTY session
 	let reader = session::create_session(
 		&ctx.sessions,
-		&session_id,
+		session_id,
 		&config.shell,
 		&config.cwd,
 		config.rows,
@@ -186,33 +198,42 @@ fn create_session_inner(
 		ctx.helper_bin.as_deref(),
 	)?;
 
-	// Insert session record into database
+	// 4. Persist to database
 	{
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		let new_record = NewPtySessionRecord {
-			id: &session_id,
-			profile_id: &meta.profile_id,
-			title: &meta.title,
-			shell: &config.shell,
-			cwd: &config.cwd,
-			cols: config.cols as i32,
-			rows: config.rows as i32,
-		};
-		repo::pty::insert_session(conn, &new_record)?;
+		if reuse_existing {
+			// Restore path: update record in-place, replace output blob
+			repo::pty::reopen_session(
+				conn,
+				session_id,
+				initial_output.unwrap_or(&[]),
+			)?;
+		} else {
+			// New session path: insert fresh record
+			let new_record = NewPtySessionRecord {
+				id: session_id,
+				profile_id: &meta.profile_id,
+				title: &meta.title,
+				shell: &config.shell,
+				cwd: &config.cwd,
+				cols: config.cols as i32,
+				rows: config.rows as i32,
+			};
+			repo::pty::insert_session(conn, &new_record)?;
 
-		// Pre-write initial output (e.g. sanitized history from restored session)
-		// BEFORE spawning the read thread so it precedes any new PTY output.
-		if let Some(output) = initial_output {
-			if !output.is_empty() {
-				repo::pty::append_output(conn, &session_id, output)?;
+			// Pre-write initial output BEFORE spawning the read thread
+			if let Some(output) = initial_output {
+				if !output.is_empty() {
+					repo::pty::append_output(conn, session_id, output)?;
+				}
 			}
 		}
 	}
 
-	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, "session created");
+	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, reuse_existing, "session created");
 
 	// Spawn a background thread to read PTY output and emit events
-	let id = session_id.clone();
+	let id = session_id.to_string();
 	let emitter = ctx.emitter.clone();
 	let db = ctx.db.clone();
 	let flush_senders = ctx.flush_senders.clone();
@@ -225,7 +246,7 @@ fn create_session_inner(
 		guard.push(handle);
 	}
 
-	Ok(session_id)
+	Ok(())
 }
 
 pub fn close_session(
@@ -274,7 +295,8 @@ pub fn mark_all_closed(db: &DbPool) {
 }
 
 /// Restore all closed PTY sessions at startup.
-/// For each: read history → sanitize → create new PTY with history pre-written → delete old record.
+/// For each: read history → sanitize → spawn new PTY reusing the SAME session ID.
+/// The DB record is updated in-place so frontend-persisted IDs stay valid.
 pub fn restore_all_sessions(ctx: &PtyContext) -> usize {
 	let sessions = {
 		let Ok(mut conn) = ctx.db.lock() else { return 0 };
@@ -321,7 +343,7 @@ fn restore_single_session(
 		"restore: sanitized history"
 	);
 
-	// 3. Create new PTY with history pre-written to blob
+	// 3. Spawn new PTY process reusing the SAME session ID, update DB in-place
 	let meta = PtySessionMeta {
 		profile_id: old.profile_id.clone(),
 		title: old.title.clone(),
@@ -337,14 +359,8 @@ fn restore_single_session(
 	} else {
 		Some(history.as_slice())
 	};
-	let new_id = create_session_inner(ctx, &meta, &config, history_ref)?;
-	tracing::info!(target: "pty", old_id = %old.id, %new_id, "restore: new session created");
-
-	// 4. Delete old record
-	{
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		repo::pty::delete_session(conn, &old.id)?;
-	}
+	create_session_with_id(ctx, &old.id, &meta, &config, history_ref, true)?;
+	tracing::info!(target: "pty", session_id = %old.id, "restore: session restored in-place");
 
 	Ok(())
 }

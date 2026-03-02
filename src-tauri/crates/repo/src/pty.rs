@@ -172,3 +172,31 @@ pub fn delete_session(
 	tracing::info!(target: "pty", %session_id, rows_deleted = rows, "repo: delete_session");
 	Ok(())
 }
+
+/// Reopen a previously-closed session: clear `closed_at` and replace the
+/// output blob with sanitized history so the session can be reused in-place.
+pub fn reopen_session(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	sanitized_output: &[u8],
+) -> Result<(), AppError> {
+	// Mark as open again
+	diesel::update(
+		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
+	)
+	.set(pty_sessions::closed_at.eq(None::<String>))
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	// Replace output blob with sanitized history
+	diesel::sql_query(
+		"UPDATE pty_session_output SET data = ? WHERE session_id = ?",
+	)
+	.bind::<diesel::sql_types::Binary, _>(sanitized_output)
+	.bind::<diesel::sql_types::Text, _>(session_id)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	tracing::info!(target: "pty", %session_id, output_bytes = sanitized_output.len(), "repo: reopened session");
+	Ok(())
+}
