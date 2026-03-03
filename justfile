@@ -43,3 +43,6 @@ coverage-summary:
 
 cloc:
     cloc --include-lang="TypeScript,Rust,JavaScript,CSS" . --exclude-dir=node_modules,dist,target --fullpath --not-match-d='(src-tauri/target|src/generated|src/paraglide)'
+
+test:
+    cd src-tauri && cargo nextest run
