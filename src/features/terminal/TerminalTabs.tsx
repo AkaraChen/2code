@@ -141,24 +141,8 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 								/>
 							))
 							.with({ type: "pending" }, (t) => (
-								<Suspense
-									fallback={
-										<Flex
-											h="full"
-											w="full"
-											direction="column"
-											gap="4"
-											align="center"
-											justify="center"
-										>
-											<Spinner size="xl" color="gray.500" />
-											<Box color="fg.muted" fontSize="sm">
-												{m.loading({ name: t.title })}
-											</Box>
-										</Flex>
-									}
-								>
-									<PendingTabResolver promise={t.promise} />
+								<Suspense fallback={<PendingTabLoading title={t.title} />}>
+									<PendingTabResolver promise={t.promise} title={t.title} />
 								</Suspense>
 							))
 							.exhaustive()}
@@ -169,7 +153,25 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 	);
 }
 
-function PendingTabResolver({ promise }: { promise: Promise<unknown> }) {
+function PendingTabLoading({ title }: { title: string }) {
+	return (
+		<Flex
+			h="full"
+			w="full"
+			direction="column"
+			gap="4"
+			align="center"
+			justify="center"
+		>
+			<Spinner size="xl" color="gray.500" />
+			<Box color="fg.muted" fontSize="sm">
+				{m.loading({ name: title })}
+			</Box>
+		</Flex>
+	);
+}
+
+function PendingTabResolver({ promise, title }: { promise: Promise<unknown>; title: string }) {
 	use(promise);
-	return null;
+	return <PendingTabLoading title={title} />;
 }
