@@ -1,8 +1,8 @@
-import { Box, CodeBlock, createShikiAdapter, Text } from "@chakra-ui/react";
+import { Box, CodeBlock, createShikiAdapter } from "@chakra-ui/react";
 import type { HighlighterGeneric } from "shiki";
+import { ErrorBoundary } from "react-error-boundary";
 import { Streamdown } from "streamdown";
 import { streamdownComponents } from "../utils/streamdownComponents";
-import { AgentErrorBoundary } from "./AgentErrorBoundary";
 
 const SHIKI_LANGS = [
 	"typescript",
@@ -75,9 +75,12 @@ export function MarkdownRenderer({
 			fontSize="sm"
 			overflow="auto"
 		>
-			<AgentErrorBoundary
-				label="Markdown render failed"
-				compact
+			<ErrorBoundary
+				fallbackRender={({ error }) => (
+					<Box fontSize="xs" color="fg.error" px="1">
+						⚠ {error instanceof Error ? error.message : String(error)}
+					</Box>
+				)}
 			>
 				<CodeBlock.AdapterProvider value={shikiAdapter}>
 					<Streamdown
@@ -88,7 +91,7 @@ export function MarkdownRenderer({
 						{content}
 					</Streamdown>
 				</CodeBlock.AdapterProvider>
-			</AgentErrorBoundary>
+			</ErrorBoundary>
 			{children}
 		</Box>
 	);

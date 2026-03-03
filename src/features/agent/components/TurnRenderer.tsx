@@ -1,6 +1,6 @@
 import { Flex } from "@chakra-ui/react";
+import { ErrorBoundary } from "react-error-boundary";
 import type { AgentTurn } from "../types";
-import { AgentErrorBoundary } from "./AgentErrorBoundary";
 import { AgentResponseGroup } from "./AgentResponseGroup";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { Message } from "./Message";
@@ -17,7 +17,13 @@ export function TurnRenderer({
 	agentName,
 }: TurnRendererProps) {
 	return (
-		<AgentErrorBoundary label="Failed to render message" compact>
+		<ErrorBoundary
+			fallbackRender={({ error }) => (
+				<Flex px="4" py="1" fontSize="xs" color="fg.error">
+					⚠ {error instanceof Error ? error.message : String(error)}
+				</Flex>
+			)}
+		>
 			<Flex direction="column">
 				{/* 用户消息 */}
 				{turn.userMessage && (
@@ -42,6 +48,6 @@ export function TurnRenderer({
 					</Message>
 				)}
 			</Flex>
-		</AgentErrorBoundary>
+		</ErrorBoundary>
 	);
 }
