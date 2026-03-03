@@ -13,7 +13,7 @@ fn skills_dir() -> Result<PathBuf, AppError> {
 
 /// Parse YAML frontmatter and markdown body from SKILL.md content.
 /// Format:
-/// ```
+/// ```text
 /// ---
 /// name: my-skill
 /// description: Does something useful
