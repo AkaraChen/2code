@@ -1,7 +1,8 @@
-import { Box, CodeBlock, createShikiAdapter } from "@chakra-ui/react";
+import { Box, CodeBlock, createShikiAdapter, Text } from "@chakra-ui/react";
 import type { HighlighterGeneric } from "shiki";
 import { Streamdown } from "streamdown";
 import { streamdownComponents } from "../utils/streamdownComponents";
+import { AgentErrorBoundary } from "./AgentErrorBoundary";
 
 const SHIKI_LANGS = [
 	"typescript",
@@ -74,15 +75,20 @@ export function MarkdownRenderer({
 			fontSize="sm"
 			overflow="auto"
 		>
-			<CodeBlock.AdapterProvider value={shikiAdapter}>
-				<Streamdown
-					animated
-					isAnimating={isAnimating}
-					components={streamdownComponents}
-				>
-					{content}
-				</Streamdown>
-			</CodeBlock.AdapterProvider>
+			<AgentErrorBoundary
+				label="Markdown render failed"
+				compact
+			>
+				<CodeBlock.AdapterProvider value={shikiAdapter}>
+					<Streamdown
+						animated
+						isAnimating={isAnimating}
+						components={streamdownComponents}
+					>
+						{content}
+					</Streamdown>
+				</CodeBlock.AdapterProvider>
+			</AgentErrorBoundary>
 			{children}
 		</Box>
 	);

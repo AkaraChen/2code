@@ -11,13 +11,13 @@ import {
 	VStack,
 } from "@chakra-ui/react";
 import { Suspense, use, useCallback, useMemo, useState } from "react";
-import { ErrorBoundary } from "react-error-boundary";
 import { LuShrink } from "react-icons/lu";
 import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "@/features/settings/stores";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
 import type { AgentTabSession } from "./AgentTabSession";
+import { AgentErrorBoundary } from "./components/AgentErrorBoundary";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
 import { useSendAgentPrompt, useSetAgentModel, useSetAgentMode } from "./hooks";
@@ -77,26 +77,6 @@ function ReconnectingFallback() {
 			<VStack gap="4">
 				<Spinner size="lg" />
 				<Text color="fg.muted">{m.agentReconnecting()}</Text>
-			</VStack>
-		</Flex>
-	);
-}
-
-function ReconnectErrorFallback({ error }: { error: unknown }) {
-	const message = error instanceof Error ? error.message : String(error);
-	return (
-		<Flex
-			direction="column"
-			h="full"
-			w="full"
-			align="center"
-			justify="center"
-			bg="bg"
-		>
-			<VStack gap="4">
-				<Text color="fg.error">
-					{m.agentReconnectFailed({ error: message })}
-				</Text>
 			</VStack>
 		</Flex>
 	);
@@ -286,11 +266,11 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 
 	if (isActive && needsReconnection(sessionId)) {
 		return (
-			<ErrorBoundary FallbackComponent={ReconnectErrorFallback}>
+			<AgentErrorBoundary label="Failed to reconnect agent session">
 				<Suspense fallback={<ReconnectingFallback />}>
 					<AwaitReconnection sessionId={sessionId} />
 				</Suspense>
-			</ErrorBoundary>
+			</AgentErrorBoundary>
 		);
 	}
 
