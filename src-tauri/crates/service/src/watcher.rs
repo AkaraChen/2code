@@ -91,11 +91,11 @@ fn reconcile_watchers(
 		Err(_) => return,
 	};
 
-	let current_ids: std::collections::HashSet<String> =
-		projects.iter().map(|p| p.id.clone()).collect();
+	let current_ids: std::collections::HashSet<&str> =
+		projects.iter().map(|p| p.id.as_str()).collect();
 
 	// Remove watchers for deleted projects
-	watchers.retain(|id, _| current_ids.contains(id));
+	watchers.retain(|id, _| current_ids.contains(id.as_str()));
 
 	// Add watchers for new projects
 	for project in projects {
@@ -103,10 +103,11 @@ fn reconcile_watchers(
 			continue;
 		}
 
-		let folder = project.folder.clone();
-		let project_id = project.id.clone();
+		let folder = project.folder;
+		let project_id = project.id;
 		let tx_clone = tx.clone();
 
+		let watcher_project_id = project_id.clone();
 		let watcher = recommended_watcher(move |res: Result<Event, _>| {
 			if let Ok(event) = res {
 				let is_change = matches!(
@@ -122,7 +123,7 @@ fn reconcile_watchers(
 							continue;
 						}
 						let _ =
-							tx_clone.send((project_id.clone(), path.clone()));
+							tx_clone.send((watcher_project_id.clone(), path.clone()));
 					}
 				}
 			}
@@ -139,7 +140,7 @@ fn reconcile_watchers(
 						continue;
 					}
 					watchers.insert(
-						project.id.clone(),
+						project_id,
 						ProjectWatcher {
 							_watcher: Box::new(w),
 						},

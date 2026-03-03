@@ -64,10 +64,10 @@ pub fn list() -> Result<Vec<Skill>, AppError> {
 	}
 
 	let mut skills = Vec::new();
-	let entries = fs::read_dir(&dir).map_err(|e| AppError::IoError(e))?;
+	let entries = fs::read_dir(&dir).map_err(AppError::IoError)?;
 
 	for entry in entries {
-		let entry = entry.map_err(|e| AppError::IoError(e))?;
+		let entry = entry.map_err(AppError::IoError)?;
 		let path = entry.path();
 		if !path.is_dir() {
 			continue;
