@@ -1,3 +1,4 @@
+import { Suspense, use } from "react";
 import {
 	Box,
 	Circle,
@@ -6,6 +7,7 @@ import {
 	HStack,
 	ScrollArea,
 	Tabs,
+	Spinner,
 } from "@chakra-ui/react";
 import { RiTerminalBoxLine } from "react-icons/ri";
 import { match } from "ts-pattern";
@@ -14,6 +16,7 @@ import { AgentChat } from "@/features/agent/AgentChat";
 import { useCloseTab } from "@/features/tabs/hooks";
 import { isPending } from "@/features/tabs/pendingDeletions";
 import { useTabStore } from "@/features/tabs/store";
+import * as m from "@/paraglide/messages.js";
 import { AgentIcon } from "@/shared/components/AgentIcon";
 import { SplitTerminal } from "./SplitTerminal";
 
@@ -39,6 +42,7 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 				t.panes.some((p) => notifiedTabs.has(p.sessionId)),
 			)
 			.with({ type: "agent" }, (t) => notifiedTabs.has(t.sessionId))
+			.with({ type: "pending" }, () => false)
 			.exhaustive();
 
 	return (
@@ -69,6 +73,16 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 										.with({ type: "terminal" }, () => (
 											<RiTerminalBoxLine />
 										))
+										.with({ type: "pending" }, (t) =>
+											t.intendedType === "agent" ? (
+												<AgentIcon
+													iconUrl={t.iconUrl}
+													alt={t.title}
+												/>
+											) : (
+												<RiTerminalBoxLine />
+											),
+										)
 										.exhaustive()}
 									<HStack gap="2">
 										{tab.title}
@@ -126,10 +140,36 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 									cwd={cwd}
 								/>
 							))
+							.with({ type: "pending" }, (t) => (
+								<Suspense
+									fallback={
+										<Flex
+											h="full"
+											w="full"
+											direction="column"
+											gap="4"
+											align="center"
+											justify="center"
+										>
+											<Spinner size="xl" color="gray.500" />
+											<Box color="fg.muted" fontSize="sm">
+												{m.loading({ name: t.title })}
+											</Box>
+										</Flex>
+									}
+								>
+									<PendingTabResolver promise={t.promise} />
+								</Suspense>
+							))
 							.exhaustive()}
 					</Box>
 				))}
 			</Box>
 		</Flex>
 	);
+}
+
+function PendingTabResolver({ promise }: { promise: Promise<unknown> }) {
+	use(promise);
+	return null;
 }

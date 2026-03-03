@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { nanoid } from "nanoid";
 import { match } from "ts-pattern";
 import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import * as m from "@/paraglide/messages.js";
@@ -6,7 +7,8 @@ import { clearPending, markPending } from "./pendingDeletions";
 import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
-import type { AgentTab } from "./types";
+import type { AgentTab, PendingTab } from "./types";
+import { TabSession } from "./session";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }
@@ -22,32 +24,58 @@ type CreateTabParams =
 export function useCreateTab() {
 	return useMutation({
 		mutationFn: async (params: CreateTabParams) => {
-			const session = await match(params)
-				.with({ type: "terminal" }, async (p) => {
-					const counter =
-						useTabStore.getState().profiles[p.profileId]?.counter ??
-						0;
-					return TerminalTabSession.create(
-						p.profileId,
-						p.cwd,
-						m.terminalTabTitle({ n: counter + 1 }),
-					);
-				})
-				.with({ type: "agent" }, (p) =>
-					AgentTabSession.create(
-						p.profileId,
-						p.cwd,
-						p.agent,
-						p.agentName,
-						p.iconUrl,
-					),
-				)
-				.exhaustive();
-			sessionRegistry.set(session.id, session);
-			return session;
+			const tempId = nanoid();
+			let promise: Promise<TabSession>;
+
+			if (params.type === "terminal") {
+				const counter =
+					useTabStore.getState().profiles[params.profileId]?.counter ??
+					0;
+				promise = TerminalTabSession.create(
+					params.profileId,
+					params.cwd,
+					m.terminalTabTitle({ n: counter + 1 }),
+				);
+			} else {
+				promise = AgentTabSession.create(
+					params.profileId,
+					params.cwd,
+					params.agent,
+					params.agentName,
+					params.iconUrl,
+				);
+			}
+
+			const pendingTab: PendingTab = {
+				type: "pending",
+				id: tempId,
+				title: params.type === "agent" ? params.agentName : m.newTerminal(),
+				intendedType: params.type,
+				iconUrl: params.type === "agent" ? params.iconUrl : undefined,
+				promise,
+			};
+
+			useTabStore.getState().addTab(params.profileId, pendingTab);
+
+			try {
+				const session = await promise;
+				sessionRegistry.set(session.id, session);
+				return { session, optimisticTabId: tempId };
+			} catch (error) {
+				useTabStore.getState().closeTab(params.profileId, tempId);
+				throw error;
+			}
 		},
-		onSuccess: (session) => {
-			useTabStore.getState().addTab(session.profileId, session.toTab());
+		onSuccess: ({ session, optimisticTabId }, variables) => {
+			const finalTab = session.toTab();
+			finalTab.id = optimisticTabId; // Re-use nanoid so React elements don't unmount
+			useTabStore
+				.getState()
+				.replaceTab(
+					variables.profileId,
+					optimisticTabId,
+					finalTab,
+				);
 		},
 	});
 }

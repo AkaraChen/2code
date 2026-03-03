@@ -246,5 +246,6 @@
 	"richTextHr": "Horizontal Rule",
 	"richTextCodeBlock": "Code Block",
 	"richTextUndo": "Undo",
-	"richTextRedo": "Redo"
+	"richTextRedo": "Redo",
+	"loading": "Loading {name}\u2026"
 }

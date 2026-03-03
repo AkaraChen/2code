@@ -27,8 +27,19 @@ export const useTabStore = create<TabStore>()(
 		{
 			name: "tab-layout",
 			version: 1,
-			// Only persist the tab layout (profiles). notifiedTabs is ephemeral.
-			partialize: (state) => ({ profiles: state.profiles }),
+			// Only persist the tab layout (profiles). notifiedTabs is ephemeral, and pending tabs are ephemeral.
+			partialize: (state) => {
+				const profiles = { ...state.profiles };
+				for (const id in profiles) {
+					profiles[id] = {
+						...profiles[id],
+						tabs: profiles[id].tabs.filter(
+							(t) => t.type !== "pending",
+						),
+					};
+				}
+				return { profiles };
+			},
 		},
 	),
 );

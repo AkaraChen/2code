@@ -246,5 +246,6 @@
 	"richTextHr": "分隔线",
 	"richTextCodeBlock": "代码块",
 	"richTextUndo": "撤销",
-	"richTextRedo": "重做"
+	"richTextRedo": "重做",
+	"loading": "正在加载 {name}\u2026"
 }

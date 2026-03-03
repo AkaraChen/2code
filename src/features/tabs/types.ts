@@ -23,8 +23,17 @@ export interface AgentTab {
 	iconUrl?: string | null;
 }
 
+export interface PendingTab {
+	type: "pending";
+	id: string;
+	title: string;
+	intendedType: "terminal" | "agent";
+	iconUrl?: string | null;
+	promise: Promise<unknown>;
+}
+
 /** Discriminated union of all tab types within a profile. */
-export type ProfileTab = TerminalTab | AgentTab;
+export type ProfileTab = TerminalTab | AgentTab | PendingTab;
 
 export interface ProfileTabState {
 	tabs: ProfileTab[];
