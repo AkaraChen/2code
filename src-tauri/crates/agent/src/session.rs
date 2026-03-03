@@ -12,8 +12,8 @@ use sandbox_agent_agent_management::agents::AgentProcessLaunchSpec;
 use serde_json::Value;
 
 use crate::models::{
-	AgentModelOption, AgentModelState, AgentSessionInfo, ContentPart,
-	PromptResult,
+	AgentModeState, AgentModelOption, AgentModelState, AgentSessionInfo,
+	AgentSessionMode, ContentPart, PromptResult,
 };
 use crate::runtime::{AgentSession, AgentSessionError};
 
@@ -38,6 +38,22 @@ impl SessionModelRuntimeState {
 	}
 }
 
+#[derive(Debug, Clone, Default)]
+struct SessionModeRuntimeState {
+	current_mode_id: Option<String>,
+	available_modes: Vec<AgentSessionMode>,
+}
+
+impl SessionModeRuntimeState {
+	fn to_public(&self) -> AgentModeState {
+		AgentModeState {
+			supported: !self.available_modes.is_empty(),
+			current_mode_id: self.current_mode_id.clone(),
+			available_modes: self.available_modes.clone(),
+		}
+	}
+}
+
 /// A managed agent session that wraps AgentSession with ACP session lifecycle.
 pub struct ManagedAgentSession {
 	inner: AgentSession,
@@ -48,6 +64,7 @@ pub struct ManagedAgentSession {
 	/// Conversation history from a previous session, injected on the first prompt after reconnect.
 	pending_history: tokio::sync::Mutex<Option<String>>,
 	model_state: tokio::sync::Mutex<SessionModelRuntimeState>,
+	mode_state: tokio::sync::Mutex<SessionModeRuntimeState>,
 }
 
 impl ManagedAgentSession {
@@ -124,6 +141,7 @@ impl ManagedAgentSession {
 
 		let result_value = response.get("result").cloned().unwrap_or(response);
 		let model_state = parse_model_state_from_response(&result_value);
+		let mode_state = parse_mode_state_from_response(&result_value);
 		let acp_session_id = match serde_json::from_value::<NewSessionResponse>(
 			result_value.clone(),
 		) {
@@ -134,6 +152,7 @@ impl ManagedAgentSession {
 					modes = ?new_session.modes,
 					config_options = ?new_session.config_options,
 					model_supported = model_state.to_public().supported,
+					mode_supported = mode_state.to_public().supported,
 					"acp session/new parsed successfully"
 				);
 				new_session.session_id.to_string()
@@ -153,6 +172,7 @@ impl ManagedAgentSession {
 			acp_session_id = %acp_session_id,
 			agent = agent,
 			model_supported = model_state.to_public().supported,
+			mode_supported = mode_state.to_public().supported,
 			"managed agent session created"
 		);
 
@@ -164,6 +184,7 @@ impl ManagedAgentSession {
 			event_counter: AtomicI32::new(0),
 			pending_history: tokio::sync::Mutex::new(None),
 			model_state: tokio::sync::Mutex::new(model_state),
+			mode_state: tokio::sync::Mutex::new(mode_state),
 		})
 	}
 
@@ -251,6 +272,7 @@ impl ManagedAgentSession {
 
 		let result_value = response.get("result").cloned().unwrap_or(response);
 		let model_state = parse_model_state_from_response(&result_value);
+		let mode_state = parse_mode_state_from_response(&result_value);
 		match serde_json::from_value::<LoadSessionResponse>(result_value) {
 			Ok(load_resp) => {
 				tracing::info!(
@@ -258,6 +280,7 @@ impl ManagedAgentSession {
 					acp_session_id = acp_session_id,
 					modes = ?load_resp.modes,
 					model_supported = model_state.to_public().supported,
+					mode_supported = mode_state.to_public().supported,
 					"acp session/load parsed successfully"
 				);
 			}
@@ -275,6 +298,7 @@ impl ManagedAgentSession {
 			acp_session_id = acp_session_id,
 			agent = agent,
 			model_supported = model_state.to_public().supported,
+			mode_supported = mode_state.to_public().supported,
 			"managed agent session loaded"
 		);
 
@@ -286,12 +310,25 @@ impl ManagedAgentSession {
 			event_counter: AtomicI32::new(0),
 			pending_history: tokio::sync::Mutex::new(None),
 			model_state: tokio::sync::Mutex::new(model_state),
+			mode_state: tokio::sync::Mutex::new(mode_state),
 		})
 	}
 
 	/// Read current model state for this managed session.
 	pub async fn model_state(&self) -> AgentModelState {
 		self.model_state.lock().await.to_public()
+	}
+
+	/// Read current mode state for this managed session.
+	pub async fn mode_state(&self) -> AgentModeState {
+		self.mode_state.lock().await.to_public()
+	}
+
+	/// Update the mode state from a `current_mode_update` notification.
+	pub async fn apply_mode_update(&self, mode_id: &str) -> AgentModeState {
+		let mut guard = self.mode_state.lock().await;
+		guard.current_mode_id = Some(mode_id.to_string());
+		guard.to_public()
 	}
 
 	/// Switch to a different model.
@@ -354,7 +391,52 @@ impl ManagedAgentSession {
 		Ok(self.commit_model_state(parsed, Some(model_id)).await)
 	}
 
-	/// Send a prompt to the agent and return the result.
+	/// Switch to a different session mode.
+	pub async fn set_mode(
+		&self,
+		mode_id: &str,
+	) -> Result<AgentModeState, AgentSessionError> {
+		let request = serde_json::json!({
+			"sessionId": self.acp_session_id,
+			"modeId": mode_id,
+		});
+
+		tracing::info!(
+			local_id = %self.local_id,
+			acp_session_id = %self.acp_session_id,
+			mode_id = mode_id,
+			"acp session/set_mode request"
+		);
+
+		let response = self
+			.inner
+			.send("session/set_mode", request)
+			.await?;
+
+		if let Some(err) = response.get("error") {
+			tracing::warn!(
+				local_id = %self.local_id,
+				acp_session_id = %self.acp_session_id,
+				error = %err,
+				"failed to set mode via session/set_mode"
+			);
+			return Err(AgentSessionError::UnexpectedResponse);
+		}
+
+		// Optimistically update internal state
+		let mode_state = self.apply_mode_update(mode_id).await;
+
+		tracing::info!(
+			local_id = %self.local_id,
+			acp_session_id = %self.acp_session_id,
+			mode_id = mode_id,
+			"acp session/set_mode success"
+		);
+
+		Ok(mode_state)
+	}
+
+
 	pub async fn prompt(
 		&self,
 		content: Vec<ContentPart>,
@@ -629,6 +711,43 @@ fn parse_model_state_from_response(result: &Value) -> SessionModelRuntimeState {
 				}
 				state.available_models = options;
 			}
+		}
+	}
+
+	state
+}
+
+fn parse_mode_state_from_response(result: &Value) -> SessionModeRuntimeState {
+	let mut state = SessionModeRuntimeState::default();
+
+	if let Some(modes) = result.get("modes") {
+		if let Some(current) =
+			modes.get("currentModeId").and_then(Value::as_str)
+		{
+			state.current_mode_id = Some(current.to_string());
+		}
+		if let Some(available) =
+			modes.get("availableModes").and_then(Value::as_array)
+		{
+			state.available_modes = available
+				.iter()
+				.filter_map(|item| {
+					let id = item.get("id").and_then(Value::as_str)?;
+					let name = item
+						.get("name")
+						.and_then(Value::as_str)
+						.unwrap_or(id);
+					let description = item
+						.get("description")
+						.and_then(Value::as_str)
+						.map(ToOwned::to_owned);
+					Some(AgentSessionMode {
+						id: id.to_string(),
+						name: name.to_string(),
+						description,
+					})
+				})
+				.collect();
 		}
 	}
 

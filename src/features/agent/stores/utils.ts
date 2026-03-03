@@ -20,6 +20,8 @@ export function ensureSession(
 			error: null,
 			modelState: null,
 			modelLoading: false,
+			modeState: null,
+			modeLoading: false,
 		};
 	}
 	return sessions[sessionId];

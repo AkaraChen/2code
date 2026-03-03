@@ -37,3 +37,21 @@ export function useSetAgentModel() {
 		},
 	});
 }
+
+export function useSetAgentMode() {
+	return useMutation({
+		mutationFn: async ({
+			sessionId,
+			modeId,
+		}: {
+			sessionId: string;
+			modeId: string;
+		}) => {
+			const tabSession = sessionRegistry.get(sessionId);
+			if (!tabSession || tabSession.type !== "agent") {
+				throw new Error(`Agent session not found: ${sessionId}`);
+			}
+			await (tabSession as AgentTabSession).setMode(modeId);
+		},
+	});
+}

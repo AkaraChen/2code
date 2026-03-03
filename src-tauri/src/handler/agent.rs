@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent::{
-	AgentManagerWrapper, AgentModelState, AgentSessionInfo, AgentSessionMap,
-	AgentStatusInfo, ContentPart, CredentialInfo, ManagedAgentSession,
-	NotificationTaskMap,
+	AgentManagerWrapper, AgentModeState, AgentModelState, AgentSessionInfo,
+	AgentSessionMap, AgentStatusInfo, ContentPart, CredentialInfo,
+	ManagedAgentSession, NotificationTaskMap,
 };
 use futures::StreamExt;
 use infra::db::{DbPool, DbPoolExt};
@@ -102,6 +102,31 @@ pub fn spawn_notification_listener(
 					error = %e,
 					"failed to emit agent notification event"
 				);
+			}
+
+			// Emit dedicated mode-update event if this notification is a
+			// current_mode_update so the frontend can refresh its mode selector.
+			if let Some(update) = notification
+				.pointer("/params/update")
+				.filter(|u| {
+					u.get("sessionUpdate")
+						.and_then(|v| v.as_str())
+						== Some("current_mode_update")
+				})
+			{
+				if let Some(mode_id) = update
+					.get("modeId")
+					.and_then(|v| v.as_str())
+				{
+					let mode_event = format!("agent-mode-update-{notif_id}");
+					if let Err(e) = app.emit(&mode_event, mode_id) {
+						tracing::warn!(
+							session_id = %notif_id,
+							error = %e,
+							"failed to emit mode-update event"
+						);
+					}
+				}
 			}
 		}
 		tracing::info!(session_id = %notif_id, "agent notification stream ended");
@@ -273,6 +298,42 @@ pub async fn set_agent_session_model(
 	}
 
 	Ok(model_state)
+}
+
+#[tauri::command]
+pub async fn get_agent_session_modes(
+	session_id: String,
+	sessions: State<'_, AgentSessionMap>,
+) -> Result<AgentModeState, AppError> {
+	let session = {
+		let map = sessions.lock().await;
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
+	};
+
+	Ok(session.mode_state().await)
+}
+
+#[tauri::command]
+pub async fn set_agent_session_mode(
+	session_id: String,
+	mode_id: String,
+	sessions: State<'_, AgentSessionMap>,
+) -> Result<AgentModeState, AppError> {
+	let session = {
+		let map = sessions.lock().await;
+		map.get(&session_id).cloned().ok_or_else(|| {
+			AppError::NotFound(format!("session: {session_id}"))
+		})?
+	};
+
+	let mode_state = session
+		.set_mode(&mode_id)
+		.await
+		.map_err(|e| AppError::PtyError(format!("Failed to set mode: {e}")))?;
+
+	Ok(mode_state)
 }
 
 #[tauri::command]

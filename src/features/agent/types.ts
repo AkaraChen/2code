@@ -17,6 +17,8 @@ export type {
 // ==================== Application-layer specific types ====================
 
 import type { Plan, ToolCall } from "@agentclientprotocol/sdk";
+import type { AgentModeState } from "@/generated";
+export type { AgentModeState };
 
 /**
  * Unified message content type (used for UI rendering)
@@ -55,4 +57,6 @@ export interface AgentSessionState {
 	error: string | null;
 	modelState: AgentModelState | null;
 	modelLoading: boolean;
+	modeState: AgentModeState | null;
+	modeLoading: boolean;
 }

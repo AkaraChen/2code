@@ -12,8 +12,8 @@ pub use manager::{
 	AgentManagerWrapper, AgentStatusInfo, CredentialEntry, CredentialInfo,
 };
 pub use models::{
-	AgentModelState, AgentSessionEvent, AgentSessionInfo, ContentPart,
-	PromptResult,
+	AgentModeState, AgentModelState, AgentSessionEvent, AgentSessionInfo,
+	AgentSessionMode, ContentPart, PromptResult,
 };
 pub use runtime::{AgentSession, AgentSessionError};
 pub use sandbox_agent_agent_management::agents::{

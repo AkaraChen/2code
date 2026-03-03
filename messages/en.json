@@ -158,6 +158,7 @@
 	"agentTerminal": "Terminal: {id}",
 	"agentToolOutputAlt": "Tool output",
 	"agentModel": "Model",
+	"agentMode": "Mode",
 	"terminalTabTitle": "Terminal {n}",
 	"agentTabTitle": "{agent} session",
 	"agentInstallSuccess": "{name} installed successfully",

@@ -69,6 +69,26 @@ pub struct AgentModelState {
 	pub available_models: Vec<AgentModelOption>,
 }
 
+/// A named operating mode exposed by an agent session (e.g. ask, architect, code).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionMode {
+	pub id: String,
+	pub name: String,
+	#[serde(default)]
+	pub description: Option<String>,
+}
+
+/// Current session mode state returned by the agent.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentModeState {
+	/// Whether the agent supports session modes at all.
+	pub supported: bool,
+	#[serde(default)]
+	pub current_mode_id: Option<String>,
+	#[serde(default)]
+	pub available_modes: Vec<AgentSessionMode>,
+}
+
 /// A recorded event in an agent session (for persistence and frontend).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSessionEvent {

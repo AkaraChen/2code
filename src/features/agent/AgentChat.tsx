@@ -20,7 +20,7 @@ import * as m from "@/paraglide/messages.js";
 import type { AgentTabSession } from "./AgentTabSession";
 import { ChatInput } from "./components/ChatInput";
 import { MessageList } from "./components/MessageList";
-import { useSendAgentPrompt, useSetAgentModel } from "./hooks";
+import { useSendAgentPrompt, useSetAgentModel, useSetAgentMode } from "./hooks";
 import { useAgentStore } from "./store";
 
 interface AgentChatProps {
@@ -105,6 +105,7 @@ function ReconnectErrorFallback({ error }: { error: unknown }) {
 export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
 	const setAgentModel = useSetAgentModel();
+	const setAgentMode = useSetAgentMode();
 	const defaultAgent = useSettingsStore((s) => s.defaultAgent);
 	const tabSession = sessionRegistry.get(sessionId) as
 		| AgentTabSession
@@ -119,6 +120,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		error,
 		modelState,
 		modelLoading,
+		modeState,
+		modeLoading,
 	} = useAgentStore(
 		useShallow((s) => {
 			const session = s.sessions[sessionId];
@@ -129,6 +132,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 				error: session?.error,
 				modelState: session?.modelState,
 				modelLoading: session?.modelLoading,
+				modeState: session?.modeState,
+				modeLoading: session?.modeLoading,
 			};
 		}),
 	);
@@ -168,6 +173,74 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		},
 		[selectedModel, sessionId, setAgentModel],
 	);
+
+	// ── Mode selector ──────────────────────────────────────────────────────────
+	const modeItems = useMemo(
+		() =>
+			(modeState?.available_modes ?? []).map((mode) => ({
+				value: mode.id,
+				label: mode.name,
+			})),
+		[modeState],
+	);
+	const modeCollection = useMemo(
+		() => createListCollection({ items: modeItems }),
+		[modeItems],
+	);
+	const selectedMode = modeState?.current_mode_id ?? modeItems[0]?.value ?? null;
+	const showModeSelector = !!modeState?.supported && modeItems.length > 1;
+	const modeBusy = !!modeLoading || setAgentMode.isPending;
+
+	const handleModeChange = useCallback(
+		(details: { value: string[] }) => {
+			const next = details.value[0];
+			if (!next || next === selectedMode) return;
+			setAgentMode.mutate({ sessionId, modeId: next });
+		},
+		[selectedMode, sessionId, setAgentMode],
+	);
+	const modeSelector = showModeSelector ? (
+		<Select.Root
+			collection={modeCollection}
+			value={selectedMode ? [selectedMode] : []}
+			onValueChange={handleModeChange}
+			size="xs"
+			width={{ base: "100px", md: "160px" }}
+			disabled={modeBusy || (isStreaming ?? false)}
+			aria-label={m.agentMode()}
+			variant="ghost"
+		>
+			<Select.HiddenSelect />
+			<Select.Control>
+				<Select.Trigger
+					h="6"
+					minH="6"
+					px="1"
+					bg="transparent"
+					borderWidth="0"
+					color="fg.muted"
+					_hover={{ bg: "transparent", color: "fg" }}
+				>
+					<Select.ValueText fontSize="xs" truncate />
+				</Select.Trigger>
+				<Select.IndicatorGroup>
+					{modeBusy ? <Spinner size="xs" /> : <Select.Indicator />}
+				</Select.IndicatorGroup>
+			</Select.Control>
+			<Portal>
+				<Select.Positioner>
+					<Select.Content>
+						{modeCollection.items.map((item) => (
+							<Select.Item item={item} key={item.value}>
+								{item.label}
+								<Select.ItemIndicator />
+							</Select.Item>
+						))}
+					</Select.Content>
+				</Select.Positioner>
+			</Portal>
+		</Select.Root>
+	) : null;
 	const modelSelector = showModelSelector ? (
 		<Select.Root
 			collection={modelCollection}
@@ -250,7 +323,12 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 								onSend={handleSend}
 								disabled={isStreaming ?? false}
 								onToggleExpand={() => setExpanded(true)}
-								modelSelector={modelSelector}
+								modelSelector={
+									<Flex gap="2">
+										{modeSelector}
+										{modelSelector}
+									</Flex>
+								}
 							/>
 						</Box>
 					</Box>
@@ -285,7 +363,12 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 							onSend={handleSend}
 							disabled={isStreaming ?? false}
 							expanded={true}
-							modelSelector={modelSelector}
+							modelSelector={
+								<>
+									{modeSelector}
+									{modelSelector}
+								</>
+							}
 						/>
 					</Box>
 				</Flex>

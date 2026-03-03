@@ -7,10 +7,12 @@ import {
 	closeAgentSession,
 	createAgentSessionPersistent,
 	deleteAgentSessionRecord,
+	getAgentSessionModes,
 	getAgentSessionModels,
 	listAgentSessionEvents,
 	playSystemSound,
 	reconnectAgentSession,
+	setAgentSessionMode,
 	setAgentSessionModel,
 } from "@/generated";
 import { useSettingsStore } from "../settings/stores";
@@ -71,6 +73,7 @@ export class AgentTabSession extends TabSession {
 		await session.registerListeners();
 		session._connected = true;
 		await session.refreshModelState();
+		await session.refreshModeState();
 		return session;
 	}
 
@@ -108,6 +111,7 @@ export class AgentTabSession extends TabSession {
 			useAgentStore.getState().restoreFromEvents(info.id, events);
 			newSession._connected = true;
 			await newSession.refreshModelState();
+			await newSession.refreshModeState();
 
 			// Replace in registry
 			this.unregister();
@@ -136,7 +140,7 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async registerListeners(): Promise<void> {
-		const [unlistenEvent, unlistenComplete, unlistenError] =
+		const [unlistenEvent, unlistenComplete, unlistenError, unlistenMode] =
 			await Promise.all([
 				listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
 					useAgentStore
@@ -163,9 +167,20 @@ export class AgentTabSession extends TabSession {
 				listen<string>(`agent-error-${this.id}`, (e) => {
 					useAgentStore.getState().handleError(this.id, e.payload);
 				}),
+				listen<string>(`agent-mode-update-${this.id}`, (e) => {
+					// The agent sent a current_mode_update notification.
+					// We optimistically update the current_mode_id in store.
+					const modeState = useAgentStore.getState().sessions[this.id]?.modeState;
+					if (modeState) {
+						useAgentStore.getState().setModeState(this.id, {
+							...modeState,
+							current_mode_id: e.payload,
+						});
+					}
+				}),
 			]);
 
-		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError];
+		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError, unlistenMode];
 	}
 
 	async refreshModelState(): Promise<void> {
@@ -186,6 +201,24 @@ export class AgentTabSession extends TabSession {
 		}
 	}
 
+	async refreshModeState(): Promise<void> {
+		useAgentStore.getState().setModeLoading(this.id, true);
+		try {
+			const modeState = await getAgentSessionModes({
+				sessionId: this.id,
+			});
+			useAgentStore.getState().setModeState(this.id, modeState);
+		} catch (err) {
+			consola.warn(
+				`[agent] failed to load mode state for ${this.id}:`,
+				err,
+			);
+			useAgentStore.getState().setModeState(this.id, null);
+		} finally {
+			useAgentStore.getState().setModeLoading(this.id, false);
+		}
+	}
+
 	async setModel(modelId: string): Promise<void> {
 		useAgentStore.getState().setModelLoading(this.id, true);
 		try {
@@ -196,6 +229,19 @@ export class AgentTabSession extends TabSession {
 			useAgentStore.getState().setModelState(this.id, modelState);
 		} finally {
 			useAgentStore.getState().setModelLoading(this.id, false);
+		}
+	}
+
+	async setMode(modeId: string): Promise<void> {
+		useAgentStore.getState().setModeLoading(this.id, true);
+		try {
+			const modeState = await setAgentSessionMode({
+				sessionId: this.id,
+				modeId,
+			});
+			useAgentStore.getState().setModeState(this.id, modeState);
+		} finally {
+			useAgentStore.getState().setModeLoading(this.id, false);
 		}
 	}
 

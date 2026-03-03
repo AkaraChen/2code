@@ -132,6 +132,8 @@ pub fn run() {
 			handler::agent::send_agent_prompt,
 			handler::agent::get_agent_session_models,
 			handler::agent::set_agent_session_model,
+			handler::agent::get_agent_session_modes,
+			handler::agent::set_agent_session_mode,
 			handler::agent::close_agent_session,
 			handler::agent::create_agent_session_persistent,
 			handler::agent::reconnect_agent_session,

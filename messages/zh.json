@@ -158,6 +158,7 @@
 	"agentTerminal": "终端：{id}",
 	"agentToolOutputAlt": "工具输出",
 	"agentModel": "模型",
+	"agentMode": "模式",
 	"terminalTabTitle": "终端 {n}",
 	"agentTabTitle": "{agent} 会话",
 	"agentInstallSuccess": "{name} 安装成功",
