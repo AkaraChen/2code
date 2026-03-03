@@ -21,9 +21,23 @@ const SHIKI_LANGS = [
 const shikiAdapter = createShikiAdapter<HighlighterGeneric<any, any>>({
 	async load() {
 		const { createHighlighter } = await import("shiki");
-		return createHighlighter({
+		const hl = await createHighlighter({
 			langs: [...SHIKI_LANGS],
 			themes: ["github-dark", "github-light"],
+		});
+		// Wrap codeToHtml to silently fall back to plain text for unknown languages.
+		return new Proxy(hl, {
+			get(target, prop, receiver) {
+				if (prop !== "codeToHtml") return Reflect.get(target, prop, receiver);
+				return (code: string, opts: any) => {
+					const lang = opts?.lang ?? "";
+					const safe =
+						lang === "text" ||
+						lang === "" ||
+						(target.getLoadedLanguages() as string[]).includes(lang);
+					return target.codeToHtml(code, safe ? opts : { ...opts, lang: "text" });
+				};
+			},
 		});
 	},
 	theme: { light: "github-light", dark: "github-dark" },
