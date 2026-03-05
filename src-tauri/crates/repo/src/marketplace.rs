@@ -6,32 +6,14 @@ use model::schema::marketplace_agents;
 
 pub fn insert(
 	conn: &mut SqliteConnection,
-	id: &str,
-	name: &str,
-	version: &str,
-	description: Option<&str>,
-	icon_url: Option<&str>,
-	repository: Option<&str>,
-	license: Option<&str>,
-	authors_json: &str,
-	distribution_json: &str,
+	record: &NewMarketplaceAgent<'_>,
 ) -> Result<MarketplaceAgent, AppError> {
 	diesel::insert_into(marketplace_agents::table)
-		.values(&NewMarketplaceAgent {
-			id,
-			name,
-			version,
-			description,
-			icon_url,
-			repository,
-			license,
-			authors_json,
-			distribution_json,
-		})
+		.values(record)
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 	marketplace_agents::table
-		.find(id)
+		.find(record.id)
 		.select(MarketplaceAgent::as_select())
 		.first(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))

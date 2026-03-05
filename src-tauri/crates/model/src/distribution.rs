@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
 
+/// Resolved launch spec: `(program, args, env)`.
+pub type LaunchResult = (PathBuf, Vec<String>, HashMap<String, String>);
+
 /// Top-level distribution spec stored as `distribution_json` in `marketplace_agents`.
 /// At most one of `npx`, `uvx`, or `binary` will be present.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -50,9 +53,7 @@ impl Distribution {
 	/// Resolve to `(program, args, env)` for process spawning.
 	///
 	/// Priority: `npx` → `uvx` → `binary` (current platform).
-	pub fn resolve_launch(
-		&self,
-	) -> Result<(PathBuf, Vec<String>, HashMap<String, String>), AppError> {
+	pub fn resolve_launch(&self) -> Result<LaunchResult, AppError> {
 		if let Some(pkg) = &self.npx {
 			let mut args = vec![pkg.package.clone()];
 			args.extend(pkg.args.clone().unwrap_or_default());

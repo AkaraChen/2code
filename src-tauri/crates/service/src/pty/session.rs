@@ -67,13 +67,15 @@ fn create_session_with_id(
 	let reader = session::create_session(
 		&ctx.sessions,
 		session_id,
-		&config.shell,
-		&config.cwd,
-		config.rows,
-		config.cols,
-		init_dir.as_deref().ok(),
-		ctx.helper_url.as_deref(),
-		ctx.helper_bin.as_deref(),
+		&session::PtySessionConfig {
+			shell: &config.shell,
+			cwd: &config.cwd,
+			rows: config.rows,
+			cols: config.cols,
+			init_dir: init_dir.as_deref().ok(),
+			helper_url: ctx.helper_url.as_deref(),
+			helper_bin: ctx.helper_bin.as_deref(),
+		},
 	)?;
 
 	// 4. Persist to database

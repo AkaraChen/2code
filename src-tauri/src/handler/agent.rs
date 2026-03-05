@@ -407,9 +407,7 @@ pub async fn create_agent_session_persistent(
 		&meta.agent,
 		&meta.profile_id,
 		PathBuf::from(&cwd),
-		program,
-		args,
-		base_env,
+		service::agent::RawLaunchParams { program, args, base_env },
 	)
 	.await?;
 

@@ -72,15 +72,17 @@ pub fn add_agent(
 
 	repo::marketplace::insert(
 		conn,
-		&input.id,
-		&input.name,
-		&input.version,
-		input.description.as_deref(),
-		input.icon_url.as_deref(),
-		input.repository.as_deref(),
-		input.license.as_deref(),
-		&authors_json,
-		&input.distribution,
+		&model::marketplace::NewMarketplaceAgent {
+			id: &input.id,
+			name: &input.name,
+			version: &input.version,
+			description: input.description.as_deref(),
+			icon_url: input.icon_url.as_deref(),
+			repository: input.repository.as_deref(),
+			license: input.license.as_deref(),
+			authors_json: &authors_json,
+			distribution_json: &input.distribution,
+		},
 	)
 }
 

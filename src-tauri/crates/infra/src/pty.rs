@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
@@ -42,50 +41,55 @@ pub fn join_all_read_threads(threads: &PtyReadThreads) {
 	}
 }
 
+/// Configuration for spawning a new PTY session.
+pub struct PtySessionConfig<'a> {
+	pub shell: &'a str,
+	pub cwd: &'a str,
+	pub rows: u16,
+	pub cols: u16,
+	pub init_dir: Option<&'a std::path::Path>,
+	pub helper_url: Option<&'a str>,
+	pub helper_bin: Option<&'a str>,
+}
+
 pub fn create_session(
 	sessions: &PtySessionMap,
 	session_id: &str,
-	shell: &str,
-	cwd: &str,
-	rows: u16,
-	cols: u16,
-	init_dir: Option<&Path>,
-	helper_url: Option<&str>,
-	helper_bin: Option<&str>,
+	config: &PtySessionConfig<'_>,
 ) -> Result<Box<dyn std::io::Read + Send>, AppError> {
 	let pty_system = native_pty_system();
 
 	let pair = pty_system
 		.openpty(PtySize {
-			rows,
-			cols,
+			rows: config.rows,
+			cols: config.cols,
 			pixel_width: 0,
 			pixel_height: 0,
 		})
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
-	let mut cmd = CommandBuilder::new(shell);
+	let mut cmd = CommandBuilder::new(config.shell);
 	cmd.env("TERM", "xterm-256color");
 
 	// Inject helper env vars for CLI sidecar communication
-	if let Some(url) = helper_url {
+	if let Some(url) = config.helper_url {
 		cmd.env("_2CODE_HELPER_URL", url);
 	}
-	if let Some(bin) = helper_bin {
+	if let Some(bin) = config.helper_bin {
 		cmd.env("_2CODE_HELPER", bin);
 	}
 	cmd.env("_2CODE_SESSION_ID", session_id);
 
 	// Inject shell init via ZDOTDIR
-	if let Some(dir) = init_dir {
+	if let Some(dir) = config.init_dir {
 		if let Ok(original) = std::env::var("ZDOTDIR") {
 			cmd.env("_2CODE_ORIG_ZDOTDIR", &original);
 		}
 		cmd.env("ZDOTDIR", dir.to_string_lossy().as_ref());
 	}
 
-	if !cwd.is_empty() {
-		cmd.cwd(cwd);
+	if !config.cwd.is_empty() {
+		cmd.cwd(config.cwd);
 	}
 
 	let child = pair

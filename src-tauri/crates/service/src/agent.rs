@@ -39,6 +39,13 @@ pub async fn create_session(
 		.await
 }
 
+/// Raw launch specification resolved from a distribution spec.
+pub struct RawLaunchParams {
+	pub program: PathBuf,
+	pub args: Vec<String>,
+	pub base_env: HashMap<String, String>,
+}
+
 /// Create a new agent session from raw distribution params (marketplace path).
 ///
 /// Resolves `(program, args, base_env)` from the stored distribution spec,
@@ -49,16 +56,14 @@ pub async fn create_session_from_raw(
 	agent: &str,
 	profile_id: &str,
 	cwd: PathBuf,
-	program: PathBuf,
-	args: Vec<String>,
-	base_env: HashMap<String, String>,
+	launch: RawLaunchParams,
 ) -> Result<String, AppError> {
 	let managed_session = ManagedAgentSession::create_from_raw(
 		agent,
 		cwd.clone(),
-		program,
-		args,
-		base_env,
+		launch.program,
+		launch.args,
+		launch.base_env,
 		HashMap::new(), // extra_env (API keys etc. — empty for marketplace agents for now)
 	)
 	.await
