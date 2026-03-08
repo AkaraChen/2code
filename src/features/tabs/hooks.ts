@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
 import { nanoid } from "nanoid";
-import { match } from "ts-pattern";
 import { AgentTabSession } from "@/features/agent/AgentTabSession";
 import * as m from "@/paraglide/messages.js";
 import { clearPending, markPending } from "./pendingDeletions";
@@ -8,7 +7,7 @@ import { sessionRegistry } from "./sessionRegistry";
 import { useTabStore } from "./store";
 import { TerminalTabSession } from "./TerminalTabSession";
 import type { AgentTab, PendingTab } from "./types";
-import { TabSession } from "./session";
+import type { TabSession } from "./session";
 
 type CreateTabParams =
 	| { type: "terminal"; profileId: string; cwd: string }

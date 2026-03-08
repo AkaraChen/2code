@@ -14,6 +14,7 @@ import * as m from "@/paraglide/messages.js";
 import { AgentsTab } from "./AgentsTab";
 import { SkillsTab } from "./SkillsTab";
 import { SnippetsTab } from "./SnippetsTab";
+import { SkillsMarketplace } from "@/features/settings/tabs/SkillsMarketplace";
 
 type Mode = "manage" | "store";
 type Filter = "skills" | "snippets" | "agents";
@@ -62,28 +63,18 @@ export default function AssetsPage() {
 						<SegmentGroup.Indicator />
 						{mode === "store" ? (
 							<>
-								<Tooltip.Root>
-									<Tooltip.Trigger asChild>
-										<SegmentGroup.Item
-											value="skills"
-											disabled
-										>
-											{m.skills()}
-										</SegmentGroup.Item>
-									</Tooltip.Trigger>
-									<Tooltip.Positioner>
-										<Tooltip.Content>
-											{m.wip()}
-										</Tooltip.Content>
-									</Tooltip.Positioner>
-								</Tooltip.Root>
+								<SegmentGroup.Item value="skills">
+									<SegmentGroup.ItemText>{m.skills()}</SegmentGroup.ItemText>
+									<SegmentGroup.ItemHiddenInput />
+								</SegmentGroup.Item>
 								<Tooltip.Root>
 									<Tooltip.Trigger asChild>
 										<SegmentGroup.Item
 											value="snippets"
 											disabled
 										>
-											{m.snippets()}
+											<SegmentGroup.ItemText>{m.snippets()}</SegmentGroup.ItemText>
+											<SegmentGroup.ItemHiddenInput />
 										</SegmentGroup.Item>
 									</Tooltip.Trigger>
 									<Tooltip.Positioner>
@@ -93,7 +84,8 @@ export default function AssetsPage() {
 									</Tooltip.Positioner>
 								</Tooltip.Root>
 								<SegmentGroup.Item value="agents">
-									{m.agents()}
+									<SegmentGroup.ItemText>{m.agents()}</SegmentGroup.ItemText>
+									<SegmentGroup.ItemHiddenInput />
 								</SegmentGroup.Item>
 							</>
 						) : (
@@ -142,20 +134,11 @@ export default function AssetsPage() {
 				)}
 
 				{mode === "store" && (
-					<>
+					<Box>
 						{filter === "agents" && <AgentsTab mode="store" />}
-						{filter !== "agents" && (
-							<WipSection
-								title={
-									filter === "skills"
-										? m.skills()
-										: filter === "snippets"
-											? m.snippets()
-											: m.agents()
-								}
-							/>
-						)}
-					</>
+						{filter === "skills" && <SkillsMarketplace />}
+						{filter === "snippets" && <WipSection title={m.snippets()} />}
+					</Box>
 				)}
 			</Stack>
 		</Box>

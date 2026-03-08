@@ -8,7 +8,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import * as types from './types';
+import type * as types from './types';
 
 export async function createPtySession(params: types.CreatePtySessionParams): Promise<string> {
   return invoke('create_pty_session', params);
@@ -158,6 +158,17 @@ export async function getSkill(params: types.GetSkillParams): Promise<types.Skil
 export async function deleteSkill(params: types.DeleteSkillParams): Promise<void> {
   return invoke('delete_skill', params);
 }
+
+
+export async function searchSkills(params: { query: string; limit?: number }): Promise<types.SearchSkillResult[]> {
+  return invoke('search_skills', params);
+}
+
+
+export async function installSkillFromRegistry(params: { source: string; skill: string }): Promise<void> {
+  return invoke('install_skill_from_registry', params);
+}
+
 
 
 

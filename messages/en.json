@@ -248,5 +248,10 @@
 	"richTextCodeBlock": "Code Block",
 	"richTextUndo": "Undo",
 	"richTextRedo": "Redo",
-	"loading": "Loading {name}\u2026"
+	"loading": "Loading {name}\u2026",
+	"skillInstalled": "Installed",
+	"skillInstall": "Install",
+	"skillInstalls": "{n} installs",
+	"skillsNoResults": "No skills found for \"{query}\"",
+	"skillsSearchPlaceholder": "Search skills.sh\u2026 (min. 2 characters)"
 }

@@ -248,5 +248,10 @@
 	"richTextCodeBlock": "代码块",
 	"richTextUndo": "撤销",
 	"richTextRedo": "重做",
-	"loading": "正在加载 {name}\u2026"
+	"loading": "正在加载 {name}\u2026",
+	"skillInstalled": "已安装",
+	"skillInstall": "安装",
+	"skillInstalls": "{n} 次安装",
+	"skillsNoResults": "未找到与 \"{query}\" 相关的技能",
+	"skillsSearchPlaceholder": "搜索 skills.sh\u2026 (至少 2 个字符)"
 }

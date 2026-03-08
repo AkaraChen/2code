@@ -9,3 +9,12 @@ pub struct Skill {
 	/// Markdown body (the prompt/instructions)
 	pub content: String,
 }
+
+/// A skill result returned by the skills.sh search API.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SearchSkillResult {
+	pub name: String,
+	pub slug: String,
+	pub source: String,
+	pub installs: i64,
+}

@@ -16,6 +16,13 @@ export interface Skill {
   content: string;
 }
 
+export interface SearchSkillResult {
+  name: string;
+  slug: string;
+  source: string;
+  installs: number;
+}
+
 export interface Profile {
   id: string;
   project_id: string;

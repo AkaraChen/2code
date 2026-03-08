@@ -169,6 +169,88 @@ pub fn delete(name: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Search for skills on skills.sh via their public API.
+/// Returns up to `limit` results matching `query`.
+pub async fn search(
+	query: &str,
+	limit: u32,
+) -> Result<Vec<model::skill::SearchSkillResult>, AppError> {
+	let url = format!(
+		"https://skills.sh/api/search?q={}&limit={}",
+		urlencoding::encode(query),
+		limit,
+	);
+
+	let response = reqwest::get(&url)
+		.await
+		.map_err(|e| AppError::PtyError(format!("skills.sh fetch failed: {e}")))?;
+
+	if !response.status().is_success() {
+		return Ok(Vec::new());
+	}
+
+	#[derive(serde::Deserialize)]
+	struct ApiSkill {
+		id: String,
+		name: String,
+		installs: Option<i64>,
+		source: Option<String>,
+	}
+
+	#[derive(serde::Deserialize)]
+	struct ApiResponse {
+		skills: Vec<ApiSkill>,
+	}
+
+	let data: ApiResponse = response
+		.json()
+		.await
+		.map_err(|e| AppError::PtyError(format!("skills.sh parse failed: {e}")))?;
+
+	Ok(data
+		.skills
+		.into_iter()
+		.map(|s| model::skill::SearchSkillResult {
+			name: s.name,
+			slug: s.id,
+			source: s.source.unwrap_or_default(),
+			installs: s.installs.unwrap_or(0),
+		})
+		.collect())
+}
+
+/// Install a skill from a source repository into `~/.config/agents/skills/`.
+/// Delegates to: `npx skills add <source> --skill <skill> --agent universal --global --yes`
+pub fn install_from_registry(source: &str, skill: &str) -> Result<(), AppError> {
+	use std::process::Command;
+
+	let output = Command::new("npx")
+		.args([
+			"skills",
+			"add",
+			source,
+			"--skill",
+			skill,
+			"--agent",
+			"universal",
+			"--global",
+			"--yes",
+		])
+		.output()
+		.map_err(AppError::IoError)?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		let stdout = String::from_utf8_lossy(&output.stdout);
+		return Err(AppError::PtyError(format!(
+			"npx skills add failed:\n{stderr}\n{stdout}"
+		)));
+	}
+
+	Ok(())
+}
+
+
 #[cfg(test)]
 mod tests {
 	use super::*;

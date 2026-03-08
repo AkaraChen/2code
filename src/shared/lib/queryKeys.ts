@@ -42,6 +42,7 @@ export const queryKeys = {
 	},
 	skills: {
 		all: ["skills"] as const,
+		search: (query: string) => ["skills-search", query] as const,
 	},
 	marketplace: {
 		registry: ["marketplace-registry"] as const,
