@@ -1,5 +1,8 @@
 import consola from "consola";
 import { nanoid } from "nanoid";
+import { Channel } from "@tauri-apps/api/core";
+import { match, P } from "ts-pattern";
+import type { AgentNotification } from "@agentclientprotocol/sdk";
 import {
 	closeAgentSession,
 	createAgentSessionPersistent,
@@ -9,20 +12,43 @@ import {
 	listAgentSessionEvents,
 	playSystemSound,
 	reconnectAgentSession,
+	sendAgentPrompt,
 	setAgentSessionMode,
 	setAgentSessionModel,
 } from "@/generated";
 import { useSettingsStore } from "../settings/stores";
 import { TabSession } from "../tabs/session";
 import type { AgentTab } from "../tabs/types";
-import { AgentStreamService } from "./services/AgentStreamService";
 import { useAgentStore } from "./store";
+
+/**
+ * Application-level event types (not part of ACP standard).
+ * These are distinguished by the "type" field.
+ */
+interface TurnCompleteEvent {
+	type: "turn_complete";
+	sessionId: string;
+	stopReason: string;
+}
+
+interface ErrorEvent {
+	type: "error";
+	sessionId: string;
+	message: string;
+}
+
+type AppEvent = TurnCompleteEvent | ErrorEvent;
+
+/**
+ * Union type for all events through the Channel.
+ * Can be either standard ACP notifications or application-level events.
+ */
+type ChannelEvent = AgentNotification | AppEvent;
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
 	readonly agentType: string;
 	readonly iconUrl: string | null;
-	private streamService: AgentStreamService | null = null;
 	private _connected = false;
 	private _reconnecting = false;
 
@@ -71,7 +97,6 @@ export class AgentTabSession extends TabSession {
 			iconUrl,
 		);
 		useAgentStore.getState().initSession(info.id);
-		await session.registerListeners();
 		session._connected = true;
 		await session.refreshModelState();
 		await session.refreshModeState();
@@ -103,11 +128,8 @@ export class AgentTabSession extends TabSession {
 				this.iconUrl,
 			);
 
-			// Load transferred events and register listeners in parallel
-			const [events] = await Promise.all([
-				listAgentSessionEvents({ sessionId: info.id }),
-				newSession.registerListeners(),
-			]);
+			// Load transferred events
+			const events = await listAgentSessionEvents({ sessionId: info.id });
 			useAgentStore.getState().initSession(info.id);
 			useAgentStore.getState().restoreFromEvents(info.id, events);
 			newSession._connected = true;
@@ -140,46 +162,71 @@ export class AgentTabSession extends TabSession {
 		}
 	}
 
-	async registerListeners(): Promise<void> {
-		this.streamService = new AgentStreamService(this.id);
+	/**
+	 * Send a prompt to the agent session.
+	 * Uses Tauri Channel to receive events:
+	 * - Standard ACP notifications (AgentNotification)
+	 * - Application-level events (TurnCompleteEvent, ErrorEvent)
+	 */
+	async sendPrompt(content: string): Promise<void> {
+		const channel = new Channel<ChannelEvent>();
 
-		// Subscribe to ACP notifications (session/update, etc.)
-		this.streamService.onAcpNotification((notification) => {
-			useAgentStore
-				.getState()
-				.handleAgentEvent(this.id, {
-					method: "session/update",
-					params: notification,
-				});
-		});
+		channel.onmessage = (event) => {
+			console.error("[agent] channel event:", event);
+			console.error(
+				"[agent] event?.type:",
+				(event as Record<string, unknown>)?.type,
+			);
+			// First, check if it's an application-level event by checking for "type" field
+			match(event)
+				.with({ type: "turn_complete" }, (e) => {
+					console.error("[agent] turn_complete received", e);
+					// Application-level turn complete
+					useAgentStore.getState().handleTurnComplete(this.id, e);
 
-		// Subscribe to turn completion
-		this.streamService.onTurnComplete(() => {
-			// Update store to stop loading state and finalize the turn
-			useAgentStore.getState().handleTurnComplete(this.id, null);
-
-			// Play notification sound
-			const { notificationEnabled, notificationSound } =
-				useSettingsStore.getState();
-			if (notificationEnabled && notificationSound) {
-				void playSystemSound({ name: notificationSound }).catch(
-					(err) => {
-						consola.warn(
-							"[agent] failed to play completion sound:",
-							err,
+					// Play notification sound
+					const { notificationEnabled, notificationSound } =
+						useSettingsStore.getState();
+					if (notificationEnabled && notificationSound) {
+						void playSystemSound({ name: notificationSound }).catch(
+							(err) => {
+								consola.warn(
+									"[agent] failed to play completion sound:",
+									err,
+								);
+							},
 						);
-					},
-				);
-			}
-		});
+					}
+				})
+				.with({ type: "error" }, (e) => {
+					// Application-level error
+					useAgentStore.getState().handleError(this.id, e.message);
+				})
+				.with({ method: P.string }, (e) => {
+					// Standard ACP notification (has "method" field)
+					useAgentStore
+						.getState()
+						.handleAgentEvent(this.id, e as AgentNotification);
+				})
+				.otherwise(() => {
+					// Check if this might be a turn_complete event with different shape
+					if (event && typeof event === "object") {
+						const evt = event as Record<string, unknown>;
 
-		// Subscribe to errors
-		this.streamService.onError((error) => {
-			useAgentStore.getState().handleError(this.id, error);
-		});
+						console.error("[agent] event shape check:", {
+							type: evt.type,
+							hasMethod: "method" in evt,
+							keys: Object.keys(evt),
+						});
+					}
+				});
+		};
 
-		// Start listening to all channels
-		await this.streamService.start();
+		await sendAgentPrompt({
+			sessionId: this.id,
+			content,
+			onEvent: channel,
+		});
 	}
 
 	async refreshModelState(): Promise<void> {
@@ -245,10 +292,6 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async close(): Promise<void> {
-		// Stop stream service first (always succeeds)
-		this.streamService?.stop();
-		this.streamService = null;
-
 		try {
 			// Close runtime session and delete database record
 			await Promise.all([

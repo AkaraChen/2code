@@ -1,6 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
-import { sendAgentPrompt } from "@/generated";
 import type { AgentTabSession } from "./AgentTabSession";
 import { useAgentStore } from "./store";
 
@@ -15,7 +14,12 @@ export function useSendAgentPrompt() {
 		}) => {
 			useAgentStore.getState().addUserMessage(sessionId, content);
 			useAgentStore.getState().setStreaming(sessionId, true);
-			await sendAgentPrompt({ sessionId, content });
+
+			const tabSession = sessionRegistry.get(sessionId);
+			if (!tabSession || tabSession.type !== "agent") {
+				throw new Error(`Agent session not found: ${sessionId}`);
+			}
+			await (tabSession as AgentTabSession).sendPrompt(content);
 		},
 	});
 }

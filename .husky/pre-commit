@@ -1,3 +1,12 @@
 bun run zx scripts/format.js
 bun run zx scripts/lint.js
 bun run zx scripts/typecheck.js
+
+# Auto-stage any files modified by format/lint
+# This ensures prettier/eslint/cargo fixes are included in the current commit
+if git diff --quiet; then
+	echo "No auto-fixes to stage"
+else
+	echo "Staging auto-fixed files..."
+	git add -u
+fi

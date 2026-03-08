@@ -14,7 +14,7 @@ use model::agent::{
 };
 use model::distribution::Distribution;
 use model::error::AppError;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{ipc::Channel, AppHandle, Emitter, State};
 use tokio::time::timeout;
 
 /// Spawn a notification listener task for an agent session.
@@ -145,7 +145,7 @@ pub fn detect_credentials(
 pub async fn send_agent_prompt(
 	session_id: String,
 	content: String,
-	app: AppHandle,
+	on_event: Channel<serde_json::Value>,
 	sessions: State<'_, AgentSessionMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), AppError> {
@@ -194,32 +194,73 @@ pub async fn send_agent_prompt(
 		text: content.clone(),
 	});
 
-	// Spawn async task for the prompt so we return immediately
-	let sid = session_id.clone();
+	// Clone data for async task
+	let acp_session_id = session.acp_session_id.clone();
+	let session_id_clone = session_id.clone();
+
+	// Spawn async task to handle the prompt and stream events via Channel
 	tokio::spawn(async move {
+		// Get notification stream for forwarding to Channel
+		// NOTE: spawn_notification_listener also reads from this stream and persists
+		// to DB + emits via Tauri Events. We forward to Channel here for unified
+		// frontend handling. The broadcast stream supports multiple consumers.
+		let stream = session.notifications().await;
+
+		// Create a shared channel reference for both tasks
+		let on_event_clone = on_event.clone();
+
+		// Start notification forwarding task (forward only, no persistence)
+		let forward_handle: tokio::task::JoinHandle<()> = tokio::spawn(
+			async move {
+				let mut stream = stream;
+				while let Some(notification) = stream.next().await {
+					// Forward raw ACP notification through channel
+					// These are standard ACP format (no wrapping)
+					if on_event_clone.send(notification).is_err() {
+						tracing::warn!(session_id = %session_id, "channel closed, stopping notification forward");
+						break;
+					}
+				}
+				tracing::debug!(session_id = %session_id, "notification forward task ended");
+			},
+		);
+
+		// Wait for prompt to complete
 		let result = session.prompt(prompt_parts).await;
+
+		// Send final event based on result FIRST
+		// NOTE: These are application-level events (not standard ACP),
+		// distinguished by the "type" field.
 		match result {
 			Ok(prompt_result) => {
-				let event_name = format!("agent-turn-complete-{sid}");
-				if let Err(e) = app.emit(&event_name, &prompt_result) {
-					tracing::warn!(
-						session_id = %sid,
-						error = %e,
-						"failed to emit turn-complete event"
-					);
+				let turn_complete = serde_json::json!({
+					"type": "turn_complete",
+					"sessionId": acp_session_id,
+					"stopReason": prompt_result.stop_reason
+				});
+				tracing::info!(
+					session_id = %session_id_clone,
+					acp_session_id = %acp_session_id,
+					"sending turn_complete event"
+				);
+				if let Err(e) = on_event.send(turn_complete) {
+					tracing::error!(error = %e, "failed to send turn_complete event");
 				}
 			}
 			Err(e) => {
-				let event_name = format!("agent-error-{sid}");
-				if let Err(emit_err) = app.emit(&event_name, &format!("{e}")) {
-					tracing::warn!(
-						session_id = %sid,
-						error = %emit_err,
-						"failed to emit agent-error event"
-					);
-				}
+				let error_event = serde_json::json!({
+					"type": "error",
+					"sessionId": acp_session_id,
+					"message": format!("{e}")
+				});
+				let _ = on_event.send(error_event);
 			}
 		}
+
+		// Wait a bit for final notifications to be forwarded, then abort
+		tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+		forward_handle.abort();
+		let _ = forward_handle.await;
 	});
 
 	Ok(())
