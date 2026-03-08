@@ -166,7 +166,7 @@ describe("getLineStats", () => {
 					deletions: ["b", "c"],
 				},
 			],
-		}));
+		} as Hunk));
 		expect(getLineStats(makeFile(hunks))).toEqual({
 			additions: 100,
 			deletions: 200,
