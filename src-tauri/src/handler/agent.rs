@@ -105,32 +105,20 @@ pub fn spawn_notification_listener(
 
 			// Emit dedicated mode-update event if this notification is a
 			// current_mode_update so the frontend can refresh its mode selector.
-			if let Some(update) = notification.pointer("/params/update") {
-				if update.get("sessionUpdate").and_then(|v| v.as_str())
-					== Some("current_mode_update")
+			if let Some(update) =
+				notification.pointer("/params/update").filter(|u| {
+					u.get("sessionUpdate").and_then(|v| v.as_str())
+						== Some("current_mode_update")
+				}) {
+				if let Some(mode_id) =
+					update.get("modeId").and_then(|v| v.as_str())
 				{
-					if let Some(mode_id) =
-						update.get("modeId").and_then(|v| v.as_str())
-					{
-						let mode_event = format!("agent-mode-update-{notif_id}");
-						if let Err(e) = app.emit(&mode_event, mode_id) {
-							tracing::warn!(
-								session_id = %notif_id,
-								error = %e,
-								"failed to emit mode-update event"
-							);
-						}
-					}
-				}
-
-				// Emit dedicated session-update event if sessionTitle is present
-				if let Some(title) = update.get("sessionTitle").and_then(|v| v.as_str()) {
-					let title_event = format!("agent-session-update-{notif_id}");
-					if let Err(e) = app.emit(&title_event, title) {
+					let mode_event = format!("agent-mode-update-{notif_id}");
+					if let Err(e) = app.emit(&mode_event, mode_id) {
 						tracing::warn!(
 							session_id = %notif_id,
 							error = %e,
-							"failed to emit session-update event"
+							"failed to emit mode-update event"
 						);
 					}
 				}
