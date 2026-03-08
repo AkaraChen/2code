@@ -1,11 +1,11 @@
 import {
 	Box,
-	createListCollection,
+	Button,
 	Flex,
 	HStack,
 	IconButton,
+	Menu,
 	Portal,
-	Select,
 	Spinner,
 	Text,
 	VStack,
@@ -13,6 +13,7 @@ import {
 import { Suspense, use, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { LuShrink } from "react-icons/lu";
+import { RiArrowDownSLine } from "react-icons/ri";
 import { useShallow } from "zustand/react/shallow";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
@@ -132,13 +133,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			})),
 		[modelState],
 	);
-	const modelCollection = useMemo(
-		() =>
-			createListCollection({
-				items: modelItems,
-			}),
-		[modelItems],
-	);
+	
 	const selectedModel =
 		modelState?.current_model_id ?? modelItems[0]?.value ?? null;
 	const showModelSelector = !!modelState?.supported && modelItems.length > 0;
@@ -162,10 +157,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			})),
 		[modeState],
 	);
-	const modeCollection = useMemo(
-		() => createListCollection({ items: modeItems }),
-		[modeItems],
-	);
+	
 	const selectedMode =
 		modeState?.current_mode_id ?? modeItems[0]?.value ?? null;
 	const showModeSelector = !!modeState?.supported && modeItems.length > 1;
@@ -180,88 +172,78 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		[selectedMode, sessionId, setAgentMode],
 	);
 	const modeSelector = showModeSelector ? (
-		<Select.Root
-			collection={modeCollection}
-			value={selectedMode ? [selectedMode] : []}
-			onValueChange={handleModeChange}
-			w={32}
-			size="xs"
-			disabled={modeBusy || (isStreaming ?? false)}
-			aria-label={m.agentMode()}
-			variant="ghost"
-		>
-			<Select.HiddenSelect />
-			<Select.Control>
-				<Select.Trigger
+		<Menu.Root>
+			<Menu.Trigger asChild>
+				<Button
+					size="xs"
+					variant="ghost"
 					h="6"
 					minH="6"
-					px="1"
-					bg="transparent"
-					borderWidth="0"
+					px="2"
 					color="fg.muted"
-					_hover={{ bg: "transparent", color: "fg" }}
+					_hover={{ bg: "bg.muted", color: "fg" }}
+					disabled={modeBusy || (isStreaming ?? false)}
+					aria-label={m.agentMode()}
 				>
-					<Select.ValueText fontSize="xs" truncate />
-				</Select.Trigger>
-				<Select.IndicatorGroup>
-					{modeBusy ? <Spinner size="xs" /> : <Select.Indicator />}
-				</Select.IndicatorGroup>
-			</Select.Control>
+					<Text fontSize="xs" truncate maxW="32">
+						{modeItems.find((m) => m.value === selectedMode)?.label ?? selectedMode}
+					</Text>
+					{modeBusy ? <Spinner size="xs" ml="1" /> : <RiArrowDownSLine />}
+				</Button>
+			</Menu.Trigger>
 			<Portal>
-				<Select.Positioner>
-					<Select.Content>
-						{modeCollection.items.map((item) => (
-							<Select.Item item={item} key={item.value}>
+				<Menu.Positioner>
+					<Menu.Content>
+						{modeItems.map((item) => (
+							<Menu.Item
+								key={item.value}
+								value={item.value}
+								onClick={() => handleModeChange({ value: [item.value] })}
+							>
 								{item.label}
-								<Select.ItemIndicator />
-							</Select.Item>
+							</Menu.Item>
 						))}
-					</Select.Content>
-				</Select.Positioner>
+					</Menu.Content>
+				</Menu.Positioner>
 			</Portal>
-		</Select.Root>
+		</Menu.Root>
 	) : null;
 	const modelSelector = showModelSelector ? (
-		<Select.Root
-			collection={modelCollection}
-			value={selectedModel ? [selectedModel] : []}
-			onValueChange={handleModelChange}
-			size="xs"
-			w={32}
-			disabled={modelBusy || (isStreaming ?? false)}
-			aria-label={m.agentModel()}
-			variant={"ghost"}
-		>
-			<Select.HiddenSelect />
-			<Select.Control>
-				<Select.Trigger
+		<Menu.Root>
+			<Menu.Trigger asChild>
+				<Button
+					size="xs"
+					variant="ghost"
 					h="6"
 					minH="6"
-					px="1"
-					bg="transparent"
-					borderWidth="0"
+					px="2"
 					color="fg.muted"
-					_hover={{ bg: "transparent", color: "fg" }}
+					_hover={{ bg: "bg.muted", color: "fg" }}
+					disabled={modelBusy || (isStreaming ?? false)}
+					aria-label={m.agentModel()}
 				>
-					<Select.ValueText fontSize="xs" truncate />
-				</Select.Trigger>
-				<Select.IndicatorGroup>
-					{modelBusy ? <Spinner size="xs" /> : <Select.Indicator />}
-				</Select.IndicatorGroup>
-			</Select.Control>
+					<Text fontSize="xs" truncate maxW="48">
+						{modelItems.find((m) => m.value === selectedModel)?.label ?? selectedModel}
+					</Text>
+					{modelBusy ? <Spinner size="xs" ml="1" /> : <RiArrowDownSLine />}
+				</Button>
+			</Menu.Trigger>
 			<Portal>
-				<Select.Positioner>
-					<Select.Content>
-						{modelCollection.items.map((item) => (
-							<Select.Item item={item} key={item.value}>
+				<Menu.Positioner>
+					<Menu.Content>
+						{modelItems.map((item) => (
+							<Menu.Item
+								key={item.value}
+								value={item.value}
+								onClick={() => handleModelChange({ value: [item.value] })}
+							>
 								{item.label}
-								<Select.ItemIndicator />
-							</Select.Item>
+							</Menu.Item>
 						))}
-					</Select.Content>
-				</Select.Positioner>
+					</Menu.Content>
+				</Menu.Positioner>
 			</Portal>
-		</Select.Root>
+		</Menu.Root>
 	) : null;
 
 	if (isActive && needsReconnection(sessionId)) {

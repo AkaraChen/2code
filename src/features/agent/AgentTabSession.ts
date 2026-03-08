@@ -140,8 +140,13 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async registerListeners(): Promise<void> {
-		const [unlistenEvent, unlistenComplete, unlistenError, unlistenMode] =
-			await Promise.all([
+		const [
+			unlistenEvent,
+			unlistenComplete,
+			unlistenError,
+			unlistenMode,
+			unlistenSession,
+		] = await Promise.all([
 				listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
 					useAgentStore
 						.getState()
@@ -179,6 +184,22 @@ export class AgentTabSession extends TabSession {
 						});
 					}
 				}),
+				listen<string>(`agent-session-update-${this.id}`, (e) => {
+					// The agent sent a session/update notification with a sessionTitle.
+					// We update the tab title in the store.
+					const profile = this.tabStore.profiles[this.profileId];
+					const agentTab = profile?.tabs.find(
+						(t): t is AgentTab =>
+							t.type === "agent" && t.sessionId === this.id,
+					);
+					if (agentTab) {
+						this.tabStore.updateTabTitle(
+							this.profileId,
+							agentTab.id,
+							e.payload,
+						);
+					}
+				}),
 			]);
 
 		this.unlisteners = [
@@ -186,6 +207,7 @@ export class AgentTabSession extends TabSession {
 			unlistenComplete,
 			unlistenError,
 			unlistenMode,
+			unlistenSession,
 		];
 	}
 
