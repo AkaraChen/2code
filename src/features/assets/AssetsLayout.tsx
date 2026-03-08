@@ -52,42 +52,40 @@ export default function AssetsLayout() {
 						}
 					>
 						<SegmentGroup.Indicator />
-						{mode === "store" ? (
-							<>
-								<SegmentGroup.Item value="skills">
-									<SegmentGroup.ItemText>{m.skills()}</SegmentGroup.ItemText>
+						{[
+							{ value: "skills", label: m.skills() },
+							{ value: "snippets", label: m.snippets() },
+							{ value: "agents", label: m.agents() },
+						].map((item) => {
+							const isDisabled = mode === "store" && item.value === "snippets";
+							const segmentItem = (
+								<SegmentGroup.Item
+									key={item.value}
+									value={item.value}
+									disabled={isDisabled}
+								>
+									<SegmentGroup.ItemText>{item.label}</SegmentGroup.ItemText>
 									<SegmentGroup.ItemHiddenInput />
 								</SegmentGroup.Item>
-								<Tooltip.Root>
-									<Tooltip.Trigger asChild>
-										<SegmentGroup.Item
-											value="snippets"
-											disabled
-										>
-											<SegmentGroup.ItemText>{m.snippets()}</SegmentGroup.ItemText>
-											<SegmentGroup.ItemHiddenInput />
-										</SegmentGroup.Item>
-									</Tooltip.Trigger>
-									<Tooltip.Positioner>
-										<Tooltip.Content>
-											{m.wip()}
-										</Tooltip.Content>
-									</Tooltip.Positioner>
-								</Tooltip.Root>
-								<SegmentGroup.Item value="agents">
-									<SegmentGroup.ItemText>{m.agents()}</SegmentGroup.ItemText>
-									<SegmentGroup.ItemHiddenInput />
-								</SegmentGroup.Item>
-							</>
-						) : (
-							<SegmentGroup.Items
-								items={[
-									{ value: "skills", label: m.skills() },
-									{ value: "snippets", label: m.snippets() },
-									{ value: "agents", label: m.agents() },
-								]}
-							/>
-						)}
+							);
+
+							if (isDisabled) {
+								return (
+									<Tooltip.Root key={item.value}>
+										<Tooltip.Trigger asChild>
+											{segmentItem}
+										</Tooltip.Trigger>
+										<Tooltip.Positioner>
+											<Tooltip.Content>
+												{m.wip()}
+											</Tooltip.Content>
+										</Tooltip.Positioner>
+									</Tooltip.Root>
+								);
+							}
+
+							return segmentItem;
+						})}
 					</SegmentGroup.Root>
 
 					<SegmentGroup.Root
@@ -99,12 +97,18 @@ export default function AssetsLayout() {
 						}
 					>
 						<SegmentGroup.Indicator />
-						<SegmentGroup.Items
-							items={[
-								{ value: "manage", label: m.management() },
-								{ value: "store", label: m.store() },
-							]}
-						/>
+						{[
+							{ value: "manage", label: m.management() },
+							{ value: "store", label: m.store() },
+						].map((item) => (
+							<SegmentGroup.Item
+								key={item.value}
+								value={item.value}
+							>
+								<SegmentGroup.ItemText>{item.label}</SegmentGroup.ItemText>
+								<SegmentGroup.ItemHiddenInput />
+							</SegmentGroup.Item>
+						))}
 					</SegmentGroup.Root>
 				</HStack>
 
