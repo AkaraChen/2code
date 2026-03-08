@@ -83,7 +83,7 @@ export default function AppSidebar() {
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
-					<SidebarLink to="/assets" icon={<RiArchive2Line />}>
+					<SidebarLink to="/assets" pattern="/assets/*" icon={<RiArchive2Line />}>
 						{m.assets()}
 					</SidebarLink>
 
