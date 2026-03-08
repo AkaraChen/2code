@@ -11,10 +11,10 @@
 		"start": "tauri dev",
 		"test:watch": "vitest",
 		"prepare": "husky",
-		"fmt": "pnpm zx scripts/format.js",
-		"lint": "pnpm zx scripts/lint.js",
-		"typecheck": "pnpm zx scripts/typecheck.js",
-		"test": "pnpm zx scripts/test.js"
+		"fmt": "zx scripts/format.js",
+		"lint": "zx scripts/lint.js",
+		"typecheck": "zx scripts/typecheck.js",
+		"test": "zx scripts/test.js"
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.14.1",

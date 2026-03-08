@@ -2,6 +2,6 @@
 
 console.log(chalk.blue("Running format..."));
 
-await Promise.all([$`pnpm prettier --write .`, $`cd src-tauri && cargo fmt`]);
+await Promise.all([$`bunx prettier --write .`, $`cd src-tauri && cargo fmt`]);
 
 console.log(chalk.green("Format complete!"));
