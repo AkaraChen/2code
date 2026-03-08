@@ -184,8 +184,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			collection={modeCollection}
 			value={selectedMode ? [selectedMode] : []}
 			onValueChange={handleModeChange}
+			w={32}
 			size="xs"
-			width={{ base: "100px", md: "160px" }}
 			disabled={modeBusy || (isStreaming ?? false)}
 			aria-label={m.agentMode()}
 			variant="ghost"
@@ -227,7 +227,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			value={selectedModel ? [selectedModel] : []}
 			onValueChange={handleModelChange}
 			size="xs"
-			width={{ base: "120px", md: "150px" }}
+			w={32}
 			disabled={modelBusy || (isStreaming ?? false)}
 			aria-label={m.agentModel()}
 			variant={"ghost"}
