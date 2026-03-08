@@ -133,7 +133,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			})),
 		[modelState],
 	);
-	
+
 	const selectedModel =
 		modelState?.current_model_id ?? modelItems[0]?.value ?? null;
 	const showModelSelector = !!modelState?.supported && modelItems.length > 0;
@@ -157,7 +157,7 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			})),
 		[modeState],
 	);
-	
+
 	const selectedMode =
 		modeState?.current_mode_id ?? modeItems[0]?.value ?? null;
 	const showModeSelector = !!modeState?.supported && modeItems.length > 1;
@@ -186,9 +186,14 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 					aria-label={m.agentMode()}
 				>
 					<Text fontSize="xs" truncate maxW="32">
-						{modeItems.find((m) => m.value === selectedMode)?.label ?? selectedMode}
+						{modeItems.find((m) => m.value === selectedMode)
+							?.label ?? selectedMode}
 					</Text>
-					{modeBusy ? <Spinner size="xs" ml="1" /> : <RiArrowDownSLine />}
+					{modeBusy ? (
+						<Spinner size="xs" ml="1" />
+					) : (
+						<RiArrowDownSLine />
+					)}
 				</Button>
 			</Menu.Trigger>
 			<Portal>
@@ -198,7 +203,9 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 							<Menu.Item
 								key={item.value}
 								value={item.value}
-								onClick={() => handleModeChange({ value: [item.value] })}
+								onClick={() =>
+									handleModeChange({ value: [item.value] })
+								}
 							>
 								{item.label}
 							</Menu.Item>
@@ -223,9 +230,14 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 					aria-label={m.agentModel()}
 				>
 					<Text fontSize="xs" truncate maxW="48">
-						{modelItems.find((m) => m.value === selectedModel)?.label ?? selectedModel}
+						{modelItems.find((m) => m.value === selectedModel)
+							?.label ?? selectedModel}
 					</Text>
-					{modelBusy ? <Spinner size="xs" ml="1" /> : <RiArrowDownSLine />}
+					{modelBusy ? (
+						<Spinner size="xs" ml="1" />
+					) : (
+						<RiArrowDownSLine />
+					)}
 				</Button>
 			</Menu.Trigger>
 			<Portal>
@@ -235,7 +247,9 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 							<Menu.Item
 								key={item.value}
 								value={item.value}
-								onClick={() => handleModelChange({ value: [item.value] })}
+								onClick={() =>
+									handleModelChange({ value: [item.value] })
+								}
 							>
 								{item.label}
 							</Menu.Item>
