@@ -1,124 +1,23 @@
 import {
-	Badge,
 	Box,
 	Button,
-	Card,
 	Center,
 	EmptyState,
-	HStack,
-	Link,
 	SimpleGrid,
 	Spinner,
-	Stack,
 	Text,
 	VStack,
 } from "@chakra-ui/react";
-import { LuExternalLink } from "react-icons/lu";
 import type { RegistryAgentInfo } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
-import { AgentIcon } from "@/shared/components/AgentIcon";
 import {
 	useAddMarketplaceAgent,
 	useMarketplaceAgents,
 	useRegistryAgents,
 } from "@/features/assets/hooks/useMarketplace";
-import { ICON_CONTAINER_STYLE } from "../components/shared";
 import { MarketplaceQueryBoundary } from "../components/MarketplaceQueryBoundary";
+import { AgentCard } from "../components/AgentCard";
 
-function RegistryAgentCard({
-	agent,
-	isAdded,
-	onAdd,
-	isPending,
-	isHero,
-}: {
-	agent: RegistryAgentInfo;
-	isAdded: boolean;
-	onAdd: (agent: RegistryAgentInfo) => void;
-	isPending: boolean;
-	isHero?: boolean;
-}) {
-	return (
-		<Card.Root 
-			size={isHero ? "lg" : "md"} 
-			variant={isHero ? "elevated" : "outline"}
-			bg={isHero ? "bg.subtle" : "bg.panel"}
-		>
-			<Card.Body gap={isHero ? "5" : "3"}>
-				<HStack gap={isHero ? "5" : "3"} align="flex-start">
-					<div style={ICON_CONTAINER_STYLE}>
-						<AgentIcon
-							iconUrl={agent.icon}
-							size={28}
-							alt={agent.name}
-						/>
-					</div>
-					<Stack gap="0" flex="1" minW="0">
-						<HStack justify="space-between" align="flex-start">
-							<Card.Title fontSize="sm" lineClamp={1}>
-								{agent.name}
-							</Card.Title>
-							<Badge
-								size="sm"
-								variant="outline"
-								flexShrink={0}
-								fontFamily="mono"
-							>
-								{m.marketplaceVersion({
-									version: agent.version,
-								})}
-							</Badge>
-						</HStack>
-						{agent.authors.length > 0 && (
-							<Text fontSize="xs" color="fg.muted" lineClamp={1}>
-								{m.marketplaceBy({
-									authors: agent.authors.join(", "),
-								})}
-							</Text>
-						)}
-					</Stack>
-				</HStack>
-
-				{agent.description && (
-					<Card.Description fontSize="xs" lineClamp={2}>
-						{agent.description}
-					</Card.Description>
-				)}
-
-				<HStack justify="space-between" align="center">
-					{agent.repository ? (
-						<Link
-							href={agent.repository}
-							target="_blank"
-							rel="noopener noreferrer"
-							fontSize="xs"
-							color="fg.muted"
-							display="flex"
-							alignItems="center"
-							gap="1"
-						>
-							<LuExternalLink size={10} />
-							Repo
-						</Link>
-					) : (
-						<Box />
-					)}
-					<Button
-						size="sm"
-						minH="44px"
-						variant={isAdded ? "subtle" : "solid"}
-						colorPalette={isAdded ? "gray" : undefined}
-						disabled={isAdded || isPending}
-						loading={isPending}
-						onClick={() => !isAdded && onAdd(agent)}
-					>
-						{isAdded ? m.marketplaceAdded() : m.marketplaceAdd()}
-					</Button>
-				</HStack>
-			</Card.Body>
-		</Card.Root>
-	);
-}
 
 function RegistryList() {
 	const { data: registry } = useRegistryAgents();
@@ -154,39 +53,40 @@ function RegistryList() {
 	}
 
 	return (
-		<Box w="full" css={{ containerType: "inline-size" }}>
-			<Box
-				display="grid"
-				gridTemplateColumns={{
-					base: "1fr",
-					md: "repeat(2, 1fr)",
-					lg: "repeat(3, 1fr)",
-				}}
-				gap={{ base: "4", md: "6" }}
-			>
-				{registry.map((agent, index) => (
-					<Box
-						key={agent.id}
-						gridColumn={
-							index === 0
-								? { base: "span 1", md: "span 2", lg: "span 2" }
-								: "span 1"
+		<SimpleGrid
+			columns={{ base: 1, md: 2, lg: 3 }}
+			gap="4"
+			w="full"
+		>
+			{registry.map((agent) => (
+				<Box key={agent.id} display="flex" flexDirection="column">
+					<AgentCard
+						name={agent.name}
+						version={agent.version}
+						description={agent.description}
+						iconUrl={agent.icon}
+						authors={agent.authors}
+						repository={agent.repository}
+						action={
+							<Button
+								size="xs"
+								variant={installedIds.has(agent.id) ? "subtle" : "solid"}
+								colorPalette={installedIds.has(agent.id) ? "gray" : undefined}
+								disabled={installedIds.has(agent.id) || (addMutation.isPending && addMutation.variables?.id === agent.id)}
+								loading={addMutation.isPending && addMutation.variables?.id === agent.id}
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									!installedIds.has(agent.id) && handleAdd(agent);
+								}}
+							>
+								{installedIds.has(agent.id) ? m.marketplaceAdded() : m.marketplaceAdd()}
+							</Button>
 						}
-					>
-						<RegistryAgentCard
-							agent={agent}
-							isAdded={installedIds.has(agent.id)}
-							onAdd={handleAdd}
-							isPending={
-								addMutation.isPending &&
-								addMutation.variables?.id === agent.id
-							}
-							isHero={index === 0}
-						/>
-					</Box>
-				))}
-			</Box>
-		</Box>
+					/>
+				</Box>
+			))}
+		</SimpleGrid>
 	);
 }
 

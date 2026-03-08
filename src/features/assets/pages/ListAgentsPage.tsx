@@ -14,77 +14,9 @@ import {
 import { useState } from "react";
 import { LuTrash2 } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
-import { AgentIcon } from "@/shared/components/AgentIcon";
 import { useMarketplaceAgents, useRemoveMarketplaceAgent } from "@/features/assets/hooks/useMarketplace";
-import { ICON_CONTAINER_STYLE } from "../components/shared";
 import { MarketplaceQueryBoundary } from "../components/MarketplaceQueryBoundary";
-
-function InstalledAgentCard({
-	id,
-	name,
-	version,
-	description,
-	iconUrl,
-	authors,
-	onRemove,
-}: {
-	id: string;
-	name: string;
-	version: string;
-	description?: string | null;
-	iconUrl?: string | null;
-	authors: string[];
-	onRemove: (id: string) => void;
-}) {
-	return (
-		<Card.Root>
-			<Card.Body gap="3">
-				<HStack gap="3" align="flex-start">
-					<div style={ICON_CONTAINER_STYLE}>
-						<AgentIcon iconUrl={iconUrl} size={28} alt={name} />
-					</div>
-					<Stack gap="0" flex="1" minW="0">
-						<HStack justify="space-between" align="flex-start">
-							<Card.Title fontSize="sm" lineClamp={1}>
-								{name}
-							</Card.Title>
-							<HStack gap="2" flexShrink={0}>
-								<Badge
-									size="sm"
-									variant="outline"
-									fontFamily="mono"
-								>
-									{m.marketplaceVersion({ version })}
-								</Badge>
-								<Button
-									size="xs"
-									variant="ghost"
-									colorPalette="red"
-									onClick={() => onRemove(id)}
-									aria-label={m.removeAgent()}
-								>
-									<LuTrash2 />
-								</Button>
-							</HStack>
-						</HStack>
-						{authors.length > 0 && (
-							<Text fontSize="xs" color="fg.muted" lineClamp={1}>
-								{m.marketplaceBy({
-									authors: authors.join(", "),
-								})}
-							</Text>
-						)}
-					</Stack>
-				</HStack>
-				{description && (
-					<Card.Description fontSize="xs" lineClamp={2}>
-						{description}
-					</Card.Description>
-				)}
-			</Card.Body>
-		</Card.Root>
-	);
-}
+import { AgentCard } from "../components/AgentCard";
 
 function InstalledList() {
 	const { data: agents } = useMarketplaceAgents();
@@ -115,15 +47,28 @@ function InstalledList() {
 						}
 					})();
 					return (
-						<InstalledAgentCard
+						<AgentCard
 							key={agent.id}
-							id={agent.id}
 							name={agent.name}
 							version={agent.version}
 							description={agent.description}
 							iconUrl={agent.icon_url}
 							authors={authors}
-							onRemove={setRemoveTarget}
+							action={
+								<Button
+									size="xs"
+									variant="ghost"
+									colorPalette="red"
+									onClick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										setRemoveTarget(agent.id);
+									}}
+									aria-label={m.removeAgent()}
+								>
+									<LuTrash2 />
+								</Button>
+							}
 						/>
 					);
 				})}
