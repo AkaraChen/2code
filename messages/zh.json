@@ -253,5 +253,8 @@
 	"skillInstall": "安装",
 	"skillInstalls": "{n} 次安装",
 	"skillsNoResults": "未找到与 \"{query}\" 相关的技能",
-	"skillsSearchPlaceholder": "搜索 skills.sh\u2026 (至少 2 个字符)"
+	"skillsSearchPlaceholder": "搜索 skills.sh\u2026 (至少 2 个字符)",
+	"skillsEmptyTitle": "探索技能",
+	"skillsEmptyDesc": "搜索技能注册表，发现并安装更多强大的扩展能力。",
+	"search": "搜索"
 }

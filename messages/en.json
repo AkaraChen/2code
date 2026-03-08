@@ -253,5 +253,8 @@
 	"skillInstall": "Install",
 	"skillInstalls": "{n} installs",
 	"skillsNoResults": "No skills found for \"{query}\"",
-	"skillsSearchPlaceholder": "Search skills.sh\u2026 (min. 2 characters)"
+	"skillsSearchPlaceholder": "Search skills.sh\u2026 (min. 2 characters)",
+	"skillsEmptyTitle": "Discover Skills",
+	"skillsEmptyDesc": "Search the registry to find and install new skills.",
+	"search": "Search"
 }
