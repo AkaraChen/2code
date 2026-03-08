@@ -48,7 +48,10 @@ export class AgentTabSession extends TabSession {
 	 * Create a new persistent agent session.
 	 * Session and events are automatically persisted to the database.
 	 *
-	 * @param agentName Display name from the marketplace agent record (used as tab title).
+	 * @param profileId The profile ID to associate with this session (for multi-profile support).
+	 * @param cwd       The initial working directory for the agent process.
+	 * @param agent     The agent identifier (e.g. marketplace record ID or local agent ID).
+	 * @param agentName The display name of the agent (for the tab title).
 	 * @param iconUrl   Icon URL from the marketplace agent record.
 	 */
 	static async create(
