@@ -9,6 +9,7 @@ import { initLogger } from "./shared/lib/logger";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 import { Toaster } from "./shared/providers/Toaster";
 import "./features/watcher/fileWatcher";
+import { Agentation } from "agentation";
 
 // Initialize Tauri logger integration
 initLogger();
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 			<ChakraProvider value={defaultSystem}>
 				<ThemeProvider>
 					<BrowserRouter>
+						{import.meta.env.DEV && <Agentation />}
 						<App />
 					</BrowserRouter>
 					<Toaster />
