@@ -11,7 +11,7 @@ typecheck:
     nr typecheck
 
 lint:
-    nr lint:check
+    nr lint
 
 # Build CLI sidecar (src-tauri/bins/2code-helper)
 build-helper:
