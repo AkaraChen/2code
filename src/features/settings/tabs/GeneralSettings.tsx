@@ -4,11 +4,8 @@ import {
 	Portal,
 	Select,
 	Stack,
-	Switch,
-	Text,
 } from "@chakra-ui/react";
 import { use } from "react";
-import { useDebugStore } from "@/features/debug/debugStore";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
 import { getLocale, setLocale } from "@/paraglide/runtime.js";
@@ -25,12 +22,10 @@ const localeCollection = createListCollection({
 
 /**
  * 通用设置选项卡
- * 语言、主题、强调色、圆角、调试模式
+ * 语言、主题、强调色、圆角
  */
 export function GeneralSettings() {
 	const { preference, setPreference } = use(ThemeContext);
-	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
-		useDebugStore();
 
 	const themeCollection = createListCollection({
 		items: [
@@ -110,22 +105,6 @@ export function GeneralSettings() {
 
 			<AccentColorPicker />
 			<BorderRadiusPicker />
-
-			<Field.Root>
-				<Field.Label>{m.debugMode()}</Field.Label>
-				<Switch.Root
-					checked={debugEnabled}
-					onCheckedChange={(e) => setDebugEnabled(!!e.checked)}
-				>
-					<Switch.HiddenInput />
-					<Switch.Control />
-					<Switch.Label>
-						<Text fontSize="sm" color="fg.muted">
-							{m.debugModeDescription()}
-						</Text>
-					</Switch.Label>
-				</Switch.Root>
-			</Field.Root>
 		</Stack>
 	);
 }

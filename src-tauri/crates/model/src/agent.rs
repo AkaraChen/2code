@@ -56,3 +56,31 @@ pub struct AgentSessionMeta {
 	pub profile_id: String,
 	pub agent: String,
 }
+
+/// Agent event types for channel streaming.
+/// These events are sent from the backend to the frontend via Tauri Channel.
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "type")]
+pub enum AgentEvent {
+	/// Standard ACP notification from the agent process
+	Notification {
+		/// The JSON-RPC method name
+		method: String,
+		/// Notification parameters as JSON string
+		params: String,
+	},
+	/// Turn completed successfully
+	TurnComplete {
+		/// The ACP session ID
+		session_id: String,
+		/// The stop reason (e.g., "end_turn", "tool_use")
+		stop_reason: String,
+	},
+	/// Error occurred during processing
+	Error {
+		/// The ACP session ID
+		session_id: String,
+		/// Error message
+		message: String,
+	},
+}

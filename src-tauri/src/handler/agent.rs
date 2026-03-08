@@ -10,7 +10,7 @@ use agent::{
 use futures::StreamExt;
 use infra::db::{DbPool, DbPoolExt};
 use model::agent::{
-	AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord,
+	AgentEvent, AgentSessionEventRecord, AgentSessionMeta, AgentSessionRecord,
 };
 use model::distribution::Distribution;
 use model::error::AppError;
@@ -145,7 +145,7 @@ pub fn detect_credentials(
 pub async fn send_agent_prompt(
 	session_id: String,
 	content: String,
-	on_event: Channel<serde_json::Value>,
+	on_event: Channel<AgentEvent>,
 	sessions: State<'_, AgentSessionMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), AppError> {
@@ -215,8 +215,36 @@ pub async fn send_agent_prompt(
 				let mut stream = stream;
 				while let Some(notification) = stream.next().await {
 					// Forward raw ACP notification through channel
-					// These are standard ACP format (no wrapping)
-					if on_event_clone.send(notification).is_err() {
+					// Convert JSON Value to AgentEvent::Notification
+					let event = if let Some(method) =
+						notification.get("method").and_then(|m| m.as_str())
+					{
+						// Extract params, excluding "method" and "jsonrpc" fields
+						let params = notification
+							.as_object()
+							.map(|obj| {
+								let filtered: serde_json::Map<
+									String,
+									serde_json::Value,
+								> = obj.iter()
+									.filter(|(k, _)| {
+										*k != "method" && *k != "jsonrpc"
+									})
+									.map(|(k, v)| (k.clone(), v.clone()))
+									.collect();
+								serde_json::to_string(&filtered)
+									.unwrap_or_else(|_| "{}".to_string())
+							})
+							.unwrap_or_else(|| "{}".to_string());
+						AgentEvent::Notification {
+							method: method.to_string(),
+							params,
+						}
+					} else {
+						// Skip non-notification messages
+						continue;
+					};
+					if on_event_clone.send(event).is_err() {
 						tracing::warn!(session_id = %session_id, "channel closed, stopping notification forward");
 						break;
 					}
@@ -233,27 +261,23 @@ pub async fn send_agent_prompt(
 		// distinguished by the "type" field.
 		match result {
 			Ok(prompt_result) => {
-				let turn_complete = serde_json::json!({
-					"type": "turn_complete",
-					"sessionId": acp_session_id,
-					"stopReason": prompt_result.stop_reason
-				});
 				tracing::info!(
 					session_id = %session_id_clone,
 					acp_session_id = %acp_session_id,
 					"sending turn_complete event"
 				);
-				if let Err(e) = on_event.send(turn_complete) {
+				if let Err(e) = on_event.send(AgentEvent::TurnComplete {
+					session_id: acp_session_id,
+					stop_reason: prompt_result.stop_reason,
+				}) {
 					tracing::error!(error = %e, "failed to send turn_complete event");
 				}
 			}
 			Err(e) => {
-				let error_event = serde_json::json!({
-					"type": "error",
-					"sessionId": acp_session_id,
-					"message": format!("{e}")
+				let _ = on_event.send(AgentEvent::Error {
+					session_id: acp_session_id,
+					message: format!("{e}"),
 				});
-				let _ = on_event.send(error_event);
 			}
 		}
 

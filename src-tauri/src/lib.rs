@@ -2,23 +2,10 @@ mod bridge;
 mod handler;
 mod helper;
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-	// Initialize tracing subscriber with console output + channel layer
-	let (channel_layer, layer_handle) = infra::logger::ChannelLayer::new();
-	{
-		use tracing_subscriber::layer::SubscriberExt;
-		use tracing_subscriber::util::SubscriberInitExt;
-		tracing_subscriber::registry()
-			.with(
-				tracing_subscriber::fmt::layer()
-					.with_target(true)
-					.with_level(true),
-			)
-			.with(channel_layer)
-			.init();
-	}
-
 	let sessions = infra::pty::create_session_map();
 	let agent_manager = std::sync::Arc::new(
 		agent::AgentManagerWrapper::new(
@@ -50,16 +37,36 @@ pub fn run() {
 		.plugin(tauri_plugin_notification::init())
 		.plugin(tauri_plugin_shell::init())
 		.plugin(tauri_plugin_store::Builder::default().build())
+		.plugin({
+			let mut builder = tauri_plugin_log::Builder::new()
+				.target(tauri_plugin_log::Target::new(
+					tauri_plugin_log::TargetKind::Stdout,
+				))
+				.target(tauri_plugin_log::Target::new(
+					tauri_plugin_log::TargetKind::Webview,
+				));
+
+			// Dev mode: add file logging to app.log
+			#[cfg(debug_assertions)]
+			{
+				builder = builder.target(tauri_plugin_log::Target::new(
+					tauri_plugin_log::TargetKind::Folder {
+						path: std::path::PathBuf::from("."),
+						file_name: Some("app".to_string()),
+					},
+				));
+			}
+
+			builder.build()
+		})
 		.manage(sessions)
 		.manage(read_threads)
 		.manage(flush_senders)
 		.manage(shutdown_flag)
-		.manage(layer_handle)
 		.manage(agent_manager)
 		.manage(agent_sessions)
 		.manage(notification_tasks)
 		.setup(|app| {
-			use tauri::Manager;
 			let app_data_dir = app
 				.path()
 				.app_data_dir()
@@ -124,8 +131,6 @@ pub fn run() {
 			handler::profile::create_profile,
 			handler::profile::delete_profile,
 			handler::watcher::watch_projects,
-			handler::debug::start_debug_log,
-			handler::debug::stop_debug_log,
 			handler::agent::list_agent_status,
 			handler::agent::install_agent,
 			handler::agent::detect_credentials,

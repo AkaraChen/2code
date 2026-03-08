@@ -1,7 +1,7 @@
 pub mod agent;
-pub mod debug;
 pub mod distribution;
 pub mod error;
+pub mod json;
 pub mod marketplace;
 pub mod notification;
 pub mod profile;

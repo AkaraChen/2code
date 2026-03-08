@@ -5,9 +5,13 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import App from "./App";
 import { queryClient } from "./shared/lib/queryClient";
+import { initLogger } from "./shared/lib/logger";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 import { Toaster } from "./shared/providers/Toaster";
 import "./features/watcher/fileWatcher";
+
+// Initialize Tauri logger integration
+initLogger();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

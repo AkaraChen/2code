@@ -1,5 +1,5 @@
 use model::error::AppError;
-use model::skill::Skill;
+use model::skill::{SearchSkillResult, Skill};
 
 #[tauri::command]
 pub fn list_skills() -> Result<Vec<Skill>, AppError> {
@@ -22,7 +22,7 @@ pub fn delete_skill(name: String) -> Result<(), AppError> {
 pub async fn search_skills(
 	query: String,
 	limit: Option<u32>,
-) -> Result<Vec<model::skill::SearchSkillResult>, AppError> {
+) -> Result<Vec<SearchSkillResult>, AppError> {
 	service::skill::search(&query, limit.unwrap_or(10)).await
 }
 

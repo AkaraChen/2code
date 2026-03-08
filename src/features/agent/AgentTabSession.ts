@@ -1,7 +1,7 @@
 import consola from "consola";
 import { nanoid } from "nanoid";
 import { Channel } from "@tauri-apps/api/core";
-import { match, P } from "ts-pattern";
+import { match } from "ts-pattern";
 import type { AgentNotification } from "@agentclientprotocol/sdk";
 import {
 	closeAgentSession,
@@ -20,30 +20,18 @@ import { useSettingsStore } from "../settings/stores";
 import { TabSession } from "../tabs/session";
 import type { AgentTab } from "../tabs/types";
 import { useAgentStore } from "./store";
+import type { AgentEvent } from "@/generated/types";
 
 /**
- * Application-level event types (not part of ACP standard).
- * These are distinguished by the "type" field.
+ * Parse ACP notification from AgentEvent params JSON string.
  */
-interface TurnCompleteEvent {
-	type: "turn_complete";
-	sessionId: string;
-	stopReason: string;
+function parseNotification(params: string): AgentNotification | null {
+	try {
+		return JSON.parse(params) as AgentNotification;
+	} catch {
+		return null;
+	}
 }
-
-interface ErrorEvent {
-	type: "error";
-	sessionId: string;
-	message: string;
-}
-
-type AppEvent = TurnCompleteEvent | ErrorEvent;
-
-/**
- * Union type for all events through the Channel.
- * Can be either standard ACP notifications or application-level events.
- */
-type ChannelEvent = AgentNotification | AppEvent;
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
@@ -166,23 +154,23 @@ export class AgentTabSession extends TabSession {
 	 * Send a prompt to the agent session.
 	 * Uses Tauri Channel to receive events:
 	 * - Standard ACP notifications (AgentNotification)
-	 * - Application-level events (TurnCompleteEvent, ErrorEvent)
+	 * - Application-level events (TurnComplete, Error)
 	 */
 	async sendPrompt(content: string): Promise<void> {
-		const channel = new Channel<ChannelEvent>();
+		const channel = new Channel<AgentEvent>();
 
 		channel.onmessage = (event) => {
 			console.error("[agent] channel event:", event);
-			console.error(
-				"[agent] event?.type:",
-				(event as Record<string, unknown>)?.type,
-			);
-			// First, check if it's an application-level event by checking for "type" field
+			// Handle discriminated union by type field
 			match(event)
-				.with({ type: "turn_complete" }, (e) => {
-					console.error("[agent] turn_complete received", e);
+				.with({ type: "TurnComplete" }, (e) => {
+					console.error("[agent] TurnComplete received", e);
 					// Application-level turn complete
-					useAgentStore.getState().handleTurnComplete(this.id, e);
+					useAgentStore.getState().handleTurnComplete(this.id, {
+						type: "turn_complete",
+						sessionId: e.session_id,
+						stopReason: e.stop_reason,
+					});
 
 					// Play notification sound
 					const { notificationEnabled, notificationSound } =
@@ -198,27 +186,22 @@ export class AgentTabSession extends TabSession {
 						);
 					}
 				})
-				.with({ type: "error" }, (e) => {
+				.with({ type: "Error" }, (e) => {
 					// Application-level error
 					useAgentStore.getState().handleError(this.id, e.message);
 				})
-				.with({ method: P.string }, (e) => {
-					// Standard ACP notification (has "method" field)
-					useAgentStore
-						.getState()
-						.handleAgentEvent(this.id, e as AgentNotification);
+				.with({ type: "Notification" }, (e) => {
+					// Standard ACP notification - parse params JSON
+					const notification = parseNotification(e.params);
+					if (notification) {
+						useAgentStore
+							.getState()
+							.handleAgentEvent(this.id, notification);
+					}
 				})
 				.otherwise(() => {
-					// Check if this might be a turn_complete event with different shape
-					if (event && typeof event === "object") {
-						const evt = event as Record<string, unknown>;
-
-						console.error("[agent] event shape check:", {
-							type: evt.type,
-							hasMethod: "method" in evt,
-							keys: Object.keys(evt),
-						});
-					}
+					// Unknown event type
+					console.error("[agent] unknown event shape:", event);
 				});
 		};
 

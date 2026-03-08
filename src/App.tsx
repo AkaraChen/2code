@@ -2,9 +2,6 @@ import { Box, Flex } from "@chakra-ui/react";
 import { lazy, Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
-import { useKey } from "rooks";
-import DebugFloat from "./features/debug/DebugFloat";
-import { useDebugStore } from "./features/debug/debugStore";
 import HomePage from "./features/home/HomePage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 
@@ -41,14 +38,6 @@ import {
 import "./app.css";
 
 export default function App() {
-	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
-	useKey("D", (e) => {
-		if (e.shiftKey && (e.metaKey || e.ctrlKey)) {
-			e.preventDefault();
-			useDebugStore.getState().togglePanel();
-		}
-	});
-
 	return (
 		<Flex direction="column" h="full">
 			<Flex flex="1" minH="0">
@@ -149,7 +138,6 @@ export default function App() {
 					</Suspense>
 				</Box>
 			</Flex>
-			<DebugFloat />
 		</Flex>
 	);
 }
