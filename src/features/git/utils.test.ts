@@ -1,4 +1,4 @@
-import type { FileDiffMetadata } from "@pierre/diffs";
+import type { FileDiffMetadata, Hunk } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 import { changeBadge, getLineStats } from "./utils";
 
@@ -158,7 +158,7 @@ describe("getLineStats", () => {
 	});
 
 	it("handles large number of hunks", () => {
-		const hunks = Array.from({length: 100}).fill({
+		const hunks: Array<Hunk> = Array.from({ length: 100 }).map(() => ({
 			hunkContent: [
 				{
 					type: "change" as const,
@@ -166,7 +166,7 @@ describe("getLineStats", () => {
 					deletions: ["b", "c"],
 				},
 			],
-		});
+		}));
 		expect(getLineStats(makeFile(hunks))).toEqual({
 			additions: 100,
 			deletions: 200,

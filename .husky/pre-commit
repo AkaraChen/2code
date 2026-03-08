@@ -1,1 +1,2 @@
 npx nano-staged
+pnpm test && pnpm typecheck && pnpm lint:check && cd src-tauri && cargo nextest run && cargo clippy -- -D warnings
