@@ -219,22 +219,10 @@ pub async fn send_agent_prompt(
 					let event = if let Some(method) =
 						notification.get("method").and_then(|m| m.as_str())
 					{
-						// Extract params, excluding "method" and "jsonrpc" fields
+						// Extract the params field content for ACP notifications
 						let params = notification
-							.as_object()
-							.map(|obj| {
-								let filtered: serde_json::Map<
-									String,
-									serde_json::Value,
-								> = obj.iter()
-									.filter(|(k, _)| {
-										*k != "method" && *k != "jsonrpc"
-									})
-									.map(|(k, v)| (k.clone(), v.clone()))
-									.collect();
-								serde_json::to_string(&filtered)
-									.unwrap_or_else(|_| "{}".to_string())
-							})
+							.get("params")
+							.map(|p| p.to_string())
 							.unwrap_or_else(|| "{}".to_string());
 						AgentEvent::Notification {
 							method: method.to_string(),
