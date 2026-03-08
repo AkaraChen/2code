@@ -30,16 +30,22 @@ function RegistryAgentCard({
 	isAdded,
 	onAdd,
 	isPending,
+	isHero,
 }: {
 	agent: RegistryAgentInfo;
 	isAdded: boolean;
 	onAdd: (agent: RegistryAgentInfo) => void;
 	isPending: boolean;
+	isHero?: boolean;
 }) {
 	return (
-		<Card.Root>
-			<Card.Body gap="3">
-				<HStack gap="3" align="flex-start">
+		<Card.Root 
+			size={isHero ? "lg" : "md"} 
+			variant={isHero ? "elevated" : "outline"}
+			bg={isHero ? "bg.subtle" : "bg.panel"}
+		>
+			<Card.Body gap={isHero ? "5" : "3"}>
+				<HStack gap={isHero ? "5" : "3"} align="flex-start">
 					<div style={ICON_CONTAINER_STYLE}>
 						<AgentIcon
 							iconUrl={agent.icon}
@@ -98,9 +104,10 @@ function RegistryAgentCard({
 						<Box />
 					)}
 					<Button
-						size="xs"
+						size="sm"
+						minH="44px"
 						variant={isAdded ? "subtle" : "solid"}
-						colorPalette={isAdded ? "gray" : "blue"}
+						colorPalette={isAdded ? "gray" : undefined}
 						disabled={isAdded || isPending}
 						loading={isPending}
 						onClick={() => !isAdded && onAdd(agent)}
@@ -147,20 +154,39 @@ function RegistryList() {
 	}
 
 	return (
-		<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4">
-			{registry.map((agent) => (
-				<RegistryAgentCard
-					key={agent.id}
-					agent={agent}
-					isAdded={installedIds.has(agent.id)}
-					onAdd={handleAdd}
-					isPending={
-						addMutation.isPending &&
-						addMutation.variables?.id === agent.id
-					}
-				/>
-			))}
-		</SimpleGrid>
+		<Box w="full" css={{ containerType: "inline-size" }}>
+			<Box
+				display="grid"
+				gridTemplateColumns={{
+					base: "1fr",
+					md: "repeat(2, 1fr)",
+					lg: "repeat(3, 1fr)",
+				}}
+				gap={{ base: "4", md: "6" }}
+			>
+				{registry.map((agent, index) => (
+					<Box
+						key={agent.id}
+						gridColumn={
+							index === 0
+								? { base: "span 1", md: "span 2", lg: "span 2" }
+								: "span 1"
+						}
+					>
+						<RegistryAgentCard
+							agent={agent}
+							isAdded={installedIds.has(agent.id)}
+							onAdd={handleAdd}
+							isPending={
+								addMutation.isPending &&
+								addMutation.variables?.id === agent.id
+							}
+							isHero={index === 0}
+						/>
+					</Box>
+				))}
+			</Box>
+		</Box>
 	);
 }
 

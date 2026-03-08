@@ -1,4 +1,4 @@
-import { SimpleGrid, Skeleton, Text } from "@chakra-ui/react";
+import { Box, SimpleGrid, Skeleton, Text } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
 import { useSkillSearch } from "@/features/assets/hooks/useSkills";
 import { SkillSearchResultCard } from "./SkillSearchResultCard";
@@ -14,9 +14,18 @@ export function SkillSearchResultList({
 
 	if (isLoading || isFetching) {
 		return (
-			<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4">
+			<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4" w="full">
 				{Array.from({ length: 6 }).map((_, i) => (
-					<Skeleton key={i} h="100px" borderRadius="md" />
+					<Box 
+						key={i} 
+						p="4"
+						borderWidth="1px" 
+						borderColor="border.subtle"
+						rounded="md"
+					>
+						<Skeleton h="20px" w="1/2" mb="3" />
+						<Skeleton h="16px" w="1/3" />
+					</Box>
 				))}
 			</SimpleGrid>
 		);
@@ -31,7 +40,7 @@ export function SkillSearchResultList({
 	}
 
 	return (
-		<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4">
+		<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4" w="full">
 			{results.map((skill) => (
 				<SkillSearchResultCard
 					key={skill.slug}

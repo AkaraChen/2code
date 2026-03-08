@@ -20,21 +20,35 @@ export function SkillSearchResultCard({
 	const install = useInstallSkill();
 	const isInstalled = installedNames.has(skill.name);
 	const installs = formatInstalls(skill.installs);
-	const isLoading =
-		install.isPending && install.variables?.skill === skill.name;
+	const isLoading = install.isPending && install.variables?.skill === skill.name;
 
 	return (
-		<Card.Root key={skill.slug} size="sm">
-			<Card.Body gap="2">
-				<HStack justify="space-between" align="flex-start">
-					<Card.Title>{skill.name}</Card.Title>
+		<Card.Root key={skill.slug} size="sm" variant="outline" bg="bg.panel" overflow="hidden">
+			<Card.Body gap="3" p="4">
+				<HStack justify="space-between" align="center">
+					<Card.Title fontSize="sm" fontWeight="semibold" lineClamp={1} flex="1" mr="2">
+						{skill.name}
+					</Card.Title>
+					
 					{isInstalled ? (
-						<Badge size="sm" colorPalette="green" variant="subtle">
+						<Badge 
+							size="sm" 
+							color="fg.success" 
+							bg="bg.success.subtle" 
+							variant="subtle" 
+							flexShrink={0}
+							h="24px"
+							px="2"
+							display="inline-flex"
+							alignItems="center"
+							rounded="sm"
+						>
 							{m.skillInstalled()}
 						</Badge>
 					) : (
 						<Button
 							size="2xs"
+							minH="24px"
 							variant="outline"
 							loading={isLoading}
 							disabled={install.isPending}
@@ -45,31 +59,28 @@ export function SkillSearchResultCard({
 								})
 							}
 							aria-label={`${m.skillInstall()} ${skill.name}`}
+							flexShrink={0}
 						>
 							<RiDownloadLine />
 							{m.skillInstall()}
 						</Button>
 					)}
 				</HStack>
-				<Card.Description lineClamp={2}>
-					<Stack gap="1" mt="1">
+				
+				<HStack justify="space-between" align="flex-end" mt="auto">
+					<Stack gap="1">
 						{skill.source && (
 							<Text fontSize="xs" color="fg.muted" lineClamp={1}>
 								{skill.source}
 							</Text>
 						)}
-						{installs && (
-							<Badge
-								size="sm"
-								variant="subtle"
-								colorPalette="gray"
-								w="fit-content"
-							>
-								{m.skillInstalls({ n: installs })}
-							</Badge>
-						)}
 					</Stack>
-				</Card.Description>
+					{installs && (
+						<Badge size="sm" variant="subtle" color="fg.muted" bg="bg.subtle">
+							{m.skillInstalls({ n: installs })}
+						</Badge>
+					)}
+				</HStack>
 			</Card.Body>
 		</Card.Root>
 	);
