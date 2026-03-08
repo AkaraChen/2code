@@ -2,7 +2,10 @@ import consola from "consola";
 import { nanoid } from "nanoid";
 import { Channel } from "@tauri-apps/api/core";
 import { match } from "ts-pattern";
-import type { AgentNotification } from "@agentclientprotocol/sdk";
+import type {
+	AgentNotification,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 import {
 	closeAgentSession,
 	createAgentSessionPersistent,
@@ -23,11 +26,11 @@ import { useAgentStore } from "./store";
 import type { AgentEvent } from "@/generated/types";
 
 /**
- * Parse ACP notification from AgentEvent params JSON string.
+ * Parse ACP SessionNotification from AgentEvent params JSON string.
  */
-function parseNotification(params: string): AgentNotification | null {
+function parseSessionNotification(params: string): SessionNotification | null {
 	try {
-		return JSON.parse(params) as AgentNotification;
+		return JSON.parse(params) as SessionNotification;
 	} catch {
 		return null;
 	}
@@ -191,12 +194,19 @@ export class AgentTabSession extends TabSession {
 					useAgentStore.getState().handleError(this.id, e.message);
 				})
 				.with({ type: "Notification" }, (e) => {
-					// Standard ACP notification - parse params JSON
-					const notification = parseNotification(e.params);
-					if (notification) {
+					// Standard ACP notification - parse params as SessionNotification
+					const sessionNotification = parseSessionNotification(
+						e.params,
+					);
+					if (sessionNotification) {
+						// Construct AgentNotification structure expected by handleAgentEvent
+						const agentNotification: AgentNotification = {
+							method: e.method,
+							params: sessionNotification,
+						};
 						useAgentStore
 							.getState()
-							.handleAgentEvent(this.id, notification);
+							.handleAgentEvent(this.id, agentNotification);
 					}
 				})
 				.otherwise(() => {
