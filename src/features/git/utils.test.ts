@@ -158,7 +158,7 @@ describe("getLineStats", () => {
 	});
 
 	it("handles large number of hunks", () => {
-		const hunks = Array.from({length: 100}).fill({
+		const hunks = Array.from({length: 100}, () => ({
 			hunkContent: [
 				{
 					type: "change" as const,
@@ -166,7 +166,7 @@ describe("getLineStats", () => {
 					deletions: ["b", "c"],
 				},
 			],
-		});
+		}));
 		expect(getLineStats(makeFile(hunks))).toEqual({
 			additions: 100,
 			deletions: 200,

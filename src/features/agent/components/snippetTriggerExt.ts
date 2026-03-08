@@ -24,6 +24,8 @@ interface TriggerState {
 	trigger: "!" | "！";
 }
 
+const TRIGGER_REGEX = /^([!！])([^\n]*)$/;
+
 function getTriggerState(editor: Editor): TriggerState | null {
 	const { from, empty } = editor.state.selection;
 
@@ -32,7 +34,7 @@ function getTriggerState(editor: Editor): TriggerState | null {
 	const textToCursor = editor.state.doc.textBetween(1, from, "\n", "\n");
 	if (textToCursor.includes("\n")) return null;
 
-	const match = textToCursor.match(/^([!！])([^\n]*)$/);
+	const match = textToCursor.match(TRIGGER_REGEX);
 	if (!match) return null;
 
 	return {

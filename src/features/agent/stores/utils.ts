@@ -74,7 +74,7 @@ export function applySessionUpdate(
 		.with(
 			{ sessionUpdate: "agent_message_chunk", content: { type: "text" } },
 			(u) => {
-				const last = content.at(-1);
+				const last = content.length > 0 ? content[content.length - 1] : undefined;
 				if (last && last.type === "text") {
 					(
 						last as { type: "text"; text: string; role: string }
@@ -91,7 +91,7 @@ export function applySessionUpdate(
 		.with(
 			{ sessionUpdate: "agent_thought_chunk", content: { type: "text" } },
 			(u) => {
-				const last = content.at(-1);
+				const last = content.length > 0 ? content[content.length - 1] : undefined;
 				if (last && last.type === "thought") {
 					(last as { type: "thought"; text: string }).text +=
 						u.content.text;

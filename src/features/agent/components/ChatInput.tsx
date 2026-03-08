@@ -14,7 +14,7 @@ import HighlightExt from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
-import { useEditor } from "@tiptap/react";
+import { Extension, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { all, createLowlight } from "lowlight";
@@ -42,28 +42,45 @@ import {
 
 const lowlight = createLowlight(all);
 
+const RE_CRLF = /\r\n/g;
+const RE_TRIPLE_NL = /\n{3,}/g;
+
+const RE_META = /<meta[^>]*>/gi;
+const RE_STYLE = /style="[^"]*"/gi;
+const RE_CLASS = /class="[^"]*"/gi;
+const RE_DIR = /\s*dir="[^"]*"/gi;
+const RE_ID = /\s*id="[^"]*"/gi;
+const RE_P_EMPTY = /<p>\s*<\/p>/gi;
+const RE_DIV_START = /<div>/gi;
+const RE_DIV_END = /<\/div>/gi;
+const RE_FONT_START = /<font[^>]*>/gi;
+const RE_FONT_END = /<\/font>/gi;
+const RE_SPAN_START = /<span[^>]*>/gi;
+const RE_SPAN_END = /<\/span>/gi;
+const RE_P_EMPTY_NBSP = /<p>(\s|&nbsp;)*<\/p>/gi;
+
 const transformPastedText = (text: string) => {
 	return text
-		.replace(/\r\n/g, "\n")
-		.replace(/\n{3,}/g, "\n\n")
+		.replace(RE_CRLF, "\n")
+		.replace(RE_TRIPLE_NL, "\n\n")
 		.trim();
 };
 
 const transformPastedHTML = (html: string) => {
 	return html
-		.replace(/<meta[^>]*>/gi, "")
-		.replace(/style="[^"]*"/gi, "")
-		.replace(/class="[^"]*"/gi, "")
-		.replace(/\s*dir="[^"]*"/gi, "")
-		.replace(/\s*id="[^"]*"/gi, "")
-		.replace(/<p>\s*<\/p>/gi, "")
-		.replace(/<div>/gi, "<p>")
-		.replace(/<\/div>/gi, "</p>")
-		.replace(/<font[^>]*>/gi, "")
-		.replace(/<\/font>/gi, "")
-		.replace(/<span[^>]*>/gi, "")
-		.replace(/<\/span>/gi, "")
-		.replace(/<p>(\s|&nbsp;)*<\/p>/gi, "");
+		.replace(RE_META, "")
+		.replace(RE_STYLE, "")
+		.replace(RE_CLASS, "")
+		.replace(RE_DIR, "")
+		.replace(RE_ID, "")
+		.replace(RE_P_EMPTY, "")
+		.replace(RE_DIV_START, "<p>")
+		.replace(RE_DIV_END, "</p>")
+		.replace(RE_FONT_START, "")
+		.replace(RE_FONT_END, "")
+		.replace(RE_SPAN_START, "")
+		.replace(RE_SPAN_END, "")
+		.replace(RE_P_EMPTY_NBSP, "");
 };
 
 interface ChatInputProps {
@@ -95,15 +112,14 @@ export const ChatInput = ({
 			HighlightExt.configure({ multicolor: true }),
 			TaskList,
 			TaskItem.configure({ nested: true }),
-			snippetTriggerExt,
+			snippetTriggerExt as Extension,
 			Placeholder.configure({
 				placeholder: ({ editor }) =>
-					(editor.storage.submitOnEnter as SubmitOnEnterStorage)
-						.expanded
+					(editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter?.expanded
 						? m.agentChatPlaceholderSheet()
 						: m.agentChatPlaceholder(),
 			}),
-			submitOnEnterExt,
+			submitOnEnterExt as Extension,
 		],
 		shouldRerenderOnTransaction: true,
 		editorProps: {
@@ -112,13 +128,11 @@ export const ChatInput = ({
 		},
 	});
 
-	useImperativeHandle<Editor | null, Editor | null>(ref, () => editor, [
+	useImperativeHandle<Editor | null, Editor | null>(ref, () => editor as any, [
 		editor,
 	]);
 
-	const snippetStorage = editor?.storage.snippetTrigger as
-		| SnippetTriggerStorage
-		| undefined;
+	const snippetStorage = (editor?.storage as { snippetTrigger?: SnippetTriggerStorage })?.snippetTrigger;
 	const isSnippetMenuOpen = !!snippetStorage?.active;
 	const snippetQuery = snippetStorage?.query ?? "";
 
@@ -153,9 +167,9 @@ export const ChatInput = ({
 		(snippet: Snippet) => {
 			if (!editor) return;
 
-			const storage = editor.storage
-				.snippetTrigger as SnippetTriggerStorage;
-			if (!storage.range) return;
+			const storage = (editor.storage as { snippetTrigger?: SnippetTriggerStorage })
+				.snippetTrigger;
+			if (!storage?.range) return;
 
 			editor
 				.chain()
@@ -185,39 +199,57 @@ export const ChatInput = ({
 
 	useEffect(() => {
 		if (!editor) return;
-		// eslint-disable-next-line react-hooks/immutability
-		editor.storage.submitOnEnter.onSend = onSend;
-		editor.storage.submitOnEnter.disabled = disabled;
+		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
+		if (submitStore) {
+			// eslint-disable-next-line react-hooks/immutability
+			submitStore.onSend = onSend;
+			submitStore.disabled = disabled;
+		}
 		editor.setEditable(!disabled);
 	}, [editor, onSend, disabled]);
 
 	// Sync expanded into storage, then trigger a transaction so Placeholder re-evaluates
 	useEffect(() => {
 		if (!editor) return;
-		// eslint-disable-next-line react-hooks/immutability
-		editor.storage.submitOnEnter.expanded = expanded;
+		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
+		if (submitStore) {
+			// eslint-disable-next-line react-hooks/immutability
+			submitStore.expanded = expanded;
+		}
 		editor.view.dispatch(editor.view.state.tr);
 	}, [editor, expanded]);
 
 	useEffect(() => {
-		if (!editor) return;
-		// eslint-disable-next-line react-hooks/immutability
-		editor.storage.snippetTrigger.onMoveSelection = (direction) => {
-			if (filteredSnippets.length === 0) return;
+		if (editor) {
+			// Cast extensions to any to bypass the pnpm double-resolution type mismatch on Editor interfaces
+			(editor.extensionManager.extensions as any) = editor.extensionManager.extensions;
+		}
+	}, [editor]);
 
-			setSelectedSnippetIndex((prev) => {
-				const delta = direction === "down" ? 1 : -1;
-				return (
-					(prev + delta + filteredSnippets.length) %
-					filteredSnippets.length
-				);
-			});
-		};
-		editor.storage.snippetTrigger.onSelectItem = handleSelectSnippet;
+	useEffect(() => {
+		if (!editor) return;
+		const snippetStore = (editor.storage as { snippetTrigger?: SnippetTriggerStorage }).snippetTrigger;
+		if (snippetStore) {
+			// eslint-disable-next-line react-hooks/immutability
+			snippetStore.onMoveSelection = (direction: "up" | "down") => {
+				if (filteredSnippets.length === 0) return;
+
+				setSelectedSnippetIndex((prev) => {
+					const delta = direction === "down" ? 1 : -1;
+					return (
+						(prev + delta + filteredSnippets.length) %
+						filteredSnippets.length
+					);
+				});
+			};
+			snippetStore.onSelectItem = handleSelectSnippet;
+		}
 
 		return () => {
-			editor.storage.snippetTrigger.onMoveSelection = () => {};
-			editor.storage.snippetTrigger.onSelectItem = () => {};
+			if (snippetStore) {
+				snippetStore.onMoveSelection = () => {};
+				snippetStore.onSelectItem = () => {};
+			}
 		};
 	}, [editor, filteredSnippets.length, handleSelectSnippet]);
 
