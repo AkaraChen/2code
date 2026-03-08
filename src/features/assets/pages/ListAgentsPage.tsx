@@ -1,14 +1,10 @@
 import {
-	Badge,
 	Button,
-	Card,
 	CloseButton,
 	Dialog,
 	EmptyState,
-	HStack,
 	Portal,
 	SimpleGrid,
-	Stack,
 	Text,
 } from "@chakra-ui/react";
 import { useState } from "react";

@@ -14,7 +14,8 @@ import HighlightExt from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
-import { Extension, useEditor } from "@tiptap/react";
+import type { Extension} from "@tiptap/react";
+import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { all, createLowlight } from "lowlight";
@@ -201,7 +202,7 @@ export const ChatInput = ({
 		if (!editor) return;
 		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
 		if (submitStore) {
-			// eslint-disable-next-line react-hooks/immutability
+			 
 			submitStore.onSend = onSend;
 			submitStore.disabled = disabled;
 		}
@@ -213,7 +214,7 @@ export const ChatInput = ({
 		if (!editor) return;
 		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
 		if (submitStore) {
-			// eslint-disable-next-line react-hooks/immutability
+			 
 			submitStore.expanded = expanded;
 		}
 		editor.view.dispatch(editor.view.state.tr);
@@ -230,7 +231,7 @@ export const ChatInput = ({
 		if (!editor) return;
 		const snippetStore = (editor.storage as { snippetTrigger?: SnippetTriggerStorage }).snippetTrigger;
 		if (snippetStore) {
-			// eslint-disable-next-line react-hooks/immutability
+			 
 			snippetStore.onMoveSelection = (direction: "up" | "down") => {
 				if (filteredSnippets.length === 0) return;
 

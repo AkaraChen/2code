@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -7,7 +8,6 @@ use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
 use infra::db::MIGRATIONS;
-#![allow(dead_code)]
 use model::profile::{NewProfile, Profile};
 use model::project::{NewProject, Project};
 

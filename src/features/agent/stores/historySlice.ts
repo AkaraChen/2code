@@ -83,7 +83,7 @@ export const createHistorySlice: StateCreator<
 				const agentContent = flushStreamingTurn(tempStreamingTurn);
 
 				if (userMessage || agentContent.length > 0) {
-					const lastAgentEvent = agentEvents.length > 0 ? agentEvents[agentEvents.length - 1] : undefined;
+					const lastAgentEvent = agentEvents.length > 0 ? agentEvents.at(-1) : undefined;
 					const timestamp = userEvent?.created_at
 						? userEvent.created_at * 1000
 						: lastAgentEvent?.created_at
