@@ -81,7 +81,7 @@ export function AgentCard({
 							gap="1"
 						>
 							<LuExternalLink size={10} />
-							Repo
+							Repository
 						</Link>
 					) : (
 						<Box />
