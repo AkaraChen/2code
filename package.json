@@ -9,12 +9,12 @@
 		"preview": "vite preview",
 		"tauri": "tauri",
 		"start": "tauri dev",
-		"lint": "zx scripts/format.js",
-		"lint:check": "zx scripts/lint.js",
-		"test": "zx scripts/test.js",
 		"test:watch": "vitest",
-		"typecheck": "zx scripts/typecheck.js",
-		"prepare": "husky"
+		"prepare": "husky",
+		"fmt": "pnpm zx scripts/format.js",
+		"lint": "pnpm zx scripts/lint.js",
+		"typecheck": "pnpm zx scripts/typecheck.js",
+		"test": "pnpm zx scripts/test.js"
 	},
 	"dependencies": {
 		"@agentclientprotocol/sdk": "^0.14.1",

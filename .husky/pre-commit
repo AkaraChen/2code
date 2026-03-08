@@ -1,2 +1,3 @@
 pnpm zx scripts/format.js
 pnpm zx scripts/lint.js
+pnpm zx scripts/typecheck.js

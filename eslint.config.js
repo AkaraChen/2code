@@ -6,7 +6,7 @@ export default antfu({
 	imports: false,
 })
 	.append({
-		ignores: ["**/*.md", "./src-tauri/target/**"],
+		ignores: ["**/*.md", "./src-tauri/target/**", "./scripts/**"],
 	})
 	.append({
 		rules: {

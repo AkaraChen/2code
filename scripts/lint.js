@@ -1,10 +1,12 @@
 #!/usr/bin/env zx
 
+import { labeled } from "./_utils.js";
+
 console.log(chalk.blue("Running lint..."));
 
 await Promise.all([
-	$`pnpm lint:check`,
-	$`cd src-tauri && cargo clippy -- -D warnings`,
+	labeled("Running eslint", $`pnpm eslint --fix`),
+	labeled("Running clippy", $`cd src-tauri && cargo clippy -- -D warnings`),
 ]);
 
 console.log(chalk.green("Lint passed!"));
