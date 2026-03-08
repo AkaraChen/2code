@@ -1,4 +1,7 @@
-import type { AgentNotification, SessionNotification } from "@agentclientprotocol/sdk";
+import type {
+	AgentNotification,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { match, P } from "ts-pattern";
@@ -54,7 +57,9 @@ export interface ModeUpdate {
  * Callback types for specific event handlers
  */
 export type AgentStreamHandler = (event: AgentStreamEvent) => void;
-export type AcpNotificationHandler = (notification: SessionNotification) => void;
+export type AcpNotificationHandler = (
+	notification: SessionNotification,
+) => void;
 export type ModeUpdateHandler = (update: ModeUpdate) => void;
 export type ErrorHandler = (error: string) => void;
 export type TurnCompleteHandler = () => void;
@@ -116,25 +121,34 @@ export class AgentStreamService {
 			throw new Error("AgentStreamService already started");
 		}
 
-		const [acpUnlisten, completeUnlisten, errorUnlisten] = await Promise.all([
-			// ACP notification stream (session/update, etc.)
-			listen<AgentNotification>(`agent-stream-${this.sessionId}`, (e) => {
-				this.handleAcpNotification(e.payload);
-			}),
+		const [acpUnlisten, completeUnlisten, errorUnlisten] =
+			await Promise.all([
+				// ACP notification stream (session/update, etc.)
+				listen<AgentNotification>(
+					`agent-stream-${this.sessionId}`,
+					(e) => {
+						this.handleAcpNotification(e.payload);
+					},
+				),
 
-			// Application-level turn complete signal
-			listen<unknown>(`agent-turn-complete-${this.sessionId}`, (e) => {
-				const payload = this.parseTurnCompletePayload(e.payload);
-				this.emit({ type: "turn_complete", payload });
-				this.completeHandlers.forEach((h) => h());
-			}),
+				// Application-level turn complete signal
+				listen<unknown>(
+					`agent-turn-complete-${this.sessionId}`,
+					(e) => {
+						const payload = this.parseTurnCompletePayload(
+							e.payload,
+						);
+						this.emit({ type: "turn_complete", payload });
+						this.completeHandlers.forEach((h) => h());
+					},
+				),
 
-			// Application-level error signal
-			listen<string>(`agent-error-${this.sessionId}`, (e) => {
-				this.emit({ type: "error", payload: e.payload });
-				this.errorHandlers.forEach((h) => h(e.payload));
-			}),
-		]);
+				// Application-level error signal
+				listen<string>(`agent-error-${this.sessionId}`, (e) => {
+					this.emit({ type: "error", payload: e.payload });
+					this.errorHandlers.forEach((h) => h(e.payload));
+				}),
+			]);
 
 		this.unlisteners = [acpUnlisten, completeUnlisten, errorUnlisten];
 	}
@@ -172,7 +186,10 @@ export class AgentStreamService {
 		const wrapper: AgentStreamHandler = (event) => {
 			match(event)
 				.with({ type: "acp" }, (e) => {
-					if (e.payload.method === "session/update" && e.payload.params) {
+					if (
+						e.payload.method === "session/update" &&
+						e.payload.params
+					) {
 						handler(e.payload.params as SessionNotification);
 					}
 				})
@@ -235,9 +252,9 @@ export class AgentStreamService {
 			while (this.unlisteners.length > 0) {
 				const event =
 					buffer.shift() ??
-					(new Promise<AgentStreamEvent>((resolve) => {
+					new Promise<AgentStreamEvent>((resolve) => {
 						resolveNext = resolve;
-					}));
+					});
 				yield await event;
 			}
 		} finally {
@@ -256,7 +273,9 @@ export class AgentStreamService {
 					},
 				},
 				(payload) => {
-					const modeId = (payload.params?.update as { modeId?: string })?.modeId;
+					const modeId = (
+						payload.params?.update as { modeId?: string }
+					)?.modeId;
 					if (modeId) {
 						this.modeHandlers.forEach((h) => h({ modeId }));
 					}
@@ -273,15 +292,16 @@ export class AgentStreamService {
 		this.handlers.forEach((h) => h(event));
 	}
 
-	private parseTurnCompletePayload(raw: unknown): TurnCompleteEvent["payload"] {
+	private parseTurnCompletePayload(
+		raw: unknown,
+	): TurnCompleteEvent["payload"] {
 		return match(raw)
-			.with(
-				{ session_id: P.string },
-				(payload) => ({
-					session_id: payload.session_id,
-					stop_reason: (payload as { stop_reason?: string }).stop_reason ?? "unknown",
-				}),
-			)
+			.with({ session_id: P.string }, (payload) => ({
+				session_id: payload.session_id,
+				stop_reason:
+					(payload as { stop_reason?: string }).stop_reason ??
+					"unknown",
+			}))
 			.otherwise(() => ({
 				session_id: this.sessionId,
 				stop_reason: "unknown",

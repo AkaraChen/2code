@@ -1,7 +1,4 @@
-export {
-	AgentStreamService,
-	createAgentStream,
-} from "./AgentStreamService";
+export { AgentStreamService, createAgentStream } from "./AgentStreamService";
 export type {
 	AcpEvent,
 	TurnCompleteEvent,

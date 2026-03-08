@@ -1,4 +1,7 @@
-import type { AgentNotification, SessionNotification } from "@agentclientprotocol/sdk";
+import type {
+	AgentNotification,
+	SessionNotification,
+} from "@agentclientprotocol/sdk";
 import { match, P } from "ts-pattern";
 import type { StateCreator } from "zustand";
 import type { AgentStore } from "../store";
@@ -43,7 +46,10 @@ export const createMessageSlice: StateCreator<
 					{
 						method: "session/update",
 						params: {
-							update: { sessionUpdate: "current_mode_update", modeId: P.string },
+							update: {
+								sessionUpdate: "current_mode_update",
+								modeId: P.string,
+							},
 						},
 					},
 					(payload) => {
@@ -53,17 +59,14 @@ export const createMessageSlice: StateCreator<
 						}
 					},
 				)
-				.with(
-					{ method: "session/update", params: P._ },
-					(payload) => {
-						if (session.streamingTurn && payload.params) {
-							applySessionUpdate(
-								session.streamingTurn,
-								(payload.params as SessionNotification).update,
-							);
-						}
-					},
-				)
+				.with({ method: "session/update", params: P._ }, (payload) => {
+					if (session.streamingTurn && payload.params) {
+						applySessionUpdate(
+							session.streamingTurn,
+							(payload.params as SessionNotification).update,
+						);
+					}
+				})
 				.otherwise(() => {
 					// Unhandled notification types are ignored
 				});
@@ -105,7 +108,9 @@ export const createMessageSlice: StateCreator<
 					const agentContent = flushStreamingTurn(streamingTurn);
 
 					// Append error to existing text or create new text entry
-					const textEntry = agentContent.find((c) => c.type === "text");
+					const textEntry = agentContent.find(
+						(c) => c.type === "text",
+					);
 					if (textEntry?.type === "text") {
 						textEntry.text += `\n\n[Error: ${error}]`;
 					} else {
@@ -121,7 +126,10 @@ export const createMessageSlice: StateCreator<
 						if (item.type === "tool_call") {
 							match(item.data.status)
 								.with("pending", "in_progress", () => {
-									item.data = { ...item.data, status: "failed" };
+									item.data = {
+										...item.data,
+										status: "failed",
+									};
 								})
 								.otherwise(() => {
 									// Other statuses remain unchanged

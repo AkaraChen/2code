@@ -147,7 +147,10 @@ export class AgentTabSession extends TabSession {
 		this.streamService.onAcpNotification((notification) => {
 			useAgentStore
 				.getState()
-				.handleAgentEvent(this.id, { method: "session/update", params: notification });
+				.handleAgentEvent(this.id, {
+					method: "session/update",
+					params: notification,
+				});
 		});
 
 		// Subscribe to turn completion
@@ -159,9 +162,14 @@ export class AgentTabSession extends TabSession {
 			const { notificationEnabled, notificationSound } =
 				useSettingsStore.getState();
 			if (notificationEnabled && notificationSound) {
-				void playSystemSound({ name: notificationSound }).catch((err) => {
-					consola.warn("[agent] failed to play completion sound:", err);
-				});
+				void playSystemSound({ name: notificationSound }).catch(
+					(err) => {
+						consola.warn(
+							"[agent] failed to play completion sound:",
+							err,
+						);
+					},
+				);
 			}
 		});
 
