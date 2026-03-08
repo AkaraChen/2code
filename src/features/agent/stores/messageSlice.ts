@@ -1,8 +1,5 @@
-import type {
-	AgentNotification,
-	SessionNotification,
-} from "@agentclientprotocol/sdk";
-import consola from "consola";
+import type { AgentNotification, SessionNotification } from "@agentclientprotocol/sdk";
+import { match, P } from "ts-pattern";
 import type { StateCreator } from "zustand";
 import type { AgentStore } from "../store";
 import { applySessionUpdate, ensureSession, flushStreamingTurn } from "./utils";
@@ -41,93 +38,106 @@ export const createMessageSlice: StateCreator<
 		set((state) => {
 			const session = ensureSession(state.sessions, sessionId);
 
-			if (!session.streamingTurn) {
-				consola.warn(
-					`[AgentStore] Received agent event but no streamingTurn exists for ${sessionId}`,
-				);
-				return;
-			}
-
-			const streamingTurn = session.streamingTurn;
-
-			if (payload.method === "session/update" && payload.params) {
-				const { update } = payload.params as SessionNotification;
-				applySessionUpdate(streamingTurn, update);
-			}
+			match(payload)
+				.with(
+					{
+						method: "session/update",
+						params: {
+							update: { sessionUpdate: "current_mode_update", modeId: P.string },
+						},
+					},
+					(payload) => {
+						if (session.modeState) {
+							session.modeState.current_mode_id =
+								payload.params.update.modeId;
+						}
+					},
+				)
+				.with(
+					{ method: "session/update", params: P._ },
+					(payload) => {
+						if (session.streamingTurn && payload.params) {
+							applySessionUpdate(
+								session.streamingTurn,
+								(payload.params as SessionNotification).update,
+							);
+						}
+					},
+				)
+				.otherwise(() => {
+					// Unhandled notification types are ignored
+				});
 		}),
 
 	handleTurnComplete: (sessionId, _payload) =>
 		set((state) => {
 			const session = ensureSession(state.sessions, sessionId);
 
-			if (!session.streamingTurn) {
-				consola.warn(
-					`[AgentStore] Turn complete but no streamingTurn for ${sessionId}`,
-				);
-				return;
-			}
+			match(session.streamingTurn)
+				.with(null, () => {
+					// No streaming turn to finalize
+				})
+				.otherwise((streamingTurn) => {
+					const agentContent = flushStreamingTurn(streamingTurn);
 
-			const streamingTurn = session.streamingTurn;
-			const agentContent = flushStreamingTurn(streamingTurn);
+					session.turns.push({
+						timestamp: Date.now(),
+						userMessage: streamingTurn.userMessage,
+						agentContent,
+					});
 
-			session.turns.push({
-				timestamp: Date.now(),
-				userMessage: streamingTurn.userMessage,
-				agentContent,
-			});
-
-			session.streamingTurn = null;
-			session.isStreaming = false;
-			session.error = null;
+					session.streamingTurn = null;
+					session.isStreaming = false;
+					session.error = null;
+				});
 		}),
 
 	handleError: (sessionId, error) =>
 		set((state) => {
 			const session = ensureSession(state.sessions, sessionId);
-			session.isStreaming = false;
-			session.error = error;
 
-			if (session.streamingTurn) {
-				const streamingTurn = session.streamingTurn;
-				const agentContent = flushStreamingTurn(streamingTurn);
+			match(session.streamingTurn)
+				.with(null, () => {
+					session.isStreaming = false;
+					session.error = error;
+				})
+				.otherwise((streamingTurn) => {
+					const agentContent = flushStreamingTurn(streamingTurn);
 
-				const textIdx = agentContent.findIndex(
-					(c) => c.type === "text",
-				);
-				if (textIdx >= 0) {
-					const textItem = agentContent[textIdx] as {
-						type: "text";
-						text: string;
-						role: string;
-					};
-					textItem.text = `${textItem.text}\n\n[Error: ${error}]`;
-				} else {
-					agentContent.unshift({
-						type: "text",
-						text: `[Error: ${error}]`,
-						role: "assistant",
-					});
-				}
+					// Append error to existing text or create new text entry
+					const textEntry = agentContent.find((c) => c.type === "text");
+					if (textEntry?.type === "text") {
+						textEntry.text += `\n\n[Error: ${error}]`;
+					} else {
+						agentContent.unshift({
+							type: "text",
+							text: `[Error: ${error}]`,
+							role: "assistant",
+						});
+					}
 
-				for (const item of agentContent) {
-					if (item.type === "tool_call") {
-						const tc = item.data;
-						if (
-							tc.status === "pending" ||
-							tc.status === "in_progress"
-						) {
-							item.data = { ...tc, status: "failed" };
+					// Mark pending tool calls as failed
+					for (const item of agentContent) {
+						if (item.type === "tool_call") {
+							match(item.data.status)
+								.with("pending", "in_progress", () => {
+									item.data = { ...item.data, status: "failed" };
+								})
+								.otherwise(() => {
+									// Other statuses remain unchanged
+								});
 						}
 					}
-				}
 
-				session.turns.push({
-					timestamp: Date.now(),
-					userMessage: streamingTurn.userMessage,
-					agentContent,
+					session.turns.push({
+						timestamp: Date.now(),
+						userMessage: streamingTurn.userMessage,
+						agentContent,
+					});
+
+					session.streamingTurn = null;
+					session.isStreaming = false;
+					session.error = error;
 				});
-
-				session.streamingTurn = null;
-			}
 		}),
 });

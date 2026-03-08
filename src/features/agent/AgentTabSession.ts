@@ -1,6 +1,3 @@
-import type { AgentNotification } from "@agentclientprotocol/sdk";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { listen } from "@tauri-apps/api/event";
 import consola from "consola";
 import { nanoid } from "nanoid";
 import {
@@ -18,13 +15,14 @@ import {
 import { useSettingsStore } from "../settings/stores";
 import { TabSession } from "../tabs/session";
 import type { AgentTab } from "../tabs/types";
+import { AgentStreamService } from "./services/AgentStreamService";
 import { useAgentStore } from "./store";
 
 export class AgentTabSession extends TabSession {
 	readonly type = "agent" as const;
 	readonly agentType: string;
 	readonly iconUrl: string | null;
-	private unlisteners: UnlistenFn[] = [];
+	private streamService: AgentStreamService | null = null;
 	private _connected = false;
 	private _reconnecting = false;
 
@@ -143,53 +141,37 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async registerListeners(): Promise<void> {
-		const [unlistenEvent, unlistenComplete, unlistenError, unlistenMode] =
-			await Promise.all([
-				listen<AgentNotification>(`agent-event-${this.id}`, (e) => {
-					useAgentStore
-						.getState()
-						.handleAgentEvent(this.id, e.payload);
-				}),
-				listen<unknown>(`agent-turn-complete-${this.id}`, (e) => {
-					useAgentStore
-						.getState()
-						.handleTurnComplete(this.id, e.payload);
-					const { notificationEnabled, notificationSound } =
-						useSettingsStore.getState();
-					if (notificationEnabled && notificationSound) {
-						void playSystemSound({ name: notificationSound }).catch(
-							(err) => {
-								consola.warn(
-									"[agent] failed to play completion sound:",
-									err,
-								);
-							},
-						);
-					}
-				}),
-				listen<string>(`agent-error-${this.id}`, (e) => {
-					useAgentStore.getState().handleError(this.id, e.payload);
-				}),
-				listen<string>(`agent-mode-update-${this.id}`, (e) => {
-					// The agent sent a current_mode_update notification.
-					// We optimistically update the current_mode_id in store.
-					const modeState =
-						useAgentStore.getState().sessions[this.id]?.modeState;
-					if (modeState) {
-						useAgentStore.getState().setModeState(this.id, {
-							...modeState,
-							current_mode_id: e.payload,
-						});
-					}
-				}),
-			]);
+		this.streamService = new AgentStreamService(this.id);
 
-		this.unlisteners = [
-			unlistenEvent,
-			unlistenComplete,
-			unlistenError,
-			unlistenMode,
-		];
+		// Subscribe to ACP notifications (session/update, etc.)
+		this.streamService.onAcpNotification((notification) => {
+			useAgentStore
+				.getState()
+				.handleAgentEvent(this.id, { method: "session/update", params: notification });
+		});
+
+		// Subscribe to turn completion
+		this.streamService.onTurnComplete(() => {
+			// Update store to stop loading state and finalize the turn
+			useAgentStore.getState().handleTurnComplete(this.id, null);
+
+			// Play notification sound
+			const { notificationEnabled, notificationSound } =
+				useSettingsStore.getState();
+			if (notificationEnabled && notificationSound) {
+				void playSystemSound({ name: notificationSound }).catch((err) => {
+					consola.warn("[agent] failed to play completion sound:", err);
+				});
+			}
+		});
+
+		// Subscribe to errors
+		this.streamService.onError((error) => {
+			useAgentStore.getState().handleError(this.id, error);
+		});
+
+		// Start listening to all channels
+		await this.streamService.start();
 	}
 
 	async refreshModelState(): Promise<void> {
@@ -255,9 +237,9 @@ export class AgentTabSession extends TabSession {
 	}
 
 	async close(): Promise<void> {
-		// Unlisten first (always succeeds)
-		for (const unlisten of this.unlisteners) unlisten();
-		this.unlisteners = [];
+		// Stop stream service first (always succeeds)
+		this.streamService?.stop();
+		this.streamService = null;
 
 		try {
 			// Close runtime session and delete database record

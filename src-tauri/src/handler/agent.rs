@@ -19,7 +19,7 @@ use tokio::time::timeout;
 
 /// Spawn a notification listener task for an agent session.
 /// This reads ACP notifications from the agent process, persists them to DB,
-/// and emits Tauri events to the frontend.
+/// and emits Tauri events to the frontend via a single unified stream.
 ///
 /// Must be called after the session is stored in the session map.
 pub fn spawn_notification_listener(
@@ -93,35 +93,15 @@ pub fn spawn_notification_listener(
 
 			event_index += 1;
 
-			// Emit event to frontend
-			let event_name = format!("agent-event-{notif_id}");
+			// Emit unified stream event to frontend
+			// All ACP notifications go through this single channel
+			let event_name = format!("agent-stream-{notif_id}");
 			if let Err(e) = app.emit(&event_name, &notification) {
 				tracing::warn!(
 					session_id = %notif_id,
 					error = %e,
-					"failed to emit agent notification event"
+					"failed to emit agent stream event"
 				);
-			}
-
-			// Emit dedicated mode-update event if this notification is a
-			// current_mode_update so the frontend can refresh its mode selector.
-			if let Some(update) =
-				notification.pointer("/params/update").filter(|u| {
-					u.get("sessionUpdate").and_then(|v| v.as_str())
-						== Some("current_mode_update")
-				}) {
-				if let Some(mode_id) =
-					update.get("modeId").and_then(|v| v.as_str())
-				{
-					let mode_event = format!("agent-mode-update-{notif_id}");
-					if let Err(e) = app.emit(&mode_event, mode_id) {
-						tracing::warn!(
-							session_id = %notif_id,
-							error = %e,
-							"failed to emit mode-update event"
-						);
-					}
-				}
 			}
 		}
 		tracing::info!(session_id = %notif_id, "agent notification stream ended");
