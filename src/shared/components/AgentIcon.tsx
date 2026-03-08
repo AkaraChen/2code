@@ -1,5 +1,5 @@
 import { Image } from "@chakra-ui/react";
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import { RiRobot2Line } from "react-icons/ri";
 import { ThemeContext } from "@/shared/providers/themeContext";
 
@@ -11,12 +11,10 @@ interface AgentIconProps {
 
 export function AgentIcon({ iconUrl, size = 16, alt = "" }: AgentIconProps) {
 	const { isDark } = use(ThemeContext);
-	const [failed, setFailed] = useState(false);
+	const [failedUrl, setFailedUrl] = useState<string | null>(null);
 	const imageSize = typeof size === "number" ? `${size}px` : size;
 
-	useEffect(() => {
-		setFailed(false);
-	}, [iconUrl]);
+	const failed = iconUrl === failedUrl && iconUrl !== null;
 
 	if (!iconUrl || failed) {
 		return <RiRobot2Line size={size} />;
@@ -29,7 +27,7 @@ export function AgentIcon({ iconUrl, size = 16, alt = "" }: AgentIconProps) {
 			height={imageSize}
 			objectFit="contain"
 			filter={isDark ? "invert(1)" : "none"}
-			onError={() => setFailed(true)}
+			onError={() => setFailedUrl(iconUrl ?? null)}
 			alt={alt}
 		/>
 	);

@@ -10,13 +10,14 @@ import {
 	SimpleGrid,
 	Stack,
 	Text,
+	Skeleton,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { LuTrash2 } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
-import { useDeleteSkill, useSkills } from "./hooks/useSkills";
+import { useDeleteSkill, useSkills } from "@/features/assets/hooks/useSkills";
 
-export function SkillsTab() {
+function SkillsListContent() {
 	const { data: skills } = useSkills();
 	const deleteMutation = useDeleteSkill();
 	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -63,7 +64,6 @@ export function SkillsTab() {
 				</SimpleGrid>
 			)}
 
-			{/* Delete confirmation dialog */}
 			<Dialog.Root
 				lazyMount
 				open={deleteTarget !== null}
@@ -107,5 +107,13 @@ export function SkillsTab() {
 				</Portal>
 			</Dialog.Root>
 		</Stack>
+	);
+}
+
+export default function ListSkillsPage() {
+	return (
+		<Suspense fallback={<Skeleton height="200px" />}>
+			<SkillsListContent />
+		</Suspense>
 	);
 }

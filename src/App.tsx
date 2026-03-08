@@ -8,7 +8,25 @@ import { useDebugStore } from "./features/debug/debugStore";
 import HomePage from "./features/home/HomePage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 
-const AssetsPage = lazy(() => import("./features/assets/AssetsPage"));
+const AssetsLayout = lazy(() => import("./features/assets/AssetsLayout"));
+const ListSkillsPage = lazy(
+	() => import("./features/assets/pages/ListSkillsPage"),
+);
+const InstallSkillPage = lazy(
+	() => import("./features/assets/pages/InstallSkillPage"),
+);
+const ListAgentsPage = lazy(
+	() => import("./features/assets/pages/ListAgentsPage"),
+);
+const InstallAgentPage = lazy(
+	() => import("./features/assets/pages/InstallAgentPage"),
+);
+const ListSnippetsPage = lazy(
+	() => import("./features/assets/pages/ListSnippetsPage"),
+);
+const InstallSnippetPage = lazy(
+	() => import("./features/assets/pages/InstallSnippetPage"),
+);
 const ProjectDetailPage = lazy(
 	() => import("./features/projects/ProjectDetailPage"),
 );
@@ -53,10 +71,17 @@ export default function App() {
 						<Suspense fallback={<PageSkeleton />}>
 							<Routes>
 								<Route path="/" element={<HomePage />} />
-								<Route
-									path="/assets"
-									element={<AssetsPage />}
-								/>
+								<Route path="/assets" element={<AssetsLayout />}>
+									<Route index element={<Navigate to="/assets/manage/skills" replace />} />
+									<Route path="manage" element={<Navigate to="/assets/manage/skills" replace />} />
+									<Route path="manage/skills" element={<ListSkillsPage />} />
+									<Route path="manage/agents" element={<ListAgentsPage />} />
+									<Route path="manage/snippets" element={<ListSnippetsPage />} />
+									<Route path="store" element={<Navigate to="/assets/store/agents" replace />} />
+									<Route path="store/skills" element={<InstallSkillPage />} />
+									<Route path="store/agents" element={<InstallAgentPage />} />
+									<Route path="store/snippets" element={<InstallSnippetPage />} />
+								</Route>
 								<Route
 									path="/projects/:id/profiles/:profileId"
 									element={<ProjectDetailPage />}

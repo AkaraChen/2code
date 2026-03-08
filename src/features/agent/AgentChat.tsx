@@ -14,7 +14,6 @@ import { Suspense, use, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { LuShrink } from "react-icons/lu";
 import { useShallow } from "zustand/react/shallow";
-import { useSettingsStore } from "@/features/settings/stores";
 import { sessionRegistry } from "@/features/tabs/sessionRegistry";
 import * as m from "@/paraglide/messages.js";
 import { PageError } from "@/shared/components/Fallbacks";
@@ -87,7 +86,6 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 	const sendPrompt = useSendAgentPrompt();
 	const setAgentModel = useSetAgentModel();
 	const setAgentMode = useSetAgentMode();
-	const defaultAgent = useSettingsStore((s) => s.defaultAgent);
 	const tabSession = sessionRegistry.get(sessionId) as
 		| AgentTabSession
 		| undefined;
