@@ -30,10 +30,9 @@ pub fn play_system_sound(name: String) -> Result<(), AppError> {
 	if !path.exists() {
 		return Err(AppError::PtyError(format!("Sound not found: {name}")));
 	}
-	Command::new("afplay")
-		.arg(&path)
-		.spawn()
-		.map_err(|e| AppError::PtyError(format!("Failed to play sound: {e}")))?;
+	Command::new("afplay").arg(&path).spawn().map_err(|e| {
+		AppError::PtyError(format!("Failed to play sound: {e}"))
+	})?;
 	Ok(())
 }
 

@@ -242,10 +242,20 @@ fn restore_all_sessions_reuses_existing() {
 		service::pty::list_project_sessions(&mut conn, "p1").unwrap();
 
 	// Should have exactly one session, and it should be the original ID
-	assert_eq!(sessions.len(), 1, "should have exactly one session after restore");
+	assert_eq!(
+		sessions.len(),
+		1,
+		"should have exactly one session after restore"
+	);
 	let restored_session = &sessions[0];
-	assert_eq!(restored_session.id, session_id, "restored session ID should be the same as the original");
-	assert!(restored_session.closed_at.is_none(), "restored session should be open (closed_at is None)");
+	assert_eq!(
+		restored_session.id, session_id,
+		"restored session ID should be the same as the original"
+	);
+	assert!(
+		restored_session.closed_at.is_none(),
+		"restored session should be open (closed_at is None)"
+	);
 	drop(conn);
 
 	// Cleanup

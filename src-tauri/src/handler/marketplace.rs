@@ -2,12 +2,15 @@ use tauri::State;
 
 use infra::db::{DbPool, DbPoolExt};
 use model::error::AppError;
-use model::marketplace::{AddMarketplaceAgentInput, MarketplaceAgent, RegistryAgentInfo};
+use model::marketplace::{
+	AddMarketplaceAgentInput, MarketplaceAgent, RegistryAgentInfo,
+};
 
 /// Fetch the ACP agent registry from the CDN.
 /// Proxied through the backend to avoid CORS issues in the frontend.
 #[tauri::command]
-pub async fn fetch_agent_registry() -> Result<Vec<RegistryAgentInfo>, AppError> {
+pub async fn fetch_agent_registry() -> Result<Vec<RegistryAgentInfo>, AppError>
+{
 	service::marketplace::fetch_registry().await
 }
 

@@ -36,7 +36,9 @@ pub fn spawn_notification_listener(
 	let initial_event_index = db
 		.lock()
 		.ok()
-		.and_then(|mut conn| repo::agent::next_event_index(&mut conn, &session_id).ok())
+		.and_then(|mut conn| {
+			repo::agent::next_event_index(&mut conn, &session_id).ok()
+		})
 		.unwrap_or(0);
 
 	let task_handle = tokio::spawn(async move {
@@ -65,7 +67,9 @@ pub fn spawn_notification_listener(
 			let turn_idx = db
 				.lock()
 				.ok()
-				.and_then(|mut conn| repo::agent::get_max_turn_index(&mut conn, &notif_id).ok())
+				.and_then(|mut conn| {
+					repo::agent::get_max_turn_index(&mut conn, &notif_id).ok()
+				})
 				.unwrap_or(0);
 
 			// Persist event to database
@@ -101,17 +105,13 @@ pub fn spawn_notification_listener(
 
 			// Emit dedicated mode-update event if this notification is a
 			// current_mode_update so the frontend can refresh its mode selector.
-			if let Some(update) = notification
-				.pointer("/params/update")
-				.filter(|u| {
-					u.get("sessionUpdate")
-						.and_then(|v| v.as_str())
+			if let Some(update) =
+				notification.pointer("/params/update").filter(|u| {
+					u.get("sessionUpdate").and_then(|v| v.as_str())
 						== Some("current_mode_update")
-				})
-			{
-				if let Some(mode_id) = update
-					.get("modeId")
-					.and_then(|v| v.as_str())
+				}) {
+				if let Some(mode_id) =
+					update.get("modeId").and_then(|v| v.as_str())
 				{
 					let mode_event = format!("agent-mode-update-{notif_id}");
 					if let Err(e) = app.emit(&mode_event, mode_id) {
@@ -169,9 +169,12 @@ pub async fn send_agent_prompt(
 	sessions: State<'_, AgentSessionMap>,
 	db: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let session = sessions.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 
 	// Get next turn index and event index from database in one lock scope
 	let (turn_idx, event_idx) = {
@@ -247,9 +250,12 @@ pub async fn get_agent_session_models(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
 ) -> Result<AgentModelState, AppError> {
-	let session = sessions.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 
 	Ok(session.model_state().await)
 }
@@ -261,9 +267,12 @@ pub async fn set_agent_session_model(
 	sessions: State<'_, AgentSessionMap>,
 	db: State<'_, DbPool>,
 ) -> Result<AgentModelState, AppError> {
-	let session = sessions.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 
 	let model_state = session
 		.set_model(&model_id)
@@ -291,9 +300,12 @@ pub async fn get_agent_session_modes(
 	session_id: String,
 	sessions: State<'_, AgentSessionMap>,
 ) -> Result<AgentModeState, AppError> {
-	let session = sessions.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 
 	Ok(session.mode_state().await)
 }
@@ -304,9 +316,12 @@ pub async fn set_agent_session_mode(
 	mode_id: String,
 	sessions: State<'_, AgentSessionMap>,
 ) -> Result<AgentModeState, AppError> {
-	let session = sessions.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 
 	let mode_state = session
 		.set_mode(&mode_id)
@@ -407,14 +422,21 @@ pub async fn create_agent_session_persistent(
 		&meta.agent,
 		&meta.profile_id,
 		PathBuf::from(&cwd),
-		service::agent::RawLaunchParams { program, args, base_env },
+		service::agent::RawLaunchParams {
+			program,
+			args,
+			base_env,
+		},
 	)
 	.await?;
 
 	// Get session info
-	let session = sessions_clone.lock().await.get(&session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session: {session_id}"))
-	})?;
+	let session = sessions_clone
+		.lock()
+		.await
+		.get(&session_id)
+		.cloned()
+		.ok_or_else(|| AppError::NotFound(format!("session: {session_id}")))?;
 	let info = session.info();
 
 	// Spawn notification stream listener
@@ -455,9 +477,16 @@ pub async fn reconnect_agent_session(
 	.await?;
 
 	// Get session info
-	let session = sessions_clone.lock().await.get(&new_session_id).cloned().ok_or_else(|| {
-		AppError::NotFound(format!("session after reconnect: {new_session_id}"))
-	})?;
+	let session = sessions_clone
+		.lock()
+		.await
+		.get(&new_session_id)
+		.cloned()
+		.ok_or_else(|| {
+			AppError::NotFound(format!(
+				"session after reconnect: {new_session_id}"
+			))
+		})?;
 	let info = session.info();
 
 	// Spawn notification listener

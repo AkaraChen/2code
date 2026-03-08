@@ -32,7 +32,9 @@ fn insert_event(
 	sender: &str,
 	payload: &str,
 ) {
-	insert_event_with_turn(conn, event_id, session_id, index, sender, payload, 0);
+	insert_event_with_turn(
+		conn, event_id, session_id, index, sender, payload, 0,
+	);
 }
 
 fn insert_event_with_turn(
@@ -425,7 +427,8 @@ fn agent_session_restore_db_flow() {
 	insert_session(&mut conn, "as-new", "pr1", "claude-code");
 
 	// 3. Transfer events to new session (uses repo::agent::transfer_events)
-	let transferred = agent::transfer_events(&mut conn, "as-old", "as-new").unwrap();
+	let transferred =
+		agent::transfer_events(&mut conn, "as-old", "as-new").unwrap();
 	assert_eq!(transferred, 2, "should transfer 2 events");
 
 	// 4. Delete old session
@@ -459,20 +462,40 @@ fn transfer_events_preserves_turn_index() {
 
 	// Multi-turn conversation: turn 1 (user+agent), turn 2 (user+agent)
 	insert_event_with_turn(
-		&mut conn, "ev1", "as-old", 0, "user",
-		r#"{"text":"first question"}"#, 1,
+		&mut conn,
+		"ev1",
+		"as-old",
+		0,
+		"user",
+		r#"{"text":"first question"}"#,
+		1,
 	);
 	insert_event_with_turn(
-		&mut conn, "ev2", "as-old", 1, "agent",
-		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"first answer"}}}}"#, 1,
+		&mut conn,
+		"ev2",
+		"as-old",
+		1,
+		"agent",
+		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"first answer"}}}}"#,
+		1,
 	);
 	insert_event_with_turn(
-		&mut conn, "ev3", "as-old", 2, "user",
-		r#"{"text":"second question"}"#, 2,
+		&mut conn,
+		"ev3",
+		"as-old",
+		2,
+		"user",
+		r#"{"text":"second question"}"#,
+		2,
 	);
 	insert_event_with_turn(
-		&mut conn, "ev4", "as-old", 3, "agent",
-		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"second answer"}}}}"#, 2,
+		&mut conn,
+		"ev4",
+		"as-old",
+		3,
+		"agent",
+		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"second answer"}}}}"#,
+		2,
 	);
 
 	// Create new session and transfer
@@ -517,12 +540,22 @@ fn full_reconnect_db_flow() {
 	// 1. Create original session with conversation
 	insert_session(&mut conn, "as-original", "pr1", "claude-code");
 	insert_event_with_turn(
-		&mut conn, "ev-u1", "as-original", 0, "user",
-		r#"{"text":"hello"}"#, 1,
+		&mut conn,
+		"ev-u1",
+		"as-original",
+		0,
+		"user",
+		r#"{"text":"hello"}"#,
+		1,
 	);
 	insert_event_with_turn(
-		&mut conn, "ev-a1", "as-original", 1, "agent",
-		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hi there"}}}}"#, 1,
+		&mut conn,
+		"ev-a1",
+		"as-original",
+		1,
+		"agent",
+		r#"{"method":"session/update","params":{"sessionId":"acp1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hi there"}}}}"#,
+		1,
 	);
 
 	// 2. Simulate app shutdown: mark destroyed
@@ -539,7 +572,8 @@ fn full_reconnect_db_flow() {
 	let old = &all[0];
 	insert_session(&mut conn, "as-reconnected", &old.profile_id, &old.agent);
 
-	let transferred = agent::transfer_events(&mut conn, &old.id, "as-reconnected").unwrap();
+	let transferred =
+		agent::transfer_events(&mut conn, &old.id, "as-reconnected").unwrap();
 	assert_eq!(transferred, 2, "should transfer all events");
 
 	agent::delete_session(&mut conn, &old.id).unwrap();
@@ -562,7 +596,8 @@ fn full_reconnect_db_flow() {
 	assert!(events[1].payload_json.contains("hi there"));
 
 	// next_event_index continues from where we left off
-	let next_idx = agent::next_event_index(&mut conn, "as-reconnected").unwrap();
+	let next_idx =
+		agent::next_event_index(&mut conn, "as-reconnected").unwrap();
 	assert_eq!(next_idx, 2);
 
 	// list_all should now return only the new session
@@ -579,14 +614,24 @@ fn multiple_sessions_reconnect_independently() {
 	// Create two sessions with different agents
 	insert_session(&mut conn, "as-claude", "pr1", "claude-code");
 	insert_event_with_turn(
-		&mut conn, "ev-c1", "as-claude", 0, "user",
-		r#"{"text":"claude msg"}"#, 1,
+		&mut conn,
+		"ev-c1",
+		"as-claude",
+		0,
+		"user",
+		r#"{"text":"claude msg"}"#,
+		1,
 	);
 
 	insert_session(&mut conn, "as-codex", "pr1", "codex");
 	insert_event_with_turn(
-		&mut conn, "ev-x1", "as-codex", 0, "user",
-		r#"{"text":"codex msg"}"#, 1,
+		&mut conn,
+		"ev-x1",
+		"as-codex",
+		0,
+		"user",
+		r#"{"text":"codex msg"}"#,
+		1,
 	);
 
 	// Mark all destroyed
@@ -604,7 +649,8 @@ fn multiple_sessions_reconnect_independently() {
 	}
 
 	// Verify
-	let claude_events = agent::list_events(&mut conn, "as-new-claude-code").unwrap();
+	let claude_events =
+		agent::list_events(&mut conn, "as-new-claude-code").unwrap();
 	assert_eq!(claude_events.len(), 1);
 	assert!(claude_events[0].payload_json.contains("claude msg"));
 
@@ -628,5 +674,9 @@ fn list_all_returns_all_regardless_of_destroyed_state() {
 	let _ = agent::mark_destroyed(&mut conn, "as-destroyed");
 
 	let all = agent::list_all(&mut conn).unwrap();
-	assert_eq!(all.len(), 2, "list_all should return both active and destroyed");
+	assert_eq!(
+		all.len(),
+		2,
+		"list_all should return both active and destroyed"
+	);
 }
