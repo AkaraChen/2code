@@ -134,7 +134,8 @@ pub fn get_current_streak(
 	let mut expected = today_date;
 
 	for date_str in &dates {
-		if let Ok(date) = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+		if let Ok(date) =
+			chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
 		{
 			if date == expected {
 				streak += 1;

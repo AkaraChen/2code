@@ -62,8 +62,8 @@ This keeps the service crate framework-agnostic while the app/bridge layer provi
 1. Resolve profile/project context and load init scripts.
 2. Prepare shell-init directory and create PTY session via `infra::pty`.
 3. Persist session metadata, then stream output:
-   - emit text to frontend through `PtyEventEmitter`
-   - persist raw bytes in DB via dedicated persistence thread
+    - emit text to frontend through `PtyEventEmitter`
+    - persist raw bytes in DB via dedicated persistence thread
 4. On startup restore, old history is sanitized through `vt100`, prewritten into new session history, then old session row is deleted.
 
 ### Agent session reconnect
@@ -84,7 +84,7 @@ This keeps the service crate framework-agnostic while the app/bridge layer provi
 
 - Unit tests are colocated in each module (`#[cfg(test)]`).
 - High-signal tests in this crate cover:
-  - branch/dir name sanitization
-  - UTF-8 boundary handling for streamed PTY output
-  - ANSI/vt100 history sanitization behavior
-  - skill frontmatter parsing/roundtrip
+    - branch/dir name sanitization
+    - UTF-8 boundary handling for streamed PTY output
+    - ANSI/vt100 history sanitization behavior
+    - skill frontmatter parsing/roundtrip

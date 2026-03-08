@@ -28,8 +28,8 @@ export function useCreateTab() {
 
 			if (params.type === "terminal") {
 				const counter =
-					useTabStore.getState().profiles[params.profileId]?.counter ??
-					0;
+					useTabStore.getState().profiles[params.profileId]
+						?.counter ?? 0;
 				promise = TerminalTabSession.create(
 					params.profileId,
 					params.cwd,
@@ -48,7 +48,10 @@ export function useCreateTab() {
 			const pendingTab: PendingTab = {
 				type: "pending",
 				id: tempId,
-				title: params.type === "agent" ? params.agentName : m.newTerminal(),
+				title:
+					params.type === "agent"
+						? params.agentName
+						: m.newTerminal(),
 				intendedType: params.type,
 				iconUrl: params.type === "agent" ? params.iconUrl : undefined,
 				promise,
@@ -70,11 +73,7 @@ export function useCreateTab() {
 			finalTab.id = optimisticTabId; // Re-use nanoid so React elements don't unmount
 			useTabStore
 				.getState()
-				.replaceTab(
-					variables.profileId,
-					optimisticTabId,
-					finalTab,
-				);
+				.replaceTab(variables.profileId, optimisticTabId, finalTab);
 		},
 	});
 }

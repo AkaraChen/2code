@@ -41,10 +41,7 @@ pub fn find(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn delete(
-	conn: &mut SqliteConnection,
-	id: &str,
-) -> Result<(), AppError> {
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let rows = diesel::delete(marketplace_agents::table.find(id))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;

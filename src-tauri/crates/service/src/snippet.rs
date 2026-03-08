@@ -14,9 +14,7 @@ pub fn create(
 	repo::snippet::insert(conn, &id, name, trigger, content)
 }
 
-pub fn list(
-	conn: &mut SqliteConnection,
-) -> Result<Vec<Snippet>, AppError> {
+pub fn list(conn: &mut SqliteConnection) -> Result<Vec<Snippet>, AppError> {
 	repo::snippet::list_all(conn)
 }
 
@@ -28,9 +26,6 @@ pub fn update(
 	repo::snippet::update(conn, id, changeset)
 }
 
-pub fn delete(
-	conn: &mut SqliteConnection,
-	id: &str,
-) -> Result<(), AppError> {
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	repo::snippet::delete(conn, id)
 }

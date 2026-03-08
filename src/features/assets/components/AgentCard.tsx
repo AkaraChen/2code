@@ -51,7 +51,11 @@ export function AgentCard({
 								</Badge>
 							</HStack>
 							{authors.length > 0 && (
-								<Text fontSize="xs" color="fg.muted" lineClamp={1}>
+								<Text
+									fontSize="xs"
+									color="fg.muted"
+									lineClamp={1}
+								>
 									{m.marketplaceBy({
 										authors: authors.join(", "),
 									})}

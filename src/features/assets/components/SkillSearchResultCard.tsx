@@ -20,22 +20,35 @@ export function SkillSearchResultCard({
 	const install = useInstallSkill();
 	const isInstalled = installedNames.has(skill.name);
 	const installs = formatInstalls(skill.installs);
-	const isLoading = install.isPending && install.variables?.skill === skill.name;
+	const isLoading =
+		install.isPending && install.variables?.skill === skill.name;
 
 	return (
-		<Card.Root key={skill.slug} size="sm" variant="outline" bg="bg.panel" overflow="hidden">
+		<Card.Root
+			key={skill.slug}
+			size="sm"
+			variant="outline"
+			bg="bg.panel"
+			overflow="hidden"
+		>
 			<Card.Body gap="3" p="4">
 				<HStack justify="space-between" align="center">
-					<Card.Title fontSize="sm" fontWeight="semibold" lineClamp={1} flex="1" mr="2">
+					<Card.Title
+						fontSize="sm"
+						fontWeight="semibold"
+						lineClamp={1}
+						flex="1"
+						mr="2"
+					>
 						{skill.name}
 					</Card.Title>
-					
+
 					{isInstalled ? (
-						<Badge 
-							size="sm" 
-							color="fg.success" 
-							bg="bg.success.subtle" 
-							variant="subtle" 
+						<Badge
+							size="sm"
+							color="fg.success"
+							bg="bg.success.subtle"
+							variant="subtle"
 							flexShrink={0}
 							h="24px"
 							px="2"
@@ -66,7 +79,7 @@ export function SkillSearchResultCard({
 						</Button>
 					)}
 				</HStack>
-				
+
 				<HStack justify="space-between" align="flex-end" mt="auto">
 					<Stack gap="1">
 						{skill.source && (
@@ -76,7 +89,12 @@ export function SkillSearchResultCard({
 						)}
 					</Stack>
 					{installs && (
-						<Badge size="sm" variant="subtle" color="fg.muted" bg="bg.subtle">
+						<Badge
+							size="sm"
+							variant="subtle"
+							color="fg.muted"
+							bg="bg.subtle"
+						>
 							{m.skillInstalls({ n: installs })}
 						</Badge>
 					)}

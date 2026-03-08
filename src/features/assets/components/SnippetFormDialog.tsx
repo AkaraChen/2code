@@ -11,7 +11,10 @@ import {
 import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import * as m from "@/paraglide/messages.js";
-import { useCreateSnippet, useUpdateSnippet } from "@/features/assets/hooks/useSnippets";
+import {
+	useCreateSnippet,
+	useUpdateSnippet,
+} from "@/features/assets/hooks/useSnippets";
 
 interface SnippetFormData {
 	name: string;
@@ -22,10 +25,19 @@ interface SnippetFormData {
 interface SnippetFormDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	editingSnippet: { id: string; name: string; trigger: string; content: string } | null;
+	editingSnippet: {
+		id: string;
+		name: string;
+		trigger: string;
+		content: string;
+	} | null;
 }
 
-export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: SnippetFormDialogProps) {
+export function SnippetFormDialog({
+	open,
+	onOpenChange,
+	editingSnippet,
+}: SnippetFormDialogProps) {
 	const createMutation = useCreateSnippet();
 	const updateMutation = useUpdateSnippet();
 	const lastAutoSyncedNameRef = useRef("");
@@ -83,7 +95,9 @@ export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: Snippe
 					<Dialog.Content>
 						<Dialog.Header>
 							<Dialog.Title>
-								{editingSnippet ? m.editSnippet() : m.createSnippet()}
+								{editingSnippet
+									? m.editSnippet()
+									: m.createSnippet()}
 							</Dialog.Title>
 						</Dialog.Header>
 						<Dialog.Body>
@@ -98,10 +112,12 @@ export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: Snippe
 											if (editingSnippet !== null) return;
 
 											const nextName = event.target.value;
-											const currentContent = form.getValues("content");
+											const currentContent =
+												form.getValues("content");
 											const shouldSyncContent =
 												currentContent.trim() === "" ||
-												currentContent === lastAutoSyncedNameRef.current;
+												currentContent ===
+													lastAutoSyncedNameRef.current;
 
 											if (!shouldSyncContent) return;
 
@@ -109,14 +125,17 @@ export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: Snippe
 												shouldDirty: false,
 												shouldTouch: true,
 											});
-											lastAutoSyncedNameRef.current = nextName;
+											lastAutoSyncedNameRef.current =
+												nextName;
 										}}
 										placeholder={m.snippetNamePlaceholder()}
 										autoComplete="off"
 									/>
 								</Field.Root>
 								<Field.Root>
-									<Field.Label>{m.snippetTrigger()}</Field.Label>
+									<Field.Label>
+										{m.snippetTrigger()}
+									</Field.Label>
 									<Input
 										{...triggerField}
 										placeholder={m.snippetTriggerPlaceholder()}
@@ -124,7 +143,9 @@ export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: Snippe
 									/>
 								</Field.Root>
 								<Field.Root>
-									<Field.Label>{m.snippetContent()}</Field.Label>
+									<Field.Label>
+										{m.snippetContent()}
+									</Field.Label>
 									<Textarea
 										{...contentField}
 										placeholder={m.snippetContentPlaceholder()}
@@ -140,7 +161,10 @@ export function SnippetFormDialog({ open, onOpenChange, editingSnippet }: Snippe
 							</Dialog.ActionTrigger>
 							<Button
 								onClick={onSubmit}
-								loading={createMutation.isPending || updateMutation.isPending}
+								loading={
+									createMutation.isPending ||
+									updateMutation.isPending
+								}
 							>
 								{editingSnippet ? m.save() : m.create()}
 							</Button>

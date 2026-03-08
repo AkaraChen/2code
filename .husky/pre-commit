@@ -1,1 +1,2 @@
-npx nano-staged
+pnpm zx scripts/format.js
+pnpm zx scripts/lint.js

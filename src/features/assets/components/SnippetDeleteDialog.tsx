@@ -7,7 +7,10 @@ interface SnippetDeleteDialogProps {
 	onClose: () => void;
 }
 
-export function SnippetDeleteDialog({ deleteTarget, onClose }: SnippetDeleteDialogProps) {
+export function SnippetDeleteDialog({
+	deleteTarget,
+	onClose,
+}: SnippetDeleteDialogProps) {
 	const deleteMutation = useDeleteSnippet();
 
 	const handleDelete = () => {

@@ -46,8 +46,9 @@ pub struct BinaryTarget {
 impl Distribution {
 	/// Parse from the `distribution_json` column of `marketplace_agents`.
 	pub fn from_json(s: &str) -> Result<Self, AppError> {
-		serde_json::from_str(s)
-			.map_err(|e| AppError::DbError(format!("invalid distribution JSON: {e}")))
+		serde_json::from_str(s).map_err(|e| {
+			AppError::DbError(format!("invalid distribution JSON: {e}"))
+		})
 	}
 
 	/// Resolve to `(program, args, env)` for process spawning.

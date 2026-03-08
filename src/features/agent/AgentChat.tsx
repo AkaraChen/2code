@@ -166,7 +166,8 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 		() => createListCollection({ items: modeItems }),
 		[modeItems],
 	);
-	const selectedMode = modeState?.current_mode_id ?? modeItems[0]?.value ?? null;
+	const selectedMode =
+		modeState?.current_mode_id ?? modeItems[0]?.value ?? null;
 	const showModeSelector = !!modeState?.supported && modeItems.length > 1;
 	const modeBusy = !!modeLoading || setAgentMode.isPending;
 
@@ -268,7 +269,11 @@ export function AgentChat({ sessionId, isActive }: AgentChatProps) {
 			<ErrorBoundary
 				fallbackRender={({ error, resetErrorBoundary }) => (
 					<PageError
-						error={error instanceof Error ? error : new Error(String(error))}
+						error={
+							error instanceof Error
+								? error
+								: new Error(String(error))
+						}
 						onRetry={resetErrorBoundary}
 					/>
 				)}

@@ -31,7 +31,14 @@ fn create_session_inner(
 	initial_output: Option<&[u8]>,
 ) -> Result<String, AppError> {
 	let session_id = uuid::Uuid::new_v4().to_string();
-	create_session_with_id(ctx, &session_id, meta, config, initial_output, false)?;
+	create_session_with_id(
+		ctx,
+		&session_id,
+		meta,
+		config,
+		initial_output,
+		false,
+	)?;
 	Ok(session_id)
 }
 
@@ -179,7 +186,9 @@ pub fn mark_all_closed(db: &DbPool) {
 /// The DB record is updated in-place so frontend-persisted IDs stay valid.
 pub fn restore_all_sessions(ctx: &PtyContext) -> usize {
 	let sessions = {
-		let Ok(mut conn) = ctx.db.lock() else { return 0 };
+		let Ok(mut conn) = ctx.db.lock() else {
+			return 0;
+		};
 		repo::pty::list_all(&mut conn).unwrap_or_default()
 	};
 
@@ -216,7 +225,8 @@ fn restore_single_session(
 	};
 
 	// 2. Sanitize through vt100
-	let history = sanitize_history(&raw_history, old.rows as u16, old.cols as u16);
+	let history =
+		sanitize_history(&raw_history, old.rows as u16, old.cols as u16);
 	tracing::info!(
 		target: "pty", session_id = %old.id,
 		raw_bytes = raw_history.len(), clean_bytes = history.len(),

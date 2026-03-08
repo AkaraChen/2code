@@ -17,6 +17,7 @@ Run these from this directory (`src-tauri/`) unless noted.
 - `cargo tauri-typegen generate` — regenerate TypeScript IPC bindings to `src/generated/` after changing `#[tauri::command]` signatures
 
 Build hooks configured in `tauri.conf.json`:
+
 - `beforeDevCommand`: `just build-helper-dev && bun run dev`
 - `beforeBuildCommand`: `just build-helper && bun run build`
 
@@ -40,13 +41,14 @@ with bridge traits in service implemented by app-layer adapters.
 ### App Layer (`src/lib.rs`)
 
 `lib.rs` is the main composition root:
+
 - initializes tracing
 - initializes managed state (DB, PTY session map, read thread tracker, agent manager/session maps)
 - starts helper HTTP server
 - performs startup recovery:
-  - mark orphaned PTY sessions closed
-  - mark orphaned agent sessions destroyed
-  - restore PTY sessions from persisted output
+    - mark orphaned PTY sessions closed
+    - mark orphaned agent sessions destroyed
+    - restore PTY sessions from persisted output
 - registers all Tauri commands in `invoke_handler`
 - performs shutdown cleanup (abort notification tasks, close sessions, join PTY threads, mark sessions destroyed/closed)
 
@@ -55,6 +57,7 @@ Keep handlers in `src/handler/*` thin: extract state and delegate to `service::*
 ### PTY System
 
 Core PTY logic lives in `crates/service/src/pty.rs` and `crates/infra/src/pty.rs`:
+
 - session create flow loads project `init_script` from `2code.json`, prepares shell init dir, spawns PTY, persists session metadata
 - PTY output is read on a background thread, streamed to frontend via emitter trait, and persisted via a dedicated flush channel
 - output persistence supports explicit flush and clear-scrollback detection (`ESC[3J`)
@@ -64,11 +67,13 @@ Core PTY logic lives in `crates/service/src/pty.rs` and `crates/infra/src/pty.rs
 ### Agent System
 
 Agent runtime is split across:
+
 - `crates/agent/*` for process/session/runtime primitives
 - `crates/service/src/agent.rs` for app-level lifecycle + DB persistence
 - `src/handler/agent.rs` for Tauri commands
 
 Important behavior:
+
 - sessions are persisted in DB and can be lazily reconnected
 - reconnect tries ACP `session/load`, then falls back to new session creation
 - historical events are transferred and can be summarized into prompt context for resumed sessions
@@ -84,6 +89,7 @@ Important behavior:
 ### Profiles and Git Worktrees
 
 Profile creation/deletion (`service::profile`) manages isolated git worktrees:
+
 - worktrees live under `~/.2code/workspace/<profile_id>`
 - branch names are sanitized with CJK-aware slugification
 - profile setup/teardown runs scripts from project `2code.json`
@@ -91,6 +97,7 @@ Profile creation/deletion (`service::profile`) manages isolated git worktrees:
 ### Notification Sidecar
 
 `bins/2code-helper` is bundled as an external binary and used by PTY sessions:
+
 - helper HTTP server in `src/helper.rs` exposes `/notify` and `/health`
 - sidecar calls `/notify?session_id=...`
 - app emits `pty-notify` event and optionally plays configured system sound

@@ -1,1 +1,2 @@
-pnpm test && pnpm typecheck && pnpm lint:check && cd src-tauri && cargo nextest run && cargo clippy -- -D warnings
+pnpm zx scripts/typecheck.js
+pnpm zx scripts/test.js

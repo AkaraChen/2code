@@ -112,8 +112,7 @@ pub fn capture_agent_stats(
 		};
 
 	let (user_count, agent_count) =
-		repo::agent::count_events_by_sender(conn, session_id)
-			.unwrap_or((0, 0));
+		repo::agent::count_events_by_sender(conn, session_id).unwrap_or((0, 0));
 	let total_events = user_count + agent_count;
 
 	let created_at = session.created_at;
@@ -158,10 +157,7 @@ pub fn capture_agent_stats(
 }
 
 /// Capture stats for all sessions belonging to a project (before project deletion).
-pub fn capture_project_stats(
-	conn: &mut SqliteConnection,
-	project_id: &str,
-) {
+pub fn capture_project_stats(conn: &mut SqliteConnection, project_id: &str) {
 	// Capture PTY sessions
 	if let Ok(pty_sessions) = repo::pty::list_by_project(conn, project_id) {
 		for session in &pty_sessions {
@@ -170,8 +166,7 @@ pub fn capture_project_stats(
 	}
 
 	// Capture agent sessions
-	if let Ok(agent_sessions) = repo::agent::list_by_project(conn, project_id)
-	{
+	if let Ok(agent_sessions) = repo::agent::list_by_project(conn, project_id) {
 		for session in &agent_sessions {
 			let _ = capture_agent_stats(conn, &session.id);
 		}

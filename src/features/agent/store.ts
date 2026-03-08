@@ -8,11 +8,7 @@ import { createSessionSlice, type SessionSlice } from "./stores/sessionSlice";
 import type { AgentSessionState } from "./types";
 
 export interface AgentStore
-	extends SessionSlice,
-		MessageSlice,
-		ModelSlice,
-		ModeSlice,
-		HistorySlice {
+	extends SessionSlice, MessageSlice, ModelSlice, ModeSlice, HistorySlice {
 	sessions: Record<string, AgentSessionState>;
 }
 

@@ -11,60 +11,60 @@ This crate provides the AI agent runtime layer for 2code’s Tauri backend. It w
 Run these from `src-tauri/crates/agent` unless noted otherwise.
 
 - Build crate:
-  - `cargo build`
+    - `cargo build`
 - Build optimized:
-  - `cargo build --release`
+    - `cargo build --release`
 - Run tests for this crate:
-  - `cargo test`
+    - `cargo test`
 - Run a single test:
-  - `cargo test test_mask_key`
+    - `cargo test test_mask_key`
 - Run tests with logs/output visible:
-  - `cargo test -- --nocapture`
+    - `cargo test -- --nocapture`
 - Type/lint check (if clippy is available):
-  - `cargo clippy --all-targets --all-features -- -D warnings`
+    - `cargo clippy --all-targets --all-features -- -D warnings`
 - Format (workspace-standard Rust formatting):
-  - `cargo fmt --all`
+    - `cargo fmt --all`
 
 ## Architecture
 
 ### Module layout
 
 - `src/lib.rs`
-  - Public crate surface and type aliases.
-  - Re-exports key types from submodules so callers can depend on `agent` directly.
-  - Defines shared runtime maps:
-    - `AgentSessionMap`: local session id -> `ManagedAgentSession`
-    - `NotificationTaskMap`: session id -> notification task handle
+    - Public crate surface and type aliases.
+    - Re-exports key types from submodules so callers can depend on `agent` directly.
+    - Defines shared runtime maps:
+        - `AgentSessionMap`: local session id -> `ManagedAgentSession`
+        - `NotificationTaskMap`: session id -> notification task handle
 
 - `src/manager.rs`
-  - Thin wrapper around `sandbox-agent-agent-management`.
-  - Responsibilities:
-    - list installed/ready agent runtimes
-    - install ACP bridges
-    - resolve launch specs (`program`, `args`, `env`)
-    - detect credentials (Anthropic/OpenAI) and mask key previews
-  - Converts upstream types into stable crate-facing DTOs (`AgentStatusInfo`, `CredentialInfo`).
+    - Thin wrapper around `sandbox-agent-agent-management`.
+    - Responsibilities:
+        - list installed/ready agent runtimes
+        - install ACP bridges
+        - resolve launch specs (`program`, `args`, `env`)
+        - detect credentials (Anthropic/OpenAI) and mask key previews
+    - Converts upstream types into stable crate-facing DTOs (`AgentStatusInfo`, `CredentialInfo`).
 
 - `src/runtime.rs`
-  - Low-level ACP transport session (`AgentSession`).
-  - Spawns ACP process using `acp-client`, sends JSON-RPC request/notification messages, exposes notification stream, and performs graceful shutdown.
-  - No ACP session lifecycle semantics here; just process + protocol transport.
+    - Low-level ACP transport session (`AgentSession`).
+    - Spawns ACP process using `acp-client`, sends JSON-RPC request/notification messages, exposes notification stream, and performs graceful shutdown.
+    - No ACP session lifecycle semantics here; just process + protocol transport.
 
 - `src/session.rs`
-  - High-level managed lifecycle (`ManagedAgentSession`) built on `AgentSession`.
-  - Responsibilities:
-    - create/load ACP sessions via `session/new` and `session/load`
-    - send prompts via `session/prompt`
-    - parse ACP push notifications into `SessionNotification`
-    - maintain per-session event counter and reconnect history handoff
-    - maintain model capability/state and model switching fallback strategy
-  - Model switch behavior:
-    1. try `session/set_model`
-    2. fallback to `session/set_config_option` with model config id
+    - High-level managed lifecycle (`ManagedAgentSession`) built on `AgentSession`.
+    - Responsibilities:
+        - create/load ACP sessions via `session/new` and `session/load`
+        - send prompts via `session/prompt`
+        - parse ACP push notifications into `SessionNotification`
+        - maintain per-session event counter and reconnect history handoff
+        - maintain model capability/state and model switching fallback strategy
+    - Model switch behavior:
+        1. try `session/set_model`
+        2. fallback to `session/set_config_option` with model config id
 
 - `src/models.rs`
-  - Serde DTOs for frontend/backend boundary.
-  - Includes prompt content schema, prompt result schema, session info, session events, and model option/state payloads.
+    - Serde DTOs for frontend/backend boundary.
+    - Includes prompt content schema, prompt result schema, session info, session events, and model option/state payloads.
 
 ## Key Runtime Flow
 
@@ -88,8 +88,8 @@ Run these from `src-tauri/crates/agent` unless noted otherwise.
 
 - Tests are colocated in each module (`#[cfg(test)]`).
 - Most tests cover:
-  - serialization/deserialization stability
-  - ACP response/notification parsing
-  - model state extraction logic
-  - credential masking and agent id parsing
+    - serialization/deserialization stability
+    - ACP response/notification parsing
+    - model state extraction logic
+    - credential masking and agent id parsing
 - When changing protocol parsing or DTOs, update both parser logic and round-trip tests in the same module.

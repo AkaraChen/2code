@@ -141,8 +141,15 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 								/>
 							))
 							.with({ type: "pending" }, (t) => (
-								<Suspense fallback={<PendingTabLoading title={t.title} />}>
-									<PendingTabResolver promise={t.promise} title={t.title} />
+								<Suspense
+									fallback={
+										<PendingTabLoading title={t.title} />
+									}
+								>
+									<PendingTabResolver
+										promise={t.promise}
+										title={t.title}
+									/>
 								</Suspense>
 							))
 							.exhaustive()}
@@ -171,7 +178,13 @@ function PendingTabLoading({ title }: { title: string }) {
 	);
 }
 
-function PendingTabResolver({ promise, title }: { promise: Promise<unknown>; title: string }) {
+function PendingTabResolver({
+	promise,
+	title,
+}: {
+	promise: Promise<unknown>;
+	title: string;
+}) {
 	use(promise);
 	return <PendingTabLoading title={title} />;
 }

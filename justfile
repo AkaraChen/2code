@@ -3,8 +3,15 @@ start:
 
 fmt:
     nr lint
-    fama src/**
-    cd src-tauri && cargo fmt
+
+test:
+    nr test
+
+typecheck:
+    nr typecheck
+
+lint:
+    nr lint:check
 
 # Build CLI sidecar (src-tauri/bins/2code-helper)
 build-helper:
@@ -44,5 +51,4 @@ coverage-summary:
 cloc:
     cloc --include-lang="TypeScript,Rust,JavaScript,CSS" . --exclude-dir=node_modules,dist,target --fullpath --not-match-d='(src-tauri/target|src/generated|src/paraglide)'
 
-test:
-    cd src-tauri && cargo nextest run
+# Removed redundant test target as it's now handled by nr test

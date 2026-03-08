@@ -57,9 +57,9 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok((project_id, _path)) => {
 				let now = Instant::now();
-				let debounced = last_event
-					.get(&project_id)
-					.is_some_and(|t| now.duration_since(*t) < DEBOUNCE_DURATION);
+				let debounced = last_event.get(&project_id).is_some_and(|t| {
+					now.duration_since(*t) < DEBOUNCE_DURATION
+				});
 
 				if !debounced {
 					last_event.insert(project_id.clone(), now);
@@ -122,8 +122,8 @@ fn reconcile_watchers(
 						if path.components().any(|c| c.as_os_str() == ".git") {
 							continue;
 						}
-						let _ =
-							tx_clone.send((watcher_project_id.clone(), path.clone()));
+						let _ = tx_clone
+							.send((watcher_project_id.clone(), path.clone()));
 					}
 				}
 			}

@@ -241,8 +241,10 @@ export const RichTextEditorFooter = function RichTextEditorFooter({
 	return <HStack ref={ref} gap="1" borderTopWidth="1px" p="3" {...props} />;
 };
 
-export interface RichTextEditorContentProps
-	extends Omit<React.ComponentProps<typeof EditorContent>, "editor"> {}
+export interface RichTextEditorContentProps extends Omit<
+	React.ComponentProps<typeof EditorContent>,
+	"editor"
+> {}
 
 export const RichTextEditorContent = function RichTextEditorContent({
 	ref,

@@ -170,7 +170,8 @@ export class AgentTabSession extends TabSession {
 				listen<string>(`agent-mode-update-${this.id}`, (e) => {
 					// The agent sent a current_mode_update notification.
 					// We optimistically update the current_mode_id in store.
-					const modeState = useAgentStore.getState().sessions[this.id]?.modeState;
+					const modeState =
+						useAgentStore.getState().sessions[this.id]?.modeState;
 					if (modeState) {
 						useAgentStore.getState().setModeState(this.id, {
 							...modeState,
@@ -180,7 +181,12 @@ export class AgentTabSession extends TabSession {
 				}),
 			]);
 
-		this.unlisteners = [unlistenEvent, unlistenComplete, unlistenError, unlistenMode];
+		this.unlisteners = [
+			unlistenEvent,
+			unlistenComplete,
+			unlistenError,
+			unlistenMode,
+		];
 	}
 
 	async refreshModelState(): Promise<void> {

@@ -47,30 +47,30 @@ This keeps the crate boundary intentionally narrow.
 Key behavior:
 
 1. **Spawn path**
-   - `spawn` delegates to `spawn_with_timeout`
-   - Subprocess is started with piped stdin/stdout and inherited stderr
-   - A background stdout reader task is spawned immediately
+    - `spawn` delegates to `spawn_with_timeout`
+    - Subprocess is started with piped stdin/stdout and inherited stderr
+    - A background stdout reader task is spawned immediately
 
 2. **Request/response flow**
-   - `request()` allocates a numeric ID, stores a oneshot sender in `pending`, writes JSON-RPC payload, then awaits the response channel
-   - Timeout is optional; `None` means wait indefinitely
-   - On send failure or timeout, the request entry is removed from `pending`
+    - `request()` allocates a numeric ID, stores a oneshot sender in `pending`, writes JSON-RPC payload, then awaits the response channel
+    - Timeout is optional; `None` means wait indefinitely
+    - On send failure or timeout, the request entry is removed from `pending`
 
 3. **Notification flow**
-   - `notify()` sends fire-and-forget JSON-RPC messages (no `id`)
-   - `notifications()` returns a stream from a broadcast receiver
+    - `notify()` sends fire-and-forget JSON-RPC messages (no `id`)
+    - `notifications()` returns a stream from a broadcast receiver
 
 4. **Stdout dispatch loop**
-   - Reads line-delimited stdout (`BufReader::lines`)
-   - Parses each line as JSON
-   - Messages with `id` are treated as responses and matched against `pending`
-   - Messages without `id` are treated as notifications and broadcast
+    - Reads line-delimited stdout (`BufReader::lines`)
+    - Parses each line as JSON
+    - Messages with `id` are treated as responses and matched against `pending`
+    - Messages without `id` are treated as notifications and broadcast
 
 5. **Shutdown behavior**
-   - Idempotent via `shutting_down` atomic swap
-   - Clears all pending requests first
-   - Then acquires child lock, checks process state, and kills/waits if still running
-   - Avoids lock-order deadlocks by not using a separate exit watcher
+    - Idempotent via `shutting_down` atomic swap
+    - Clears all pending requests first
+    - Then acquires child lock, checks process state, and kills/waits if still running
+    - Avoids lock-order deadlocks by not using a separate exit watcher
 
 ### Error Model (`src/error.rs`)
 

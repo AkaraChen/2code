@@ -71,16 +71,61 @@ export default function App() {
 						<Suspense fallback={<PageSkeleton />}>
 							<Routes>
 								<Route path="/" element={<HomePage />} />
-								<Route path="/assets" element={<AssetsLayout />}>
-									<Route index element={<Navigate to="/assets/manage/skills" replace />} />
-									<Route path="manage" element={<Navigate to="/assets/manage/skills" replace />} />
-									<Route path="manage/skills" element={<ListSkillsPage />} />
-									<Route path="manage/agents" element={<ListAgentsPage />} />
-									<Route path="manage/snippets" element={<ListSnippetsPage />} />
-									<Route path="store" element={<Navigate to="/assets/store/agents" replace />} />
-									<Route path="store/skills" element={<InstallSkillPage />} />
-									<Route path="store/agents" element={<InstallAgentPage />} />
-									<Route path="store/snippets" element={<InstallSnippetPage />} />
+								<Route
+									path="/assets"
+									element={<AssetsLayout />}
+								>
+									<Route
+										index
+										element={
+											<Navigate
+												to="/assets/manage/skills"
+												replace
+											/>
+										}
+									/>
+									<Route
+										path="manage"
+										element={
+											<Navigate
+												to="/assets/manage/skills"
+												replace
+											/>
+										}
+									/>
+									<Route
+										path="manage/skills"
+										element={<ListSkillsPage />}
+									/>
+									<Route
+										path="manage/agents"
+										element={<ListAgentsPage />}
+									/>
+									<Route
+										path="manage/snippets"
+										element={<ListSnippetsPage />}
+									/>
+									<Route
+										path="store"
+										element={
+											<Navigate
+												to="/assets/store/agents"
+												replace
+											/>
+										}
+									/>
+									<Route
+										path="store/skills"
+										element={<InstallSkillPage />}
+									/>
+									<Route
+										path="store/agents"
+										element={<InstallAgentPage />}
+									/>
+									<Route
+										path="store/snippets"
+										element={<InstallSnippetPage />}
+									/>
 								</Route>
 								<Route
 									path="/projects/:id/profiles/:profileId"

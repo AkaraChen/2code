@@ -27,9 +27,7 @@ pub fn insert(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
-pub fn list_all(
-	conn: &mut SqliteConnection,
-) -> Result<Vec<Snippet>, AppError> {
+pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Snippet>, AppError> {
 	snippets::table
 		.select(Snippet::as_select())
 		.order(snippets::created_at.asc())

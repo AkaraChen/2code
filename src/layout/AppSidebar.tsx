@@ -25,7 +25,9 @@ export default function AppSidebar() {
 		const nav = navRef.current;
 		if (!nav) return;
 
-		const items = [...nav.querySelectorAll<HTMLElement>("[data-sidebar-item]")];
+		const items = [
+			...nav.querySelectorAll<HTMLElement>("[data-sidebar-item]"),
+		];
 		if (items.length === 0) return;
 
 		const currentIndex = items.indexOf(
@@ -83,7 +85,11 @@ export default function AppSidebar() {
 					<SidebarLink to="/" icon={<RiHome4Line />}>
 						{m.home()}
 					</SidebarLink>
-					<SidebarLink to="/assets" pattern="/assets/*" icon={<RiArchive2Line />}>
+					<SidebarLink
+						to="/assets"
+						pattern="/assets/*"
+						icon={<RiArchive2Line />}
+					>
 						{m.assets()}
 					</SidebarLink>
 

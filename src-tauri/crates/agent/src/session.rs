@@ -408,10 +408,7 @@ impl ManagedAgentSession {
 			"acp session/set_mode request"
 		);
 
-		let response = self
-			.inner
-			.send("session/set_mode", request)
-			.await?;
+		let response = self.inner.send("session/set_mode", request).await?;
 
 		if let Some(err) = response.get("error") {
 			tracing::warn!(
@@ -435,7 +432,6 @@ impl ManagedAgentSession {
 
 		Ok(mode_state)
 	}
-
 
 	pub async fn prompt(
 		&self,
@@ -733,10 +729,8 @@ fn parse_mode_state_from_response(result: &Value) -> SessionModeRuntimeState {
 				.iter()
 				.filter_map(|item| {
 					let id = item.get("id").and_then(Value::as_str)?;
-					let name = item
-						.get("name")
-						.and_then(Value::as_str)
-						.unwrap_or(id);
+					let name =
+						item.get("name").and_then(Value::as_str).unwrap_or(id);
 					let description = item
 						.get("description")
 						.and_then(Value::as_str)
@@ -774,7 +768,10 @@ mod tests {
 		let state = parse_model_state_from_response(&payload);
 		assert_eq!(state.current_model_id.as_deref(), Some("gpt-5"));
 		assert_eq!(state.available_models.len(), 2);
-		assert_eq!(state.available_models[1].description.as_deref(), Some("Fast"));
+		assert_eq!(
+			state.available_models[1].description.as_deref(),
+			Some("Fast")
+		);
 	}
 
 	#[test]
@@ -802,10 +799,7 @@ mod tests {
 		});
 
 		let state = parse_model_state_from_response(&payload);
-		assert_eq!(
-			state.current_model_id.as_deref(),
-			Some("claude-sonnet-4")
-		);
+		assert_eq!(state.current_model_id.as_deref(), Some("claude-sonnet-4"));
 		assert_eq!(state.config_id.as_deref(), Some("model"));
 		assert_eq!(state.available_models.len(), 2);
 	}

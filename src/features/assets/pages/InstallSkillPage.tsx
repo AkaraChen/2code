@@ -60,7 +60,11 @@ function SkillsLogo() {
 			</Box>
 			<Link asChild _hover={{ textDecoration: "none" }}>
 				<RouterLink to="/assets/skills">
-					<Text fontWeight="medium" letterSpacing="tight" fontSize="3xl">
+					<Text
+						fontWeight="medium"
+						letterSpacing="tight"
+						fontSize="3xl"
+					>
 						Skills
 					</Text>
 				</RouterLink>
@@ -73,7 +77,7 @@ export default function InstallSkillPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const query = searchParams.get("q") || "";
 	const [inputValue, setInputValue] = useState(query);
-	
+
 	const { data: installedSkills } = useSkills();
 	const installedNames = new Set(installedSkills.map((s) => s.name));
 	const showResults = query.trim().length >= 2;
@@ -96,7 +100,11 @@ export default function InstallSkillPage() {
 			gap="6"
 			pt={showResults ? "0" : "10vh"}
 		>
-			<Stack gap="6" w="full" align={showResults ? "flex-start" : "center"}>
+			<Stack
+				gap="6"
+				w="full"
+				align={showResults ? "flex-start" : "center"}
+			>
 				<SkillsLogo />
 				<Box w="full" maxW="lg">
 					<HStack w="full">
@@ -105,27 +113,30 @@ export default function InstallSkillPage() {
 							endElement={<Kbd size="sm">Enter</Kbd>}
 							flex="1"
 						>
-						<Input
-							placeholder={m.skillsSearchPlaceholder()}
-							value={inputValue}
-							onChange={(e) => setInputValue(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") handleSearch();
-							}}
-						/>
-					</InputGroup>
-					<Button
-						onClick={handleSearch}
-						disabled={inputValue.trim().length === 0}
-					>
-						{m.search()}
-					</Button>
+							<Input
+								placeholder={m.skillsSearchPlaceholder()}
+								value={inputValue}
+								onChange={(e) => setInputValue(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") handleSearch();
+								}}
+							/>
+						</InputGroup>
+						<Button
+							onClick={handleSearch}
+							disabled={inputValue.trim().length === 0}
+						>
+							{m.search()}
+						</Button>
 					</HStack>
 				</Box>
 
 				{showResults ? (
 					<Box w="full" maxW="full">
-						<SkillSearchResultList query={query} installedNames={installedNames} />
+						<SkillSearchResultList
+							query={query}
+							installedNames={installedNames}
+						/>
 					</Box>
 				) : (
 					<Box textAlign="center">

@@ -10,7 +10,7 @@
 
 ## Why 2code?
 
-Every developer knows the feeling: you're deep in flow, making progress, and then—*alt-tab*. Terminal here. IDE there. AI chat somewhere else. Git history in another window. Each switch is a tiny context tax that adds up to lost momentum.
+Every developer knows the feeling: you're deep in flow, making progress, and then—_alt-tab_. Terminal here. IDE there. AI chat somewhere else. Git history in another window. Each switch is a tiny context tax that adds up to lost momentum.
 
 **2code is built on a simple idea: your coding environment shouldn't break your flow.**
 
@@ -52,23 +52,27 @@ Every design decision in 2code serves one goal: **minimize context switching**.
 ## What You Can Do
 
 **Projects & Profiles**
+
 - Import any code folder as a project
 - Create isolated worktrees for each feature or experiment
 - Automatic setup/teardown scripts per profile
 
 **Terminals**
+
 - Multiple tabs per profile
 - Customizable themes, fonts, and sizes
 - Sessions persist across restarts
 - Audio alerts when commands complete
 
 **AI Agents**
+
 - Built-in support for Claude Code, Codex, Cursor, and more
 - Agent marketplace to discover new AI tools
 - Rich chat UI with tool call visualization
 - Switch models within the same conversation
 
 **Git Integration**
+
 - Live diff viewer for staged and unstaged changes
 - Commit history browser with syntax highlighting
 - One-click pull request creation
@@ -95,4 +99,4 @@ We believe the future of software development is **human + AI collaboration**—
 
 ---
 
-*Currently macOS only. Windows and Linux support planned.*
+_Currently macOS only. Windows and Linux support planned._

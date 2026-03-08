@@ -22,11 +22,7 @@ import {
 export type { AgentSlice } from "./agentSlice";
 export type { NotificationSlice } from "./notificationSlice";
 export type { TerminalSlice } from "./terminalSlice";
-export type {
-	AccentColor,
-	BorderRadius,
-	ThemeSlice,
-} from "./themeSlice";
+export type { AccentColor, BorderRadius, ThemeSlice } from "./themeSlice";
 export { ACCENT_COLORS, BORDER_RADIUS_MAP } from "./themeSlice";
 
 export type SettingsStore = AgentSlice &

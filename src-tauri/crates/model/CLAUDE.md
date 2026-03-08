@@ -5,6 +5,7 @@ This file gives future Claude Code instances the minimum high-signal context for
 ## Scope
 
 This crate is the shared Rust data-model layer for the app. It defines:
+
 - Diesel schema bindings (`src/schema.rs`)
 - Diesel model structs (`Queryable`, `Insertable`, `AsChangeset`)
 - Serde DTOs shared across backend layers and frontend IPC boundaries
@@ -28,12 +29,14 @@ Run from `src-tauri/crates/model`.
 ## 1) Module layout
 
 `src/lib.rs` is the crate surface; it exports domain modules:
+
 - Core entities: `project`, `profile`, `pty`, `agent`, `snippet`, `marketplace`, `stats`
 - Support DTOs: `notification`, `watcher`, `debug`, `skill`
 - Platform/shared types: `distribution`, `error`
 - Database schema: `schema`
 
 Most modules follow a predictable pattern:
+
 - DB row structs: `#[derive(Queryable, Selectable)]`
 - Insert payload structs: `#[derive(Insertable)]`
 - Update payload structs where relevant: `#[derive(AsChangeset)]`
@@ -42,6 +45,7 @@ Most modules follow a predictable pattern:
 ## 2) Database contract source of truth
 
 `src/schema.rs` is generated Diesel schema and defines:
+
 - Tables, column types, PKs
 - Join relationships (`joinable!`)
 - Cross-table query allowances (`allow_tables_to_appear_in_same_query!`)
@@ -61,6 +65,7 @@ Important: `src/schema.rs` is generated; update schema via migrations/print-sche
 ## 4) Distribution resolution behavior
 
 `distribution.rs` encodes ACP distribution JSON and resolves launch command/env with fixed priority:
+
 1. `npx`
 2. `uvx`
 3. `binary` for current platform key
@@ -76,6 +81,7 @@ If none match, it returns `AppError::NotFound`. This resolution logic is covered
 ## 6) Type/time representation caveats
 
 The crate mixes DB time representations by table contract:
+
 - Some records use timestamp-like `String` fields (e.g., many Diesel query models)
 - Stats/agent event records use integer epoch-like fields (`i32`)
 

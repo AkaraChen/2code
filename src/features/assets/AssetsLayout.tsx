@@ -21,7 +21,11 @@ export default function AssetsLayout() {
 	const filterSegment = pathSegments[2] as Filter | undefined;
 
 	const mode: Mode = modeSegment === "store" ? "store" : "manage";
-	const filter: Filter = ["skills", "snippets", "agents"].includes(filterSegment as any) ? filterSegment as Filter : "skills";
+	const filter: Filter = ["skills", "snippets", "agents"].includes(
+		filterSegment as any,
+	)
+		? (filterSegment as Filter)
+		: "skills";
 
 	const handleModeChange = (newMode: Mode) => {
 		if (newMode === "store" && filter === "snippets") {
@@ -57,14 +61,17 @@ export default function AssetsLayout() {
 							{ value: "snippets", label: m.snippets() },
 							{ value: "agents", label: m.agents() },
 						].map((item) => {
-							const isDisabled = mode === "store" && item.value === "snippets";
+							const isDisabled =
+								mode === "store" && item.value === "snippets";
 							const segmentItem = (
 								<SegmentGroup.Item
 									key={item.value}
 									value={item.value}
 									disabled={isDisabled}
 								>
-									<SegmentGroup.ItemText>{item.label}</SegmentGroup.ItemText>
+									<SegmentGroup.ItemText>
+										{item.label}
+									</SegmentGroup.ItemText>
 									<SegmentGroup.ItemHiddenInput />
 								</SegmentGroup.Item>
 							);
@@ -105,7 +112,9 @@ export default function AssetsLayout() {
 								key={item.value}
 								value={item.value}
 							>
-								<SegmentGroup.ItemText>{item.label}</SegmentGroup.ItemText>
+								<SegmentGroup.ItemText>
+									{item.label}
+								</SegmentGroup.ItemText>
 								<SegmentGroup.ItemHiddenInput />
 							</SegmentGroup.Item>
 						))}

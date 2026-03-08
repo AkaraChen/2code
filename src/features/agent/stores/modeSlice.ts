@@ -4,10 +4,7 @@ import type { AgentStore } from "../store";
 import { ensureSession } from "./utils";
 
 export interface ModeSlice {
-	setModeState: (
-		sessionId: string,
-		modeState: AgentModeState | null,
-	) => void;
+	setModeState: (sessionId: string, modeState: AgentModeState | null) => void;
 	setModeLoading: (sessionId: string, loading: boolean) => void;
 }
 

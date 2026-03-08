@@ -137,7 +137,11 @@ impl AcpClient {
 			// With timeout
 			match tokio::time::timeout(timeout, rx).await {
 				Ok(Ok(response)) => {
-					tracing::debug!(method = method, id = id, "received response");
+					tracing::debug!(
+						method = method,
+						id = id,
+						"received response"
+					);
 					Ok(response)
 				}
 				Ok(Err(_)) => {
@@ -167,7 +171,11 @@ impl AcpClient {
 
 			match rx.await {
 				Ok(response) => {
-					tracing::debug!(method = method, id = id, "received response");
+					tracing::debug!(
+						method = method,
+						id = id,
+						"received response"
+					);
 					Ok(response)
 				}
 				Err(_) => {

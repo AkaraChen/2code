@@ -10,7 +10,10 @@ import {
 import { useState } from "react";
 import { LuTrash2 } from "react-icons/lu";
 import * as m from "@/paraglide/messages.js";
-import { useMarketplaceAgents, useRemoveMarketplaceAgent } from "@/features/assets/hooks/useMarketplace";
+import {
+	useMarketplaceAgents,
+	useRemoveMarketplaceAgent,
+} from "@/features/assets/hooks/useMarketplace";
 import { MarketplaceQueryBoundary } from "../components/MarketplaceQueryBoundary";
 import { AgentCard } from "../components/AgentCard";
 

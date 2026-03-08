@@ -47,9 +47,9 @@ If running from this crate directory (`src-tauri/crates/repo`):
 - Most writes use Diesel query builder (`insert_into`, `update`, `delete`) followed by a readback for the created/updated row.
 - Cross-table reads are done with joins where needed (for example, project-scoped PTY/agent session queries via `profiles`).
 - Some hot paths use raw SQL (`diesel::sql_query`) for SQLite-specific operations:
-  - PTY output append + 1MB trimming
-  - Daily activity upserts
-  - Aggregated stats queries
+    - PTY output append + 1MB trimming
+    - Daily activity upserts
+    - Aggregated stats queries
 
 ## Key Behaviors and Invariants
 
@@ -57,9 +57,9 @@ If running from this crate directory (`src-tauri/crates/repo`):
 
 - Tests are colocated in each module under `#[cfg(test)]`.
 - Test DB setup is consistent:
-  - in-memory SQLite (`:memory:`)
-  - `PRAGMA foreign_keys=ON`
-  - embedded migrations via `infra::db::MIGRATIONS`
+    - in-memory SQLite (`:memory:`)
+    - `PRAGMA foreign_keys=ON`
+    - embedded migrations via `infra::db::MIGRATIONS`
 - Follow this same setup for new repository tests.
 
 ### Project/Profile rules
@@ -70,8 +70,8 @@ If running from this crate directory (`src-tauri/crates/repo`):
 ### PTY persistence model
 
 - `pty::insert_session` must create both:
-  - a `pty_sessions` row
-  - a companion `pty_session_output` row initialized with empty blob
+    - a `pty_sessions` row
+    - a companion `pty_session_output` row initialized with empty blob
 - Output history is append-only data in `pty_session_output.data`, with hard trim to last 1MB.
 - `mark_all_open_closed` marks sessions with `closed_at IS NULL` as closed.
 

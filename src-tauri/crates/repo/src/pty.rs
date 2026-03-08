@@ -181,12 +181,10 @@ pub fn reopen_session(
 	sanitized_output: &[u8],
 ) -> Result<(), AppError> {
 	// Mark as open again
-	diesel::update(
-		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
-	)
-	.set(pty_sessions::closed_at.eq(None::<String>))
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
+	diesel::update(pty_sessions::table.filter(pty_sessions::id.eq(session_id)))
+		.set(pty_sessions::closed_at.eq(None::<String>))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	// Replace output blob with sanitized history
 	diesel::sql_query(

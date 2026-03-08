@@ -6,8 +6,9 @@ use model::skill::Skill;
 
 /// Global skills directory: ~/.claude/skills/
 fn skills_dir() -> Result<PathBuf, AppError> {
-	let home = dirs::home_dir()
-		.ok_or_else(|| AppError::IoError(std::io::Error::other("no home dir")))?;
+	let home = dirs::home_dir().ok_or_else(|| {
+		AppError::IoError(std::io::Error::other("no home dir"))
+	})?;
 	Ok(home.join(".claude").join("skills"))
 }
 
@@ -52,9 +53,7 @@ fn parse_skill_md(raw: &str) -> (String, String) {
 
 /// Serialize a skill back into SKILL.md format with frontmatter.
 fn serialize_skill_md(name: &str, description: &str, content: &str) -> String {
-	format!(
-		"---\nname: {name}\ndescription: \"{description}\"\n---\n{content}"
-	)
+	format!("---\nname: {name}\ndescription: \"{description}\"\n---\n{content}")
 }
 
 pub fn list() -> Result<Vec<Skill>, AppError> {
@@ -115,7 +114,11 @@ pub fn get(name: &str) -> Result<Skill, AppError> {
 	})
 }
 
-pub fn create(name: &str, description: &str, content: &str) -> Result<Skill, AppError> {
+pub fn create(
+	name: &str,
+	description: &str,
+	content: &str,
+) -> Result<Skill, AppError> {
 	let dir = skills_dir()?;
 	fs::create_dir_all(&dir)?;
 
@@ -181,9 +184,9 @@ pub async fn search(
 		limit,
 	);
 
-	let response = reqwest::get(&url)
-		.await
-		.map_err(|e| AppError::PtyError(format!("skills.sh fetch failed: {e}")))?;
+	let response = reqwest::get(&url).await.map_err(|e| {
+		AppError::PtyError(format!("skills.sh fetch failed: {e}"))
+	})?;
 
 	if !response.status().is_success() {
 		return Ok(Vec::new());
@@ -202,10 +205,9 @@ pub async fn search(
 		skills: Vec<ApiSkill>,
 	}
 
-	let data: ApiResponse = response
-		.json()
-		.await
-		.map_err(|e| AppError::PtyError(format!("skills.sh parse failed: {e}")))?;
+	let data: ApiResponse = response.json().await.map_err(|e| {
+		AppError::PtyError(format!("skills.sh parse failed: {e}"))
+	})?;
 
 	Ok(data
 		.skills
@@ -221,7 +223,10 @@ pub async fn search(
 
 /// Install a skill from a source repository into `~/.config/agents/skills/`.
 /// Delegates to: `npx skills add <source> --skill <skill> --agent universal --global --yes`
-pub fn install_from_registry(source: &str, skill: &str) -> Result<(), AppError> {
+pub fn install_from_registry(
+	source: &str,
+	skill: &str,
+) -> Result<(), AppError> {
 	use std::process::Command;
 
 	let output = Command::new("npx")
@@ -250,14 +255,14 @@ pub fn install_from_registry(source: &str, skill: &str) -> Result<(), AppError> 
 	Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
 	fn parse_with_frontmatter() {
-		let raw = "---\nname: test\ndescription: \"A test skill\"\n---\nBody here";
+		let raw =
+			"---\nname: test\ndescription: \"A test skill\"\n---\nBody here";
 		let (desc, body) = parse_skill_md(raw);
 		assert_eq!(desc, "A test skill");
 		assert_eq!(body, "Body here");
@@ -280,7 +285,8 @@ mod tests {
 
 	#[test]
 	fn roundtrip() {
-		let md = serialize_skill_md("my-skill", "Does things", "# Hello\nWorld");
+		let md =
+			serialize_skill_md("my-skill", "Does things", "# Hello\nWorld");
 		let (desc, body) = parse_skill_md(&md);
 		assert_eq!(desc, "Does things");
 		assert_eq!(body, "# Hello\nWorld");

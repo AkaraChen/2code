@@ -14,7 +14,7 @@ import HighlightExt from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
-import type { Extension} from "@tiptap/react";
+import type { Extension } from "@tiptap/react";
 import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -61,10 +61,7 @@ const RE_SPAN_END = /<\/span>/gi;
 const RE_P_EMPTY_NBSP = /<p>(\s|&nbsp;)*<\/p>/gi;
 
 const transformPastedText = (text: string) => {
-	return text
-		.replace(RE_CRLF, "\n")
-		.replace(RE_TRIPLE_NL, "\n\n")
-		.trim();
+	return text.replace(RE_CRLF, "\n").replace(RE_TRIPLE_NL, "\n\n").trim();
 };
 
 const transformPastedHTML = (html: string) => {
@@ -116,7 +113,8 @@ export const ChatInput = ({
 			snippetTriggerExt as Extension,
 			Placeholder.configure({
 				placeholder: ({ editor }) =>
-					(editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter?.expanded
+					(editor.storage as { submitOnEnter?: SubmitOnEnterStorage })
+						.submitOnEnter?.expanded
 						? m.agentChatPlaceholderSheet()
 						: m.agentChatPlaceholder(),
 			}),
@@ -129,11 +127,15 @@ export const ChatInput = ({
 		},
 	});
 
-	useImperativeHandle<Editor | null, Editor | null>(ref, () => editor as any, [
-		editor,
-	]);
+	useImperativeHandle<Editor | null, Editor | null>(
+		ref,
+		() => editor as any,
+		[editor],
+	);
 
-	const snippetStorage = (editor?.storage as { snippetTrigger?: SnippetTriggerStorage })?.snippetTrigger;
+	const snippetStorage = (
+		editor?.storage as { snippetTrigger?: SnippetTriggerStorage }
+	)?.snippetTrigger;
 	const isSnippetMenuOpen = !!snippetStorage?.active;
 	const snippetQuery = snippetStorage?.query ?? "";
 
@@ -168,8 +170,9 @@ export const ChatInput = ({
 		(snippet: Snippet) => {
 			if (!editor) return;
 
-			const storage = (editor.storage as { snippetTrigger?: SnippetTriggerStorage })
-				.snippetTrigger;
+			const storage = (
+				editor.storage as { snippetTrigger?: SnippetTriggerStorage }
+			).snippetTrigger;
 			if (!storage?.range) return;
 
 			editor
@@ -200,9 +203,10 @@ export const ChatInput = ({
 
 	useEffect(() => {
 		if (!editor) return;
-		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
+		const submitStore = (
+			editor.storage as { submitOnEnter?: SubmitOnEnterStorage }
+		).submitOnEnter;
 		if (submitStore) {
-			 
 			submitStore.onSend = onSend;
 			submitStore.disabled = disabled;
 		}
@@ -212,9 +216,10 @@ export const ChatInput = ({
 	// Sync expanded into storage, then trigger a transaction so Placeholder re-evaluates
 	useEffect(() => {
 		if (!editor) return;
-		const submitStore = (editor.storage as { submitOnEnter?: SubmitOnEnterStorage }).submitOnEnter;
+		const submitStore = (
+			editor.storage as { submitOnEnter?: SubmitOnEnterStorage }
+		).submitOnEnter;
 		if (submitStore) {
-			 
 			submitStore.expanded = expanded;
 		}
 		editor.view.dispatch(editor.view.state.tr);
@@ -223,15 +228,17 @@ export const ChatInput = ({
 	useEffect(() => {
 		if (editor) {
 			// Cast extensions to any to bypass the pnpm double-resolution type mismatch on Editor interfaces
-			(editor.extensionManager.extensions as any) = editor.extensionManager.extensions;
+			(editor.extensionManager.extensions as any) =
+				editor.extensionManager.extensions;
 		}
 	}, [editor]);
 
 	useEffect(() => {
 		if (!editor) return;
-		const snippetStore = (editor.storage as { snippetTrigger?: SnippetTriggerStorage }).snippetTrigger;
+		const snippetStore = (
+			editor.storage as { snippetTrigger?: SnippetTriggerStorage }
+		).snippetTrigger;
 		if (snippetStore) {
-			 
 			snippetStore.onMoveSelection = (direction: "up" | "down") => {
 				if (filteredSnippets.length === 0) return;
 

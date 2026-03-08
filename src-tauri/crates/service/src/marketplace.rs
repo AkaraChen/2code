@@ -1,7 +1,9 @@
 use diesel::SqliteConnection;
 
 use model::error::AppError;
-use model::marketplace::{AddMarketplaceAgentInput, MarketplaceAgent, RegistryAgentInfo};
+use model::marketplace::{
+	AddMarketplaceAgentInput, MarketplaceAgent, RegistryAgentInfo,
+};
 
 const REGISTRY_URL: &str =
 	"https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
@@ -30,14 +32,13 @@ pub async fn fetch_registry() -> Result<Vec<RegistryAgentInfo>, AppError> {
 		agents: Vec<CdnAgent>,
 	}
 
-	let response = reqwest::get(REGISTRY_URL)
-		.await
-		.map_err(|e| AppError::PtyError(format!("Registry fetch failed: {e}")))?;
+	let response = reqwest::get(REGISTRY_URL).await.map_err(|e| {
+		AppError::PtyError(format!("Registry fetch failed: {e}"))
+	})?;
 
-	let registry: RegistryResponse = response
-		.json()
-		.await
-		.map_err(|e| AppError::PtyError(format!("Registry parse failed: {e}")))?;
+	let registry: RegistryResponse = response.json().await.map_err(|e| {
+		AppError::PtyError(format!("Registry parse failed: {e}"))
+	})?;
 
 	let agents = registry
 		.agents

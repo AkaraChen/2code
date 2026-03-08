@@ -29,14 +29,20 @@ const shikiAdapter = createShikiAdapter<HighlighterGeneric<any, any>>({
 		// Wrap codeToHtml to silently fall back to plain text for unknown languages.
 		return new Proxy(hl, {
 			get(target, prop, receiver) {
-				if (prop !== "codeToHtml") return Reflect.get(target, prop, receiver);
+				if (prop !== "codeToHtml")
+					return Reflect.get(target, prop, receiver);
 				return (code: string, opts: any) => {
 					const lang = opts?.lang ?? "";
 					const safe =
 						lang === "text" ||
 						lang === "" ||
-						(target.getLoadedLanguages() as string[]).includes(lang);
-					return target.codeToHtml(code, safe ? opts : { ...opts, lang: "text" });
+						(target.getLoadedLanguages() as string[]).includes(
+							lang,
+						);
+					return target.codeToHtml(
+						code,
+						safe ? opts : { ...opts, lang: "text" },
+					);
 				};
 			},
 		});
@@ -78,7 +84,8 @@ export function MarkdownRenderer({
 			<ErrorBoundary
 				fallbackRender={({ error }) => (
 					<Box fontSize="xs" color="fg.error" px="1">
-						⚠ {error instanceof Error ? error.message : String(error)}
+						⚠{" "}
+						{error instanceof Error ? error.message : String(error)}
 					</Box>
 				)}
 			>

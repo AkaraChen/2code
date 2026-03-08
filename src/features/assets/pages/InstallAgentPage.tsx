@@ -18,7 +18,6 @@ import {
 import { MarketplaceQueryBoundary } from "../components/MarketplaceQueryBoundary";
 import { AgentCard } from "../components/AgentCard";
 
-
 function RegistryList() {
 	const { data: registry } = useRegistryAgents();
 	const { data: installedAgents } = useMarketplaceAgents();
@@ -53,11 +52,7 @@ function RegistryList() {
 	}
 
 	return (
-		<SimpleGrid
-			columns={{ base: 1, md: 2, lg: 3 }}
-			gap="4"
-			w="full"
-		>
+		<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4" w="full">
 			{registry.map((agent) => (
 				<Box key={agent.id} display="flex" flexDirection="column">
 					<AgentCard
@@ -70,17 +65,35 @@ function RegistryList() {
 						action={
 							<Button
 								size="xs"
-								variant={installedIds.has(agent.id) ? "subtle" : "solid"}
-								colorPalette={installedIds.has(agent.id) ? "gray" : undefined}
-								disabled={installedIds.has(agent.id) || (addMutation.isPending && addMutation.variables?.id === agent.id)}
-								loading={addMutation.isPending && addMutation.variables?.id === agent.id}
+								variant={
+									installedIds.has(agent.id)
+										? "subtle"
+										: "solid"
+								}
+								colorPalette={
+									installedIds.has(agent.id)
+										? "gray"
+										: undefined
+								}
+								disabled={
+									installedIds.has(agent.id) ||
+									(addMutation.isPending &&
+										addMutation.variables?.id === agent.id)
+								}
+								loading={
+									addMutation.isPending &&
+									addMutation.variables?.id === agent.id
+								}
 								onClick={(e) => {
 									e.preventDefault();
 									e.stopPropagation();
-									!installedIds.has(agent.id) && handleAdd(agent);
+									!installedIds.has(agent.id) &&
+										handleAdd(agent);
 								}}
 							>
-								{installedIds.has(agent.id) ? m.marketplaceAdded() : m.marketplaceAdd()}
+								{installedIds.has(agent.id)
+									? m.marketplaceAdded()
+									: m.marketplaceAdd()}
 							</Button>
 						}
 					/>

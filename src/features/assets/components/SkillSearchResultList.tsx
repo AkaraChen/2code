@@ -16,10 +16,10 @@ export function SkillSearchResultList({
 		return (
 			<SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap="4" w="full">
 				{Array.from({ length: 6 }).map((_, i) => (
-					<Box 
-						key={i} 
+					<Box
+						key={i}
 						p="4"
-						borderWidth="1px" 
+						borderWidth="1px"
 						borderColor="border.subtle"
 						rounded="md"
 					>

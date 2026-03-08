@@ -87,8 +87,7 @@ impl AgentSession {
 		);
 
 		let runtime = Arc::new(
-			AcpClient::spawn_with_timeout(program, args, env, timeout)
-				.await?,
+			AcpClient::spawn_with_timeout(program, args, env, timeout).await?,
 		);
 		let id = uuid::Uuid::new_v4().to_string();
 

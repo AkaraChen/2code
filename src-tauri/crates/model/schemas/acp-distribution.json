@@ -1,47 +1,56 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Distribution",
-  "description": "ACP agent distribution specification (extracted from agent.schema.json).",
-  "type": "object",
-  "properties": {
-    "binary": { "$ref": "#/definitions/BinaryDistribution" },
-    "npx":    { "$ref": "#/definitions/PackageDistribution" },
-    "uvx":    { "$ref": "#/definitions/PackageDistribution" }
-  },
-  "additionalProperties": false,
-  "definitions": {
-    "BinaryDistribution": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": { "$ref": "#/definitions/BinaryTarget" },
-      "propertyNames": {
-        "enum": [
-          "darwin-aarch64", "darwin-x86_64",
-          "linux-aarch64",  "linux-x86_64",
-          "windows-aarch64","windows-x86_64"
-        ]
-      }
-    },
-    "BinaryTarget": {
-      "type": "object",
-      "required": ["archive", "cmd"],
-      "properties": {
-        "archive": { "type": "string" },
-        "cmd":     { "type": "string" },
-        "args":    { "type": "array", "items": { "type": "string" } },
-        "env":     { "type": "object", "additionalProperties": { "type": "string" } }
-      },
-      "additionalProperties": false
-    },
-    "PackageDistribution": {
-      "type": "object",
-      "required": ["package"],
-      "properties": {
-        "package": { "type": "string" },
-        "args":    { "type": "array", "items": { "type": "string" } },
-        "env":     { "type": "object", "additionalProperties": { "type": "string" } }
-      },
-      "additionalProperties": false
-    }
-  }
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Distribution",
+	"description": "ACP agent distribution specification (extracted from agent.schema.json).",
+	"type": "object",
+	"properties": {
+		"binary": { "$ref": "#/definitions/BinaryDistribution" },
+		"npx": { "$ref": "#/definitions/PackageDistribution" },
+		"uvx": { "$ref": "#/definitions/PackageDistribution" }
+	},
+	"additionalProperties": false,
+	"definitions": {
+		"BinaryDistribution": {
+			"type": "object",
+			"minProperties": 1,
+			"additionalProperties": { "$ref": "#/definitions/BinaryTarget" },
+			"propertyNames": {
+				"enum": [
+					"darwin-aarch64",
+					"darwin-x86_64",
+					"linux-aarch64",
+					"linux-x86_64",
+					"windows-aarch64",
+					"windows-x86_64"
+				]
+			}
+		},
+		"BinaryTarget": {
+			"type": "object",
+			"required": ["archive", "cmd"],
+			"properties": {
+				"archive": { "type": "string" },
+				"cmd": { "type": "string" },
+				"args": { "type": "array", "items": { "type": "string" } },
+				"env": {
+					"type": "object",
+					"additionalProperties": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"PackageDistribution": {
+			"type": "object",
+			"required": ["package"],
+			"properties": {
+				"package": { "type": "string" },
+				"args": { "type": "array", "items": { "type": "string" } },
+				"env": {
+					"type": "object",
+					"additionalProperties": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		}
+	}
 }
