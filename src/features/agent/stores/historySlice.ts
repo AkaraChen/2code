@@ -85,7 +85,7 @@ export const createHistorySlice: StateCreator<
 				if (userMessage || agentContent.length > 0) {
 					const timestamp = userEvent?.created_at
 						? userEvent.created_at * 1000
-						: agentEvents[agentEvents.length - 1]?.created_at *
+						: agentEvents.at(-1)?.created_at *
 								1000 || Date.now();
 
 					session.turns.push({

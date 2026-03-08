@@ -1,16 +1,13 @@
 import { Badge, Button, Card, HStack, Stack, Text } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
+import numeral from "numeral";
 import { RiDownloadLine } from "react-icons/ri";
 import { useInstallSkill } from "@/features/assets/hooks/useSkills";
 import type { SearchSkillResult } from "@/generated/types";
 
 function formatInstalls(count: number): string {
 	if (!count || count <= 0) return "";
-	if (count >= 1_000_000)
-		return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-	if (count >= 1_000)
-		return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-	return String(count);
+	return numeral(count).format("0.[0]a").toUpperCase();
 }
 
 export function SkillSearchResultCard({
