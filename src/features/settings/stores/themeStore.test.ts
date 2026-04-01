@@ -7,7 +7,7 @@ import {
 } from "./themeStore";
 
 function resetStore() {
-	useThemeStore.setState({ accentColor: "blue", borderRadius: "sm" });
+	useThemeStore.setState({ accentColor: "gray", borderRadius: "sm" });
 	localStorage.clear();
 }
 
@@ -54,8 +54,8 @@ describe("useThemeStore", () => {
 	beforeEach(resetStore);
 
 	describe("initial state", () => {
-		it("accentColor defaults to 'blue'", () => {
-			expect(getState().accentColor).toBe("blue");
+		it("accentColor defaults to 'gray'", () => {
+			expect(getState().accentColor).toBe("gray");
 		});
 
 		it("borderRadius defaults to 'sm'", () => {

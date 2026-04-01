@@ -49,7 +49,7 @@ export const BORDER_RADIUS_MAP: Record<
 export const useThemeStore = create<ThemeStore>()(
 	persist(
 		(set) => ({
-			accentColor: "blue",
+			accentColor: "gray",
 			borderRadius: "sm",
 			setAccentColor: (color) => set({ accentColor: color }),
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
