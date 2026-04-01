@@ -102,5 +102,9 @@
 	"agentAcpBridge": "ACP Bridge",
 	"agentNativeNotRequired": "Not required",
 	"agentApiKey": "API Key",
-	"agentOAuth": "OAuth"
+	"agentOAuth": "OAuth",
+	"onboardingTourTitle": "Create your first project",
+	"onboardingTourDesc": "Click here to add a project folder and get started.",
+	"emptyProjectsTitle": "No projects yet",
+	"emptyProjectsDesc": "Create your first project from the sidebar to get started."
 }

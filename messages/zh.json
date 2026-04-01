@@ -102,5 +102,9 @@
 	"agentAcpBridge": "ACP 桥接",
 	"agentNativeNotRequired": "不需要",
 	"agentApiKey": "API 密钥",
-	"agentOAuth": "OAuth"
+	"agentOAuth": "OAuth",
+	"onboardingTourTitle": "创建你的第一个项目",
+	"onboardingTourDesc": "点击此处添加项目文件夹并开始。",
+	"emptyProjectsTitle": "暂无项目",
+	"emptyProjectsDesc": "从侧边栏创建你的第一个项目以开始使用。"
 }

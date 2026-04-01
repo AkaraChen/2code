@@ -72,6 +72,7 @@ export default function AppSidebar() {
 							{m.projects()}
 						</Text>
 						<IconButton
+							id="add-project-button"
 							aria-label={m.newProject()}
 							variant="ghost"
 							size="2xs"
