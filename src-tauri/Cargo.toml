@@ -43,7 +43,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [ "env-filter" ] }
 axum = "0.8"
 tokio = { version = "1", features = [ "net" ] }
-fix-path-env = "0.1"
+fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 [dev-dependencies]
 diesel = { version = "2", features = ["sqlite"] }
