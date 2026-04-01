@@ -12,6 +12,7 @@ import {
 	listProjects,
 	updateProject,
 } from "@/generated";
+import type { ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 export function useProjects() {
@@ -41,7 +42,9 @@ export function useProjectProfiles(projectId: string) {
 	);
 }
 
-export function useCreateProject() {
+export function useCreateProject(options?: {
+	onSuccess?: (project: ProjectWithProfiles) => void;
+}) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: async (opts?: { name?: string; folder?: string }) => {
@@ -54,8 +57,14 @@ export function useCreateProject() {
 			}
 			return createProjectTemporary({ name: opts?.name });
 		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+		onSuccess: async (project) => {
+			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+			await queryClient.refetchQueries({ queryKey: queryKeys.projects.all });
+			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all);
+			const createdProject = projects?.find((p) => p.id === project.id);
+			if (createdProject) {
+				options?.onSuccess?.(createdProject);
+			}
 		},
 	});
 }

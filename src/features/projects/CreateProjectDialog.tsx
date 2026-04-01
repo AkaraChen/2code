@@ -38,9 +38,7 @@ export default function CreateProjectDialog({
 	const form = useForm<FormValues>({
 		defaultValues: { name: "", folder: null },
 	});
-	const createProject = useCreateProject();
 	const navigate = useNavigate();
-
 	const folder = useWatch({ control: form.control, name: "folder" });
 
 	const handleClose = () => {
@@ -58,8 +56,18 @@ export default function CreateProjectDialog({
 		}
 	};
 
+	const createProject = useCreateProject({
+		onSuccess: (project) => {
+			handleClose();
+			if (project.profiles.length > 0) {
+				const defaultProfile = project.profiles[0];
+				navigate(`/projects/${project.id}/profiles/${defaultProfile.id}`);
+			}
+		},
+	});
+
 	const handleCreate = form.handleSubmit(async (data) => {
-		const project = await createProject.mutateAsync(
+		await createProject.mutateAsync(
 			data.name || data.folder
 				? {
 						name: data.name || undefined,
@@ -67,8 +75,6 @@ export default function CreateProjectDialog({
 					}
 				: undefined,
 		);
-		handleClose();
-		navigate(`/projects/${project.id}`);
 	});
 
 	return (
