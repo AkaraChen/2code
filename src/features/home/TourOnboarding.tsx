@@ -17,15 +17,28 @@ export function TourOnboarding({ isEnabled }: TourOnboardingProps) {
 			showButtons: ["close"],
 			popoverClass: "driver-popover-theme",
 			steps: [
-				{
-					element: "#add-project-button",
-					popover: {
-						title: m.onboardingTourTitle(),
-						description: m.onboardingTourDesc(),
-						side: "right",
-						align: "start",
+					{
+						element: "#add-project-button",
+						popover: {
+							title: m.onboardingTourTitle(),
+							description: m.onboardingTourDesc(),
+							side: "right",
+							align: "start",
+						},
+						onHighlighted: () => {
+							const target = document.querySelector("#add-project-button");
+							if (target) {
+								target.addEventListener(
+									"click",
+									() => {
+										d.destroy();
+									},
+									{ once: true },
+								);
+							}
+						}
 					},
-				},
+
 			],
 		});
 		return d;
