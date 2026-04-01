@@ -40,30 +40,33 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 				onValueChange={(e) => setActiveTab(profileId, e.value)}
 			>
 				<Tabs.List>
-					{tabs.map((tab) => (
-						<Tabs.Trigger key={tab.id} value={tab.id}>
-							<RiTerminalBoxLine />
-							<HStack gap="2">
-								{tab.title}
-								{notifiedTabs.has(tab.id) &&
-									tab.id !== activeTabId && (
-										<Circle size="2" bg="green.500" />
-									)}
-								<CloseButton
-									as="span"
-									role="button"
-									size="2xs"
-									onClick={(e) => {
-										e.stopPropagation();
-										closeTab.mutate({
-											profileId,
-											sessionId: tab.id,
-										});
-									}}
-								/>
-							</HStack>
-						</Tabs.Trigger>
-					))}
+					{tabs.map((tab) => {
+						const displayTitle = tab.title.length > 10 ? `${tab.title.slice(0, 10)}...` : tab.title;
+						return (
+							<Tabs.Trigger key={tab.id} value={tab.id}>
+								<RiTerminalBoxLine />
+								<HStack gap="2">
+									{displayTitle}
+									{notifiedTabs.has(tab.id) &&
+										tab.id !== activeTabId && (
+											<Circle size="2" bg="green.500" />
+										)}
+									<CloseButton
+										as="span"
+										role="button"
+										size="2xs"
+										onClick={(e) => {
+											e.stopPropagation();
+											closeTab.mutate({
+												profileId,
+												sessionId: tab.id,
+											});
+										}}
+									/>
+								</HStack>
+							</Tabs.Trigger>
+						);
+					})}
 					<Button
 						alignSelf="center"
 						ms="2"
