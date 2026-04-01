@@ -4,6 +4,10 @@ mod helper;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+	// Fix PATH when launched from GUI (macOS Finder / Dock) so shell
+	// profiles (e.g. .zshrc) are reflected in the app environment.
+	let _ = fix_path_env::fix();
+
 	// Initialize tracing subscriber with console output + channel layer
 	let (channel_layer, layer_handle) = infra::logger::ChannelLayer::new();
 	{
