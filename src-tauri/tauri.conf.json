@@ -22,14 +22,16 @@
     ]
   },
   "build": {
-    "beforeBuildCommand": "just build-helper && bun run build",
-    "beforeDevCommand": "just build-helper-dev && bun run dev",
+    "beforeBuildCommand": "just build-helper \u0026\u0026 bun run build",
+    "beforeDevCommand": "just build-helper-dev \u0026\u0026 bun run dev",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
-    "externalBin": ["binaries/2code-helper"],
+    "externalBin": [
+      "binaries/2code-helper"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -55,5 +57,5 @@
     }
   },
   "productName": "two-code",
-  "version": "1.0.0"
+  "version": "1.1.0"
 }
