@@ -2,7 +2,7 @@ import { Circle, HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
 import { RiGitBranchLine } from "react-icons/ri";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
-import { useProfileHasNotification } from "@/features/terminal/store";
+import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -18,6 +18,7 @@ export function ProfileItem({
 }) {
 	const deleteDialog = useDialogState();
 	const hasNotification = useProfileHasNotification(profile.id);
+	const markProfileRead = useTerminalStore((s) => s.markProfileRead);
 
 	return (
 		<>
@@ -38,6 +39,7 @@ export function ProfileItem({
 					>
 						<NavLink
 							to={`/projects/${projectId}/profiles/${profile.id}`}
+							onClick={() => markProfileRead(profile.id)}
 						>
 							<Icon fontSize="xs" color="fg.muted">
 								<RiGitBranchLine />

@@ -28,6 +28,7 @@ interface TerminalStore {
 	removeStaleProfiles: (validIds: Set<string>) => void;
 	markNotified: (sessionId: string) => void;
 	markRead: (sessionId: string) => void;
+	markProfileRead: (profileId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>()(
@@ -114,6 +115,14 @@ export const useTerminalStore = create<TerminalStore>()(
 		markRead(sessionId) {
 			set((state) => {
 				state.notifiedTabs.delete(sessionId);
+			});
+		},
+
+		markProfileRead(profileId) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				profile.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
 			});
 		},
 	})),
