@@ -100,6 +100,19 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
 
+			// Auto-focus when terminal becomes visible (profile switch)
+			const intersectionObserver = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[0];
+					if (entry.isIntersecting && termRef.current) {
+						termRef.current.focus();
+					}
+				},
+				{ threshold: 0.1 }
+			);
+			intersectionObserver.observe(container);
+			unlisteners.push(() => intersectionObserver.disconnect());
+
 			// Resize PTY to match xterm dimensions
 			resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
