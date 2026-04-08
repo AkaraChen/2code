@@ -52,6 +52,20 @@ function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	);
 }
 
+function VisibleBox({
+	visible,
+	children,
+}: {
+	visible: boolean;
+	children: React.ReactNode;
+}) {
+	return (
+		<Box flex="1" display={visible ? "flex" : "none"}>
+			{children}
+		</Box>
+	);
+}
+
 interface GitDiffDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -358,7 +372,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 			: null;
 
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<VisibleBox visible={visible}>
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
@@ -368,7 +382,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 						: m.selectFileToView()
 				}
 			/>
-		</Box>
+		</VisibleBox>
 	);
 }
 
@@ -447,13 +461,13 @@ function HistoryDiffPane({ visible }: { visible: boolean }) {
 
 	if (!state.selectedCommit) {
 		return (
-			<Box flex="1" display={visible ? "flex" : "none"}>
+			<VisibleBox visible={visible}>
 				<GitDiffPane
 					activeFile={null}
 					options={options}
 					emptyMessage={m.selectFileToView()}
 				/>
-			</Box>
+			</VisibleBox>
 		);
 	}
 
@@ -470,12 +484,12 @@ function CommitDiffViewer({ visible }: { visible: boolean }) {
 			: null;
 
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<VisibleBox visible={visible}>
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
 				emptyMessage={m.selectFileToView()}
 			/>
-		</Box>
+		</VisibleBox>
 	);
 }
