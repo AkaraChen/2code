@@ -44,6 +44,28 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-light": "one-light",
 };
 
+function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
+	return (
+		<Flex flex="1" align="center" justify="center">
+			<Spinner size={size} color="colorPalette.500" />
+		</Flex>
+	);
+}
+
+function VisibleBox({
+	visible,
+	children,
+}: {
+	visible: boolean;
+	children: React.ReactNode;
+}) {
+	return (
+		<Box flex="1" display={visible ? "flex" : "none"}>
+			{children}
+		</Box>
+	);
+}
+
 interface GitDiffDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -95,13 +117,7 @@ export default function GitDiffDialog({
 							overflow="hidden"
 							display="flex"
 						>
-							<Suspense
-								fallback={
-									<Flex flex="1" align="center" justify="center">
-										<Spinner size="md" color="colorPalette.500" />
-									</Flex>
-								}
-							>
+							<Suspense fallback={<LoadingSpinner />}>
 								<GitDiffContent profileId={profileId} />
 							</Suspense>
 						</Dialog.Body>
@@ -281,13 +297,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense
-									fallback={
-										<Flex flex="1" align="center" justify="center">
-											<Spinner size="sm" color="colorPalette.500" />
-										</Flex>
-									}
-								>
+								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<ChangesSidebar />
 								</Suspense>
 							</Box>
@@ -301,13 +311,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense
-									fallback={
-										<Flex flex="1" align="center" justify="center">
-											<Spinner size="sm" color="colorPalette.500" />
-										</Flex>
-									}
-								>
+								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<HistorySidebar />
 								</Suspense>
 							</Box>
@@ -317,25 +321,13 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 
 				{/* Pane column */}
 				<Activity mode={isChanges ? "visible" : "hidden"}>
-					<Suspense
-						fallback={
-							<Flex flex="1" align="center" justify="center">
-								<Spinner size="md" color="colorPalette.500" />
-							</Flex>
-						}
-					>
+					<Suspense fallback={<LoadingSpinner />}>
 						<ChangesDiffPane visible={isChanges} />
 					</Suspense>
 				</Activity>
 
 				<Activity mode={!isChanges ? "visible" : "hidden"}>
-					<Suspense
-						fallback={
-							<Flex flex="1" align="center" justify="center">
-								<Spinner size="md" color="colorPalette.500" />
-							</Flex>
-						}
-					>
+					<Suspense fallback={<LoadingSpinner />}>
 						<HistoryDiffPane visible={!isChanges} />
 					</Suspense>
 				</Activity>
@@ -380,7 +372,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 			: null;
 
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<VisibleBox visible={visible}>
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
@@ -390,7 +382,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 						: m.selectFileToView()
 				}
 			/>
-		</Box>
+		</VisibleBox>
 	);
 }
 
@@ -469,13 +461,13 @@ function HistoryDiffPane({ visible }: { visible: boolean }) {
 
 	if (!state.selectedCommit) {
 		return (
-			<Box flex="1" display={visible ? "flex" : "none"}>
+			<VisibleBox visible={visible}>
 				<GitDiffPane
 					activeFile={null}
 					options={options}
 					emptyMessage={m.selectFileToView()}
 				/>
-			</Box>
+			</VisibleBox>
 		);
 	}
 
@@ -492,12 +484,12 @@ function CommitDiffViewer({ visible }: { visible: boolean }) {
 			: null;
 
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<VisibleBox visible={visible}>
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
 				emptyMessage={m.selectFileToView()}
 			/>
-		</Box>
+		</VisibleBox>
 	);
 }
