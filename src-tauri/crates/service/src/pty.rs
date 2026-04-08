@@ -41,14 +41,116 @@ pub struct PtyContext {
 
 const VT100_SCROLLBACK: usize = 10000;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AltScreenTransition {
+	Enter,
+	Exit,
+}
+
+fn is_alt_screen_mode(param: usize) -> bool {
+	matches!(param, 47 | 1047 | 1049)
+}
+
+/// Remove bytes rendered inside the terminal alternate screen so restores only
+/// replay normal-screen state.
+fn strip_alternative_screen(raw: &[u8]) -> Vec<u8> {
+	let mut output = Vec::with_capacity(raw.len());
+	let mut i = 0;
+	let mut in_alt_screen = false;
+	let mut saw_alt_transition = false;
+
+	while i < raw.len() {
+		if let Some((len, transition)) = parse_alt_screen_transition(&raw[i..])
+		{
+			if matches!(transition, AltScreenTransition::Exit)
+				&& !in_alt_screen
+				&& !saw_alt_transition
+			{
+				// The persisted buffer may start mid-alt-screen after 1MB trimming.
+				// In that case, everything before the first unmatched exit belongs
+				// to the alternate screen as well.
+				output.clear();
+			}
+
+			saw_alt_transition = true;
+			in_alt_screen = matches!(transition, AltScreenTransition::Enter);
+			i += len;
+			continue;
+		}
+
+		if !in_alt_screen {
+			output.push(raw[i]);
+		}
+		i += 1;
+	}
+
+	output
+}
+
+fn parse_alt_screen_transition(
+	bytes: &[u8],
+) -> Option<(usize, AltScreenTransition)> {
+	if bytes.len() < 5
+		|| bytes[0] != 0x1b
+		|| bytes[1] != b'['
+		|| bytes[2] != b'?'
+	{
+		return None;
+	}
+
+	let mut i = 3;
+	let mut current_param = 0usize;
+	let mut saw_digit = false;
+	let mut has_alt_param = false;
+
+	while i < bytes.len() {
+		match bytes[i] {
+			b'0'..=b'9' => {
+				saw_digit = true;
+				current_param =
+					current_param * 10 + usize::from(bytes[i] - b'0');
+				i += 1;
+			}
+			b';' => {
+				if !saw_digit {
+					return None;
+				}
+				has_alt_param |= is_alt_screen_mode(current_param);
+				current_param = 0;
+				saw_digit = false;
+				i += 1;
+			}
+			b'h' | b'l' => {
+				if !saw_digit {
+					return None;
+				}
+				has_alt_param |= is_alt_screen_mode(current_param);
+				if !has_alt_param {
+					return None;
+				}
+				let transition = if bytes[i] == b'h' {
+					AltScreenTransition::Enter
+				} else {
+					AltScreenTransition::Exit
+				};
+				return Some((i + 1, transition));
+			}
+			_ => return None,
+		}
+	}
+
+	None
+}
+
 /// Process raw terminal history through a virtual terminal emulator
 /// to produce clean output (text + colors, no cursor positioning).
 fn sanitize_history(raw: &[u8], rows: u16, cols: u16) -> Vec<u8> {
 	if raw.is_empty() {
 		return Vec::new();
 	}
+	let raw = strip_alternative_screen(raw);
 	let mut parser = vt100::Parser::new(rows, cols, VT100_SCROLLBACK);
-	parser.process(raw);
+	parser.process(&raw);
 	serialize_screen(&mut parser)
 }
 
@@ -820,6 +922,45 @@ mod tests {
 		assert!(
 			!text.contains("alt screen content"),
 			"Should not contain alt screen content, got: {:?}",
+			text
+		);
+	}
+
+	#[test]
+	fn sanitize_alt_screen_active_is_dropped() {
+		let mut input = Vec::new();
+		input.extend_from_slice(b"normal before\r\n");
+		input.extend_from_slice(b"\x1b[?1049h");
+		input.extend_from_slice(b"alt screen content");
+
+		let result = sanitize_history(&input, 24, 80);
+		let text = strip_ansi(&result);
+		assert!(
+			text.contains("normal before"),
+			"Expected 'normal before', got: {:?}",
+			text
+		);
+		assert!(
+			!text.contains("alt screen content"),
+			"Should not contain active alt screen content, got: {:?}",
+			text
+		);
+	}
+
+	#[test]
+	fn sanitize_alt_screen_truncated_history_drops_prefix_until_exit() {
+		let input = b"alt screen content\x1b[?1049lnormal after";
+
+		let result = sanitize_history(input, 24, 80);
+		let text = strip_ansi(&result);
+		assert!(
+			text.contains("normal after"),
+			"Expected 'normal after', got: {:?}",
+			text
+		);
+		assert!(
+			!text.contains("alt screen content"),
+			"Should not contain truncated alt screen content, got: {:?}",
 			text
 		);
 	}
