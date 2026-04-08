@@ -2,12 +2,14 @@ import { Box, Flex } from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { use, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
+import { useKey } from "rooks";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { restorationPromise } from "./state";
-import { useTerminalProfileIds } from "./store";
+import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
+import { useTerminalProfileIds, useTerminalStore } from "./store";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -20,6 +22,8 @@ export default function TerminalLayer() {
 	});
 
 	const terminalProfileIds = useTerminalProfileIds();
+	const createTab = useCreateTerminalTab();
+	const closeTab = useCloseTerminalTab();
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -47,6 +51,22 @@ export default function TerminalLayer() {
 		location.pathname,
 	);
 	const activeProfileId = profileMatch?.params.profileId ?? null;
+
+	useKey(["t"], (e) => {
+		if (!e.metaKey || !activeProfileId) return;
+		e.preventDefault();
+		const profile = profileMap.get(activeProfileId);
+		if (!profile) return;
+		createTab.mutate({ profileId: activeProfileId, cwd: profile.worktree_path });
+	}, { target: window });
+
+	useKey(["w"], (e) => {
+		if (!e.metaKey || !activeProfileId) return;
+		e.preventDefault();
+		const profileState = useTerminalStore.getState().profiles[activeProfileId];
+		if (!profileState?.activeTabId) return;
+		closeTab.mutate({ profileId: activeProfileId, sessionId: profileState.activeTabId });
+	}, { target: window });
 
 	return (
 		<>
