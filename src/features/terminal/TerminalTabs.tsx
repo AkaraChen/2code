@@ -41,7 +41,10 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 			>
 				<Tabs.List>
 					{tabs.map((tab) => {
-						const displayTitle = tab.title.length > 10 ? `${tab.title.slice(0, 10)}...` : tab.title;
+						const displayTitle =
+							tab.title.length > 10
+								? `${tab.title.slice(0, 10)}...`
+								: tab.title;
 						return (
 							<Tabs.Trigger key={tab.id} value={tab.id}>
 								<RiTerminalBoxLine />
@@ -87,9 +90,17 @@ export default function TerminalTabs({ profileId, cwd }: TerminalTabsProps) {
 						key={tab.id}
 						position="absolute"
 						inset="0"
-						display={tab.id === activeTabId ? "block" : "none"}
+						visibility={
+							tab.id === activeTabId ? "visible" : "hidden"
+						}
+						pointerEvents={tab.id === activeTabId ? "auto" : "none"}
+						aria-hidden={tab.id !== activeTabId}
 					>
-						<Terminal profileId={profileId} sessionId={tab.id} />
+						<Terminal
+							profileId={profileId}
+							sessionId={tab.id}
+							isActive={tab.id === activeTabId}
+						/>
 					</Box>
 				))}
 			</Box>

@@ -16,13 +16,15 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalProps {
 	profileId: string;
 	sessionId: string;
+	isActive: boolean;
 }
 
-export function Terminal({ profileId, sessionId }: TerminalProps) {
+export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const isStreamReadyRef = useRef(false);
 	const pendingEventsRef = useRef<string[]>([]);
+	const layoutFrameRef = useRef<number | null>(null);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const theme = useTerminalTheme();
@@ -31,37 +33,105 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 	const initFontSizeRef = useRef(fontSize);
 	const initThemeRef = useRef(theme);
 
-	// Update theme without re-mounting the terminal
+	const syncTerminalLayout = useCallback((delayFrames = 0) => {
+		if (layoutFrameRef.current !== null) {
+			window.cancelAnimationFrame(layoutFrameRef.current);
+		}
+
+		let remainingFrames = delayFrames;
+		const tick = () => {
+			if (remainingFrames > 0) {
+				remainingFrames -= 1;
+				layoutFrameRef.current = window.requestAnimationFrame(tick);
+				return;
+			}
+
+			layoutFrameRef.current = null;
+
+			const term = termRef.current;
+			const fitAddon = fitAddonRef.current;
+			if (!term || !fitAddon) return;
+
+			const nextDimensions = fitAddon.proposeDimensions();
+			if (
+				nextDimensions &&
+				(nextDimensions.cols !== term.cols || nextDimensions.rows !== term.rows)
+			) {
+				fitAddon.fit();
+				return;
+			}
+
+			if (term.rows > 0) {
+				term.refresh(0, term.rows - 1);
+			}
+		};
+
+		layoutFrameRef.current = window.requestAnimationFrame(tick);
+	}, []);
+
 	useEffect(() => {
 		if (termRef.current) {
 			termRef.current.options.theme = theme;
+			syncTerminalLayout();
 		}
-	}, [theme]);
+	}, [syncTerminalLayout, theme]);
 
-	// Update font family without re-mounting the terminal
 	useEffect(() => {
-		if (termRef.current) {
-			termRef.current.options.fontFamily = `"${fontFamily}", monospace`;
-			fitAddonRef.current?.fit();
-		}
-	}, [fontFamily]);
+		const term = termRef.current;
+		if (!term) return;
 
-	// Update font size without re-mounting the terminal
+		term.options.fontFamily = `"${fontFamily}", monospace`;
+		term.options.fontSize = fontSize;
+		syncTerminalLayout(1);
+
+		if (!("fonts" in document)) return;
+
+		let cancelled = false;
+		void Promise.allSettled([
+			document.fonts.load(`${fontSize}px "${fontFamily}"`),
+			document.fonts.ready,
+		]).then(() => {
+			if (!cancelled) {
+				syncTerminalLayout(1);
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [fontFamily, fontSize, syncTerminalLayout]);
+
 	useEffect(() => {
-		if (termRef.current) {
-			termRef.current.options.fontSize = fontSize;
-			fitAddonRef.current?.fit();
-		}
-	}, [fontSize]);
+		if (!isActive || !termRef.current) return;
 
-	const containerStyle = useMemo(
+		syncTerminalLayout(2);
+		const focusFrame = window.requestAnimationFrame(() => {
+			termRef.current?.focus();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(focusFrame);
+		};
+	}, [isActive, syncTerminalLayout]);
+
+	useEffect(() => {
+		return () => {
+			if (layoutFrameRef.current !== null) {
+				window.cancelAnimationFrame(layoutFrameRef.current);
+			}
+		};
+	}, []);
+
+	const shellStyle = useMemo(
 		() => ({
+			display: "flex",
 			width: "100%",
 			height: "100%",
 			padding: "8px 0 0 8px",
 			background: theme.background,
 			border: "0.5px solid var(--chakra-colors-border-subtle)",
 			boxSizing: "border-box" as const,
+			overflow: "hidden",
 		}),
 		[theme.background],
 	);
@@ -95,23 +165,10 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 			term.loadAddon(webLinksAddon);
 
 			term.open(container);
-			fitAddon.fit();
-
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
-
-			// Auto-focus when terminal becomes visible (profile switch)
-			const intersectionObserver = new IntersectionObserver(
-				(entries) => {
-					const entry = entries[0];
-					if (entry.isIntersecting && termRef.current) {
-						termRef.current.focus();
-					}
-				},
-				{ threshold: 0.1 }
-			);
-			intersectionObserver.observe(container);
-			unlisteners.push(() => intersectionObserver.disconnect());
+			fitAddon.fit();
+			syncTerminalLayout(1);
 
 			// Resize PTY to match xterm dimensions
 			resizePty({ sessionId, rows: term.rows, cols: term.cols });
@@ -189,7 +246,7 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 					entry.contentRect.width > 0 &&
 					entry.contentRect.height > 0
 				) {
-					fitAddon.fit();
+					syncTerminalLayout();
 				}
 			});
 			resizeObserver.observe(container);
@@ -215,8 +272,12 @@ export function Terminal({ profileId, sessionId }: TerminalProps) {
 				fitAddonRef.current = null;
 			};
 		},
-		[profileId, sessionId],
+		[profileId, sessionId, syncTerminalLayout],
 	);
 
-	return <div ref={terminalRef} style={containerStyle} />;
+	return (
+		<div style={shellStyle}>
+			<div ref={terminalRef} style={{ flex: 1, minWidth: 0, minHeight: 0 }} />
+		</div>
+	);
 }
