@@ -44,6 +44,14 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-light": "one-light",
 };
 
+function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
+	return (
+		<Flex flex="1" align="center" justify="center">
+			<Spinner size={size} color="colorPalette.500" />
+		</Flex>
+	);
+}
+
 interface GitDiffDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -95,13 +103,7 @@ export default function GitDiffDialog({
 							overflow="hidden"
 							display="flex"
 						>
-							<Suspense
-								fallback={
-									<Flex flex="1" align="center" justify="center">
-										<Spinner size="md" color="colorPalette.500" />
-									</Flex>
-								}
-							>
+							<Suspense fallback={<LoadingSpinner />}>
 								<GitDiffContent profileId={profileId} />
 							</Suspense>
 						</Dialog.Body>
@@ -281,13 +283,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense
-									fallback={
-										<Flex flex="1" align="center" justify="center">
-											<Spinner size="sm" color="colorPalette.500" />
-										</Flex>
-									}
-								>
+								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<ChangesSidebar />
 								</Suspense>
 							</Box>
@@ -301,13 +297,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense
-									fallback={
-										<Flex flex="1" align="center" justify="center">
-											<Spinner size="sm" color="colorPalette.500" />
-										</Flex>
-									}
-								>
+								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<HistorySidebar />
 								</Suspense>
 							</Box>
@@ -317,25 +307,13 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 
 				{/* Pane column */}
 				<Activity mode={isChanges ? "visible" : "hidden"}>
-					<Suspense
-						fallback={
-							<Flex flex="1" align="center" justify="center">
-								<Spinner size="md" color="colorPalette.500" />
-							</Flex>
-						}
-					>
+					<Suspense fallback={<LoadingSpinner />}>
 						<ChangesDiffPane visible={isChanges} />
 					</Suspense>
 				</Activity>
 
 				<Activity mode={!isChanges ? "visible" : "hidden"}>
-					<Suspense
-						fallback={
-							<Flex flex="1" align="center" justify="center">
-								<Spinner size="md" color="colorPalette.500" />
-							</Flex>
-						}
-					>
+					<Suspense fallback={<LoadingSpinner />}>
 						<HistoryDiffPane visible={!isChanges} />
 					</Suspense>
 				</Activity>

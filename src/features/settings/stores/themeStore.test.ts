@@ -14,7 +14,7 @@ function getState() {
 	return useThemeStore.getState();
 }
 
-describe("BORDER_RADIUS_MAP", () => {
+describe("bORDER_RADIUS_MAP", () => {
 	it("contains entries for all BorderRadius values", () => {
 		const keys: BorderRadius[] = ["none", "sm", "md", "lg", "xl"];
 		for (const key of keys) {
