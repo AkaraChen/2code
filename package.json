@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide && tsc && vite build",
+    "open:dmg": "bash ./scripts/open-dmg.sh",
     "preview": "vite preview",
     "tauri": "tauri",
     "start": "tauri dev",
