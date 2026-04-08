@@ -7,13 +7,16 @@ use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use service::pty::PtyFlushSenders;
 
 #[tauri::command]
-pub fn create_pty_session(
+pub async fn create_pty_session(
 	app: AppHandle,
 	meta: PtySessionMeta,
 	config: PtyConfig,
 ) -> Result<String, AppError> {
 	let ctx = crate::bridge::build_pty_context(&app);
-	service::pty::create_session(&ctx, &meta, &config)
+	super::run_blocking(move || {
+		service::pty::create_session(&ctx, &meta, &config)
+	})
+	.await
 }
 
 #[tauri::command]
@@ -51,41 +54,56 @@ pub fn close_pty_session(
 }
 
 #[tauri::command]
-pub fn list_project_sessions(
+pub async fn list_project_sessions(
 	project_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::pty::list_project_sessions(conn, &project_id)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::pty::list_project_sessions(conn, &project_id)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn get_pty_session_history(
+pub async fn get_pty_session_history(
 	session_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<u8>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::pty::get_history(conn, &session_id)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::pty::get_history(conn, &session_id)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn delete_pty_session_record(
+pub async fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::pty::delete_session(conn, &session_id)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::pty::delete_session(conn, &session_id)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn restore_pty_session(
+pub async fn restore_pty_session(
 	app: AppHandle,
 	old_session_id: String,
 	meta: PtySessionMeta,
 	config: PtyConfig,
 ) -> Result<RestoreResult, AppError> {
 	let ctx = crate::bridge::build_pty_context(&app);
-	service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
+	super::run_blocking(move || {
+		service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
+	})
+	.await
 }
 
 #[tauri::command]

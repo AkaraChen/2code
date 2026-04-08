@@ -19,6 +19,7 @@ export interface ControlOptionField {
 
 export interface ControlProps {
 	profile: Profile;
+	isActive: boolean;
 	options: Record<string, unknown>;
 }
 

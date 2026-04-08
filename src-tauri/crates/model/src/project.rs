@@ -64,3 +64,10 @@ pub struct GitCommit {
 	pub insertions: u32,
 	pub deletions: u32,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct GitDiffStats {
+	pub files_changed: u32,
+	pub insertions: u32,
+	pub deletions: u32,
+}

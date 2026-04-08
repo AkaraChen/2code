@@ -2,7 +2,10 @@ mod common;
 
 use diesel::prelude::*;
 
-use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo, setup_db};
+use common::{
+	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
+	setup_db,
+};
 
 // ============================================================
 // Project Creation (basic)
@@ -11,7 +14,9 @@ use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_
 #[test]
 fn create_temporary_returns_complete_project() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("My App".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("My App".into()))
+			.unwrap();
 
 	assert!(!project.id.is_empty());
 	assert_eq!(project.name, "My App");
@@ -38,7 +43,9 @@ fn create_temporary_with_none_name_uses_untitled() {
 #[test]
 fn create_temporary_also_creates_default_profile() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("Test".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("Test".into()))
+			.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 1);
@@ -56,7 +63,9 @@ fn create_from_folder_returns_correct_project() {
 	add_commit(&dir, "a.txt", "hello", "init");
 	let folder = dir.to_string_lossy().to_string();
 
-	let project = service::project::create_from_folder(&mut conn, "FromFolder", &folder).unwrap();
+	let project =
+		service::project::create_from_folder(&mut conn, "FromFolder", &folder)
+			.unwrap();
 
 	assert_eq!(project.name, "FromFolder");
 	assert_eq!(project.folder, folder);
@@ -83,7 +92,9 @@ fn create_from_folder_creates_default_profile() {
 	add_commit(&dir, "a.txt", "hi", "init");
 	let folder = dir.to_string_lossy().to_string();
 
-	let project = service::project::create_from_folder(&mut conn, "Test", &folder).unwrap();
+	let project =
+		service::project::create_from_folder(&mut conn, "Test", &folder)
+			.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
@@ -100,8 +111,12 @@ fn create_from_folder_creates_default_profile() {
 #[test]
 fn create_duplicate_project_names_allowed() {
 	let mut conn = setup_db();
-	let p1 = service::project::create_temporary(&mut conn, Some("Same Name".into())).unwrap();
-	let p2 = service::project::create_temporary(&mut conn, Some("Same Name".into())).unwrap();
+	let p1 =
+		service::project::create_temporary(&mut conn, Some("Same Name".into()))
+			.unwrap();
+	let p2 =
+		service::project::create_temporary(&mut conn, Some("Same Name".into()))
+			.unwrap();
 
 	assert_ne!(p1.id, p2.id);
 	assert_eq!(p1.name, p2.name);
@@ -120,8 +135,10 @@ fn create_duplicate_project_folders_allowed() {
 	add_commit(&dir, "a.txt", "x", "init");
 	let folder = dir.to_string_lossy().to_string();
 
-	let p1 = service::project::create_from_folder(&mut conn, "A", &folder).unwrap();
-	let p2 = service::project::create_from_folder(&mut conn, "B", &folder).unwrap();
+	let p1 =
+		service::project::create_from_folder(&mut conn, "A", &folder).unwrap();
+	let p2 =
+		service::project::create_from_folder(&mut conn, "B", &folder).unwrap();
 
 	assert_ne!(p1.id, p2.id);
 	assert_eq!(p1.folder, p2.folder);
@@ -132,7 +149,9 @@ fn create_duplicate_project_folders_allowed() {
 #[test]
 fn create_with_whitespace_only_name() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("   ".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("   ".into()))
+			.unwrap();
 
 	// Name preserved as-is, but slug is empty so dir uses UUID
 	assert_eq!(project.name, "   ");
@@ -144,7 +163,9 @@ fn create_with_whitespace_only_name() {
 #[test]
 fn create_with_emoji_name() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("🚀🔥".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("🚀🔥".into()))
+			.unwrap();
 
 	assert_eq!(project.name, "🚀🔥");
 
@@ -157,7 +178,8 @@ fn create_with_very_long_name() {
 	// Use a moderate length that won't exceed filesystem limits (slug + UUID short id)
 	let long_name = "a".repeat(100);
 	let project =
-		service::project::create_temporary(&mut conn, Some(long_name.clone())).unwrap();
+		service::project::create_temporary(&mut conn, Some(long_name.clone()))
+			.unwrap();
 
 	assert_eq!(project.name, long_name);
 
@@ -167,8 +189,11 @@ fn create_with_very_long_name() {
 #[test]
 fn create_with_special_chars_name() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("!@#$%^&*()".into())).unwrap();
+	let project = service::project::create_temporary(
+		&mut conn,
+		Some("!@#$%^&*()".into()),
+	)
+	.unwrap();
 
 	assert_eq!(project.name, "!@#$%^&*()");
 
@@ -179,7 +204,8 @@ fn create_with_special_chars_name() {
 fn create_with_cjk_name() {
 	let mut conn = setup_db();
 	let project =
-		service::project::create_temporary(&mut conn, Some("我的项目".into())).unwrap();
+		service::project::create_temporary(&mut conn, Some("我的项目".into()))
+			.unwrap();
 
 	assert_eq!(project.name, "我的项目");
 	// Dir name should contain pinyin slug
@@ -200,7 +226,9 @@ fn create_with_cjk_name() {
 #[test]
 fn list_returns_project_with_profiles_shape() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("Shape".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("Shape".into()))
+			.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 1);
@@ -233,8 +261,10 @@ fn list_empty_database() {
 #[test]
 fn list_multiple_projects_each_with_profiles() {
 	let mut conn = setup_db();
-	let p1 = service::project::create_temporary(&mut conn, Some("A".into())).unwrap();
-	let p2 = service::project::create_temporary(&mut conn, Some("B".into())).unwrap();
+	let p1 = service::project::create_temporary(&mut conn, Some("A".into()))
+		.unwrap();
+	let p2 = service::project::create_temporary(&mut conn, Some("B".into()))
+		.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 2);
@@ -254,10 +284,17 @@ fn list_multiple_projects_each_with_profiles() {
 #[test]
 fn update_name_only() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, Some("Old".into())).unwrap();
+	let project =
+		service::project::create_temporary(&mut conn, Some("Old".into()))
+			.unwrap();
 
-	let updated =
-		service::project::update(&mut conn, &project.id, Some("New".into()), None).unwrap();
+	let updated = service::project::update(
+		&mut conn,
+		&project.id,
+		Some("New".into()),
+		None,
+	)
+	.unwrap();
 
 	assert_eq!(updated.name, "New");
 	assert_eq!(updated.folder, project.folder);
@@ -268,8 +305,12 @@ fn update_name_only() {
 #[test]
 fn update_nonexistent_returns_error() {
 	let mut conn = setup_db();
-	let result =
-		service::project::update(&mut conn, "nonexistent-id", Some("X".into()), None);
+	let result = service::project::update(
+		&mut conn,
+		"nonexistent-id",
+		Some("X".into()),
+		None,
+	);
 	assert!(result.is_err());
 }
 
@@ -280,7 +321,8 @@ fn update_nonexistent_returns_error() {
 #[test]
 fn delete_cascades_to_profiles_and_sessions() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Insert a PTY session on the default profile
 	let session_record = model::pty::NewPtySessionRecord {
@@ -329,7 +371,8 @@ fn create_profile_returns_correct_shape() {
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
 	let profile =
-		service::profile::create(&mut conn, &project.id, "feature-branch").unwrap();
+		service::profile::create(&mut conn, &project.id, "feature-branch")
+			.unwrap();
 
 	assert!(!profile.id.is_empty());
 	assert_eq!(profile.project_id, project.id);
@@ -348,7 +391,8 @@ fn create_profile_sanitizes_cjk() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
-	let profile = service::profile::create(&mut conn, &project.id, "新功能").unwrap();
+	let profile =
+		service::profile::create(&mut conn, &project.id, "新功能").unwrap();
 
 	assert_eq!(profile.branch_name, "xin-gong-neng");
 
@@ -361,7 +405,8 @@ fn create_profile_shows_in_list_projects() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
-	let profile = service::profile::create(&mut conn, &project.id, "dev").unwrap();
+	let profile =
+		service::profile::create(&mut conn, &project.id, "dev").unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
@@ -413,7 +458,8 @@ fn create_profile_duplicate_branch_returns_error() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
-	let p1 = service::profile::create(&mut conn, &project.id, "dup-branch").unwrap();
+	let p1 =
+		service::profile::create(&mut conn, &project.id, "dup-branch").unwrap();
 	let result = service::profile::create(&mut conn, &project.id, "dup-branch");
 
 	assert!(result.is_err());
@@ -431,7 +477,8 @@ fn create_profile_duplicate_branch_returns_error() {
 #[test]
 fn create_profile_for_nonexistent_project_returns_error() {
 	let mut conn = setup_db();
-	let result = service::profile::create(&mut conn, "nonexistent-project-id", "branch");
+	let result =
+		service::profile::create(&mut conn, "nonexistent-project-id", "branch");
 	assert!(result.is_err());
 }
 
@@ -442,7 +489,8 @@ fn create_profile_for_nonexistent_project_returns_error() {
 #[test]
 fn delete_default_profile_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let result = service::profile::delete(&mut conn, &default_profile.id);
 
@@ -461,7 +509,8 @@ fn delete_non_default_succeeds() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
-	let profile = service::profile::create(&mut conn, &project.id, "to-delete").unwrap();
+	let profile =
+		service::profile::create(&mut conn, &project.id, "to-delete").unwrap();
 	service::profile::delete(&mut conn, &profile.id).unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
@@ -478,7 +527,8 @@ fn delete_profile_cascades_sessions() {
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
 	let profile =
-		service::profile::create(&mut conn, &project.id, "cascade-test").unwrap();
+		service::profile::create(&mut conn, &project.id, "cascade-test")
+			.unwrap();
 
 	// Insert session for this profile
 	let session_record = model::pty::NewPtySessionRecord {
@@ -495,7 +545,8 @@ fn delete_profile_cascades_sessions() {
 	// Delete profile — should cascade to session
 	service::profile::delete(&mut conn, &profile.id).unwrap();
 
-	let sessions = service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
+	let sessions =
+		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	// Only default profile sessions (none)
 	assert!(sessions.is_empty());
 
@@ -517,10 +568,8 @@ fn delete_nonexistent_profile_returns_error() {
 fn create_profile_in_non_git_folder_fails() {
 	let mut conn = setup_db();
 	// Create a plain directory (no git init)
-	let dir = std::env::temp_dir().join(format!(
-		"2code-no-git-{}",
-		uuid::Uuid::new_v4()
-	));
+	let dir = std::env::temp_dir()
+		.join(format!("2code-no-git-{}", uuid::Uuid::new_v4()));
 	std::fs::create_dir_all(&dir).unwrap();
 	std::fs::write(dir.join("file.txt"), "hello").unwrap();
 
@@ -542,7 +591,8 @@ fn create_profile_in_non_git_folder_fails() {
 	.unwrap();
 
 	// Attempting to create a profile (worktree) in a non-git folder should fail
-	let result = service::profile::create(&mut conn, "p-nogit", "feature-branch");
+	let result =
+		service::profile::create(&mut conn, "p-nogit", "feature-branch");
 	assert!(result.is_err(), "should fail for non-git folder");
 
 	cleanup(&dir);

@@ -33,8 +33,7 @@ pub fn create(
 	project_id: &str,
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
-	let project_folder =
-		repo::profile::get_project_folder(conn, project_id)?;
+	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
 
 	let branch_name = sanitize_branch_name(branch_name);
 	if branch_name.is_empty() {
@@ -47,11 +46,7 @@ pub fn create(
 	let worktree_path = worktree_base.join(&id);
 	let worktree_str = worktree_path.to_string_lossy().to_string();
 
-	infra::git::worktree_add(
-		&project_folder,
-		&branch_name,
-		&worktree_str,
-	)?;
+	infra::git::worktree_add(&project_folder, &branch_name, &worktree_str)?;
 
 	let profile = repo::profile::insert(
 		conn,
@@ -62,10 +57,7 @@ pub fn create(
 	)?;
 
 	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(
-			&cfg.setup_script,
-			&worktree_path,
-		);
+		infra::config::execute_scripts(&cfg.setup_script, &worktree_path);
 	}
 
 	Ok(profile)
@@ -76,10 +68,7 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 
 	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(
-			&cfg.teardown_script,
-			&worktree_path,
-		);
+		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
 	}
 
 	infra::git::worktree_remove(&project_folder, &profile.worktree_path);

@@ -53,12 +53,14 @@ interface ProjectTopBarProps {
 	projectId: string;
 	projectName: string;
 	profile: Profile;
+	isActive: boolean;
 }
 
 export default function ProjectTopBar({
 	projectId,
 	projectName,
 	profile,
+	isActive,
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
@@ -104,9 +106,11 @@ export default function ProjectTopBar({
 					</Text>
 					<Box color="fg.muted">
 						{profile.is_default ? (
-							<Suspense>
-								<GitBranchLabel cwd={profile.worktree_path} />
-							</Suspense>
+							isActive ? (
+								<Suspense>
+									<GitBranchLabel cwd={profile.worktree_path} />
+								</Suspense>
+							) : null
 						) : (
 							<HStack gap="1">
 								<RiGitBranchLine />
@@ -124,6 +128,7 @@ export default function ProjectTopBar({
 							<Comp
 								key={controlId}
 								profile={profile}
+								isActive={isActive}
 								options={controlOptions[controlId] ?? {}}
 							/>
 						);

@@ -1,6 +1,9 @@
 mod common;
 
-use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo, setup_db};
+use common::{
+	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
+	setup_db,
+};
 
 // ============================================================
 // Git Diff (basic)
@@ -9,12 +12,14 @@ use common::{add_commit, cleanup, create_project_with_git_repo, create_temp_git_
 #[test]
 fn diff_resolves_profile_to_folder() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Modify a file to create a diff
 	std::fs::write(dir.join("README.md"), "# Modified").unwrap();
 
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert!(diff.contains("README.md"), "diff should contain filename");
 	assert!(diff.contains("Modified"), "diff should contain new content");
 
@@ -24,7 +29,8 @@ fn diff_resolves_profile_to_folder() {
 #[test]
 fn diff_captures_staged_and_unstaged() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Staged change
 	std::fs::write(dir.join("staged.txt"), "staged content").unwrap();
@@ -37,8 +43,12 @@ fn diff_captures_staged_and_unstaged() {
 	// Unstaged change
 	std::fs::write(dir.join("README.md"), "# Unstaged change").unwrap();
 
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
-	assert!(diff.contains("staged.txt"), "diff should contain staged file");
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	assert!(
+		diff.contains("staged.txt"),
+		"diff should contain staged file"
+	);
 	assert!(
 		diff.contains("README.md"),
 		"diff should contain unstaged file"
@@ -50,11 +60,13 @@ fn diff_captures_staged_and_unstaged() {
 #[test]
 fn diff_includes_untracked_files() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	std::fs::write(dir.join("new_file.txt"), "new content").unwrap();
 
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert!(
 		diff.contains("new_file.txt"),
 		"diff should include untracked file"
@@ -81,7 +93,8 @@ fn diff_empty_repo_returns_empty_string() {
 	let dir = create_temp_git_repo();
 	let folder = dir.to_string_lossy().to_string();
 	let project =
-		service::project::create_from_folder(&mut conn, "Empty", &folder).unwrap();
+		service::project::create_from_folder(&mut conn, "Empty", &folder)
+			.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
@@ -96,10 +109,12 @@ fn diff_empty_repo_returns_empty_string() {
 #[test]
 fn diff_no_changes_returns_empty_string() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// No changes after initial commit
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert_eq!(diff, "");
 
 	cleanup(&dir);
@@ -108,12 +123,14 @@ fn diff_no_changes_returns_empty_string() {
 #[test]
 fn diff_deleted_file() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Delete the tracked file
 	std::fs::remove_file(dir.join("README.md")).unwrap();
 
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert!(diff.contains("README.md"), "diff should show deleted file");
 	assert!(
 		diff.contains("deleted file") || diff.contains("--- a/README.md"),
@@ -126,13 +143,15 @@ fn diff_deleted_file() {
 #[test]
 fn diff_binary_file_change() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Create a binary file
 	let binary_data: Vec<u8> = (0..=255).collect();
 	std::fs::write(dir.join("image.bin"), &binary_data).unwrap();
 
-	let diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert!(
 		diff.contains("image.bin"),
 		"diff should mention binary file"
@@ -148,7 +167,8 @@ fn diff_binary_file_change() {
 #[test]
 fn log_returns_commit_shape() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let commits =
 		service::project::get_log(&mut conn, &default_profile.id, 10).unwrap();
@@ -170,7 +190,8 @@ fn log_returns_commit_shape() {
 #[test]
 fn log_respects_limit() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	add_commit(&dir, "b.txt", "b", "Second commit");
 	add_commit(&dir, "c.txt", "c", "Third commit");
@@ -191,7 +212,8 @@ fn log_empty_repo_returns_empty_vec() {
 	let dir = create_temp_git_repo();
 	let folder = dir.to_string_lossy().to_string();
 	let project =
-		service::project::create_from_folder(&mut conn, "Empty", &folder).unwrap();
+		service::project::create_from_folder(&mut conn, "Empty", &folder)
+			.unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
@@ -210,7 +232,8 @@ fn log_empty_repo_returns_empty_vec() {
 #[test]
 fn log_limit_zero() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// git log -0 shows all commits (no limit)
 	let commits =
@@ -225,7 +248,8 @@ fn log_limit_zero() {
 #[test]
 fn log_commit_with_cjk_message() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	add_commit(&dir, "cjk.txt", "content", "添加中文文件");
 
@@ -240,7 +264,8 @@ fn log_commit_with_cjk_message() {
 #[test]
 fn log_multiple_files_in_commit() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Add multiple files in one commit
 	std::fs::write(dir.join("x.txt"), "x").unwrap();
@@ -272,14 +297,16 @@ fn log_multiple_files_in_commit() {
 #[test]
 fn commit_diff_returns_patch() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let commits =
 		service::project::get_log(&mut conn, &default_profile.id, 1).unwrap();
 	let hash = &commits[0].full_hash;
 
 	let diff =
-		service::project::get_commit_diff(&mut conn, &default_profile.id, hash).unwrap();
+		service::project::get_commit_diff(&mut conn, &default_profile.id, hash)
+			.unwrap();
 	assert!(diff.contains("README.md"));
 	assert!(diff.contains("# Test"));
 
@@ -289,11 +316,15 @@ fn commit_diff_returns_patch() {
 #[test]
 fn commit_diff_invalid_hash_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Non-hex characters (injection attempt)
-	let result =
-		service::project::get_commit_diff(&mut conn, &default_profile.id, "--all");
+	let result = service::project::get_commit_diff(
+		&mut conn,
+		&default_profile.id,
+		"--all",
+	);
 	assert!(result.is_err());
 
 	cleanup(&dir);
@@ -302,9 +333,14 @@ fn commit_diff_invalid_hash_returns_error() {
 #[test]
 fn commit_diff_too_short_hash_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
-	let result = service::project::get_commit_diff(&mut conn, &default_profile.id, "abc");
+	let result = service::project::get_commit_diff(
+		&mut conn,
+		&default_profile.id,
+		"abc",
+	);
 	assert!(result.is_err());
 
 	cleanup(&dir);
@@ -313,7 +349,8 @@ fn commit_diff_too_short_hash_returns_error() {
 #[test]
 fn commit_diff_nonexistent_hash_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let result = service::project::get_commit_diff(
 		&mut conn,
@@ -350,15 +387,18 @@ fn get_branch_returns_correct_branch() {
 #[test]
 fn diff_on_profile_worktree() {
 	let mut conn = setup_db();
-	let (project, _default_profile, dir) = create_project_with_git_repo(&mut conn);
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	// Create a non-default profile (creates a worktree)
 	let profile =
-		service::profile::create(&mut conn, &project.id, "worktree-test").unwrap();
+		service::profile::create(&mut conn, &project.id, "worktree-test")
+			.unwrap();
 
 	// Make a change in the worktree, not in the main repo
 	let worktree_path = std::path::Path::new(&profile.worktree_path);
-	std::fs::write(worktree_path.join("worktree-file.txt"), "worktree content").unwrap();
+	std::fs::write(worktree_path.join("worktree-file.txt"), "worktree content")
+		.unwrap();
 
 	// Diff on profile should see the worktree changes
 	let diff = service::project::get_diff(&mut conn, &profile.id).unwrap();
@@ -372,7 +412,8 @@ fn diff_on_profile_worktree() {
 	let main_list = service::project::list(&mut conn).unwrap();
 	let pwp = main_list.iter().find(|p| p.id == project.id).unwrap();
 	let default_profile = pwp.profiles.iter().find(|p| p.is_default).unwrap();
-	let main_diff = service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	let main_diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
 	assert!(
 		!main_diff.contains("worktree-file.txt"),
 		"main repo should not see worktree file"

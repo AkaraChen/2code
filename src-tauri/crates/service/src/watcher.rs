@@ -136,7 +136,9 @@ fn reconcile_watchers(
 				let path = std::path::Path::new(&folder);
 				if path.exists() {
 					if let Err(e) = w.watch(path, RecursiveMode::Recursive) {
-						tracing::warn!("Watcher: failed to watch {folder}: {e}");
+						tracing::warn!(
+							"Watcher: failed to watch {folder}: {e}"
+						);
 						continue;
 					}
 					watchers.insert(

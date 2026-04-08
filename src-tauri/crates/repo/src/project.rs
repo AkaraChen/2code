@@ -124,11 +124,11 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use diesel_migrations::MigrationHarness;
 	use infra::db::MIGRATIONS;
 	use model::profile::NewProfile;
 	use model::pty::NewPtySessionRecord;
 	use model::schema::{profiles, pty_sessions};
-	use diesel_migrations::MigrationHarness;
 
 	fn setup_db() -> SqliteConnection {
 		let mut conn =

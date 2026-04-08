@@ -1,7 +1,12 @@
 import { parsePatchFiles } from "@pierre/diffs";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
+import {
+	getCommitDiff,
+	getGitDiff,
+	getGitDiffStats,
+	getGitLog,
+} from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 function useGitDiff(profileId: string) {
@@ -25,26 +30,22 @@ function useCommitDiff(profileId: string, commitHash: string) {
 	});
 }
 
-export function useGitDiffStats(profileId: string) {
-	const { data: diff } = useQuery({
-		queryKey: queryKeys.git.diff(profileId),
-		queryFn: () => getGitDiff({ profileId }),
+export function useGitDiffStats(profileId: string, enabled = true) {
+	const { data } = useQuery({
+		queryKey: queryKeys.git.diffStats(profileId),
+		queryFn: () => getGitDiffStats({ profileId }),
+		enabled,
 	});
 
 	return useMemo(() => {
-		if (!diff) return null;
-
-		let additions = 0;
-		let deletions = 0;
-		for (const line of diff.split("\n")) {
-			if (line.startsWith("+") && !line.startsWith("+++")) additions++;
-			else if (line.startsWith("-") && !line.startsWith("---"))
-				deletions++;
-		}
-
-		if (additions === 0 && deletions === 0) return null;
-		return { additions, deletions };
-	}, [diff]);
+		if (!data) return null;
+		if (data.insertions === 0 && data.deletions === 0) return null;
+		return {
+			additions: data.insertions,
+			deletions: data.deletions,
+			filesChanged: data.files_changed,
+		};
+	}, [data]);
 }
 
 export function useGitDiffFiles(profileId: string) {

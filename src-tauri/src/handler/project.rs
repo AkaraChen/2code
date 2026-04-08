@@ -2,106 +2,161 @@ use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::project::{GitCommit, Project, ProjectConfig, ProjectWithProfiles};
+use model::project::{
+	GitCommit, GitDiffStats, Project, ProjectConfig, ProjectWithProfiles,
+};
 
 #[tauri::command]
-pub fn create_project_temporary(
+pub async fn create_project_temporary(
 	name: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::create_temporary(conn, name)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::create_temporary(conn, name)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn create_project_from_folder(
+pub async fn create_project_from_folder(
 	name: String,
 	folder: String,
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::create_from_folder(conn, &name, &folder)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::create_from_folder(conn, &name, &folder)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn list_projects(
+pub async fn list_projects(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::list(conn)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::list(conn)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn update_project(
+pub async fn update_project(
 	id: String,
 	name: Option<String>,
 	folder: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<Project, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::update(conn, &id, name, folder)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::update(conn, &id, name, folder)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn get_git_branch(folder: String) -> Result<String, AppError> {
-	service::project::get_branch(&folder)
+pub async fn get_git_branch(folder: String) -> Result<String, AppError> {
+	super::run_blocking(move || service::project::get_branch(&folder)).await
 }
 
 #[tauri::command]
-pub fn get_git_diff(
+pub async fn get_git_diff(
 	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::get_diff(conn, &profile_id)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_diff(conn, &profile_id)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn get_git_log(
+pub async fn get_git_diff_stats(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<GitDiffStats, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_diff_stats(conn, &profile_id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_git_log(
 	profile_id: String,
 	limit: Option<u32>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn get_commit_diff(
+pub async fn get_commit_diff(
 	profile_id: String,
 	commit_hash: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn delete_project(
+pub async fn delete_project(
 	id: String,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	service::project::delete(conn, &id)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::delete(conn, &id)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn get_project_config(
+pub async fn get_project_config(
 	project_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<ProjectConfig, AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	let project = repo::project::find_by_id(conn, &project_id)?;
-	infra::config::load_project_config(&project.folder)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let project = repo::project::find_by_id(conn, &project_id)?;
+		infra::config::load_project_config(&project.folder)
+	})
+	.await
 }
 
 #[tauri::command]
-pub fn save_project_config(
+pub async fn save_project_config(
 	project_id: String,
 	config: ProjectConfig,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let conn = &mut *state.lock().map_err(|_| AppError::LockError)?;
-	let project = repo::project::find_by_id(conn, &project_id)?;
-	infra::config::write_project_config(&project.folder, &config)
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let project = repo::project::find_by_id(conn, &project_id)?;
+		infra::config::write_project_config(&project.folder, &config)
+	})
+	.await
 }

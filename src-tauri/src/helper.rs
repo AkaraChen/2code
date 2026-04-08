@@ -63,10 +63,11 @@ fn try_play_notification(app: &AppHandle) -> bool {
 		None => return false,
 	};
 
-	let entry: model::notification::NotificationEntry = match serde_json::from_value(val) {
-		Ok(e) => e,
-		Err(_) => return false,
-	};
+	let entry: model::notification::NotificationEntry =
+		match serde_json::from_value(val) {
+			Ok(e) => e,
+			Err(_) => return false,
+		};
 
 	if !entry.state.enabled {
 		return false;

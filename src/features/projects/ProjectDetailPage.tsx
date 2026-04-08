@@ -38,6 +38,7 @@ export default function ProjectDetailPage() {
 				projectId={project.id}
 				projectName={project.name}
 				profile={profile}
+				isActive
 			/>
 			<Center flex="1">
 				<EmptyState.Root>

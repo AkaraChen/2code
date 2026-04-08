@@ -32,10 +32,7 @@ impl ChannelLayerHandle {
 	/// Start forwarding log events to the given sink function.
 	/// Spawns a thread that reads from the internal mpsc and calls the sink.
 	/// The sink should return `true` to continue, `false` to stop.
-	pub fn attach(
-		&self,
-		sink: impl Fn(LogEntry) -> bool + Send + 'static,
-	) {
+	pub fn attach(&self, sink: impl Fn(LogEntry) -> bool + Send + 'static) {
 		let (sender, receiver) = mpsc::channel::<LogEntry>();
 
 		// Set the sender so the Layer starts forwarding

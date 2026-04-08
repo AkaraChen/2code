@@ -1,5 +1,6 @@
 import {
 	useMutation,
+	useQuery,
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
@@ -24,10 +25,11 @@ export function useProjects() {
 	});
 }
 
-export function useGitBranch(folder: string) {
-	return useSuspenseQuery({
+export function useGitBranch(folder: string, enabled = true) {
+	return useQuery({
 		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
+		enabled,
 	});
 }
 

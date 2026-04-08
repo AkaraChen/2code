@@ -5,7 +5,8 @@ use diesel_migrations::{
 };
 use std::sync::{Arc, Mutex};
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("../../migrations");
+pub const MIGRATIONS: EmbeddedMigrations =
+	embed_migrations!("../../migrations");
 
 pub type DbPool = Arc<Mutex<SqliteConnection>>;
 

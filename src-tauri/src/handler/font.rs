@@ -10,8 +10,7 @@ pub struct SystemFont {
 	pub is_mono: bool,
 }
 
-#[tauri::command]
-pub fn list_system_fonts() -> Vec<SystemFont> {
+fn load_system_fonts() -> Vec<SystemFont> {
 	let collection = create_for_all_families();
 	let descriptors = collection.get_descriptors();
 
@@ -40,4 +39,10 @@ pub fn list_system_fonts() -> Vec<SystemFont> {
 		.into_iter()
 		.map(|(family, is_mono)| SystemFont { family, is_mono })
 		.collect()
+}
+
+#[tauri::command]
+pub async fn list_system_fonts() -> Vec<SystemFont> {
+	let fonts = tauri::async_runtime::spawn_blocking(load_system_fonts).await;
+	fonts.unwrap_or_default()
 }

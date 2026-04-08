@@ -4,7 +4,7 @@ use diesel::SqliteConnection;
 use uuid::Uuid;
 
 use model::error::AppError;
-use model::project::{GitCommit, Project, ProjectWithProfiles};
+use model::project::{GitCommit, GitDiffStats, Project, ProjectWithProfiles};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -41,8 +41,7 @@ pub fn create_temporary(
 
 	let branch_name = infra::git::branch(&dir_str).unwrap_or_default();
 
-	let project =
-		repo::project::insert(conn, &id, &project_name, &dir_str)?;
+	let project = repo::project::insert(conn, &id, &project_name, &dir_str)?;
 
 	let default_profile_id = format!("default-{id}");
 	repo::profile::insert_default(
@@ -111,6 +110,14 @@ pub fn get_diff(
 ) -> Result<String, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	infra::git::diff(&profile.worktree_path)
+}
+
+pub fn get_diff_stats(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<GitDiffStats, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::diff_stats(&profile.worktree_path)
 }
 
 pub fn get_log(

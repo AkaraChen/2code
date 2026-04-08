@@ -63,15 +63,17 @@ export function CursorControl(props: ControlProps) {
 function GitDiffBranchDialog({
 	cwd,
 	isOpen,
+	isActive,
 	onClose,
 	profileId,
 }: {
 	cwd: string;
 	isOpen: boolean;
+	isActive: boolean;
 	onClose: () => void;
 	profileId: string;
 }) {
-	const { data: branch } = useGitBranch(cwd);
+	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
 	return (
 		<GitDiffDialog
 			isOpen={isOpen}
@@ -82,9 +84,9 @@ function GitDiffBranchDialog({
 	);
 }
 
-export function GitDiffControl({ profile }: ControlProps) {
+export function GitDiffControl({ profile, isActive }: ControlProps) {
 	const dialog = useDialogState();
-	const stats = useGitDiffStats(profile.id);
+	const stats = useGitDiffStats(profile.id, isActive);
 
 	return (
 		<>
@@ -120,6 +122,7 @@ export function GitDiffControl({ profile }: ControlProps) {
 					<GitDiffBranchDialog
 						cwd={profile.worktree_path}
 						isOpen={dialog.isOpen}
+						isActive={isActive}
 						onClose={dialog.onClose}
 						profileId={profile.id}
 					/>

@@ -84,11 +84,12 @@ export default function TerminalLayer() {
 							profileId === activeProfileId ? "flex" : "none"
 						}
 					>
-						<ProjectTopBar
-							projectId={project?.id ?? profile.project_id}
-							projectName={project?.name ?? ""}
-							profile={profile}
-						/>
+							<ProjectTopBar
+								projectId={project?.id ?? profile.project_id}
+								projectName={project?.name ?? ""}
+								profile={profile}
+								isActive={profileId === activeProfileId}
+							/>
 						<Box flex="1" minH="0">
 						<TerminalTabs
 							profileId={profileId}

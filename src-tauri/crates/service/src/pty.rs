@@ -2,16 +2,17 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use diesel::SqliteConnection;
 
+use infra::db::DbPool;
+use infra::pty::{self as session, PtyReadThreads, PtySessionMap};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
 	RestoreResult,
 };
-use infra::db::DbPool;
-use infra::pty::{self as session, PtySessionMap, PtyReadThreads};
 
 use crate::PtyEventEmitter;
 
@@ -40,6 +41,8 @@ pub struct PtyContext {
 }
 
 const VT100_SCROLLBACK: usize = 10000;
+const PERSIST_BATCH_BYTES: usize = 32 * 1024;
+const PERSIST_FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AltScreenTransition {
@@ -250,10 +253,8 @@ pub fn create_session(
 	let project_init_scripts = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let profile = repo::profile::find_by_id(conn, &meta.profile_id)?;
-		let folder = repo::profile::get_project_folder(
-			conn,
-			&profile.project_id,
-		)?;
+		let folder =
+			repo::profile::get_project_folder(conn, &profile.project_id)?;
 		infra::config::load_project_config(&folder)
 			.map(|c| c.init_script)
 			.unwrap_or_default()
@@ -263,10 +264,8 @@ pub fn create_session(
 	let session_id = uuid::Uuid::new_v4().to_string();
 
 	// 3. Prepare shell init directory (graceful degradation on failure)
-	let init_dir = infra::shell_init::prepare_init_dir(
-		&session_id,
-		&project_init_scripts,
-	);
+	let init_dir =
+		infra::shell_init::prepare_init_dir(&session_id, &project_init_scripts);
 	if let Err(ref e) = init_dir {
 		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
 	}
@@ -485,11 +484,13 @@ fn read_pty_output(
 				let raw = &buf[..n];
 
 				// Detect clear-scrollback sequence and notify persistence thread
-				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ) {
+				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ)
+				{
 					let after = pos + CLEAR_SCROLLBACK_SEQ.len();
 					let _ = tx.send(PersistMsg::Clear);
 					if after < n {
-						let _ = tx.send(PersistMsg::Data(raw[after..].to_vec()));
+						let _ =
+							tx.send(PersistMsg::Data(raw[after..].to_vec()));
 					}
 				} else {
 					let _ = tx.send(PersistMsg::Data(raw.to_vec()));
@@ -542,36 +543,71 @@ fn read_pty_output(
 	emitter.emit_exit(&session_id);
 }
 
-/// Persistence thread: receives raw bytes from channel and writes to DB immediately.
+fn flush_pending_output(db: &DbPool, session_id: &str, pending: &mut Vec<u8>) {
+	if pending.is_empty() {
+		return;
+	}
+
+	let data = std::mem::take(pending);
+	let Ok(mut conn) = db.lock() else { return };
+	let n = data.len();
+	match repo::pty::append_output(&mut conn, session_id, &data) {
+		Ok(()) => {
+			tracing::info!(target: "pty", %session_id, n, "persist: appended");
+		}
+		Err(e) => {
+			tracing::warn!(
+				target: "pty",
+				%session_id,
+				error = %e,
+				"persist: failed to append"
+			);
+			// Restore data so an explicit flush or final drain can retry.
+			pending.extend_from_slice(&data);
+		}
+	}
+}
+
+/// Persistence thread: buffers raw PTY bytes and writes them to DB in batches.
 fn persist_pty_output(
 	rx: mpsc::Receiver<PersistMsg>,
 	db: DbPool,
 	session_id: &str,
 ) {
-	while let Ok(msg) = rx.recv() {
-		match msg {
-			PersistMsg::Data(data) => {
-				let Ok(mut conn) = db.lock() else { continue };
-				let n = data.len();
-				match repo::pty::append_output(&mut conn, session_id, &data)
-				{
-					Ok(()) => {
-						tracing::info!(target: "pty", %session_id, n, "persist: appended");
-					}
-					Err(e) => {
-						tracing::warn!(target: "pty", %session_id, error = %e, "persist: failed to append");
-					}
+	let mut pending = Vec::new();
+
+	loop {
+		match rx.recv_timeout(PERSIST_FLUSH_INTERVAL) {
+			Ok(PersistMsg::Data(data)) => {
+				pending.extend_from_slice(&data);
+				if pending.len() >= PERSIST_BATCH_BYTES {
+					flush_pending_output(&db, session_id, &mut pending);
 				}
 			}
-			PersistMsg::Flush => {} // no-op: data is already persisted
-			PersistMsg::Clear => {
-				tracing::info!(target: "pty", %session_id, "persist: clear scrollback");
+			Ok(PersistMsg::Flush) => {
+				flush_pending_output(&db, session_id, &mut pending);
+			}
+			Ok(PersistMsg::Clear) => {
+				pending.clear();
+				tracing::info!(
+					target: "pty",
+					%session_id,
+					"persist: clear scrollback"
+				);
 				if let Ok(mut conn) = db.lock() {
 					repo::pty::clear_output(&mut conn, session_id);
 				}
 			}
+			Err(mpsc::RecvTimeoutError::Timeout) => {
+				flush_pending_output(&db, session_id, &mut pending);
+			}
+			Err(mpsc::RecvTimeoutError::Disconnected) => {
+				break;
+			}
 		}
 	}
+
+	flush_pending_output(&db, session_id, &mut pending);
 	tracing::info!(target: "pty", %session_id, "persist: thread exiting");
 }
 
@@ -832,7 +868,9 @@ mod tests {
 		let input = b"\x1b[31mred text\x1b[0m";
 		let result = sanitize_history(input, 24, 80);
 		// Output should contain SGR sequences (not be plain text)
-		assert!(result.windows(4).any(|w| w == b"\x1b[31" || w == b"\x1b[0m"));
+		assert!(result
+			.windows(4)
+			.any(|w| w == b"\x1b[31" || w == b"\x1b[0m"));
 		let text = strip_ansi(&result);
 		assert!(text.contains("red text"));
 	}
@@ -1022,8 +1060,8 @@ mod tests {
 		db: &infra::db::DbPool,
 		session_id: &str,
 	) {
-		use model::pty::NewPtySessionRecord;
 		use diesel::RunQueryDsl;
+		use model::pty::NewPtySessionRecord;
 		let mut conn = db.lock().unwrap();
 		// Insert a minimal project + profile + session
 		diesel::sql_query(
@@ -1088,11 +1126,9 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = repo::pty::get_session_history(
-			&mut conn,
-			"s-persist-clear",
-		)
-		.unwrap();
+		let history =
+			repo::pty::get_session_history(&mut conn, "s-persist-clear")
+				.unwrap();
 		assert!(history.is_empty());
 	}
 
@@ -1114,11 +1150,9 @@ mod tests {
 		handle.join().unwrap();
 
 		let mut conn = db.lock().unwrap();
-		let history = repo::pty::get_session_history(
-			&mut conn,
-			"s-persist-flush",
-		)
-		.unwrap();
+		let history =
+			repo::pty::get_session_history(&mut conn, "s-persist-flush")
+				.unwrap();
 		assert_eq!(history, b"data before flush");
 	}
 }

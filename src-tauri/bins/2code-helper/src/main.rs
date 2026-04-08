@@ -28,7 +28,9 @@ fn main() {
 					let body: model::notification::NotifyResponse = resp
 						.body_mut()
 						.read_json()
-						.unwrap_or(model::notification::NotifyResponse { played: false });
+						.unwrap_or(model::notification::NotifyResponse {
+							played: false,
+						});
 					if !body.played {
 						std::process::exit(1);
 					}

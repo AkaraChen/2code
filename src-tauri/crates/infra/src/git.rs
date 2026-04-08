@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 
 use model::error::AppError;
-use model::project::{GitAuthor, GitCommit};
+use model::project::{GitAuthor, GitCommit, GitDiffStats};
 
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
@@ -82,6 +82,62 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	}
 
 	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
+}
+
+pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
+	let tmp_dir = tempfile::tempdir().map_err(|e| {
+		AppError::GitError(format!("Failed to create temp dir: {e}"))
+	})?;
+	let tmp_index = tmp_dir.path().join("index");
+
+	let add_output = Command::new("git")
+		.args(["add", "-A"])
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", &tmp_index)
+		.output()?;
+
+	if !add_output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&add_output.stderr)
+				.trim()
+				.to_string(),
+		));
+	}
+
+	let diff_output = Command::new("git")
+		.args(["diff", "--cached", "--shortstat", "HEAD"])
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", &tmp_index)
+		.output()?;
+
+	if !diff_output.status.success() {
+		let stderr = String::from_utf8_lossy(&diff_output.stderr)
+			.trim()
+			.to_string();
+		let no_head_patterns = [
+			"does not have any commits",
+			"bad revision 'HEAD'",
+			"invalid revision 'HEAD'",
+			"unknown revision",
+		];
+		if no_head_patterns.iter().any(|p| stderr.contains(p)) {
+			return Ok(GitDiffStats::default());
+		}
+		return Err(AppError::GitError(stderr));
+	}
+
+	let stdout = String::from_utf8_lossy(&diff_output.stdout);
+	let (files_changed, insertions, deletions) = stdout
+		.lines()
+		.find(|line| line.contains("file"))
+		.map(parse_shortstat)
+		.unwrap_or((0, 0, 0));
+
+	Ok(GitDiffStats {
+		files_changed,
+		insertions,
+		deletions,
+	})
 }
 
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
