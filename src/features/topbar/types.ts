@@ -1,7 +1,13 @@
 import type { ComponentType } from "react";
 import type { Profile } from "@/generated";
 
-export type ControlId = "github-desktop" | "vscode" | "windsurf" | "cursor" | "git-diff";
+export type ControlId =
+	| "github-desktop"
+	| "vscode"
+	| "windsurf"
+	| "cursor"
+	| "git-diff"
+	| "reveal-in-finder";
 
 export interface ControlOptionField {
 	key: string;

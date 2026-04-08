@@ -6,6 +6,7 @@ export const defaultActiveControls: ControlId[] = [
 	"github-desktop",
 	"vscode",
 	"git-diff",
+	"reveal-in-finder",
 ];
 
 interface TopBarStore {

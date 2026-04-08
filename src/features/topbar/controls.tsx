@@ -1,9 +1,11 @@
-import { IconButton, Portal, Tooltip } from "@chakra-ui/react";
+import { Button, IconButton, Portal, Text, Tooltip } from "@chakra-ui/react";
 import type { ComponentType } from "react";
 import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
 import { Suspense } from "react";
+import { RiFolderLine } from "react-icons/ri";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
+import { useGitDiffStats } from "@/features/git/hooks";
 import { useGitBranch } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -82,19 +84,30 @@ function GitDiffBranchDialog({
 
 export function GitDiffControl({ profile }: ControlProps) {
 	const dialog = useDialogState();
+	const stats = useGitDiffStats(profile.id);
 
 	return (
 		<>
 			<Tooltip.Root>
 				<Tooltip.Trigger asChild>
-					<IconButton
+					<Button
 						aria-label={m.topbarGitDiff()}
 						size="xs"
 						variant="subtle"
 						onClick={dialog.onOpen}
 					>
 						<SiGit size={14} />
-					</IconButton>
+						{stats && (
+							<>
+								<Text as="span" color="green.400" fontSize="xs">
+									+{stats.additions}
+								</Text>
+								<Text as="span" color="red.400" fontSize="xs">
+									-{stats.deletions}
+								</Text>
+							</>
+						)}
+					</Button>
 				</Tooltip.Trigger>
 				<Portal>
 					<Tooltip.Positioner>
@@ -120,5 +133,36 @@ export function GitDiffControl({ profile }: ControlProps) {
 				/>
 			)}
 		</>
+	);
+}
+
+export function RevealInFinderControl({ profile }: ControlProps) {
+	const handleReveal = async () => {
+		const isMac = navigator.platform.toUpperCase().includes("MAC");
+		const cmd = isMac ? "open" : "explorer";
+		const args = isMac
+			? ["-R", profile.worktree_path]
+			: [profile.worktree_path];
+		await Command.create(cmd, args).execute();
+	};
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<IconButton
+					aria-label={m.revealInFinder()}
+					size="xs"
+					variant="subtle"
+					onClick={handleReveal}
+				>
+					<RiFolderLine />
+				</IconButton>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{m.revealInFinder()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
 	);
 }

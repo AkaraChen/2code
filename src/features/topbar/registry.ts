@@ -1,9 +1,11 @@
 import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
+import { RiFolderLine } from "react-icons/ri";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
 	GithubDesktopControl,
 	GitDiffControl,
+	RevealInFinderControl,
 	VscodeControl,
 	WindsurfControl,
 } from "./controls";
@@ -44,6 +46,13 @@ const definitions: ControlDefinition[] = [
 		icon: SiGit,
 		optionFields: [],
 		component: GitDiffControl,
+	},
+	{
+		id: "reveal-in-finder",
+		label: () => m.revealInFinder(),
+		icon: RiFolderLine,
+		optionFields: [],
+		component: RevealInFinderControl,
 	},
 ];
 

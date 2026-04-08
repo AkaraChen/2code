@@ -85,6 +85,7 @@ export default function TerminalLayer() {
 						}
 					>
 						<ProjectTopBar
+							projectId={project?.id ?? profile.project_id}
 							projectName={project?.name ?? ""}
 							profile={profile}
 						/>

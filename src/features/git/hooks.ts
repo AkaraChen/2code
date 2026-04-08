@@ -1,5 +1,5 @@
 import { parsePatchFiles } from "@pierre/diffs";
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getCommitDiff, getGitDiff, getGitLog } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -23,6 +23,28 @@ function useCommitDiff(profileId: string, commitHash: string) {
 		queryKey: queryKeys.git.commitDiff(profileId, commitHash),
 		queryFn: () => getCommitDiff({ profileId, commitHash }),
 	});
+}
+
+export function useGitDiffStats(profileId: string) {
+	const { data: diff } = useQuery({
+		queryKey: queryKeys.git.diff(profileId),
+		queryFn: () => getGitDiff({ profileId }),
+	});
+
+	return useMemo(() => {
+		if (!diff) return null;
+
+		let additions = 0;
+		let deletions = 0;
+		for (const line of diff.split("\n")) {
+			if (line.startsWith("+") && !line.startsWith("+++")) additions++;
+			else if (line.startsWith("-") && !line.startsWith("---"))
+				deletions++;
+		}
+
+		if (additions === 0 && deletions === 0) return null;
+		return { additions, deletions };
+	}, [diff]);
 }
 
 export function useGitDiffFiles(profileId: string) {
