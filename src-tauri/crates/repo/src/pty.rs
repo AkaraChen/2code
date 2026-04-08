@@ -1,29 +1,37 @@
 use diesel::prelude::*;
+use diesel::sql_types::{Integer, Text};
 
 use model::error::AppError;
-use model::pty::{NewPtySessionOutput, NewPtySessionRecord, PtySessionRecord};
-use model::schema::{profiles, pty_session_output, pty_sessions};
+use model::pty::{
+	NewPtyOutputChunk, NewPtyOutputState, NewPtySessionRecord, PtyOutputChunk,
+	PtySessionRecord,
+};
+use model::schema::{
+	profiles, pty_output_chunks, pty_output_state, pty_sessions,
+};
+
+pub const PERSISTED_PTY_OUTPUT_BYTES_CAP: usize = 1024 * 1024;
 
 pub fn insert_session(
 	conn: &mut SqliteConnection,
 	record: &NewPtySessionRecord,
 ) -> Result<(), AppError> {
-	diesel::insert_into(pty_sessions::table)
-		.values(record)
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+	conn.transaction::<_, diesel::result::Error, _>(|conn| {
+		diesel::insert_into(pty_sessions::table)
+			.values(record)
+			.execute(conn)?;
 
-	// Create companion output row with empty BLOB
-	let output = NewPtySessionOutput {
-		session_id: record.id,
-		data: &[],
-	};
-	diesel::insert_into(pty_session_output::table)
-		.values(&output)
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+		let output_state = NewPtyOutputState {
+			session_id: record.id,
+			total_bytes: 0,
+		};
+		diesel::insert_into(pty_output_state::table)
+			.values(&output_state)
+			.execute(conn)?;
 
-	Ok(())
+		Ok(())
+	})
+	.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 pub fn list_by_project(
@@ -90,51 +98,79 @@ pub fn mark_all_open_closed(conn: &mut SqliteConnection) {
 	}
 }
 
-/// Append data to the session's output BLOB and trim to 1MB cap.
+/// Append data as a new output chunk and trim the session history to the configured cap.
 pub fn append_output(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 	data: &[u8],
 ) -> Result<(), AppError> {
-	diesel::sql_query(
-		"UPDATE pty_session_output SET data = data || ? WHERE session_id = ?",
-	)
-	.bind::<diesel::sql_types::Binary, _>(data)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
+	if data.is_empty() {
+		return Ok(());
+	}
 
-	// Trim to last 1MB if needed (SUBSTR with negative offset = last N bytes)
-	diesel::sql_query(
-		"UPDATE pty_session_output \
-		 SET data = SUBSTR(data, -1048576) \
-		 WHERE session_id = ? AND LENGTH(data) > 1048576",
-	)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
+	let output = NewPtyOutputChunk {
+		session_id,
+		data,
+		byte_len: data.len() as i32,
+	};
+	diesel::insert_into(pty_output_chunks::table)
+		.values(&output)
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let total_bytes = increment_output_bytes(conn, session_id, data.len())?;
+	if total_bytes > PERSISTED_PTY_OUTPUT_BYTES_CAP {
+		prune_output_to_cap(
+			conn,
+			session_id,
+			total_bytes - PERSISTED_PTY_OUTPUT_BYTES_CAP,
+		)?;
+		set_output_bytes(conn, session_id, PERSISTED_PTY_OUTPUT_BYTES_CAP)?;
+	}
 
 	Ok(())
 }
 
-/// Clear persisted output for a session (reset BLOB to empty).
+/// Clear persisted output for a session.
 pub fn clear_output(conn: &mut SqliteConnection, session_id: &str) {
-	let _ = diesel::sql_query(
-		"UPDATE pty_session_output SET data = X'' WHERE session_id = ?",
-	)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn);
+	let _ = conn.transaction::<_, diesel::result::Error, _>(|conn| {
+		diesel::delete(
+			pty_output_chunks::table
+				.filter(pty_output_chunks::session_id.eq(session_id)),
+		)
+		.execute(conn)?;
+		diesel::update(
+			pty_output_state::table
+				.filter(pty_output_state::session_id.eq(session_id)),
+		)
+		.set(pty_output_state::total_bytes.eq(0))
+		.execute(conn)?;
+		Ok(())
+	});
 }
 
 pub fn get_session_history(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 ) -> Result<Vec<u8>, AppError> {
-	let data: Vec<u8> = pty_session_output::table
-		.filter(pty_session_output::session_id.eq(session_id))
-		.select(pty_session_output::data)
-		.first(conn)
+	let total_bytes = pty_output_state::table
+		.filter(pty_output_state::session_id.eq(session_id))
+		.select(pty_output_state::total_bytes)
+		.first::<i32>(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?
+		.max(0) as usize;
+
+	let chunks = pty_output_chunks::table
+		.filter(pty_output_chunks::session_id.eq(session_id))
+		.order(pty_output_chunks::id.asc())
+		.select(PtyOutputChunk::as_select())
+		.load::<PtyOutputChunk>(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	let mut data = Vec::with_capacity(total_bytes);
+	for chunk in chunks {
+		data.extend_from_slice(&chunk.data);
+	}
 
 	tracing::info!(target: "pty", %session_id, total_bytes = data.len(), "repo: loaded history");
 	Ok(data)
@@ -150,5 +186,83 @@ pub fn delete_session(
 	.execute(conn)
 	.map_err(|e| AppError::DbError(e.to_string()))?;
 	tracing::info!(target: "pty", %session_id, rows_deleted = rows, "repo: delete_session");
+	Ok(())
+}
+
+fn prune_output_to_cap(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	mut excess: usize,
+) -> Result<(), AppError> {
+	while excess > 0 {
+		let oldest = pty_output_chunks::table
+			.filter(pty_output_chunks::session_id.eq(session_id))
+			.order(pty_output_chunks::id.asc())
+			.select((pty_output_chunks::id, pty_output_chunks::byte_len))
+			.first::<(i32, i32)>(conn)
+			.optional()
+			.map_err(|e| AppError::DbError(e.to_string()))?;
+
+		let Some((id, byte_len)) = oldest else { break };
+		let chunk_len = byte_len.max(0) as usize;
+		if excess >= chunk_len {
+			diesel::delete(
+				pty_output_chunks::table.filter(pty_output_chunks::id.eq(id)),
+			)
+			.execute(conn)
+			.map_err(|e| AppError::DbError(e.to_string()))?;
+			excess -= chunk_len;
+			continue;
+		}
+
+		diesel::sql_query(
+			"UPDATE pty_output_chunks \
+			 SET data = SUBSTR(data, ?), byte_len = byte_len - ? \
+			 WHERE id = ?",
+		)
+		.bind::<Integer, _>((excess + 1) as i32)
+		.bind::<Integer, _>(excess as i32)
+		.bind::<Integer, _>(id)
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+		excess = 0;
+	}
+
+	Ok(())
+}
+
+fn increment_output_bytes(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	additional_bytes: usize,
+) -> Result<usize, AppError> {
+	diesel::sql_query(
+		"UPDATE pty_output_state SET total_bytes = total_bytes + ? WHERE session_id = ?",
+	)
+	.bind::<Integer, _>(additional_bytes as i32)
+	.bind::<Text, _>(session_id)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	pty_output_state::table
+		.filter(pty_output_state::session_id.eq(session_id))
+		.select(pty_output_state::total_bytes)
+		.first::<i32>(conn)
+		.map(|n| n.max(0) as usize)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+fn set_output_bytes(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	total_bytes: usize,
+) -> Result<(), AppError> {
+	diesel::update(
+		pty_output_state::table
+			.filter(pty_output_state::session_id.eq(session_id)),
+	)
+	.set(pty_output_state::total_bytes.eq(total_bytes as i32))
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
 	Ok(())
 }

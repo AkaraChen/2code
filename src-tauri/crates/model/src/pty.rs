@@ -1,4 +1,4 @@
-use crate::schema::{pty_session_output, pty_sessions};
+use crate::schema::{pty_output_chunks, pty_output_state, pty_sessions};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -30,10 +30,28 @@ pub struct NewPtySessionRecord<'a> {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = pty_session_output)]
-pub struct NewPtySessionOutput<'a> {
+#[diesel(table_name = pty_output_chunks)]
+pub struct NewPtyOutputChunk<'a> {
 	pub session_id: &'a str,
 	pub data: &'a [u8],
+	pub byte_len: i32,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = pty_output_chunks)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct PtyOutputChunk {
+	pub id: i32,
+	pub session_id: String,
+	pub data: Vec<u8>,
+	pub byte_len: i32,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = pty_output_state)]
+pub struct NewPtyOutputState<'a> {
+	pub session_id: &'a str,
+	pub total_bytes: i32,
 }
 
 #[derive(Deserialize)]

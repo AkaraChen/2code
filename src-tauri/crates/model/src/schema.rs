@@ -21,9 +21,18 @@ diesel::table! {
 }
 
 diesel::table! {
-	pty_session_output (session_id) {
+	pty_output_chunks (id) {
+		id -> Integer,
 		session_id -> Text,
 		data -> Binary,
+		byte_len -> Integer,
+	}
+}
+
+diesel::table! {
+	pty_output_state (session_id) {
+		session_id -> Text,
+		total_bytes -> Integer,
 	}
 }
 
@@ -42,12 +51,14 @@ diesel::table! {
 }
 
 diesel::joinable!(profiles -> projects (project_id));
-diesel::joinable!(pty_session_output -> pty_sessions (session_id));
+diesel::joinable!(pty_output_chunks -> pty_sessions (session_id));
+diesel::joinable!(pty_output_state -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	profiles,
 	projects,
-	pty_session_output,
+	pty_output_chunks,
+	pty_output_state,
 	pty_sessions,
 );
