@@ -58,7 +58,7 @@ export default function TerminalLayer() {
 		const profile = profileMap.get(activeProfileId);
 		if (!profile) return;
 		createTab.mutate({ profileId: activeProfileId, cwd: profile.worktree_path });
-	}, { target: window });
+	});
 
 	useKey(["w"], (e) => {
 		if (!e.metaKey || !activeProfileId) return;
@@ -66,7 +66,7 @@ export default function TerminalLayer() {
 		const profileState = useTerminalStore.getState().profiles[activeProfileId];
 		if (!profileState?.activeTabId) return;
 		closeTab.mutate({ profileId: activeProfileId, sessionId: profileState.activeTabId });
-	}, { target: window });
+	});
 
 	return (
 		<>
