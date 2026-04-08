@@ -14,7 +14,7 @@ export interface GitDiffState {
 	commitFileCount: number;
 }
 
-export type GitDiffAction =
+type GitDiffAction =
 	| { type: "switchTab"; tab: Tab }
 	| { type: "selectFile"; index: number }
 	| { type: "selectCommit"; commit: GitCommit; index: number }
@@ -90,7 +90,7 @@ export const gitDiffReducer = produce(
 	},
 );
 
-export interface GitDiffContextValue {
+interface GitDiffContextValue {
 	state: GitDiffState;
 	dispatch: React.Dispatch<GitDiffAction>;
 	profileId: string;
