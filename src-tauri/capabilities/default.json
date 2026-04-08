@@ -39,6 +39,16 @@
 					"name": "cursor",
 					"cmd": "cursor",
 					"args": true
+				},
+				{
+					"name": "open",
+					"cmd": "open",
+					"args": true
+				},
+				{
+					"name": "explorer",
+					"cmd": "explorer",
+					"args": true
 				}
 			]
 		}

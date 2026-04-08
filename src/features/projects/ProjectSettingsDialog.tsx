@@ -4,6 +4,7 @@ import {
 	Dialog,
 	Field,
 	Portal,
+	Spinner,
 	Stack,
 	Text,
 	Textarea,
@@ -146,7 +147,19 @@ export default function ProjectSettingsDialog({
 						<Dialog.Header>
 							<Dialog.Title>{m.projectSettings()}</Dialog.Title>
 						</Dialog.Header>
-						<Suspense>
+						<Suspense
+							fallback={
+								<Dialog.Body>
+									<Stack
+										alignItems="center"
+										justifyContent="center"
+										minH="200px"
+									>
+										<Spinner size="md" color="colorPalette.500" />
+									</Stack>
+								</Dialog.Body>
+							}
+						>
 							<ProjectSettingsForm
 								projectId={projectId}
 								onClose={onClose}

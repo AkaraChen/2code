@@ -6,6 +6,7 @@ import {
 	HStack,
 	Icon,
 	Portal,
+	Spinner,
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
@@ -94,7 +95,13 @@ export default function GitDiffDialog({
 							overflow="hidden"
 							display="flex"
 						>
-							<Suspense fallback={null}>
+							<Suspense
+								fallback={
+									<Flex flex="1" align="center" justify="center">
+										<Spinner size="md" color="colorPalette.500" />
+									</Flex>
+								}
+							>
 								<GitDiffContent profileId={profileId} />
 							</Suspense>
 						</Dialog.Body>
@@ -274,7 +281,13 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense fallback={null}>
+								<Suspense
+									fallback={
+										<Flex flex="1" align="center" justify="center">
+											<Spinner size="sm" color="colorPalette.500" />
+										</Flex>
+									}
+								>
 									<ChangesSidebar />
 								</Suspense>
 							</Box>
@@ -288,7 +301,13 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								flexDirection="column"
 								overflow="hidden"
 							>
-								<Suspense fallback={null}>
+								<Suspense
+									fallback={
+										<Flex flex="1" align="center" justify="center">
+											<Spinner size="sm" color="colorPalette.500" />
+										</Flex>
+									}
+								>
 									<HistorySidebar />
 								</Suspense>
 							</Box>
@@ -298,13 +317,25 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 
 				{/* Pane column */}
 				<Activity mode={isChanges ? "visible" : "hidden"}>
-					<Suspense fallback={null}>
+					<Suspense
+						fallback={
+							<Flex flex="1" align="center" justify="center">
+								<Spinner size="md" color="colorPalette.500" />
+							</Flex>
+						}
+					>
 						<ChangesDiffPane visible={isChanges} />
 					</Suspense>
 				</Activity>
 
 				<Activity mode={!isChanges ? "visible" : "hidden"}>
-					<Suspense fallback={null}>
+					<Suspense
+						fallback={
+							<Flex flex="1" align="center" justify="center">
+								<Spinner size="md" color="colorPalette.500" />
+							</Flex>
+						}
+					>
 						<HistoryDiffPane visible={!isChanges} />
 					</Suspense>
 				</Activity>
