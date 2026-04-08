@@ -1,6 +1,6 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
-export const appThemeConfig = defineConfig({
+const appThemeConfig = defineConfig({
   theme: {
     semanticTokens: {
       colors: {
