@@ -19,6 +19,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.2.8",
     "@icons-pack/react-simple-icons": "^13.11.2",
     "@pierre/diffs": "^1.0.10",
     "@tanstack/react-query": "^5.90.20",

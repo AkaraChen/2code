@@ -5,14 +5,16 @@ export function SidebarLink({
   to,
   icon,
   children,
+  pattern,
   style,
 }: {
   to: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  pattern?: string;
   style?: React.CSSProperties;
 }) {
-  const isActive = useMatch(to) !== null;
+  const isActive = useMatch(pattern ?? to) !== null;
   return (
     <HStack
       asChild
