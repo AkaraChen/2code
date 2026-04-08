@@ -20,7 +20,6 @@ import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
 import { getLocale, setLocale } from "@/paraglide/runtime.js";
 import { ThemeContext } from "@/shared/providers/themeContext";
-import { AccentColorPicker } from "./AccentColorPicker";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
@@ -162,7 +161,6 @@ export default function SettingsPage() {
 									</Portal>
 								</Select.Root>
 							</Field.Root>
-							<AccentColorPicker />
 							<BorderRadiusPicker />
 							<Field.Root>
 								<Field.Label>{m.debugMode()}</Field.Label>

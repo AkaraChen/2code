@@ -1,39 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type AccentColor =
-	| "gray"
-	| "red"
-	| "orange"
-	| "yellow"
-	| "green"
-	| "teal"
-	| "blue"
-	| "cyan"
-	| "purple"
-	| "pink";
-
 export type BorderRadius = "none" | "sm" | "md" | "lg" | "xl";
 
 interface ThemeStore {
-	accentColor: AccentColor;
 	borderRadius: BorderRadius;
-	setAccentColor: (color: AccentColor) => void;
 	setBorderRadius: (radius: BorderRadius) => void;
 }
-
-export const ACCENT_COLORS: AccentColor[] = [
-	"gray",
-	"red",
-	"orange",
-	"yellow",
-	"green",
-	"teal",
-	"blue",
-	"cyan",
-	"purple",
-	"pink",
-];
 
 export const BORDER_RADIUS_MAP: Record<
 	BorderRadius,
@@ -49,9 +22,7 @@ export const BORDER_RADIUS_MAP: Record<
 export const useThemeStore = create<ThemeStore>()(
 	persist(
 		(set) => ({
-			accentColor: "gray",
 			borderRadius: "sm",
-			setAccentColor: (color) => set({ accentColor: color }),
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
 		}),
 		{ name: "theme-settings" },

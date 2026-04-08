@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-	ACCENT_COLORS,
 	BORDER_RADIUS_MAP,
 	type BorderRadius,
 	useThemeStore,
 } from "./themeStore";
 
 function resetStore() {
-	useThemeStore.setState({ accentColor: "gray", borderRadius: "sm" });
+	useThemeStore.setState({ borderRadius: "sm" });
 	localStorage.clear();
 }
 
@@ -54,26 +53,8 @@ describe("useThemeStore", () => {
 	beforeEach(resetStore);
 
 	describe("initial state", () => {
-		it("accentColor defaults to 'gray'", () => {
-			expect(getState().accentColor).toBe("gray");
-		});
-
 		it("borderRadius defaults to 'sm'", () => {
 			expect(getState().borderRadius).toBe("sm");
-		});
-	});
-
-	describe("setAccentColor", () => {
-		it("updates accentColor", () => {
-			getState().setAccentColor("red");
-			expect(getState().accentColor).toBe("red");
-		});
-
-		it("accepts all valid accent colors", () => {
-			for (const color of ACCENT_COLORS) {
-				getState().setAccentColor(color);
-				expect(getState().accentColor).toBe(color);
-			}
 		});
 	});
 
