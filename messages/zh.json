@@ -85,6 +85,7 @@
 	"topbarWindsurf": "Windsurf",
 	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
+	"revealInFinder": "在 Finder 中显示",
 	"topbarNoControls": "顶栏暂无控件。从下方拖拽控件到此处。",
 	"topbarAllControlsActive": "所有控件已激活。",
 	"agents": "代理",
@@ -106,5 +107,14 @@
 	"onboardingTourTitle": "创建你的第一个项目",
 	"onboardingTourDesc": "点击此处添加项目文件夹并开始。",
 	"emptyProjectsTitle": "暂无项目",
-	"emptyProjectsDesc": "从侧边栏创建你的第一个项目以开始使用。"
+	"emptyProjectsDesc": "从侧边栏创建你的第一个项目以开始使用。",
+	"projectSettings": "项目设置",
+	"setupScript": "安装脚本",
+	"teardownScript": "清理脚本",
+	"initScript": "初始化脚本",
+	"setupScriptDesc": "创建新 Profile（git worktree）时运行",
+	"teardownScriptDesc": "删除 Profile（git worktree）时运行",
+	"initScriptDesc": "注入到每个新终端会话",
+	"save": "保存",
+	"scriptPlaceholder": "每行一条命令…"
 }

@@ -85,6 +85,7 @@
 	"topbarWindsurf": "Windsurf",
 	"topbarCursor": "Cursor",
 	"topbarGitDiff": "Git Diff",
+	"revealInFinder": "Reveal in Finder",
 	"topbarNoControls": "No controls in the top bar. Drag controls here from below.",
 	"topbarAllControlsActive": "All controls are active.",
 	"agents": "Agents",
@@ -106,5 +107,14 @@
 	"onboardingTourTitle": "Create your first project",
 	"onboardingTourDesc": "Click here to add a project folder and get started.",
 	"emptyProjectsTitle": "No projects yet",
-	"emptyProjectsDesc": "Create your first project from the sidebar to get started."
+	"emptyProjectsDesc": "Create your first project from the sidebar to get started.",
+	"projectSettings": "Project Settings",
+	"setupScript": "Setup Script",
+	"teardownScript": "Teardown Script",
+	"initScript": "Init Script",
+	"setupScriptDesc": "Runs when creating a new profile (git worktree)",
+	"teardownScriptDesc": "Runs when deleting a profile (git worktree)",
+	"initScriptDesc": "Injected into every new terminal session",
+	"save": "Save",
+	"scriptPlaceholder": "One command per line…"
 }

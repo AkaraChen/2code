@@ -1,5 +1,6 @@
 export const queryNamespaces = {
 	project: "project",
+	"project-config": "project-config",
 	"git-branch": "git-branch",
 	"git-diff": "git-diff",
 	"git-log": "git-log",
@@ -10,6 +11,8 @@ export const queryKeys = {
 	projects: {
 		all: ["projects"] as const,
 	},
+	projectConfig: (projectId: string) =>
+		["project-config", projectId] as const,
 	git: {
 		branch: (folder: string) => ["git-branch", folder] as const,
 		diff: (profileId: string) => ["git-diff", profileId] as const,

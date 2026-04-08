@@ -31,6 +31,17 @@ pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn find_by_id(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<Project, AppError> {
+	projects::table
+		.find(id)
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Project: {id}")))
+}
+
 pub fn list_all_with_profiles(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
@@ -146,6 +157,21 @@ mod tests {
 		insert(&mut conn, "p1", "A", "/a").unwrap();
 		let err = insert(&mut conn, "p1", "B", "/b");
 		assert!(err.is_err());
+	}
+
+	#[test]
+	fn find_existing_project() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Test", "/tmp/test").unwrap();
+		let project = find_by_id(&mut conn, "p1").unwrap();
+		assert_eq!(project.name, "Test");
+	}
+
+	#[test]
+	fn find_missing_project() {
+		let mut conn = setup_db();
+		let result = find_by_id(&mut conn, "missing");
+		assert!(result.is_err());
 	}
 
 	#[test]

@@ -1,18 +1,8 @@
-use serde::Deserialize;
 use std::path::Path;
 use std::process::Command;
 
 use model::error::AppError;
-
-#[derive(Debug, Deserialize, Default, PartialEq)]
-pub struct ProjectConfig {
-	#[serde(default)]
-	pub setup_script: Vec<String>,
-	#[serde(default)]
-	pub teardown_script: Vec<String>,
-	#[serde(default)]
-	pub init_script: Vec<String>,
-}
+pub use model::project::ProjectConfig;
 
 pub fn load_project_config(
 	project_folder: &str,
@@ -29,6 +19,21 @@ pub fn load_project_config(
 			format!("Failed to parse 2code.json: {e}"),
 		))
 	})
+}
+
+pub fn write_project_config(
+	project_folder: &str,
+	config: &ProjectConfig,
+) -> Result<(), AppError> {
+	let config_path = Path::new(project_folder).join("2code.json");
+	let content = serde_json::to_string_pretty(config).map_err(|e| {
+		AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::InvalidData,
+			format!("Failed to serialize 2code.json: {e}"),
+		))
+	})?;
+	std::fs::write(&config_path, content)?;
+	Ok(())
 }
 
 pub fn execute_scripts(scripts: &[String], cwd: &Path) {
@@ -171,5 +176,20 @@ mod tests {
 	fn execute_scripts_empty_list() {
 		let dir = TempDir::new().unwrap();
 		execute_scripts(&[], dir.path());
+	}
+
+	#[test]
+	fn write_config_round_trip() {
+		let dir = TempDir::new().unwrap();
+		let config = ProjectConfig {
+			setup_script: vec!["npm install".to_string()],
+			teardown_script: vec!["rm -rf node_modules".to_string()],
+			init_script: vec!["echo ready".to_string()],
+		};
+
+		write_project_config(dir.path().to_str().unwrap(), &config).unwrap();
+
+		let loaded = load_project_config(dir.path().to_str().unwrap()).unwrap();
+		assert_eq!(loaded, config);
 	}
 }

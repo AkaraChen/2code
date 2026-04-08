@@ -15,6 +15,7 @@ import {
 } from "react-icons/ri";
 import { NavLink, useMatch } from "react-router";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
+import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -42,16 +43,11 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
 
-	const [expanded, setExpanded] = useState(isAnyActive);
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
-
-	// Auto-expand on inactive → active transition (derived state during render)
-	const [wasActive, setWasActive] = useState(isAnyActive);
-	if (wasActive !== isAnyActive) {
-		setWasActive(isAnyActive);
-		if (isAnyActive) setExpanded(true);
-	}
+	const settingsDialog = useDialogState();
+	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+	const expanded = userExpanded ?? true;
 
 	return (
 		<>
@@ -81,7 +77,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							onClick={(e) => {
 								e.preventDefault();
 								e.stopPropagation();
-								setExpanded((v) => !v);
+								setUserExpanded((prev) =>
+									prev === null ? !expanded : !prev,
+								);
 							}}
 						>
 							{expanded ? (
@@ -95,6 +93,12 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				<Portal>
 					<Menu.Positioner>
 						<Menu.Content>
+							<Menu.Item
+								value="settings"
+								onClick={settingsDialog.onOpen}
+							>
+								{m.projectSettings()}
+							</Menu.Item>
 							<Menu.Item
 								value="rename"
 								onClick={renameDialog.onOpen}
@@ -156,6 +160,11 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				isOpen={deleteDialog.isOpen}
 				onClose={deleteDialog.onClose}
 				project={project}
+			/>
+			<ProjectSettingsDialog
+				isOpen={settingsDialog.isOpen}
+				onClose={settingsDialog.onClose}
+				projectId={project.id}
 			/>
 		</>
 	);
