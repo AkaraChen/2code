@@ -35,6 +35,7 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
+		refetchInterval: 5_000,
 	});
 
 	return useMemo(() => {
