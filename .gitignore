@@ -27,3 +27,4 @@ dist-ssr
 # Coverage reports
 src-tauri/coverage/
 /coverage
+e2e-tests/artifacts/

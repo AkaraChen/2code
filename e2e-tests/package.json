@@ -1,0 +1,13 @@
+{
+  "name": "2code-e2e-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "mocha \"test/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "chai": "^5.2.1",
+    "mocha": "^11.7.1",
+    "selenium-webdriver": "^4.34.0"
+  }
+}
