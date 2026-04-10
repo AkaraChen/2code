@@ -28,6 +28,7 @@ export function ProfileItem({
 						asChild
 						data-sidebar-item
 						gap="2"
+						position="relative"
 						ps="9"
 						pe="4"
 						py="1"
@@ -36,6 +37,19 @@ export function ProfileItem({
 						fontSize="sm"
 						bg={isActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
+						_before={
+							isActive
+								? {
+										content: '""',
+										position: "absolute",
+										insetInlineStart: "6",
+										insetBlock: "1.5",
+										width: "2px",
+										borderRadius: "full",
+										bg: "colorPalette.solid",
+									}
+								: undefined
+						}
 					>
 						<NavLink
 							to={`/projects/${projectId}/profiles/${profile.id}`}

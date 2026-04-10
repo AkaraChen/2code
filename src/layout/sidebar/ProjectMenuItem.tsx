@@ -35,7 +35,6 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const profileMatch = useMatch(
 		`/projects/${project.id}/profiles/:profileId`,
 	);
-	const isAnyActive = profileMatch !== null;
 	const activeProfileId = profileMatch?.params.profileId ?? null;
 	const isDefaultActive = activeProfileId === defaultProfile?.id;
 
@@ -58,11 +57,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						px="4"
 						py="1.5"
 						cursor="pointer"
-						borderLeft="3px solid"
-						borderColor={
-							isAnyActive ? "colorPalette.solid" : "transparent"
-						}
-						bg={isAnyActive ? "bg.subtle" : "transparent"}
+						fontWeight="medium"
 						_hover={{ bg: "bg.subtle" }}
 					>
 						<Box asChild truncate flex="1" data-sidebar-item>
@@ -126,6 +121,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						asChild
 						data-sidebar-item
 						gap="2"
+						position="relative"
 						ps="9"
 						pe="4"
 						py="1"
@@ -133,6 +129,19 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						fontSize="sm"
 						bg={isDefaultActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
+						_before={
+							isDefaultActive
+								? {
+										content: '""',
+										position: "absolute",
+										insetInlineStart: "6",
+										insetBlock: "1.5",
+										width: "2px",
+										borderRadius: "full",
+										bg: "colorPalette.solid",
+									}
+								: undefined
+						}
 					>
 						<NavLink to={defaultProfileUrl}>
 							<Icon fontSize="xs" color="fg.muted">
