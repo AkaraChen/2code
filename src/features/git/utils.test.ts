@@ -44,7 +44,7 @@ function makeFile(
 	hunks: Array<{
 		hunkContent: Array<
 			| { type: "context" }
-			| { type: "change"; additions: string[]; deletions: string[] }
+			| { type: "change"; additions: number; deletions: number }
 		>;
 	}>,
 ): FileDiffMetadata {
@@ -70,8 +70,8 @@ describe("getLineStats", () => {
 				hunkContent: [
 					{
 						type: "change",
-						additions: ["a", "b"],
-						deletions: ["c"],
+						additions: 2,
+						deletions: 1,
 					},
 				],
 			},
@@ -85,13 +85,13 @@ describe("getLineStats", () => {
 				hunkContent: [
 					{
 						type: "change",
-						additions: ["a"],
-						deletions: ["b", "c"],
+						additions: 1,
+						deletions: 2,
 					},
 					{
 						type: "change",
-						additions: ["d", "e", "f"],
-						deletions: [],
+						additions: 3,
+						deletions: 0,
 					},
 				],
 			},
@@ -103,15 +103,15 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: ["a"], deletions: ["b"] },
+					{ type: "change", additions: 1, deletions: 1 },
 				],
 			},
 			{
 				hunkContent: [
 					{
 						type: "change",
-						additions: ["c", "d"],
-						deletions: ["e"],
+						additions: 2,
+						deletions: 1,
 					},
 				],
 			},
@@ -124,7 +124,7 @@ describe("getLineStats", () => {
 			{
 				hunkContent: [
 					{ type: "context" },
-					{ type: "change", additions: ["a"], deletions: [] },
+					{ type: "change", additions: 1, deletions: 0 },
 					{ type: "context" },
 				],
 			},
@@ -136,7 +136,7 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: [], deletions: ["x"] },
+					{ type: "change", additions: 0, deletions: 1 },
 				],
 			},
 		]);
@@ -147,7 +147,7 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: [], deletions: [] },
+					{ type: "change", additions: 0, deletions: 0 },
 				],
 			},
 		]);
@@ -164,8 +164,8 @@ describe("getLineStats", () => {
 			hunkContent: [
 				{
 					type: "change" as const,
-					additions: ["a"],
-					deletions: ["b", "c"],
+					additions: 1,
+					deletions: 2,
 				},
 			],
 		}));
@@ -179,12 +179,12 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: ["a", "b", "c"], deletions: [] },
+					{ type: "change", additions: 3, deletions: 0 },
 				],
 			},
 			{
 				hunkContent: [
-					{ type: "change", additions: ["d"], deletions: [] },
+					{ type: "change", additions: 1, deletions: 0 },
 				],
 			},
 		]);
@@ -195,7 +195,7 @@ describe("getLineStats", () => {
 		const file = makeFile([
 			{
 				hunkContent: [
-					{ type: "change", additions: [], deletions: ["a", "b"] },
+					{ type: "change", additions: 0, deletions: 2 },
 				],
 			},
 		]);
@@ -207,7 +207,7 @@ describe("getLineStats", () => {
 			{
 				hunkContent: [
 					{ type: "unknown-type" } as never,
-					{ type: "change", additions: ["a"], deletions: [] },
+					{ type: "change", additions: 1, deletions: 0 },
 				],
 			},
 		]);

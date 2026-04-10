@@ -5,8 +5,10 @@ describe("queryNamespaces", () => {
 	it("contains all expected namespace strings", () => {
 		expect(queryNamespaces).toEqual({
 			project: "project",
+			"project-config": "project-config",
 			"git-branch": "git-branch",
 			"git-diff": "git-diff",
+			"git-diff-stats": "git-diff-stats",
 			"git-log": "git-log",
 			"git-commit-diff": "git-commit-diff",
 		});
@@ -24,6 +26,15 @@ describe("queryKeys", () => {
 		});
 	});
 
+	describe("projectConfig", () => {
+		it("includes projectId in key", () => {
+			expect(queryKeys.projectConfig("project-1")).toEqual([
+				"project-config",
+				"project-1",
+			]);
+		});
+	});
+
 	describe("git", () => {
 		it("branch() includes folder in key", () => {
 			expect(queryKeys.git.branch("/path/to/repo")).toEqual([
@@ -35,6 +46,13 @@ describe("queryKeys", () => {
 		it("diff() includes profileId in key", () => {
 			expect(queryKeys.git.diff("profile-1")).toEqual([
 				"git-diff",
+				"profile-1",
+			]);
+		});
+
+		it("diffStats() includes profileId in key", () => {
+			expect(queryKeys.git.diffStats("profile-1")).toEqual([
+				"git-diff-stats",
 				"profile-1",
 			]);
 		});
