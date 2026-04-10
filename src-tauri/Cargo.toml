@@ -44,7 +44,7 @@ tokio = { version = "1", features = [ "net" ] }
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-text = "20"
+core-text = "21"
 
 [dev-dependencies]
 diesel = { version = "2", features = ["sqlite"] }
