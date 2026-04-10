@@ -135,5 +135,8 @@
 	"teardownScriptDesc": "删除 Profile（git worktree）时运行",
 	"initScriptDesc": "注入到每个新终端会话",
 	"save": "保存",
-	"scriptPlaceholder": "每行一条命令…"
+	"scriptPlaceholder": "每行一条命令…",
+	"scripts": "脚本",
+	"templates": "模板",
+	"noTemplatesDropdownHint": "可在项目设置中添加项目模板，或在全局设置中添加全局模板。"
 }

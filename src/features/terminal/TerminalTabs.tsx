@@ -69,7 +69,6 @@ export default function TerminalTabs({
 	}
 
 	function openTemplateMenu() {
-		if (!hasTemplates) return;
 		const rect = newTerminalButtonRef.current?.getBoundingClientRect();
 		if (!rect) return;
 		clearCloseMenuTimer();
@@ -180,7 +179,7 @@ export default function TerminalTabs({
 				</Tabs.List>
 			</Tabs.Root>
 
-			{hasTemplates && isTemplateMenuOpen && templateMenuPosition ? (
+			{isTemplateMenuOpen && templateMenuPosition ? (
 				<Portal>
 					<Box
 						position="fixed"
@@ -198,100 +197,111 @@ export default function TerminalTabs({
 						onMouseEnter={openTemplateMenu}
 						onMouseLeave={scheduleTemplateMenuClose}
 					>
-						<Stack gap="2">
-							{projectTemplates.length > 0 ? (
-								<>
-									<Text
-										px="2"
-										pt="1"
-										fontSize="xs"
-										fontWeight="semibold"
-										color="fg.muted"
-										textTransform="uppercase"
-									>
-										{m.projectTerminalTemplates()}
-									</Text>
-									{projectTemplates.map((template) => (
-										<Button
-											key={template.id}
-											variant="ghost"
-											justifyContent="flex-start"
-											alignItems="flex-start"
-											h="auto"
+						{!hasTemplates ? (
+							<Stack gap="1" px="2" py="3">
+								<Text fontSize="sm" color="fg.muted">
+									{m.noTerminalTemplates()}
+								</Text>
+								<Text fontSize="xs" color="fg.subtle">
+									{m.noTemplatesDropdownHint()}
+								</Text>
+							</Stack>
+						) : (
+							<Stack gap="2">
+								{projectTemplates.length > 0 ? (
+									<>
+										<Text
 											px="2"
-											py="2"
-											disabled={createTab.isPending}
-											onClick={() => {
-												void handleTemplateClick(
-													template,
-													"project",
-												);
-											}}
+											pt="1"
+											fontSize="xs"
+											fontWeight="semibold"
+											color="fg.muted"
+											textTransform="uppercase"
 										>
-											<Stack
-												gap="0.5"
-												align="start"
-												textAlign="left"
+											{m.projectTerminalTemplates()}
+										</Text>
+										{projectTemplates.map((template) => (
+											<Button
+												key={template.id}
+												variant="ghost"
+												justifyContent="flex-start"
+												alignItems="flex-start"
+												h="auto"
+												px="2"
+												py="2"
+												disabled={createTab.isPending}
+												onClick={() => {
+													void handleTemplateClick(
+														template,
+														"project",
+													);
+												}}
+											>
+												<Stack
+													gap="0.5"
+													align="start"
+													textAlign="left"
+												>
+													<Text fontSize="sm">
+														{template.name}
+													</Text>
+													{template.cwd.trim() ? (
+														<Text
+															fontSize="xs"
+															color="fg.muted"
+														>
+															{template.cwd.trim()}
+														</Text>
+													) : null}
+												</Stack>
+											</Button>
+										))}
+									</>
+								) : null}
+
+								{projectTemplates.length > 0 &&
+								globalTemplates.length > 0 ? (
+									<Box h="1px" bg="border.subtle" mx="2" />
+								) : null}
+
+								{globalTemplates.length > 0 ? (
+									<>
+										<Text
+											px="2"
+											pt="1"
+											fontSize="xs"
+											fontWeight="semibold"
+											color="fg.muted"
+											textTransform="uppercase"
+										>
+											{m.globalTerminalTemplates()}
+										</Text>
+										{globalTemplates.map((template) => (
+											<Button
+												key={template.id}
+												variant="ghost"
+												justifyContent="flex-start"
+												alignItems="flex-start"
+												h="auto"
+												px="2"
+												py="2"
+												disabled={createTab.isPending}
+												onClick={() => {
+													void handleTemplateClick(
+														template,
+														"global",
+													);
+												}}
 											>
 												<Text fontSize="sm">
 													{template.name}
 												</Text>
-												{template.cwd.trim() ? (
-													<Text
-														fontSize="xs"
-														color="fg.muted"
-													>
-														{template.cwd.trim()}
-													</Text>
-												) : null}
-											</Stack>
-										</Button>
-									))}
-								</>
-							) : null}
-
-							{projectTemplates.length > 0 &&
-							globalTemplates.length > 0 ? (
-								<Box h="1px" bg="border.subtle" mx="2" />
-							) : null}
-
-							{globalTemplates.length > 0 ? (
-								<>
-									<Text
-										px="2"
-										pt="1"
-										fontSize="xs"
-										fontWeight="semibold"
-										color="fg.muted"
-										textTransform="uppercase"
-									>
-										{m.globalTerminalTemplates()}
-									</Text>
-									{globalTemplates.map((template) => (
-										<Button
-											key={template.id}
-											variant="ghost"
-											justifyContent="flex-start"
-											alignItems="flex-start"
-											h="auto"
-											px="2"
-											py="2"
-											disabled={createTab.isPending}
-											onClick={() => {
-												void handleTemplateClick(
-													template,
-													"global",
-												);
-											}}
-										>
-											<Text fontSize="sm">
-												{template.name}
-											</Text>
-										</Button>
-									))}
-								</>
-							) : null}
-						</Stack>
+											</Button>
+										))}
+									</>
+								) : null}
+							</Stack>
+						)}
 					</Box>
 				</Portal>
 			) : null}
