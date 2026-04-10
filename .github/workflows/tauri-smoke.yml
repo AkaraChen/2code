@@ -57,3 +57,11 @@ jobs:
 
       - name: Run Tauri smoke test
         run: xvfb-run -a bun run test:tauri-smoke
+
+      - name: Upload smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-smoke-artifacts
+          path: e2e-tests/artifacts/
+          if-no-files-found: ignore

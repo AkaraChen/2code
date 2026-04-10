@@ -75,15 +75,19 @@ describe("Tauri smoke", function () {
 			return;
 		}
 
-		const filename = path.join(
-			artifactsDir,
-			`${sanitize(this.currentTest.title)}.png`,
-		);
+		const basename = sanitize(this.currentTest.title);
+		const screenshotPath = path.join(artifactsDir, `${basename}.png`);
+		const pageSourcePath = path.join(artifactsDir, `${basename}.html`);
 
 		try {
+			const pageSource = await driver.getPageSource();
+			await fsp.writeFile(pageSourcePath, pageSource, "utf8");
+
 			const screenshot = await driver.takeScreenshot();
-			await fsp.writeFile(filename, screenshot, "base64");
-			console.error(`Saved smoke-test failure screenshot to ${filename}`);
+			await fsp.writeFile(screenshotPath, screenshot, "base64");
+			console.error(
+				`Saved smoke-test failure diagnostics to ${screenshotPath} and ${pageSourcePath}`,
+			);
 		} catch (error) {
 			console.error("Failed to capture smoke-test screenshot:", error);
 		}
@@ -112,37 +116,7 @@ describe("Tauri smoke", function () {
 });
 
 function buildAppForSmoke() {
-	const targetTriple = runCommand("rustc", ["--print", "host-tuple"]).trim();
-	const helperBinary = path.join(
-		repoRoot,
-		"src-tauri",
-		"target",
-		"debug",
-		process.platform === "win32" ? "2code-helper.exe" : "2code-helper",
-	);
-	const helperDest = path.join(
-		repoRoot,
-		"src-tauri",
-		"binaries",
-		`2code-helper-${targetTriple}`,
-	);
-
-	runOrThrow("cargo", [
-		"build",
-		"--manifest-path",
-		"src-tauri/Cargo.toml",
-		"-p",
-		"twocode-helper",
-	]);
-
-	fs.mkdirSync(path.dirname(helperDest), { recursive: true });
-	fs.copyFileSync(helperBinary, helperDest);
-	if (process.platform !== "win32") {
-		fs.chmodSync(helperDest, 0o755);
-	}
-
-	runOrThrow("bun", ["run", "build"]);
-	runOrThrow("cargo", ["build", "--manifest-path", "src-tauri/Cargo.toml"]);
+	runOrThrow("bun", ["tauri", "build", "--debug", "--no-bundle"]);
 }
 
 function startTauriDriver() {
@@ -287,21 +261,6 @@ function runOrThrow(command, args) {
 	if (result.status !== 0) {
 		throw new Error(`Command failed: ${command} ${args.join(" ")}`);
 	}
-}
-
-function runCommand(command, args) {
-	const result = spawnSync(command, args, {
-		cwd: repoRoot,
-		encoding: "utf8",
-		shell: process.platform === "win32",
-		env: process.env,
-	});
-
-	if (result.status !== 0) {
-		throw new Error(result.stderr || `Command failed: ${command}`);
-	}
-
-	return result.stdout;
 }
 
 function assertExecutableExists(filepath, hint) {
