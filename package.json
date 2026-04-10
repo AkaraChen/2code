@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite",
+    "dev": "portless 2code vite",
     "build": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide && tsc && vite build",
     "typegen": "cargo tauri-typegen generate && node ./scripts/fix-tauri-generated.mjs",
     "open:dmg": "bash ./scripts/open-dmg.sh",
@@ -70,6 +70,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "jsdom": "^29.0.2",
     "knip": "^6.3.1",
+    "portless": "^0.10.1",
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"

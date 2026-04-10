@@ -3,7 +3,6 @@ members = [ "bins/*", "crates/*" ]
 
 [package]
 name = "code"
-version = "1.3.0"
 description = "A Tauri App"
 authors = [ "you" ]
 edition = "2021"

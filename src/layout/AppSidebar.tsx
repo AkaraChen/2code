@@ -83,7 +83,7 @@ export default function AppSidebar() {
             </SidebarLink>
           )}
 
-          <HStack px="4" pt="5" pb="2" justify="space-between">
+          <HStack px="4" pt="2" pb="2" justify="space-between">
             <Text
               fontSize="xs"
               fontWeight="semibold"
