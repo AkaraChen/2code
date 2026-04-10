@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { expect } from "chai";
-import { Builder, By, Capabilities, until } from "selenium-webdriver";
+import { Builder, By, Capabilities } from "selenium-webdriver";
 
 const testDir = fileURLToPath(new URL(".", import.meta.url));
 const e2eRoot = path.resolve(testDir, "..");
@@ -67,7 +67,7 @@ describe("Tauri smoke", function () {
 			.withCapabilities(capabilities)
 			.build();
 
-		await driver.wait(until.elementLocated(By.css("body")), 60_000);
+		await waitForPageReady();
 	});
 
 	afterEach(async function () {
@@ -96,24 +96,11 @@ describe("Tauri smoke", function () {
 	it("launches the desktop shell and renders a non-empty main layout", async function () {
 		this.timeout(60_000);
 
-		await driver.wait(until.elementLocated(By.css("nav[aria-label]")), 60_000);
-		await driver.wait(until.elementLocated(By.css("main")), 60_000);
-		await driver.wait(
-			until.elementLocated(By.css("#add-project-button")),
-			60_000,
-		);
+		const nav = await waitForElement("nav[aria-label]");
+		const main = await waitForElement("main");
+		const addProjectButton = await waitForElement("#add-project-button");
 
-		await driver.wait(async () => {
-			const text = await readBodyText();
-			return text.trim().length > 20;
-		}, 60_000);
-
-		const nav = await driver.findElement(By.css("nav[aria-label]"));
-		const main = await driver.findElement(By.css("main"));
-		const addProjectButton = await driver.findElement(
-			By.css("#add-project-button"),
-		);
-		const bodyText = await readBodyText();
+		const bodyText = await waitForBodyText((text) => text.trim().length > 20);
 
 		expect(await nav.isDisplayed()).to.equal(true);
 		expect(await main.isDisplayed()).to.equal(true);
@@ -200,7 +187,90 @@ async function waitForWebDriverServer() {
 }
 
 async function readBodyText() {
-	return driver.findElement(By.css("body")).getText();
+	const body = await waitForElement("body");
+	return body.getText();
+}
+
+async function waitForPageReady(timeoutMs = 60_000) {
+	const deadline = Date.now() + timeoutMs;
+	let lastError;
+
+	while (Date.now() < deadline) {
+		try {
+			const readyState = await driver.executeScript(
+				"return document.readyState",
+			);
+			if (readyState === "complete") {
+				await waitForElement("body", 5_000);
+				return;
+			}
+		} catch (error) {
+			if (!isTransientNavigationError(error)) {
+				throw error;
+			}
+			lastError = error;
+		}
+
+		await sleep(500);
+	}
+
+	throw lastError ?? new Error("Timed out waiting for the Tauri page to load.");
+}
+
+async function waitForElement(selector, timeoutMs = 60_000) {
+	const deadline = Date.now() + timeoutMs;
+	let lastError;
+
+	while (Date.now() < deadline) {
+		try {
+			const elements = await driver.findElements(By.css(selector));
+			if (elements.length > 0) {
+				return elements[0];
+			}
+		} catch (error) {
+			if (!isTransientNavigationError(error)) {
+				throw error;
+			}
+			lastError = error;
+		}
+
+		await sleep(500);
+	}
+
+	throw (
+		lastError ?? new Error(`Timed out waiting for element matching ${selector}.`)
+	);
+}
+
+async function waitForBodyText(predicate, timeoutMs = 60_000) {
+	const deadline = Date.now() + timeoutMs;
+	let lastError;
+
+	while (Date.now() < deadline) {
+		try {
+			const text = await readBodyText();
+			if (predicate(text)) {
+				return text;
+			}
+		} catch (error) {
+			if (!isTransientNavigationError(error)) {
+				throw error;
+			}
+			lastError = error;
+		}
+
+		await sleep(500);
+	}
+
+	throw lastError ?? new Error("Timed out waiting for non-empty body text.");
+}
+
+function isTransientNavigationError(error) {
+	const name = error?.name ?? "";
+	const message = error?.message ?? "";
+
+	return /NoSuchFrameError|StaleElementReferenceError/i.test(name)
+		|| /unload event|stale element/i.test(message);
 }
 
 function runOrThrow(command, args) {

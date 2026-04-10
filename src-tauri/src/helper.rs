@@ -7,6 +7,7 @@ use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::Json;
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "macos")]
 use tauri_plugin_store::StoreExt;
 
 pub struct HelperState {
