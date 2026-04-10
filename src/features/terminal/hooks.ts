@@ -9,29 +9,39 @@ import {
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { useTerminalStore } from "./store";
+import { DEFAULT_TERMINAL_SHELL } from "./templates";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
-
-// TODO: Allow users to configure the default shell in settings
-const DEFAULT_SHELL = "/bin/zsh";
 
 export function useCreateTerminalTab() {
 	return useMutation({
 		mutationFn: async ({
 			profileId,
 			cwd,
+			title,
+			shell = DEFAULT_TERMINAL_SHELL,
+			startupCommands = [],
 		}: {
 			profileId: string;
 			cwd: string;
+			title?: string;
+			shell?: string;
+			startupCommands?: string[];
 		}) => {
 			const counter =
 				useTerminalStore.getState().profiles[profileId]?.counter ?? 0;
-			const title = `Terminal ${counter + 1}`;
+			const nextTitle = title ?? `Terminal ${counter + 1}`;
 			const sessionId = await createPtySession({
-				meta: { profileId, title },
-				config: { shell: DEFAULT_SHELL, cwd, rows: 24, cols: 80 },
+				meta: { profileId, title: nextTitle },
+				config: {
+					shell,
+					cwd,
+					rows: 24,
+					cols: 80,
+					startupCommands,
+				},
 			});
-			return { profileId, sessionId, title };
+			return { profileId, sessionId, title: nextTitle };
 		},
 		onSuccess: ({ profileId, sessionId, title }) => {
 			useTerminalStore.getState().addTab(profileId, sessionId, title);

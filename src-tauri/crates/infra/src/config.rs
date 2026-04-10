@@ -113,6 +113,7 @@ mod tests {
 		assert!(config.setup_script.is_empty());
 		assert!(config.teardown_script.is_empty());
 		assert!(config.init_script.is_empty());
+		assert!(config.terminal_templates.is_empty());
 	}
 
 	#[test]
@@ -183,6 +184,15 @@ mod tests {
 			setup_script: vec!["npm install".to_string()],
 			teardown_script: vec!["rm -rf node_modules".to_string()],
 			init_script: vec!["echo ready".to_string()],
+			terminal_templates: vec![model::project::ProjectTerminalTemplate {
+				id: "template-1".to_string(),
+				name: "Dev Server".to_string(),
+				cwd: "apps/web".to_string(),
+				commands: vec![
+					"bun install".to_string(),
+					"bun run dev".to_string(),
+				],
+			}],
 		};
 
 		write_project_config(dir.path().to_str().unwrap(), &config).unwrap();

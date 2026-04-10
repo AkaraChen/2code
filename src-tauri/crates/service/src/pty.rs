@@ -314,6 +314,23 @@ pub fn create_session(
 		guard.push(handle);
 	}
 
+	if !config.startup_commands.is_empty() {
+		let mut startup_commands = config.startup_commands.join("\n");
+		startup_commands.push('\n');
+
+		if let Err(err) = session::write_to_pty(
+			&ctx.sessions,
+			&session_id,
+			startup_commands.as_bytes(),
+		) {
+			tracing::warn!(
+				target: "pty",
+				%session_id,
+				"failed to inject startup commands: {err}"
+			);
+		}
+	}
+
 	Ok(session_id)
 }
 

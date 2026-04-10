@@ -23,6 +23,7 @@ import { ThemeContext } from "@/shared/providers/themeContext";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
+import { GlobalTerminalTemplatesSettings } from "./GlobalTerminalTemplatesSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
@@ -66,6 +67,9 @@ export default function SettingsPage() {
 						</Tabs.Trigger>
 						<Tabs.Trigger value="terminal">
 							{m.terminal()}
+						</Tabs.Trigger>
+						<Tabs.Trigger value="template">
+							{m.terminalTemplates()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
 							{m.notification()}
@@ -196,6 +200,11 @@ export default function SettingsPage() {
 								<TerminalPreview themeId={previewThemeId} />
 							</Box>
 						</Flex>
+					</Tabs.Content>
+					<Tabs.Content value="template">
+						<Stack gap="6" maxW="2xl">
+							<GlobalTerminalTemplatesSettings />
+						</Stack>
 					</Tabs.Content>
 					<Tabs.Content value="notification">
 						<NotificationSettings />

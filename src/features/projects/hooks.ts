@@ -91,6 +91,13 @@ export function useProjectConfig(projectId: string) {
 	});
 }
 
+export function useProjectConfigQuery(projectId: string) {
+	return useQuery({
+		queryKey: queryKeys.projectConfig(projectId),
+		queryFn: () => getProjectConfig({ projectId }),
+	});
+}
+
 export function useSaveProjectConfig() {
 	const queryClient = useQueryClient();
 	return useMutation({

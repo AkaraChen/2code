@@ -11,6 +11,17 @@ pub struct ProjectConfig {
 	pub teardown_script: Vec<String>,
 	#[serde(default)]
 	pub init_script: Vec<String>,
+	#[serde(default)]
+	pub terminal_templates: Vec<ProjectTerminalTemplate>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Clone)]
+pub struct ProjectTerminalTemplate {
+	pub id: String,
+	pub name: String,
+	pub cwd: String,
+	#[serde(default)]
+	pub commands: Vec<String>,
 }
 
 #[derive(Queryable, Selectable, Serialize)]

@@ -9,8 +9,15 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
+import { TerminalTemplateListEditor } from "@/features/terminal/TerminalTemplateListEditor";
+import {
+	createEmptyProjectTerminalTemplateDraft,
+	normalizeProjectTerminalTemplates,
+	toProjectTerminalTemplateDraft,
+	type ProjectTerminalTemplateDraft,
+} from "@/features/terminal/templates";
 import * as m from "@/paraglide/messages.js";
 import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 
@@ -46,6 +53,11 @@ function ProjectSettingsForm({
 }) {
 	const { data: config } = useProjectConfig(projectId);
 	const saveConfig = useSaveProjectConfig();
+	const [templateDrafts, setTemplateDrafts] = useState<
+		ProjectTerminalTemplateDraft[]
+	>(() =>
+		(config.terminal_templates ?? []).map(toProjectTerminalTemplateDraft),
+	);
 	const form = useForm<FormValues>({
 		defaultValues: {
 			initScript: scriptsToText(config.init_script),
@@ -61,6 +73,8 @@ function ProjectSettingsForm({
 				init_script: textToScripts(data.initScript),
 				setup_script: textToScripts(data.setupScript),
 				teardown_script: textToScripts(data.teardownScript),
+				terminal_templates:
+					normalizeProjectTerminalTemplates(templateDrafts),
 			},
 		});
 		onClose();
@@ -111,6 +125,15 @@ function ProjectSettingsForm({
 							fontSize="sm"
 						/>
 					</Field.Root>
+
+					<TerminalTemplateListEditor
+						title={m.projectTerminalTemplates()}
+						description={m.projectTerminalTemplatesDescription()}
+						templates={templateDrafts}
+						onChange={setTemplateDrafts}
+						createTemplate={createEmptyProjectTerminalTemplateDraft}
+						showCwd
+					/>
 				</Stack>
 			</Dialog.Body>
 			<Dialog.Footer>

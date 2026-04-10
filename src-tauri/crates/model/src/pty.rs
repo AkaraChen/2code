@@ -43,12 +43,15 @@ pub struct PtySessionMeta {
 	pub title: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct PtyConfig {
 	pub shell: String,
 	pub cwd: String,
 	pub rows: u16,
 	pub cols: u16,
+	#[serde(default)]
+	pub startup_commands: Vec<String>,
 }
 
 #[derive(Serialize)]

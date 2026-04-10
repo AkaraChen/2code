@@ -92,6 +92,7 @@ export default function TerminalLayer() {
 							/>
 						<Box flex="1" minH="0">
 						<TerminalTabs
+							projectId={project?.id ?? profile.project_id}
 							profileId={profileId}
 							cwd={profile.worktree_path}
 						/>

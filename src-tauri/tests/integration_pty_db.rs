@@ -1,8 +1,22 @@
 mod common;
 
+use std::sync::{Arc, Mutex};
+
 use common::{cleanup, create_project_with_git_repo, setup_db};
-use model::pty::NewPtySessionRecord;
+use infra::db::DbPool;
+use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
 use repo::pty;
+use service::pty::{create_flush_senders, PtyContext};
+
+struct TestPtyEmitter;
+
+impl service::PtyEventEmitter for TestPtyEmitter {
+	fn emit_output(&self, _session_id: &str, _text: &str) -> bool {
+		true
+	}
+
+	fn emit_exit(&self, _session_id: &str) {}
+}
 
 /// Helper: insert a session record for a given profile.
 fn insert_session(
@@ -399,6 +413,58 @@ fn insert_duplicate_session_id_returns_error() {
 	let result = pty::insert_session(&mut conn, &record);
 	assert!(result.is_err());
 
+	cleanup(&dir);
+}
+
+#[test]
+fn create_session_executes_startup_commands() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let db: DbPool = Arc::new(Mutex::new(conn));
+
+	let sessions = infra::pty::create_session_map();
+	let read_threads = infra::pty::create_thread_tracker();
+	let flush_senders = create_flush_senders();
+	let emitter = Arc::new(TestPtyEmitter);
+	let ctx = PtyContext {
+		db: db.clone(),
+		sessions: sessions.clone(),
+		flush_senders: flush_senders.clone(),
+		read_threads: read_threads.clone(),
+		emitter,
+		helper_url: None,
+		helper_bin: None,
+	};
+
+	let session_id = service::pty::create_session(
+		&ctx,
+		&PtySessionMeta {
+			profile_id: default_profile.id.clone(),
+			title: "Dev Server".to_string(),
+		},
+		&PtyConfig {
+			shell: "/bin/sh".to_string(),
+			cwd: default_profile.worktree_path.clone(),
+			rows: 24,
+			cols: 80,
+			startup_commands: vec![
+				"printf 'tmpl-ok\\n'".to_string(),
+				"exit".to_string(),
+			],
+		},
+	)
+	.unwrap();
+
+	infra::pty::join_all_read_threads(&read_threads);
+
+	let history = {
+		let mut db_conn = db.lock().unwrap();
+		service::pty::get_history(&mut db_conn, &session_id).unwrap()
+	};
+	assert!(String::from_utf8_lossy(&history).contains("tmpl-ok"));
+
+	infra::pty::close_all_sessions(&sessions);
 	cleanup(&dir);
 }
 

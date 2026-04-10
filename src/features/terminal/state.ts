@@ -84,6 +84,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 					cwd: session.cwd,
 					rows: session.rows,
 					cols: session.cols,
+					startupCommands: [],
 				},
 			});
 			consola.info(`[pty-restore] restorePtySession result`, {
