@@ -26,8 +26,9 @@ jobs:
             build-essential \
             curl \
             wget \
-            file \
-            libxdo-dev \
+          file \
+          just \
+          libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
