@@ -1,0 +1,68 @@
+name: Tauri Smoke
+
+on:
+  push:
+    branches:
+      - dev
+      - "codex/**"
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  smoke:
+    name: Linux Smoke
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+          file \
+          just \
+          libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            webkit2gtk-driver \
+            xvfb
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install app dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install smoke-test dependencies
+        run: bun install --cwd e2e-tests --frozen-lockfile
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Run Tauri smoke test
+        run: xvfb-run -a bun run test:tauri-smoke
+
+      - name: Upload smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-smoke-artifacts
+          path: e2e-tests/artifacts/
+          if-no-files-found: ignore

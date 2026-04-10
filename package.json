@@ -12,7 +12,8 @@
     "start": "tauri dev",
     "lint": "eslint --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:tauri-smoke": "cd e2e-tests && bun run test"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.34.0",

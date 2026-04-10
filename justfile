@@ -31,5 +31,8 @@ coverage:
 coverage-summary:
     cd src-tauri && cargo llvm-cov --lib --tests
 
+tauri-smoke:
+    cd e2e-tests && bun run test
+
 cloc:
     cloc --include-lang="TypeScript,Rust,JavaScript,CSS" . --exclude-dir=node_modules,dist,target --fullpath --not-match-d='(src-tauri/target|src/generated|src/paraglide)'

@@ -1,6 +1,5 @@
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::Command;
 
 use std::collections::HashMap;
 
@@ -8,6 +7,7 @@ use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::Json;
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "macos")]
 use tauri_plugin_store::StoreExt;
 
 pub struct HelperState {
@@ -53,34 +53,45 @@ async fn notify_handler(
 }
 
 fn try_play_notification(app: &AppHandle) -> bool {
-	let store = match app.store("settings.json") {
-		Ok(s) => s,
-		Err(_) => return false,
-	};
+	#[cfg(not(target_os = "macos"))]
+	{
+		let _ = app;
+		return false;
+	}
 
-	let val = match store.get("notification-settings") {
-		Some(v) => v,
-		None => return false,
-	};
+	#[cfg(target_os = "macos")]
+	{
+		use std::process::Command;
 
-	let entry: model::notification::NotificationEntry =
-		match serde_json::from_value(val) {
-			Ok(e) => e,
+		let store = match app.store("settings.json") {
+			Ok(s) => s,
 			Err(_) => return false,
 		};
 
-	if !entry.state.enabled {
-		return false;
+		let val = match store.get("notification-settings") {
+			Some(v) => v,
+			None => return false,
+		};
+
+		let entry: model::notification::NotificationEntry =
+			match serde_json::from_value(val) {
+				Ok(e) => e,
+				Err(_) => return false,
+			};
+
+		if !entry.state.enabled {
+			return false;
+		}
+
+		let sound_path =
+			format!("/System/Library/Sounds/{}.aiff", entry.state.sound);
+
+		if !std::path::Path::new(&sound_path).exists() {
+			return false;
+		}
+
+		Command::new("afplay").arg(&sound_path).spawn().is_ok()
 	}
-
-	let sound_path =
-		format!("/System/Library/Sounds/{}.aiff", entry.state.sound);
-
-	if !std::path::Path::new(&sound_path).exists() {
-		return false;
-	}
-
-	Command::new("afplay").arg(&sound_path).spawn().is_ok()
 }
 
 async fn health_handler() -> &'static str {

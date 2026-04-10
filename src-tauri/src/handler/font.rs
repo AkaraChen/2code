@@ -1,8 +1,4 @@
-use core_text::font::*;
-use core_text::font_collection::create_for_all_families;
-use core_text::font_descriptor::kCTFontMonoSpaceTrait;
 use serde::Serialize;
-use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct SystemFont {
@@ -10,7 +6,13 @@ pub struct SystemFont {
 	pub is_mono: bool,
 }
 
+#[cfg(target_os = "macos")]
 fn load_system_fonts() -> Vec<SystemFont> {
+	use core_text::font::*;
+	use core_text::font_collection::create_for_all_families;
+	use core_text::font_descriptor::kCTFontMonoSpaceTrait;
+	use std::collections::BTreeMap;
+
 	let collection = create_for_all_families();
 	let descriptors = collection.get_descriptors();
 
@@ -39,6 +41,11 @@ fn load_system_fonts() -> Vec<SystemFont> {
 		.into_iter()
 		.map(|(family, is_mono)| SystemFont { family, is_mono })
 		.collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn load_system_fonts() -> Vec<SystemFont> {
+	Vec::new()
 }
 
 #[tauri::command]
