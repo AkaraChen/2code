@@ -7,6 +7,7 @@
 
 		/* Path aliases */
 		"baseUrl": ".",
+		"ignoreDeprecations": "6.0",
 		"module": "ESNext",
 
 		/* Bundler mode */

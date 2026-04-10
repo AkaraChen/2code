@@ -17,8 +17,8 @@ export function getLineStats(file: FileDiffMetadata) {
 	for (const hunk of file.hunks) {
 		for (const content of hunk.hunkContent) {
 			if (content.type === "change") {
-				additions += content.additions.length;
-				deletions += content.deletions.length;
+				additions += content.additions;
+				deletions += content.deletions;
 			}
 		}
 	}
