@@ -115,4 +115,10 @@ describe("getTerminalShortcutAction", () => {
 			),
 		).toBeNull();
 	});
+
+	it("maps Ctrl+L to clear the terminal screen", () => {
+		expect(
+			getTerminalShortcutAction(makeEvent({ ctrlKey: true, key: "l" })),
+		).toEqual({ type: "clear-screen" });
+	});
 });

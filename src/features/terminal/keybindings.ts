@@ -11,7 +11,8 @@ export interface TerminalShortcutKeyEvent {
 export type TerminalShortcutAction =
 	| { type: "write-sequence"; sequence: string }
 	| { type: "increase-font-size" }
-	| { type: "decrease-font-size" };
+	| { type: "decrease-font-size" }
+	| { type: "clear-screen" };
 
 function isMacPlatform(platform: string) {
 	return platform.toUpperCase().includes("MAC");
@@ -68,6 +69,16 @@ export function getTerminalShortcutAction(
 		) {
 			return { type: "decrease-font-size" };
 		}
+	}
+
+	if (
+		event.ctrlKey
+		&& !event.metaKey
+		&& !event.altKey
+		&& !event.shiftKey
+		&& event.key.toLowerCase() === "l"
+	) {
+		return { type: "clear-screen" };
 	}
 
 	return null;

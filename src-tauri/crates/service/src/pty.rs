@@ -425,6 +425,26 @@ pub fn flush_output(
 	Ok(())
 }
 
+pub fn clear_output(
+	db: &DbPool,
+	senders: &PtyFlushSenders,
+	session_id: &str,
+) -> Result<(), AppError> {
+	let sent_clear = {
+		let map = senders.lock().map_err(|_| AppError::LockError)?;
+		map.get(session_id)
+			.is_some_and(|tx| tx.send(PersistMsg::Clear).is_ok())
+	};
+
+	if sent_clear {
+		return Ok(());
+	}
+
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	repo::pty::clear_output(conn, session_id);
+	Ok(())
+}
+
 /// Find the last occurrence of `needle` in `haystack`.
 /// Returns the byte offset of the match start, or `None` if not found.
 fn find_last_pattern(haystack: &[u8], needle: &[u8]) -> Option<usize> {
