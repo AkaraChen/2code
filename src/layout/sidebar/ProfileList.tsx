@@ -1,5 +1,5 @@
 import { HStack, Icon, Text } from "@chakra-ui/react";
-import { RiAddLine } from "react-icons/ri";
+import { FiPlus } from "react-icons/fi";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -40,7 +40,7 @@ export function ProfileList({
 				onClick={createDialog.onOpen}
 			>
 				<Icon fontSize="xs">
-					<RiAddLine />
+					<FiPlus />
 				</Icon>
 				<Text>{m.createProfile()}</Text>
 			</HStack>

@@ -1,5 +1,5 @@
 import { Circle, HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
-import { RiGitBranchLine } from "react-icons/ri";
+import { FiGitBranch } from "react-icons/fi";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
 import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
@@ -56,7 +56,7 @@ export function ProfileItem({
 							onClick={() => markProfileRead(profile.id)}
 						>
 							<Icon fontSize="xs" color="fg.muted">
-								<RiGitBranchLine />
+								<FiGitBranch />
 							</Icon>
 							<Text truncate>{profile.branch_name}</Text>
 							{hasNotification && (

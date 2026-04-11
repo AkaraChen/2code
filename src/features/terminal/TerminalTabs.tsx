@@ -11,7 +11,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
+import { FiPlus, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
@@ -133,7 +133,7 @@ export default function TerminalTabs({
 								: tab.title;
 						return (
 							<Tabs.Trigger key={tab.id} value={tab.id}>
-								<RiTerminalBoxLine />
+								<FiTerminal />
 								<HStack gap="2">
 									{displayTitle}
 									{notifiedTabs.has(tab.id) &&
@@ -173,7 +173,7 @@ export default function TerminalTabs({
 								createTab.mutate({ profileId, cwd });
 							}}
 						>
-							<RiAddLine /> {m.newTerminal()}
+							<FiPlus /> {m.newTerminal()}
 						</Button>
 					</Box>
 				</Tabs.List>

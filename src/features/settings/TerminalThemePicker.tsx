@@ -7,7 +7,7 @@ import {
 	Portal,
 	Select,
 } from "@chakra-ui/react";
-import { RiEyeLine } from "react-icons/ri";
+import { FiEye } from "react-icons/fi";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import {
 	terminalThemeIds,
@@ -47,7 +47,7 @@ function ThemeSelect({
 					_hover={{ opacity: 1 }}
 					onClick={() => onPreview(value)}
 				>
-					<RiEyeLine />
+					<FiEye />
 				</IconButton>
 			</Flex>
 			<Select.Root

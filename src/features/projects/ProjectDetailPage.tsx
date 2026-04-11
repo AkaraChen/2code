@@ -1,6 +1,6 @@
 import { Button, Center, EmptyState, Flex, VStack } from "@chakra-ui/react";
 import { useMemo } from "react";
-import { RiAddLine, RiTerminalBoxLine } from "react-icons/ri";
+import { FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import { useProject, useProjectProfiles } from "@/features/projects/hooks";
@@ -41,11 +41,11 @@ export default function ProjectDetailPage() {
 				isActive
 			/>
 			<Center flex="1">
-				<EmptyState.Root>
-					<EmptyState.Content>
-						<EmptyState.Indicator>
-							<RiTerminalBoxLine />
-						</EmptyState.Indicator>
+					<EmptyState.Root>
+						<EmptyState.Content>
+							<EmptyState.Indicator>
+								<FiTerminal />
+							</EmptyState.Indicator>
 						<VStack textAlign="center">
 							<EmptyState.Title>
 								{m.noTerminalsOpen()}
@@ -62,10 +62,10 @@ export default function ProjectDetailPage() {
 									cwd: profile.worktree_path,
 								})
 							}
-						>
-							<RiAddLine />
-							{m.newTerminal()}
-						</Button>
+							>
+								<FiPlus />
+								{m.newTerminal()}
+							</Button>
 					</EmptyState.Content>
 				</EmptyState.Root>
 			</Center>

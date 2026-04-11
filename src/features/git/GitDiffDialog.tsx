@@ -21,7 +21,7 @@ import {
 	useReducer,
 	useRef,
 } from "react";
-import { RiGitBranchLine } from "react-icons/ri";
+import { FiGitBranch } from "react-icons/fi";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
@@ -101,7 +101,7 @@ export default function GitDiffDialog({
 							<Dialog.Title fontSize="sm">
 								<HStack gap="1.5" alignItems="center">
 									<Icon fontSize="md">
-										<RiGitBranchLine />
+										<FiGitBranch />
 									</Icon>
 									<Text>{branchName ?? "main"}</Text>
 								</HStack>
