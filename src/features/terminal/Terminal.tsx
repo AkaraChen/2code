@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
+import { getTerminalShortcutSequence } from "./keybindings";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -160,6 +161,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				cursorWidth: 4,
 			});
 			unlisteners.push(() => term.dispose());
+
+			term.attachCustomKeyEventHandler((event) => {
+				const sequence = getTerminalShortcutSequence(event);
+				if (!sequence) return true;
+
+				event.preventDefault();
+				event.stopPropagation();
+				void writeToPty({ sessionId, data: sequence });
+				return false;
+			});
 
 			const fitAddon = new FitAddon();
 			term.loadAddon(fitAddon);
