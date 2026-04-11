@@ -67,6 +67,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@xterm/xterm@6.1.0-beta.197": "patches/@xterm%2Fxterm@6.1.0-beta.197.patch",
+  },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
 

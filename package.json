@@ -75,5 +75,8 @@
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"
+  },
+  "patchedDependencies": {
+    "@xterm/xterm@6.1.0-beta.197": "patches/@xterm%2Fxterm@6.1.0-beta.197.patch"
   }
 }
