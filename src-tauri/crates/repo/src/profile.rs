@@ -102,20 +102,8 @@ pub fn get_project_folder(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use diesel_migrations::MigrationHarness;
-	use infra::db::MIGRATIONS;
+	use crate::test_utils::setup_db;
 	use model::project::NewProject;
-
-	fn setup_db() -> SqliteConnection {
-		let mut conn =
-			SqliteConnection::establish(":memory:").expect("in-memory db");
-		diesel::sql_query("PRAGMA foreign_keys=ON;")
-			.execute(&mut conn)
-			.ok();
-		conn.run_pending_migrations(MIGRATIONS)
-			.expect("run migrations");
-		conn
-	}
 
 	/// Insert a test project with its default profile (mirrors real app behavior).
 	fn insert_test_project(
