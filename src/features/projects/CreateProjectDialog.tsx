@@ -31,6 +31,28 @@ interface FormValues {
 	folder: string | null;
 }
 
+function getProjectNamePlaceholder(folder: string | null) {
+	return folder
+		? m.projectNamePlaceholderFolder()
+		: m.projectNamePlaceholderTemporary();
+}
+
+function getProjectNameHint(folder: string | null, name: string) {
+	const hasFolder = !!folder;
+	const hasName = !!name.trim();
+
+	if (!hasFolder && !hasName) {
+		return m.createProjectHintTemporaryEmpty();
+	}
+	if (!hasFolder) {
+		return m.createProjectHintTemporaryNamed();
+	}
+	if (!hasName) {
+		return m.createProjectHintFolderEmpty();
+	}
+	return m.createProjectHintFolderNamed();
+}
+
 export default function CreateProjectDialog({
 	isOpen,
 	onClose,
@@ -40,6 +62,7 @@ export default function CreateProjectDialog({
 	});
 	const navigate = useNavigate();
 	const folder = useWatch({ control: form.control, name: "folder" });
+	const name = useWatch({ control: form.control, name: "name" });
 
 	const handleClose = () => {
 		form.reset();
@@ -50,7 +73,7 @@ export default function CreateProjectDialog({
 		const selected = await open({ directory: true });
 		if (selected) {
 			form.setValue("folder", selected);
-			if (!form.getValues("name")) {
+			if (!form.getValues("name").trim()) {
 				form.setValue("name", await basename(selected));
 			}
 		}
@@ -67,10 +90,11 @@ export default function CreateProjectDialog({
 	});
 
 	const handleCreate = form.handleSubmit(async (data) => {
+		const name = data.name.trim();
 		await createProject.mutateAsync(
-			data.name || data.folder
+			name || data.folder
 				? {
-						name: data.name || undefined,
+						name: name || undefined,
 						folder: data.folder ?? undefined,
 					}
 				: undefined,
@@ -168,13 +192,16 @@ export default function CreateProjectDialog({
 								<Field.Root>
 									<Field.Label>{m.projectName()}</Field.Label>
 									<Input
-										placeholder={m.projectNamePlaceholder()}
+										placeholder={getProjectNamePlaceholder(folder)}
 										{...form.register("name")}
 										onKeyDown={(e) => {
 											if (e.key === "Enter")
 												handleCreate();
 										}}
 									/>
+									<Text fontSize="xs" color="fg.muted">
+										{getProjectNameHint(folder, name)}
+									</Text>
 								</Field.Root>
 							</Stack>
 						</Dialog.Body>
