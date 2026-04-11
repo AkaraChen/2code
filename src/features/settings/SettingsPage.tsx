@@ -18,7 +18,7 @@ import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
-import { getLocale, setLocale } from "@/paraglide/runtime.js";
+import { setAppLocale, useLocale } from "@/shared/lib/locale";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
@@ -39,6 +39,7 @@ export default function SettingsPage() {
 	const { preference, setPreference } = use(ThemeContext);
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
+	const locale = useLocale();
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
@@ -51,7 +52,7 @@ export default function SettingsPage() {
 					{ value: "dark", label: m.themeDark() },
 				],
 			}),
-		[],
+		[locale],
 	);
 
 	return (
@@ -88,9 +89,9 @@ export default function SettingsPage() {
 								<Field.Label>{m.language()}</Field.Label>
 								<Select.Root
 									collection={localeCollection}
-									defaultValue={[getLocale()]}
+									value={[locale]}
 									onValueChange={(e) =>
-										setLocale(e.value[0] as Locale)
+										setAppLocale(e.value[0] as Locale)
 									}
 									size="sm"
 								>

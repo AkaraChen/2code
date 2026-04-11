@@ -2,12 +2,14 @@ import { useEffect, useMemo } from "react";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import * as m from "@/paraglide/messages.js";
+import { useLocale } from "@/shared/lib/locale";
 
 interface TourOnboardingProps {
 	isEnabled: boolean;
 }
 
 export function TourOnboarding({ isEnabled }: TourOnboardingProps) {
+	const locale = useLocale();
 	const driverObj = useMemo<any>(() => {
 		if (!isEnabled) return null;
 
@@ -42,7 +44,7 @@ export function TourOnboarding({ isEnabled }: TourOnboardingProps) {
 			],
 		});
 		return d;
-	}, [isEnabled]);
+	}, [isEnabled, locale]);
 
 	useEffect(() => {
 		if (driverObj) {
