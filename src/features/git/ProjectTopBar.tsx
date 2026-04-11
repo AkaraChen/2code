@@ -7,8 +7,7 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
-import { homeDir } from "@tauri-apps/api/path";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { RiGitBranchLine, RiSettings3Line } from "react-icons/ri";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -28,26 +27,6 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	);
 }
 
-function useShortPath(fullPath: string): string {
-	const [shortPath, setShortPath] = useState(fullPath);
-
-	useEffect(() => {
-		let cancelled = false;
-		void homeDir().then((home) => {
-			if (cancelled) return;
-			if (home && fullPath.startsWith(home)) {
-				setShortPath(`~${fullPath.slice(home.length)}`);
-			} else {
-				setShortPath(fullPath);
-			}
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [fullPath]);
-
-	return shortPath;
-}
 
 interface ProjectTopBarProps {
 	projectId: string;
@@ -64,7 +43,6 @@ export default function ProjectTopBar({
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
-	const shortPath = useShortPath(profile.worktree_path);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 
 	return (
@@ -95,15 +73,6 @@ export default function ProjectTopBar({
 							</Tooltip.Positioner>
 						</Portal>
 					</Tooltip.Root>
-					<Text
-						as="span"
-						color="fg.muted"
-						fontSize="xs"
-						lineClamp={1}
-						maxW="200px"
-					>
-						{shortPath}
-					</Text>
 					<Box color="fg.muted">
 						{profile.is_default ? (
 							isActive ? (
