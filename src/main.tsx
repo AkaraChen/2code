@@ -11,7 +11,7 @@ import { Toaster } from "./shared/providers/Toaster";
 import { appSystem } from "./theme/system";
 import "./features/watcher/fileWatcher";
 
-function LocaleRoot() {
+function LocaleAdapter() {
 	useLocale();
 	return <App />;
 }
@@ -22,7 +22,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 			<ChakraProvider value={appSystem}>
 				<ThemeProvider>
 					<BrowserRouter>
-						<LocaleRoot />
+						<LocaleAdapter />
 					</BrowserRouter>
 					<Toaster />
 				</ThemeProvider>
