@@ -63,7 +63,6 @@ export function useCreateProject(options?: {
 		},
 		onSuccess: async (project) => {
 			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-			await queryClient.refetchQueries({ queryKey: queryKeys.projects.all });
 			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all);
 			const createdProject = projects?.find((p) => p.id === project.id);
 			if (createdProject) {

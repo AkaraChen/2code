@@ -47,6 +47,16 @@ export function textToCommands(text: string): string[] {
 		.filter(Boolean);
 }
 
+export function commandPreview(commandsText: string): string {
+	const lines = commandsText
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+	if (lines.length === 0) return "";
+	if (lines.length === 1) return lines[0];
+	return `${lines[0]} +${lines.length - 1}`;
+}
+
 export function createEmptyGlobalTerminalTemplateDraft(): GlobalTerminalTemplateDraft {
 	return {
 		id: createTemplateId(),
