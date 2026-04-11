@@ -17,6 +17,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { RiDeleteBinLine, RiPencilLine } from "react-icons/ri";
 import {
+	commandPreview,
 	createEmptyGlobalTerminalTemplateDraft,
 	normalizeGlobalTerminalTemplates,
 	toGlobalTerminalTemplateDraft,
@@ -144,17 +145,6 @@ function GlobalTerminalTemplateDialog({
 			</Portal>
 		</Dialog.Root>
 	);
-}
-
-function commandPreview(commandsText: string) {
-	const lines = commandsText
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
-
-	if (lines.length === 0) return "";
-	if (lines.length === 1) return lines[0];
-	return `${lines[0]} +${lines.length - 1}`;
 }
 
 export function GlobalTerminalTemplatesSettings() {

@@ -19,8 +19,11 @@ import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
 import { RiDeleteBinLine, RiPencilLine } from "react-icons/ri";
 import {
+	commandPreview,
+	commandsToText,
 	createEmptyProjectTerminalTemplateDraft,
 	normalizeProjectTerminalTemplates,
+	textToCommands,
 	toProjectTerminalTemplateDraft,
 	type ProjectTerminalTemplateDraft,
 } from "@/features/terminal/templates";
@@ -37,27 +40,6 @@ interface FormValues {
 	initScript: string;
 	setupScript: string;
 	teardownScript: string;
-}
-
-function scriptsToText(scripts: string[]): string {
-	return scripts.join("\n");
-}
-
-function textToScripts(text: string): string[] {
-	return text
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
-}
-
-function commandPreview(commandsText: string) {
-	const lines = commandsText
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
-	if (lines.length === 0) return "";
-	if (lines.length === 1) return lines[0];
-	return `${lines[0]} +${lines.length - 1}`;
 }
 
 // ── Project template draft dialog ─────────────────────────────────────────────
@@ -394,9 +376,9 @@ function ProjectSettingsForm({
 	);
 	const form = useForm<FormValues>({
 		defaultValues: {
-			initScript: scriptsToText(config.init_script),
-			setupScript: scriptsToText(config.setup_script),
-			teardownScript: scriptsToText(config.teardown_script),
+			initScript: commandsToText(config.init_script),
+			setupScript: commandsToText(config.setup_script),
+			teardownScript: commandsToText(config.teardown_script),
 		},
 	});
 
@@ -404,9 +386,9 @@ function ProjectSettingsForm({
 		await saveConfig.mutateAsync({
 			projectId,
 			config: {
-				init_script: textToScripts(data.initScript),
-				setup_script: textToScripts(data.setupScript),
-				teardown_script: textToScripts(data.teardownScript),
+				init_script: textToCommands(data.initScript),
+				setup_script: textToCommands(data.setupScript),
+				teardown_script: textToCommands(data.teardownScript),
 				terminal_templates:
 					normalizeProjectTerminalTemplates(templateDrafts),
 			},
