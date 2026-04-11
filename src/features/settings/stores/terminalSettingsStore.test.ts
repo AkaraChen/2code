@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useTerminalSettingsStore } from "./terminalSettingsStore";
+import {
+	MAX_TERMINAL_FONT_SIZE,
+	MIN_TERMINAL_FONT_SIZE,
+	useTerminalSettingsStore,
+} from "./terminalSettingsStore";
 
 function resetStore() {
 	useTerminalSettingsStore.setState({
@@ -67,6 +71,14 @@ describe("useTerminalSettingsStore", () => {
 			expect(getState().fontSize).toBe(16);
 		});
 
+		it("clamps fontSize to the configured range", () => {
+			getState().setFontSize(MAX_TERMINAL_FONT_SIZE + 5);
+			expect(getState().fontSize).toBe(MAX_TERMINAL_FONT_SIZE);
+
+			getState().setFontSize(MIN_TERMINAL_FONT_SIZE - 5);
+			expect(getState().fontSize).toBe(MIN_TERMINAL_FONT_SIZE);
+		});
+
 		it("does not trigger font CSS sync", () => {
 			getState().setFontFamily("Test Font");
 			const before = document.documentElement.style.getPropertyValue(
@@ -77,6 +89,28 @@ describe("useTerminalSettingsStore", () => {
 				"--chakra-fonts-mono",
 			);
 			expect(after).toBe(before);
+		});
+	});
+
+	describe("fontSize helpers", () => {
+		it("increaseFontSize increments within bounds", () => {
+			getState().increaseFontSize();
+			expect(getState().fontSize).toBe(14);
+		});
+
+		it("decreaseFontSize decrements within bounds", () => {
+			getState().decreaseFontSize();
+			expect(getState().fontSize).toBe(12);
+		});
+
+		it("does not grow past max or shrink past min", () => {
+			getState().setFontSize(MAX_TERMINAL_FONT_SIZE);
+			getState().increaseFontSize();
+			expect(getState().fontSize).toBe(MAX_TERMINAL_FONT_SIZE);
+
+			getState().setFontSize(MIN_TERMINAL_FONT_SIZE);
+			getState().decreaseFontSize();
+			expect(getState().fontSize).toBe(MIN_TERMINAL_FONT_SIZE);
 		});
 	});
 
