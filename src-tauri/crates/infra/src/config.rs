@@ -8,11 +8,13 @@ pub fn load_project_config(
 	project_folder: &str,
 ) -> Result<ProjectConfig, AppError> {
 	let config_path = Path::new(project_folder).join("2code.json");
-	if !config_path.exists() {
-		return Ok(ProjectConfig::default());
-	}
-
-	let content = std::fs::read_to_string(&config_path)?;
+	let content = match std::fs::read_to_string(&config_path) {
+		Ok(c) => c,
+		Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+			return Ok(ProjectConfig::default());
+		}
+		Err(e) => return Err(AppError::IoError(e)),
+	};
 	serde_json::from_str(&content).map_err(|e| {
 		AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::InvalidData,

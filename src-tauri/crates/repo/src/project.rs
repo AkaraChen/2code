@@ -124,22 +124,10 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use diesel_migrations::MigrationHarness;
-	use infra::db::MIGRATIONS;
+	use crate::test_utils::setup_db;
 	use model::profile::NewProfile;
 	use model::pty::NewPtySessionRecord;
 	use model::schema::{profiles, pty_sessions};
-
-	fn setup_db() -> SqliteConnection {
-		let mut conn =
-			SqliteConnection::establish(":memory:").expect("in-memory db");
-		diesel::sql_query("PRAGMA foreign_keys=ON;")
-			.execute(&mut conn)
-			.ok();
-		conn.run_pending_migrations(MIGRATIONS)
-			.expect("run migrations");
-		conn
-	}
 
 	#[test]
 	fn insert_and_fetch() {
