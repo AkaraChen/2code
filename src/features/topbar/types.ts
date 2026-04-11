@@ -1,13 +1,28 @@
 import type { ComponentType } from "react";
 import type { Profile } from "@/generated";
 
-export type ControlId =
-	| "github-desktop"
-	| "vscode"
-	| "windsurf"
-	| "cursor"
-	| "git-diff"
-	| "reveal-in-finder";
+export const launchAppControlIds = [
+	"github-desktop",
+	"vscode",
+	"windsurf",
+	"cursor",
+	"zed",
+	"sublime-text",
+	"ghostty",
+	"iterm2",
+	"kitty",
+	"warp",
+] as const;
+
+export const staticControlIds = ["git-diff", "reveal-in-finder"] as const;
+
+export type LaunchAppControlId = (typeof launchAppControlIds)[number];
+export type StaticControlId = (typeof staticControlIds)[number];
+export type ControlId = LaunchAppControlId | StaticControlId;
+
+export function isLaunchAppControlId(id: string): id is LaunchAppControlId {
+	return launchAppControlIds.includes(id as LaunchAppControlId);
+}
 
 export interface ControlOptionField {
 	key: string;
@@ -25,6 +40,7 @@ export interface ControlProps {
 
 export interface ControlDefinition {
 	id: ControlId;
+	kind: "app" | "static";
 	label: () => string;
 	icon: ComponentType<{ size?: number | string }>;
 	optionFields: ControlOptionField[];

@@ -11,6 +11,7 @@ describe("queryNamespaces", () => {
 			"git-diff-stats": "git-diff-stats",
 			"git-log": "git-log",
 			"git-commit-diff": "git-commit-diff",
+			"topbar-apps": "topbar-apps",
 		});
 	});
 });
@@ -32,6 +33,12 @@ describe("queryKeys", () => {
 				"project-config",
 				"project-1",
 			]);
+		});
+	});
+
+	describe("topbar", () => {
+		it("returns static key for supported apps", () => {
+			expect(queryKeys.topbar.apps).toEqual(["topbar-apps"]);
 		});
 	});
 

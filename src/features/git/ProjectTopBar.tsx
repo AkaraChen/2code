@@ -11,7 +11,11 @@ import { Suspense, useState } from "react";
 import { FiGitBranch, FiSettings } from "react-icons/fi";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
-import { controlRegistry } from "@/features/topbar/registry";
+import { useSupportedTopbarAppIds } from "@/features/topbar/hooks";
+import {
+	controlRegistry,
+	getSupportedControlIds,
+} from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -26,7 +30,6 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 		</HStack>
 	);
 }
-
 
 interface ProjectTopBarProps {
 	projectId: string;
@@ -44,6 +47,13 @@ export default function ProjectTopBar({
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
+	const supportedControlIdSet = new Set(
+		getSupportedControlIds(supportedAppIds),
+	);
+	const visibleActiveControls = activeControls.filter((id) =>
+		supportedControlIdSet.has(id),
+	);
 
 	return (
 		<>
@@ -59,7 +69,11 @@ export default function ProjectTopBar({
 				<HStack gap="2">
 					<Tooltip.Root>
 						<Tooltip.Trigger asChild>
-							<Text as="span" fontWeight="semibold" cursor="default">
+							<Text
+								as="span"
+								fontWeight="semibold"
+								cursor="default"
+							>
 								{projectName}
 							</Text>
 						</Tooltip.Trigger>
@@ -77,7 +91,9 @@ export default function ProjectTopBar({
 						{profile.is_default ? (
 							isActive ? (
 								<Suspense>
-									<GitBranchLabel cwd={profile.worktree_path} />
+									<GitBranchLabel
+										cwd={profile.worktree_path}
+									/>
 								</Suspense>
 							) : null
 						) : (
@@ -89,7 +105,7 @@ export default function ProjectTopBar({
 					</Box>
 				</HStack>
 				<HStack gap="2">
-					{activeControls.map((controlId) => {
+					{visibleActiveControls.map((controlId) => {
 						const def = controlRegistry.get(controlId);
 						if (!def) return null;
 						const Comp = def.component;
