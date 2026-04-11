@@ -11,6 +11,7 @@ import { RiVolumeUpLine } from "react-icons/ri";
 import { listSystemSounds, playSystemSound } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
+import { useLocale } from "@/shared/lib/locale";
 import { useNotificationStore } from "./stores/notificationStore";
 
 const getSoundsPromise = createCachedPromise<string[]>(() =>
@@ -20,6 +21,7 @@ const getSoundsPromise = createCachedPromise<string[]>(() =>
 export function SoundPicker() {
 	const sounds = use(getSoundsPromise());
 	const { enabled, sound, setSound } = useNotificationStore();
+	const locale = useLocale();
 
 	const soundCollection = useMemo(
 		() =>
@@ -29,7 +31,7 @@ export function SoundPicker() {
 					...sounds.map((s) => ({ value: s, label: s })),
 				],
 			}),
-		[sounds],
+		[locale, sounds],
 	);
 
 	return (
