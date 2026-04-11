@@ -86,7 +86,7 @@ function ProjectTemplateDraftDialog({
 							</Dialog.Title>
 						</Dialog.Header>
 						<Dialog.Body>
-							<Stack gap="5">
+							<Stack gap="3">
 								<Field.Root required>
 									<Field.Label>
 										{m.terminalTemplateName()}
@@ -240,7 +240,7 @@ function ProjectTemplatesEditor({
 
 	return (
 		<>
-			<Stack gap="4">
+			<Stack gap="3">
 				<HStack justify="space-between" align="start">
 					<Stack gap="1">
 						<Text fontWeight="semibold">
@@ -400,7 +400,7 @@ function ProjectSettingsForm({
 		<>
 			<Dialog.Body pb="2">
 				<Tabs.Root defaultValue="scripts" variant="plain">
-					<Tabs.List bg="bg.muted" rounded="l3" p="1" mb="5">
+					<Tabs.List bg="bg.muted" rounded="l3" p="1" mb="3">
 						<Tabs.Trigger value="scripts">
 							{m.scripts()}
 						</Tabs.Trigger>
@@ -411,7 +411,7 @@ function ProjectSettingsForm({
 					</Tabs.List>
 
 					<Tabs.Content value="scripts">
-						<Stack gap="5">
+						<Stack gap="3">
 							<Field.Root>
 								<Field.Label>{m.initScript()}</Field.Label>
 								<Text
