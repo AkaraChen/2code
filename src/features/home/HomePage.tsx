@@ -1,6 +1,6 @@
 import { Box, Heading, EmptyState, VStack, Center } from "@chakra-ui/react";
-import { RiFolderAddLine } from "react-icons/ri";
 import { useEffect } from "react";
+import { FiFolderPlus } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useProjects } from "@/features/projects/hooks";
@@ -35,7 +35,7 @@ export default function HomePage() {
 					<EmptyState.Root>
 						<EmptyState.Content>
 							<EmptyState.Indicator>
-								<RiFolderAddLine />
+								<FiFolderPlus />
 							</EmptyState.Indicator>
 							<VStack textAlign="center">
 								<EmptyState.Title>{m.emptyProjectsTitle()}</EmptyState.Title>

@@ -12,7 +12,7 @@ import {
 	VStack,
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RiDeleteBinLine } from "react-icons/ri";
+import { FiTrash2 } from "react-icons/fi";
 import type { LogEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { useDebugLogStore } from "./debugLogStore";
@@ -145,7 +145,7 @@ export default function DebugLogDialog({
 								variant="ghost"
 								onClick={clear}
 							>
-								<RiDeleteBinLine />
+								<FiTrash2 />
 							</IconButton>
 						</HStack>
 

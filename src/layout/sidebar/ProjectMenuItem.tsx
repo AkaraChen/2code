@@ -8,11 +8,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useMemo, useState } from "react";
-import {
-	RiArrowDownSLine,
-	RiArrowRightSLine,
-	RiTerminalBoxLine,
-} from "react-icons/ri";
+import { FiChevronDown, FiChevronRight, FiTerminal } from "react-icons/fi";
 import { NavLink, useMatch } from "react-router";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -78,9 +74,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							}}
 						>
 							{expanded ? (
-								<RiArrowDownSLine />
+								<FiChevronDown />
 							) : (
-								<RiArrowRightSLine />
+								<FiChevronRight />
 							)}
 						</IconButton>
 					</HStack>
@@ -145,7 +141,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 					>
 						<NavLink to={defaultProfileUrl}>
 							<Icon fontSize="xs" color="fg.muted">
-								<RiTerminalBoxLine />
+								<FiTerminal />
 							</Icon>
 							<Text truncate>{m.defaultProfile()}</Text>
 						</NavLink>

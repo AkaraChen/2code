@@ -1,5 +1,5 @@
 import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
-import { RiFolderLine } from "react-icons/ri";
+import { FiFolder } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
@@ -50,7 +50,7 @@ const definitions: ControlDefinition[] = [
 	{
 		id: "reveal-in-finder",
 		label: () => m.revealInFinder(),
-		icon: RiFolderLine,
+		icon: FiFolder,
 		optionFields: [],
 		component: RevealInFinderControl,
 	},

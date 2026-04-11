@@ -1,5 +1,5 @@
 import { IconButton } from "@chakra-ui/react";
-import { RiBugLine } from "react-icons/ri";
+import { FiTool } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import DebugLogDialog from "./DebugLogDialog";
 import { useDebugStore } from "./debugStore";
@@ -25,7 +25,7 @@ export default function DebugFloat() {
 				variant="solid"
 				onClick={() => setPanelOpen(true)}
 			>
-				<RiBugLine />
+				<FiTool />
 			</IconButton>
 			<DebugLogDialog
 				isOpen={panelOpen}

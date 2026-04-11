@@ -16,7 +16,7 @@ import {
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useForm, useWatch } from "react-hook-form";
-import { RiFolderOpenLine, RiPencilLine } from "react-icons/ri";
+import { FiEdit2, FiFolder } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProject } from "./hooks";
@@ -143,7 +143,7 @@ export default function CreateProjectDialog({
 												fontSize="2xl"
 												color="fg.muted"
 											>
-												<RiFolderOpenLine />
+												<FiFolder />
 											</Icon>
 											<Text
 												fontSize="sm"
@@ -171,7 +171,7 @@ export default function CreateProjectDialog({
 												size="xs"
 												onClick={handleChooseFolder}
 											>
-												<RiPencilLine />
+												<FiEdit2 />
 												{m.chooseFolder()}
 											</Button>
 										</HStack>

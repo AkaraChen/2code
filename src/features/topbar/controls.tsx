@@ -3,7 +3,7 @@ import type { ComponentType } from "react";
 import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
 import { Suspense } from "react";
-import { RiFolderLine } from "react-icons/ri";
+import { FiFolder } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitDiffStats } from "@/features/git/hooks";
 import { useGitBranch } from "@/features/projects/hooks";
@@ -155,10 +155,10 @@ export function RevealInFinderControl({ profile }: ControlProps) {
 				<IconButton
 					aria-label={m.revealInFinder()}
 					size="xs"
-					variant="subtle"
+				variant="subtle"
 					onClick={handleReveal}
 				>
-					<RiFolderLine />
+					<FiFolder />
 				</IconButton>
 			</Tooltip.Trigger>
 			<Portal>

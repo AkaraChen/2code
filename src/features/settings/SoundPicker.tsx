@@ -7,7 +7,7 @@ import {
 	Select,
 } from "@chakra-ui/react";
 import { use, useMemo } from "react";
-import { RiVolumeUpLine } from "react-icons/ri";
+import { FiVolume2 } from "react-icons/fi";
 import { listSystemSounds, playSystemSound } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
@@ -50,7 +50,7 @@ export function SoundPicker() {
 						if (sound) playSystemSound({ name: sound });
 					}}
 				>
-					<RiVolumeUpLine />
+					<FiVolume2 />
 				</IconButton>
 			</Flex>
 			<Select.Root

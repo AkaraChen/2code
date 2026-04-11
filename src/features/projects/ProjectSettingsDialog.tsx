@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
 import { useForm } from "react-hook-form";
-import { RiDeleteBinLine, RiPencilLine } from "react-icons/ri";
+import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import {
 	commandPreview,
 	commandsToText,
@@ -319,7 +319,7 @@ function ProjectTemplatesEditor({
 										aria-label={m.editTerminalTemplate()}
 										onClick={() => openEdit(t.id)}
 									>
-										<RiPencilLine />
+										<FiEdit2 />
 									</IconButton>
 									<IconButton
 										variant="ghost"
@@ -334,7 +334,7 @@ function ProjectTemplatesEditor({
 											)
 										}
 									>
-										<RiDeleteBinLine />
+										<FiTrash2 />
 									</IconButton>
 								</HStack>
 							</Flex>

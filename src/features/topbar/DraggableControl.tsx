@@ -1,7 +1,7 @@
 import { Box, HStack, Icon, Portal, Tooltip } from "@chakra-ui/react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { RiDraggable } from "react-icons/ri";
+import { FiMove } from "react-icons/fi";
 import type { ControlDefinition } from "./types";
 
 const DRAG_ICON_SIZE = 16;
@@ -49,7 +49,7 @@ export function DraggableControl({
 				>
 					<HStack gap="1.5">
 						<Icon color="fg.muted" fontSize="sm">
-							<RiDraggable />
+							<FiMove />
 						</Icon>
 						<definition.icon size={DRAG_ICON_SIZE} />
 					</HStack>

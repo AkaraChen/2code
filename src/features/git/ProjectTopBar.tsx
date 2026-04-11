@@ -8,7 +8,7 @@ import {
 	Tooltip,
 } from "@chakra-ui/react";
 import { Suspense, useState } from "react";
-import { RiGitBranchLine, RiSettings3Line } from "react-icons/ri";
+import { FiGitBranch, FiSettings } from "react-icons/fi";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import { controlRegistry } from "@/features/topbar/registry";
@@ -21,7 +21,7 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	if (!branch) return null;
 	return (
 		<HStack gap="1">
-			<RiGitBranchLine />
+			<FiGitBranch />
 			<Text as="span">{branch}</Text>
 		</HStack>
 	);
@@ -82,7 +82,7 @@ export default function ProjectTopBar({
 							) : null
 						) : (
 							<HStack gap="1">
-								<RiGitBranchLine />
+								<FiGitBranch />
 								<Text as="span">{profile.branch_name}</Text>
 							</HStack>
 						)}
@@ -110,7 +110,7 @@ export default function ProjectTopBar({
 								variant="subtle"
 								onClick={() => setSettingsOpen(true)}
 							>
-								<RiSettings3Line />
+								<FiSettings />
 							</IconButton>
 						</Tooltip.Trigger>
 						<Portal>

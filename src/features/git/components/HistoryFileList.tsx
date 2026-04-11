@@ -1,6 +1,6 @@
 import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { RiArrowLeftLine } from "react-icons/ri";
+import { FiArrowLeft } from "react-icons/fi";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -29,7 +29,7 @@ function CommitHeader({
 				aria-label={m.backToCommitList()}
 				onClick={onBack}
 			>
-				<RiArrowLeftLine />
+				<FiArrowLeft />
 			</IconButton>
 			<VStack align="start" gap="0" flex="1" minW="0">
 				<Text fontSize="sm" fontWeight="medium" lineClamp={1}>

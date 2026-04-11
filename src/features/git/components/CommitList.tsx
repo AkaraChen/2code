@@ -1,5 +1,5 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
-import { RiGitCommitLine } from "react-icons/ri";
+import { FiGitCommit } from "react-icons/fi";
 import type { GitCommit } from "@/generated";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 
@@ -66,7 +66,7 @@ export default function CommitList({
 					<HStack gap="2" fontSize="xs" color="fg.muted">
 						<HStack gap="1">
 							<Icon fontSize="xs">
-								<RiGitCommitLine />
+								<FiGitCommit />
 							</Icon>
 							<Text fontFamily="mono">{commit.hash}</Text>
 						</HStack>

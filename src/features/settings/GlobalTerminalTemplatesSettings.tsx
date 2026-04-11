@@ -15,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { RiDeleteBinLine, RiPencilLine } from "react-icons/ri";
+import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import {
 	commandPreview,
 	createEmptyGlobalTerminalTemplateDraft,
@@ -283,7 +283,7 @@ export function GlobalTerminalTemplatesSettings() {
 										onClick={() => openEditDialog(template.id)}
 										disabled={replaceTemplates.isPending}
 									>
-										<RiPencilLine />
+										<FiEdit2 />
 									</IconButton>
 									<IconButton
 										variant="ghost"
@@ -293,7 +293,7 @@ export function GlobalTerminalTemplatesSettings() {
 										onClick={() => openEditDialog(template.id)}
 										disabled={replaceTemplates.isPending}
 									>
-										<RiDeleteBinLine />
+										<FiTrash2 />
 									</IconButton>
 								</HStack>
 							</Flex>
