@@ -89,6 +89,8 @@ pub fn run() {
 			handler::font::list_system_fonts,
 			handler::sound::list_system_sounds,
 			handler::sound::play_system_sound,
+			handler::topbar::list_supported_topbar_apps,
+			handler::topbar::open_topbar_app,
 			handler::profile::create_profile,
 			handler::profile::delete_profile,
 			handler::watcher::watch_projects,

@@ -5,4 +5,5 @@ pub mod profile;
 pub mod project;
 pub mod pty;
 pub mod schema;
+pub mod topbar;
 pub mod watcher;

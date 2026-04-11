@@ -1,26 +1,40 @@
 import { Button, IconButton, Portal, Text, Tooltip } from "@chakra-ui/react";
-import type { ComponentType } from "react";
-import { SiCursor, SiGit, SiGithub, SiVscodium, SiWindsurf } from "@icons-pack/react-simple-icons";
+import {
+	SiCursor,
+	SiGhostty,
+	SiGit,
+	SiGithub,
+	SiIterm2,
+	SiSublimetext,
+	SiVscodium,
+	SiWarp,
+	SiWindsurf,
+	SiZedindustries,
+} from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
+import type { ComponentType } from "react";
 import { Suspense } from "react";
-import { FiFolder } from "react-icons/fi";
+import { FiFolder, FiTerminal } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitDiffStats } from "@/features/git/hooks";
 import { useGitBranch } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
-import type { ControlProps } from "./types";
+import { useOpenTopbarApp } from "./hooks";
+import type { ControlProps, LaunchAppControlId } from "./types";
 
-function EditorButton({
+function AppButton({
 	label,
-	cmd,
+	appId,
 	icon: Icon,
 	profile,
 }: ControlProps & {
 	label: string;
-	cmd: string;
-	icon: ComponentType<{ size?: number }>;
+	appId: LaunchAppControlId;
+	icon: ComponentType<{ size?: number | string }>;
 }) {
+	const openApp = useOpenTopbarApp();
+
 	return (
 		<Tooltip.Root>
 			<Tooltip.Trigger asChild>
@@ -29,7 +43,10 @@ function EditorButton({
 					size="xs"
 					variant="subtle"
 					onClick={() =>
-						Command.create(cmd, [profile.worktree_path]).execute()
+						openApp.mutate({
+							appId,
+							path: profile.worktree_path,
+						})
 					}
 				>
 					<Icon size={14} />
@@ -45,19 +62,113 @@ function EditorButton({
 }
 
 export function GithubDesktopControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarGithubDesktop()} cmd="github" icon={SiGithub} />;
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarGithubDesktop()}
+			appId="github-desktop"
+			icon={SiGithub}
+		/>
+	);
 }
 
 export function VscodeControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarVscode()} cmd="code" icon={SiVscodium} />;
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarVscode()}
+			appId="vscode"
+			icon={SiVscodium}
+		/>
+	);
 }
 
 export function WindsurfControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarWindsurf()} cmd="windsurf" icon={SiWindsurf} />;
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarWindsurf()}
+			appId="windsurf"
+			icon={SiWindsurf}
+		/>
+	);
 }
 
 export function CursorControl(props: ControlProps) {
-	return <EditorButton {...props} label={m.topbarCursor()} cmd="cursor" icon={SiCursor} />;
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarCursor()}
+			appId="cursor"
+			icon={SiCursor}
+		/>
+	);
+}
+
+export function ZedControl(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarZed()}
+			appId="zed"
+			icon={SiZedindustries}
+		/>
+	);
+}
+
+export function SublimeTextControl(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarSublimeText()}
+			appId="sublime-text"
+			icon={SiSublimetext}
+		/>
+	);
+}
+
+export function GhosttyControl(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarGhostty()}
+			appId="ghostty"
+			icon={SiGhostty}
+		/>
+	);
+}
+
+export function Iterm2Control(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarIterm2()}
+			appId="iterm2"
+			icon={SiIterm2}
+		/>
+	);
+}
+
+export function KittyControl(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarKitty()}
+			appId="kitty"
+			icon={FiTerminal}
+		/>
+	);
+}
+
+export function WarpControl(props: ControlProps) {
+	return (
+		<AppButton
+			{...props}
+			label={m.topbarWarp()}
+			appId="warp"
+			icon={SiWarp}
+		/>
+	);
 }
 
 function GitDiffBranchDialog({
@@ -155,7 +266,7 @@ export function RevealInFinderControl({ profile }: ControlProps) {
 				<IconButton
 					aria-label={m.revealInFinder()}
 					size="xs"
-				variant="subtle"
+					variant="subtle"
 					onClick={handleReveal}
 				>
 					<FiFolder />
