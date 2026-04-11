@@ -12,7 +12,12 @@ import { open } from "@tauri-apps/plugin-shell";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
+import {
+	clearPtyOutput,
+	flushPtyOutput,
+	resizePty,
+	writeToPty,
+} from "@/generated";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
 import { sessionHistory } from "./state";
@@ -178,6 +183,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
 				if (action.type === "decrease-font-size") {
 					decreaseFontSize();
+					return false;
+				}
+
+				if (action.type === "clear-screen") {
+					term.clear();
+					void clearPtyOutput({ sessionId })
+						.catch(() => {})
+						.finally(() => {
+							void writeToPty({ sessionId, data: "\x0c" });
+						});
 					return false;
 				}
 

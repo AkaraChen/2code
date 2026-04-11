@@ -113,3 +113,12 @@ pub fn flush_pty_output(
 ) -> Result<(), AppError> {
 	service::pty::flush_output(state.inner(), &session_id)
 }
+
+#[tauri::command]
+pub fn clear_pty_output(
+	session_id: String,
+	db: State<'_, DbPool>,
+	state: State<'_, PtyFlushSenders>,
+) -> Result<(), AppError> {
+	service::pty::clear_output(db.inner(), state.inner(), &session_id)
+}
