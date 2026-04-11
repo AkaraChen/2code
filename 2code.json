@@ -1,8 +1,8 @@
 {
-  "setup_script": [],
-  "teardown_script": [],
-  "init_script": [
+  "setup_script": [
     "bun i"
   ],
+  "teardown_script": [],
+  "init_script": [],
   "terminal_templates": []
 }
