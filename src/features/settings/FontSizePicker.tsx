@@ -1,6 +1,10 @@
 import { Field, NumberInput } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
-import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
+import {
+	MAX_TERMINAL_FONT_SIZE,
+	MIN_TERMINAL_FONT_SIZE,
+	useTerminalSettingsStore,
+} from "./stores/terminalSettingsStore";
 
 export function FontSizePicker() {
 	const { fontSize, setFontSize } = useTerminalSettingsStore();
@@ -9,10 +13,13 @@ export function FontSizePicker() {
 		<Field.Root>
 			<Field.Label>{m.fontSize()}</Field.Label>
 			<NumberInput.Root
-				min={10}
-				max={20}
+				min={MIN_TERMINAL_FONT_SIZE}
+				max={MAX_TERMINAL_FONT_SIZE}
 				value={String(fontSize)}
-				onValueChange={(e) => setFontSize(Number(e.value))}
+				onValueChange={(e) => {
+					if (e.value === "") return;
+					setFontSize(Number(e.value));
+				}}
 			>
 				<NumberInput.Control />
 				<NumberInput.Input />

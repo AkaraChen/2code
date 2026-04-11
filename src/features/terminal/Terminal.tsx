@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { flushPtyOutput, resizePty, writeToPty } from "@/generated";
 import { useTerminalTheme } from "./hooks";
-import { getTerminalShortcutSequence } from "./keybindings";
+import { getTerminalShortcutAction } from "./keybindings";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -33,6 +33,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const layoutFrameRef = useRef<number | null>(null);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const increaseFontSize = useTerminalSettingsStore((s) => s.increaseFontSize);
+	const decreaseFontSize = useTerminalSettingsStore((s) => s.decreaseFontSize);
 	const theme = useTerminalTheme();
 
 	const initFontFamilyRef = useRef(fontFamily);
@@ -163,12 +165,23 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			unlisteners.push(() => term.dispose());
 
 			term.attachCustomKeyEventHandler((event) => {
-				const sequence = getTerminalShortcutSequence(event);
-				if (!sequence) return true;
+				const action = getTerminalShortcutAction(event);
+				if (!action) return true;
 
 				event.preventDefault();
 				event.stopPropagation();
-				void writeToPty({ sessionId, data: sequence });
+
+				if (action.type === "increase-font-size") {
+					increaseFontSize();
+					return false;
+				}
+
+				if (action.type === "decrease-font-size") {
+					decreaseFontSize();
+					return false;
+				}
+
+				void writeToPty({ sessionId, data: action.sequence });
 				return false;
 			});
 
@@ -304,7 +317,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				fitAddonRef.current = null;
 			};
 		},
-		[profileId, sessionId, syncTerminalLayout],
+		[
+			decreaseFontSize,
+			increaseFontSize,
+			profileId,
+			sessionId,
+			syncTerminalLayout,
+		],
 	);
 
 	return (

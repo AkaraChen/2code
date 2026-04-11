@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	getTerminalShortcutAction,
 	getTerminalShortcutSequence,
 	type TerminalShortcutKeyEvent,
 } from "./keybindings";
@@ -68,6 +69,49 @@ describe("getTerminalShortcutSequence", () => {
 			getTerminalShortcutSequence(
 				makeEvent({ type: "keyup", metaKey: true, key: "ArrowLeft" }),
 				"MacIntel",
+			),
+		).toBeNull();
+	});
+});
+
+describe("getTerminalShortcutAction", () => {
+	it("maps Cmd+= to increase font size on macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ metaKey: true, key: "=", code: "Equal" }),
+				"MacIntel",
+			),
+		).toEqual({ type: "increase-font-size" });
+	});
+
+	it("maps Cmd++ to increase font size on macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({
+					metaKey: true,
+					shiftKey: true,
+					key: "+",
+					code: "Equal",
+				}),
+				"MacIntel",
+			),
+		).toEqual({ type: "increase-font-size" });
+	});
+
+	it("maps Cmd+- to decrease font size on macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ metaKey: true, key: "-", code: "Minus" }),
+				"MacIntel",
+			),
+		).toEqual({ type: "decrease-font-size" });
+	});
+
+	it("does not map font size shortcuts on non-macOS platforms", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ metaKey: true, key: "=", code: "Equal" }),
+				"Win32",
 			),
 		).toBeNull();
 	});

@@ -1,32 +1,83 @@
 export interface TerminalShortcutKeyEvent {
 	type: string;
 	key: string;
+	code?: string;
 	altKey: boolean;
 	ctrlKey: boolean;
 	metaKey: boolean;
 	shiftKey: boolean;
 }
 
+export type TerminalShortcutAction =
+	| { type: "write-sequence"; sequence: string }
+	| { type: "increase-font-size" }
+	| { type: "decrease-font-size" };
+
 function isMacPlatform(platform: string) {
 	return platform.toUpperCase().includes("MAC");
+}
+
+function isPlainMetaShortcut(
+	event: TerminalShortcutKeyEvent,
+	platform: string,
+) {
+	return (
+		isMacPlatform(platform)
+		&& event.metaKey
+		&& !event.ctrlKey
+		&& !event.altKey
+	);
+}
+
+export function getTerminalShortcutAction(
+	event: TerminalShortcutKeyEvent,
+	platform = globalThis.navigator?.platform ?? "",
+): TerminalShortcutAction | null {
+	if (event.type !== "keydown") return null;
+
+	if (isPlainMetaShortcut(event, platform) && !event.shiftKey) {
+		if (event.key === "ArrowLeft") {
+			return { type: "write-sequence", sequence: "\x1b[H" };
+		}
+		if (event.key === "ArrowRight") {
+			return { type: "write-sequence", sequence: "\x1b[F" };
+		}
+	}
+
+	if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
+		if (event.key === "ArrowLeft") {
+			return { type: "write-sequence", sequence: "\x1bb" };
+		}
+		if (event.key === "ArrowRight") {
+			return { type: "write-sequence", sequence: "\x1bf" };
+		}
+	}
+
+	if (isPlainMetaShortcut(event, platform)) {
+		if (
+			event.code === "Equal"
+			|| event.key === "="
+			|| event.key === "+"
+		) {
+			return { type: "increase-font-size" };
+		}
+		if (
+			event.code === "Minus"
+			|| event.key === "-"
+			|| event.key === "_"
+		) {
+			return { type: "decrease-font-size" };
+		}
+	}
+
+	return null;
 }
 
 export function getTerminalShortcutSequence(
 	event: TerminalShortcutKeyEvent,
 	platform = globalThis.navigator?.platform ?? "",
 ): string | null {
-	if (event.type !== "keydown") return null;
-	if (event.ctrlKey || event.shiftKey) return null;
-
-	if (isMacPlatform(platform) && event.metaKey && !event.altKey) {
-		if (event.key === "ArrowLeft") return "\x1b[H";
-		if (event.key === "ArrowRight") return "\x1b[F";
-	}
-
-	if (event.altKey && !event.metaKey) {
-		if (event.key === "ArrowLeft") return "\x1bb";
-		if (event.key === "ArrowRight") return "\x1bf";
-	}
-
-	return null;
+	const action = getTerminalShortcutAction(event, platform);
+	if (action?.type !== "write-sequence") return null;
+	return action.sequence;
 }
