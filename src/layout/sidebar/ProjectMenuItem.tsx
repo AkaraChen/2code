@@ -6,10 +6,12 @@ import {
 	Menu,
 	Portal,
 	Text,
+	Tooltip,
 } from "@chakra-ui/react";
 import { useMemo, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiTerminal } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiPlus, FiTerminal } from "react-icons/fi";
 import { NavLink, useMatch } from "react-router";
+import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
@@ -28,6 +30,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 		[project.profiles],
 	);
 
+	const hasOnlyDefaultProfile = nonDefaultProfiles.length === 0;
+
 	const profileMatch = useMatch(
 		`/projects/${project.id}/profiles/:profileId`,
 	);
@@ -41,6 +45,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
 	const settingsDialog = useDialogState();
+	const createProfileDialog = useDialogState();
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 	const expanded = userExpanded ?? true;
 
@@ -49,36 +54,85 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 			<Menu.Root>
 				<Menu.ContextTrigger asChild>
 					<HStack
+						className="group"
 						gap="1"
 						px="4"
 						py="1.5"
 						cursor="pointer"
 						fontWeight="medium"
+						position="relative"
+						bg={
+							hasOnlyDefaultProfile && isDefaultActive
+								? "bg.subtle"
+								: "transparent"
+						}
 						_hover={{ bg: "bg.subtle" }}
+						_before={
+							hasOnlyDefaultProfile && isDefaultActive
+								? {
+										content: '""',
+										position: "absolute",
+										insetInlineStart: "1",
+										insetBlock: "1.5",
+										width: "2px",
+										borderRadius: "full",
+										bg: "colorPalette.solid",
+									}
+								: undefined
+						}
 					>
 						<Box asChild truncate flex="1" data-sidebar-item>
 							<NavLink to={defaultProfileUrl}>
 								{project.name}
 							</NavLink>
 						</Box>
-						<IconButton
-							as="span"
-							variant="ghost"
-							size="2xs"
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								setUserExpanded((prev) =>
-									prev === null ? !expanded : !prev,
-								);
-							}}
-						>
-							{expanded ? (
-								<FiChevronDown />
-							) : (
-								<FiChevronRight />
-							)}
-						</IconButton>
+
+						{hasOnlyDefaultProfile ? (
+							<Tooltip.Root openDelay={400} positioning={{ placement: "right" }}>
+								<Tooltip.Trigger asChild>
+									<IconButton
+										as="span"
+										variant="ghost"
+										size="2xs"
+										opacity="0"
+										_groupHover={{ opacity: 1 }}
+										onClick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											createProfileDialog.onOpen();
+										}}
+									>
+										<FiPlus />
+									</IconButton>
+								</Tooltip.Trigger>
+								<Portal>
+									<Tooltip.Positioner>
+										<Tooltip.Content>
+											创建 git worktree
+										</Tooltip.Content>
+									</Tooltip.Positioner>
+								</Portal>
+							</Tooltip.Root>
+						) : (
+							<IconButton
+								as="span"
+								variant="ghost"
+								size="2xs"
+								onClick={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									setUserExpanded((prev) =>
+										prev === null ? !expanded : !prev,
+									);
+								}}
+							>
+								{expanded ? (
+									<FiChevronDown />
+								) : (
+									<FiChevronRight />
+								)}
+							</IconButton>
+						)}
 					</HStack>
 				</Menu.ContextTrigger>
 				<Portal>
@@ -110,7 +164,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				</Portal>
 			</Menu.Root>
 
-			{expanded && (
+			{!hasOnlyDefaultProfile && expanded && (
 				<>
 					{/* Default (project root) item */}
 					<HStack
@@ -171,6 +225,13 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				onClose={settingsDialog.onClose}
 				projectId={project.id}
 			/>
+			{hasOnlyDefaultProfile && (
+				<CreateProfileDialog
+					isOpen={createProfileDialog.isOpen}
+					onClose={createProfileDialog.onClose}
+					projectId={project.id}
+				/>
+			)}
 		</>
 	);
 }
