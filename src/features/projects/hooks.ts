@@ -11,7 +11,9 @@ import {
 	deleteProject,
 	getGitBranch,
 	getProjectConfig,
+	listDirectory,
 	listProjects,
+	readFileContent,
 	saveProjectConfig,
 	updateProject,
 } from "@/generated";
@@ -122,5 +124,23 @@ export function useDeleteProject() {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
+	});
+}
+
+export function useDirectoryListing(path: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.fs.dir(path),
+		queryFn: () => listDirectory({ path }),
+		enabled: !!path && enabled,
+		staleTime: 5000,
+	});
+}
+
+export function useFileContent(path: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.fs.file(path),
+		queryFn: () => readFileContent({ path }),
+		enabled: !!path && enabled,
+		staleTime: 10000,
 	});
 }

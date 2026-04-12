@@ -8,7 +8,7 @@ import {
 	Tooltip,
 } from "@chakra-ui/react";
 import { Suspense, useEffect, useState } from "react";
-import { FiGitBranch, FiSettings } from "react-icons/fi";
+import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -61,6 +61,8 @@ interface ProjectTopBarProps {
 	projectName: string;
 	profile: Profile;
 	isActive: boolean;
+	isFileTreeOpen?: boolean;
+	onToggleFileTree?: () => void;
 }
 
 export default function ProjectTopBar({
@@ -68,6 +70,8 @@ export default function ProjectTopBar({
 	projectName,
 	profile,
 	isActive,
+	isFileTreeOpen = false,
+	onToggleFileTree,
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
@@ -82,10 +86,14 @@ export default function ProjectTopBar({
 				e.preventDefault();
 				setGitDiffOpen(true);
 			}
+			if ((e.metaKey || e.ctrlKey) && e.key === "e") {
+				e.preventDefault();
+				onToggleFileTree?.();
+			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isActive]);
+	}, [isActive, onToggleFileTree]);
 	const supportedControlIdSet = new Set(
 		getSupportedControlIds(supportedAppIds),
 	);
@@ -105,6 +113,27 @@ export default function ProjectTopBar({
 				pt="3"
 			>
 				<HStack gap="2">
+					{onToggleFileTree && (
+						<Tooltip.Root>
+							<Tooltip.Trigger asChild>
+								<IconButton
+									aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
+									size="xs"
+									variant="ghost"
+									onClick={onToggleFileTree}
+								>
+									<FiSidebar />
+								</IconButton>
+							</Tooltip.Trigger>
+							<Portal>
+								<Tooltip.Positioner>
+									<Tooltip.Content>
+										{isFileTreeOpen ? "Close file tree" : "Open file tree"} ⌘E
+									</Tooltip.Content>
+								</Tooltip.Positioner>
+							</Portal>
+						</Tooltip.Root>
+					)}
 					<Tooltip.Root>
 						<Tooltip.Trigger asChild>
 							<Text

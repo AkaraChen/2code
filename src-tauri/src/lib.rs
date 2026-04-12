@@ -87,6 +87,8 @@ pub fn run() {
 			handler::project::commit_git_changes,
 			handler::project::get_project_config,
 			handler::project::save_project_config,
+			handler::filesystem::list_directory,
+			handler::filesystem::read_file_content,
 			handler::font::list_system_fonts,
 			handler::sound::list_system_sounds,
 			handler::sound::play_system_sound,

@@ -11,10 +11,11 @@ import {
 	Text,
 	VStack,
 } from "@chakra-ui/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
+import FileTreePanel from "@/features/projects/FileTreePanel";
 import {
 	useProject,
 	useProjectConfigQuery,
@@ -42,6 +43,8 @@ export default function ProjectDetailPage() {
 		() => profiles.find((p) => p.id === profileId),
 		[profiles, profileId],
 	);
+
+	const [fileTreeOpen, setFileTreeOpen] = useState(true);
 
 	const hasTabs = useTerminalStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
@@ -89,6 +92,13 @@ export default function ProjectDetailPage() {
 				projectName={project.name}
 				profile={profile}
 				isActive
+				isFileTreeOpen={fileTreeOpen}
+				onToggleFileTree={() => setFileTreeOpen((v) => !v)}
+			/>
+			<Flex flex="1" overflow="hidden">
+			<FileTreePanel
+				rootPath={profile.worktree_path}
+				isOpen={fileTreeOpen}
 			/>
 			<Center flex="1">
 					<EmptyState.Root>
@@ -219,6 +229,7 @@ export default function ProjectDetailPage() {
 					</EmptyState.Content>
 				</EmptyState.Root>
 			</Center>
+			</Flex>
 		</Flex>
 	);
 }
