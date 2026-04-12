@@ -1,4 +1,12 @@
-import { Badge, HStack, Text } from "@chakra-ui/react";
+import {
+	Badge,
+	Box,
+	Button,
+	Checkbox,
+	HStack,
+	Text,
+	VStack,
+} from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { useMemo } from "react";
 import * as m from "@/paraglide/messages.js";
@@ -8,32 +16,83 @@ import { changeBadge, getLineStats } from "../utils";
 interface FileListItemProps {
 	file: FileDiffMetadata;
 	isActive: boolean;
+	isIncluded?: boolean;
 	onClick: () => void;
+	onToggleIncluded?: (included: boolean) => void;
 }
 
-function FileListItem({ file, isActive, onClick }: FileListItemProps) {
+function FileListItem({
+	file,
+	isActive,
+	isIncluded,
+	onClick,
+	onToggleIncluded,
+}: FileListItemProps) {
 	const { additions, deletions } = useMemo(() => getLineStats(file), [file]);
 	const badge = changeBadge[file.type] ?? changeBadge.change;
 	const basename = file.name.split("/").pop() ?? file.name;
+	const effectiveIncluded = isIncluded ?? true;
+	const parentPath = file.name.includes("/")
+		? file.name.split("/").slice(0, -1).join("/")
+		: null;
 
 	return (
 		<HStack
 			px="3"
-			py="1"
+			py="2"
 			cursor="pointer"
 			bg={isActive ? "bg.emphasized" : "transparent"}
-			_hover={{ bg: isActive ? "bg.emphasized" : "bg.muted" }}
+			_hover={{ bg: isActive ? "bg.emphasized" : "bg.subtle" }}
 			onClick={onClick}
 			gap="2"
 			userSelect="none"
+			opacity={effectiveIncluded ? 1 : 0.72}
+			align="flex-start"
 		>
-			<Badge size="xs" colorPalette={badge.colorPalette} variant="subtle">
-				{badge.label}
-			</Badge>
-			<Text fontSize="sm" flex="1" truncate title={file.name}>
-				{basename}
-			</Text>
-			<HStack gap="1" fontSize="xs" flexShrink={0}>
+			{onToggleIncluded ? (
+				<Checkbox.Root
+					mt="0.5"
+					size="sm"
+					checked={effectiveIncluded}
+					onClick={(event) => event.stopPropagation()}
+					onCheckedChange={(event) =>
+						onToggleIncluded(!!event.checked)
+					}
+				>
+					<Checkbox.HiddenInput />
+					<Checkbox.Control />
+				</Checkbox.Root>
+			) : (
+				<Box width="4" flexShrink={0} />
+			)}
+
+			<VStack flex="1" align="stretch" gap="0.5" minW="0">
+				<HStack gap="2" minW="0">
+					<Text
+						fontSize="sm"
+						fontWeight={isActive ? "medium" : "normal"}
+						flex="1"
+						truncate
+						title={file.name}
+					>
+						{basename}
+					</Text>
+					<Badge
+						size="xs"
+						colorPalette={badge.colorPalette}
+						variant="subtle"
+					>
+						{badge.label}
+					</Badge>
+				</HStack>
+				{parentPath && (
+					<Text fontSize="xs" color="fg.muted" truncate title={file.name}>
+						{parentPath}
+					</Text>
+				)}
+			</VStack>
+
+			<HStack gap="1" fontSize="xs" flexShrink={0} pt="0.5">
 				{additions > 0 && (
 					<Text color="green.solid" lineHeight="1">
 						+{additions}
@@ -52,28 +111,79 @@ function FileListItem({ file, isActive, onClick }: FileListItemProps) {
 interface ChangesFileListProps {
 	files: FileDiffMetadata[];
 	selectedIndex: number;
+	includedFileNames: Set<string>;
 	onSelect: (index: number) => void;
+	onToggleIncluded: (fileName: string, included: boolean) => void;
+	onIncludeAll: () => void;
+	onIncludeNone: () => void;
 }
 
 export default function ChangesFileList({
 	files,
 	selectedIndex,
+	includedFileNames,
 	onSelect,
+	onToggleIncluded,
+	onIncludeAll,
+	onIncludeNone,
 }: ChangesFileListProps) {
 	const { ref: containerRef } =
 		useScrollIntoView<HTMLDivElement>(selectedIndex);
+	const includedCount = includedFileNames.size;
 
 	return (
 		<div ref={containerRef}>
-			<Text px="3" py="1" fontSize="xs" color="fg.muted">
-				{m.changedFiles({ count: files.length })}
-			</Text>
+			<HStack
+				position="sticky"
+				top="0"
+				zIndex="1"
+				justify="space-between"
+				px="3"
+				py="2.5"
+				bg="bg.subtle"
+				borderBottomWidth="1px"
+				borderColor="border.subtle"
+			>
+				<VStack align="start" gap="0">
+					<Text fontSize="xs" color="fg.muted">
+						{m.changedFiles({ count: files.length })}
+					</Text>
+					<Text fontSize="xs" color="fg.muted">
+						{m.gitCommitIncludedCount({
+							includedCount,
+							totalCount: files.length,
+						})}
+					</Text>
+				</VStack>
+				<HStack gap="1">
+					<Button
+						size="xs"
+						variant="ghost"
+						onClick={onIncludeAll}
+						disabled={includedCount === files.length}
+					>
+						{m.gitCommitIncludeAll()}
+					</Button>
+					<Button
+						size="xs"
+						variant="ghost"
+						onClick={onIncludeNone}
+						disabled={includedCount === 0}
+					>
+						{m.gitCommitIncludeNone()}
+					</Button>
+				</HStack>
+			</HStack>
 			{files.map((file, i) => (
 				<div key={file.name} data-index={i}>
 					<FileListItem
 						file={file}
 						isActive={selectedIndex === i}
+						isIncluded={includedFileNames.has(file.name)}
 						onClick={() => onSelect(i)}
+						onToggleIncluded={(included) =>
+							onToggleIncluded(file.name, included)
+						}
 					/>
 				</div>
 			))}

@@ -1,6 +1,10 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
-import { changeBadge, getLineStats } from "./utils";
+import {
+	changeBadge,
+	getLineStats,
+	reconcileIncludedFiles,
+} from "./utils";
 
 describe("changeBadge", () => {
 	it("maps 'new' to label 'A' with green palette", () => {
@@ -212,5 +216,47 @@ describe("getLineStats", () => {
 			},
 		]);
 		expect(getLineStats(file)).toEqual({ additions: 1, deletions: 0 });
+	});
+});
+
+describe("reconcileIncludedFiles", () => {
+	it("includes all files on first load", () => {
+		expect(
+			reconcileIncludedFiles(
+				["a.ts", "b.ts"],
+				new Set<string>(),
+				new Set<string>(),
+			),
+		).toEqual(new Set(["a.ts", "b.ts"]));
+	});
+
+	it("preserves existing exclusions for unchanged files", () => {
+		expect(
+			reconcileIncludedFiles(
+				["a.ts", "b.ts"],
+				new Set(["a.ts"]),
+				new Set(["a.ts", "b.ts"]),
+			),
+		).toEqual(new Set(["a.ts"]));
+	});
+
+	it("auto-includes newly added files while keeping existing choices", () => {
+		expect(
+			reconcileIncludedFiles(
+				["a.ts", "b.ts", "c.ts"],
+				new Set(["a.ts"]),
+				new Set(["a.ts", "b.ts"]),
+			),
+		).toEqual(new Set(["a.ts", "c.ts"]));
+	});
+
+	it("drops removed files from the included set", () => {
+		expect(
+			reconcileIncludedFiles(
+				["b.ts"],
+				new Set(["a.ts", "b.ts"]),
+				new Set(["a.ts", "b.ts"]),
+			),
+		).toEqual(new Set(["b.ts"]));
 	});
 });

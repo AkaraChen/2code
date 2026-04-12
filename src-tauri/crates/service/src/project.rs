@@ -138,6 +138,17 @@ pub fn get_commit_diff(
 	infra::git::show(&profile.worktree_path, commit_hash)
 }
 
+pub fn commit_changes(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+	files: &[String],
+	message: &str,
+	body: Option<&str>,
+) -> Result<String, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::commit(&profile.worktree_path, files, message, body)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

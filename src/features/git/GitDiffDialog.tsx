@@ -20,17 +20,26 @@ import {
 	useMemo,
 	useReducer,
 	useRef,
+	useState,
 } from "react";
 import { FiGitBranch } from "react-icons/fi";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
 import ChangesFileList from "./components/ChangesFileList";
+import CommitComposer from "./components/CommitComposer";
 import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
 import HistoryFileList from "./components/HistoryFileList";
 import { GitDiffContext, gitDiffReducer, initialState } from "./gitDiffReducer";
-import { useCommitDiffFiles, useGitDiffFiles, useGitLog } from "./hooks";
+import {
+	useCommitDiffFiles,
+	useCommitGitChanges,
+	useGitDiffFiles,
+	useGitLog,
+} from "./hooks";
+import { reconcileIncludedFiles } from "./utils";
+import { toaster } from "@/shared/providers/Toaster";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"github-dark": "github-dark",
@@ -64,6 +73,28 @@ function VisibleBox({
 			{children}
 		</Box>
 	);
+}
+
+function isInteractiveKeyboardTarget(target: EventTarget | null) {
+	if (!(target instanceof HTMLElement)) {
+		return false;
+	}
+
+	return !!target.closest("input, textarea, button, select, [role='textbox']");
+}
+
+function areSetsEqual(left: Set<string>, right: Set<string>) {
+	if (left.size !== right.size) {
+		return false;
+	}
+
+	for (const value of left) {
+		if (!right.has(value)) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 interface GitDiffDialogProps {
@@ -135,12 +166,26 @@ export default function GitDiffDialog({
 function GitDiffContent({ profileId }: { profileId: string }) {
 	const termThemeId = useTerminalThemeId();
 	const [state, dispatch] = useReducer(gitDiffReducer, initialState);
+	const [includedFileNames, setIncludedFileNames] = useState<Set<string>>(
+		() => new Set(),
+	);
+	const [commitMessage, setCommitMessage] = useState("");
+	const [commitBody, setCommitBody] = useState("");
 
 	const sidebarRef = useRef<HTMLDivElement>(null);
+	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 
 	const changesFiles = useGitDiffFiles(profileId);
 	const { data: logData } = useGitLog(profileId);
 	const commits = useMemo(() => logData ?? [], [logData]);
+	const commitGitChanges = useCommitGitChanges(profileId);
+	const orderedIncludedFileNames = useMemo(
+		() =>
+			changesFiles.flatMap((file) =>
+				includedFileNames.has(file.name) ? [file.name] : [],
+			),
+		[changesFiles, includedFileNames],
+	);
 
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({
@@ -163,9 +208,25 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 		});
 	};
 
+	const setFileIncluded = (fileName: string, included: boolean) => {
+		setIncludedFileNames((prev) => {
+			const next = new Set(prev);
+			if (included) {
+				next.add(fileName);
+			} else {
+				next.delete(fileName);
+			}
+			return next;
+		});
+	};
+
 	// Keyboard navigation — dispatch arrow keys to the active list,
 	// handle Enter / Escape / Backspace for commit drill-in/back.
 	const activeListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+		if (isInteractiveKeyboardTarget(e.target)) {
+			return;
+		}
+
 		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
 			e.preventDefault();
 			const delta = e.key === "ArrowDown" ? 1 : -1;
@@ -191,6 +252,23 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 					delta,
 					count: commits.length,
 				});
+			}
+			return;
+		}
+
+		if (e.key === " " && state.activeTab === "changes") {
+			const activeFile =
+				changesFiles.length > 0 &&
+				state.selectedFileIndex < changesFiles.length
+					? changesFiles[state.selectedFileIndex]
+					: null;
+
+			if (activeFile) {
+				e.preventDefault();
+				setFileIncluded(
+					activeFile.name,
+					!includedFileNames.has(activeFile.name),
+				);
 			}
 			return;
 		}
@@ -249,6 +327,35 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 		}
 	}, [state.selectedCommit]);
 
+	useEffect(() => {
+		const nextFileNames = changesFiles.map((file) => file.name);
+		const nextIncluded = reconcileIncludedFiles(
+			nextFileNames,
+			includedFileNames,
+			previousChangeFileNamesRef.current,
+		);
+
+		if (!areSetsEqual(includedFileNames, nextIncluded)) {
+			setIncludedFileNames(nextIncluded);
+		}
+
+		previousChangeFileNamesRef.current = new Set(nextFileNames);
+	}, [changesFiles, includedFileNames]);
+
+	useEffect(() => {
+		if (
+			changesFiles.length > 0 &&
+			state.selectedFileIndex >= changesFiles.length
+		) {
+			startTransition(() => {
+				dispatch({
+					type: "selectFile",
+					index: changesFiles.length - 1,
+				});
+			});
+		}
+	}, [changesFiles.length, dispatch, state.selectedFileIndex]);
+
 	const isChanges = state.activeTab === "changes";
 
 	const ctxValue = useMemo(
@@ -263,7 +370,7 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 				<Flex
 					ref={sidebarRef}
 					direction="column"
-					w="320px"
+					w="360px"
 					flexShrink={0}
 					overflow="hidden"
 					tabIndex={0}
@@ -298,7 +405,70 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 								overflow="hidden"
 							>
 								<Suspense fallback={<LoadingSpinner size="sm" />}>
-									<ChangesSidebar />
+									<ChangesSidebar
+										includedFileNames={includedFileNames}
+										commitMessage={commitMessage}
+										commitBody={commitBody}
+										isCommitting={commitGitChanges.isPending}
+										onToggleIncluded={setFileIncluded}
+										onIncludeAll={() =>
+											setIncludedFileNames(
+												new Set(
+													changesFiles.map(
+														(file) => file.name,
+													),
+												),
+											)
+										}
+										onIncludeNone={() =>
+											setIncludedFileNames(new Set())
+										}
+										onCommitMessageChange={
+											setCommitMessage
+										}
+										onCommitBodyChange={setCommitBody}
+										onCommit={async () => {
+											try {
+												const hash =
+													await commitGitChanges.mutateAsync(
+														{
+															files: orderedIncludedFileNames,
+															message:
+																commitMessage.trim(),
+															body:
+																commitBody.trim() ||
+																undefined,
+														},
+													);
+												setCommitMessage("");
+												setCommitBody("");
+												toaster.create({
+													title: m.gitCommitSuccessTitle(),
+													description:
+														m.gitCommitSuccessDescription(
+															{
+																hash: hash.slice(
+																	0,
+																	7,
+																),
+															},
+														),
+													type: "success",
+													closable: true,
+												});
+											} catch (error) {
+												toaster.create({
+													title: m.gitCommitErrorTitle(),
+													description:
+														error instanceof Error
+															? error.message
+															: String(error),
+													type: "error",
+													closable: true,
+												});
+											}
+										}}
+									/>
 								</Suspense>
 							</Box>
 						</Activity>
@@ -340,25 +510,72 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 // Changes tab components
 // ---------------------------------------------------------------------------
 
-function ChangesSidebar() {
+interface ChangesSidebarProps {
+	includedFileNames: Set<string>;
+	commitMessage: string;
+	commitBody: string;
+	isCommitting: boolean;
+	onToggleIncluded: (fileName: string, included: boolean) => void;
+	onIncludeAll: () => void;
+	onIncludeNone: () => void;
+	onCommitMessageChange: (value: string) => void;
+	onCommitBodyChange: (value: string) => void;
+	onCommit: () => void;
+}
+
+function ChangesSidebar({
+	includedFileNames,
+	commitMessage,
+	commitBody,
+	isCommitting,
+	onToggleIncluded,
+	onIncludeAll,
+	onIncludeNone,
+	onCommitMessageChange,
+	onCommitBodyChange,
+	onCommit,
+}: ChangesSidebarProps) {
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 
-	if (changesFiles.length === 0) {
-		return (
-			<Flex align="center" justify="center" flex="1" p="8">
-				<Box color="fg.muted" fontSize="sm">
-					{m.noChangesDetected()}
-				</Box>
-			</Flex>
-		);
-	}
-
 	return (
-		<Box flex="1" overflowY="auto">
-			<ChangesFileList
-				files={changesFiles}
-				selectedIndex={state.selectedFileIndex}
-				onSelect={(i) => dispatch({ type: "selectFile", index: i })}
+		<Box
+			flex="1"
+			display="flex"
+			flexDirection="column"
+			minH="0"
+			bg="bg.subtle"
+		>
+			<Box flex="1" overflowY="auto" minH="0">
+				{changesFiles.length === 0 ? (
+					<Flex align="center" justify="center" h="full" p="8">
+						<Box color="fg.muted" fontSize="sm">
+							{m.noChangesDetected()}
+						</Box>
+					</Flex>
+				) : (
+					<ChangesFileList
+						files={changesFiles}
+						selectedIndex={state.selectedFileIndex}
+						includedFileNames={includedFileNames}
+						onSelect={(i) =>
+							dispatch({ type: "selectFile", index: i })
+						}
+						onToggleIncluded={onToggleIncluded}
+						onIncludeAll={onIncludeAll}
+						onIncludeNone={onIncludeNone}
+					/>
+				)}
+			</Box>
+
+			<CommitComposer
+				commitMessage={commitMessage}
+				commitBody={commitBody}
+				includedCount={includedFileNames.size}
+				totalCount={changesFiles.length}
+				isPending={isCommitting}
+				onMessageChange={onCommitMessageChange}
+				onBodyChange={onCommitBodyChange}
+				onSubmit={onCommit}
 			/>
 		</Box>
 	);

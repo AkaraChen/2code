@@ -84,6 +84,7 @@ pub fn run() {
 			handler::project::get_git_diff_stats,
 			handler::project::get_git_log,
 			handler::project::get_commit_diff,
+			handler::project::commit_git_changes,
 			handler::project::get_project_config,
 			handler::project::save_project_config,
 			handler::font::list_system_fonts,

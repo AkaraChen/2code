@@ -120,6 +120,28 @@ pub async fn get_commit_diff(
 }
 
 #[tauri::command]
+pub async fn commit_git_changes(
+	profile_id: String,
+	files: Vec<String>,
+	message: String,
+	body: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::commit_changes(
+			conn,
+			&profile_id,
+			&files,
+			&message,
+			body.as_deref(),
+		)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn delete_project(
 	id: String,
 	state: State<'_, DbPool>,
