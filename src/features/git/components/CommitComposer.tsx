@@ -2,6 +2,7 @@ import {
 	Box,
 	Button,
 	Field,
+	Flex,
 	Input,
 	Text,
 	Textarea,
@@ -49,10 +50,10 @@ export default function CommitComposer({
 			borderTopWidth="1px"
 			borderColor="border.subtle"
 			bg="bg"
-			px="3"
-			py="3"
+			px="2.5"
+			py="2"
 		>
-			<VStack align="stretch" gap="3">
+			<VStack align="stretch" gap="2">
 				<Text
 					fontSize="xs"
 					fontWeight="medium"
@@ -64,9 +65,11 @@ export default function CommitComposer({
 				</Text>
 
 				<Field.Root required>
-					<Field.Label>{m.gitCommitSummary()}</Field.Label>
+					<Field.Label fontSize="xs" mb="1">
+						{m.gitCommitSummary()}
+					</Field.Label>
 					<Input
-						size="sm"
+						size="xs"
 						value={commitMessage}
 						disabled={isDisabled}
 						placeholder={m.gitCommitSummaryPlaceholder()}
@@ -76,10 +79,12 @@ export default function CommitComposer({
 				</Field.Root>
 
 				<Field.Root>
-					<Field.Label>{m.gitCommitBody()}</Field.Label>
+					<Field.Label fontSize="xs" mb="1">
+						{m.gitCommitBody()}
+					</Field.Label>
 					<Textarea
-						size="sm"
-						rows={4}
+						size="xs"
+						rows={3}
 						value={commitBody}
 						disabled={isDisabled}
 						placeholder={m.gitCommitBodyPlaceholder()}
@@ -89,24 +94,26 @@ export default function CommitComposer({
 					/>
 				</Field.Root>
 
-				<Text fontSize="xs" color="fg.muted">
-					{m.gitCommitIncludedCount({
-						includedCount,
-						totalCount,
-					})}
-					{" • "}
-					{m.gitCommitShortcutHint()}
-				</Text>
+				<Flex align="center" gap="2" justify="space-between">
+					<Text fontSize="xs" color="fg.muted" flex="1" lineHeight="short">
+						{m.gitCommitIncludedCount({
+							includedCount,
+							totalCount,
+						})}
+						{" • "}
+						{m.gitCommitShortcutHint()}
+					</Text>
 
-				<Button
-					size="sm"
-					width="full"
-					loading={isPending}
-					disabled={!canSubmit || isPending}
-					onClick={onSubmit}
-				>
-					{m.gitCommitButton()}
-				</Button>
+					<Button
+						size="xs"
+						flexShrink={0}
+						loading={isPending}
+						disabled={!canSubmit || isPending}
+						onClick={onSubmit}
+					>
+						{m.gitCommitButton()}
+					</Button>
+				</Flex>
 			</VStack>
 		</Box>
 	);
