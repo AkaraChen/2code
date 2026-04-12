@@ -1,5 +1,6 @@
 import {
 	Box,
+	Circle,
 	HStack,
 	Icon,
 	IconButton,
@@ -13,6 +14,7 @@ import { NavLink, useMatch } from "react-router";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
+import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDialogState } from "@/shared/hooks/useDialogState";
@@ -37,6 +39,10 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const defaultProfileUrl = defaultProfile
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
+	const hasDefaultNotification = useProfileHasNotification(
+		defaultProfile?.id ?? "",
+	);
+	const markProfileRead = useTerminalStore((s) => s.markProfileRead);
 
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
@@ -139,11 +145,25 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 								: undefined
 						}
 					>
-						<NavLink to={defaultProfileUrl}>
+						<NavLink
+							to={defaultProfileUrl}
+							onClick={() => {
+								if (defaultProfile) {
+									markProfileRead(defaultProfile.id);
+								}
+							}}
+						>
 							<Icon fontSize="xs" color="fg.muted">
 								<FiTerminal />
 							</Icon>
 							<Text truncate>{m.defaultProfile()}</Text>
+							{hasDefaultNotification && (
+								<Circle
+									size="2"
+									bg="green.500"
+									flexShrink={0}
+								/>
+							)}
 						</NavLink>
 					</HStack>
 
