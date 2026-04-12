@@ -217,7 +217,7 @@ function GitDiffHeader({
 	});
 
 	return (
-		<Dialog.Header py="2" px="4">
+		<Dialog.Header py="2" pl="4" pr="16">
 			<Flex w="full" align="center" gap="3" minW="0">
 				<Dialog.Title fontSize="sm" flex="1" minW="0">
 					<HStack gap="1.5" alignItems="center" minW="0">
