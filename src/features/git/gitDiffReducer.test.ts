@@ -21,6 +21,7 @@ describe("initialState", () => {
 	it("has expected default values", () => {
 		expect(initialState).toEqual({
 			activeTab: "changes",
+			viewMode: "unified",
 			selectedCommit: null,
 			selectedFileIndex: 0,
 			selectedCommitIndex: 0,
@@ -31,6 +32,30 @@ describe("initialState", () => {
 });
 
 describe("gitDiffReducer", () => {
+	describe("setViewMode", () => {
+		it("updates the diff preview mode", () => {
+			const next = gitDiffReducer(initialState, {
+				type: "setViewMode",
+				viewMode: "split",
+			});
+			expect(next.viewMode).toBe("split");
+		});
+
+		it("does not reset other selection state", () => {
+			const state: GitDiffState = {
+				...initialState,
+				selectedFileIndex: 3,
+				selectedCommitIndex: 2,
+			};
+			const next = gitDiffReducer(state, {
+				type: "setViewMode",
+				viewMode: "split",
+			});
+			expect(next.selectedFileIndex).toBe(3);
+			expect(next.selectedCommitIndex).toBe(2);
+		});
+	});
+
 	describe("switchTab", () => {
 		it("changes activeTab to the specified tab", () => {
 			const next = gitDiffReducer(initialState, {
