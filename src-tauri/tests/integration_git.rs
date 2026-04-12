@@ -363,6 +363,134 @@ fn commit_diff_nonexistent_hash_returns_error() {
 }
 
 // ============================================================
+// Git Commit
+// ============================================================
+
+#[test]
+fn commit_changes_commits_only_selected_files() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
+	std::fs::write(dir.join("notes.txt"), "keep me for later").unwrap();
+
+	let commit_hash = service::project::commit_changes(
+		&mut conn,
+		&default_profile.id,
+		&["README.md".into()],
+		"Commit README only",
+		None,
+	)
+	.unwrap();
+
+	let head = std::process::Command::new("git")
+		.args(["rev-parse", "HEAD"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), commit_hash);
+
+	let latest_message = std::process::Command::new("git")
+		.args(["log", "-1", "--format=%s"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	assert_eq!(
+		String::from_utf8_lossy(&latest_message.stdout).trim(),
+		"Commit README only"
+	);
+
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	assert!(
+		diff.contains("notes.txt"),
+		"unselected file should stay uncommitted"
+	);
+	assert!(
+		!diff.contains("README.md"),
+		"selected file should be removed from diff after commit"
+	);
+
+	cleanup(&dir);
+}
+
+#[test]
+fn commit_changes_supports_body_and_untracked_files() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("new-file.txt"), "new file").unwrap();
+
+	service::project::commit_changes(
+		&mut conn,
+		&default_profile.id,
+		&["new-file.txt".into()],
+		"Add new file",
+		Some("Body line 1\n\nBody line 2"),
+	)
+	.unwrap();
+
+	let full_message = std::process::Command::new("git")
+		.args(["log", "-1", "--format=%B"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	let full_message = String::from_utf8_lossy(&full_message.stdout);
+	assert!(full_message.contains("Add new file"));
+	assert!(full_message.contains("Body line 1"));
+	assert!(full_message.contains("Body line 2"));
+
+	let diff =
+		service::project::get_diff(&mut conn, &default_profile.id).unwrap();
+	assert!(!diff.contains("new-file.txt"));
+
+	cleanup(&dir);
+}
+
+#[test]
+fn commit_changes_empty_message_returns_error() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
+
+	let result = service::project::commit_changes(
+		&mut conn,
+		&default_profile.id,
+		&["README.md".into()],
+		"   ",
+		None,
+	);
+	assert!(result.is_err());
+
+	cleanup(&dir);
+}
+
+#[test]
+fn commit_changes_requires_selected_files() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
+
+	let files: Vec<String> = Vec::new();
+	let result = service::project::commit_changes(
+		&mut conn,
+		&default_profile.id,
+		&files,
+		"Missing files",
+		None,
+	);
+	assert!(result.is_err());
+
+	cleanup(&dir);
+}
+
+// ============================================================
 // Git Branch
 // ============================================================
 

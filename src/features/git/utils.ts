@@ -24,3 +24,25 @@ export function getLineStats(file: FileDiffMetadata) {
 	}
 	return { additions, deletions };
 }
+
+export function reconcileIncludedFiles(
+	nextFileNames: string[],
+	prevIncluded: Set<string>,
+	prevFileNames: Set<string>,
+) {
+	const nextIncluded = new Set<string>();
+	const hadPreviousFiles = prevFileNames.size > 0;
+
+	for (const fileName of nextFileNames) {
+		if (!hadPreviousFiles || !prevFileNames.has(fileName)) {
+			nextIncluded.add(fileName);
+			continue;
+		}
+
+		if (prevIncluded.has(fileName)) {
+			nextIncluded.add(fileName);
+		}
+	}
+
+	return nextIncluded;
+}

@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Component, Path};
 use std::process::Command;
 
 use model::error::AppError;
@@ -180,6 +181,77 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+pub fn commit(
+	folder: &str,
+	files: &[String],
+	message: &str,
+	body: Option<&str>,
+) -> Result<String, AppError> {
+	let files = validate_commit_files(files)?;
+	let message = validate_commit_message(message)?;
+	let body = body
+		.map(str::trim)
+		.filter(|content| !content.is_empty())
+		.map(ToOwned::to_owned);
+
+	// Stage the selected paths first so untracked files and deletions can be
+	// committed, then use `--only` so unrelated staged files stay out.
+	let add_output = Command::new("git")
+		.arg("add")
+		.arg("-A")
+		.arg("--")
+		.args(&files)
+		.current_dir(folder)
+		.output()?;
+
+	if !add_output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git add failed",
+			&add_output,
+		)));
+	}
+
+	let mut commit_command = Command::new("git");
+	commit_command
+		.arg("commit")
+		.arg("--only")
+		.arg("-m")
+		.arg(&message);
+
+	if let Some(body) = &body {
+		commit_command.arg("-m").arg(body);
+	}
+
+	let commit_output = commit_command
+		.arg("--")
+		.args(&files)
+		.current_dir(folder)
+		.output()?;
+
+	if !commit_output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git commit failed",
+			&commit_output,
+		)));
+	}
+
+	let rev_parse = Command::new("git")
+		.args(["rev-parse", "HEAD"])
+		.current_dir(folder)
+		.output()?;
+
+	if !rev_parse.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git rev-parse failed",
+			&rev_parse,
+		)));
+	}
+
+	Ok(String::from_utf8_lossy(&rev_parse.stdout)
+		.trim()
+		.to_string())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
@@ -289,6 +361,68 @@ pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
+	let trimmed = message.trim();
+	if trimmed.is_empty() {
+		return Err(AppError::GitError(
+			"Commit message cannot be empty".into(),
+		));
+	}
+	Ok(trimmed.to_string())
+}
+
+pub fn validate_commit_files(
+	files: &[String],
+) -> Result<Vec<String>, AppError> {
+	if files.is_empty() {
+		return Err(AppError::GitError(
+			"Select at least one file to commit".into(),
+		));
+	}
+
+	let mut seen = HashSet::new();
+	let mut validated = Vec::with_capacity(files.len());
+
+	for file in files {
+		let trimmed = file.trim();
+		if trimmed.is_empty() {
+			return Err(AppError::GitError(
+				"Commit file path cannot be empty".into(),
+			));
+		}
+		if trimmed.contains('\0') {
+			return Err(AppError::GitError(
+				"Commit file path contains invalid characters".into(),
+			));
+		}
+
+		let path = Path::new(trimmed);
+		if path.is_absolute() {
+			return Err(AppError::GitError(format!(
+				"Commit file path must be relative: {trimmed}",
+			)));
+		}
+		if path.components().any(|component| {
+			matches!(
+				component,
+				Component::ParentDir
+					| Component::RootDir
+					| Component::Prefix(_)
+			)
+		}) {
+			return Err(AppError::GitError(format!(
+				"Commit file path escapes repository: {trimmed}",
+			)));
+		}
+
+		if seen.insert(trimmed.to_string()) {
+			validated.push(trimmed.to_string());
+		}
+	}
+
+	Ok(validated)
+}
+
 pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	let mut files = 0u32;
 	let mut insertions = 0u32;
@@ -394,6 +528,20 @@ fn extract_conflicting_ref(stderr: &str) -> Option<String> {
 	Some(name.to_string())
 }
 
+fn command_error(prefix: &str, output: &std::process::Output) -> String {
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if !stderr.is_empty() {
+		return format!("{prefix}: {stderr}");
+	}
+
+	let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if !stdout.is_empty() {
+		return format!("{prefix}: {stdout}");
+	}
+
+	prefix.to_string()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -432,6 +580,46 @@ mod tests {
 	#[test]
 	fn validate_hash_empty() {
 		assert!(validate_commit_hash("").is_err());
+	}
+
+	#[test]
+	fn validate_commit_message_rejects_blank() {
+		assert!(validate_commit_message("   ").is_err());
+	}
+
+	#[test]
+	fn validate_commit_message_trims_whitespace() {
+		assert_eq!(
+			validate_commit_message("  test commit  ").unwrap(),
+			"test commit"
+		);
+	}
+
+	#[test]
+	fn validate_commit_files_rejects_empty_list() {
+		let files: Vec<String> = Vec::new();
+		assert!(validate_commit_files(&files).is_err());
+	}
+
+	#[test]
+	fn validate_commit_files_deduplicates_paths() {
+		let files = vec!["a.txt".into(), "a.txt".into(), "b.txt".into()];
+		assert_eq!(
+			validate_commit_files(&files).unwrap(),
+			vec!["a.txt".to_string(), "b.txt".to_string()]
+		);
+	}
+
+	#[test]
+	fn validate_commit_files_rejects_parent_dir_escape() {
+		let files = vec!["../secrets.txt".into()];
+		assert!(validate_commit_files(&files).is_err());
+	}
+
+	#[test]
+	fn validate_commit_files_rejects_absolute_paths() {
+		let files = vec!["/tmp/a.txt".into()];
+		assert!(validate_commit_files(&files).is_err());
 	}
 
 	// --- parse_shortstat ---

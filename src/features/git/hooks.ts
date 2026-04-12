@@ -1,7 +1,13 @@
 import { parsePatchFiles } from "@pierre/diffs";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import {
+	useMutation,
+	useQuery,
+	useQueryClient,
+	useSuspenseQuery,
+} from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
+	commitGitChanges,
 	getCommitDiff,
 	getGitDiff,
 	getGitDiffStats,
@@ -47,6 +53,41 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 			filesChanged: data.files_changed,
 		};
 	}, [data]);
+}
+
+export function useCommitGitChanges(profileId: string) {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: ({
+			files,
+			message,
+			body,
+		}: {
+			files: string[];
+			message: string;
+			body?: string;
+		}) =>
+			commitGitChanges({
+				profileId,
+				files,
+				message,
+				body,
+			}),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.log(profileId),
+				}),
+			]);
+		},
+	});
 }
 
 export function useGitDiffFiles(profileId: string) {
