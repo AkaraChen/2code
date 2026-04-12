@@ -144,9 +144,10 @@ function TreeNode({
 interface FileTreePanelProps {
 	rootPath: string;
 	isOpen: boolean;
+	onOpenFile?: (filePath: string) => void;
 }
 
-export default function FileTreePanel({ rootPath, isOpen }: FileTreePanelProps) {
+export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTreePanelProps) {
 	const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
 
@@ -162,6 +163,14 @@ export default function FileTreePanel({ rootPath, isOpen }: FileTreePanelProps) 
 			}
 			return next;
 		});
+	}
+
+	function handleOpenFile(filePath: string) {
+		if (onOpenFile) {
+			onOpenFile(filePath);
+		} else {
+			setOpenFilePath(filePath);
+		}
 	}
 
 	return (
@@ -188,7 +197,7 @@ export default function FileTreePanel({ rootPath, isOpen }: FileTreePanelProps) 
 								depth={0}
 								expandedPaths={expandedPaths}
 								onToggleDir={toggleDir}
-								onOpenFile={setOpenFilePath}
+								onOpenFile={handleOpenFile}
 							/>
 						))}
 					</Box>

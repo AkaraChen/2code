@@ -6,12 +6,16 @@ import { useKey } from "rooks";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import FileTreePanel from "@/features/projects/FileTreePanel";
 import { useFileTreeStore } from "@/features/projects/fileTreeStore";
+import {
+	useActiveProfileIds,
+	useFileViewerTabsStore,
+} from "@/features/projects/fileViewerTabsStore";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { restorationPromise } from "./state";
 import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
-import { useTerminalProfileIds, useTerminalStore } from "./store";
+import { useTerminalStore } from "./store";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -23,12 +27,14 @@ export default function TerminalLayer() {
 		queryFn: listProjects,
 	});
 
-	const terminalProfileIds = useTerminalProfileIds();
+	const activeProfileIds = useActiveProfileIds();
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
+	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
 	const fileTreeOpenProfiles = useFileTreeStore((s) => s.openProfiles);
 	const toggleFileTree = useFileTreeStore((s) => s.toggle);
-	const fileTreeIsOpen = (profileId: string) => fileTreeOpenProfiles[profileId] ?? true;
+	const fileTreeIsOpen = (profileId: string) =>
+		fileTreeOpenProfiles[profileId] ?? true;
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -62,20 +68,27 @@ export default function TerminalLayer() {
 		e.preventDefault();
 		const profile = profileMap.get(activeProfileId);
 		if (!profile) return;
-		createTab.mutate({ profileId: activeProfileId, cwd: profile.worktree_path });
+		createTab.mutate({
+			profileId: activeProfileId,
+			cwd: profile.worktree_path,
+		});
 	});
 
 	useKey(["w"], (e) => {
 		if (!e.metaKey || !activeProfileId) return;
 		e.preventDefault();
-		const profileState = useTerminalStore.getState().profiles[activeProfileId];
+		const profileState =
+			useTerminalStore.getState().profiles[activeProfileId];
 		if (!profileState?.activeTabId) return;
-		closeTab.mutate({ profileId: activeProfileId, sessionId: profileState.activeTabId });
+		closeTab.mutate({
+			profileId: activeProfileId,
+			sessionId: profileState.activeTabId,
+		});
 	});
 
 	return (
 		<>
-			{terminalProfileIds.map((profileId) => {
+			{activeProfileIds.map((profileId) => {
 				const profile = profileMap.get(profileId);
 				if (!profile) return null;
 				const project = projectMap.get(profile.project_id);
@@ -89,20 +102,23 @@ export default function TerminalLayer() {
 							profileId === activeProfileId ? "flex" : "none"
 						}
 					>
-							<ProjectTopBar
-								projectId={project?.id ?? profile.project_id}
-								projectName={project?.name ?? ""}
-								profile={profile}
-								isActive={profileId === activeProfileId}
-								isFileTreeOpen={fileTreeIsOpen(profileId)}
-								onToggleFileTree={() => toggleFileTree(profileId)}
-							/>
-						<Flex flex="1" minH="0">
+						<ProjectTopBar
+							projectId={project?.id ?? profile.project_id}
+							projectName={project?.name ?? ""}
+							profile={profile}
+							isActive={profileId === activeProfileId}
+							isFileTreeOpen={fileTreeIsOpen(profileId)}
+							onToggleFileTree={() => toggleFileTree(profileId)}
+						/>
+						<Flex flex="1" minH="0" minW="0">
 							<FileTreePanel
 								rootPath={profile.worktree_path}
 								isOpen={fileTreeIsOpen(profileId)}
+								onOpenFile={(filePath) =>
+									openFileTab(profileId, filePath)
+								}
 							/>
-							<Box flex="1" minH="0">
+							<Box flex="1" minH="0" minW="0">
 								<TerminalTabs
 									projectId={project?.id ?? profile.project_id}
 									profileId={profileId}

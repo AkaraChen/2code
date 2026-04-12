@@ -11,8 +11,16 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
+import { getIconForFile } from "vscode-icons-js";
 import { FiPlus, FiTerminal } from "react-icons/fi";
+
+const ICONS_CDN = "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons";
+function fileIconUrl(name: string) {
+	return `${ICONS_CDN}/${getIconForFile(name) ?? "default_file.svg"}`;
+}
 import { useShallow } from "zustand/react/shallow";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
+import FileViewerPane from "@/features/projects/FileViewerPane";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import * as m from "@/paraglide/messages.js";
@@ -26,6 +34,11 @@ import {
 } from "./templates";
 import { Terminal } from "./Terminal";
 
+// Stable fallbacks — module-level constants prevent new object refs each render,
+// which would break useShallow's equality check and cause infinite re-renders.
+const EMPTY_TERMINAL_PROFILE = { tabs: [] as { id: string; title: string }[], activeTabId: null as string | null };
+const EMPTY_FILE_PROFILE = { tabs: [] as { filePath: string; title: string }[], activeFilePath: null as string | null, fileTabActive: false };
+
 interface TerminalTabsProps {
 	projectId: string;
 	profileId: string;
@@ -38,12 +51,23 @@ export default function TerminalTabs({
 	cwd,
 }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
-		useShallow(
-			(s) => s.profiles[profileId] ?? { tabs: [], activeTabId: null },
-		),
+		useShallow((s) => s.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
 	const notifiedTabs = useTerminalStore((s) => s.notifiedTabs);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
+
+	const fileViewerState = useFileViewerTabsStore(
+		(s) => s.profiles[profileId] ?? EMPTY_FILE_PROFILE,
+	);
+	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
+	const closeFileTab = useFileViewerTabsStore((s) => s.closeTab);
+	const setFileActive = useFileViewerTabsStore((s) => s.setFileActive);
+	const setTerminalActive = useFileViewerTabsStore((s) => s.setTerminalActive);
+
+	const fileTabs = fileViewerState.tabs;
+	const activeFilePath = fileViewerState.activeFilePath;
+	const fileTabActive = fileViewerState.fileTabActive;
+
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
 	const projectConfig = useProjectConfigQuery(projectId);
@@ -60,6 +84,21 @@ export default function TerminalTabs({
 	const projectTemplates = projectConfig.data?.terminal_templates ?? [];
 	const hasTemplates =
 		projectTemplates.length > 0 || globalTemplates.length > 0;
+
+	// Unified active tab value: file path when a file tab is active, session ID otherwise
+	const activeValue = fileTabActive
+		? (activeFilePath ?? "")
+		: (activeTabId ?? "");
+
+	function handleTabChange(value: string) {
+		const isFileTab = fileTabs.some((t) => t.filePath === value);
+		if (isFileTab) {
+			setFileActive(profileId, value);
+		} else {
+			setActiveTab(profileId, value);
+			setTerminalActive(profileId);
+		}
+	}
 
 	function clearCloseMenuTimer() {
 		if (closeMenuTimerRef.current !== null) {
@@ -114,69 +153,115 @@ export default function TerminalTabs({
 			title: resolvedTemplate.name,
 			startupCommands: resolvedTemplate.commands,
 		});
+		setTerminalActive(profileId);
 	}
 
-	if (tabs.length === 0) return null;
+	if (tabs.length === 0 && fileTabs.length === 0) return null;
 
 	return (
-		<Flex direction="column" h="full" w="full">
+		<Flex direction="column" h="full" w="full" minW="0">
 			<Tabs.Root
 				size="sm"
-				value={activeTabId}
-				onValueChange={(e) => setActiveTab(profileId, e.value)}
+				w="full"
+				minW="0"
+				value={activeValue}
+				onValueChange={(e) => handleTabChange(e.value)}
 			>
-				<Tabs.List>
-					{tabs.map((tab) => {
-						const displayTitle =
-							tab.title.length > 10
-								? `${tab.title.slice(0, 10)}...`
-								: tab.title;
-						return (
-							<Tabs.Trigger key={tab.id} value={tab.id}>
-								<FiTerminal />
-								<HStack gap="2">
-									{displayTitle}
-									{notifiedTabs.has(tab.id) &&
-										tab.id !== activeTabId && (
-											<Circle size="2" bg="green.500" />
-										)}
-									<CloseButton
-										as="span"
-										role="button"
-										size="2xs"
-										onClick={(e) => {
-											e.stopPropagation();
-											closeTab.mutate({
-												profileId,
-												sessionId: tab.id,
-											});
-										}}
+				<Box overflowX="auto" overflowY="hidden" w="full" minW="0">
+					<Tabs.List w="max-content" minW="max-content" flexWrap="nowrap">
+						{tabs.map((tab) => {
+							const displayTitle =
+								tab.title.length > 10
+									? `${tab.title.slice(0, 10)}...`
+									: tab.title;
+							return (
+								<Tabs.Trigger
+									key={tab.id}
+									value={tab.id}
+									flexShrink={0}
+								>
+									<FiTerminal />
+									<HStack gap="2">
+										{displayTitle}
+										{notifiedTabs.has(tab.id) &&
+											tab.id !== activeTabId && (
+												<Circle size="2" bg="green.500" />
+											)}
+										<CloseButton
+											as="span"
+											role="button"
+											size="2xs"
+											onClick={(e) => {
+												e.stopPropagation();
+												closeTab.mutate({
+													profileId,
+													sessionId: tab.id,
+												});
+											}}
+										/>
+									</HStack>
+								</Tabs.Trigger>
+							);
+						})}
+
+						{fileTabs.map((tab) => {
+							const displayTitle =
+								tab.title.length > 14
+									? `${tab.title.slice(0, 14)}...`
+									: tab.title;
+							return (
+								<Tabs.Trigger
+									key={tab.filePath}
+									value={tab.filePath}
+									flexShrink={0}
+								>
+									<img
+										src={fileIconUrl(tab.title)}
+										width={14}
+										height={14}
+										alt=""
+										draggable={false}
 									/>
-								</HStack>
-							</Tabs.Trigger>
-						);
-					})}
-					<Box
-						ref={newTerminalButtonRef}
-						display="inline-flex"
-						alignSelf="center"
-						ms="2"
-						onMouseEnter={openTemplateMenu}
-						onMouseLeave={scheduleTemplateMenuClose}
-					>
-						<Button
-							size="2xs"
-							variant="ghost"
-							disabled={createTab.isPending}
-							onClick={() => {
-								setIsTemplateMenuOpen(false);
-								createTab.mutate({ profileId, cwd });
-							}}
+									<HStack gap="2">
+										{displayTitle}
+										<CloseButton
+											as="span"
+											role="button"
+											size="2xs"
+											onClick={(e) => {
+												e.stopPropagation();
+												closeFileTab(profileId, tab.filePath);
+											}}
+										/>
+									</HStack>
+								</Tabs.Trigger>
+							);
+						})}
+
+						<Box
+							ref={newTerminalButtonRef}
+							display="inline-flex"
+							flexShrink={0}
+							alignSelf="center"
+							ms="2"
+							onMouseEnter={openTemplateMenu}
+							onMouseLeave={scheduleTemplateMenuClose}
 						>
-							<FiPlus /> {m.newTerminal()}
-						</Button>
-					</Box>
-				</Tabs.List>
+							<Button
+								size="2xs"
+								variant="ghost"
+								disabled={createTab.isPending}
+								onClick={() => {
+									setIsTemplateMenuOpen(false);
+									createTab.mutate({ profileId, cwd });
+									setTerminalActive(profileId);
+								}}
+							>
+								<FiPlus /> {m.newTerminal()}
+							</Button>
+						</Box>
+					</Tabs.List>
+				</Box>
 			</Tabs.Root>
 
 			{isTemplateMenuOpen && templateMenuPosition ? (
@@ -306,27 +391,34 @@ export default function TerminalTabs({
 				</Portal>
 			) : null}
 
-			{/* Terminal area — all terminals stay mounted, hidden via CSS */}
-			<Box flex="1" minH="0" position="relative">
-				{tabs.map((tab) => (
-					<Box
-						key={tab.id}
-						position="absolute"
-						inset="0"
-						visibility={
-							tab.id === activeTabId ? "visible" : "hidden"
-						}
-						pointerEvents={tab.id === activeTabId ? "auto" : "none"}
-						aria-hidden={tab.id !== activeTabId}
-					>
-						<Terminal
-							profileId={profileId}
-							sessionId={tab.id}
-							isActive={tab.id === activeTabId}
-						/>
-					</Box>
-				))}
-			</Box>
+			{/* Content area: file viewer pane or terminal instances */}
+			{fileTabActive && activeFilePath ? (
+				<Box flex="1" minH="0" overflow="hidden">
+					<FileViewerPane filePath={activeFilePath} />
+				</Box>
+			) : (
+				/* Terminal area — all terminals stay mounted, hidden via CSS */
+				<Box flex="1" minH="0" position="relative">
+					{tabs.map((tab) => (
+						<Box
+							key={tab.id}
+							position="absolute"
+							inset="0"
+							visibility={
+								tab.id === activeTabId ? "visible" : "hidden"
+							}
+							pointerEvents={tab.id === activeTabId ? "auto" : "none"}
+							aria-hidden={tab.id !== activeTabId}
+						>
+							<Terminal
+								profileId={profileId}
+								sessionId={tab.id}
+								isActive={tab.id === activeTabId}
+							/>
+						</Box>
+					))}
+				</Box>
+			)}
 		</Flex>
 	);
 }

@@ -22,6 +22,7 @@ import {
 	useProjectProfiles,
 } from "@/features/projects/hooks";
 import { useFileTreeStore } from "@/features/projects/fileTreeStore";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
@@ -51,6 +52,10 @@ export default function ProjectDetailPage() {
 	const hasTabs = useTerminalStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
 	);
+	const hasFileTabs = useFileViewerTabsStore(
+		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
+	);
+	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
 	const createTab = useCreateTerminalTab();
 	const projectConfig = useProjectConfigQuery(project?.id ?? "");
 	const globalTemplates = useTerminalTemplatesStore((s) => s.templates);
@@ -84,8 +89,8 @@ export default function ProjectDetailPage() {
 		return <Navigate to="/" replace />;
 	}
 
-	// Terminal overlay handles rendering when tabs exist
-	if (hasTabs) return null;
+	// TerminalLayer handles rendering when any tab (terminal or file) is open
+	if (hasTabs || hasFileTabs) return null;
 
 	return (
 		<Flex direction="column" h="full">
@@ -101,6 +106,7 @@ export default function ProjectDetailPage() {
 			<FileTreePanel
 				rootPath={profile.worktree_path}
 				isOpen={fileTreeOpen}
+				onOpenFile={(filePath) => openFileTab(profile.id, filePath)}
 			/>
 			<Center flex="1">
 					<EmptyState.Root>
