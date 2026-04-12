@@ -7,8 +7,9 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings } from "react-icons/fi";
+import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import { useSupportedTopbarAppIds } from "@/features/topbar/hooks";
@@ -31,6 +32,30 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	);
 }
 
+function GitDiffDialogWithBranch({
+	cwd,
+	isOpen,
+	isActive,
+	onClose,
+	profileId,
+}: {
+	cwd: string;
+	isOpen: boolean;
+	isActive: boolean;
+	onClose: () => void;
+	profileId: string;
+}) {
+	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
+	return (
+		<GitDiffDialog
+			isOpen={isOpen}
+			onClose={onClose}
+			profileId={profileId}
+			branchName={branch ?? undefined}
+		/>
+	);
+}
+
 interface ProjectTopBarProps {
 	projectId: string;
 	projectName: string;
@@ -47,7 +72,20 @@ export default function ProjectTopBar({
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [gitDiffOpen, setGitDiffOpen] = useState(false);
 	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
+
+	useEffect(() => {
+		if (!isActive) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+				e.preventDefault();
+				setGitDiffOpen(true);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isActive]);
 	const supportedControlIdSet = new Set(
 		getSupportedControlIds(supportedAppIds),
 	);
@@ -114,7 +152,12 @@ export default function ProjectTopBar({
 								key={controlId}
 								profile={profile}
 								isActive={isActive}
-								options={controlOptions[controlId] ?? {}}
+								options={{
+									...(controlOptions[controlId] ?? {}),
+									...(controlId === "git-diff"
+										? { onOpen: () => setGitDiffOpen(true) }
+										: {}),
+								}}
 							/>
 						);
 					})}
@@ -145,6 +188,25 @@ export default function ProjectTopBar({
 				onClose={() => setSettingsOpen(false)}
 				projectId={projectId}
 			/>
+
+			{profile.is_default ? (
+				<Suspense>
+					<GitDiffDialogWithBranch
+						cwd={profile.worktree_path}
+						isOpen={gitDiffOpen}
+						isActive={isActive}
+						onClose={() => setGitDiffOpen(false)}
+						profileId={profile.id}
+					/>
+				</Suspense>
+			) : (
+				<GitDiffDialog
+					isOpen={gitDiffOpen}
+					onClose={() => setGitDiffOpen(false)}
+					profileId={profile.id}
+					branchName={profile.branch_name}
+				/>
+			)}
 		</>
 	);
 }
