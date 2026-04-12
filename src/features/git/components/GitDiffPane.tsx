@@ -1,11 +1,77 @@
-import { Badge, Box, Flex, Text } from "@chakra-ui/react";
-import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
+import {
+	Badge,
+	Box,
+	Button,
+	CloseButton,
+	Dialog,
+	Field,
+	Flex,
+	HStack,
+	Portal,
+	Text,
+	Textarea,
+} from "@chakra-ui/react";
+import type {
+	DiffLineAnnotation,
+	FileDiffMetadata,
+	FileDiffOptions,
+	SelectedLineRange,
+} from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { toaster } from "@/shared/providers/Toaster";
+import {
+	formatGitDiffCommentLocation,
+	formatGitDiffCommentPayload,
+	formatSelectedLineRange,
+	getGitDiffCommentAnchor,
+	getGitDiffCommentFileKey,
+	normalizeSelectedLineRange,
+} from "../commentUtils";
 import { changeBadge, getLineStats } from "../utils";
 
-function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
+interface GitDiffCommentAnnotation {
+	id: string;
+	comment: string;
+	location: string;
+	selection: SelectedLineRange;
+}
+
+async function copyTextToClipboard(text: string) {
+	if (navigator.clipboard?.writeText) {
+		await navigator.clipboard.writeText(text);
+		return;
+	}
+
+	const textarea = document.createElement("textarea");
+	textarea.value = text;
+	textarea.setAttribute("readonly", "true");
+	textarea.style.position = "absolute";
+	textarea.style.opacity = "0";
+	document.body.append(textarea);
+	textarea.select();
+
+	const copied = document.execCommand("copy");
+	textarea.remove();
+
+	if (!copied) {
+		throw new Error("Clipboard copy failed");
+	}
+}
+
+function FileDiffHeader({
+	file,
+	selectedRangeLabel,
+	canComment,
+	onCommentClick,
+}: {
+	file: FileDiffMetadata;
+	selectedRangeLabel: string | null;
+	canComment: boolean;
+	onCommentClick: () => void;
+}) {
 	const { additions, deletions } = useMemo(() => getLineStats(file), [file]);
 	const badge = changeBadge[file.type] ?? changeBadge.change;
 	const displayName =
@@ -29,11 +95,317 @@ function FileDiffHeader({ file }: { file: FileDiffMetadata }) {
 			<Text fontSize="sm" fontFamily="mono" flex="1" truncate>
 				{displayName}
 			</Text>
-			<Flex gap="2" fontSize="xs" fontFamily="mono">
+			<HStack gap="2" fontSize="xs" fontFamily="mono">
+				{selectedRangeLabel && (
+					<Text color="fg.muted">{selectedRangeLabel}</Text>
+				)}
 				{additions > 0 && <Text color="green.solid">+{additions}</Text>}
 				{deletions > 0 && <Text color="red.solid">-{deletions}</Text>}
-			</Flex>
+				<Button
+					size="xs"
+					variant="subtle"
+					disabled={!canComment}
+					onClick={onCommentClick}
+				>
+					{m.gitDiffCommentButton()}
+				</Button>
+			</HStack>
 		</Flex>
+	);
+}
+
+function CommentAnnotation({
+	annotation,
+}: {
+	annotation: GitDiffCommentAnnotation;
+}) {
+	return (
+		<Box
+			px="3"
+			py="2.5"
+			bg="bg.subtle"
+			borderWidth="1px"
+			borderColor="border.subtle"
+			borderRadius="md"
+			mx="2"
+			my="1.5"
+		>
+			<Flex align="center" justify="space-between" gap="3">
+				<Text
+					fontSize="xs"
+					fontWeight="medium"
+					letterSpacing="widest"
+					textTransform="uppercase"
+					color="fg.muted"
+				>
+					{m.gitDiffCommentButton()}
+				</Text>
+				<Text fontSize="xs" color="fg.muted" fontFamily="mono">
+					{annotation.location}
+				</Text>
+			</Flex>
+			<Text mt="2" fontSize="sm" whiteSpace="pre-wrap">
+				{annotation.comment}
+			</Text>
+		</Box>
+	);
+}
+
+function GitDiffCommentDialog({
+	isOpen,
+	onClose,
+	location,
+	comment,
+	onCommentChange,
+	onConfirm,
+}: {
+	isOpen: boolean;
+	onClose: () => void;
+	location: string;
+	comment: string;
+	onCommentChange: (value: string) => void;
+	onConfirm: () => void;
+}) {
+	const trimmedComment = comment.trim();
+
+	return (
+		<Dialog.Root
+			lazyMount
+			open={isOpen}
+			onOpenChange={(event) => {
+				if (!event.open) {
+					onClose();
+				}
+			}}
+			initialFocusEl={() =>
+				document.querySelector<HTMLTextAreaElement>(
+					"[data-git-diff-comment-input]",
+				)
+			}
+		>
+			<Portal>
+				<Dialog.Backdrop />
+				<Dialog.Positioner>
+					<Dialog.Content>
+						<Dialog.Header>
+							<Dialog.Title>
+								{m.gitDiffCommentDialogTitle()}
+							</Dialog.Title>
+						</Dialog.Header>
+						<Dialog.Body>
+							<Flex direction="column" gap="4">
+								<Field.Root>
+									<Field.Label>
+										{m.gitDiffCommentDialogSelectionLabel()}
+									</Field.Label>
+									<Text
+										fontSize="sm"
+										fontFamily="mono"
+										color="fg.muted"
+									>
+										{location}
+									</Text>
+								</Field.Root>
+
+								<Field.Root required>
+									<Field.Label>
+										{m.gitDiffCommentDialogFieldLabel()}
+									</Field.Label>
+									<Textarea
+										data-git-diff-comment-input
+										rows={5}
+										value={comment}
+										placeholder={m.gitDiffCommentDialogPlaceholder()}
+										onChange={(event) =>
+											onCommentChange(
+												event.target.value,
+											)
+										}
+										onKeyDown={(event) => {
+											if (
+												(event.metaKey ||
+													event.ctrlKey) &&
+												event.key === "Enter" &&
+												trimmedComment.length > 0
+											) {
+												event.preventDefault();
+												onConfirm();
+											}
+										}}
+									/>
+								</Field.Root>
+							</Flex>
+						</Dialog.Body>
+						<Dialog.Footer>
+							<Dialog.ActionTrigger asChild>
+								<Button variant="outline">
+									{m.cancel()}
+								</Button>
+							</Dialog.ActionTrigger>
+							<Button
+								onClick={onConfirm}
+								disabled={trimmedComment.length === 0}
+							>
+								{m.gitDiffCommentDialogConfirm()}
+							</Button>
+						</Dialog.Footer>
+						<Dialog.CloseTrigger asChild>
+							<CloseButton size="sm" />
+						</Dialog.CloseTrigger>
+					</Dialog.Content>
+				</Dialog.Positioner>
+			</Portal>
+		</Dialog.Root>
+	);
+}
+
+function ActiveGitDiffFilePane({
+	activeFile,
+	activeFileKey,
+	options,
+	selectedLines,
+	comments,
+	onSelectionChange,
+	onCommentAdd,
+}: {
+	activeFile: FileDiffMetadata;
+	activeFileKey: string;
+	options: FileDiffOptions<unknown>;
+	selectedLines: SelectedLineRange | null;
+	comments: GitDiffCommentAnnotation[];
+	onSelectionChange: (range: SelectedLineRange | null) => void;
+	onCommentAdd: (comment: GitDiffCommentAnnotation) => void;
+}) {
+	const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
+	const [commentDraft, setCommentDraft] = useState("");
+	const selectedRangeLabel =
+		selectedLines == null ? null : formatSelectedLineRange(selectedLines);
+	const selectedLocation =
+		selectedLines == null
+			? ""
+			: formatGitDiffCommentLocation(activeFile, selectedLines);
+
+	const lineAnnotations = useMemo<
+		DiffLineAnnotation<GitDiffCommentAnnotation>[]
+	>(
+		() =>
+			comments.map((comment) => {
+				const anchor = getGitDiffCommentAnchor(comment.selection);
+
+				return {
+					side: anchor.side,
+					lineNumber: anchor.lineNumber,
+					metadata: comment,
+				};
+			}),
+		[comments],
+	);
+
+	const diffOptions = useMemo(
+		() =>
+			({
+				...(options as FileDiffOptions<GitDiffCommentAnnotation>),
+				enableLineSelection: true,
+				lineHoverHighlight: "line",
+				onLineSelected: (range: SelectedLineRange | null) => {
+					if (range == null) {
+						setIsCommentDialogOpen(false);
+						setCommentDraft("");
+						onSelectionChange(null);
+						return;
+					}
+
+					onSelectionChange(normalizeSelectedLineRange(range));
+				},
+			}) satisfies FileDiffOptions<GitDiffCommentAnnotation>,
+		[onSelectionChange, options],
+	);
+
+	const handleCommentConfirm = async () => {
+		if (selectedLines == null) {
+			return;
+		}
+
+		const trimmedComment = commentDraft.trim();
+		if (trimmedComment.length === 0) {
+			return;
+		}
+
+		const nextComment: GitDiffCommentAnnotation = {
+			id:
+				globalThis.crypto?.randomUUID?.() ??
+				`${Date.now()}-${activeFileKey}`,
+			comment: trimmedComment,
+			location: selectedLocation,
+			selection: selectedLines,
+		};
+
+		onCommentAdd(nextComment);
+		onSelectionChange(null);
+		setIsCommentDialogOpen(false);
+		setCommentDraft("");
+
+		try {
+			await copyTextToClipboard(
+				formatGitDiffCommentPayload(
+					activeFile,
+					selectedLines,
+					trimmedComment,
+				),
+			);
+			toaster.create({
+				title: m.gitDiffCommentCopiedTitle(),
+				description: m.gitDiffCommentCopiedDescription({
+					location: selectedLocation,
+				}),
+				type: "success",
+				closable: true,
+			});
+		} catch (error) {
+			toaster.create({
+				title: m.gitDiffCommentCopyFailedTitle(),
+				description:
+					error instanceof Error ? error.message : String(error),
+				type: "error",
+				closable: true,
+			});
+		}
+	};
+
+	return (
+		<>
+			<FileDiffHeader
+				file={activeFile}
+				selectedRangeLabel={selectedRangeLabel}
+				canComment={selectedLines != null}
+				onCommentClick={() => {
+					setIsCommentDialogOpen(true);
+					setCommentDraft("");
+				}}
+			/>
+			<FileDiff
+				fileDiff={activeFile}
+				options={diffOptions}
+				selectedLines={selectedLines}
+				lineAnnotations={lineAnnotations}
+				renderAnnotation={(annotation) =>
+					annotation.metadata ? (
+						<CommentAnnotation annotation={annotation.metadata} />
+					) : null
+				}
+			/>
+			<GitDiffCommentDialog
+				isOpen={isCommentDialogOpen && selectedLines != null}
+				onClose={() => {
+					setIsCommentDialogOpen(false);
+					setCommentDraft("");
+				}}
+				location={selectedLocation}
+				comment={commentDraft}
+				onCommentChange={setCommentDraft}
+				onConfirm={handleCommentConfirm}
+			/>
+		</>
 	);
 }
 
@@ -41,15 +413,33 @@ interface GitDiffPaneProps {
 	activeFile: FileDiffMetadata | null;
 	options: FileDiffOptions<unknown>;
 	emptyMessage: string;
+	contextKey?: string;
 }
 
 export default function GitDiffPane({
 	activeFile,
 	options,
 	emptyMessage,
+	contextKey = "default",
 }: GitDiffPaneProps) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const [selectedLinesByFileKey, setSelectedLinesByFileKey] = useState<
+		Record<string, SelectedLineRange | null>
+	>({});
+	const [annotationsByFileKey, setAnnotationsByFileKey] = useState<
+		Record<string, GitDiffCommentAnnotation[]>
+	>({});
+
+	const activeFileKey = activeFile
+		? getGitDiffCommentFileKey(activeFile, contextKey)
+		: null;
+	const selectedLines =
+		activeFileKey == null
+			? null
+			: selectedLinesByFileKey[activeFileKey] ?? null;
+	const comments =
+		activeFileKey == null ? [] : annotationsByFileKey[activeFileKey] ?? [];
 
 	return (
 		<Box
@@ -60,11 +450,30 @@ export default function GitDiffPane({
 				"--diffs-font-size": `${fontSize}px`,
 			}}
 		>
-			{activeFile ? (
-				<>
-					<FileDiffHeader file={activeFile} />
-					<FileDiff fileDiff={activeFile} options={options} />
-				</>
+			{activeFile && activeFileKey ? (
+				<ActiveGitDiffFilePane
+					key={activeFileKey}
+					activeFile={activeFile}
+					activeFileKey={activeFileKey}
+					options={options}
+					selectedLines={selectedLines}
+					comments={comments}
+					onSelectionChange={(range) =>
+						setSelectedLinesByFileKey((prev) => ({
+							...prev,
+							[activeFileKey]: range,
+						}))
+					}
+					onCommentAdd={(comment) =>
+						setAnnotationsByFileKey((prev) => ({
+							...prev,
+							[activeFileKey]: [
+								...(prev[activeFileKey] ?? []),
+								comment,
+							],
+						}))
+					}
+				/>
 			) : (
 				<Flex align="center" justify="center" h="full" p="8">
 					<Text color="fg.muted" fontSize="sm">
