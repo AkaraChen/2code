@@ -715,6 +715,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
+				contextKey="working-tree"
 				emptyMessage={
 					changesFiles.length === 0
 						? m.noChangesDetected()
@@ -801,13 +802,14 @@ function HistoryDiffPane({ visible }: { visible: boolean }) {
 	if (!state.selectedCommit) {
 		return (
 			<VisibleBox visible={visible}>
-				<GitDiffPane
-					activeFile={null}
-					options={options}
-					emptyMessage={m.selectFileToView()}
-				/>
-			</VisibleBox>
-		);
+			<GitDiffPane
+				activeFile={null}
+				options={options}
+				contextKey="history"
+				emptyMessage={m.selectFileToView()}
+			/>
+		</VisibleBox>
+	);
 	}
 
 	return <CommitDiffViewer visible={visible} />;
@@ -827,6 +829,7 @@ function CommitDiffViewer({ visible }: { visible: boolean }) {
 			<GitDiffPane
 				activeFile={activeFile}
 				options={options}
+				contextKey={commit.full_hash}
 				emptyMessage={m.selectFileToView()}
 			/>
 		</VisibleBox>
