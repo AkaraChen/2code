@@ -62,6 +62,23 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-light": "one-light",
 };
 
+const professionalDiffOptions = {
+	diffIndicators: "bars",
+	hunkSeparators: "line-info",
+	lineDiffType: "word-alt",
+	collapsedContextThreshold: 8,
+	expansionLineCount: 24,
+	overflow: "scroll",
+} as const satisfies Pick<
+	FileDiffOptions<unknown>,
+	| "diffIndicators"
+	| "hunkSeparators"
+	| "lineDiffType"
+	| "collapsedContextThreshold"
+	| "expansionLineCount"
+	| "overflow"
+>;
+
 function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
 		<Flex flex="1" align="center" justify="center">
@@ -125,10 +142,8 @@ export default function GitDiffDialog({
 		() => ({
 			theme: shikiThemeMap[termThemeId] ?? "github-dark",
 			diffStyle: state.viewMode,
-			diffIndicators: "classic",
 			disableFileHeader: true,
-			overflow: "wrap",
-			expandUnchanged: true,
+			...professionalDiffOptions,
 		}),
 		[state.viewMode, termThemeId],
 	);
