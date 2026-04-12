@@ -28,9 +28,15 @@ interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
+	onFocus?: () => void;
 }
 
-export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
+export function Terminal({
+	profileId,
+	sessionId,
+	isActive,
+	onFocus,
+}: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const isStreamReadyRef = useRef(false);
@@ -312,6 +318,12 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			resizeObserver.observe(container);
 			unlisteners.push(() => resizeObserver.disconnect());
 
+			const textarea = term.textarea;
+			if (textarea && onFocus) {
+				textarea.addEventListener("focus", onFocus);
+				unlisteners.push(() => textarea.removeEventListener("focus", onFocus));
+			}
+
 			// 5. React 19 ref cleanup
 			return () => {
 				consola.info(`[pty-terminal] unmount sessionId=${sessionId}`);
@@ -332,17 +344,18 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				fitAddonRef.current = null;
 			};
 		},
-		[
-			decreaseFontSize,
-			increaseFontSize,
-			profileId,
-			sessionId,
-			syncTerminalLayout,
-		],
-	);
+			[
+				decreaseFontSize,
+				increaseFontSize,
+				onFocus,
+				profileId,
+				sessionId,
+				syncTerminalLayout,
+			],
+		);
 
 	return (
-		<div style={shellStyle}>
+		<div style={shellStyle} onMouseDown={onFocus}>
 			<div ref={terminalRef} style={{ flex: 1, minWidth: 0, minHeight: 0 }} />
 		</div>
 	);

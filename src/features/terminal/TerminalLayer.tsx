@@ -65,7 +65,7 @@ export default function TerminalLayer() {
 		e.preventDefault();
 		const profileState = useTerminalStore.getState().profiles[activeProfileId];
 		if (!profileState?.activeTabId) return;
-		closeTab.mutate({ profileId: activeProfileId, sessionId: profileState.activeTabId });
+		closeTab.mutate({ profileId: activeProfileId, tabId: profileState.activeTabId });
 	});
 
 	return (

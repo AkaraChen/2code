@@ -16,7 +16,13 @@ import { useShallow } from "zustand/react/shallow";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import * as m from "@/paraglide/messages.js";
-import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
+import {
+	useCloseTerminalPane,
+	useCloseTerminalTab,
+	useCreateTerminalTab,
+	useSplitTerminalPane,
+} from "./hooks";
+import { Terminal } from "./Terminal";
 import { useTerminalStore } from "./store";
 import {
 	resolveGlobalTerminalTemplate,
@@ -24,7 +30,6 @@ import {
 	type GlobalTerminalTemplate,
 	type ProjectTerminalTemplate,
 } from "./templates";
-import { Terminal } from "./Terminal";
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -39,13 +44,20 @@ export default function TerminalTabs({
 }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow(
-			(s) => s.profiles[profileId] ?? { tabs: [], activeTabId: null },
+			(s) =>
+				s.profiles[profileId] ?? {
+					tabs: [],
+					activeTabId: null,
+				},
 		),
 	);
 	const notifiedTabs = useTerminalStore((s) => s.notifiedTabs);
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
+	const setActivePane = useTerminalStore((s) => s.setActivePane);
 	const createTab = useCreateTerminalTab();
+	const splitPane = useSplitTerminalPane();
 	const closeTab = useCloseTerminalTab();
+	const closePane = useCloseTerminalPane();
 	const projectConfig = useProjectConfigQuery(projectId);
 	const globalTemplates = useTerminalTemplatesStore((s) => s.templates);
 	const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
@@ -60,6 +72,14 @@ export default function TerminalTabs({
 	const projectTemplates = projectConfig.data?.terminal_templates ?? [];
 	const hasTemplates =
 		projectTemplates.length > 0 || globalTemplates.length > 0;
+	const activeTab =
+		tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
+	const activePane =
+		activeTab?.panes.find(
+			(pane) => pane.sessionId === activeTab.activePaneId,
+		) ?? activeTab?.panes[0] ?? null;
+	const canSplitActiveTab =
+		Boolean(activeTab && activePane) && activeTab.panes.length < 2;
 
 	function clearCloseMenuTimer() {
 		if (closeMenuTimerRef.current !== null) {
@@ -116,13 +136,25 @@ export default function TerminalTabs({
 		});
 	}
 
+	function handleSplit(direction: "horizontal" | "vertical") {
+		if (!activeTab || !activePane || activeTab.panes.length >= 2) return;
+
+		splitPane.mutate({
+			profileId,
+			tabId: activeTab.id,
+			direction,
+			cwd: activePane.cwd,
+			shell: activePane.shell,
+		});
+	}
+
 	if (tabs.length === 0) return null;
 
 	return (
 		<Flex direction="column" h="full" w="full">
 			<Tabs.Root
 				size="sm"
-				value={activeTabId}
+				value={activeTabId ?? undefined}
 				onValueChange={(e) => setActiveTab(profileId, e.value)}
 			>
 				<Tabs.List>
@@ -131,12 +163,16 @@ export default function TerminalTabs({
 							tab.title.length > 10
 								? `${tab.title.slice(0, 10)}...`
 								: tab.title;
+						const tabHasNotification = tab.panes.some((pane) =>
+							notifiedTabs.has(pane.sessionId),
+						);
+
 						return (
 							<Tabs.Trigger key={tab.id} value={tab.id}>
 								<FiTerminal />
 								<HStack gap="2">
 									{displayTitle}
-									{notifiedTabs.has(tab.id) &&
+									{tabHasNotification &&
 										tab.id !== activeTabId && (
 											<Circle size="2" bg="green.500" />
 										)}
@@ -148,7 +184,7 @@ export default function TerminalTabs({
 											e.stopPropagation();
 											closeTab.mutate({
 												profileId,
-												sessionId: tab.id,
+												tabId: tab.id,
 											});
 										}}
 									/>
@@ -176,6 +212,24 @@ export default function TerminalTabs({
 							<FiPlus /> {m.newTerminal()}
 						</Button>
 					</Box>
+					<Button
+						size="2xs"
+						variant="ghost"
+						ms="1"
+						disabled={!canSplitActiveTab || splitPane.isPending}
+						onClick={() => handleSplit("horizontal")}
+					>
+						{m.splitTerminalRight()}
+					</Button>
+					<Button
+						size="2xs"
+						variant="ghost"
+						ms="1"
+						disabled={!canSplitActiveTab || splitPane.isPending}
+						onClick={() => handleSplit("vertical")}
+					>
+						{m.splitTerminalDown()}
+					</Button>
 				</Tabs.List>
 			</Tabs.Root>
 
@@ -306,26 +360,137 @@ export default function TerminalTabs({
 				</Portal>
 			) : null}
 
-			{/* Terminal area — all terminals stay mounted, hidden via CSS */}
+			{/* Terminal area — all tabs and panes stay mounted, hidden via CSS */}
 			<Box flex="1" minH="0" position="relative">
-				{tabs.map((tab) => (
-					<Box
-						key={tab.id}
-						position="absolute"
-						inset="0"
-						visibility={
-							tab.id === activeTabId ? "visible" : "hidden"
-						}
-						pointerEvents={tab.id === activeTabId ? "auto" : "none"}
-						aria-hidden={tab.id !== activeTabId}
-					>
-						<Terminal
-							profileId={profileId}
-							sessionId={tab.id}
-							isActive={tab.id === activeTabId}
-						/>
-					</Box>
-				))}
+				{tabs.map((tab) => {
+					const isTabActive = tab.id === activeTabId;
+					const layoutDirection =
+						tab.direction === "vertical" ? "column" : "row";
+
+					return (
+						<Box
+							key={tab.id}
+							position="absolute"
+							inset="0"
+							visibility={isTabActive ? "visible" : "hidden"}
+							pointerEvents={isTabActive ? "auto" : "none"}
+							aria-hidden={!isTabActive}
+							p="2"
+						>
+							<Flex
+								direction={layoutDirection}
+								gap="2"
+								h="full"
+								w="full"
+							>
+								{tab.panes.map((pane) => {
+									const isPaneActive =
+										isTabActive &&
+										pane.sessionId === tab.activePaneId;
+									const paneHasNotification =
+										notifiedTabs.has(pane.sessionId);
+
+									return (
+										<Flex
+											key={pane.sessionId}
+											direction="column"
+											flex="1"
+											minW="0"
+											minH="0"
+											rounded="l3"
+											overflow="hidden"
+											bg="bg.panel"
+										>
+											<HStack
+												gap="2"
+												h="8"
+												px="2"
+												borderBottomWidth="1px"
+												borderColor="border.subtle"
+												bg={isPaneActive ? "bg.subtle" : "bg"}
+												onMouseDown={() =>
+													setActivePane(
+														profileId,
+														tab.id,
+														pane.sessionId,
+													)
+												}
+											>
+												<Box
+													w="2px"
+													h="4"
+													borderRadius="full"
+													bg={
+														isPaneActive
+															? "colorPalette.solid"
+															: "transparent"
+													}
+													flexShrink={0}
+												/>
+												<Text
+													flex="1"
+													minW="0"
+													fontSize="xs"
+													truncate
+												>
+													{pane.title}
+												</Text>
+												{paneHasNotification &&
+												pane.sessionId !== tab.activePaneId ? (
+													<Circle
+														size="2"
+														bg="green.500"
+														flexShrink={0}
+													/>
+												) : null}
+												{tab.panes.length > 1 ? (
+													<CloseButton
+														size="2xs"
+														aria-label={m.closeTerminalPane()}
+														disabled={closePane.isPending}
+														onClick={(event) => {
+															event.stopPropagation();
+															closePane.mutate({
+																profileId,
+																tabId: tab.id,
+																sessionId:
+																	pane.sessionId,
+															});
+														}}
+													/>
+												) : null}
+											</HStack>
+											<Box
+												flex="1"
+												minH="0"
+												onMouseDown={() =>
+													setActivePane(
+														profileId,
+														tab.id,
+														pane.sessionId,
+													)
+												}
+											>
+												<Terminal
+													profileId={profileId}
+													sessionId={pane.sessionId}
+													isActive={isPaneActive}
+													onFocus={() =>
+														setActivePane(
+															profileId,
+															tab.id,
+															pane.sessionId,
+														)
+													}
+												/>
+											</Box>
+										</Flex>
+									);
+								})}
+							</Flex>
+						</Box>
+					);
+				})}
 			</Box>
 		</Flex>
 	);
