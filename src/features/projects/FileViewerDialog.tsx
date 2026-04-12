@@ -134,8 +134,8 @@ export default function FileViewerDialog({
 			<Portal>
 				<Dialog.Backdrop />
 				<Dialog.Positioner>
-					<Dialog.Content maxH="80vh" display="flex" flexDirection="column">
-						<Dialog.Header borderBottomWidth="1px" borderColor="border.subtle" pb="3">
+					<Dialog.Content h="80vh" display="flex" flexDirection="column">
+						<Dialog.Header px="4" py="2.5" borderBottomWidth="1px" borderColor="border.subtle">
 							<Dialog.Title fontFamily="mono" fontSize="sm">
 								{filename}
 							</Dialog.Title>

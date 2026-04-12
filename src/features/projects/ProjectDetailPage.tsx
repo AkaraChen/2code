@@ -11,7 +11,7 @@ import {
 	Text,
 	VStack,
 } from "@chakra-ui/react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
@@ -21,6 +21,7 @@ import {
 	useProjectConfigQuery,
 	useProjectProfiles,
 } from "@/features/projects/hooks";
+import { useFileTreeStore } from "@/features/projects/fileTreeStore";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
@@ -44,7 +45,8 @@ export default function ProjectDetailPage() {
 		[profiles, profileId],
 	);
 
-	const [fileTreeOpen, setFileTreeOpen] = useState(true);
+	const fileTreeOpen = useFileTreeStore((s) => s.isOpen(profileId ?? ""));
+	const toggleFileTree = useFileTreeStore((s) => s.toggle);
 
 	const hasTabs = useTerminalStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
@@ -93,7 +95,7 @@ export default function ProjectDetailPage() {
 				profile={profile}
 				isActive
 				isFileTreeOpen={fileTreeOpen}
-				onToggleFileTree={() => setFileTreeOpen((v) => !v)}
+				onToggleFileTree={() => toggleFileTree(profileId ?? "")}
 			/>
 			<Flex flex="1" overflow="hidden">
 			<FileTreePanel

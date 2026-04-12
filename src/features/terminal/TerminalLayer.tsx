@@ -1,10 +1,11 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { use, useMemo, useState } from "react";
+import { use, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import FileTreePanel from "@/features/projects/FileTreePanel";
+import { useFileTreeStore } from "@/features/projects/fileTreeStore";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -25,7 +26,8 @@ export default function TerminalLayer() {
 	const terminalProfileIds = useTerminalProfileIds();
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
-	const [fileTreeOpen, setFileTreeOpen] = useState<Record<string, boolean>>({});
+	const fileTreeIsOpen = useFileTreeStore((s) => s.isOpen);
+	const toggleFileTree = useFileTreeStore((s) => s.toggle);
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -91,18 +93,13 @@ export default function TerminalLayer() {
 								projectName={project?.name ?? ""}
 								profile={profile}
 								isActive={profileId === activeProfileId}
-								isFileTreeOpen={fileTreeOpen[profileId] ?? false}
-								onToggleFileTree={() =>
-									setFileTreeOpen((prev) => ({
-										...prev,
-										[profileId]: !(prev[profileId] ?? false),
-									}))
-								}
+								isFileTreeOpen={fileTreeIsOpen(profileId)}
+								onToggleFileTree={() => toggleFileTree(profileId)}
 							/>
 						<Flex flex="1" minH="0">
 							<FileTreePanel
 								rootPath={profile.worktree_path}
-								isOpen={fileTreeOpen[profileId] ?? false}
+								isOpen={fileTreeIsOpen(profileId)}
 							/>
 							<Box flex="1" minH="0">
 								<TerminalTabs

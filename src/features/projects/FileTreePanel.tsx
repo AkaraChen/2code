@@ -8,12 +8,26 @@ import { useState } from "react";
 import {
 	FiChevronDown,
 	FiChevronRight,
-	FiFile,
-	FiFolder,
 } from "react-icons/fi";
+import {
+	getIconForFile,
+	getIconForFolder,
+	getIconForOpenFolder,
+} from "vscode-icons-js";
 import type { FileEntry } from "@/generated/types";
 import { useDirectoryListing } from "./hooks";
 import FileViewerDialog from "./FileViewerDialog";
+
+const ICONS_CDN = "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons";
+
+function fileIconUrl(name: string) {
+	return `${ICONS_CDN}/${getIconForFile(name) ?? "default_file.svg"}`;
+}
+
+function folderIconUrl(name: string, isOpen: boolean) {
+	const icon = isOpen ? getIconForOpenFolder(name) : getIconForFolder(name);
+	return `${ICONS_CDN}/${icon}`;
+}
 
 interface TreeNodeProps {
 	entry: FileEntry;
@@ -61,7 +75,13 @@ function TreeNode({
 						)}
 					</Box>
 					<Box flexShrink="0" display="flex">
-						<FiFolder size={15} />
+						<img
+							src={folderIconUrl(entry.name, isExpanded)}
+							width={16}
+							height={16}
+							alt=""
+							draggable={false}
+						/>
 					</Box>
 					<Text fontSize="sm" truncate lineClamp={1}>
 						{entry.name}
@@ -82,7 +102,7 @@ function TreeNode({
 					<Text
 						fontSize="sm"
 						color="fg.muted"
-						style={{ paddingLeft: `${16 + (depth + 1) * 12 + 14}px` }}
+						style={{ paddingLeft: `${16 + (depth + 1) * 12 + 18}px` }}
 						py="0.5"
 					>
 						Empty
@@ -102,11 +122,17 @@ function TreeNode({
 			borderRadius="sm"
 			_hover={{ bg: "bg.subtle" }}
 			onClick={() => onOpenFile(entry.path)}
-			style={{ paddingLeft: `${16 + indent + 14}px` }}
+			style={{ paddingLeft: `${16 + indent + 18}px` }}
 			userSelect="none"
 		>
-			<Box color="fg.muted" flexShrink="0" display="flex">
-				<FiFile size={15} />
+			<Box flexShrink="0" display="flex">
+				<img
+					src={fileIconUrl(entry.name)}
+					width={16}
+					height={16}
+					alt=""
+					draggable={false}
+				/>
 			</Box>
 			<Text fontSize="sm" truncate lineClamp={1}>
 				{entry.name}
