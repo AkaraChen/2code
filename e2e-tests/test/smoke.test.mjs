@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { expect } from "chai";
+import { after, afterEach, before, describe, it } from "mocha";
 import { Builder, By, Capabilities } from "selenium-webdriver";
 
 const testDir = fileURLToPath(new URL(".", import.meta.url));
@@ -31,7 +32,7 @@ let driver;
 let tauriDriver;
 let tauriDriverClosed = false;
 
-describe("Tauri smoke", function () {
+describe("tauri smoke", () => {
 	before(async function () {
 		if (process.platform === "darwin") {
 			console.warn(
@@ -93,7 +94,7 @@ describe("Tauri smoke", function () {
 		}
 	});
 
-	after(async function () {
+	after(async () => {
 		await closeResources();
 	});
 

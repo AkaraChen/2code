@@ -26,7 +26,7 @@ describe("getTerminalShortcutSequence", () => {
 				makeEvent({ metaKey: true, key: "ArrowLeft" }),
 				"MacIntel",
 			),
-		).toBe("\x1b[H");
+		).toBe("\x1B[H");
 	});
 
 	it("maps Cmd+Right to line end on macOS", () => {
@@ -35,7 +35,7 @@ describe("getTerminalShortcutSequence", () => {
 				makeEvent({ metaKey: true, key: "ArrowRight" }),
 				"MacIntel",
 			),
-		).toBe("\x1b[F");
+		).toBe("\x1B[F");
 	});
 
 	it("does not map Cmd+Arrow on non-macOS platforms", () => {
@@ -50,13 +50,13 @@ describe("getTerminalShortcutSequence", () => {
 	it("maps Alt+Left to previous word", () => {
 		expect(
 			getTerminalShortcutSequence(makeEvent({ altKey: true, key: "ArrowLeft" })),
-		).toBe("\x1bb");
+		).toBe("\x1Bb");
 	});
 
 	it("maps Alt+Right to next word", () => {
 		expect(
 			getTerminalShortcutSequence(makeEvent({ altKey: true, key: "ArrowRight" })),
-		).toBe("\x1bf");
+		).toBe("\x1Bf");
 	});
 
 	it("ignores other modifier combinations and non-keydown events", () => {

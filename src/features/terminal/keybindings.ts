@@ -38,19 +38,19 @@ export function getTerminalShortcutAction(
 
 	if (isPlainMetaShortcut(event, platform) && !event.shiftKey) {
 		if (event.key === "ArrowLeft") {
-			return { type: "write-sequence", sequence: "\x1b[H" };
+			return { type: "write-sequence", sequence: "\x1B[H" };
 		}
 		if (event.key === "ArrowRight") {
-			return { type: "write-sequence", sequence: "\x1b[F" };
+			return { type: "write-sequence", sequence: "\x1B[F" };
 		}
 	}
 
 	if (event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
 		if (event.key === "ArrowLeft") {
-			return { type: "write-sequence", sequence: "\x1bb" };
+			return { type: "write-sequence", sequence: "\x1Bb" };
 		}
 		if (event.key === "ArrowRight") {
-			return { type: "write-sequence", sequence: "\x1bf" };
+			return { type: "write-sequence", sequence: "\x1Bf" };
 		}
 	}
 

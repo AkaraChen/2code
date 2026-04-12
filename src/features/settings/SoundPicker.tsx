@@ -24,13 +24,15 @@ export function SoundPicker() {
 	const locale = useLocale();
 
 	const soundCollection = useMemo(
-		() =>
-			createListCollection({
+		() => {
+			void locale;
+			return createListCollection({
 				items: [
 					{ value: "", label: m.notificationSoundNone() },
 					...sounds.map((s) => ({ value: s, label: s })),
 				],
-			}),
+			});
+		},
 		[locale, sounds],
 	);
 
