@@ -66,17 +66,32 @@ function FileListItem({
 				<Box width="4" flexShrink={0} />
 			)}
 
-			<VStack flex="1" align="stretch" gap="0.5" minW="0">
+			<VStack flex="1" align="stretch" gap="0" minW="0">
 				<HStack gap="2" minW="0">
 					<Text
 						fontSize="sm"
 						fontWeight={isActive ? "medium" : "normal"}
-						flex="1"
-						truncate
+						flexShrink={0}
+						maxW="55%"
+						overflow="hidden"
+						textOverflow="ellipsis"
+						whiteSpace="nowrap"
 						title={file.name}
 					>
 						{basename}
 					</Text>
+					{parentPath && (
+						<Text
+							fontSize="xs"
+							color="fg.muted"
+							flex="1"
+							minW="0"
+							truncate
+							title={file.name}
+						>
+							{parentPath}
+						</Text>
+					)}
 					<Badge
 						size="xs"
 						colorPalette={badge.colorPalette}
@@ -85,11 +100,6 @@ function FileListItem({
 						{badge.label}
 					</Badge>
 				</HStack>
-				{parentPath && (
-					<Text fontSize="xs" color="fg.muted" truncate title={file.name}>
-						{parentPath}
-					</Text>
-				)}
 			</VStack>
 
 			<HStack gap="1" fontSize="xs" flexShrink={0} pt="0.5">
