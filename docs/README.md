@@ -69,3 +69,4 @@
 | [Data Flow](data-flow.md)         | IPC lifecycle, PTY streaming, notification pipeline, terminal restoration |
 | [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
 | [Configuration](configuration.md) | Config files, environment variables, database schema                      |
+| [Notification Behavior](notification-behavior.md) | Terminal unread-dot state machine and click behavior          |

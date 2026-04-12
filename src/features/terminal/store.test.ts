@@ -9,10 +9,15 @@ import {
 
 function resetStore() {
 	useTerminalStore.setState({ profiles: {}, notifiedTabs: new Set() });
+	window.history.pushState({}, "", "/");
 }
 
 function getState() {
 	return useTerminalStore.getState();
+}
+
+function setPathname(pathname: string) {
+	window.history.pushState({}, "", pathname);
 }
 
 describe("useTerminalStore", () => {
@@ -57,6 +62,13 @@ describe("useTerminalStore", () => {
 			expect(Object.keys(getState().profiles)).toHaveLength(2);
 			expect(getState().profiles.p1.tabs).toHaveLength(1);
 			expect(getState().profiles.p2.tabs).toHaveLength(1);
+		});
+
+		it("clears pending notification when a focused profile opens the tab", () => {
+			setPathname("/projects/project-1/profiles/p1");
+			getState().markNotified("s1");
+			getState().addTab("p1", "s1", "Shell 1");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
 		});
 	});
 
@@ -138,6 +150,16 @@ describe("useTerminalStore", () => {
 			getState().closeTab("p1", "s2");
 			expect(getState().profiles.p1.tabs).toHaveLength(1);
 			expect(getState().profiles.p1.activeTabId).toBe("s1");
+		});
+
+		it("clears notification from the newly focused tab after closing the active tab", () => {
+			setPathname("/projects/project-1/profiles/p1");
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().markNotified("s1");
+			getState().closeTab("p1", "s2");
+			expect(getState().profiles.p1.activeTabId).toBe("s1");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
 		});
 	});
 
@@ -243,6 +265,21 @@ describe("useTerminalStore", () => {
 			getState().markNotified("s1");
 			expect(getState().notifiedTabs.has("s1")).toBe(true);
 			expect(getState().notifiedTabs.size).toBe(1);
+		});
+
+		it("does not keep unread state for the focused active tab", () => {
+			setPathname("/projects/project-1/profiles/p1");
+			getState().addTab("p1", "s1", "T1");
+			getState().markNotified("s1");
+			expect(getState().notifiedTabs.has("s1")).toBe(false);
+		});
+
+		it("still marks unread for active tabs in background profiles", () => {
+			setPathname("/projects/project-1/profiles/p1");
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p2", "s2", "T2");
+			getState().markNotified("s2");
+			expect(getState().notifiedTabs.has("s2")).toBe(true);
 		});
 	});
 
