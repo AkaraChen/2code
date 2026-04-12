@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
 import { use } from "react";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	closePtySession,
@@ -63,7 +64,20 @@ export function useCloseTerminalTab() {
 			]);
 		},
 		onSettled: (_data, _err, { profileId, sessionId }) => {
+			const terminalProfile = useTerminalStore.getState().profiles[profileId];
+			const isLastTab =
+				terminalProfile?.tabs.length === 1 &&
+				terminalProfile.tabs[0]?.id === sessionId;
+
 			useTerminalStore.getState().closeTab(profileId, sessionId);
+
+			if (isLastTab) {
+				const fileProfile = useFileViewerTabsStore.getState().profiles[profileId];
+				if (fileProfile && fileProfile.tabs.length > 0) {
+					const target = fileProfile.activeFilePath ?? fileProfile.tabs[0].filePath;
+					useFileViewerTabsStore.getState().setFileActive(profileId, target);
+				}
+			}
 		},
 	});
 }
