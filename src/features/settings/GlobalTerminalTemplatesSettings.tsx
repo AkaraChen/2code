@@ -239,7 +239,6 @@ export function GlobalTerminalTemplatesSettings() {
 						rounded="l3"
 						borderWidth="1px"
 						borderColor="border.subtle"
-						bg="bg.panel"
 						px="4"
 						py="3"
 					>
@@ -255,7 +254,6 @@ export function GlobalTerminalTemplatesSettings() {
 								rounded="l3"
 								borderWidth="1px"
 								borderColor="border.subtle"
-								bg="bg.panel"
 								px="4"
 								py="3"
 								align="center"
