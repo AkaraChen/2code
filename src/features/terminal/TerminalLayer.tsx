@@ -26,8 +26,9 @@ export default function TerminalLayer() {
 	const terminalProfileIds = useTerminalProfileIds();
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
-	const fileTreeIsOpen = useFileTreeStore((s) => s.isOpen);
+	const fileTreeOpenProfiles = useFileTreeStore((s) => s.openProfiles);
 	const toggleFileTree = useFileTreeStore((s) => s.toggle);
+	const fileTreeIsOpen = (profileId: string) => fileTreeOpenProfiles[profileId] ?? true;
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
