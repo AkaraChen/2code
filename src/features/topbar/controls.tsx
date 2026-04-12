@@ -13,13 +13,9 @@ import {
 } from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
-import { Suspense } from "react";
 import { FiFolder, FiTerminal } from "react-icons/fi";
-import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitDiffStats } from "@/features/git/hooks";
-import { useGitBranch } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
-import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useOpenTopbarApp } from "./hooks";
 import type { ControlProps, LaunchAppControlId } from "./types";
 
@@ -171,82 +167,38 @@ export function WarpControl(props: ControlProps) {
 	);
 }
 
-function GitDiffBranchDialog({
-	cwd,
-	isOpen,
-	isActive,
-	onClose,
-	profileId,
-}: {
-	cwd: string;
-	isOpen: boolean;
-	isActive: boolean;
-	onClose: () => void;
-	profileId: string;
-}) {
-	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
-	return (
-		<GitDiffDialog
-			isOpen={isOpen}
-			onClose={onClose}
-			profileId={profileId}
-			branchName={branch ?? undefined}
-		/>
-	);
-}
-
-export function GitDiffControl({ profile, isActive }: ControlProps) {
-	const dialog = useDialogState();
+export function GitDiffControl({ profile, isActive, options }: ControlProps) {
+	const onOpen = options.onOpen as (() => void) | undefined;
 	const stats = useGitDiffStats(profile.id, isActive);
 
 	return (
-		<>
-			<Tooltip.Root>
-				<Tooltip.Trigger asChild>
-					<Button
-						aria-label={m.topbarGitDiff()}
-						size="xs"
-						variant="subtle"
-						onClick={dialog.onOpen}
-					>
-						<SiGit size={14} />
-						{stats && (
-							<>
-								<Text as="span" color="green.400" fontSize="xs">
-									+{stats.additions}
-								</Text>
-								<Text as="span" color="red.400" fontSize="xs">
-									-{stats.deletions}
-								</Text>
-							</>
-						)}
-					</Button>
-				</Tooltip.Trigger>
-				<Portal>
-					<Tooltip.Positioner>
-						<Tooltip.Content>{m.topbarGitDiff()}</Tooltip.Content>
-					</Tooltip.Positioner>
-				</Portal>
-			</Tooltip.Root>
-			{profile.is_default ? (
-				<Suspense>
-					<GitDiffBranchDialog
-						cwd={profile.worktree_path}
-						isOpen={dialog.isOpen}
-						isActive={isActive}
-						onClose={dialog.onClose}
-						profileId={profile.id}
-					/>
-				</Suspense>
-			) : (
-				<GitDiffDialog
-					isOpen={dialog.isOpen}
-					onClose={dialog.onClose}
-					profileId={profile.id}
-					branchName={profile.branch_name}
-				/>
-			)}
-		</>
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<Button
+					aria-label={m.topbarGitDiff()}
+					size="xs"
+					variant="subtle"
+					onClick={() => onOpen?.()}
+				>
+					<SiGit size={14} />
+					{stats && (
+						<>
+							<Text as="span" color="green.400" fontSize="xs">
+								+{stats.additions}
+							</Text>
+							<Text as="span" color="red.400" fontSize="xs">
+								-{stats.deletions}
+							</Text>
+						</>
+					)}
+				</Button>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{m.topbarGitDiff()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
 	);
 }
 
