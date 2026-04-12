@@ -1,10 +1,12 @@
 import {
 	Box,
 	CloseButton,
+	createListCollection,
 	Dialog,
 	Flex,
 	HStack,
 	Icon,
+	Select,
 	Portal,
 	Spinner,
 	Tabs,
@@ -31,7 +33,14 @@ import CommitComposer from "./components/CommitComposer";
 import CommitList from "./components/CommitList";
 import GitDiffPane from "./components/GitDiffPane";
 import HistoryFileList from "./components/HistoryFileList";
-import { GitDiffContext, gitDiffReducer, initialState } from "./gitDiffReducer";
+import {
+	type GitDiffAction,
+	GitDiffContext,
+	type GitDiffState,
+	type GitDiffViewMode,
+	gitDiffReducer,
+	initialState,
+} from "./gitDiffReducer";
 import {
 	useCommitDiffFiles,
 	useCommitGitChanges,
@@ -52,6 +61,23 @@ const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"one-dark": "one-dark-pro",
 	"one-light": "one-light",
 };
+
+const professionalDiffOptions = {
+	diffIndicators: "bars",
+	hunkSeparators: "line-info",
+	lineDiffType: "word-alt",
+	collapsedContextThreshold: 8,
+	expansionLineCount: 24,
+	overflow: "scroll",
+} as const satisfies Pick<
+	FileDiffOptions<unknown>,
+	| "diffIndicators"
+	| "hunkSeparators"
+	| "lineDiffType"
+	| "collapsedContextThreshold"
+	| "expansionLineCount"
+	| "overflow"
+>;
 
 function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
@@ -110,6 +136,18 @@ export default function GitDiffDialog({
 	profileId,
 	branchName,
 }: GitDiffDialogProps) {
+	const termThemeId = useTerminalThemeId();
+	const [state, dispatch] = useReducer(gitDiffReducer, initialState);
+	const options: FileDiffOptions<unknown> = useMemo(
+		() => ({
+			theme: shikiThemeMap[termThemeId] ?? "github-dark",
+			diffStyle: state.viewMode,
+			disableFileHeader: true,
+			...professionalDiffOptions,
+		}),
+		[state.viewMode, termThemeId],
+	);
+
 	return (
 		<Dialog.Root
 			lazyMount
@@ -128,19 +166,11 @@ export default function GitDiffDialog({
 						display="flex"
 						flexDirection="column"
 					>
-						<Dialog.Header py="2" px="4">
-							<Dialog.Title fontSize="sm">
-								<HStack gap="1.5" alignItems="center">
-									<Icon fontSize="md">
-										<FiGitBranch />
-									</Icon>
-									<Text>{branchName ?? "main"}</Text>
-								</HStack>
-							</Dialog.Title>
-							<Dialog.CloseTrigger asChild>
-								<CloseButton size="sm" />
-							</Dialog.CloseTrigger>
-						</Dialog.Header>
+						<GitDiffHeader
+							branchName={branchName}
+							viewMode={state.viewMode}
+							dispatch={dispatch}
+						/>
 
 						<Dialog.Body
 							p="0"
@@ -149,7 +179,12 @@ export default function GitDiffDialog({
 							display="flex"
 						>
 							<Suspense fallback={<LoadingSpinner />}>
-								<GitDiffContent profileId={profileId} />
+								<GitDiffContent
+									profileId={profileId}
+									state={state}
+									dispatch={dispatch}
+									options={options}
+								/>
 							</Suspense>
 						</Dialog.Body>
 					</Dialog.Content>
@@ -159,13 +194,112 @@ export default function GitDiffDialog({
 	);
 }
 
+function GitDiffHeader({
+	branchName,
+	viewMode,
+	dispatch,
+}: {
+	branchName?: string;
+	viewMode: GitDiffViewMode;
+	dispatch: React.Dispatch<GitDiffAction>;
+}) {
+	const previewModeCollection = createListCollection({
+		items: [
+			{
+				value: "unified",
+				label: m.gitDiffPreviewModeUnified(),
+			},
+			{
+				value: "split",
+				label: m.gitDiffPreviewModeSplit(),
+			},
+		],
+	});
+
+	return (
+		<Dialog.Header py="2" pl="4" pr="16">
+			<Flex w="full" align="center" gap="3" minW="0">
+				<Dialog.Title fontSize="sm" flex="1" minW="0">
+					<HStack gap="1.5" alignItems="center" minW="0">
+						<Icon fontSize="md" flexShrink={0}>
+							<FiGitBranch />
+						</Icon>
+						<Text truncate>{branchName ?? "main"}</Text>
+					</HStack>
+				</Dialog.Title>
+
+				<Flex align="center" gap="2" flexShrink={0}>
+					<Text fontSize="xs" color="fg.muted">
+						{m.gitDiffPreviewMode()}
+					</Text>
+					<Select.Root
+						collection={previewModeCollection}
+						value={[viewMode]}
+						onValueChange={(e) => {
+							const nextViewMode = e.value[0];
+							if (!nextViewMode) {
+								return;
+							}
+
+							dispatch({
+								type: "setViewMode",
+								viewMode: nextViewMode as GitDiffViewMode,
+							});
+						}}
+						size="xs"
+						width="140px"
+						positioning={{ sameWidth: false }}
+					>
+						<Select.HiddenSelect />
+						<Select.Control>
+							<Select.Trigger>
+								<Select.ValueText />
+							</Select.Trigger>
+							<Select.IndicatorGroup>
+								<Select.Indicator />
+							</Select.IndicatorGroup>
+						</Select.Control>
+						<Portal>
+							<Select.Positioner>
+								<Select.Content>
+									{previewModeCollection.items.map((item) => (
+										<Select.Item
+											item={item}
+											key={item.value}
+										>
+											{item.label}
+											<Select.ItemIndicator />
+										</Select.Item>
+									))}
+								</Select.Content>
+							</Select.Positioner>
+						</Portal>
+					</Select.Root>
+				</Flex>
+
+				<Dialog.CloseTrigger asChild>
+					<CloseButton size="sm" />
+				</Dialog.CloseTrigger>
+			</Flex>
+		</Dialog.Header>
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Content orchestrator
 // ---------------------------------------------------------------------------
 
-function GitDiffContent({ profileId }: { profileId: string }) {
-	const termThemeId = useTerminalThemeId();
-	const [state, dispatch] = useReducer(gitDiffReducer, initialState);
+function GitDiffContent({
+	profileId,
+	state,
+	dispatch,
+	options,
+}: {
+	profileId: string;
+	state: GitDiffState;
+	dispatch: React.Dispatch<GitDiffAction>;
+	options: FileDiffOptions<unknown>;
+}) {
 	const [includedFileNames, setIncludedFileNames] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -185,18 +319,6 @@ function GitDiffContent({ profileId }: { profileId: string }) {
 				includedFileNames.has(file.name) ? [file.name] : [],
 			),
 		[changesFiles, includedFileNames],
-	);
-
-	const options: FileDiffOptions<unknown> = useMemo(
-		() => ({
-			theme: shikiThemeMap[termThemeId] ?? "github-dark",
-			diffStyle: "unified",
-			diffIndicators: "classic",
-			disableFileHeader: true,
-			overflow: "wrap",
-			expandUnchanged: true,
-		}),
-		[termThemeId],
 	);
 
 	const handleTabChange = (value: string) => {

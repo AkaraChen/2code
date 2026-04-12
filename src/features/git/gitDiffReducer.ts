@@ -4,9 +4,11 @@ import { createContext } from "react";
 import type { GitCommit } from "@/generated";
 
 export type Tab = "changes" | "history";
+export type GitDiffViewMode = NonNullable<FileDiffOptions<unknown>["diffStyle"]>;
 
 export interface GitDiffState {
 	activeTab: Tab;
+	viewMode: GitDiffViewMode;
 	selectedCommit: GitCommit | null;
 	selectedFileIndex: number;
 	selectedCommitIndex: number;
@@ -14,8 +16,9 @@ export interface GitDiffState {
 	commitFileCount: number;
 }
 
-type GitDiffAction =
+export type GitDiffAction =
 	| { type: "switchTab"; tab: Tab }
+	| { type: "setViewMode"; viewMode: GitDiffViewMode }
 	| { type: "selectFile"; index: number }
 	| { type: "selectCommit"; commit: GitCommit; index: number }
 	| { type: "selectCommitFile"; index: number }
@@ -30,6 +33,7 @@ type GitDiffAction =
 
 export const initialState: GitDiffState = {
 	activeTab: "changes",
+	viewMode: "unified",
 	selectedCommit: null,
 	selectedFileIndex: 0,
 	selectedCommitIndex: 0,
@@ -57,6 +61,9 @@ export const gitDiffReducer = produce(
 				draft.selectedCommitIndex = 0;
 				draft.selectedCommitFileIndex = 0;
 				draft.commitFileCount = 0;
+				break;
+			case "setViewMode":
+				draft.viewMode = action.viewMode;
 				break;
 			case "selectFile":
 				draft.selectedFileIndex = action.index;
