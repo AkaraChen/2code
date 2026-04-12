@@ -83,7 +83,8 @@ just coverage                    # llvm-cov HTML report
 - `topbar` feature is NOT part of `git` feature despite CLAUDE.md proximity — it's a separate customizable control bar system
 - Immer `MapSet` plugin must be enabled before any store using `Set`/`Map` (already done in `store.ts`)
 - `noUnusedLocals` + `noUnusedParameters` enforced in tsconfig — TS will error on unused vars
-- No CI/CD pipelines (no `.github/workflows/`)
+- CI: `.github/workflows/tauri-smoke.yml` — smoke test on `ubuntu-24.04` using `xvfb-run` (virtual display) + `webkit2gtk-driver` + Tauri driver. Not a full test suite.
+- E2E: `e2e-tests/` uses Mocha + Selenium WebDriver via Tauri driver (not Playwright/Cypress)
 - Frontend uses Vitest (`npm test` = `vitest run`); test files colocated as `*.test.ts` — Zustand store tests use `resetStore()` helper pattern
 - ESLint uses `@antfu/eslint-config` with React — no `.eslintrc` file, config is in `package.json` or similar
 - `openspec/` dir at root is OpenSpec workflow tooling — not application code
