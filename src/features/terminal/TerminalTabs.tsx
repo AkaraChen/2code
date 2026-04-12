@@ -391,34 +391,41 @@ export default function TerminalTabs({
 				</Portal>
 			) : null}
 
-			{/* Content area: file viewer pane or terminal instances */}
-			{fileTabActive && activeFilePath ? (
+			{/* Content area */}
+
+			{/* File viewer — static content, safe to conditionally render */}
+			{fileTabActive && activeFilePath && (
 				<Box flex="1" minH="0" overflow="hidden">
 					<FileViewerPane filePath={activeFilePath} />
 				</Box>
-			) : (
-				/* Terminal area — all terminals stay mounted, hidden via CSS */
-				<Box flex="1" minH="0" position="relative">
-					{tabs.map((tab) => (
-						<Box
-							key={tab.id}
-							position="absolute"
-							inset="0"
-							visibility={
-								tab.id === activeTabId ? "visible" : "hidden"
-							}
-							pointerEvents={tab.id === activeTabId ? "auto" : "none"}
-							aria-hidden={tab.id !== activeTabId}
-						>
-							<Terminal
-								profileId={profileId}
-								sessionId={tab.id}
-								isActive={tab.id === activeTabId}
-							/>
-						</Box>
-					))}
-				</Box>
 			)}
+
+			{/* Terminal area — NEVER unmounted, hidden via CSS when file tab is active */}
+			<Box
+				flex="1"
+				minH="0"
+				position="relative"
+				display={fileTabActive ? "none" : "block"}
+			>
+				{tabs.map((tab) => (
+					<Box
+						key={tab.id}
+						position="absolute"
+						inset="0"
+						visibility={
+							tab.id === activeTabId ? "visible" : "hidden"
+						}
+						pointerEvents={tab.id === activeTabId ? "auto" : "none"}
+						aria-hidden={tab.id !== activeTabId}
+					>
+						<Terminal
+							profileId={profileId}
+							sessionId={tab.id}
+							isActive={tab.id === activeTabId && !fileTabActive}
+						/>
+					</Box>
+				))}
+			</Box>
 		</Flex>
 	);
 }
