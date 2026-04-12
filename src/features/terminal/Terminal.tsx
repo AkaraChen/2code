@@ -191,7 +191,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 					void clearPtyOutput({ sessionId })
 						.catch(() => {})
 						.finally(() => {
-							void writeToPty({ sessionId, data: "\x0c" });
+							void writeToPty({ sessionId, data: "\x0C" });
 						});
 					return false;
 				}

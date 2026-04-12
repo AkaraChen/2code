@@ -44,14 +44,16 @@ export default function SettingsPage() {
 		useState<TerminalThemeId | null>(null);
 
 	const themeCollection = useMemo(
-		() =>
-			createListCollection({
+		() => {
+			void locale;
+			return createListCollection({
 				items: [
 					{ value: "system", label: m.themeSystem() },
 					{ value: "light", label: m.themeLight() },
 					{ value: "dark", label: m.themeDark() },
 				],
-			}),
+			});
+		},
 		[locale],
 	);
 

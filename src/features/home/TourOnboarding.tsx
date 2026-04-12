@@ -12,6 +12,7 @@ export function TourOnboarding({ isEnabled }: TourOnboardingProps) {
 	const locale = useLocale();
 	const driverObj = useMemo<any>(() => {
 		if (!isEnabled) return null;
+		void locale;
 
 		const d = driver({
 			animate: true,

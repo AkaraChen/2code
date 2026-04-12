@@ -1,7 +1,7 @@
 {
   "name": "2code-e2e-tests",
-  "private": true,
   "type": "module",
+  "private": true,
   "scripts": {
     "test": "mocha \"test/**/*.test.mjs\""
   },
