@@ -1,6 +1,5 @@
 import {
 	Badge,
-	Box,
 	Button,
 	Checkbox,
 	HStack,
@@ -62,9 +61,7 @@ function FileListItem({
 					<Checkbox.HiddenInput />
 					<Checkbox.Control />
 				</Checkbox.Root>
-			) : (
-				<Box width="4" flexShrink={0} />
-			)}
+			) : null}
 
 			<VStack flex="1" align="stretch" gap="0" minW="0">
 				<HStack gap="2" minW="0">
