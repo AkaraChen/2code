@@ -99,6 +99,17 @@ pub fn get_project_folder(
 		.map_err(|_| AppError::NotFound(format!("Project: {project_id}")))
 }
 
+pub fn list_branch_names_by_project(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<Vec<String>, AppError> {
+	profiles::table
+		.filter(profiles::project_id.eq(project_id))
+		.select(profiles::branch_name)
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -169,6 +180,25 @@ mod tests {
 		let profile = find_by_id(&mut conn, "p1").unwrap();
 		assert_eq!(profile.id, "p1");
 		assert_eq!(profile.branch_name, "main");
+	}
+
+	#[test]
+	fn list_branch_names_filters_by_project() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test-1");
+		insert_test_project(&mut conn, "proj-2", "/tmp/test-2");
+		insert(&mut conn, "p1", "proj-1", "feature/login", "/w/p1").unwrap();
+		insert(&mut conn, "p2", "proj-1", "pr/tokyo-1234abcd", "/w/p2")
+			.unwrap();
+		insert(&mut conn, "p3", "proj-2", "feature/other", "/w/p3").unwrap();
+
+		let branch_names =
+			list_branch_names_by_project(&mut conn, "proj-1").unwrap();
+
+		assert_eq!(branch_names.len(), 3);
+		assert!(branch_names.iter().any(|name| name == "main"));
+		assert!(branch_names.iter().any(|name| name == "feature/login"));
+		assert!(branch_names.iter().any(|name| name == "pr/tokyo-1234abcd"));
 	}
 
 	#[test]

@@ -6,7 +6,7 @@ import {
 	Input,
 	Portal,
 } from "@chakra-ui/react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProfile } from "./hooks";
@@ -46,8 +46,6 @@ export default function CreateProfileDialog({
 		navigate(`/projects/${projectId}/profiles/${profile.id}`);
 	});
 
-	const branchName = useWatch({ control: form.control, name: "branchName" });
-
 	return (
 		<Dialog.Root
 			lazyMount
@@ -68,13 +66,10 @@ export default function CreateProfileDialog({
 								<Field.Label>{m.branchName()}</Field.Label>
 								<Input
 									placeholder={m.branchNamePlaceholder()}
-									{...form.register("branchName", {
-										validate: (v) => !!v.trim(),
-									})}
+									{...form.register("branchName")}
 									onKeyDown={(e) => {
 										if (
 											e.key === "Enter" &&
-											branchName.trim() &&
 											!createProfile.isPending
 										) {
 											handleCreate();
@@ -88,10 +83,7 @@ export default function CreateProfileDialog({
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
 							<Button
-								disabled={
-									!branchName.trim() ||
-									createProfile.isPending
-								}
+								disabled={createProfile.isPending}
 								loading={createProfile.isPending}
 								onClick={handleCreate}
 							>

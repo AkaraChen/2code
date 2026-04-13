@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use diesel::SqliteConnection;
@@ -5,6 +6,40 @@ use uuid::Uuid;
 
 use model::error::AppError;
 use model::profile::Profile;
+
+const AUTO_BRANCH_PREFIX: &str = "pr/";
+const AUTO_BRANCH_CITIES: &[&str] = &[
+	"tokyo",
+	"osaka",
+	"kyoto",
+	"seoul",
+	"busan",
+	"taipei",
+	"tainan",
+	"singapore",
+	"bangkok",
+	"chiang-mai",
+	"hanoi",
+	"saigon",
+	"delhi",
+	"mumbai",
+	"istanbul",
+	"lisbon",
+	"porto",
+	"oslo",
+	"bergen",
+	"helsinki",
+	"prague",
+	"vienna",
+	"zurich",
+	"geneva",
+	"austin",
+	"boston",
+	"miami",
+	"denver",
+	"phoenix",
+	"seattle",
+];
 
 /// Sanitize user input into a valid git branch name.
 /// Splits on `/` to preserve namespace separators (e.g. "feature/auth"),
@@ -16,6 +51,59 @@ fn sanitize_branch_name(input: &str) -> String {
 		.filter(|s| !s.is_empty())
 		.collect::<Vec<_>>()
 		.join("/")
+}
+
+fn extract_auto_branch_city(branch_name: &str) -> Option<&str> {
+	let generated = branch_name.strip_prefix(AUTO_BRANCH_PREFIX)?;
+	let (city, suffix) = generated.rsplit_once('-')?;
+	if city.is_empty() || suffix.is_empty() {
+		return None;
+	}
+	Some(city)
+}
+
+fn build_auto_branch_name(existing_branches: &[String], seed: &Uuid) -> String {
+	let used_cities: HashSet<&str> = existing_branches
+		.iter()
+		.filter_map(|branch| extract_auto_branch_city(branch))
+		.collect();
+	let available_cities: Vec<&str> = AUTO_BRANCH_CITIES
+		.iter()
+		.copied()
+		.filter(|city| !used_cities.contains(city))
+		.collect();
+	let city_pool = if available_cities.is_empty() {
+		AUTO_BRANCH_CITIES
+	} else {
+		available_cities.as_slice()
+	};
+	let city = city_pool[usize::from(seed.as_bytes()[0]) % city_pool.len()];
+	let simple = seed.simple().to_string();
+	let short_id = &simple[..8];
+	format!("{AUTO_BRANCH_PREFIX}{city}-{short_id}")
+}
+
+fn generate_auto_branch_name(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<String, AppError> {
+	let existing_branches =
+		repo::profile::list_branch_names_by_project(conn, project_id)?;
+
+	for _ in 0..5 {
+		let seed = Uuid::new_v4();
+		let branch_name = build_auto_branch_name(&existing_branches, &seed);
+		if !existing_branches
+			.iter()
+			.any(|existing| existing == &branch_name)
+		{
+			return Ok(branch_name);
+		}
+	}
+
+	Err(AppError::GitError(
+		"Failed to auto-generate a unique branch name".to_string(),
+	))
 }
 
 fn resolve_worktree_base() -> Result<PathBuf, AppError> {
@@ -35,10 +123,16 @@ pub fn create(
 ) -> Result<Profile, AppError> {
 	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
 
-	let branch_name = sanitize_branch_name(branch_name);
-	if branch_name.is_empty() {
-		return Err(AppError::GitError("Invalid branch name".to_string()));
-	}
+	let auto_generated = branch_name.trim().is_empty();
+	let branch_name = if auto_generated {
+		generate_auto_branch_name(conn, project_id)?
+	} else {
+		let sanitized = sanitize_branch_name(branch_name);
+		if sanitized.is_empty() {
+			return Err(AppError::GitError("Invalid branch name".to_string()));
+		}
+		sanitized
+	};
 
 	let id = Uuid::new_v4().to_string();
 	let worktree_base = resolve_worktree_base()?;
@@ -46,7 +140,37 @@ pub fn create(
 	let worktree_path = worktree_base.join(&id);
 	let worktree_str = worktree_path.to_string_lossy().to_string();
 
-	infra::git::worktree_add(&project_folder, &branch_name, &worktree_str)?;
+	let branch_name = if auto_generated {
+		let mut candidate = branch_name;
+		let mut created = false;
+		for _ in 0..5 {
+			match infra::git::worktree_add(
+				&project_folder,
+				&candidate,
+				&worktree_str,
+			) {
+				Ok(()) => {
+					created = true;
+					break;
+				}
+				Err(AppError::GitError(message))
+					if message.contains("already exists") =>
+				{
+					candidate = generate_auto_branch_name(conn, project_id)?;
+				}
+				Err(err) => return Err(err),
+			}
+		}
+		if !created {
+			return Err(AppError::GitError(
+				"Failed to auto-generate a unique branch name".to_string(),
+			));
+		}
+		candidate
+	} else {
+		infra::git::worktree_add(&project_folder, &branch_name, &worktree_str)?;
+		branch_name
+	};
 
 	let profile = repo::profile::insert(
 		conn,
@@ -130,5 +254,35 @@ mod tests {
 	#[test]
 	fn sanitize_empty_input() {
 		assert_eq!(sanitize_branch_name(""), "");
+	}
+
+	#[test]
+	fn extract_auto_branch_city_reads_generated_branch() {
+		assert_eq!(
+			extract_auto_branch_city("pr/chiang-mai-deadbeef"),
+			Some("chiang-mai")
+		);
+	}
+
+	#[test]
+	fn extract_auto_branch_city_ignores_non_generated_branch() {
+		assert_eq!(extract_auto_branch_city("feature/auth"), None);
+	}
+
+	#[test]
+	fn build_auto_branch_name_avoids_used_cities() {
+		let existing = vec![
+			"pr/tokyo-11111111".to_string(),
+			"pr/osaka-22222222".to_string(),
+		];
+		let seed =
+			Uuid::parse_str("00000000-0000-4000-8000-000000000000").unwrap();
+
+		let branch_name = build_auto_branch_name(&existing, &seed);
+
+		assert!(branch_name.starts_with("pr/"));
+		assert!(!branch_name.starts_with("pr/tokyo-"));
+		assert!(!branch_name.starts_with("pr/osaka-"));
+		assert!(branch_name.ends_with("-00000000"));
 	}
 }
