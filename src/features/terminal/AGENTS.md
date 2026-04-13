@@ -21,7 +21,6 @@ PTY terminal management with xterm.js. The most complex frontend feature.
 
 **xterm.js addon stack** (loaded in `Terminal.tsx`):
 - `FitAddon` — resize to container
-- `WebglAddon` — GPU renderer (with canvas 2D fallback via try/catch)
 - `WebLinksAddon`, `ClipboardAddon`, `ImageAddon`, `LigaturesAddon`, `ProgressAddon`
 
 **Session restoration flow**:
