@@ -307,6 +307,7 @@ export default function TerminalTabs({
 										{projectTemplates.map((template) => (
 											<Button
 												key={template.id}
+												size="sm"
 												variant="ghost"
 												justifyContent="flex-start"
 												alignItems="flex-start"
@@ -363,6 +364,7 @@ export default function TerminalTabs({
 										{globalTemplates.map((template) => (
 											<Button
 												key={template.id}
+												size="sm"
 												variant="ghost"
 												justifyContent="flex-start"
 												alignItems="flex-start"
