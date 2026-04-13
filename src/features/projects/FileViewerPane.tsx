@@ -36,7 +36,13 @@ function detectLanguage(filename: string): string {
 	const map: Record<string, string> = {
 		ts: "typescript",
 		tsx: "tsx",
+		mts: "tsx",
+		cts: "typescript",
+		mtsx: "tsx",
+		ctsx: "tsx",
 		js: "javascript",
+		mjs: "javascript",
+		cjs: "javascript",
 		jsx: "jsx",
 		rs: "rust",
 		py: "python",
