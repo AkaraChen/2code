@@ -19,6 +19,7 @@ import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProfileList } from "./ProfileList";
 
@@ -73,20 +74,10 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 								: "transparent"
 						}
 						_hover={{ bg: "bg.subtle" }}
-						_before={
-							hasOnlyDefaultProfile && isDefaultActive
-								? {
-										content: '""',
-										position: "absolute",
-										insetInlineStart: "1",
-										insetBlock: "1.5",
-										width: "2px",
-										borderRadius: "full",
-										bg: "colorPalette.solid",
-									}
-								: undefined
-						}
 					>
+						{hasOnlyDefaultProfile && isDefaultActive && (
+							<SidebarActiveIndicator insetInlineStart="1" />
+						)}
 						<Box asChild truncate flex="1" data-sidebar-item>
 							<NavLink to={defaultProfileUrl}>
 								{project.name}
@@ -185,19 +176,6 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						fontSize="sm"
 						bg={isDefaultActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
-						_before={
-							isDefaultActive
-								? {
-										content: '""',
-										position: "absolute",
-										insetInlineStart: "6",
-										insetBlock: "1.5",
-										width: "2px",
-										borderRadius: "full",
-										bg: "colorPalette.solid",
-									}
-								: undefined
-						}
 					>
 						<NavLink
 							to={defaultProfileUrl}
@@ -207,6 +185,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 								}
 							}}
 						>
+							{isDefaultActive && (
+								<SidebarActiveIndicator insetInlineStart="6" />
+							)}
 							<Icon fontSize="xs" color="fg.muted">
 								<FiTerminal />
 							</Icon>

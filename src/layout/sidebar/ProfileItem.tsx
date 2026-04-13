@@ -5,6 +5,7 @@ import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
 import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 
 export function ProfileItem({
@@ -37,24 +38,14 @@ export function ProfileItem({
 						fontSize="sm"
 						bg={isActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
-						_before={
-							isActive
-								? {
-										content: '""',
-										position: "absolute",
-										insetInlineStart: "6",
-										insetBlock: "1.5",
-										width: "2px",
-										borderRadius: "full",
-										bg: "colorPalette.solid",
-									}
-								: undefined
-						}
 					>
 						<NavLink
 							to={`/projects/${projectId}/profiles/${profile.id}`}
 							onClick={() => markProfileRead(profile.id)}
 						>
+							{isActive && (
+								<SidebarActiveIndicator insetInlineStart="6" />
+							)}
 							<Icon fontSize="xs" color="fg.muted">
 								<FiGitBranch />
 							</Icon>
