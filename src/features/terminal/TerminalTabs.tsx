@@ -269,20 +269,20 @@ export default function TerminalTabs({
 						position="fixed"
 						top={templateMenuPosition.top}
 						left={templateMenuPosition.left}
-						minW="xs"
-						w={`${Math.max(templateMenuPosition.width + 48, 260)}px`}
+						minW="2xs"
+						w={`${Math.max(templateMenuPosition.width + 32, 200)}px`}
 						rounded="l3"
 						borderWidth="1px"
 						borderColor="border.subtle"
 						bg="bg.panel"
 						boxShadow="lg"
-						p="2"
+						p="1"
 						zIndex="dropdown"
 						onMouseEnter={openTemplateMenu}
 						onMouseLeave={scheduleTemplateMenuClose}
 					>
 						{!hasTemplates ? (
-							<Stack gap="1" px="2" py="3">
+							<Stack gap="1" px="2" py="2">
 								<Text fontSize="sm" color="fg.muted">
 									{m.noTerminalTemplates()}
 								</Text>
@@ -291,7 +291,7 @@ export default function TerminalTabs({
 								</Text>
 							</Stack>
 						) : (
-							<Stack gap="2">
+							<Stack gap="1">
 								{projectTemplates.length > 0 ? (
 									<>
 										<Text
