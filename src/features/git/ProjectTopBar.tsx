@@ -7,6 +7,7 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
+import { motion, useReducedMotion } from "motion/react";
 import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
@@ -20,6 +21,13 @@ import {
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+
+const FILE_TREE_TOGGLE_ICON_TRANSITION = {
+	type: "spring",
+	stiffness: 360,
+	damping: 28,
+	mass: 0.55,
+} as const;
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -78,6 +86,7 @@ export default function ProjectTopBar({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
 	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
+	const prefersReducedMotion = useReducedMotion() ?? false;
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -118,12 +127,36 @@ export default function ProjectTopBar({
 							<Tooltip.Trigger asChild>
 								<IconButton
 									aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
+									aria-pressed={isFileTreeOpen}
 									size="xs"
 									variant="ghost"
 									p="0"
+									color={isFileTreeOpen ? "fg" : "fg.muted"}
+									bg={isFileTreeOpen ? "bg.subtle" : "transparent"}
+									_hover={{
+										bg: isFileTreeOpen ? "bg.muted" : "bg.subtle",
+									}}
+									transition={
+										prefersReducedMotion
+											? undefined
+											: "background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), color 0.18s cubic-bezier(0.22, 1, 0.36, 1)"
+									}
 									onClick={onToggleFileTree}
 								>
-									<FiSidebar />
+									<motion.span
+										animate={{
+											rotate: isFileTreeOpen ? 0 : 180,
+											x: isFileTreeOpen ? 0 : -1,
+										}}
+										transition={
+											prefersReducedMotion
+												? { duration: 0 }
+												: FILE_TREE_TOGGLE_ICON_TRANSITION
+										}
+										style={{ display: "inline-flex" }}
+									>
+										<FiSidebar />
+									</motion.span>
 								</IconButton>
 							</Tooltip.Trigger>
 							<Portal>
