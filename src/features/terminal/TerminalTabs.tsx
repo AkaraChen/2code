@@ -221,7 +221,7 @@ export default function TerminalTabs({
 										alt=""
 										draggable={false}
 									/>
-									<HStack gap="2" fontFamily="mono">
+									<HStack gap="2">
 										{displayTitle}
 										<CloseButton
 											as="span"
