@@ -44,8 +44,10 @@ import {
 import {
 	useCommitDiffFiles,
 	useCommitGitChanges,
+	useGitAheadCount,
 	useGitDiffFiles,
 	useGitLog,
+	useGitPush,
 } from "./hooks";
 import { reconcileIncludedFiles } from "./utils";
 import { toaster } from "@/shared/providers/Toaster";
@@ -313,6 +315,8 @@ function GitDiffContent({
 	const { data: logData } = useGitLog(profileId);
 	const commits = useMemo(() => logData ?? [], [logData]);
 	const commitGitChanges = useCommitGitChanges(profileId);
+	const aheadCount = useGitAheadCount(profileId);
+	const gitPush = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
 		() =>
 			changesFiles.flatMap((file) =>
@@ -532,6 +536,8 @@ function GitDiffContent({
 										commitMessage={commitMessage}
 										commitBody={commitBody}
 										isCommitting={commitGitChanges.isPending}
+										aheadCount={aheadCount}
+										isPushing={gitPush.isPending}
 										onToggleIncluded={setFileIncluded}
 										onIncludeAll={() =>
 											setIncludedFileNames(
@@ -549,6 +555,26 @@ function GitDiffContent({
 											setCommitMessage
 										}
 										onCommitBodyChange={setCommitBody}
+										onPush={async () => {
+											try {
+												await gitPush.mutateAsync();
+												toaster.create({
+													title: m.gitPushSuccessTitle(),
+													type: "success",
+													closable: true,
+												});
+											} catch (error) {
+												toaster.create({
+													title: m.gitPushErrorTitle(),
+													description:
+														error instanceof Error
+															? error.message
+															: String(error),
+													type: "error",
+													closable: true,
+												});
+											}
+										}}
 										onCommit={async () => {
 											try {
 												const hash =
@@ -637,12 +663,15 @@ interface ChangesSidebarProps {
 	commitMessage: string;
 	commitBody: string;
 	isCommitting: boolean;
+	aheadCount: number;
+	isPushing: boolean;
 	onToggleIncluded: (fileName: string, included: boolean) => void;
 	onIncludeAll: () => void;
 	onIncludeNone: () => void;
 	onCommitMessageChange: (value: string) => void;
 	onCommitBodyChange: (value: string) => void;
 	onCommit: () => void;
+	onPush: () => void;
 }
 
 function ChangesSidebar({
@@ -650,12 +679,15 @@ function ChangesSidebar({
 	commitMessage,
 	commitBody,
 	isCommitting,
+	aheadCount,
+	isPushing,
 	onToggleIncluded,
 	onIncludeAll,
 	onIncludeNone,
 	onCommitMessageChange,
 	onCommitBodyChange,
 	onCommit,
+	onPush,
 }: ChangesSidebarProps) {
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 
@@ -695,9 +727,12 @@ function ChangesSidebar({
 				includedCount={includedFileNames.size}
 				totalCount={changesFiles.length}
 				isPending={isCommitting}
+				aheadCount={aheadCount}
+				isPushing={isPushing}
 				onMessageChange={onCommitMessageChange}
 				onBodyChange={onCommitBodyChange}
 				onSubmit={onCommit}
+				onPush={onPush}
 			/>
 		</Box>
 	);

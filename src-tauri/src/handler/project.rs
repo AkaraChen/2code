@@ -142,6 +142,32 @@ pub async fn commit_git_changes(
 }
 
 #[tauri::command]
+pub async fn get_git_ahead_count(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<u32, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_ahead_count(conn, &profile_id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_push(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::push(conn, &profile_id)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn delete_project(
 	id: String,
 	state: State<'_, DbPool>,

@@ -3,11 +3,13 @@ import {
 	Button,
 	Field,
 	Flex,
+	Icon,
 	Input,
 	Text,
 	Textarea,
 	VStack,
 } from "@chakra-ui/react";
+import { FiUpload } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 
 interface CommitComposerProps {
@@ -16,9 +18,12 @@ interface CommitComposerProps {
 	includedCount: number;
 	totalCount: number;
 	isPending: boolean;
+	aheadCount: number;
+	isPushing: boolean;
 	onMessageChange: (value: string) => void;
 	onBodyChange: (value: string) => void;
 	onSubmit: () => void;
+	onPush: () => void;
 }
 
 export default function CommitComposer({
@@ -27,9 +32,12 @@ export default function CommitComposer({
 	includedCount,
 	totalCount,
 	isPending,
+	aheadCount,
+	isPushing,
 	onMessageChange,
 	onBodyChange,
 	onSubmit,
+	onPush,
 }: CommitComposerProps) {
 	const isDisabled = totalCount === 0;
 	const canSubmit =
@@ -95,24 +103,50 @@ export default function CommitComposer({
 				</Field.Root>
 
 				<Flex align="center" gap="2" justify="space-between">
-					<Text fontSize="xs" color="fg.muted" flex="1" lineHeight="short">
-						{m.gitCommitIncludedCount({
-							includedCount,
-							totalCount,
-						})}
-						{" • "}
-						{m.gitCommitShortcutHint()}
-					</Text>
+					{isDisabled ? (
+						<Text fontSize="xs" color="fg.muted" flex="1" lineHeight="short">
+							{m.gitCommitShortcutHint()}
+						</Text>
+					) : (
+						<Text fontSize="xs" color="fg.muted" flex="1" lineHeight="short">
+							{m.gitCommitIncludedCount({
+								includedCount,
+								totalCount,
+							})}
+							{" • "}
+							{m.gitCommitShortcutHint()}
+						</Text>
+					)}
 
-					<Button
-						size="xs"
-						flexShrink={0}
-						loading={isPending}
-						disabled={!canSubmit || isPending}
-						onClick={onSubmit}
-					>
-						{m.gitCommitButton()}
-					</Button>
+					{isDisabled ? (
+						<Button
+							size="xs"
+							flexShrink={0}
+							loading={isPushing}
+							disabled={isPushing || aheadCount === 0}
+							onClick={onPush}
+						>
+							{aheadCount > 0 && (
+								<Text as="span" mr="1">
+									{aheadCount}
+								</Text>
+							)}
+							<Icon>
+								<FiUpload />
+							</Icon>
+							{m.gitPushButton()}
+						</Button>
+					) : (
+						<Button
+							size="xs"
+							flexShrink={0}
+							loading={isPending}
+							disabled={!canSubmit || isPending}
+							onClick={onSubmit}
+						>
+							{m.gitCommitButton()}
+						</Button>
+					)}
 				</Flex>
 			</VStack>
 		</Box>
