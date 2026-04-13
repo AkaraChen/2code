@@ -7,7 +7,7 @@
  * Do not edit manually - regenerate using: cargo tauri-typegen generate
  */
 
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import * as types from './types';
 
 
