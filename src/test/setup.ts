@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 
 // ─── Fix Node.js 22+ experimental localStorage conflicting with jsdom ───
