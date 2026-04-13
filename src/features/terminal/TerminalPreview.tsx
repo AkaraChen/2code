@@ -1,4 +1,7 @@
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import {
+	CJK_FONT_FALLBACKS,
+	useTerminalSettingsStore,
+} from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalTheme } from "./hooks";
 import type { TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
@@ -33,7 +36,7 @@ export function TerminalPreview({
 			style={{
 				background: theme.background,
 				color: theme.foreground,
-				fontFamily: `"${fontFamily}", monospace`,
+				fontFamily: `"${fontFamily}", ${CJK_FONT_FALLBACKS}, monospace`,
 				fontSize: `${fontSize}px`,
 				lineHeight: 1.4,
 				padding: "12px 16px",

@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 
 export const DEFAULT_TERMINAL_FONT_SIZE = 13;
+export const CJK_FONT_FALLBACKS = '"PingFang SC", "Hiragino Sans GB"';
 export const MIN_TERMINAL_FONT_SIZE = 10;
 export const MAX_TERMINAL_FONT_SIZE = 20;
 
@@ -63,7 +64,7 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 function syncMonoFont(fontFamily: string) {
 	document.documentElement.style.setProperty(
 		"--chakra-fonts-mono",
-		`"${fontFamily}", monospace`,
+		`"${fontFamily}", ${CJK_FONT_FALLBACKS}, monospace`,
 	);
 }
 
