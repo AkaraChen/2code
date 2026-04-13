@@ -120,6 +120,7 @@ export default function ProjectTopBar({
 									aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
 									size="xs"
 									variant="ghost"
+									p="0"
 									onClick={onToggleFileTree}
 								>
 									<FiSidebar />
