@@ -59,7 +59,6 @@ export default function TerminalTabs({
 	const fileViewerState = useFileViewerTabsStore(
 		(s) => s.profiles[profileId] ?? EMPTY_FILE_PROFILE,
 	);
-	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
 	const closeFileTab = useFileViewerTabsStore((s) => s.closeTab);
 	const setFileActive = useFileViewerTabsStore((s) => s.setFileActive);
 	const setTerminalActive = useFileViewerTabsStore((s) => s.setTerminalActive);
