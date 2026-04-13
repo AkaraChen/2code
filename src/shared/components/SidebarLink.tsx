@@ -1,5 +1,6 @@
 import { HStack, Icon } from "@chakra-ui/react";
 import { NavLink, useMatch } from "react-router";
+import { SidebarActiveIndicator } from "./SidebarActiveIndicator";
 
 export function SidebarLink({
   to,
@@ -23,13 +24,13 @@ export function SidebarLink({
       px="4"
       py="2"
       cursor="pointer"
-      borderLeft="3px solid"
-      borderColor={isActive ? "colorPalette.solid" : "transparent"}
+      position="relative"
       bg={isActive ? "bg.subtle" : "transparent"}
       _hover={{ bg: "bg.subtle" }}
       style={style}
     >
       <NavLink to={to}>
+        {isActive && <SidebarActiveIndicator insetInlineStart="1" />}
         <Icon fontSize="md">{icon}</Icon>
         {children}
       </NavLink>

@@ -1,5 +1,6 @@
 import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
+import { LayoutGroup } from "motion/react";
 import { useCallback, useRef } from "react";
 import { FiHome, FiPlus, FiSettings } from "react-icons/fi";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
@@ -52,71 +53,73 @@ export default function AppSidebar() {
         bg="bg.subtle"
         onKeyDown={handleKeyDown}
       >
-        <Flex direction="column" h="full" pb="3">
-          <Flex
-            data-tauri-drag-region
-            h="48px"
-            flexShrink={0}
-            align="center"
-            justify="start"
-            paddingInline="4"
-            mt="8"
-          >
-            <Text
-              fontFamily="'Bricolage Grotesque Variable', sans-serif"
-              fontWeight="700"
-              color="fg.muted"
-              letterSpacing="tight"
-              userSelect="none"
-              pointerEvents="none"
+        <LayoutGroup id="app-sidebar">
+          <Flex direction="column" h="full" pb="3">
+            <Flex
+              data-tauri-drag-region
+              h="48px"
+              flexShrink={0}
+              align="center"
+              justify="start"
+              paddingInline="4"
+              mt="8"
             >
-              2Code
-            </Text>
-          </Flex>
-          {projects.length === 0 && (
+              <Text
+                fontFamily="'Bricolage Grotesque Variable', sans-serif"
+                fontWeight="700"
+                color="fg.muted"
+                letterSpacing="tight"
+                userSelect="none"
+                pointerEvents="none"
+              >
+                2Code
+              </Text>
+            </Flex>
+            {projects.length === 0 && (
+              <SidebarLink
+                to="/"
+                icon={<FiHome />}
+                style={{ marginBottom: 20 }}
+              >
+                {m.home()}
+              </SidebarLink>
+            )}
+
+            <HStack px="4" pt="2" pb="2" justify="space-between">
+              <Text
+                fontSize="xs"
+                fontWeight="semibold"
+                color="fg.muted"
+                textTransform="uppercase"
+                letterSpacing="wider"
+              >
+                {m.projects()}
+              </Text>
+              <IconButton
+                id="add-project-button"
+                aria-label={m.newProject()}
+                variant="ghost"
+                size="2xs"
+                onClick={createDialog.onOpen}
+              >
+                <FiPlus />
+              </IconButton>
+            </HStack>
+
+            {projects.map((project) => (
+              <ProjectMenuItem key={project.id} project={project} />
+            ))}
+
+            <Box flex="1" />
+
             <SidebarLink
-              to="/"
-              icon={<FiHome />}
-              style={{ marginBottom: 20 }}
+              to="/settings"
+              icon={<FiSettings />}
             >
-              {m.home()}
+              {m.settings()}
             </SidebarLink>
-          )}
-
-          <HStack px="4" pt="2" pb="2" justify="space-between">
-            <Text
-              fontSize="xs"
-              fontWeight="semibold"
-              color="fg.muted"
-              textTransform="uppercase"
-              letterSpacing="wider"
-            >
-              {m.projects()}
-            </Text>
-            <IconButton
-              id="add-project-button"
-              aria-label={m.newProject()}
-              variant="ghost"
-              size="2xs"
-              onClick={createDialog.onOpen}
-            >
-              <FiPlus />
-            </IconButton>
-          </HStack>
-
-          {projects.map((project) => (
-            <ProjectMenuItem key={project.id} project={project} />
-          ))}
-
-          <Box flex="1" />
-
-          <SidebarLink
-            to="/settings"
-            icon={<FiSettings />}
-          >
-            {m.settings()}
-          </SidebarLink>
-        </Flex>
+          </Flex>
+        </LayoutGroup>
       </Box>
       <CreateProjectDialog
         isOpen={createDialog.isOpen}
