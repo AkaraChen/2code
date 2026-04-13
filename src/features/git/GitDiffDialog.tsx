@@ -24,6 +24,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useReducedMotion } from "motion/react";
 import { FiGitBranch } from "react-icons/fi";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
@@ -80,6 +81,10 @@ const professionalDiffOptions = {
 	| "expansionLineCount"
 	| "overflow"
 >;
+const TAB_CONTENT_ANIMATION = {
+	duration: 0.22,
+	ease: [0.22, 1, 0.36, 1],
+} as const;
 
 function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
@@ -97,8 +102,62 @@ function VisibleBox({
 	children: React.ReactNode;
 }) {
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<Box flex="1" display={visible ? "flex" : "none"} minW="0">
 			{children}
+		</Box>
+	);
+}
+
+function SlidingPanels({
+	activeIndex,
+	panels,
+}: {
+	activeIndex: number;
+	panels: ReadonlyArray<{
+		key: string;
+		content: React.ReactNode;
+	}>;
+}) {
+	const prefersReducedMotion = useReducedMotion();
+	const panelWidth = `${100 / panels.length}%`;
+	const translateX = `${-activeIndex * (100 / panels.length)}%`;
+
+	return (
+		<Box flex="1" minH="0" overflow="hidden" position="relative">
+			<Box
+				style={{
+					display: "flex",
+					width: `${panels.length * 100}%`,
+					height: "100%",
+					transform: `translateX(${translateX})`,
+					transition: prefersReducedMotion
+						? undefined
+						: `transform ${TAB_CONTENT_ANIMATION.duration}s cubic-bezier(0.22, 1, 0.36, 1)`,
+					willChange: "transform",
+				}}
+			>
+				{panels.map((panel, index) => {
+					const isActive = index === activeIndex;
+
+					return (
+						<Box
+							key={panel.key}
+							minW={panelWidth}
+							maxW={panelWidth}
+							flexShrink={0}
+							display="flex"
+							flexDirection="column"
+							minH="0"
+							overflow="hidden"
+							aria-hidden={!isActive}
+							pointerEvents={isActive ? "auto" : "none"}
+							inert={isActive ? undefined : true}
+						>
+							{panel.content}
+						</Box>
+					);
+				})}
+			</Box>
 		</Box>
 	);
 }
@@ -482,6 +541,7 @@ function GitDiffContent({
 	}, [changesFiles.length, dispatch, state.selectedFileIndex]);
 
 	const isChanges = state.activeTab === "changes";
+	const activeTabIndex = isChanges ? 0 : 1;
 
 	const ctxValue = useMemo(
 		() => ({ state, dispatch, profileId, changesFiles, commits, options }),
@@ -521,122 +581,129 @@ function GitDiffContent({
 							</Tabs.Trigger>
 						</Tabs.List>
 
-						{/* Changes sidebar */}
-						<Activity mode={isChanges ? "visible" : "hidden"}>
-							<Box
-								flex={isChanges ? "1" : undefined}
-								display={isChanges ? "flex" : "none"}
-								flexDirection="column"
-								overflow="hidden"
-							>
-								<Suspense fallback={<LoadingSpinner size="sm" />}>
-									<ChangesSidebar
-										includedFileNames={includedFileNames}
-										commitMessage={commitMessage}
-										commitBody={commitBody}
-										isCommitting={commitGitChanges.isPending}
-										aheadCount={aheadCount}
-										isPushing={gitPush.isPending}
-										onToggleIncluded={setFileIncluded}
-										onIncludeAll={() =>
-											setIncludedFileNames(
-												new Set(
-													changesFiles.map(
-														(file) => file.name,
-													),
-												),
-											)
-										}
-										onIncludeNone={() =>
-											setIncludedFileNames(new Set())
-										}
-										onCommitMessageChange={
-											setCommitMessage
-										}
-										onCommitBodyChange={setCommitBody}
-										onPush={async () => {
-											try {
-												await gitPush.mutateAsync();
-												toaster.create({
-													title: m.gitPushSuccessTitle(),
-													type: "success",
-													closable: true,
-												});
-											} catch (error) {
-												toaster.create({
-													title: m.gitPushErrorTitle(),
-													description:
-														error instanceof Error
-															? error.message
-															: String(error),
-													type: "error",
-													closable: true,
-												});
-											}
-										}}
-										onCommit={async () => {
-											try {
-												const hash =
-													await commitGitChanges.mutateAsync(
-														{
-															files: orderedIncludedFileNames,
-															message:
-																commitMessage.trim(),
-															body:
-																commitBody.trim() ||
-																undefined,
-														},
-													);
-												setCommitMessage("");
-												setCommitBody("");
-												toaster.create({
-													title: m.gitCommitSuccessTitle(),
-													description:
-														m.gitCommitSuccessDescription(
-															{
-																hash: hash.slice(
-																	0,
-																	7,
+						<SlidingPanels
+							activeIndex={activeTabIndex}
+							panels={[
+								{
+									key: "changes-sidebar",
+									content: (
+										<Box
+											flex="1"
+											display="flex"
+											flexDirection="column"
+											overflow="hidden"
+										>
+											<Suspense fallback={<LoadingSpinner size="sm" />}>
+												<ChangesSidebar
+													includedFileNames={includedFileNames}
+													commitMessage={commitMessage}
+													commitBody={commitBody}
+													isCommitting={commitGitChanges.isPending}
+													aheadCount={aheadCount}
+													isPushing={gitPush.isPending}
+													onToggleIncluded={setFileIncluded}
+													onIncludeAll={() =>
+														setIncludedFileNames(
+															new Set(
+																changesFiles.map(
+																	(file) => file.name,
 																),
-															},
-														),
-													type: "success",
-													closable: true,
-												});
-											} catch (error) {
-												toaster.create({
-													title: m.gitCommitErrorTitle(),
-													description:
-														error instanceof Error
-															? error.message
-															: String(error),
-													type: "error",
-													closable: true,
-												});
-											}
-										}}
-									/>
-								</Suspense>
-							</Box>
-						</Activity>
-
-						{/* History sidebar */}
-						<Activity mode={!isChanges ? "visible" : "hidden"}>
-							<Box
-								flex={!isChanges ? "1" : undefined}
-								display={!isChanges ? "flex" : "none"}
-								flexDirection="column"
-								overflow="hidden"
-							>
-								<Suspense fallback={<LoadingSpinner size="sm" />}>
-									<HistorySidebar />
-								</Suspense>
-							</Box>
-						</Activity>
+															),
+														)
+													}
+													onIncludeNone={() =>
+														setIncludedFileNames(new Set())
+													}
+													onCommitMessageChange={
+														setCommitMessage
+													}
+													onCommitBodyChange={setCommitBody}
+													onPush={async () => {
+														try {
+															await gitPush.mutateAsync();
+															toaster.create({
+																title: m.gitPushSuccessTitle(),
+																type: "success",
+																closable: true,
+															});
+														} catch (error) {
+															toaster.create({
+																title: m.gitPushErrorTitle(),
+																description:
+																	error instanceof Error
+																		? error.message
+																		: String(error),
+																type: "error",
+																closable: true,
+															});
+														}
+													}}
+													onCommit={async () => {
+														try {
+															const hash =
+																await commitGitChanges.mutateAsync(
+																	{
+																		files: orderedIncludedFileNames,
+																		message:
+																			commitMessage.trim(),
+																		body:
+																			commitBody.trim() ||
+																			undefined,
+																	},
+																);
+															setCommitMessage("");
+															setCommitBody("");
+															toaster.create({
+																title: m.gitCommitSuccessTitle(),
+																description:
+																	m.gitCommitSuccessDescription(
+																		{
+																			hash: hash.slice(
+																				0,
+																				7,
+																			),
+																		},
+																	),
+																type: "success",
+																closable: true,
+															});
+														} catch (error) {
+															toaster.create({
+																title: m.gitCommitErrorTitle(),
+																description:
+																	error instanceof Error
+																		? error.message
+																		: String(error),
+																type: "error",
+																closable: true,
+															});
+														}
+													}}
+												/>
+											</Suspense>
+										</Box>
+									),
+								},
+								{
+									key: "history-sidebar",
+									content: (
+										<Box
+											flex="1"
+											display="flex"
+											flexDirection="column"
+											overflow="hidden"
+										>
+											<Suspense fallback={<LoadingSpinner size="sm" />}>
+												<HistorySidebar />
+											</Suspense>
+										</Box>
+									),
+								},
+							]}
+						/>
 					</Tabs.Root>
 				</Flex>
 
-				{/* Pane column */}
 				<Activity mode={isChanges ? "visible" : "hidden"}>
 					<Suspense fallback={<LoadingSpinner />}>
 						<ChangesDiffPane visible={isChanges} />
@@ -766,40 +833,57 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 
 function HistorySidebar() {
 	const { commits, state, dispatch } = use(GitDiffContext)!;
-
-	if (state.selectedCommit) {
-		return (
-			<Box
-				flex="1"
-				display="flex"
-				flexDirection="column"
-				minH="0"
-				overflow="hidden"
-			>
-				<CommitFileSidebar />
-			</Box>
-		);
-	}
-
-	if (commits.length === 0) {
-		return (
-			<Flex align="center" justify="center" flex="1" p="8">
-				<Box color="fg.muted" fontSize="sm">
-					{m.noCommitsFound()}
-				</Box>
-			</Flex>
-		);
-	}
+	const isCommitSelected = !!state.selectedCommit;
+	const activeHistoryIndex = isCommitSelected ? 1 : 0;
 
 	return (
-		<CommitList
-			commits={commits}
-			selectedIndex={state.selectedCommitIndex}
-			onCommitSelect={(commit, index) =>
-				startTransition(() => {
-					dispatch({ type: "selectCommit", commit, index });
-				})
-			}
+		<SlidingPanels
+			activeIndex={activeHistoryIndex}
+			panels={[
+				{
+					key: "history-commit-list",
+					content:
+						commits.length === 0 ? (
+							<Flex align="center" justify="center" flex="1" p="8">
+								<Box color="fg.muted" fontSize="sm">
+									{m.noCommitsFound()}
+								</Box>
+							</Flex>
+						) : (
+							<CommitList
+								commits={commits}
+								selectedIndex={state.selectedCommitIndex}
+								onCommitSelect={(commit, index) =>
+									startTransition(() => {
+										dispatch({
+											type: "selectCommit",
+											commit,
+											index,
+										});
+									})
+								}
+							/>
+						),
+				},
+				{
+					key: "history-commit-files",
+					content: isCommitSelected ? (
+						<Suspense fallback={<LoadingSpinner size="sm" />}>
+							<Box
+								flex="1"
+								display="flex"
+								flexDirection="column"
+								minH="0"
+								overflow="hidden"
+							>
+								<CommitFileSidebar />
+							</Box>
+						</Suspense>
+					) : (
+						<Box flex="1" minH="0" />
+					),
+				},
+			]}
 		/>
 	);
 }
@@ -836,14 +920,14 @@ function HistoryDiffPane({ visible }: { visible: boolean }) {
 	if (!state.selectedCommit) {
 		return (
 			<VisibleBox visible={visible}>
-			<GitDiffPane
-				activeFile={null}
-				options={options}
-				contextKey="history"
-				emptyMessage={m.selectFileToView()}
-			/>
-		</VisibleBox>
-	);
+				<GitDiffPane
+					activeFile={null}
+					options={options}
+					contextKey="history"
+					emptyMessage={m.selectFileToView()}
+				/>
+			</VisibleBox>
+		);
 	}
 
 	return <CommitDiffViewer visible={visible} />;
