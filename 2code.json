@@ -3,6 +3,8 @@
     "bun i"
   ],
   "teardown_script": [],
-  "init_script": [],
+  "init_script": [
+    "alias dev=\"gco dev\""
+  ],
   "terminal_templates": []
 }
