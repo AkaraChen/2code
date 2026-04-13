@@ -10,6 +10,7 @@ import {
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { getIconForFile } from "vscode-icons-js";
 import { FiPlus, FiTerminal } from "react-icons/fi";
@@ -38,6 +39,14 @@ import { Terminal } from "./Terminal";
 // which would break useShallow's equality check and cause infinite re-renders.
 const EMPTY_TERMINAL_PROFILE = { tabs: [] as { id: string; title: string }[], activeTabId: null as string | null };
 const EMPTY_FILE_PROFILE = { tabs: [] as { filePath: string; title: string }[], activeFilePath: null as string | null, fileTabActive: false };
+const TAB_ANIMATION = {
+	duration: 0.18,
+	ease: [0.22, 1, 0.36, 1],
+} as const;
+const TAB_EXIT_ANIMATION = {
+	duration: 0.14,
+	ease: [0.4, 0, 1, 1],
+} as const;
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -71,6 +80,7 @@ export default function TerminalTabs({
 	const closeTab = useCloseTerminalTab();
 	const projectConfig = useProjectConfigQuery(projectId);
 	const globalTemplates = useTerminalTemplatesStore((s) => s.templates);
+	const prefersReducedMotion = useReducedMotion();
 	const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
 	const [templateMenuPosition, setTemplateMenuPosition] = useState<{
 		top: number;
@@ -88,6 +98,38 @@ export default function TerminalTabs({
 	const activeValue = fileTabActive
 		? (activeFilePath ?? "")
 		: (activeTabId ?? "");
+	const tabMotionProps = prefersReducedMotion
+		? {}
+		: {
+				layout: "position" as const,
+				initial: {
+					opacity: 0,
+					scale: 0.92,
+					y: 6,
+				},
+				animate: {
+					opacity: 1,
+					scale: 1,
+					y: 0,
+				},
+				exit: {
+					opacity: 0,
+					scale: 0.88,
+					y: -6,
+					width: 0,
+				},
+				transition: {
+					layout: TAB_ANIMATION,
+					default: TAB_ANIMATION,
+					opacity: TAB_EXIT_ANIMATION,
+				},
+			};
+	const buttonMotionProps = prefersReducedMotion
+		? {}
+		: {
+				layout: "position" as const,
+				transition: TAB_ANIMATION,
+			};
 
 	function handleTabChange(value: string) {
 		const isFileTab = fileTabs.some((t) => t.filePath === value);
@@ -168,97 +210,121 @@ export default function TerminalTabs({
 			>
 				<Box overflowX="auto" overflowY="hidden" w="full" minW="0">
 					<Tabs.List w="full" minW="max-content" flexWrap="nowrap">
-						{tabs.map((tab) => {
-							const displayTitle =
-								tab.title.length > 10
-									? `${tab.title.slice(0, 10)}...`
-									: tab.title;
-							return (
-								<Tabs.Trigger
-									key={tab.id}
-									value={tab.id}
-									flexShrink={0}
-								>
-									<FiTerminal />
-									<HStack gap="2">
-										{displayTitle}
-										{notifiedTabs.has(tab.id) &&
-											tab.id !== activeTabId && (
-												<Circle size="2" bg="green.500" />
-											)}
-										<CloseButton
-											as="span"
-											role="button"
-											size="2xs"
-											onClick={(e) => {
-												e.stopPropagation();
-												closeTab.mutate({
-													profileId,
-													sessionId: tab.id,
-												});
-											}}
-										/>
-									</HStack>
-								</Tabs.Trigger>
-							);
-						})}
+						<AnimatePresence initial={false}>
+							{tabs.map((tab) => {
+								const displayTitle =
+									tab.title.length > 10
+										? `${tab.title.slice(0, 10)}...`
+										: tab.title;
+								return (
+									<motion.div
+										key={`terminal:${tab.id}`}
+										style={{
+											display: "flex",
+											flexShrink: 0,
+											overflow: "hidden",
+											transformOrigin: "left center",
+										}}
+										{...tabMotionProps}
+									>
+										<Tabs.Trigger value={tab.id} flexShrink={0}>
+											<FiTerminal />
+											<HStack gap="2">
+												{displayTitle}
+												{notifiedTabs.has(tab.id) &&
+													tab.id !== activeTabId && (
+														<Circle size="2" bg="green.500" />
+													)}
+												<CloseButton
+													as="span"
+													role="button"
+													size="2xs"
+													onClick={(e) => {
+														e.stopPropagation();
+														closeTab.mutate({
+															profileId,
+															sessionId: tab.id,
+														});
+													}}
+												/>
+											</HStack>
+										</Tabs.Trigger>
+									</motion.div>
+								);
+							})}
 
-						{fileTabs.map((tab) => {
-							const displayTitle =
-								tab.title.length > 14
-									? `${tab.title.slice(0, 14)}...`
-									: tab.title;
-							return (
-								<Tabs.Trigger
-									key={tab.filePath}
-									value={tab.filePath}
-									flexShrink={0}
-								>
-									<img
-										src={fileIconUrl(tab.title)}
-										width={14}
-										height={14}
-										alt=""
-										draggable={false}
-									/>
-									<HStack gap="2">
-										{displayTitle}
-										<CloseButton
-											as="span"
-											role="button"
-											size="2xs"
-											onClick={(e) => {
-												e.stopPropagation();
-												closeFileTab(profileId, tab.filePath);
-											}}
-										/>
-									</HStack>
-								</Tabs.Trigger>
-							);
-						})}
+							{fileTabs.map((tab) => {
+								const displayTitle =
+									tab.title.length > 14
+										? `${tab.title.slice(0, 14)}...`
+										: tab.title;
+								return (
+									<motion.div
+										key={`file:${tab.filePath}`}
+										style={{
+											display: "flex",
+											flexShrink: 0,
+											overflow: "hidden",
+											transformOrigin: "left center",
+										}}
+										{...tabMotionProps}
+									>
+										<Tabs.Trigger
+											value={tab.filePath}
+											flexShrink={0}
+										>
+											<img
+												src={fileIconUrl(tab.title)}
+												width={14}
+												height={14}
+												alt=""
+												draggable={false}
+											/>
+											<HStack gap="2">
+												{displayTitle}
+												<CloseButton
+													as="span"
+													role="button"
+													size="2xs"
+													onClick={(e) => {
+														e.stopPropagation();
+														closeFileTab(profileId, tab.filePath);
+													}}
+												/>
+											</HStack>
+										</Tabs.Trigger>
+									</motion.div>
+								);
+							})}
+						</AnimatePresence>
 
-						<Box
-							ref={newTerminalButtonRef}
-							display="inline-flex"
-							flexShrink={0}
-							alignSelf="center"
-							ms="2"
-							onMouseEnter={openTemplateMenu}
-							onMouseLeave={scheduleTemplateMenuClose}
+						<motion.div
+							style={{ display: "flex", flexShrink: 0 }}
+							{...buttonMotionProps}
 						>
-							<Button
-								size="2xs"
-								variant="ghost"
-								disabled={createTab.isPending}
-								onClick={() => {
-									setIsTemplateMenuOpen(false);
-									createTab.mutate({ profileId, cwd });
-									setTerminalActive(profileId);
-								}}
+							<Box
+								ref={newTerminalButtonRef}
+								display="inline-flex"
+								flexShrink={0}
+								alignSelf="center"
+								ms="2"
+								onMouseEnter={openTemplateMenu}
+								onMouseLeave={scheduleTemplateMenuClose}
 							>
-								<FiPlus /> {m.newTerminal()}
-							</Button>
-						</Box>
+								<Button
+									size="2xs"
+									variant="ghost"
+									disabled={createTab.isPending}
+									onClick={() => {
+										setIsTemplateMenuOpen(false);
+										createTab.mutate({ profileId, cwd });
+										setTerminalActive(profileId);
+									}}
+								>
+									<FiPlus /> {m.newTerminal()}
+								</Button>
+							</Box>
+						</motion.div>
 					</Tabs.List>
 				</Box>
 			</Tabs.Root>
