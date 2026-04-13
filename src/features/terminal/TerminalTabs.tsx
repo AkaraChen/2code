@@ -167,7 +167,7 @@ export default function TerminalTabs({
 				onValueChange={(e) => handleTabChange(e.value)}
 			>
 				<Box overflowX="auto" overflowY="hidden" w="full" minW="0">
-					<Tabs.List w="max-content" minW="max-content" flexWrap="nowrap">
+					<Tabs.List w="full" minW="max-content" flexWrap="nowrap">
 						{tabs.map((tab) => {
 							const displayTitle =
 								tab.title.length > 10
@@ -221,7 +221,7 @@ export default function TerminalTabs({
 										alt=""
 										draggable={false}
 									/>
-									<HStack gap="2">
+									<HStack gap="2" fontFamily="mono">
 										{displayTitle}
 										<CloseButton
 											as="span"
