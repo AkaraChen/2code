@@ -78,6 +78,7 @@ export default function HistoryFileList({
 								<FileListItem
 									file={file}
 									isActive={selectedIndex === i}
+									showLineStats={false}
 									onClick={() => onFileSelect(i)}
 								/>
 							</div>

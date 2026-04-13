@@ -16,6 +16,7 @@ interface FileListItemProps {
 	file: FileDiffMetadata;
 	isActive: boolean;
 	isIncluded?: boolean;
+	showLineStats?: boolean;
 	onClick: () => void;
 	onToggleIncluded?: (included: boolean) => void;
 }
@@ -24,6 +25,7 @@ function FileListItem({
 	file,
 	isActive,
 	isIncluded,
+	showLineStats = true,
 	onClick,
 	onToggleIncluded,
 }: FileListItemProps) {
@@ -93,24 +95,28 @@ function FileListItem({
 						size="xs"
 						colorPalette={badge.colorPalette}
 						variant="subtle"
+						marginStart="auto"
+						flexShrink={0}
 					>
 						{badge.label}
 					</Badge>
 				</HStack>
 			</VStack>
 
-			<HStack gap="1" fontSize="xs" flexShrink={0} pt="0.5">
-				{additions > 0 && (
-					<Text color="green.solid" lineHeight="1">
-						+{additions}
-					</Text>
-				)}
-				{deletions > 0 && (
-					<Text color="red.solid" lineHeight="1">
-						-{deletions}
-					</Text>
-				)}
-			</HStack>
+			{showLineStats && (
+				<HStack gap="1" fontSize="xs" flexShrink={0} pt="0.5">
+					{additions > 0 && (
+						<Text color="green.solid" lineHeight="1">
+							+{additions}
+						</Text>
+					)}
+					{deletions > 0 && (
+						<Text color="red.solid" lineHeight="1">
+							-{deletions}
+						</Text>
+					)}
+				</HStack>
+			)}
 		</HStack>
 	);
 }
