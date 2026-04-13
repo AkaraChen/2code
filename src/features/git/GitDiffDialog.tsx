@@ -307,7 +307,6 @@ function GitDiffContent({
 	);
 	const [commitMessage, setCommitMessage] = useState("");
 	const [commitBody, setCommitBody] = useState("");
-
 	const sidebarRef = useRef<HTMLDivElement>(null);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 

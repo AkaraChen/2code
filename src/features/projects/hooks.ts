@@ -20,6 +20,8 @@ import {
 import type { ProjectConfig, ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
+const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+
 export function useProjects() {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.all,
@@ -32,6 +34,8 @@ export function useGitBranch(folder: string, enabled = true) {
 		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
 		enabled,
+		staleTime: 0,
+		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
 	});
 }
 

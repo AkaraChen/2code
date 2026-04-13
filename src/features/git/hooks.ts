@@ -17,10 +17,14 @@ import {
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
+const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
 		queryFn: () => getGitDiff({ profileId }),
+		staleTime: 0,
+		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -28,6 +32,8 @@ export function useGitLog(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.log(profileId),
 		queryFn: () => getGitLog({ profileId }),
+		staleTime: 0,
+		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -43,7 +49,8 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
-		refetchInterval: 5_000,
+		staleTime: 0,
+		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
 	});
 
 	return useMemo(() => {
@@ -61,7 +68,8 @@ export function useGitAheadCount(profileId: string) {
 	const { data } = useQuery({
 		queryKey: queryKeys.git.aheadCount(profileId),
 		queryFn: () => getGitAheadCount({ profileId }),
-		refetchInterval: 10_000,
+		staleTime: 0,
+		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 	return data ?? 0;
 }
