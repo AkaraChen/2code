@@ -10,7 +10,10 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { open } from "@tauri-apps/plugin-shell";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import {
+	CJK_FONT_FALLBACKS,
+	useTerminalSettingsStore,
+} from "@/features/settings/stores/terminalSettingsStore";
 import {
 	clearPtyOutput,
 	flushPtyOutput,
@@ -92,7 +95,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		const term = termRef.current;
 		if (!term) return;
 
-		term.options.fontFamily = `"${fontFamily}", monospace`;
+		term.options.fontFamily = `"${fontFamily}", ${CJK_FONT_FALLBACKS}, monospace`;
 		term.options.fontSize = fontSize;
 		syncTerminalLayout(1);
 
@@ -159,7 +162,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
 			// 1. Create xterm (sync)
 			const term = new XTerm({
-				fontFamily: `"${initFontFamilyRef.current}", monospace`,
+				fontFamily: `"${initFontFamilyRef.current}", ${CJK_FONT_FALLBACKS}, monospace`,
 				fontSize: initFontSizeRef.current,
 				theme: initThemeRef.current,
 				cursorBlink: true,
