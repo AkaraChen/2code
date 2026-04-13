@@ -6,7 +6,6 @@ import { ImageAddon } from "@xterm/addon-image";
 import { LigaturesAddon } from "@xterm/addon-ligatures";
 import { ProgressAddon } from "@xterm/addon-progress";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { open } from "@tauri-apps/plugin-shell";
 import consola from "consola";
@@ -212,17 +211,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
 
-			// WebGL renderer — must load after open(); fall back silently if unavailable
-			try {
-				const webglAddon = new WebglAddon();
-				webglAddon.onContextLoss(() => webglAddon.dispose());
-				term.loadAddon(webglAddon);
-				unlisteners.push(() => webglAddon.dispose());
-			} catch {
-				// WebGL unavailable — xterm falls back to canvas 2D renderer
-			}
-
-			term.loadAddon(new ClipboardAddon());
+term.loadAddon(new ClipboardAddon());
 			term.loadAddon(new ImageAddon());
 			term.loadAddon(new LigaturesAddon());
 			term.loadAddon(new ProgressAddon());
