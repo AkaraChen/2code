@@ -13,6 +13,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
 	Activity,
 	Suspense,
@@ -25,6 +26,7 @@ import {
 	useState,
 } from "react";
 import { FiGitBranch } from "react-icons/fi";
+import type { GitCommit } from "@/generated";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
@@ -105,6 +107,11 @@ const SIDEBAR_TAB_CONTENT_PROPS = {
 	},
 } as const;
 
+const HISTORY_PANEL_FADE_TRANSITION = {
+	duration: 0.33,
+	ease: [0.22, 1, 0.36, 1],
+} as const;
+
 function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
 		<Flex flex="1" align="center" justify="center">
@@ -123,6 +130,46 @@ function VisibleBox({
 	return (
 		<Box flex="1" display={visible ? "flex" : "none"}>
 			{children}
+		</Box>
+	);
+}
+
+function HistorySidebarPanel({
+	panelKey,
+	children,
+}: {
+	panelKey: string;
+	children: React.ReactNode;
+}) {
+	const prefersReducedMotion = useReducedMotion() ?? false;
+
+	return (
+		<Box position="relative" flex="1" minH="0" overflow="hidden">
+			<AnimatePresence initial={false}>
+				<motion.div
+					key={panelKey}
+					initial={prefersReducedMotion ? false : { opacity: 0 }}
+					animate={{ opacity: 1 }}
+					exit={
+						prefersReducedMotion ? { opacity: 1 } : { opacity: 0 }
+					}
+					transition={
+						prefersReducedMotion
+							? { duration: 0 }
+							: HISTORY_PANEL_FADE_TRANSITION
+					}
+					style={{
+						position: "absolute",
+						inset: 0,
+						display: "flex",
+						flexDirection: "column",
+						minHeight: 0,
+						overflow: "hidden",
+					}}
+				>
+					{children}
+				</motion.div>
+			</AnimatePresence>
 		</Box>
 	);
 }
@@ -782,47 +829,56 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 
 function HistorySidebar() {
 	const { commits, state, dispatch } = use(GitDiffContext)!;
+	const selectedCommit = state.selectedCommit;
 
-	if (state.selectedCommit) {
+	if (selectedCommit) {
 		return (
-			<Box
-				flex="1"
-				display="flex"
-				flexDirection="column"
-				minH="0"
-				overflow="hidden"
-			>
-				<CommitFileSidebar />
-			</Box>
+			<HistorySidebarPanel panelKey={`commit:${selectedCommit.full_hash}`}>
+				<Suspense fallback={<LoadingSpinner size="sm" />}>
+					<CommitFileSidebar
+						commit={selectedCommit}
+						selectedIndex={state.selectedCommitFileIndex}
+					/>
+				</Suspense>
+			</HistorySidebarPanel>
 		);
 	}
 
 	if (commits.length === 0) {
 		return (
-			<Flex align="center" justify="center" flex="1" p="8">
-				<Box color="fg.muted" fontSize="sm">
-					{m.noCommitsFound()}
-				</Box>
-			</Flex>
+			<HistorySidebarPanel panelKey="empty">
+				<Flex align="center" justify="center" flex="1" p="8">
+					<Box color="fg.muted" fontSize="sm">
+						{m.noCommitsFound()}
+					</Box>
+				</Flex>
+			</HistorySidebarPanel>
 		);
 	}
 
 	return (
-		<CommitList
-			commits={commits}
-			selectedIndex={state.selectedCommitIndex}
-			onCommitSelect={(commit, index) =>
-				startTransition(() => {
-					dispatch({ type: "selectCommit", commit, index });
-				})
-			}
-		/>
+		<HistorySidebarPanel panelKey="list">
+			<CommitList
+				commits={commits}
+				selectedIndex={state.selectedCommitIndex}
+				onCommitSelect={(commit, index) =>
+					startTransition(() => {
+						dispatch({ type: "selectCommit", commit, index });
+					})
+				}
+			/>
+		</HistorySidebarPanel>
 	);
 }
 
-function CommitFileSidebar() {
-	const { profileId, state, dispatch } = use(GitDiffContext)!;
-	const commit = state.selectedCommit!;
+function CommitFileSidebar({
+	commit,
+	selectedIndex,
+}: {
+	commit: GitCommit;
+	selectedIndex: number;
+}) {
+	const { profileId, dispatch } = use(GitDiffContext)!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
 
 	useEffect(() => {
@@ -833,7 +889,7 @@ function CommitFileSidebar() {
 		<HistoryFileList
 			commit={commit}
 			files={files}
-			selectedIndex={state.selectedCommitFileIndex}
+			selectedIndex={selectedIndex}
 			onFileSelect={(i) =>
 				dispatch({ type: "selectCommitFile", index: i })
 			}
@@ -848,40 +904,57 @@ function CommitFileSidebar() {
 
 function HistoryDiffPane({ visible }: { visible: boolean }) {
 	const { state, options } = use(GitDiffContext)!;
+	const selectedCommit = state.selectedCommit;
 
-	if (!state.selectedCommit) {
+	if (!selectedCommit) {
 		return (
 			<VisibleBox visible={visible}>
-			<GitDiffPane
-				activeFile={null}
-				options={options}
-				contextKey="history"
-				emptyMessage={m.selectFileToView()}
-			/>
-		</VisibleBox>
-	);
+				<HistorySidebarPanel panelKey="history-empty">
+					<GitDiffPane
+						activeFile={null}
+						options={options}
+						contextKey="history"
+						emptyMessage={m.selectFileToView()}
+					/>
+				</HistorySidebarPanel>
+			</VisibleBox>
+		);
 	}
-
-	return <CommitDiffViewer visible={visible} />;
-}
-
-function CommitDiffViewer({ visible }: { visible: boolean }) {
-	const { profileId, state, options } = use(GitDiffContext)!;
-	const commit = state.selectedCommit!;
-	const files = useCommitDiffFiles(profileId, commit.full_hash);
-	const activeFile =
-		files.length > 0 && state.selectedCommitFileIndex < files.length
-			? files[state.selectedCommitFileIndex]
-			: null;
 
 	return (
 		<VisibleBox visible={visible}>
-			<GitDiffPane
-				activeFile={activeFile}
-				options={options}
-				contextKey={commit.full_hash}
-				emptyMessage={m.selectFileToView()}
-			/>
+			<HistorySidebarPanel panelKey={`history:${selectedCommit.full_hash}`}>
+				<Suspense fallback={<LoadingSpinner />}>
+					<CommitDiffViewer
+						commit={selectedCommit}
+						selectedIndex={state.selectedCommitFileIndex}
+					/>
+				</Suspense>
+			</HistorySidebarPanel>
 		</VisibleBox>
+	);
+}
+
+function CommitDiffViewer({
+	commit,
+	selectedIndex,
+}: {
+	commit: GitCommit;
+	selectedIndex: number;
+}) {
+	const { profileId, options } = use(GitDiffContext)!;
+	const files = useCommitDiffFiles(profileId, commit.full_hash);
+	const activeFile =
+		files.length > 0 && selectedIndex < files.length
+			? files[selectedIndex]
+			: null;
+
+	return (
+		<GitDiffPane
+			activeFile={activeFile}
+			options={options}
+			contextKey={commit.full_hash}
+			emptyMessage={m.selectFileToView()}
+		/>
 	);
 }
