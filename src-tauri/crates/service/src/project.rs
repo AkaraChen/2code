@@ -149,6 +149,22 @@ pub fn commit_changes(
 	infra::git::commit(&profile.worktree_path, files, message, body)
 }
 
+pub fn get_ahead_count(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<u32, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	Ok(infra::git::ahead_count(&profile.worktree_path))
+}
+
+pub fn push(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<(), AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::push(&profile.worktree_path)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

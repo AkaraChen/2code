@@ -9,9 +9,11 @@ import { useMemo } from "react";
 import {
 	commitGitChanges,
 	getCommitDiff,
+	getGitAheadCount,
 	getGitDiff,
 	getGitDiffStats,
 	getGitLog,
+	gitPush,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
@@ -53,6 +55,27 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 			filesChanged: data.files_changed,
 		};
 	}, [data]);
+}
+
+export function useGitAheadCount(profileId: string) {
+	const { data } = useQuery({
+		queryKey: queryKeys.git.aheadCount(profileId),
+		queryFn: () => getGitAheadCount({ profileId }),
+		refetchInterval: 10_000,
+	});
+	return data ?? 0;
+}
+
+export function useGitPush(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => gitPush({ profileId }),
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({
+				queryKey: queryKeys.git.aheadCount(profileId),
+			});
+		},
+	});
 }
 
 export function useCommitGitChanges(profileId: string) {

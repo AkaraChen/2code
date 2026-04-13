@@ -252,6 +252,34 @@ pub fn commit(
 		.to_string())
 }
 
+pub fn ahead_count(folder: &str) -> u32 {
+	let output = Command::new("git")
+		.args(["rev-list", "--count", "@{u}..HEAD"])
+		.current_dir(folder)
+		.output();
+
+	match output {
+		Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+			.trim()
+			.parse::<u32>()
+			.unwrap_or(0),
+		_ => 0,
+	}
+}
+
+pub fn push(folder: &str) -> Result<(), AppError> {
+	let output = Command::new("git")
+		.args(["push"])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!("git push failed: {stderr}")));
+	}
+	Ok(())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
