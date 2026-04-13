@@ -12,6 +12,7 @@ dist
 src/paraglide
 dist-ssr
 *.local
+public/file-icons/
 
 # Editor directories and files
 .vscode/*

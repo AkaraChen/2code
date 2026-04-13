@@ -9,16 +9,13 @@ import { useState } from "react";
 import {
 	FiChevronRight,
 } from "react-icons/fi";
-import {
-	getIconForFile,
-	getIconForFolder,
-	getIconForOpenFolder,
-} from "vscode-icons-js";
 import type { FileEntry } from "@/generated/types";
+import {
+	getFileIconUrl,
+	getFolderIconUrl,
+} from "@/shared/lib/fileIcons";
 import { useDirectoryListing } from "./hooks";
 import FileViewerDialog from "./FileViewerDialog";
-
-const ICONS_CDN = "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons";
 const FILE_TREE_PANEL_WIDTH = 208;
 const FILE_TREE_PANEL_TRANSITION = {
 	type: "spring",
@@ -40,15 +37,6 @@ const FILE_TREE_ICON_TRANSITION = {
 	damping: 28,
 	mass: 0.5,
 } as const;
-
-function fileIconUrl(name: string) {
-	return `${ICONS_CDN}/${getIconForFile(name) ?? "default_file.svg"}`;
-}
-
-function folderIconUrl(name: string, isOpen: boolean) {
-	const icon = isOpen ? getIconForOpenFolder(name) : getIconForFolder(name);
-	return `${ICONS_CDN}/${icon}`;
-}
 
 interface TreeNodeProps {
 	entry: FileEntry;
@@ -103,12 +91,12 @@ function TreeNode({
 							<FiChevronRight size={14} />
 						</motion.span>
 					</Box>
-					<Box flexShrink="0" display="flex">
-						<img
-							src={folderIconUrl(entry.name, isExpanded)}
-							width={16}
-							height={16}
-							alt=""
+						<Box flexShrink="0" display="flex">
+							<img
+								src={getFolderIconUrl(entry.name, isExpanded)}
+								width={16}
+								height={16}
+								alt=""
 							draggable={false}
 						/>
 					</Box>
@@ -182,7 +170,7 @@ function TreeNode({
 		>
 			<Box flexShrink="0" display="flex">
 				<img
-					src={fileIconUrl(entry.name)}
+					src={getFileIconUrl(entry.name)}
 					width={16}
 					height={16}
 					alt=""

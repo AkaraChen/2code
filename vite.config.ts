@@ -3,12 +3,14 @@ import process from "node:process";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { localFileIconsPlugin } from "./scripts/vite-plugin-local-file-icons";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [
+    localFileIconsPlugin(),
     react({
       babel: {
         plugins: ["babel-plugin-react-compiler"],

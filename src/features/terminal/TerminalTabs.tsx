@@ -12,18 +12,13 @@ import {
 } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { getIconForFile } from "vscode-icons-js";
 import { FiPlus, FiTerminal } from "react-icons/fi";
-
-const ICONS_CDN = "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons@master/icons";
-function fileIconUrl(name: string) {
-	return `${ICONS_CDN}/${getIconForFile(name) ?? "default_file.svg"}`;
-}
 import { useShallow } from "zustand/react/shallow";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import FileViewerPane from "@/features/projects/FileViewerPane";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
+import { getFileIconUrl } from "@/shared/lib/fileIcons";
 import * as m from "@/paraglide/messages.js";
 import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
@@ -274,7 +269,7 @@ export default function TerminalTabs({
 											flexShrink={0}
 										>
 											<img
-												src={fileIconUrl(tab.title)}
+												src={getFileIconUrl(tab.title)}
 												width={14}
 												height={14}
 												alt=""
