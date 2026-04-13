@@ -417,6 +417,50 @@ fn create_profile_shows_in_list_projects() {
 	cleanup(&dir);
 }
 
+#[test]
+fn create_profile_blank_name_generates_pr_branch() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile = service::profile::create(&mut conn, &project.id, "").unwrap();
+
+	assert!(profile.branch_name.starts_with("pr/"));
+	let generated = profile.branch_name.strip_prefix("pr/").unwrap();
+	let (city, short_id) = generated.rsplit_once('-').unwrap();
+	assert!(!city.is_empty());
+	assert_eq!(short_id.len(), 8);
+	assert!(short_id.chars().all(|c| c.is_ascii_hexdigit()));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&dir);
+}
+
+#[test]
+fn create_profile_blank_name_uses_different_city_until_pool_exhausted() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let first = service::profile::create(&mut conn, &project.id, "").unwrap();
+	let second = service::profile::create(&mut conn, &project.id, "").unwrap();
+
+	let first_city = first
+		.branch_name
+		.strip_prefix("pr/")
+		.and_then(|name| name.rsplit_once('-').map(|(city, _)| city))
+		.unwrap();
+	let second_city = second
+		.branch_name
+		.strip_prefix("pr/")
+		.and_then(|name| name.rsplit_once('-').map(|(city, _)| city))
+		.unwrap();
+
+	assert_ne!(first_city, second_city);
+
+	service::profile::delete(&mut conn, &first.id).unwrap();
+	service::profile::delete(&mut conn, &second.id).unwrap();
+	cleanup(&dir);
+}
+
 // ============================================================
 // Profile Creation (Edge Cases)
 // ============================================================
