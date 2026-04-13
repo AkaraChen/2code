@@ -81,6 +81,30 @@ const professionalDiffOptions = {
 	| "overflow"
 >;
 
+const SIDEBAR_TAB_CONTENT_PROPS = {
+	position: "absolute",
+	inset: "0",
+	display: "flex",
+	h: "full",
+	overflow: "hidden",
+	pt: "0",
+	willChange: "opacity, transform",
+	_open: {
+		animationName: "fade-in, scale-in",
+		animationDuration: "300ms",
+		animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+		transformOrigin: "top center",
+		pointerEvents: "auto",
+	},
+	_closed: {
+		animationName: "fade-out, scale-out",
+		animationDuration: "120ms",
+		animationTimingFunction: "ease-in",
+		transformOrigin: "top center",
+		pointerEvents: "none",
+	},
+} as const;
+
 function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
 		<Flex flex="1" align="center" justify="center">
@@ -506,13 +530,13 @@ function GitDiffContent({
 						value={state.activeTab}
 						onValueChange={(e) => handleTabChange(e.value)}
 						size="sm"
-						variant="subtle"
+						variant="line"
 						flex="1"
 						minH="0"
 						display="flex"
 						flexDirection="column"
 					>
-						<Tabs.List px="3">
+						<Tabs.List mx="3" mt="2">
 							<Tabs.Trigger value="changes">
 								{m.changes()}
 							</Tabs.Trigger>
@@ -521,13 +545,10 @@ function GitDiffContent({
 							</Tabs.Trigger>
 						</Tabs.List>
 
-						{/* Changes sidebar */}
-						<Activity mode={isChanges ? "visible" : "hidden"}>
-							<Box
-								flex={isChanges ? "1" : undefined}
-								display={isChanges ? "flex" : "none"}
-								flexDirection="column"
-								overflow="hidden"
+						<Box position="relative" flex="1" minH="0" overflow="hidden">
+							<Tabs.Content
+								value="changes"
+								{...SIDEBAR_TAB_CONTENT_PROPS}
 							>
 								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<ChangesSidebar
@@ -617,22 +638,17 @@ function GitDiffContent({
 										}}
 									/>
 								</Suspense>
-							</Box>
-						</Activity>
+							</Tabs.Content>
 
-						{/* History sidebar */}
-						<Activity mode={!isChanges ? "visible" : "hidden"}>
-							<Box
-								flex={!isChanges ? "1" : undefined}
-								display={!isChanges ? "flex" : "none"}
-								flexDirection="column"
-								overflow="hidden"
+							<Tabs.Content
+								value="history"
+								{...SIDEBAR_TAB_CONTENT_PROPS}
 							>
 								<Suspense fallback={<LoadingSpinner size="sm" />}>
 									<HistorySidebar />
 								</Suspense>
-							</Box>
-						</Activity>
+							</Tabs.Content>
+						</Box>
 					</Tabs.Root>
 				</Flex>
 

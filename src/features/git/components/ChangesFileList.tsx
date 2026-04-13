@@ -155,12 +155,6 @@ export default function ChangesFileList({
 					<Text fontSize="xs" color="fg.muted">
 						{m.changedFiles({ count: files.length })}
 					</Text>
-					<Text fontSize="xs" color="fg.muted">
-						{m.gitCommitIncludedCount({
-							includedCount,
-							totalCount: files.length,
-						})}
-					</Text>
 				</VStack>
 				<HStack gap="1">
 					<Button
