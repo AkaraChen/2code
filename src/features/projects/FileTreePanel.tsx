@@ -47,6 +47,30 @@ interface TreeNodeProps {
 	prefersReducedMotion: boolean;
 }
 
+function TreeNodeLoadingRow({
+	depth,
+	label,
+}: {
+	depth: number;
+	label: string;
+}) {
+	return (
+		<Flex
+			align="center"
+			gap="2"
+			py="0.5"
+			role="status"
+			aria-label={label}
+			style={{ paddingLeft: `${16 + (depth + 1) * 12 + 18}px` }}
+		>
+			<Spinner size="xs" color="fg.muted" />
+			<Text fontSize="sm" color="fg.muted">
+				Loading...
+			</Text>
+		</Flex>
+	);
+}
+
 function TreeNode({
 	entry,
 	depth,
@@ -60,8 +84,9 @@ function TreeNode({
 		entry.path,
 		entry.is_dir && isExpanded,
 	);
-
 	const indent = depth * 12;
+	const childPaddingLeft = `${16 + (depth + 1) * 12 + 18}px`;
+	const showLoadingRow = isExpanded && isLoading && children == null;
 
 	if (entry.is_dir) {
 		return (
@@ -91,12 +116,12 @@ function TreeNode({
 							<FiChevronRight size={14} />
 						</motion.span>
 					</Box>
-						<Box flexShrink="0" display="flex">
-							<img
-								src={getFolderIconUrl(entry.name, isExpanded)}
-								width={16}
-								height={16}
-								alt=""
+					<Box flexShrink="0" display="flex">
+						<img
+							src={getFolderIconUrl(entry.name, isExpanded)}
+							width={16}
+							height={16}
+							alt=""
 							draggable={false}
 						/>
 					</Box>
@@ -109,6 +134,7 @@ function TreeNode({
 					{isExpanded && (
 						<Box asChild overflow="hidden">
 							<motion.div
+								layout={prefersReducedMotion ? false : "size"}
 								initial={
 									prefersReducedMotion
 										? false
@@ -126,7 +152,13 @@ function TreeNode({
 										: FILE_TREE_GROUP_TRANSITION
 								}
 							>
-								{children && children.map((child) => (
+								{showLoadingRow && (
+									<TreeNodeLoadingRow
+										depth={depth}
+										label={`Loading ${entry.name}`}
+									/>
+								)}
+								{children?.map((child) => (
 									<TreeNode
 										key={child.path}
 										entry={child}
@@ -137,11 +169,11 @@ function TreeNode({
 										prefersReducedMotion={prefersReducedMotion}
 									/>
 								))}
-								{children && children.length === 0 && (
+								{children?.length === 0 && (
 									<Text
 										fontSize="sm"
 										color="fg.muted"
-										style={{ paddingLeft: `${16 + (depth + 1) * 12 + 18}px` }}
+										style={{ paddingLeft: childPaddingLeft }}
 										py="0.5"
 									>
 										Empty
