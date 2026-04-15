@@ -15,6 +15,7 @@ import {
 	listProjects,
 	readFileContent,
 	saveProjectConfig,
+	searchFile,
 	updateProject,
 } from "@/generated";
 import type { ProjectConfig, ProjectWithProfiles } from "@/generated";
@@ -146,5 +147,19 @@ export function useFileContent(path: string, enabled = true) {
 		queryFn: () => readFileContent({ path }),
 		enabled: !!path && enabled,
 		staleTime: 10000,
+	});
+}
+
+export function useFileSearch(
+	profileId: string,
+	query: string,
+	enabled = true,
+) {
+	const trimmedQuery = query.trim();
+	return useQuery({
+		queryKey: queryKeys.fs.search(profileId, trimmedQuery),
+		queryFn: () => searchFile({ profileId, query: trimmedQuery }),
+		enabled: !!profileId && !!trimmedQuery && enabled,
+		staleTime: 30000,
 	});
 }
