@@ -14,6 +14,7 @@ import { FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
+import * as m from "@/paraglide/messages.js";
 import { isSearchShortcut, useSearch } from "@/shared/hooks/useSearch";
 import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
@@ -238,8 +239,8 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 									size="xs"
 									w="44"
 									value={searchQuery}
-									placeholder="Find in file"
-									aria-label="Find in file"
+									placeholder={m.fileViewerFindInFile()}
+									aria-label={m.fileViewerFindInFile()}
 									autoComplete="off"
 									onChange={handleSearchChange}
 									onKeyDown={handleSearchInputKeyDown}
@@ -255,7 +256,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 								<IconButton
 									size="2xs"
 									variant="ghost"
-									aria-label="Previous match"
+									aria-label={m.fileViewerPreviousMatch()}
 									disabled={matches.length === 0}
 									onClick={handlePreviousMatch}
 								>
@@ -264,7 +265,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 								<IconButton
 									size="2xs"
 									variant="ghost"
-									aria-label="Next match"
+									aria-label={m.fileViewerNextMatch()}
 									disabled={matches.length === 0}
 									onClick={handleNextMatch}
 								>
@@ -272,7 +273,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 								</IconButton>
 								<CloseButton
 									size="2xs"
-									aria-label="Close file search"
+									aria-label={m.fileViewerCloseFileSearch()}
 									onClick={handleCloseSearch}
 								/>
 							</HStack>
