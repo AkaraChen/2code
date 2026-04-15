@@ -2,7 +2,11 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 import {
 	changeBadge,
+	getGitBinaryPreviewPath,
+	getGitBinaryPreviewRevision,
 	getLineStats,
+	getPreviewableImageMimeType,
+	isBinaryImageDiffPreviewable,
 	reconcileIncludedFiles,
 } from "./utils";
 
@@ -258,5 +262,163 @@ describe("reconcileIncludedFiles", () => {
 				new Set(["a.ts", "b.ts"]),
 			),
 		).toEqual(new Set(["b.ts"]));
+	});
+});
+
+describe("getPreviewableImageMimeType", () => {
+	it("recognizes common previewable image formats", () => {
+		expect(getPreviewableImageMimeType("image.png")).toBe("image/png");
+		expect(getPreviewableImageMimeType("image.JPG")).toBe("image/jpeg");
+		expect(getPreviewableImageMimeType("image.webp")).toBe("image/webp");
+		expect(getPreviewableImageMimeType("icon.ico")).toBe("image/x-icon");
+		expect(getPreviewableImageMimeType("vector.svg")).toBe(
+			"image/svg+xml",
+		);
+	});
+
+	it("returns null for unsupported formats", () => {
+		expect(getPreviewableImageMimeType("document.pdf")).toBeNull();
+		expect(getPreviewableImageMimeType("README")).toBeNull();
+	});
+});
+
+describe("isBinaryImageDiffPreviewable", () => {
+	it("returns true for image diffs without hunks", () => {
+		expect(
+			isBinaryImageDiffPreviewable({
+				name: "assets/preview.png",
+				type: "change",
+				hunks: [],
+			} as unknown as FileDiffMetadata),
+		).toBe(true);
+	});
+
+	it("returns true for rename-changed image diffs without hunks", () => {
+		expect(
+			isBinaryImageDiffPreviewable({
+				name: "after.webp",
+				prevName: "before.png",
+				type: "rename-changed",
+				hunks: [],
+			} as unknown as FileDiffMetadata),
+		).toBe(true);
+	});
+
+	it("returns false for non-image files, pure renames, or text hunks", () => {
+		expect(
+			isBinaryImageDiffPreviewable({
+				name: "archive.zip",
+				type: "change",
+				hunks: [],
+			} as unknown as FileDiffMetadata),
+		).toBe(false);
+		expect(
+			isBinaryImageDiffPreviewable({
+				name: "same.png",
+				prevName: "old.png",
+				type: "rename-pure",
+				hunks: [],
+			} as unknown as FileDiffMetadata),
+		).toBe(false);
+		expect(
+			isBinaryImageDiffPreviewable({
+				name: "vector.svg",
+				type: "change",
+				hunks: [{ hunkContent: [] }],
+			} as unknown as FileDiffMetadata),
+		).toBe(false);
+	});
+});
+
+describe("getGitBinaryPreviewPath", () => {
+	it("returns the correct path for before and after sides", () => {
+		expect(
+			getGitBinaryPreviewPath(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					type: "rename-changed",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBe("prev.png");
+		expect(
+			getGitBinaryPreviewPath(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					type: "rename-changed",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBe("next.png");
+	});
+
+	it("omits missing sides for added and deleted files", () => {
+		expect(
+			getGitBinaryPreviewPath(
+				{
+					name: "new.png",
+					type: "new",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBeNull();
+		expect(
+			getGitBinaryPreviewPath(
+				{
+					name: "gone.png",
+					type: "deleted",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBeNull();
+	});
+});
+
+describe("getGitBinaryPreviewRevision", () => {
+	it("prefers object ids for cache busting", () => {
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					prevObjectId: "abc123",
+					newObjectId: "def456",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBe("abc123");
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					prevObjectId: "abc123",
+					newObjectId: "def456",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBe("def456");
+	});
+
+	it("falls back to names when object ids are missing", () => {
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBe("prev.png");
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBe("next.png");
 	});
 });

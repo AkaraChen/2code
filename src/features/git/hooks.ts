@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import {
 	commitGitChanges,
 	getCommitDiff,
+	getGitBinaryPreview,
 	getGitAheadCount,
 	getGitDiff,
 	getGitDiffStats,
@@ -16,6 +17,7 @@ import {
 	gitPush,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 
@@ -132,4 +134,41 @@ export function useCommitDiffFiles(profileId: string, commitHash: string) {
 		() => parsePatchFiles(commitDiff).flatMap((p) => p.files),
 		[commitDiff],
 	);
+}
+
+interface GitBinaryPreviewRequest {
+	profileId: string;
+	path: string;
+	source: GitBinaryPreviewSource;
+	commitHash?: string;
+	revision: string;
+}
+
+export function useGitBinaryPreview(request: GitBinaryPreviewRequest | null) {
+	return useQuery({
+		queryKey: request
+			? queryKeys.git.binaryPreview(
+					request.profileId,
+					request.path,
+					request.source,
+					request.commitHash,
+					request.revision,
+				)
+			: ["git-binary-preview", "idle"],
+		queryFn: () => {
+			if (!request) {
+				return null;
+			}
+
+			return getGitBinaryPreview({
+				profileId: request.profileId,
+				path: request.path,
+				source: request.source,
+				commitHash: request.commitHash,
+			});
+		},
+		enabled: request != null,
+		staleTime: Number.POSITIVE_INFINITY,
+		retry: false,
+	});
 }

@@ -4,7 +4,9 @@ use diesel::SqliteConnection;
 use uuid::Uuid;
 
 use model::error::AppError;
-use model::project::{GitCommit, GitDiffStats, Project, ProjectWithProfiles};
+use model::project::{
+	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectWithProfiles,
+};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -136,6 +138,53 @@ pub fn get_commit_diff(
 ) -> Result<String, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	infra::git::show(&profile.worktree_path, commit_hash)
+}
+
+pub fn get_binary_preview(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+	path: &str,
+	source: &str,
+	commit_hash: Option<&str>,
+) -> Result<Option<GitBinaryPreview>, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	let file_path = match source {
+		"working_tree" => {
+			infra::git::read_worktree_file(&profile.worktree_path, path)?
+		}
+		"head" => infra::git::read_head_file(&profile.worktree_path, path)?,
+		"commit" => {
+			let commit_hash = commit_hash.ok_or_else(|| {
+				AppError::GitError(
+					"commit_hash is required for commit previews".into(),
+				)
+			})?;
+			infra::git::read_commit_file(
+				&profile.worktree_path,
+				commit_hash,
+				path,
+			)?
+		}
+		"parent_commit" => {
+			let commit_hash = commit_hash.ok_or_else(|| {
+				AppError::GitError(
+					"commit_hash is required for parent commit previews".into(),
+				)
+			})?;
+			infra::git::read_parent_commit_file(
+				&profile.worktree_path,
+				commit_hash,
+				path,
+			)?
+		}
+		other => {
+			return Err(AppError::GitError(format!(
+				"Unsupported preview source: {other}"
+			)));
+		}
+	};
+
+	Ok(file_path.map(|file_path| GitBinaryPreview { file_path }))
 }
 
 pub fn commit_changes(

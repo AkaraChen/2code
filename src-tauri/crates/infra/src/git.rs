@@ -1,9 +1,14 @@
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::path::{Component, Path};
 use std::process::Command;
 
 use model::error::AppError;
 use model::project::{GitAuthor, GitCommit, GitDiffStats};
+
+const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
@@ -179,6 +184,68 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	}
 
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn read_worktree_file(
+	folder: &str,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	let path = validate_repo_relative_path(path, "Preview file path")?;
+	let file_path = Path::new(folder).join(&path);
+
+	if !file_path.exists() || file_path.is_dir() {
+		return Ok(None);
+	}
+
+	let metadata = std::fs::metadata(&file_path)?;
+	if metadata.len() > MAX_BINARY_PREVIEW_BYTES as u64 {
+		return Err(AppError::GitError(format!(
+			"Preview file is too large: {path}"
+		)));
+	}
+
+	Ok(Some(file_path.to_string_lossy().to_string()))
+}
+
+pub fn read_head_file(
+	folder: &str,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	let path = validate_repo_relative_path(path, "Preview file path")?;
+	let cache_path = preview_cache_path(folder, "head", None, &path);
+	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path)
+}
+
+pub fn read_commit_file(
+	folder: &str,
+	commit_hash: &str,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	validate_commit_hash(commit_hash)?;
+	let path = validate_repo_relative_path(path, "Preview file path")?;
+	let cache_path =
+		preview_cache_path(folder, "commit", Some(commit_hash), &path);
+	read_git_blob_to_cache(
+		folder,
+		&format!("{commit_hash}:{path}"),
+		&cache_path,
+	)
+}
+
+pub fn read_parent_commit_file(
+	folder: &str,
+	commit_hash: &str,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	validate_commit_hash(commit_hash)?;
+	let path = validate_repo_relative_path(path, "Preview file path")?;
+	let cache_path =
+		preview_cache_path(folder, "parent-commit", Some(commit_hash), &path);
+	read_git_blob_to_cache(
+		folder,
+		&format!("{commit_hash}^:{path}"),
+		&cache_path,
+	)
 }
 
 pub fn commit(
@@ -412,43 +479,47 @@ pub fn validate_commit_files(
 	let mut validated = Vec::with_capacity(files.len());
 
 	for file in files {
-		let trimmed = file.trim();
-		if trimmed.is_empty() {
-			return Err(AppError::GitError(
-				"Commit file path cannot be empty".into(),
-			));
-		}
-		if trimmed.contains('\0') {
-			return Err(AppError::GitError(
-				"Commit file path contains invalid characters".into(),
-			));
-		}
-
-		let path = Path::new(trimmed);
-		if path.is_absolute() {
-			return Err(AppError::GitError(format!(
-				"Commit file path must be relative: {trimmed}",
-			)));
-		}
-		if path.components().any(|component| {
-			matches!(
-				component,
-				Component::ParentDir
-					| Component::RootDir
-					| Component::Prefix(_)
-			)
-		}) {
-			return Err(AppError::GitError(format!(
-				"Commit file path escapes repository: {trimmed}",
-			)));
-		}
-
+		let trimmed = validate_repo_relative_path(file, "Commit file path")?;
 		if seen.insert(trimmed.to_string()) {
-			validated.push(trimmed.to_string());
+			validated.push(trimmed);
 		}
 	}
 
 	Ok(validated)
+}
+
+fn validate_repo_relative_path(
+	path: &str,
+	label: &str,
+) -> Result<String, AppError> {
+	let trimmed = path.trim();
+	if trimmed.is_empty() {
+		return Err(AppError::GitError(format!("{label} cannot be empty")));
+	}
+	if trimmed.contains('\0') {
+		return Err(AppError::GitError(format!(
+			"{label} contains invalid characters"
+		)));
+	}
+
+	let parsed = Path::new(trimmed);
+	if parsed.is_absolute() {
+		return Err(AppError::GitError(format!(
+			"{label} must be relative: {trimmed}"
+		)));
+	}
+	if parsed.components().any(|component| {
+		matches!(
+			component,
+			Component::ParentDir | Component::RootDir | Component::Prefix(_)
+		)
+	}) {
+		return Err(AppError::GitError(format!(
+			"{label} escapes repository: {trimmed}"
+		)));
+	}
+
+	Ok(trimmed.to_string())
 }
 
 pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
@@ -570,6 +641,135 @@ fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	prefix.to_string()
 }
 
+fn read_git_blob_to_cache(
+	folder: &str,
+	spec: &str,
+	cache_path: &Path,
+) -> Result<Option<String>, AppError> {
+	let blob_size = get_git_blob_size(folder, spec)?;
+	let Some(blob_size) = blob_size else {
+		return Ok(None);
+	};
+
+	if blob_size > MAX_BINARY_PREVIEW_BYTES as u64 {
+		return Err(AppError::GitError(format!(
+			"Preview file is too large: {spec}"
+		)));
+	}
+
+	if let Ok(metadata) = std::fs::metadata(cache_path) {
+		if metadata.is_file() && metadata.len() == blob_size {
+			return Ok(Some(cache_path.to_string_lossy().to_string()));
+		}
+	}
+
+	let output = Command::new("git")
+		.args(["cat-file", "blob", spec])
+		.current_dir(folder)
+		.output()?;
+
+	if output.status.success() {
+		if output.stdout.len() as u64 != blob_size {
+			return Err(AppError::GitError(format!(
+				"Preview file size changed while reading: {spec}"
+			)));
+		}
+		write_preview_cache_file(cache_path, &output.stdout)?;
+		return Ok(Some(cache_path.to_string_lossy().to_string()));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if is_missing_blob_error(&stderr) {
+		return Ok(None);
+	}
+
+	Err(AppError::GitError(stderr))
+}
+
+fn get_git_blob_size(
+	folder: &str,
+	spec: &str,
+) -> Result<Option<u64>, AppError> {
+	let output = Command::new("git")
+		.args(["cat-file", "-s", spec])
+		.current_dir(folder)
+		.output()?;
+
+	if output.status.success() {
+		let stdout = String::from_utf8_lossy(&output.stdout);
+		let size = stdout.trim().parse::<u64>().map_err(|error| {
+			AppError::GitError(format!(
+				"Failed to parse preview size for {spec}: {error}"
+			))
+		})?;
+		return Ok(Some(size));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if is_missing_blob_error(&stderr) {
+		return Ok(None);
+	}
+
+	Err(AppError::GitError(stderr))
+}
+
+fn is_missing_blob_error(stderr: &str) -> bool {
+	[
+		"does not exist in",
+		"exists on disk, but not in",
+		"invalid object name",
+		"Not a valid object name",
+		"invalid object",
+	]
+	.iter()
+	.any(|pattern| stderr.contains(pattern))
+}
+
+fn preview_cache_path(
+	folder: &str,
+	source: &str,
+	commit_hash: Option<&str>,
+	relative_path: &str,
+) -> std::path::PathBuf {
+	let mut hasher = DefaultHasher::new();
+	folder.hash(&mut hasher);
+	let repo_hash = hasher.finish();
+
+	let mut cache_path = std::env::temp_dir()
+		.join("2code")
+		.join("git-preview-cache")
+		.join(format!("{repo_hash:016x}"))
+		.join(source);
+
+	if let Some(commit_hash) = commit_hash {
+		cache_path = cache_path.join(commit_hash);
+	}
+
+	cache_path.join(relative_path)
+}
+
+fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
+	if let Some(parent) = path.parent() {
+		std::fs::create_dir_all(parent)?;
+		let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+		temporary.write_all(bytes)?;
+		temporary.flush()?;
+		match temporary.persist(path) {
+			Ok(_) => {}
+			Err(error)
+				if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
+			Err(error) => {
+				return Err(AppError::IoError(error.error));
+			}
+		}
+		return Ok(());
+	}
+
+	Err(AppError::IoError(std::io::Error::other(
+		"Preview cache path has no parent directory",
+	)))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -648,6 +848,27 @@ mod tests {
 	fn validate_commit_files_rejects_absolute_paths() {
 		let files = vec!["/tmp/a.txt".into()];
 		assert!(validate_commit_files(&files).is_err());
+	}
+
+	#[test]
+	fn validate_repo_relative_path_accepts_nested_relative_paths() {
+		assert_eq!(
+			validate_repo_relative_path(
+				"assets/image.png",
+				"Preview file path"
+			)
+			.unwrap(),
+			"assets/image.png"
+		);
+	}
+
+	#[test]
+	fn validate_repo_relative_path_rejects_parent_dir_escape() {
+		assert!(validate_repo_relative_path(
+			"../secret.png",
+			"Preview file path"
+		)
+		.is_err());
 	}
 
 	// --- parse_shortstat ---
@@ -738,6 +959,129 @@ mod tests {
 	#[test]
 	fn extract_ref_no_match() {
 		assert_eq!(extract_conflicting_ref("some other error"), None);
+	}
+
+	#[test]
+	fn read_preview_files_from_worktree_and_head() {
+		let dir = create_temp_git_repo();
+		let initial = vec![0_u8, 1, 2, 3];
+		let modified = vec![4_u8, 5, 6, 7];
+
+		std::fs::write(dir.join("image.bin"), &initial).unwrap();
+		Command::new("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		std::fs::write(dir.join("image.bin"), &modified).unwrap();
+
+		let head_preview =
+			read_head_file(dir.to_string_lossy().as_ref(), "image.bin")
+				.unwrap()
+				.unwrap();
+		let worktree_preview =
+			read_worktree_file(dir.to_string_lossy().as_ref(), "image.bin")
+				.unwrap()
+				.unwrap();
+
+		assert_ne!(head_preview, dir.join("image.bin").to_string_lossy());
+		assert_eq!(std::fs::read(head_preview).unwrap(), initial);
+		assert_eq!(worktree_preview, dir.join("image.bin").to_string_lossy());
+		assert_eq!(std::fs::read(worktree_preview).unwrap(), modified);
+
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn read_preview_files_from_commit_and_parent_commit() {
+		let dir = create_temp_git_repo();
+		let before = vec![1_u8, 2, 3, 4];
+		let after = vec![5_u8, 6, 7, 8];
+
+		std::fs::write(dir.join("image.bin"), &before).unwrap();
+		Command::new("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		std::fs::write(dir.join("image.bin"), &after).unwrap();
+		Command::new("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "update image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		let commit_hash =
+			String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		let commit_preview = read_commit_file(
+			dir.to_string_lossy().as_ref(),
+			&commit_hash,
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+		let parent_preview = read_parent_commit_file(
+			dir.to_string_lossy().as_ref(),
+			&commit_hash,
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+
+		assert_eq!(std::fs::read(commit_preview).unwrap(), after);
+		assert_eq!(std::fs::read(parent_preview).unwrap(), before);
+
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn read_preview_files_reject_large_committed_blob() {
+		let dir = create_temp_git_repo();
+		let oversized = vec![0_u8; MAX_BINARY_PREVIEW_BYTES + 1];
+
+		std::fs::write(dir.join("large.bin"), oversized).unwrap();
+		Command::new("git")
+			.args(["add", "large.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add large image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let error = read_head_file(dir.to_string_lossy().as_ref(), "large.bin")
+			.unwrap_err();
+
+		assert!(
+			matches!(error, AppError::GitError(message) if message.contains("too large"))
+		);
+
+		std::fs::remove_dir_all(dir).unwrap();
 	}
 
 	// --- Integration tests (temp git repos) ---
