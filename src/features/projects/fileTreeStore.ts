@@ -12,6 +12,27 @@ export function clampFileTreePanelWidth(width: number) {
 	);
 }
 
+interface FileTreePersistedState {
+	panelWidth: number;
+}
+
+function sanitizePersistedPanelWidth(panelWidth: unknown) {
+	return typeof panelWidth === "number" && Number.isFinite(panelWidth)
+		? clampFileTreePanelWidth(panelWidth)
+		: DEFAULT_FILE_TREE_PANEL_WIDTH;
+}
+
+export function migrateFileTreePersistedState(
+	persistedState: unknown,
+): FileTreePersistedState {
+	if (persistedState && typeof persistedState === "object") {
+		const { panelWidth } = persistedState as { panelWidth?: unknown };
+		return { panelWidth: sanitizePersistedPanelWidth(panelWidth) };
+	}
+
+	return { panelWidth: DEFAULT_FILE_TREE_PANEL_WIDTH };
+}
+
 interface FileTreeState {
 	openProfiles: Record<string, boolean>;
 	panelWidth: number;
@@ -38,7 +59,9 @@ export const useFileTreeStore = create<FileTreeState>()(
 		}),
 		{
 			name: "file-tree-panel",
-			version: 1,
+			version: 2,
+			migrate: (persistedState) =>
+				migrateFileTreePersistedState(persistedState),
 			partialize: (state) => ({ panelWidth: state.panelWidth }),
 		},
 	),
