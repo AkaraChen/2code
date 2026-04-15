@@ -1,5 +1,7 @@
+import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-shell";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
@@ -7,9 +9,8 @@ import { LigaturesAddon } from "@xterm/addon-ligatures";
 import { ProgressAddon } from "@xterm/addon-progress";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
-import { open } from "@tauri-apps/plugin-shell";
 import consola from "consola";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	clearPtyOutput,
@@ -17,8 +18,10 @@ import {
 	resizePty,
 	writeToPty,
 } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
+import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -35,10 +38,15 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const isStreamReadyRef = useRef(false);
 	const pendingEventsRef = useRef<string[]>([]);
 	const layoutFrameRef = useRef<number | null>(null);
+	const [pendingLink, setPendingLink] = useState<string | null>(null);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const increaseFontSize = useTerminalSettingsStore((s) => s.increaseFontSize);
-	const decreaseFontSize = useTerminalSettingsStore((s) => s.decreaseFontSize);
+	const increaseFontSize = useTerminalSettingsStore(
+		(s) => s.increaseFontSize,
+	);
+	const decreaseFontSize = useTerminalSettingsStore(
+		(s) => s.decreaseFontSize,
+	);
 	const theme = useTerminalTheme();
 
 	const initFontFamilyRef = useRef(fontFamily);
@@ -67,7 +75,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			const nextDimensions = fitAddon.proposeDimensions();
 			if (
 				nextDimensions &&
-				(nextDimensions.cols !== term.cols || nextDimensions.rows !== term.rows)
+				(nextDimensions.cols !== term.cols ||
+					nextDimensions.rows !== term.rows)
 			) {
 				fitAddon.fit();
 				return;
@@ -148,6 +157,30 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		[theme.background],
 	);
 
+	const closePendingLinkDialog = useCallback(() => {
+		setPendingLink(null);
+	}, []);
+
+	const openPendingLink = useCallback(() => {
+		const uri = pendingLink;
+		if (!uri) return;
+
+		setPendingLink(null);
+		void open(uri);
+	}, [pendingLink]);
+
+	const handleTerminalLinkOpen = useCallback(
+		(event: MouseEvent, uri: string) => {
+			if (shouldBypassTerminalLinkConfirm(event)) {
+				void open(uri);
+				return;
+			}
+
+			setPendingLink(uri);
+		},
+		[],
+	);
+
 	// Stable ref callback — only re-runs when profileId/sessionId changes
 	const terminalRef = useCallback(
 		(container: HTMLDivElement | null) => {
@@ -202,16 +235,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			const fitAddon = new FitAddon();
 			term.loadAddon(fitAddon);
 
-			const webLinksAddon = new WebLinksAddon((_event, uri) => {
-				open(uri);
-			});
+			const webLinksAddon = new WebLinksAddon(handleTerminalLinkOpen);
 			term.loadAddon(webLinksAddon);
 
 			term.open(container);
 			termRef.current = term;
 			fitAddonRef.current = fitAddon;
 
-term.loadAddon(new ClipboardAddon());
+			term.loadAddon(new ClipboardAddon());
 			term.loadAddon(new ImageAddon());
 			term.loadAddon(new LigaturesAddon());
 			term.loadAddon(new ProgressAddon());
@@ -323,6 +354,7 @@ term.loadAddon(new ClipboardAddon());
 		},
 		[
 			decreaseFontSize,
+			handleTerminalLinkOpen,
 			increaseFontSize,
 			profileId,
 			sessionId,
@@ -331,8 +363,68 @@ term.loadAddon(new ClipboardAddon());
 	);
 
 	return (
-		<div style={shellStyle}>
-			<div ref={terminalRef} style={{ flex: 1, minWidth: 0, minHeight: 0 }} />
-		</div>
+		<>
+			<div style={shellStyle}>
+				<div
+					ref={terminalRef}
+					style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+				/>
+			</div>
+
+			<Dialog.Root
+				lazyMount
+				open={!!pendingLink}
+				onOpenChange={(e) => {
+					if (!e.open) closePendingLinkDialog();
+				}}
+			>
+				<Portal>
+					<Dialog.Backdrop />
+					<Dialog.Positioner>
+						<Dialog.Content>
+							<Dialog.Header>
+								<Dialog.Title>
+									{m.terminalOpenLink()}
+								</Dialog.Title>
+							</Dialog.Header>
+							<Dialog.Body>
+								<Text>
+									{m.terminalOpenLinkConfirmDescription()}
+								</Text>
+								<Text
+									mt="4"
+									fontSize="sm"
+									color="fg.muted"
+									fontFamily="mono"
+								>
+									{m.terminalOpenLinkUrlLabel()}
+								</Text>
+								<Text
+									mt="1"
+									fontSize="sm"
+									fontFamily="mono"
+									wordBreak="break-all"
+								>
+									{pendingLink}
+								</Text>
+							</Dialog.Body>
+							<Dialog.Footer>
+								<Dialog.ActionTrigger asChild>
+									<Button variant="outline">
+										{m.cancel()}
+									</Button>
+								</Dialog.ActionTrigger>
+								<Button onClick={openPendingLink}>
+									{m.terminalOpenLink()}
+								</Button>
+							</Dialog.Footer>
+							<Dialog.CloseTrigger asChild>
+								<CloseButton size="sm" />
+							</Dialog.CloseTrigger>
+						</Dialog.Content>
+					</Dialog.Positioner>
+				</Portal>
+			</Dialog.Root>
+		</>
 	);
 }
