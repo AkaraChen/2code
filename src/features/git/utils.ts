@@ -94,6 +94,17 @@ export function getGitBinaryPreviewPath(
 	return file.name;
 }
 
+export function getGitBinaryPreviewRevision(
+	file: FileDiffMetadata,
+	side: "before" | "after",
+) {
+	if (side === "before") {
+		return file.prevObjectId ?? file.prevName ?? file.name;
+	}
+
+	return file.newObjectId ?? file.name;
+}
+
 export function reconcileIncludedFiles(
 	nextFileNames: string[],
 	prevIncluded: Set<string>,

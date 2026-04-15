@@ -148,7 +148,7 @@ pub fn get_binary_preview(
 	commit_hash: Option<&str>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	let bytes = match source {
+	let file_path = match source {
 		"working_tree" => {
 			infra::git::read_worktree_file(&profile.worktree_path, path)?
 		}
@@ -184,7 +184,7 @@ pub fn get_binary_preview(
 		}
 	};
 
-	Ok(bytes.map(|bytes| GitBinaryPreview { bytes }))
+	Ok(file_path.map(|file_path| GitBinaryPreview { file_path }))
 }
 
 pub fn commit_changes(

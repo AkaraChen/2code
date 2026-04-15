@@ -85,5 +85,5 @@ pub struct GitDiffStats {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GitBinaryPreview {
-	pub bytes: Vec<u8>,
+	pub file_path: String,
 }

@@ -141,6 +141,7 @@ interface GitBinaryPreviewRequest {
 	path: string;
 	source: GitBinaryPreviewSource;
 	commitHash?: string;
+	revision: string;
 }
 
 export function useGitBinaryPreview(request: GitBinaryPreviewRequest | null) {
@@ -151,6 +152,7 @@ export function useGitBinaryPreview(request: GitBinaryPreviewRequest | null) {
 					request.path,
 					request.source,
 					request.commitHash,
+					request.revision,
 				)
 			: ["git-binary-preview", "idle"],
 		queryFn: () => {
@@ -166,10 +168,7 @@ export function useGitBinaryPreview(request: GitBinaryPreviewRequest | null) {
 			});
 		},
 		enabled: request != null,
-		staleTime: 0,
-		refetchInterval:
-			request?.source === "working_tree"
-				? GIT_STATUS_REFRESH_INTERVAL_MS
-				: false,
+		staleTime: Number.POSITIVE_INFINITY,
+		retry: false,
 	});
 }

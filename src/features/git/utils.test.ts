@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	changeBadge,
 	getGitBinaryPreviewPath,
+	getGitBinaryPreviewRevision,
 	getLineStats,
 	getPreviewableImageMimeType,
 	isBinaryImageDiffPreviewable,
@@ -372,5 +373,52 @@ describe("getGitBinaryPreviewPath", () => {
 				"after",
 			),
 		).toBeNull();
+	});
+});
+
+describe("getGitBinaryPreviewRevision", () => {
+	it("prefers object ids for cache busting", () => {
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					prevObjectId: "abc123",
+					newObjectId: "def456",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBe("abc123");
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+					prevObjectId: "abc123",
+					newObjectId: "def456",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBe("def456");
+	});
+
+	it("falls back to names when object ids are missing", () => {
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+					prevName: "prev.png",
+				} as unknown as FileDiffMetadata,
+				"before",
+			),
+		).toBe("prev.png");
+		expect(
+			getGitBinaryPreviewRevision(
+				{
+					name: "next.png",
+				} as unknown as FileDiffMetadata,
+				"after",
+			),
+		).toBe("next.png");
 	});
 });

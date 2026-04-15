@@ -12,6 +12,7 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
 	DiffLineAnnotation,
 	FileDiffMetadata,
@@ -19,7 +20,7 @@ import type {
 	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { toaster } from "@/shared/providers/Toaster";
@@ -36,6 +37,7 @@ import {
 	changeBadge,
 	type GitBinaryPreviewSource,
 	getGitBinaryPreviewPath,
+	getGitBinaryPreviewRevision,
 	getLineStats,
 	getPreviewableImageMimeType,
 	gitBinaryPreviewSources,
@@ -452,59 +454,58 @@ function useBinaryPreviewUrl({
 	path,
 	source,
 	commitHash,
+	revision,
 	mimeType,
 }: {
 	profileId: string;
 	path: string | null;
 	source: GitBinaryPreviewSource;
 	commitHash?: string;
+	revision: string | null;
 	mimeType: string | null;
 }) {
 	const previewQuery = useGitBinaryPreview(
-		path && mimeType
+		path && mimeType && revision
 			? {
 					profileId,
 					path,
 					source,
 					commitHash,
+					revision,
 				}
 			: null,
 	);
-	const objectUrl = useMemo(() => {
-		if (!previewQuery.data?.bytes || mimeType == null) {
+
+	const assetUrl = useMemo(() => {
+		if (!previewQuery.data?.file_path || revision == null) {
 			return null;
 		}
 
-		return URL.createObjectURL(
-			new Blob([Uint8Array.from(previewQuery.data.bytes)], {
-				type: mimeType,
-			}),
-		);
-	}, [mimeType, previewQuery.data]);
+		const baseUrl =
+			typeof window !== "undefined" &&
+			"__TAURI_INTERNALS__" in window
+				? convertFileSrc(previewQuery.data.file_path)
+				: previewQuery.data.file_path;
+		const separator = baseUrl.includes("?") ? "&" : "?";
 
-	useEffect(() => {
-		return () => {
-			if (objectUrl) {
-				URL.revokeObjectURL(objectUrl);
-			}
-		};
-	}, [objectUrl]);
+		return `${baseUrl}${separator}v=${encodeURIComponent(revision)}`;
+	}, [previewQuery.data, revision]);
 
 	return {
 		...previewQuery,
-		objectUrl,
+		assetUrl,
 	};
 }
 
 function BinaryPreviewPane({
 	label,
 	path,
-	objectUrl,
+	assetUrl,
 	isLoading,
 }: {
 	label: string;
 	path: string;
-	objectUrl: string | null;
+	assetUrl: string | null;
 	isLoading: boolean;
 }) {
 	return (
@@ -564,9 +565,9 @@ function BinaryPreviewPane({
 			>
 				{isLoading ? (
 					<Spinner size="sm" color="colorPalette.500" />
-				) : objectUrl ? (
+				) : assetUrl ? (
 					<img
-						src={objectUrl}
+						src={assetUrl}
 						alt={path}
 						style={{
 							maxWidth: "100%",
@@ -600,6 +601,10 @@ function BinaryImageDiffPreview({
 		beforePath == null ? null : getPreviewableImageMimeType(beforePath);
 	const afterMimeType =
 		afterPath == null ? null : getPreviewableImageMimeType(afterPath);
+	const beforeRevision =
+		beforePath == null ? null : getGitBinaryPreviewRevision(file, "before");
+	const afterRevision =
+		afterPath == null ? null : getGitBinaryPreviewRevision(file, "after");
 
 	const beforePreview = useBinaryPreviewUrl({
 		profileId: previewContext.profileId,
@@ -612,6 +617,7 @@ function BinaryImageDiffPreview({
 			previewContext.kind === "commit"
 				? previewContext.commitHash
 				: undefined,
+		revision: beforeRevision,
 		mimeType: beforeMimeType,
 	});
 	const afterPreview = useBinaryPreviewUrl({
@@ -625,6 +631,7 @@ function BinaryImageDiffPreview({
 			previewContext.kind === "commit"
 				? previewContext.commitHash
 				: undefined,
+		revision: afterRevision,
 		mimeType: afterMimeType,
 	});
 
@@ -641,7 +648,7 @@ function BinaryImageDiffPreview({
 				<BinaryPreviewPane
 					label={m.gitDiffImagePreviewBefore()}
 					path={beforePath}
-					objectUrl={beforePreview.objectUrl}
+					assetUrl={beforePreview.assetUrl}
 					isLoading={beforePreview.isLoading}
 				/>
 			) : null}
@@ -650,7 +657,7 @@ function BinaryImageDiffPreview({
 				<BinaryPreviewPane
 					label={m.gitDiffImagePreviewAfter()}
 					path={afterPath}
-					objectUrl={afterPreview.objectUrl}
+					assetUrl={afterPreview.assetUrl}
 					isLoading={afterPreview.isLoading}
 				/>
 			) : null}

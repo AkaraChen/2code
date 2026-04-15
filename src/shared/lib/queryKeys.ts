@@ -35,6 +35,7 @@ export const queryKeys = {
 			path: string,
 			source: string,
 			commitHash?: string,
+			revision?: string,
 		) =>
 			[
 				"git-binary-preview",
@@ -42,6 +43,7 @@ export const queryKeys = {
 				path,
 				source,
 				commitHash ?? null,
+				revision ?? null,
 			] as const,
 		aheadCount: (profileId: string) =>
 			["git-ahead-count", profileId] as const,
