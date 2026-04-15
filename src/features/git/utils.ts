@@ -1,5 +1,33 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 
+export const gitBinaryPreviewSources = {
+	workingTree: "working_tree",
+	head: "head",
+	commit: "commit",
+	parentCommit: "parent_commit",
+} as const;
+
+export type GitBinaryPreviewSource =
+	(typeof gitBinaryPreviewSources)[keyof typeof gitBinaryPreviewSources];
+
+const previewableImageMimeTypes: Record<string, string> = {
+	apng: "image/apng",
+	avif: "image/avif",
+	bmp: "image/bmp",
+	cur: "image/x-icon",
+	gif: "image/gif",
+	ico: "image/x-icon",
+	jfif: "image/jpeg",
+	jpe: "image/jpeg",
+	jpeg: "image/jpeg",
+	jpg: "image/jpeg",
+	pjp: "image/jpeg",
+	pjpeg: "image/jpeg",
+	png: "image/png",
+	svg: "image/svg+xml",
+	webp: "image/webp",
+};
+
 export const changeBadge: Record<
 	string,
 	{ label: string; colorPalette: string }
@@ -23,6 +51,47 @@ export function getLineStats(file: FileDiffMetadata) {
 		}
 	}
 	return { additions, deletions };
+}
+
+export function getPreviewableImageMimeType(fileName: string) {
+	const extension = fileName.split(".").pop()?.toLowerCase();
+	if (!extension) {
+		return null;
+	}
+
+	return previewableImageMimeTypes[extension] ?? null;
+}
+
+export function isBinaryImageDiffPreviewable(file: FileDiffMetadata) {
+	if (file.hunks.length > 0 || file.type === "rename-pure") {
+		return false;
+	}
+
+	const previewPaths = [
+		getGitBinaryPreviewPath(file, "before"),
+		getGitBinaryPreviewPath(file, "after"),
+	].filter((path): path is string => path != null);
+
+	return previewPaths.some((path) => getPreviewableImageMimeType(path) != null);
+}
+
+export function getGitBinaryPreviewPath(
+	file: FileDiffMetadata,
+	side: "before" | "after",
+) {
+	if (side === "before") {
+		if (file.type === "new") {
+			return null;
+		}
+
+		return file.prevName ?? file.name;
+	}
+
+	if (file.type === "deleted") {
+		return null;
+	}
+
+	return file.name;
 }
 
 export function reconcileIncludedFiles(

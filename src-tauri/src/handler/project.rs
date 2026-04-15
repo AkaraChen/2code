@@ -3,7 +3,8 @@ use tauri::State;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
-	GitCommit, GitDiffStats, Project, ProjectConfig, ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
+	ProjectWithProfiles,
 };
 
 #[tauri::command]
@@ -115,6 +116,28 @@ pub async fn get_commit_diff(
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_git_binary_preview(
+	profile_id: String,
+	path: String,
+	source: String,
+	commit_hash: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<Option<GitBinaryPreview>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_binary_preview(
+			conn,
+			&profile_id,
+			&path,
+			&source,
+			commit_hash.as_deref(),
+		)
 	})
 	.await
 }

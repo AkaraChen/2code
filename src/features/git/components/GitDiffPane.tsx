@@ -8,6 +8,7 @@ import {
 	Flex,
 	HStack,
 	Portal,
+	Spinner,
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
@@ -18,10 +19,11 @@ import type {
 	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { toaster } from "@/shared/providers/Toaster";
+import { useGitBinaryPreview } from "../hooks";
 import {
 	formatGitDiffCommentLocation,
 	formatGitDiffCommentPayload,
@@ -30,7 +32,30 @@ import {
 	getGitDiffCommentFileKey,
 	normalizeSelectedLineRange,
 } from "../commentUtils";
-import { changeBadge, getLineStats } from "../utils";
+import {
+	changeBadge,
+	type GitBinaryPreviewSource,
+	getGitBinaryPreviewPath,
+	getLineStats,
+	getPreviewableImageMimeType,
+	gitBinaryPreviewSources,
+	isBinaryImageDiffPreviewable,
+} from "../utils";
+
+interface GitPreviewContextWorkingTree {
+	kind: "working-tree";
+	profileId: string;
+}
+
+interface GitPreviewContextCommit {
+	kind: "commit";
+	profileId: string;
+	commitHash: string;
+}
+
+type GitPreviewContext =
+	| GitPreviewContextWorkingTree
+	| GitPreviewContextCommit;
 
 interface GitDiffCommentAnnotation {
 	id: string;
@@ -263,6 +288,7 @@ function ActiveGitDiffFilePane({
 	activeFile,
 	activeFileKey,
 	options,
+	previewContext,
 	selectedLines,
 	comments,
 	onSelectionChange,
@@ -271,6 +297,7 @@ function ActiveGitDiffFilePane({
 	activeFile: FileDiffMetadata;
 	activeFileKey: string;
 	options: FileDiffOptions<unknown>;
+	previewContext?: GitPreviewContext;
 	selectedLines: SelectedLineRange | null;
 	comments: GitDiffCommentAnnotation[];
 	onSelectionChange: (range: SelectedLineRange | null) => void;
@@ -284,6 +311,8 @@ function ActiveGitDiffFilePane({
 		selectedLines == null
 			? ""
 			: formatGitDiffCommentLocation(activeFile, selectedLines);
+	const showBinaryPreview =
+		previewContext != null && isBinaryImageDiffPreviewable(activeFile);
 
 	const lineAnnotations = useMemo<
 		DiffLineAnnotation<GitDiffCommentAnnotation>[]
@@ -383,17 +412,26 @@ function ActiveGitDiffFilePane({
 					setCommentDraft("");
 				}}
 			/>
-			<FileDiff
-				fileDiff={activeFile}
-				options={diffOptions}
-				selectedLines={selectedLines}
-				lineAnnotations={lineAnnotations}
-				renderAnnotation={(annotation) =>
-					annotation.metadata ? (
-						<CommentAnnotation annotation={annotation.metadata} />
-					) : null
-				}
-			/>
+			{showBinaryPreview && previewContext ? (
+				<BinaryImageDiffPreview
+					file={activeFile}
+					previewContext={previewContext}
+				/>
+			) : (
+				<FileDiff
+					fileDiff={activeFile}
+					options={diffOptions}
+					selectedLines={selectedLines}
+					lineAnnotations={lineAnnotations}
+					renderAnnotation={(annotation) =>
+						annotation.metadata ? (
+							<CommentAnnotation
+								annotation={annotation.metadata}
+							/>
+						) : null
+					}
+				/>
+			)}
 			<GitDiffCommentDialog
 				isOpen={isCommentDialogOpen && selectedLines != null}
 				onClose={() => {
@@ -409,11 +447,223 @@ function ActiveGitDiffFilePane({
 	);
 }
 
+function useBinaryPreviewUrl({
+	profileId,
+	path,
+	source,
+	commitHash,
+	mimeType,
+}: {
+	profileId: string;
+	path: string | null;
+	source: GitBinaryPreviewSource;
+	commitHash?: string;
+	mimeType: string | null;
+}) {
+	const previewQuery = useGitBinaryPreview(
+		path && mimeType
+			? {
+					profileId,
+					path,
+					source,
+					commitHash,
+				}
+			: null,
+	);
+	const objectUrl = useMemo(() => {
+		if (!previewQuery.data?.bytes || mimeType == null) {
+			return null;
+		}
+
+		return URL.createObjectURL(
+			new Blob([Uint8Array.from(previewQuery.data.bytes)], {
+				type: mimeType,
+			}),
+		);
+	}, [mimeType, previewQuery.data]);
+
+	useEffect(() => {
+		return () => {
+			if (objectUrl) {
+				URL.revokeObjectURL(objectUrl);
+			}
+		};
+	}, [objectUrl]);
+
+	return {
+		...previewQuery,
+		objectUrl,
+	};
+}
+
+function BinaryPreviewPane({
+	label,
+	path,
+	objectUrl,
+	isLoading,
+}: {
+	label: string;
+	path: string;
+	objectUrl: string | null;
+	isLoading: boolean;
+}) {
+	return (
+		<Flex
+			flex="1"
+			minH={{ base: "18rem", lg: "24rem" }}
+			direction="column"
+			borderWidth="1px"
+			borderColor="border.subtle"
+			borderRadius="lg"
+			overflow="hidden"
+			bg="bg.panel"
+		>
+			<Flex
+				align="center"
+				justify="space-between"
+				gap="3"
+				px="3"
+				py="2.5"
+				borderBottomWidth="1px"
+				borderColor="border.subtle"
+				bg="bg.subtle"
+			>
+				<Text
+					fontSize="xs"
+					fontWeight="semibold"
+					letterSpacing="widest"
+					textTransform="uppercase"
+					color="fg.muted"
+				>
+					{label}
+				</Text>
+				<Text
+					fontSize="xs"
+					fontFamily="mono"
+					color="fg.muted"
+					truncate
+				>
+					{path}
+				</Text>
+			</Flex>
+
+			<Flex
+				flex="1"
+				align="center"
+				justify="center"
+				p="4"
+				minH="0"
+				bgImage={[
+					"linear-gradient(45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
+					"linear-gradient(-45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
+					"linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
+					"linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
+				].join(", ")}
+				bgSize="16px 16px"
+				css={{ backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0" }}
+			>
+				{isLoading ? (
+					<Spinner size="sm" color="colorPalette.500" />
+				) : objectUrl ? (
+					<img
+						src={objectUrl}
+						alt={path}
+						style={{
+							maxWidth: "100%",
+							maxHeight: "70vh",
+							objectFit: "contain",
+							borderRadius: "0.375rem",
+							boxShadow:
+								"var(--chakra-shadows-md, 0 4px 6px rgba(0, 0, 0, 0.1))",
+						}}
+					/>
+				) : (
+					<Text fontSize="sm" color="fg.muted">
+						{m.gitDiffImagePreviewUnavailable()}
+					</Text>
+				)}
+			</Flex>
+		</Flex>
+	);
+}
+
+function BinaryImageDiffPreview({
+	file,
+	previewContext,
+}: {
+	file: FileDiffMetadata;
+	previewContext: GitPreviewContext;
+}) {
+	const beforePath = getGitBinaryPreviewPath(file, "before");
+	const afterPath = getGitBinaryPreviewPath(file, "after");
+	const beforeMimeType =
+		beforePath == null ? null : getPreviewableImageMimeType(beforePath);
+	const afterMimeType =
+		afterPath == null ? null : getPreviewableImageMimeType(afterPath);
+
+	const beforePreview = useBinaryPreviewUrl({
+		profileId: previewContext.profileId,
+		path: beforePath,
+		source:
+			previewContext.kind === "working-tree"
+				? gitBinaryPreviewSources.head
+				: gitBinaryPreviewSources.parentCommit,
+		commitHash:
+			previewContext.kind === "commit"
+				? previewContext.commitHash
+				: undefined,
+		mimeType: beforeMimeType,
+	});
+	const afterPreview = useBinaryPreviewUrl({
+		profileId: previewContext.profileId,
+		path: afterPath,
+		source:
+			previewContext.kind === "working-tree"
+				? gitBinaryPreviewSources.workingTree
+				: gitBinaryPreviewSources.commit,
+		commitHash:
+			previewContext.kind === "commit"
+				? previewContext.commitHash
+				: undefined,
+		mimeType: afterMimeType,
+	});
+
+	return (
+		<Flex
+			flex="1"
+			minH="0"
+			direction={{ base: "column", xl: "row" }}
+			gap="4"
+			p="4"
+			overflow="auto"
+		>
+			{beforePath && beforeMimeType ? (
+				<BinaryPreviewPane
+					label={m.gitDiffImagePreviewBefore()}
+					path={beforePath}
+					objectUrl={beforePreview.objectUrl}
+					isLoading={beforePreview.isLoading}
+				/>
+			) : null}
+
+			{afterPath && afterMimeType ? (
+				<BinaryPreviewPane
+					label={m.gitDiffImagePreviewAfter()}
+					path={afterPath}
+					objectUrl={afterPreview.objectUrl}
+					isLoading={afterPreview.isLoading}
+				/>
+			) : null}
+		</Flex>
+	);
+}
+
 interface GitDiffPaneProps {
 	activeFile: FileDiffMetadata | null;
 	options: FileDiffOptions<unknown>;
 	emptyMessage: string;
 	contextKey?: string;
+	previewContext?: GitPreviewContext;
 }
 
 export default function GitDiffPane({
@@ -421,6 +671,7 @@ export default function GitDiffPane({
 	options,
 	emptyMessage,
 	contextKey = "default",
+	previewContext,
 }: GitDiffPaneProps) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
@@ -456,6 +707,7 @@ export default function GitDiffPane({
 					activeFile={activeFile}
 					activeFileKey={activeFileKey}
 					options={options}
+					previewContext={previewContext}
 					selectedLines={selectedLines}
 					comments={comments}
 					onSelectionChange={(range) =>

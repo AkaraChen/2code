@@ -801,7 +801,7 @@ function ChangesSidebar({
 }
 
 function ChangesDiffPane({ visible }: { visible: boolean }) {
-	const { changesFiles, state, options } = use(GitDiffContext)!;
+	const { changesFiles, state, options, profileId } = use(GitDiffContext)!;
 	const activeFile =
 		changesFiles.length > 0 && state.selectedFileIndex < changesFiles.length
 			? changesFiles[state.selectedFileIndex]
@@ -813,6 +813,7 @@ function ChangesDiffPane({ visible }: { visible: boolean }) {
 				activeFile={activeFile}
 				options={options}
 				contextKey="working-tree"
+				previewContext={{ kind: "working-tree", profileId }}
 				emptyMessage={
 					changesFiles.length === 0
 						? m.noChangesDetected()
@@ -903,7 +904,7 @@ function CommitFileSidebar({
 }
 
 function HistoryDiffPane({ visible }: { visible: boolean }) {
-	const { state, options } = use(GitDiffContext)!;
+	const { state, options, profileId } = use(GitDiffContext)!;
 	const selectedCommit = state.selectedCommit;
 
 	if (!selectedCommit) {
@@ -914,6 +915,10 @@ function HistoryDiffPane({ visible }: { visible: boolean }) {
 						activeFile={null}
 						options={options}
 						contextKey="history"
+						previewContext={{
+							kind: "working-tree",
+							profileId,
+						}}
 						emptyMessage={m.selectFileToView()}
 					/>
 				</HistorySidebarPanel>
@@ -954,6 +959,11 @@ function CommitDiffViewer({
 			activeFile={activeFile}
 			options={options}
 			contextKey={commit.full_hash}
+			previewContext={{
+				kind: "commit",
+				profileId,
+				commitHash: commit.full_hash,
+			}}
 			emptyMessage={m.selectFileToView()}
 		/>
 	);
