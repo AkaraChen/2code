@@ -92,6 +92,7 @@ pub fn run() {
 			handler::project::save_project_config,
 			handler::filesystem::list_directory,
 			handler::filesystem::read_file_content,
+			handler::filesystem::search_file,
 			handler::font::list_system_fonts,
 			handler::sound::list_system_sounds,
 			handler::sound::play_system_sound,

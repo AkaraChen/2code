@@ -1,7 +1,10 @@
 use std::path::Path;
 
+use tauri::State;
+
+use infra::db::DbPool;
 use model::error::AppError;
-use model::filesystem::FileEntry;
+use model::filesystem::{FileEntry, FileSearchResult};
 
 #[tauri::command]
 pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, AppError> {
@@ -71,6 +74,20 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 		String::from_utf8(bytes).map_err(|_| {
 			AppError::IoError(std::io::Error::other("Invalid UTF-8"))
 		})
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn search_file(
+	profile_id: String,
+	query: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<FileSearchResult>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::filesystem::search_file(conn, &profile_id, &query)
 	})
 	.await
 }

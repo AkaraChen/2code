@@ -1,5 +1,6 @@
 pub mod config;
 pub mod db;
+pub mod filesystem;
 pub mod git;
 pub mod logger;
 pub mod pty;

@@ -1,5 +1,6 @@
 use model::watcher::WatchEvent;
 
+pub mod filesystem;
 pub mod profile;
 pub mod project;
 pub mod pty;
