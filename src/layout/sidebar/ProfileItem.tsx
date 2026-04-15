@@ -29,12 +29,13 @@ export function ProfileItem({
 						asChild
 						data-sidebar-item
 						gap="2"
+						w="full"
+						minW="max-content"
 						position="relative"
 						ps="9"
 						pe="4"
 						py="1"
 						cursor="pointer"
-						truncate
 						fontSize="sm"
 						bg={isActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
@@ -49,7 +50,9 @@ export function ProfileItem({
 							<Icon fontSize="xs" color="fg.muted">
 								<FiGitBranch />
 							</Icon>
-							<Text truncate>{profile.branch_name}</Text>
+							<Text whiteSpace="nowrap" flexShrink={0}>
+								{profile.branch_name}
+							</Text>
 							{hasNotification && (
 								<Circle
 									size="2"

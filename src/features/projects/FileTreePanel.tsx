@@ -10,13 +10,19 @@ import {
 	FiChevronRight,
 } from "react-icons/fi";
 import type { FileEntry } from "@/generated/types";
+import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import {
 	getFileIconUrl,
 	getFolderIconUrl,
 } from "@/shared/lib/fileIcons";
 import { useDirectoryListing } from "./hooks";
 import FileViewerDialog from "./FileViewerDialog";
-const FILE_TREE_PANEL_WIDTH = 208;
+import {
+	FILE_TREE_PANEL_MAX_WIDTH,
+	FILE_TREE_PANEL_MIN_WIDTH,
+	useFileTreeStore,
+} from "./fileTreeStore";
+
 const FILE_TREE_PANEL_TRANSITION = {
 	type: "spring",
 	stiffness: 320,
@@ -58,6 +64,8 @@ function TreeNodeLoadingRow({
 		<Flex
 			align="center"
 			gap="2"
+			w="max-content"
+			minW="full"
 			py="0.5"
 			role="status"
 			aria-label={label}
@@ -94,6 +102,8 @@ function TreeNode({
 				<Flex
 					align="center"
 					gap="1"
+					w="max-content"
+					minW="full"
 					px="2"
 					py="0.5"
 					cursor="pointer"
@@ -125,7 +135,7 @@ function TreeNode({
 							draggable={false}
 						/>
 					</Box>
-					<Text fontSize="sm" truncate lineClamp={1}>
+					<Text fontSize="sm" whiteSpace="nowrap" flexShrink={0}>
 						{entry.name}
 					</Text>
 					{isLoading && <Spinner size="xs" ml="1" />}
@@ -175,6 +185,7 @@ function TreeNode({
 										color="fg.muted"
 										style={{ paddingLeft: childPaddingLeft }}
 										py="0.5"
+										whiteSpace="nowrap"
 									>
 										Empty
 									</Text>
@@ -191,6 +202,8 @@ function TreeNode({
 		<Flex
 			align="center"
 			gap="1"
+			w="max-content"
+			minW="full"
 			px="2"
 			py="0.5"
 			cursor="pointer"
@@ -209,7 +222,7 @@ function TreeNode({
 					draggable={false}
 				/>
 			</Box>
-			<Text fontSize="sm" truncate lineClamp={1}>
+			<Text fontSize="sm" whiteSpace="nowrap" flexShrink={0}>
 				{entry.name}
 			</Text>
 		</Flex>
@@ -228,6 +241,15 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 	);
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
 	const prefersReducedMotion = useReducedMotion() ?? false;
+	const panelWidth = useFileTreeStore((s) => s.panelWidth);
+	const setPanelWidth = useFileTreeStore((s) => s.setPanelWidth);
+	const resize = useHorizontalResize({
+		value: panelWidth,
+		min: FILE_TREE_PANEL_MIN_WIDTH,
+		max: FILE_TREE_PANEL_MAX_WIDTH,
+		disabled: !isOpen,
+		onChange: setPanelWidth,
+	});
 
 	const { data: rootEntries, isLoading } = useDirectoryListing(rootPath, isOpen);
 
@@ -254,71 +276,130 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 	return (
 		<>
 			<Box
-				asChild
+				h="full"
 				flexShrink="0"
-				borderRightWidth={isOpen ? "1px" : "0px"}
-				borderColor="border.subtle"
-				bg="bg.panel"
-				overflow="hidden"
 				pointerEvents={isOpen ? "auto" : "none"}
 				aria-hidden={!isOpen}
 			>
-				<motion.div
-					initial={false}
-					animate={{ width: isOpen ? FILE_TREE_PANEL_WIDTH : 0 }}
-					transition={
-						prefersReducedMotion
-							? { duration: 0 }
-							: FILE_TREE_PANEL_TRANSITION
-					}
-					style={{
-						display: "flex",
-						flexDirection: "column",
-						minWidth: 0,
-						overflow: "hidden",
-						willChange: "width",
-					}}
+				<Box
+					asChild
+					h="full"
+					borderRightWidth={isOpen ? "1px" : "0px"}
+					borderColor="border.subtle"
+					bg="bg.panel"
 				>
-					<Box asChild flex="1" minH="0">
-						<motion.div
-							initial={false}
-							animate={{
-								opacity: isOpen ? 1 : 0,
-								x: isOpen ? 0 : -12,
-							}}
-							transition={
-								prefersReducedMotion
-									? { duration: 0 }
-									: FILE_TREE_CONTENT_TRANSITION
-							}
-							style={{
-								display: "flex",
-								flex: 1,
-								minHeight: 0,
-								minWidth: 0,
-							}}
-						>
-							<Box overflow="auto" flex="1" py="1">
-								{isLoading && (
-									<Flex align="center" justify="center" py="4">
-										<Spinner size="xs" />
-									</Flex>
-								)}
-								{rootEntries?.map((entry) => (
-									<TreeNode
-										key={entry.path}
-										entry={entry}
-										depth={0}
-										expandedPaths={expandedPaths}
-										onToggleDir={toggleDir}
-										onOpenFile={handleOpenFile}
-										prefersReducedMotion={prefersReducedMotion}
-									/>
-								))}
+					<motion.div
+						initial={false}
+						animate={{ width: isOpen ? panelWidth : 0 }}
+						transition={
+							prefersReducedMotion || resize.isDragging
+								? { duration: 0 }
+								: FILE_TREE_PANEL_TRANSITION
+						}
+						style={{
+							display: "flex",
+							flexDirection: "column",
+							minWidth: 0,
+							overflow: "visible",
+							position: "relative",
+							willChange: "width",
+						}}
+					>
+						<Box display="flex" flex="1" minH="0" overflow="hidden">
+							<Box asChild flex="1" minH="0">
+								<motion.div
+									initial={false}
+									animate={{
+										opacity: isOpen ? 1 : 0,
+										x: isOpen ? 0 : -12,
+									}}
+									transition={
+										prefersReducedMotion
+											? { duration: 0 }
+											: FILE_TREE_CONTENT_TRANSITION
+									}
+									style={{
+										display: "flex",
+										flex: 1,
+										minHeight: 0,
+										minWidth: 0,
+									}}
+								>
+									<Box overflow="auto" flex="1" py="1">
+										<Box minW="max-content" minH="full">
+											{isLoading && (
+												<Flex
+													align="center"
+													justify="center"
+													py="4"
+												>
+													<Spinner size="xs" />
+												</Flex>
+											)}
+											{rootEntries?.map((entry) => (
+												<TreeNode
+													key={entry.path}
+													entry={entry}
+													depth={0}
+													expandedPaths={expandedPaths}
+													onToggleDir={toggleDir}
+													onOpenFile={handleOpenFile}
+													prefersReducedMotion={
+														prefersReducedMotion
+													}
+												/>
+											))}
+										</Box>
+									</Box>
+								</motion.div>
 							</Box>
-						</motion.div>
-					</Box>
-				</motion.div>
+						</Box>
+						{isOpen && (
+							<Box
+								role="separator"
+								aria-label="Resize file tree"
+								aria-orientation="vertical"
+								aria-valuemin={FILE_TREE_PANEL_MIN_WIDTH}
+								aria-valuemax={FILE_TREE_PANEL_MAX_WIDTH}
+								aria-valuenow={panelWidth}
+								tabIndex={0}
+								position="absolute"
+								top="0"
+								right="-4px"
+								bottom="0"
+								w="8px"
+								cursor="col-resize"
+								zIndex={1}
+								onPointerDown={resize.handlePointerDown}
+								onKeyDown={resize.handleKeyDown}
+								_before={{
+									content: "\"\"",
+									position: "absolute",
+									top: 0,
+									bottom: 0,
+									left: "50%",
+									transform: "translateX(-50%)",
+									width: "1px",
+									bg: resize.isDragging
+										? "border.emphasized"
+										: "transparent",
+									transition: "background-color 0.16s ease",
+								}}
+								_hover={{
+									_before: {
+										bg: "border.subtle",
+									},
+								}}
+								_focusVisible={{
+									outline: "none",
+									_before: {
+										bg: "border.emphasized",
+									},
+								}}
+							/>
+						)}
+					</motion.div>
+				</Box>
 			</Box>
 
 			<FileViewerDialog

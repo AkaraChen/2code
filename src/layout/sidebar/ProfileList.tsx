@@ -30,6 +30,8 @@ export function ProfileList({
 			<HStack
 				as="button"
 				gap="2"
+				w="full"
+				minW="max-content"
 				ps="9"
 				pe="4"
 				py="1"
@@ -42,7 +44,9 @@ export function ProfileList({
 				<Icon fontSize="xs">
 					<FiPlus />
 				</Icon>
-				<Text>{m.createProfile()}</Text>
+				<Text whiteSpace="nowrap" flexShrink={0}>
+					{m.createProfile()}
+				</Text>
 			</HStack>
 			<CreateProfileDialog
 				isOpen={createDialog.isOpen}
