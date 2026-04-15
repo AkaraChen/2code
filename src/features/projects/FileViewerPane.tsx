@@ -5,31 +5,10 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import atomDark from "react-syntax-highlighter/dist/esm/styles/prism/atom-dark";
-import dracula from "react-syntax-highlighter/dist/esm/styles/prism/dracula";
-import ghcolors from "react-syntax-highlighter/dist/esm/styles/prism/ghcolors";
-import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
-import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light";
-import solarizedDarkAtom from "react-syntax-highlighter/dist/esm/styles/prism/solarized-dark-atom";
-import solarizedLight from "react-syntax-highlighter/dist/esm/styles/prism/solarizedlight";
-import vscDarkPlus from "react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus";
-import vs from "react-syntax-highlighter/dist/esm/styles/prism/vs";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
-import type { TerminalThemeId } from "@/features/terminal/themes";
+import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
-
-const prismThemeMap: Record<TerminalThemeId, unknown> = {
-	"github-dark": vscDarkPlus,
-	"github-light": ghcolors,
-	dracula: dracula,
-	"ayu-dark": atomDark,
-	"ayu-light": vs,
-	"solarized-dark": solarizedDarkAtom,
-	"solarized-light": solarizedLight,
-	"one-dark": oneDark,
-	"one-light": oneLight,
-};
 
 function detectLanguage(filename: string): string {
 	const ext = filename.split(".").pop()?.toLowerCase() ?? "";
@@ -111,7 +90,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 	const themeId = useTerminalThemeId();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const prismStyle = prismThemeMap[themeId];
+	const prismStyle = getPrismTheme(themeId);
 
 	const { data: content, isLoading, error } = useFileContent(filePath, true);
 
@@ -153,7 +132,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 		>
 			<SyntaxHighlighter
 				language={language}
-				style={prismStyle as Record<string, React.CSSProperties>}
+				style={prismStyle}
 				showLineNumbers
 				wrapLongLines={false}
 				customStyle={{
