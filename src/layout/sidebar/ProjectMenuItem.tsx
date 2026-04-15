@@ -63,6 +63,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 					<HStack
 						className="group"
 						gap="1"
+						w="full"
+						minW="max-content"
 						px="4"
 						py="1.5"
 						cursor="pointer"
@@ -78,7 +80,13 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						{hasOnlyDefaultProfile && isDefaultActive && (
 							<SidebarActiveIndicator insetInlineStart="1" />
 						)}
-						<Box asChild truncate flex="1" data-sidebar-item>
+						<Box
+							asChild
+							flex="1"
+							minW="fit-content"
+							whiteSpace="nowrap"
+							data-sidebar-item
+						>
 							<NavLink to={defaultProfileUrl}>
 								{project.name}
 							</NavLink>
@@ -168,6 +176,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						asChild
 						data-sidebar-item
 						gap="2"
+						w="full"
+						minW="max-content"
 						position="relative"
 						ps="9"
 						pe="4"
@@ -191,7 +201,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							<Icon fontSize="xs" color="fg.muted">
 								<FiTerminal />
 							</Icon>
-							<Text truncate>{m.defaultProfile()}</Text>
+							<Text whiteSpace="nowrap" flexShrink={0}>
+								{m.defaultProfile()}
+							</Text>
 							{hasDefaultNotification && (
 								<Circle
 									size="2"
