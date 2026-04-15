@@ -57,12 +57,12 @@ export default function AppSidebar() {
           <Flex direction="column" h="full" pb="3">
             <Flex
               data-tauri-drag-region
-              h="48px"
+              h="80px"
               flexShrink={0}
               align="center"
               justify="start"
               paddingInline="4"
-              mt="8"
+              pt="8"
             >
               <Text
                 fontFamily="'Bricolage Grotesque Variable', sans-serif"
