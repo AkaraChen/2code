@@ -87,6 +87,7 @@
 	"radiusXLarge": "Extra Large",
 	"changes": "Changes",
 	"history": "History",
+	"fileTreeResizeSeparator": "Resize file tree",
 	"noChangesDetected": "No changes detected",
 	"selectFileToView": "Select a file to view changes",
 	"noCommitsFound": "No commits found",

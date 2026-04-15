@@ -10,6 +10,7 @@ import {
 	FiChevronRight,
 } from "react-icons/fi";
 import type { FileEntry } from "@/generated/types";
+import * as m from "@/paraglide/messages.js";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import {
 	getFileIconUrl,
@@ -357,7 +358,7 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 						{isOpen && (
 							<Box
 								role="separator"
-								aria-label="Resize file tree"
+								aria-label={m.fileTreeResizeSeparator()}
 								aria-orientation="vertical"
 								aria-valuemin={FILE_TREE_PANEL_MIN_WIDTH}
 								aria-valuemax={FILE_TREE_PANEL_MAX_WIDTH}
