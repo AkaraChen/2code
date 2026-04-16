@@ -148,3 +148,71 @@ impl<S: tracing::Subscriber> Layer<S> for ChannelLayer {
 		let _ = tx.send(entry);
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use std::sync::mpsc;
+	use std::time::Duration;
+
+	use tracing_subscriber::prelude::*;
+
+	use super::ChannelLayer;
+
+	#[test]
+	fn forwards_info_events_with_target_and_fields() {
+		let (layer, handle) = ChannelLayer::new();
+		let (tx, rx) = mpsc::channel();
+		handle.attach(move |entry| {
+			tx.send(entry).expect("send log entry");
+			false
+		});
+
+		let subscriber = tracing_subscriber::registry().with(layer);
+		tracing::subscriber::with_default(subscriber, || {
+			tracing::info!(target: "logger-test", answer = 42, "hello");
+		});
+
+		let entry = rx
+			.recv_timeout(Duration::from_secs(1))
+			.expect("receive log entry");
+		assert_eq!(entry.level, "INFO");
+		assert_eq!(entry.source, "logger-test");
+		assert!(entry.message.contains("hello"));
+		assert!(entry.message.contains("answer=42"));
+	}
+
+	#[test]
+	fn ignores_debug_events() {
+		let (layer, handle) = ChannelLayer::new();
+		let (tx, rx) = mpsc::channel();
+		handle.attach(move |entry| {
+			tx.send(entry).expect("send log entry");
+			true
+		});
+
+		let subscriber = tracing_subscriber::registry().with(layer);
+		tracing::subscriber::with_default(subscriber, || {
+			tracing::debug!(target: "logger-test", "skip me");
+		});
+
+		assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+	}
+
+	#[test]
+	fn detach_stops_forwarding_new_events() {
+		let (layer, handle) = ChannelLayer::new();
+		let (tx, rx) = mpsc::channel();
+		handle.attach(move |entry| {
+			tx.send(entry).expect("send log entry");
+			true
+		});
+		handle.detach();
+
+		let subscriber = tracing_subscriber::registry().with(layer);
+		tracing::subscriber::with_default(subscriber, || {
+			tracing::info!(target: "logger-test", "ignored");
+		});
+
+		assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+	}
+}

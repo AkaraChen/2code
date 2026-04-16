@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { startDebugLog, stopDebugLog } from "@/generated";
 import { useDebugStore } from "./debugStore";
 import { useDebugLogStore } from "./debugLogStore";
 
+const startDebugLogMock = startDebugLog as unknown as Mock;
+const stopDebugLogMock = stopDebugLog as unknown as Mock;
+
 function resetStore() {
 	useDebugStore.setState({ enabled: false, panelOpen: false });
 	useDebugLogStore.setState({ logs: [] });
-	vi.mocked(startDebugLog).mockClear();
-	vi.mocked(stopDebugLog).mockClear();
+	startDebugLogMock.mockClear();
+	stopDebugLogMock.mockClear();
 }
 
 function getState() {
@@ -76,7 +80,7 @@ describe("useDebugStore", () => {
 
 		it("calls stopDebugLog when enabled changes to false", () => {
 			getState().setEnabled(true);
-			vi.mocked(startDebugLog).mockClear();
+			startDebugLogMock.mockClear();
 			getState().setEnabled(false);
 			expect(stopDebugLog).toHaveBeenCalled();
 		});
@@ -85,8 +89,12 @@ describe("useDebugStore", () => {
 			getState().setEnabled(true);
 
 			// Extract the channel passed to startDebugLog
-			const call = vi.mocked(startDebugLog).mock.calls[0];
-			const channel = (call[0] as { onEvent: { onmessage: ((msg: unknown) => void) | null } }).onEvent;
+			const call = startDebugLogMock.mock.calls[0];
+			const channel = (
+				call[0] as unknown as {
+					onEvent: { onmessage: ((msg: unknown) => void) | null };
+				}
+			).onEvent;
 			expect(channel).toBeDefined();
 			expect(channel.onmessage).toBeTypeOf("function");
 

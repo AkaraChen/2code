@@ -152,3 +152,98 @@ pub fn delete_session(
 	tracing::info!(target: "pty", %session_id, rows_deleted = rows, "repo: delete_session");
 	Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::project;
+	use crate::profile;
+	use crate::test_utils::setup_db;
+
+	fn setup_profile(conn: &mut SqliteConnection) -> String {
+		project::insert(conn, "proj-1", "Project", "/tmp/project")
+			.expect("insert project");
+		profile::insert_default(
+			conn,
+			"profile-1",
+			"proj-1",
+			"main",
+			"/tmp/project",
+		)
+		.expect("insert default profile");
+		"profile-1".to_string()
+	}
+
+	fn session_record<'a>(
+		id: &'a str,
+		profile_id: &'a str,
+	) -> NewPtySessionRecord<'a> {
+		NewPtySessionRecord {
+			id,
+			profile_id,
+			title: "Shell",
+			shell: "/bin/zsh",
+			cwd: "/tmp/project",
+			cols: 80,
+			rows: 24,
+		}
+	}
+
+	#[test]
+	fn insert_session_creates_a_history_row_and_lists_by_project() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session");
+
+		let sessions = list_by_project(&mut conn, "proj-1").expect("list sessions");
+		assert_eq!(sessions.len(), 1);
+		assert_eq!(sessions[0].id, "session-1");
+		assert_eq!(
+			get_session_history(&mut conn, "session-1").expect("history"),
+			Vec::<u8>::new(),
+		);
+	}
+
+	#[test]
+	fn append_output_trims_history_to_the_last_megabyte_and_can_be_cleared() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session");
+
+		append_output(&mut conn, "session-1", &vec![b'a'; 1_048_576])
+			.expect("append first chunk");
+		append_output(&mut conn, "session-1", b"tail")
+			.expect("append tail");
+
+		let history =
+			get_session_history(&mut conn, "session-1").expect("history");
+		assert_eq!(history.len(), 1_048_576);
+		assert!(history.ends_with(b"tail"));
+		assert_eq!(history[0], b'a');
+
+		clear_output(&mut conn, "session-1");
+		assert!(
+			get_session_history(&mut conn, "session-1")
+				.expect("cleared history")
+				.is_empty(),
+		);
+	}
+
+	#[test]
+	fn delete_session_removes_the_session_and_its_history() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session");
+		append_output(&mut conn, "session-1", b"hello")
+			.expect("append history");
+
+		delete_session(&mut conn, "session-1").expect("delete session");
+
+		assert!(list_by_project(&mut conn, "proj-1").unwrap().is_empty());
+		assert!(get_session_history(&mut conn, "session-1").is_err());
+	}
+}

@@ -615,6 +615,7 @@ dependencies = [
  "diesel_migrations",
  "fix-path-env",
  "infra",
+ "libsqlite3-sys",
  "model",
  "portable-pty",
  "repo",
@@ -2395,6 +2396,7 @@ version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -3983,6 +3985,7 @@ dependencies = [
  "model",
  "notify",
  "repo",
+ "tempfile",
  "tracing",
  "uuid",
  "vt100",
@@ -5120,7 +5123,7 @@ name = "twocode-helper"
 version = "0.1.0"
 dependencies = [
  "clap",
- "model",
+ "serde",
  "serde_json",
  "ureq",
 ]

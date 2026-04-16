@@ -32,10 +32,11 @@ function hasFontFamily(theme: Record<string, Record<string, unknown>>) {
 describe("prismThemes", () => {
 	it("provides a style object for every terminal theme", () => {
 		for (const themeId of terminalThemeIds) {
-			expect(getPrismTheme(themeId)).toBeTruthy();
-			expect(getPrismTheme(themeId)).toHaveProperty('code[class*="language-"]');
-			expect(getPrismTheme(themeId)).toHaveProperty('pre[class*="language-"]');
-			expect(Object.keys(getPrismTheme(themeId)).length).toBeGreaterThanOrEqual(35);
+			const theme = getPrismTheme(themeId);
+			expect(theme).toBeTruthy();
+			expect(theme['code[class*="language-"]']).toBeTruthy();
+			expect(theme['pre[class*="language-"]']).toBeTruthy();
+			expect(Object.keys(theme).length).toBeGreaterThanOrEqual(35);
 		}
 	});
 
@@ -53,7 +54,7 @@ describe("prismThemes", () => {
 		for (const themeId of terminalThemeIds) {
 			const theme = getPrismTheme(themeId);
 			for (const selector of requiredSelectors) {
-				expect(theme).toHaveProperty(selector);
+				expect(theme[selector]).toBeTruthy();
 			}
 		}
 	});
