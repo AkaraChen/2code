@@ -42,6 +42,7 @@ const TAB_EXIT_ANIMATION = {
 	duration: 0.14,
 	ease: [0.4, 0, 1, 1],
 } as const;
+const TAB_MIN_WIDTH = "140px";
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -222,7 +223,11 @@ export default function TerminalTabs({
 										}}
 										{...tabMotionProps}
 									>
-										<Tabs.Trigger value={tab.id} flexShrink={0}>
+										<Tabs.Trigger
+											value={tab.id}
+											flexShrink={0}
+											minW={TAB_MIN_WIDTH}
+										>
 											<FiTerminal />
 											<HStack gap="2">
 												{displayTitle}
@@ -267,6 +272,7 @@ export default function TerminalTabs({
 										<Tabs.Trigger
 											value={tab.filePath}
 											flexShrink={0}
+											minW={TAB_MIN_WIDTH}
 										>
 											<img
 												src={getFileIconUrl(tab.title)}
