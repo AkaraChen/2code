@@ -7,16 +7,14 @@ import {
 	VStack,
 } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { useMemo } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
-import { changeBadge, getLineStats } from "../utils";
+import { changeBadge } from "../utils";
 
 interface FileListItemProps {
 	file: FileDiffMetadata;
 	isActive: boolean;
 	isIncluded?: boolean;
-	showLineStats?: boolean;
 	onClick: () => void;
 	onToggleIncluded?: (included: boolean) => void;
 }
@@ -25,11 +23,9 @@ function FileListItem({
 	file,
 	isActive,
 	isIncluded,
-	showLineStats = true,
 	onClick,
 	onToggleIncluded,
 }: FileListItemProps) {
-	const { additions, deletions } = useMemo(() => getLineStats(file), [file]);
 	const badge = changeBadge[file.type] ?? changeBadge.change;
 	const basename = file.name.split("/").pop() ?? file.name;
 	const effectiveIncluded = isIncluded ?? true;
@@ -49,6 +45,9 @@ function FileListItem({
 			userSelect="none"
 			opacity={effectiveIncluded ? 1 : 0.72}
 			align="flex-start"
+			w="full"
+			minW="0"
+			overflow="hidden"
 		>
 			{onToggleIncluded ? (
 				<Checkbox.Root
@@ -66,15 +65,14 @@ function FileListItem({
 			) : null}
 
 			<VStack flex="1" align="stretch" gap="0" minW="0">
-				<HStack gap="2" minW="0">
+				<HStack gap="2" minW="0" w="full" overflow="hidden">
 					<Text
 						fontSize="sm"
 						fontWeight={isActive ? "medium" : "normal"}
-						flexShrink={0}
-						maxW="55%"
-						overflow="hidden"
-						textOverflow="ellipsis"
-						whiteSpace="nowrap"
+						flex="1"
+						minW="0"
+						maxW={parentPath ? "55%" : undefined}
+						truncate
 						title={file.name}
 					>
 						{basename}
@@ -102,21 +100,6 @@ function FileListItem({
 					</Badge>
 				</HStack>
 			</VStack>
-
-			{showLineStats && (
-				<HStack gap="1" fontSize="xs" flexShrink={0} pt="0.5">
-					{additions > 0 && (
-						<Text color="green.solid" lineHeight="1">
-							+{additions}
-						</Text>
-					)}
-					{deletions > 0 && (
-						<Text color="red.solid" lineHeight="1">
-							-{deletions}
-						</Text>
-					)}
-				</HStack>
-			)}
 		</HStack>
 	);
 }
