@@ -74,7 +74,7 @@ function TreeNodeLoadingRow({
 		>
 			<Spinner size="xs" color="fg.muted" />
 			<Text fontSize="sm" color="fg.muted">
-				Loading...
+				{m.fileTreeLoading()}
 			</Text>
 		</Flex>
 	);
@@ -186,7 +186,7 @@ function TreeNode({
 										py="0.5"
 										whiteSpace="nowrap"
 									>
-										Empty
+										{m.fileTreeEmptyDirectory()}
 									</Text>
 								)}
 							</motion.div>

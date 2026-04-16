@@ -199,5 +199,7 @@
 	"scriptPlaceholder": "One command per line…",
 	"scripts": "Scripts",
 	"templates": "Templates",
-	"noTemplatesDropdownHint": "Add project templates in Project Settings, or global templates in Settings."
+	"noTemplatesDropdownHint": "Add project templates in Project Settings, or global templates in Settings.",
+	"fileTreeLoading": "Loading...",
+	"fileTreeEmptyDirectory": "Empty"
 }

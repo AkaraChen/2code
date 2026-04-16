@@ -4,7 +4,7 @@ import { FiArrowLeft } from "react-icons/fi";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
-import { FileListItem } from "./ChangesFileList";
+import { FileListItem } from "./FileListItem";
 
 interface HistoryFileListProps {
 	commit: GitCommit;
