@@ -28,7 +28,9 @@ vi.mock("@tauri-apps/api/path", () => ({
 describe("terminal templates", () => {
 	beforeEach(() => {
 		joinMock.mockClear();
-		vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("mock-uuid");
+		vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+			"00000000-0000-4000-8000-000000000000",
+		);
 	});
 
 	it("serializes and parses command text while trimming blanks", () => {
@@ -51,12 +53,12 @@ describe("terminal templates", () => {
 
 	it("creates empty drafts with generated ids", () => {
 		expect(createEmptyGlobalTerminalTemplateDraft()).toEqual({
-			id: "mock-uuid",
+			id: "00000000-0000-4000-8000-000000000000",
 			name: "",
 			commandsText: "",
 		});
 		expect(createEmptyProjectTerminalTemplateDraft()).toEqual({
-			id: "mock-uuid",
+			id: "00000000-0000-4000-8000-000000000000",
 			name: "",
 			commandsText: "",
 			cwd: "",
@@ -112,7 +114,7 @@ describe("terminal templates", () => {
 
 		expect(normalizeGlobalTerminalTemplates(drafts)).toEqual([
 			{
-				id: "mock-uuid",
+				id: "00000000-0000-4000-8000-000000000000",
 				name: "Install deps",
 				commands: ["bun install", "bun test"],
 			},

@@ -1,4 +1,10 @@
 use clap::{Parser, Subcommand};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct NotifyResponse {
+	played: bool,
+}
 
 #[derive(Parser)]
 #[command(name = "2code-helper", about = "2code CLI helper")]
@@ -25,12 +31,9 @@ fn main() {
 			};
 			match ureq::get(&notify_url).call() {
 				Ok(mut resp) => {
-					let body: model::notification::NotifyResponse = resp
-						.body_mut()
-						.read_json()
-						.unwrap_or(model::notification::NotifyResponse {
-							played: false,
-						});
+					let body: NotifyResponse = resp.body_mut().read_json().unwrap_or(
+						NotifyResponse { played: false },
+					);
 					if !body.played {
 						std::process::exit(1);
 					}

@@ -5121,7 +5121,7 @@ name = "twocode-helper"
 version = "0.1.0"
 dependencies = [
  "clap",
- "model",
+ "serde",
  "serde_json",
  "ureq",
 ]
