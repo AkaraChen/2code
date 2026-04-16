@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "mocha \"test/**/*.test.mjs\""
+    "test": "bunx mocha \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "chai": "^6.0.0",

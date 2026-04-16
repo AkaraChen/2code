@@ -3983,6 +3983,7 @@ dependencies = [
  "model",
  "notify",
  "repo",
+ "tempfile",
  "tracing",
  "uuid",
  "vt100",

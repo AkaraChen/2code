@@ -15,6 +15,14 @@ pub struct HelperState {
 	pub sidecar_path: PathBuf,
 }
 
+fn sidecar_binary_name(target: &str) -> String {
+	if target.contains("windows") {
+		format!("2code-helper-{target}.exe")
+	} else {
+		format!("2code-helper-{target}")
+	}
+}
+
 fn find_free_port() -> u16 {
 	let listener =
 		TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
@@ -27,7 +35,7 @@ fn resolve_sidecar_path() -> PathBuf {
 	// Production: next to the main executable
 	if let Ok(exe) = std::env::current_exe() {
 		if let Some(dir) = exe.parent() {
-			let prod_path = dir.join(format!("2code-helper-{target}"));
+			let prod_path = dir.join(sidecar_binary_name(target));
 			if prod_path.exists() {
 				return prod_path;
 			}
@@ -37,7 +45,7 @@ fn resolve_sidecar_path() -> PathBuf {
 	// Dev: in the binaries/ directory relative to CARGO_MANIFEST_DIR
 	let manifest_dir =
 		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
-	let dev_path = manifest_dir.join(format!("2code-helper-{target}"));
+	let dev_path = manifest_dir.join(sidecar_binary_name(target));
 	dev_path
 }
 
@@ -121,4 +129,32 @@ pub fn start(app: &AppHandle) -> HelperState {
 	});
 
 	HelperState { port, sidecar_path }
+}
+
+#[cfg(test)]
+mod tests {
+	use std::net::TcpListener;
+
+	use super::{find_free_port, resolve_sidecar_path, sidecar_binary_name};
+
+	#[test]
+	fn find_free_port_returns_a_bindable_local_port() {
+		let port = find_free_port();
+		let listener =
+			TcpListener::bind(("127.0.0.1", port)).expect("bind free port");
+		assert_eq!(listener.local_addr().expect("local addr").port(), port);
+	}
+
+	#[test]
+	fn resolve_sidecar_path_uses_the_target_specific_helper_name() {
+		let path = resolve_sidecar_path();
+
+		assert_eq!(
+			path.file_name()
+				.and_then(|value| value.to_str())
+				.map(str::to_owned),
+			Some(sidecar_binary_name(env!("TARGET"))),
+		);
+		assert!(path.to_string_lossy().contains("2code-helper-"));
+	}
 }

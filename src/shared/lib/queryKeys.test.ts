@@ -11,7 +11,12 @@ describe("queryNamespaces", () => {
 			"git-diff-stats": "git-diff-stats",
 			"git-log": "git-log",
 			"git-commit-diff": "git-commit-diff",
+			"git-binary-preview": "git-binary-preview",
+			"git-ahead-count": "git-ahead-count",
 			"topbar-apps": "topbar-apps",
+			"fs-dir": "fs-dir",
+			"fs-file": "fs-file",
+			"fs-search": "fs-search",
 		});
 	});
 });
@@ -79,12 +84,62 @@ describe("queryKeys", () => {
 			]);
 		});
 
+		it("binaryPreview() includes cache-busting inputs", () => {
+			expect(
+				queryKeys.git.binaryPreview(
+					"profile-1",
+					"assets/logo.png",
+					"after",
+					"abc123",
+					"rev-1",
+				),
+			).toEqual([
+				"git-binary-preview",
+				"profile-1",
+				"assets/logo.png",
+				"after",
+				"abc123",
+				"rev-1",
+			]);
+		});
+
+		it("aheadCount() includes profileId in key", () => {
+			expect(queryKeys.git.aheadCount("profile-1")).toEqual([
+				"git-ahead-count",
+				"profile-1",
+			]);
+		});
+
 		it("returns different references for different args", () => {
 			expect(queryKeys.git.diff("a")).not.toBe(queryKeys.git.diff("b"));
 		});
 
 		it("returns different references on each call (factory)", () => {
 			expect(queryKeys.git.diff("a")).not.toBe(queryKeys.git.diff("a"));
+		});
+	});
+
+	describe("filesystem", () => {
+		it("dir() includes the folder path", () => {
+			expect(queryKeys.fs.dir("/tmp/worktree")).toEqual([
+				"fs-dir",
+				"/tmp/worktree",
+			]);
+		});
+
+		it("file() includes the file path", () => {
+			expect(queryKeys.fs.file("/tmp/worktree/README.md")).toEqual([
+				"fs-file",
+				"/tmp/worktree/README.md",
+			]);
+		});
+
+		it("search() includes profileId and query", () => {
+			expect(queryKeys.fs.search("profile-1", "readme")).toEqual([
+				"fs-search",
+				"profile-1",
+				"readme",
+			]);
 		});
 	});
 });

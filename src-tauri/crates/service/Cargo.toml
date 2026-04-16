@@ -16,3 +16,4 @@ tracing = "0.1"
 
 [dev-dependencies]
 diesel_migrations = "2"
+tempfile = "3"

@@ -21,7 +21,23 @@ import { vi } from "vitest";
 		},
 		key: (index: number) => [...store.keys()][index] ?? null,
 	};
-	globalThis.localStorage = localStorageFallback;
+	Object.defineProperty(globalThis, "localStorage", {
+		value: localStorageFallback,
+		configurable: true,
+	});
+	if (typeof window !== "undefined") {
+		Object.defineProperty(window, "localStorage", {
+			value: localStorageFallback,
+			configurable: true,
+		});
+	}
+}
+
+if (typeof window !== "undefined" && !window.HTMLElement.prototype.scrollTo) {
+	window.HTMLElement.prototype.scrollTo = vi.fn();
+}
+if (typeof window !== "undefined") {
+	window.scrollTo = vi.fn();
 }
 
 // ─── Mock @tauri-apps/api/event ───

@@ -5,25 +5,44 @@ fmt:
     fama "./src/**/*.{ts,tsx}"
     cd src-tauri && cargo fmt
 
+test-frontend:
+    bun run test
+
+test-rust:
+    just build-helper-dev
+    cd src-tauri && cargo test
+
+test-all:
+    bun run test
+    just test-rust
+
 # Build CLI sidecar (src-tauri/bins/2code-helper)
 build-helper:
     #!/usr/bin/env bash
     set -euo pipefail
     TARGET_TRIPLE=$(rustc --print host-tuple)
+    BIN_SUFFIX=""
+    if [[ "${TARGET_TRIPLE}" == *windows* ]]; then
+        BIN_SUFFIX=".exe"
+    fi
     cd src-tauri && cargo build --release -p twocode-helper
     mkdir -p binaries
-    cp -f target/release/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
-    chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
+    cp -f "target/release/2code-helper${BIN_SUFFIX}" "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
+    chmod +x "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
 
 # Build CLI sidecar in debug mode (src-tauri/bins/2code-helper)
 build-helper-dev:
     #!/usr/bin/env bash
     set -euo pipefail
     TARGET_TRIPLE=$(rustc --print host-tuple)
+    BIN_SUFFIX=""
+    if [[ "${TARGET_TRIPLE}" == *windows* ]]; then
+        BIN_SUFFIX=".exe"
+    fi
     cd src-tauri && cargo build -p twocode-helper
     mkdir -p binaries
-    cp -f target/debug/2code-helper "binaries/2code-helper-${TARGET_TRIPLE}"
-    chmod +x "binaries/2code-helper-${TARGET_TRIPLE}"
+    cp -f "target/debug/2code-helper${BIN_SUFFIX}" "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
+    chmod +x "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
 
 coverage:
     cd src-tauri && cargo llvm-cov --lib --tests --html --output-dir coverage/

@@ -71,7 +71,7 @@ describe("fileViewerPane", () => {
 		fireEvent.keyDown(window, { key: "f", metaKey: true });
 
 		const searchInput = await screen.findByRole("searchbox", {
-			name: "Find in file",
+			name: "fileViewerFindInFile",
 		});
 		await waitFor(() => expect(searchInput).toHaveFocus());
 	});
@@ -81,7 +81,7 @@ describe("fileViewerPane", () => {
 
 		fireEvent.keyDown(window, { key: "f", ctrlKey: true });
 		const searchInput = await screen.findByRole("searchbox", {
-			name: "Find in file",
+			name: "fileViewerFindInFile",
 		});
 
 		fireEvent.change(searchInput, { target: { value: "function" } });
@@ -100,7 +100,9 @@ describe("fileViewerPane", () => {
 
 		await waitFor(() => {
 			expect(
-				screen.queryByRole("searchbox", { name: "Find in file" }),
+				screen.queryByRole("searchbox", {
+					name: "fileViewerFindInFile",
+				}),
 			).not.toBeInTheDocument();
 		});
 	});

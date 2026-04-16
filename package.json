@@ -13,6 +13,8 @@
     "lint": "eslint --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rust": "just test-rust",
+    "test:all": "just test-all",
     "test:tauri-smoke": "cd e2e-tests && bun run test"
   },
   "dependencies": {
