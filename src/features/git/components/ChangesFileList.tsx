@@ -9,8 +9,9 @@ import {
 	Tooltip,
 	VStack,
 } from "@chakra-ui/react";
+import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import { changeBadge } from "../utils";
@@ -27,6 +28,19 @@ interface OverflowTooltipTextProps {
 	color?: string;
 }
 
+interface MeasuredTextSnapshot {
+	availableWidth: number;
+	font: string;
+}
+
+function buildCanvasFont(style: CSSStyleDeclaration) {
+	if (style.font.trim().length > 0) {
+		return style.font;
+	}
+
+	return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+}
+
 function OverflowTooltipText({
 	displayValue,
 	tooltipValue,
@@ -38,30 +52,56 @@ function OverflowTooltipText({
 	fontWeight,
 	color,
 }: OverflowTooltipTextProps) {
-	const textRef = useRef<HTMLParagraphElement | null>(null);
-	const [isOverflowing, setIsOverflowing] = useState(false);
+	const observerRef = useRef<ResizeObserver | null>(null);
+	const [snapshot, setSnapshot] = useState<MeasuredTextSnapshot>({
+		availableWidth: 0,
+		font: "",
+	});
+	const textRef = useCallback((element: HTMLParagraphElement | null) => {
+		observerRef.current?.disconnect();
+		observerRef.current = null;
 
-	useEffect(() => {
-		const element = textRef.current;
-		if (!element) return;
+		if (!element) {
+			return;
+		}
 
-		const updateOverflow = () => {
-			setIsOverflowing(element.scrollWidth > element.clientWidth);
+		const updateSnapshot = () => {
+			const nextSnapshot = {
+				availableWidth: element.clientWidth,
+				font: buildCanvasFont(getComputedStyle(element)),
+			};
+
+			setSnapshot((prev) =>
+				prev.availableWidth === nextSnapshot.availableWidth &&
+				prev.font === nextSnapshot.font
+					? prev
+					: nextSnapshot,
+			);
 		};
 
-		updateOverflow();
+		updateSnapshot();
 
 		if (typeof ResizeObserver === "undefined") {
 			return;
 		}
 
 		const observer = new ResizeObserver(() => {
-			updateOverflow();
+			updateSnapshot();
 		});
 		observer.observe(element);
+		observerRef.current = observer;
+	}, []);
+	const naturalWidth = useMemo(() => {
+		if (!snapshot.font) {
+			return 0;
+		}
 
-		return () => observer.disconnect();
-	}, [displayValue, fontWeight]);
+		return measureNaturalWidth(
+			prepareWithSegments(displayValue, snapshot.font),
+		);
+	}, [displayValue, snapshot.font]);
+	const isOverflowing =
+		snapshot.availableWidth > 0 && naturalWidth - snapshot.availableWidth > 0.5;
 
 	return (
 		<Tooltip.Root
