@@ -7,7 +7,6 @@ import {
 	Portal,
 	Text,
 	Tooltip,
-	VStack,
 } from "@chakra-ui/react";
 import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
 import type { FileDiffMetadata } from "@pierre/diffs";
@@ -192,7 +191,7 @@ function FileListItem({
 				</Checkbox.Root>
 			) : null}
 
-			<HStack flex="1" align="center" gap="2" minW="0" overflow="hidden">
+			<HStack flex="1" gap="2" minW="0" overflow="hidden">
 				<OverflowTooltipText
 					displayValue={basename}
 					tooltipValue={file.name}
@@ -261,11 +260,9 @@ export default function ChangesFileList({
 				borderBottomWidth="1px"
 				borderColor="border.subtle"
 			>
-				<VStack align="start" gap="0">
-					<Text fontSize="xs" color="fg.muted">
-						{m.changedFiles({ count: files.length })}
-					</Text>
-				</VStack>
+				<Text fontSize="xs" color="fg.muted">
+					{m.changedFiles({ count: files.length })}
+				</Text>
 				<HStack gap="1">
 					<Button
 						size="xs"

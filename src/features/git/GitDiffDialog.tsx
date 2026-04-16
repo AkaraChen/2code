@@ -276,18 +276,16 @@ function GitDiffHeader({
 	viewMode: GitDiffViewMode;
 	dispatch: React.Dispatch<GitDiffAction>;
 }) {
-	const previewModeCollection = createListCollection({
-		items: [
-			{
-				value: "unified",
-				label: m.gitDiffPreviewModeUnified(),
-			},
-			{
-				value: "split",
-				label: m.gitDiffPreviewModeSplit(),
-			},
-		],
-	});
+	const previewModeCollection = useMemo(
+		() =>
+			createListCollection({
+				items: [
+					{ value: "unified", label: m.gitDiffPreviewModeUnified() },
+					{ value: "split", label: m.gitDiffPreviewModeSplit() },
+				],
+			}),
+		[],
+	);
 
 	return (
 		<Dialog.Header py="2" pl="4" pr="16">
@@ -754,10 +752,9 @@ function ChangesSidebar({
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 
 	return (
-		<Box
+		<Flex
+			direction="column"
 			flex="1"
-			display="flex"
-			flexDirection="column"
 			minH="0"
 			overflow="hidden"
 			bg="bg.subtle"
@@ -795,7 +792,7 @@ function ChangesSidebar({
 				onSubmit={onCommit}
 				onPush={onPush}
 			/>
-		</Box>
+		</Flex>
 	);
 }
 

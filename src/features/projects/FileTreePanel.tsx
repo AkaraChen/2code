@@ -115,28 +115,25 @@ function TreeNode({
 					style={{ paddingLeft: `${16 + indent}px` }}
 					userSelect="none"
 				>
-					<Box flexShrink="0" display="flex">
-						<motion.span
-							animate={{ rotate: isExpanded ? 90 : 0 }}
-							transition={
-								prefersReducedMotion
-									? { duration: 0 }
-									: FILE_TREE_ICON_TRANSITION
-							}
-							style={{ display: "inline-flex" }}
-						>
-							<FiChevronRight size={14} />
-						</motion.span>
-					</Box>
-					<Box flexShrink="0" display="flex">
-						<img
-							src={getFolderIconUrl(entry.name, isExpanded)}
-							width={16}
-							height={16}
-							alt=""
-							draggable={false}
-						/>
-					</Box>
+					<motion.span
+						animate={{ rotate: isExpanded ? 90 : 0 }}
+						transition={
+							prefersReducedMotion
+								? { duration: 0 }
+								: FILE_TREE_ICON_TRANSITION
+						}
+						style={{ display: "inline-flex", flexShrink: 0 }}
+					>
+						<FiChevronRight size={14} />
+					</motion.span>
+					<img
+						src={getFolderIconUrl(entry.name, isExpanded)}
+						width={16}
+						height={16}
+						alt=""
+						draggable={false}
+						style={{ flexShrink: 0 }}
+					/>
 					<Text fontSize="sm" whiteSpace="nowrap" flexShrink={0}>
 						{entry.name}
 					</Text>
@@ -215,15 +212,14 @@ function TreeNode({
 			style={{ paddingLeft: `${16 + indent + 18}px` }}
 			userSelect="none"
 		>
-			<Box flexShrink="0" display="flex">
-				<img
-					src={getFileIconUrl(entry.name)}
-					width={16}
-					height={16}
-					alt=""
-					draggable={false}
-				/>
-			</Box>
+			<img
+				src={getFileIconUrl(entry.name)}
+				width={16}
+				height={16}
+				alt=""
+				draggable={false}
+				style={{ flexShrink: 0 }}
+			/>
 			<Text fontSize="sm" whiteSpace="nowrap" flexShrink={0}>
 				{entry.name}
 			</Text>

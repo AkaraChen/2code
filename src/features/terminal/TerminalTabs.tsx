@@ -43,6 +43,17 @@ const TAB_EXIT_ANIMATION = {
 	ease: [0.4, 0, 1, 1],
 } as const;
 const TAB_MIN_WIDTH = "140px";
+const FULL_TAB_MOTION_PROPS = {
+	layout: "position" as const,
+	initial: { opacity: 0, scale: 0.92, y: 6 },
+	animate: { opacity: 1, scale: 1, y: 0 },
+	exit: { opacity: 0, scale: 0.88, y: -6, width: 0 },
+	transition: { layout: TAB_ANIMATION, default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
+} as const;
+const FULL_BUTTON_MOTION_PROPS = {
+	layout: "position" as const,
+	transition: TAB_ANIMATION,
+} as const;
 
 interface TerminalTabsProps {
 	projectId: string;
@@ -62,7 +73,7 @@ export default function TerminalTabs({
 	const setActiveTab = useTerminalStore((s) => s.setActiveTab);
 
 	const fileViewerState = useFileViewerTabsStore(
-		(s) => s.profiles[profileId] ?? EMPTY_FILE_PROFILE,
+		useShallow((s) => s.profiles[profileId] ?? EMPTY_FILE_PROFILE),
 	);
 	const closeFileTab = useFileViewerTabsStore((s) => s.closeTab);
 	const setFileActive = useFileViewerTabsStore((s) => s.setFileActive);
@@ -94,38 +105,8 @@ export default function TerminalTabs({
 	const activeValue = fileTabActive
 		? (activeFilePath ?? "")
 		: (activeTabId ?? "");
-	const tabMotionProps = prefersReducedMotion
-		? {}
-		: {
-				layout: "position" as const,
-				initial: {
-					opacity: 0,
-					scale: 0.92,
-					y: 6,
-				},
-				animate: {
-					opacity: 1,
-					scale: 1,
-					y: 0,
-				},
-				exit: {
-					opacity: 0,
-					scale: 0.88,
-					y: -6,
-					width: 0,
-				},
-				transition: {
-					layout: TAB_ANIMATION,
-					default: TAB_ANIMATION,
-					opacity: TAB_EXIT_ANIMATION,
-				},
-			};
-	const buttonMotionProps = prefersReducedMotion
-		? {}
-		: {
-				layout: "position" as const,
-				transition: TAB_ANIMATION,
-			};
+	const tabMotionProps = prefersReducedMotion ? {} : FULL_TAB_MOTION_PROPS;
+	const buttonMotionProps = prefersReducedMotion ? {} : FULL_BUTTON_MOTION_PROPS;
 
 	function handleTabChange(value: string) {
 		const isFileTab = fileTabs.some((t) => t.filePath === value);
@@ -205,7 +186,7 @@ export default function TerminalTabs({
 				onValueChange={(e) => handleTabChange(e.value)}
 			>
 				<Box overflowX="auto" overflowY="hidden" w="full" minW="0">
-					<Tabs.List w="full" minW="max-content" flexWrap="nowrap">
+					<Tabs.List w="full" minW="max-content">
 						<AnimatePresence initial={false}>
 							{tabs.map((tab) => {
 								const displayTitle =
