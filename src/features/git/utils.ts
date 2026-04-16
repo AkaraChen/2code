@@ -1,5 +1,7 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 
+export const GIT_DIFF_LARGE_FILE_LINE_THRESHOLD = 500;
+
 export const gitBinaryPreviewSources = {
 	workingTree: "working_tree",
 	head: "head",
@@ -51,6 +53,18 @@ export function getLineStats(file: FileDiffMetadata) {
 		}
 	}
 	return { additions, deletions };
+}
+
+export function getChangedLineCount(file: FileDiffMetadata) {
+	const { additions, deletions } = getLineStats(file);
+	return additions + deletions;
+}
+
+export function isLargeGitDiffFile(
+	file: FileDiffMetadata,
+	threshold = GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
+) {
+	return getChangedLineCount(file) >= threshold;
 }
 
 export function getPreviewableImageMimeType(fileName: string) {

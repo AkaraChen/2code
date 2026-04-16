@@ -2,10 +2,13 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 import {
 	changeBadge,
+	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
+	getChangedLineCount,
 	getGitBinaryPreviewPath,
 	getGitBinaryPreviewRevision,
 	getLineStats,
 	getPreviewableImageMimeType,
+	isLargeGitDiffFile,
 	isBinaryImageDiffPreviewable,
 	reconcileIncludedFiles,
 } from "./utils";
@@ -220,6 +223,60 @@ describe("getLineStats", () => {
 			},
 		]);
 		expect(getLineStats(file)).toEqual({ additions: 1, deletions: 0 });
+	});
+});
+
+describe("getChangedLineCount", () => {
+	it("returns the sum of additions and deletions", () => {
+		expect(
+			getChangedLineCount(
+				makeFile([
+					{
+						hunkContent: [
+							{ type: "change", additions: 4, deletions: 3 },
+						],
+					},
+				]),
+			),
+		).toBe(7);
+	});
+});
+
+describe("isLargeGitDiffFile", () => {
+	it("returns false below the guardrail", () => {
+		expect(
+			isLargeGitDiffFile(
+				makeFile([
+					{
+						hunkContent: [
+							{
+								type: "change",
+								additions: GIT_DIFF_LARGE_FILE_LINE_THRESHOLD - 1,
+								deletions: 0,
+							},
+						],
+					},
+				]),
+			),
+		).toBe(false);
+	});
+
+	it("returns true at the guardrail", () => {
+		expect(
+			isLargeGitDiffFile(
+				makeFile([
+					{
+						hunkContent: [
+							{
+								type: "change",
+								additions: GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
+								deletions: 0,
+							},
+						],
+					},
+				]),
+			),
+		).toBe(true);
 	});
 });
 
