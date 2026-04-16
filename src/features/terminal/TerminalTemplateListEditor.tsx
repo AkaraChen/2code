@@ -71,7 +71,7 @@ export function TerminalTemplateListEditor<T extends BaseTemplateDraft>({
 				<Box
 					rounded="l3"
 					borderWidth="1px"
-					borderColor="border.subtle"
+					borderColor="border"
 					bg="bg.panel"
 					px="4"
 					py="3"
@@ -87,7 +87,7 @@ export function TerminalTemplateListEditor<T extends BaseTemplateDraft>({
 							key={template.id}
 							rounded="l3"
 							borderWidth="1px"
-							borderColor="border.subtle"
+							borderColor="border"
 							bg="bg.panel"
 							p="4"
 						>

@@ -238,7 +238,7 @@ export function GlobalTerminalTemplatesSettings() {
 					<Box
 						rounded="l3"
 						borderWidth="1px"
-						borderColor="border.subtle"
+						borderColor="border"
 						px="4"
 						py="3"
 					>
@@ -253,7 +253,7 @@ export function GlobalTerminalTemplatesSettings() {
 								key={template.id}
 								rounded="l3"
 								borderWidth="1px"
-								borderColor="border.subtle"
+								borderColor="border"
 								px="4"
 								py="3"
 								align="center"

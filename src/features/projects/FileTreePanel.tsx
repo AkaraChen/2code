@@ -109,12 +109,13 @@ function TreeNode({
 					py="0.5"
 					cursor="pointer"
 					borderRadius="sm"
-					_hover={{ bg: "bg.subtle" }}
+					color={isExpanded ? "fg" : "fg.muted"}
+					_hover={{ bg: "bg.subtle", color: "fg" }}
 					onClick={() => onToggleDir(entry.path)}
 					style={{ paddingLeft: `${16 + indent}px` }}
 					userSelect="none"
 				>
-					<Box color="fg.muted" flexShrink="0" display="flex">
+					<Box flexShrink="0" display="flex">
 						<motion.span
 							animate={{ rotate: isExpanded ? 90 : 0 }}
 							transition={
@@ -209,7 +210,7 @@ function TreeNode({
 			py="0.5"
 			cursor="pointer"
 			borderRadius="sm"
-			_hover={{ bg: "bg.subtle" }}
+			_hover={{ bg: "bg.subtle", color: "fg" }}
 			onClick={() => onOpenFile(entry.path)}
 			style={{ paddingLeft: `${16 + indent + 18}px` }}
 			userSelect="none"
@@ -285,9 +286,6 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 				<Box
 					asChild
 					h="full"
-					borderRightWidth={isOpen ? "1px" : "0px"}
-					borderColor="border.subtle"
-					bg="bg.panel"
 				>
 					<motion.div
 						initial={false}
@@ -327,7 +325,7 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 									}}
 								>
 									<Box overflow="auto" flex="1" py="1">
-										<Box minW="max-content" minH="full">
+										<Box minW="max-content" minH="full" color="fg.muted">
 											{isLoading && (
 												<Flex
 													align="center"
@@ -373,29 +371,8 @@ export default function FileTreePanel({ rootPath, isOpen, onOpenFile }: FileTree
 								zIndex={1}
 								onPointerDown={resize.handlePointerDown}
 								onKeyDown={resize.handleKeyDown}
-								_before={{
-									content: "\"\"",
-									position: "absolute",
-									top: 0,
-									bottom: 0,
-									left: "50%",
-									transform: "translateX(-50%)",
-									width: "1px",
-									bg: resize.isDragging
-										? "border.emphasized"
-										: "transparent",
-									transition: "background-color 0.16s ease",
-								}}
-								_hover={{
-									_before: {
-										bg: "border.subtle",
-									},
-								}}
 								_focusVisible={{
 									outline: "none",
-									_before: {
-										bg: "border.emphasized",
-									},
 								}}
 							/>
 						)}
