@@ -13,7 +13,7 @@ import * as m from "@/paraglide/messages.js";
 import { LoadingSpinner } from "@/shared/components/Fallbacks";
 import { isInteractiveKeyboardTarget } from "@/shared/lib/dom";
 import { areSetsEqual } from "@/shared/lib/setUtils";
-import { toaster } from "@/shared/providers/Toaster";
+import { toaster } from "@/shared/providers/toastController";
 import {
 	type GitDiffAction,
 	GitDiffContext,

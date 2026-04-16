@@ -1,4 +1,25 @@
-import type { ITheme } from "@xterm/xterm";
+export interface TerminalTheme {
+	background: string;
+	foreground: string;
+	cursor: string;
+	selectionBackground: string;
+	black: string;
+	red: string;
+	green: string;
+	yellow: string;
+	blue: string;
+	magenta: string;
+	cyan: string;
+	white: string;
+	brightBlack: string;
+	brightRed: string;
+	brightGreen: string;
+	brightYellow: string;
+	brightBlue: string;
+	brightMagenta: string;
+	brightCyan: string;
+	brightWhite: string;
+}
 
 export type TerminalThemeId =
 	| "github-dark"
@@ -27,7 +48,7 @@ export const terminalThemeIds: TerminalThemeId[] = Object.keys(
 	terminalThemeNames,
 ) as TerminalThemeId[];
 
-export const terminalThemes: Record<TerminalThemeId, ITheme> = {
+export const terminalThemes: Record<TerminalThemeId, TerminalTheme> = {
 	"github-dark": {
 		background: "#161616",
 		foreground: "#BFD4E1",

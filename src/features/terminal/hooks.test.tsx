@@ -170,7 +170,7 @@ describe("terminal hooks", () => {
 		expect(lightHook.result.current).toBe("one-dark");
 	});
 
-	it("returns the resolved xterm theme object for the selected theme id", () => {
+	it("returns the resolved terminal theme object for the selected theme id", () => {
 		const { result } = renderHook(() => useTerminalTheme(), {
 			wrapper: createWrapper(false),
 		});

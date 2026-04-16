@@ -1,6 +1,30 @@
 const createMessage = (name: string) => (..._args: unknown[]) => name;
 
+export const accentColor = createMessage("accentColor");
 export const addTerminalTemplate = createMessage("addTerminalTemplate");
+export const agentAcpBridge = createMessage("agentAcpBridge");
+export const agentApiKey = createMessage("agentApiKey");
+export const agentCredentials = createMessage("agentCredentials");
+export const agentCredentialsDetected = createMessage(
+	"agentCredentialsDetected",
+);
+export const agentCredentialsNone = createMessage("agentCredentialsNone");
+export const agentInstall = createMessage("agentInstall");
+export const agentNativeCli = createMessage("agentNativeCli");
+export const agentNativeNotInstalled = createMessage(
+	"agentNativeNotInstalled",
+);
+export const agentNativeNotRequired = createMessage(
+	"agentNativeNotRequired",
+);
+export const agentNotInstalled = createMessage("agentNotInstalled");
+export const agentOAuth = createMessage("agentOAuth");
+export const agentPartial = createMessage("agentPartial");
+export const agentReady = createMessage("agentReady");
+export const agentReinstall = createMessage("agentReinstall");
+export const agentSummary = createMessage("agentSummary");
+export const agents = createMessage("agents");
+export const appearance = createMessage("appearance");
 export const backToCommitList = createMessage("backToCommitList");
 export const borderRadius = createMessage("borderRadius");
 export const branchName = createMessage("branchName");
@@ -42,6 +66,7 @@ export const createProjectHintTemporaryEmpty = createMessage(
 export const createProjectHintTemporaryNamed = createMessage(
 	"createProjectHintTemporaryNamed",
 );
+export const createdAt = createMessage("createdAt");
 export const debugClear = createMessage("debugClear");
 export const debugLog = createMessage("debugLog");
 export const debugMode = createMessage("debugMode");
@@ -57,6 +82,8 @@ export const deleteTerminalTemplate = createMessage("deleteTerminalTemplate");
 export const editTerminalTemplate = createMessage("editTerminalTemplate");
 export const emptyProjectsDesc = createMessage("emptyProjectsDesc");
 export const emptyProjectsTitle = createMessage("emptyProjectsTitle");
+export const fileTreeEmptyDirectory = createMessage("fileTreeEmptyDirectory");
+export const fileTreeLoading = createMessage("fileTreeLoading");
 export const fileTreeResizeSeparator = createMessage("fileTreeResizeSeparator");
 export const fileViewerCloseFileSearch = createMessage(
 	"fileViewerCloseFileSearch",
@@ -124,6 +151,15 @@ export const gitDiffImagePreviewBefore = createMessage(
 export const gitDiffImagePreviewUnavailable = createMessage(
 	"gitDiffImagePreviewUnavailable",
 );
+export const gitDiffLargeGuardrailDescription = createMessage(
+	"gitDiffLargeGuardrailDescription",
+);
+export const gitDiffLargeGuardrailReveal = createMessage(
+	"gitDiffLargeGuardrailReveal",
+);
+export const gitDiffLargeGuardrailTitle = createMessage(
+	"gitDiffLargeGuardrailTitle",
+);
 export const gitDiffPreviewMode = createMessage("gitDiffPreviewMode");
 export const gitDiffPreviewModeSplit = createMessage(
 	"gitDiffPreviewModeSplit",
@@ -151,6 +187,8 @@ export const newTerminal = createMessage("newTerminal");
 export const noChangesDetected = createMessage("noChangesDetected");
 export const noCommitsFound = createMessage("noCommitsFound");
 export const noFileChanges = createMessage("noFileChanges");
+export const noProfiles = createMessage("noProfiles");
+export const noProjectsYet = createMessage("noProjectsYet");
 export const noTemplatesDropdownHint = createMessage(
 	"noTemplatesDropdownHint",
 );
@@ -184,6 +222,7 @@ export const projectTerminalTemplates = createMessage(
 export const projectTerminalTemplatesDescription = createMessage(
 	"projectTerminalTemplatesDescription",
 );
+export const profiles = createMessage("profiles");
 export const projects = createMessage("projects");
 export const radiusLarge = createMessage("radiusLarge");
 export const radiusMedium = createMessage("radiusMedium");
@@ -233,6 +272,10 @@ export const terminalTemplateCwdPlaceholder = createMessage(
 export const terminalTemplateName = createMessage("terminalTemplateName");
 export const terminalTemplateNamePlaceholder = createMessage(
 	"terminalTemplateNamePlaceholder",
+);
+export const terminalTemplateShell = createMessage("terminalTemplateShell");
+export const terminalTemplateShellPlaceholder = createMessage(
+	"terminalTemplateShellPlaceholder",
 );
 export const terminalTemplates = createMessage("terminalTemplates");
 export const terminalTheme = createMessage("terminalTheme");

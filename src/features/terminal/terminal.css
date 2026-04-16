@@ -1,0 +1,7 @@
+.code-terminal {
+	--term-selection-bg: rgba(86, 156, 214, 0.3);
+}
+
+.code-terminal ::selection {
+	background: var(--term-selection-bg);
+}

@@ -21,7 +21,7 @@ function renderLink(pathname: string, props?: Partial<React.ComponentProps<typeo
 	);
 }
 
-describe("SidebarLink", () => {
+describe("sidebarLink", () => {
 	it("renders the active indicator when the current route matches the link", () => {
 		const { container } = renderLink("/settings");
 

@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
-import { toaster } from "@/shared/providers/Toaster";
+import { toaster } from "@/shared/providers/toastController";
 import {
 	formatGitDiffCommentLocation,
 	formatGitDiffCommentPayload,

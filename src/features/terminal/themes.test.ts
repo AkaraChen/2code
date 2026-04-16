@@ -33,7 +33,7 @@ describe("terminalThemes", () => {
 		expect(terminalThemeIds).toEqual(Object.keys(terminalThemeNames));
 	});
 
-	it("provides a label and full xterm color palette for every theme id", () => {
+	it("provides a label and full terminal color palette for every theme id", () => {
 		for (const id of terminalThemeIds) {
 			expect(terminalThemeNames[id]).toBeTruthy();
 			for (const key of requiredThemeKeys) {

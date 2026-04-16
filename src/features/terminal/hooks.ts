@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import type { ITheme } from "@xterm/xterm";
 import { use } from "react";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
@@ -11,7 +10,7 @@ import {
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { useTerminalStore } from "./store";
 import { DEFAULT_TERMINAL_SHELL } from "./templates";
-import type { TerminalThemeId } from "./themes";
+import type { TerminalTheme, TerminalThemeId } from "./themes";
 import { terminalThemes } from "./themes";
 
 export function useCreateTerminalTab() {
@@ -98,7 +97,7 @@ export function useTerminalThemeId(): TerminalThemeId {
 	return isDark ? darkTerminalTheme : lightTerminalTheme;
 }
 
-export function useTerminalTheme(): ITheme {
+export function useTerminalTheme(): TerminalTheme {
 	const id = useTerminalThemeId();
 	return terminalThemes[id] ?? terminalThemes["github-dark"];
 }
