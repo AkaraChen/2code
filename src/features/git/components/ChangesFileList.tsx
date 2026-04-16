@@ -1,15 +1,103 @@
 import {
 	Badge,
+	Box,
 	Button,
 	Checkbox,
 	HStack,
+	Portal,
 	Text,
+	Tooltip,
 	VStack,
 } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { useEffect, useRef, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import { changeBadge } from "../utils";
+
+interface OverflowTooltipTextProps {
+	displayValue: string;
+	tooltipValue: string;
+	minW?: string;
+	maxW?: string;
+	flex?: string | number;
+	w?: string;
+	fontSize: "xs" | "sm";
+	fontWeight?: "normal" | "medium";
+	color?: string;
+}
+
+function OverflowTooltipText({
+	displayValue,
+	tooltipValue,
+	minW,
+	maxW,
+	flex,
+	w,
+	fontSize,
+	fontWeight,
+	color,
+}: OverflowTooltipTextProps) {
+	const textRef = useRef<HTMLParagraphElement | null>(null);
+	const [isOverflowing, setIsOverflowing] = useState(false);
+
+	useEffect(() => {
+		const element = textRef.current;
+		if (!element) return;
+
+		const updateOverflow = () => {
+			setIsOverflowing(element.scrollWidth > element.clientWidth);
+		};
+
+		updateOverflow();
+
+		if (typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		const observer = new ResizeObserver(() => {
+			updateOverflow();
+		});
+		observer.observe(element);
+
+		return () => observer.disconnect();
+	}, [displayValue, fontWeight]);
+
+	return (
+		<Tooltip.Root
+			disabled={!isOverflowing}
+			openDelay={300}
+			positioning={{ placement: "top-start" }}
+		>
+			<Tooltip.Trigger asChild>
+				<Text
+					ref={textRef}
+					fontSize={fontSize}
+					fontWeight={fontWeight}
+					color={color}
+					minW={minW}
+					maxW={maxW ?? "full"}
+					flex={flex}
+					w={w}
+					truncate
+				>
+					{displayValue}
+				</Text>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content
+						maxW="min(480px, calc(100vw - 32px))"
+						whiteSpace="normal"
+						wordBreak="break-all"
+					>
+						{tooltipValue}
+					</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
+	);
+}
 
 interface FileListItemProps {
 	file: FileDiffMetadata;
@@ -64,42 +152,35 @@ function FileListItem({
 				</Checkbox.Root>
 			) : null}
 
-			<VStack flex="1" align="stretch" gap="0" minW="0">
-				<HStack gap="2" minW="0" w="full" overflow="hidden">
-					<Text
-						fontSize="sm"
-						fontWeight={isActive ? "medium" : "normal"}
-						flex="1"
-						minW="0"
-						maxW={parentPath ? "55%" : undefined}
-						truncate
-						title={file.name}
-					>
-						{basename}
-					</Text>
-					{parentPath && (
-						<Text
-							fontSize="xs"
-							color="fg.muted"
-							flex="1"
-							minW="0"
-							truncate
-							title={file.name}
-						>
-							{parentPath}
-						</Text>
-					)}
-					<Badge
-						size="xs"
-						colorPalette={badge.colorPalette}
-						variant="subtle"
-						marginStart="auto"
-						flexShrink={0}
-					>
-						{badge.label}
-					</Badge>
-				</HStack>
-			</VStack>
+			<HStack flex="1" align="center" gap="2" minW="0" overflow="hidden">
+				<OverflowTooltipText
+					displayValue={basename}
+					tooltipValue={file.name}
+					fontSize="sm"
+					fontWeight={isActive ? "medium" : "normal"}
+					flex="1 1 auto"
+					minW="0"
+				/>
+				{parentPath && (
+					<OverflowTooltipText
+						displayValue={parentPath}
+						tooltipValue={file.name}
+						fontSize="xs"
+						color="fg.muted"
+						flex="0 10 auto"
+						minW="2ch"
+					/>
+				)}
+				<Badge
+					size="xs"
+					colorPalette={badge.colorPalette}
+					variant="subtle"
+					marginStart="auto"
+					flexShrink={0}
+				>
+					{badge.label}
+				</Badge>
+			</HStack>
 		</HStack>
 	);
 }
@@ -128,7 +209,7 @@ export default function ChangesFileList({
 	const includedCount = includedFileNames.size;
 
 	return (
-		<div ref={containerRef}>
+		<Box ref={containerRef} flex="1" overflowY="auto" minH="0">
 			<HStack
 				position="sticky"
 				top="0"
@@ -177,7 +258,7 @@ export default function ChangesFileList({
 					/>
 				</div>
 			))}
-		</div>
+		</Box>
 	);
 }
 

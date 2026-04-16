@@ -759,29 +759,28 @@ function ChangesSidebar({
 			display="flex"
 			flexDirection="column"
 			minH="0"
+			overflow="hidden"
 			bg="bg.subtle"
 		>
-			<Box flex="1" overflowY="auto" minH="0">
-				{changesFiles.length === 0 ? (
-					<Flex align="center" justify="center" h="full" p="8">
-						<Box color="fg.muted" fontSize="sm">
-							{m.noChangesDetected()}
-						</Box>
-					</Flex>
-				) : (
-					<ChangesFileList
-						files={changesFiles}
-						selectedIndex={state.selectedFileIndex}
-						includedFileNames={includedFileNames}
-						onSelect={(i) =>
-							dispatch({ type: "selectFile", index: i })
-						}
-						onToggleIncluded={onToggleIncluded}
-						onIncludeAll={onIncludeAll}
-						onIncludeNone={onIncludeNone}
-					/>
-				)}
-			</Box>
+			{changesFiles.length === 0 ? (
+				<Flex align="center" justify="center" flex="1" minH="0" p="8">
+					<Box color="fg.muted" fontSize="sm">
+						{m.noChangesDetected()}
+					</Box>
+				</Flex>
+			) : (
+				<ChangesFileList
+					files={changesFiles}
+					selectedIndex={state.selectedFileIndex}
+					includedFileNames={includedFileNames}
+					onSelect={(i) =>
+						dispatch({ type: "selectFile", index: i })
+					}
+					onToggleIncluded={onToggleIncluded}
+					onIncludeAll={onIncludeAll}
+					onIncludeNone={onIncludeNone}
+				/>
+			)}
 
 			<CommitComposer
 				commitMessage={commitMessage}
