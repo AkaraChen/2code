@@ -1,5 +1,5 @@
 start:
-    nr start
+    ./start.sh
 
 fmt:
     fama "./src/**/*.{ts,tsx}"
