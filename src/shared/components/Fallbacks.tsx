@@ -1,5 +1,13 @@
-import { Box, Button, Center, Skeleton, Stack, VStack } from "@chakra-ui/react";
+import { Box, Button, Center, Flex, Skeleton, Spinner, Stack, VStack } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
+
+export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
+	return (
+		<Flex flex="1" align="center" justify="center">
+			<Spinner size={size} color="colorPalette.500" />
+		</Flex>
+	);
+}
 
 export function SidebarSkeleton() {
 	return (

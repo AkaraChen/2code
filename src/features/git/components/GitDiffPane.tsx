@@ -2,17 +2,10 @@ import {
 	Badge,
 	Box,
 	Button,
-	CloseButton,
-	Dialog,
-	Field,
 	Flex,
 	HStack,
-	Portal,
-	Spinner,
 	Text,
-	Textarea,
 } from "@chakra-ui/react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
 	DiffLineAnnotation,
 	FileDiffMetadata,
@@ -23,8 +16,8 @@ import { FileDiff } from "@pierre/diffs/react";
 import { useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { toaster } from "@/shared/providers/Toaster";
-import { useGitBinaryPreview } from "../hooks";
 import {
 	formatGitDiffCommentLocation,
 	formatGitDiffCommentPayload,
@@ -33,59 +26,17 @@ import {
 	getGitDiffCommentFileKey,
 	normalizeSelectedLineRange,
 } from "../commentUtils";
-import {
-	changeBadge,
-	type GitBinaryPreviewSource,
-	getGitBinaryPreviewPath,
-	getGitBinaryPreviewRevision,
-	getLineStats,
-	getPreviewableImageMimeType,
-	gitBinaryPreviewSources,
-	isBinaryImageDiffPreviewable,
-} from "../utils";
+import { changeBadge, getLineStats, isBinaryImageDiffPreviewable } from "../utils";
+import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
+import GitDiffCommentDialog from "./GitDiffCommentDialog";
 
-interface GitPreviewContextWorkingTree {
-	kind: "working-tree";
-	profileId: string;
-}
-
-interface GitPreviewContextCommit {
-	kind: "commit";
-	profileId: string;
-	commitHash: string;
-}
-
-type GitPreviewContext =
-	| GitPreviewContextWorkingTree
-	| GitPreviewContextCommit;
+export type { GitPreviewContext };
 
 interface GitDiffCommentAnnotation {
 	id: string;
 	comment: string;
 	location: string;
 	selection: SelectedLineRange;
-}
-
-async function copyTextToClipboard(text: string) {
-	if (navigator.clipboard?.writeText) {
-		await navigator.clipboard.writeText(text);
-		return;
-	}
-
-	const textarea = document.createElement("textarea");
-	textarea.value = text;
-	textarea.setAttribute("readonly", "true");
-	textarea.style.position = "absolute";
-	textarea.style.opacity = "0";
-	document.body.append(textarea);
-	textarea.select();
-
-	const copied = document.execCommand("copy");
-	textarea.remove();
-
-	if (!copied) {
-		throw new Error("Clipboard copy failed");
-	}
 }
 
 function FileDiffHeader({
@@ -178,114 +129,6 @@ function CommentAnnotation({
 	);
 }
 
-function GitDiffCommentDialog({
-	isOpen,
-	onClose,
-	location,
-	comment,
-	onCommentChange,
-	onConfirm,
-}: {
-	isOpen: boolean;
-	onClose: () => void;
-	location: string;
-	comment: string;
-	onCommentChange: (value: string) => void;
-	onConfirm: () => void;
-}) {
-	const trimmedComment = comment.trim();
-
-	return (
-		<Dialog.Root
-			lazyMount
-			open={isOpen}
-			onOpenChange={(event) => {
-				if (!event.open) {
-					onClose();
-				}
-			}}
-			initialFocusEl={() =>
-				document.querySelector<HTMLTextAreaElement>(
-					"[data-git-diff-comment-input]",
-				)
-			}
-		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>
-								{m.gitDiffCommentDialogTitle()}
-							</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Flex direction="column" gap="4">
-								<Field.Root>
-									<Field.Label>
-										{m.gitDiffCommentDialogSelectionLabel()}
-									</Field.Label>
-									<Text
-										fontSize="sm"
-										fontFamily="mono"
-										color="fg.muted"
-									>
-										{location}
-									</Text>
-								</Field.Root>
-
-								<Field.Root required>
-									<Field.Label>
-										{m.gitDiffCommentDialogFieldLabel()}
-									</Field.Label>
-									<Textarea
-										data-git-diff-comment-input
-										rows={5}
-										value={comment}
-										placeholder={m.gitDiffCommentDialogPlaceholder()}
-										onChange={(event) =>
-											onCommentChange(
-												event.target.value,
-											)
-										}
-										onKeyDown={(event) => {
-											if (
-												(event.metaKey ||
-													event.ctrlKey) &&
-												event.key === "Enter" &&
-												trimmedComment.length > 0
-											) {
-												event.preventDefault();
-												onConfirm();
-											}
-										}}
-									/>
-								</Field.Root>
-							</Flex>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">
-									{m.cancel()}
-								</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								onClick={onConfirm}
-								disabled={trimmedComment.length === 0}
-							>
-								{m.gitDiffCommentDialogConfirm()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
-	);
-}
-
 function ActiveGitDiffFilePane({
 	activeFile,
 	activeFileKey,
@@ -322,7 +165,6 @@ function ActiveGitDiffFilePane({
 		() =>
 			comments.map((comment) => {
 				const anchor = getGitDiffCommentAnchor(comment.selection);
-
 				return {
 					side: anchor.side,
 					lineNumber: anchor.lineNumber,
@@ -345,7 +187,6 @@ function ActiveGitDiffFilePane({
 						onSelectionChange(null);
 						return;
 					}
-
 					onSelectionChange(normalizeSelectedLineRange(range));
 				},
 			}) satisfies FileDiffOptions<GitDiffCommentAnnotation>,
@@ -353,14 +194,10 @@ function ActiveGitDiffFilePane({
 	);
 
 	const handleCommentConfirm = async () => {
-		if (selectedLines == null) {
-			return;
-		}
+		if (selectedLines == null) return;
 
 		const trimmedComment = commentDraft.trim();
-		if (trimmedComment.length === 0) {
-			return;
-		}
+		if (trimmedComment.length === 0) return;
 
 		const nextComment: GitDiffCommentAnnotation = {
 			id:
@@ -378,11 +215,7 @@ function ActiveGitDiffFilePane({
 
 		try {
 			await copyTextToClipboard(
-				formatGitDiffCommentPayload(
-					activeFile,
-					selectedLines,
-					trimmedComment,
-				),
+				formatGitDiffCommentPayload(activeFile, selectedLines, trimmedComment),
 			);
 			toaster.create({
 				title: m.gitDiffCommentCopiedTitle(),
@@ -395,8 +228,7 @@ function ActiveGitDiffFilePane({
 		} catch (error) {
 			toaster.create({
 				title: m.gitDiffCommentCopyFailedTitle(),
-				description:
-					error instanceof Error ? error.message : String(error),
+				description: error instanceof Error ? error.message : String(error),
 				type: "error",
 				closable: true,
 			});
@@ -415,10 +247,7 @@ function ActiveGitDiffFilePane({
 				}}
 			/>
 			{showBinaryPreview && previewContext ? (
-				<BinaryImageDiffPreview
-					file={activeFile}
-					previewContext={previewContext}
-				/>
+				<BinaryImageDiffPreview file={activeFile} previewContext={previewContext} />
 			) : (
 				<FileDiff
 					fileDiff={activeFile}
@@ -427,9 +256,7 @@ function ActiveGitDiffFilePane({
 					lineAnnotations={lineAnnotations}
 					renderAnnotation={(annotation) =>
 						annotation.metadata ? (
-							<CommentAnnotation
-								annotation={annotation.metadata}
-							/>
+							<CommentAnnotation annotation={annotation.metadata} />
 						) : null
 					}
 				/>
@@ -446,222 +273,6 @@ function ActiveGitDiffFilePane({
 				onConfirm={handleCommentConfirm}
 			/>
 		</>
-	);
-}
-
-function useBinaryPreviewUrl({
-	profileId,
-	path,
-	source,
-	commitHash,
-	revision,
-	mimeType,
-}: {
-	profileId: string;
-	path: string | null;
-	source: GitBinaryPreviewSource;
-	commitHash?: string;
-	revision: string | null;
-	mimeType: string | null;
-}) {
-	const previewQuery = useGitBinaryPreview(
-		path && mimeType && revision
-			? {
-					profileId,
-					path,
-					source,
-					commitHash,
-					revision,
-				}
-			: null,
-	);
-
-	const assetUrl = useMemo(() => {
-		if (!previewQuery.data?.file_path || revision == null) {
-			return null;
-		}
-
-		const baseUrl =
-			typeof window !== "undefined" &&
-			"__TAURI_INTERNALS__" in window
-				? convertFileSrc(previewQuery.data.file_path)
-				: previewQuery.data.file_path;
-		const separator = baseUrl.includes("?") ? "&" : "?";
-
-		return `${baseUrl}${separator}v=${encodeURIComponent(revision)}`;
-	}, [previewQuery.data, revision]);
-
-	return {
-		...previewQuery,
-		assetUrl,
-	};
-}
-
-function BinaryPreviewPane({
-	label,
-	path,
-	assetUrl,
-	isLoading,
-}: {
-	label: string;
-	path: string;
-	assetUrl: string | null;
-	isLoading: boolean;
-}) {
-	return (
-		<Flex
-			flex="1"
-			minH={{ base: "18rem", lg: "24rem" }}
-			direction="column"
-			borderWidth="1px"
-			borderColor="border.subtle"
-			borderRadius="lg"
-			overflow="hidden"
-			bg="bg.panel"
-		>
-			<Flex
-				align="center"
-				justify="space-between"
-				gap="3"
-				px="3"
-				py="2.5"
-				borderBottomWidth="1px"
-				borderColor="border.subtle"
-				bg="bg.subtle"
-			>
-				<Text
-					fontSize="xs"
-					fontWeight="semibold"
-					letterSpacing="widest"
-					textTransform="uppercase"
-					color="fg.muted"
-				>
-					{label}
-				</Text>
-				<Text
-					fontSize="xs"
-					fontFamily="mono"
-					color="fg.muted"
-					truncate
-				>
-					{path}
-				</Text>
-			</Flex>
-
-			<Flex
-				flex="1"
-				align="center"
-				justify="center"
-				p="4"
-				minH="0"
-				bgImage={[
-					"linear-gradient(45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
-					"linear-gradient(-45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
-					"linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
-					"linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
-				].join(", ")}
-				bgSize="16px 16px"
-				css={{ backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0" }}
-			>
-				{isLoading ? (
-					<Spinner size="sm" color="colorPalette.500" />
-				) : assetUrl ? (
-					<img
-						src={assetUrl}
-						alt={path}
-						style={{
-							maxWidth: "100%",
-							maxHeight: "70vh",
-							objectFit: "contain",
-							borderRadius: "0.375rem",
-							boxShadow:
-								"var(--chakra-shadows-md, 0 4px 6px rgba(0, 0, 0, 0.1))",
-						}}
-					/>
-				) : (
-					<Text fontSize="sm" color="fg.muted">
-						{m.gitDiffImagePreviewUnavailable()}
-					</Text>
-				)}
-			</Flex>
-		</Flex>
-	);
-}
-
-function BinaryImageDiffPreview({
-	file,
-	previewContext,
-}: {
-	file: FileDiffMetadata;
-	previewContext: GitPreviewContext;
-}) {
-	const beforePath = getGitBinaryPreviewPath(file, "before");
-	const afterPath = getGitBinaryPreviewPath(file, "after");
-	const beforeMimeType =
-		beforePath == null ? null : getPreviewableImageMimeType(beforePath);
-	const afterMimeType =
-		afterPath == null ? null : getPreviewableImageMimeType(afterPath);
-	const beforeRevision =
-		beforePath == null ? null : getGitBinaryPreviewRevision(file, "before");
-	const afterRevision =
-		afterPath == null ? null : getGitBinaryPreviewRevision(file, "after");
-
-	const beforePreview = useBinaryPreviewUrl({
-		profileId: previewContext.profileId,
-		path: beforePath,
-		source:
-			previewContext.kind === "working-tree"
-				? gitBinaryPreviewSources.head
-				: gitBinaryPreviewSources.parentCommit,
-		commitHash:
-			previewContext.kind === "commit"
-				? previewContext.commitHash
-				: undefined,
-		revision: beforeRevision,
-		mimeType: beforeMimeType,
-	});
-	const afterPreview = useBinaryPreviewUrl({
-		profileId: previewContext.profileId,
-		path: afterPath,
-		source:
-			previewContext.kind === "working-tree"
-				? gitBinaryPreviewSources.workingTree
-				: gitBinaryPreviewSources.commit,
-		commitHash:
-			previewContext.kind === "commit"
-				? previewContext.commitHash
-				: undefined,
-		revision: afterRevision,
-		mimeType: afterMimeType,
-	});
-
-	return (
-		<Flex
-			flex="1"
-			minH="0"
-			direction={{ base: "column", xl: "row" }}
-			gap="4"
-			p="4"
-			overflow="auto"
-		>
-			{beforePath && beforeMimeType ? (
-				<BinaryPreviewPane
-					label={m.gitDiffImagePreviewBefore()}
-					path={beforePath}
-					assetUrl={beforePreview.assetUrl}
-					isLoading={beforePreview.isLoading}
-				/>
-			) : null}
-
-			{afterPath && afterMimeType ? (
-				<BinaryPreviewPane
-					label={m.gitDiffImagePreviewAfter()}
-					path={afterPath}
-					assetUrl={afterPreview.assetUrl}
-					isLoading={afterPreview.isLoading}
-				/>
-			) : null}
-		</Flex>
 	);
 }
 
@@ -693,9 +304,7 @@ export default function GitDiffPane({
 		? getGitDiffCommentFileKey(activeFile, contextKey)
 		: null;
 	const selectedLines =
-		activeFileKey == null
-			? null
-			: selectedLinesByFileKey[activeFileKey] ?? null;
+		activeFileKey == null ? null : selectedLinesByFileKey[activeFileKey] ?? null;
 	const comments =
 		activeFileKey == null ? [] : annotationsByFileKey[activeFileKey] ?? [];
 

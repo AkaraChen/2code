@@ -1,4 +1,3 @@
-import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-shell";
@@ -18,7 +17,7 @@ import {
 	resizePty,
 	writeToPty,
 } from "@/generated";
-import * as m from "@/paraglide/messages.js";
+import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
 import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
@@ -371,60 +370,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				/>
 			</div>
 
-			<Dialog.Root
-				lazyMount
-				open={!!pendingLink}
-				onOpenChange={(e) => {
-					if (!e.open) closePendingLinkDialog();
-				}}
-			>
-				<Portal>
-					<Dialog.Backdrop />
-					<Dialog.Positioner>
-						<Dialog.Content>
-							<Dialog.Header>
-								<Dialog.Title>
-									{m.terminalOpenLink()}
-								</Dialog.Title>
-							</Dialog.Header>
-							<Dialog.Body>
-								<Text>
-									{m.terminalOpenLinkConfirmDescription()}
-								</Text>
-								<Text
-									mt="4"
-									fontSize="sm"
-									color="fg.muted"
-									fontFamily="mono"
-								>
-									{m.terminalOpenLinkUrlLabel()}
-								</Text>
-								<Text
-									mt="1"
-									fontSize="sm"
-									fontFamily="mono"
-									wordBreak="break-all"
-								>
-									{pendingLink}
-								</Text>
-							</Dialog.Body>
-							<Dialog.Footer>
-								<Dialog.ActionTrigger asChild>
-									<Button variant="outline">
-										{m.cancel()}
-									</Button>
-								</Dialog.ActionTrigger>
-								<Button onClick={openPendingLink}>
-									{m.terminalOpenLink()}
-								</Button>
-							</Dialog.Footer>
-							<Dialog.CloseTrigger asChild>
-								<CloseButton size="sm" />
-							</Dialog.CloseTrigger>
-						</Dialog.Content>
-					</Dialog.Positioner>
-				</Portal>
-			</Dialog.Root>
+			<TerminalLinkConfirmDialog
+				link={pendingLink}
+				onClose={closePendingLinkDialog}
+				onOpen={openPendingLink}
+			/>
 		</>
 	);
 }

@@ -15,92 +15,11 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import * as m from "@/paraglide/messages.js";
+import { isEditableElement } from "@/shared/lib/dom";
+import { detectLanguage } from "@/shared/lib/languageDetection";
 import { isSearchShortcut, useSearch } from "@/shared/hooks/useSearch";
 import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
-
-function detectLanguage(filename: string): string {
-	const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-	const map: Record<string, string> = {
-		ts: "typescript",
-		tsx: "tsx",
-		mts: "tsx",
-		cts: "typescript",
-		mtsx: "tsx",
-		ctsx: "tsx",
-		js: "javascript",
-		mjs: "javascript",
-		cjs: "javascript",
-		jsx: "jsx",
-		rs: "rust",
-		py: "python",
-		rb: "ruby",
-		go: "go",
-		java: "java",
-		kt: "kotlin",
-		swift: "swift",
-		c: "c",
-		cpp: "cpp",
-		cc: "cpp",
-		h: "c",
-		cs: "csharp",
-		sh: "bash",
-		zsh: "bash",
-		fish: "bash",
-		toml: "toml",
-		yaml: "yaml",
-		yml: "yaml",
-		json: "json",
-		md: "markdown",
-		mdx: "markdown",
-		html: "html",
-		css: "css",
-		scss: "scss",
-		sass: "scss",
-		sql: "sql",
-		graphql: "graphql",
-		gql: "graphql",
-		xml: "xml",
-		dockerfile: "docker",
-		tf: "hcl",
-		hcl: "hcl",
-		lua: "lua",
-		php: "php",
-		r: "r",
-		ex: "elixir",
-		exs: "elixir",
-		erl: "erlang",
-		hs: "haskell",
-		elm: "elm",
-		clj: "clojure",
-		cljs: "clojure",
-		vue: "markup",
-		svelte: "markup",
-		dart: "dart",
-		proto: "protobuf",
-	};
-	const baseName = filename.toLowerCase();
-	const nameMap: Record<string, string> = {
-		dockerfile: "docker",
-		makefile: "makefile",
-		justfile: "makefile",
-		".env": "bash",
-		".gitignore": "bash",
-		".gitattributes": "bash",
-	};
-	return nameMap[baseName] ?? map[ext] ?? "text";
-}
-
-function isEditableElement(target: EventTarget | null) {
-	if (!(target instanceof HTMLElement)) return false;
-	const tagName = target.tagName;
-	return (
-		target.isContentEditable ||
-		tagName === "INPUT" ||
-		tagName === "TEXTAREA" ||
-		tagName === "SELECT"
-	);
-}
 
 interface FileViewerPaneProps {
 	filePath: string;
@@ -203,12 +122,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 	if (content == null) return null;
 
 	return (
-		<Box
-			h="full"
-			overflow="hidden"
-			position="relative"
-			ref={paneRef}
-		>
+		<Box h="full" overflow="hidden" position="relative" ref={paneRef}>
 			<AnimatePresence initial={false}>
 				{isSearchOpen && (
 					<Box
@@ -245,12 +159,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 									onChange={handleSearchChange}
 									onKeyDown={handleSearchInputKeyDown}
 								/>
-								<Text
-									minW="9"
-									textAlign="right"
-									fontSize="xs"
-									color="fg.muted"
-								>
+								<Text minW="9" textAlign="right" fontSize="xs" color="fg.muted">
 									{matchLabel}
 								</Text>
 								<IconButton
