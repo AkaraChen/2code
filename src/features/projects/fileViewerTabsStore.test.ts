@@ -94,6 +94,47 @@ describe("fileViewerTabsStore", () => {
 		);
 	});
 
+	it("reorders file tabs without changing the active file", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/b.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/c.ts");
+		useFileViewerTabsStore
+			.getState()
+			.setFileActive("profile-1", "/repo/src/a.ts");
+
+		useFileViewerTabsStore.getState().reorderTabs("profile-1", 0, 2);
+
+		expect(
+			useFileViewerTabsStore
+				.getState()
+				.profiles["profile-1"].tabs.map((tab) => tab.filePath),
+		).toEqual([
+			"/repo/src/b.ts",
+			"/repo/src/c.ts",
+			"/repo/src/a.ts",
+		]);
+		expect(useFileViewerTabsStore.getState().profiles["profile-1"].activeFilePath).toBe(
+			"/repo/src/a.ts",
+		);
+	});
+
+	it("ignores invalid file tab reorder requests", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/b.ts");
+
+		useFileViewerTabsStore.getState().reorderTabs("profile-1", -1, 1);
+		useFileViewerTabsStore.getState().reorderTabs("profile-1", 0, 99);
+
+		expect(
+			useFileViewerTabsStore
+				.getState()
+				.profiles["profile-1"].tabs.map((tab) => tab.filePath),
+		).toEqual([
+			"/repo/src/a.ts",
+			"/repo/src/b.ts",
+		]);
+	});
+
 	it("combines terminal and file-viewer profile ids without duplicates", () => {
 		const { result } = renderHook(() => useActiveProfileIds());
 
