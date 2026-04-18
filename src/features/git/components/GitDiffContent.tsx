@@ -1,5 +1,5 @@
 import { Box, Flex, Tabs } from "@chakra-ui/react";
-import type { FileDiffOptions } from "@pierre/diffs";
+import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
 	Suspense,
@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import * as m from "@/paraglide/messages.js";
 import { LoadingSpinner } from "@/shared/components/Fallbacks";
 import { isInteractiveKeyboardTarget } from "@/shared/lib/dom";
@@ -21,6 +22,7 @@ import {
 } from "../gitDiffReducer";
 import {
 	useCommitGitChanges,
+	useDiscardGitFileChanges,
 	useGitAheadCount,
 	useGitDiffFiles,
 	useGitLog,
@@ -56,13 +58,32 @@ const SIDEBAR_TAB_CONTENT_PROPS = {
 
 interface GitDiffContentProps {
 	profileId: string;
+	worktreePath: string;
+	onClose: () => void;
 	state: GitDiffState;
 	dispatch: React.Dispatch<GitDiffAction>;
 	options: FileDiffOptions<unknown>;
 }
 
+function resolveWorktreeFilePath(
+	worktreePath: string,
+	relativePath: string,
+) {
+	const separator = worktreePath.includes("\\") ? "\\" : "/";
+	const normalizedRelativePath =
+		separator === "\\"
+			? relativePath.replace(/\//g, "\\")
+			: relativePath.replace(/\\/g, "/");
+
+	return worktreePath.endsWith("/") || worktreePath.endsWith("\\")
+		? `${worktreePath}${normalizedRelativePath}`
+		: `${worktreePath}${separator}${normalizedRelativePath}`;
+}
+
 export default function GitDiffContent({
 	profileId,
+	worktreePath,
+	onClose,
 	state,
 	dispatch,
 	options,
@@ -78,7 +99,9 @@ export default function GitDiffContent({
 	const changesFiles = useGitDiffFiles(profileId);
 	const { data: logData } = useGitLog(profileId);
 	const commits = useMemo(() => logData ?? [], [logData]);
+	const openFileTab = useFileViewerTabsStore((store) => store.openFile);
 	const commitGitChanges = useCommitGitChanges(profileId);
+	const discardGitFileChanges = useDiscardGitFileChanges(profileId);
 	const aheadCount = useGitAheadCount(profileId);
 	const gitPush = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
@@ -105,6 +128,50 @@ export default function GitDiffContent({
 			}
 			return next;
 		});
+	};
+
+	const handleOpenFile = (file: FileDiffMetadata) => {
+		openFileTab(
+			profileId,
+			resolveWorktreeFilePath(worktreePath, file.name),
+		);
+		onClose();
+	};
+
+	const handleDiscardFile = async (file: FileDiffMetadata) => {
+		const relativePaths = Array.from(
+			new Set(
+				[file.name, file.prevName].filter(
+					(path): path is string => Boolean(path),
+				),
+			),
+		);
+		const absolutePaths = relativePaths.map((path) =>
+			resolveWorktreeFilePath(worktreePath, path),
+		);
+
+		try {
+			await discardGitFileChanges.mutateAsync({
+				paths: relativePaths,
+				filePathsToRefresh: absolutePaths,
+			});
+			toaster.create({
+				title: m.gitDiscardFileSuccessTitle(),
+				description: m.gitDiscardFileSuccessDescription({
+					file: file.name,
+				}),
+				type: "success",
+				closable: true,
+			});
+		} catch (error) {
+			toaster.create({
+				title: m.gitDiscardFileErrorTitle(),
+				description:
+					error instanceof Error ? error.message : String(error),
+				type: "error",
+				closable: true,
+			});
+		}
 	};
 
 	// Keyboard navigation — dispatch arrow keys to the active list,
@@ -278,6 +345,8 @@ export default function GitDiffContent({
 										aheadCount={aheadCount}
 										isPushing={gitPush.isPending}
 										onToggleIncluded={setFileIncluded}
+										onOpenFile={handleOpenFile}
+										onDiscardFile={handleDiscardFile}
 										onIncludeAll={() =>
 											setIncludedFileNames(
 												new Set(changesFiles.map((file) => file.name)),

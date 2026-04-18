@@ -198,6 +198,15 @@ pub fn commit_changes(
 	infra::git::commit(&profile.worktree_path, files, message, body)
 }
 
+pub fn discard_file_changes(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+	paths: &[String],
+) -> Result<(), AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::discard_changes(&profile.worktree_path, paths)
+}
+
 pub fn get_ahead_count(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
