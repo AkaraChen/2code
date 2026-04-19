@@ -165,6 +165,20 @@ pub async fn commit_git_changes(
 }
 
 #[tauri::command]
+pub async fn discard_git_file_changes(
+	profile_id: String,
+	paths: Vec<String>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::discard_file_changes(conn, &profile_id, &paths)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn get_git_ahead_count(
 	profile_id: String,
 	state: State<'_, DbPool>,

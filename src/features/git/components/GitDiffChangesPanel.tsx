@@ -1,5 +1,6 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { Suspense, use } from "react";
+import type { FileDiffMetadata } from "@pierre/diffs";
 import * as m from "@/paraglide/messages.js";
 import { LoadingSpinner } from "@/shared/components/Fallbacks";
 import ChangesFileList from "./ChangesFileList";
@@ -30,6 +31,8 @@ export interface ChangesSidebarProps {
 	aheadCount: number;
 	isPushing: boolean;
 	onToggleIncluded: (fileName: string, included: boolean) => void;
+	onOpenFile: (file: FileDiffMetadata) => void;
+	onDiscardFile: (file: FileDiffMetadata) => Promise<void>;
 	onIncludeAll: () => void;
 	onIncludeNone: () => void;
 	onCommitMessageChange: (value: string) => void;
@@ -46,6 +49,8 @@ export function ChangesSidebar({
 	aheadCount,
 	isPushing,
 	onToggleIncluded,
+	onOpenFile,
+	onDiscardFile,
 	onIncludeAll,
 	onIncludeNone,
 	onCommitMessageChange,
@@ -70,6 +75,8 @@ export function ChangesSidebar({
 					includedFileNames={includedFileNames}
 					onSelect={(i) => dispatch({ type: "selectFile", index: i })}
 					onToggleIncluded={onToggleIncluded}
+					onOpenFile={onOpenFile}
+					onDiscardFile={onDiscardFile}
 					onIncludeAll={onIncludeAll}
 					onIncludeNone={onIncludeNone}
 				/>

@@ -1,5 +1,6 @@
 import { Badge, Checkbox, HStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import type { MouseEventHandler } from "react";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { changeBadge } from "../utils";
 
@@ -8,6 +9,8 @@ export interface FileListItemProps {
 	isActive: boolean;
 	isIncluded?: boolean;
 	onClick: () => void;
+	onDoubleClick?: () => void;
+	onContextMenu?: MouseEventHandler<HTMLDivElement>;
 	onToggleIncluded?: (included: boolean) => void;
 }
 
@@ -16,6 +19,8 @@ export function FileListItem({
 	isActive,
 	isIncluded,
 	onClick,
+	onDoubleClick,
+	onContextMenu,
 	onToggleIncluded,
 }: FileListItemProps) {
 	const badge = changeBadge[file.type] ?? changeBadge.change;
@@ -27,12 +32,15 @@ export function FileListItem({
 
 	return (
 		<HStack
+			data-testid="git-file-list-item"
 			px="3"
 			py="2"
 			cursor="pointer"
 			bg={isActive ? "bg.emphasized" : "transparent"}
 			_hover={{ bg: isActive ? "bg.emphasized" : "bg.subtle" }}
 			onClick={onClick}
+			onDoubleClick={onDoubleClick}
+			onContextMenu={onContextMenu}
 			gap="2"
 			userSelect="none"
 			opacity={effectiveIncluded ? 1 : 0.72}

@@ -8,6 +8,7 @@ import {
 import { useMemo } from "react";
 import {
 	commitGitChanges,
+	discardGitFileChanges,
 	getCommitDiff,
 	getGitBinaryPreview,
 	getGitAheadCount,
@@ -118,6 +119,36 @@ export function useCommitGitChanges(profileId: string) {
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.log(profileId),
 				}),
+			]);
+		},
+	});
+}
+
+export function useDiscardGitFileChanges(profileId: string) {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: ({
+			paths,
+		}: {
+			paths: string[];
+			filePathsToRefresh?: string[];
+		}) => discardGitFileChanges({ profileId, paths }),
+		onSuccess: async (_result, variables) => {
+			const filePathsToRefresh = variables.filePathsToRefresh ?? [];
+
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				...filePathsToRefresh.map((filePath) =>
+					queryClient.invalidateQueries({
+						queryKey: queryKeys.fs.file(filePath),
+					}),
+				),
 			]);
 		},
 	});

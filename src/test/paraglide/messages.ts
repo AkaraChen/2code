@@ -74,6 +74,16 @@ export const gitCommitBodyPlaceholder = createMessage(
 	"gitCommitBodyPlaceholder",
 );
 export const gitCommitButton = createMessage("gitCommitButton");
+export const gitDiscardFileAction = createMessage("gitDiscardFileAction");
+export const gitDiscardFileErrorTitle = createMessage(
+	"gitDiscardFileErrorTitle",
+);
+export const gitDiscardFileSuccessDescription = createMessage(
+	"gitDiscardFileSuccessDescription",
+);
+export const gitDiscardFileSuccessTitle = createMessage(
+	"gitDiscardFileSuccessTitle",
+);
 export const gitCommitErrorTitle = createMessage("gitCommitErrorTitle");
 export const gitCommitIncludeAll = createMessage("gitCommitIncludeAll");
 export const gitCommitIncludeNone = createMessage("gitCommitIncludeNone");

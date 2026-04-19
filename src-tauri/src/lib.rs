@@ -86,6 +86,7 @@ pub fn run() {
 			handler::project::get_commit_diff,
 			handler::project::get_git_binary_preview,
 			handler::project::commit_git_changes,
+			handler::project::discard_git_file_changes,
 			handler::project::get_git_ahead_count,
 			handler::project::git_push,
 			handler::project::get_project_config,

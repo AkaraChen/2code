@@ -319,6 +319,44 @@ pub fn commit(
 		.to_string())
 }
 
+pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
+	let paths = validate_discard_paths(paths)?;
+	let (tracked_paths, untracked_paths) =
+		partition_paths_by_tracking(folder, &paths)?;
+
+	if !tracked_paths.is_empty() {
+		let restore_output = Command::new("git")
+			.args(["restore", "--source=HEAD", "--staged", "--worktree", "--"])
+			.args(&tracked_paths)
+			.current_dir(folder)
+			.output()?;
+
+		if !restore_output.status.success() {
+			return Err(AppError::GitError(command_error(
+				"git restore failed",
+				&restore_output,
+			)));
+		}
+	}
+
+	if !untracked_paths.is_empty() {
+		let clean_output = Command::new("git")
+			.args(["clean", "-f", "--"])
+			.args(&untracked_paths)
+			.current_dir(folder)
+			.output()?;
+
+		if !clean_output.status.success() {
+			return Err(AppError::GitError(command_error(
+				"git clean failed",
+				&clean_output,
+			)));
+		}
+	}
+
+	Ok(())
+}
+
 pub fn ahead_count(folder: &str) -> u32 {
 	let output = Command::new("git")
 		.args(["rev-list", "--count", "@{u}..HEAD"])
@@ -469,17 +507,35 @@ pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
 pub fn validate_commit_files(
 	files: &[String],
 ) -> Result<Vec<String>, AppError> {
-	if files.is_empty() {
-		return Err(AppError::GitError(
-			"Select at least one file to commit".into(),
-		));
+	validate_repo_relative_paths(
+		files,
+		"Commit file path",
+		"Select at least one file to commit",
+	)
+}
+
+fn validate_discard_paths(paths: &[String]) -> Result<Vec<String>, AppError> {
+	validate_repo_relative_paths(
+		paths,
+		"Discard file path",
+		"Select at least one file to discard",
+	)
+}
+
+fn validate_repo_relative_paths(
+	paths: &[String],
+	label: &str,
+	empty_error: &str,
+) -> Result<Vec<String>, AppError> {
+	if paths.is_empty() {
+		return Err(AppError::GitError(empty_error.into()));
 	}
 
 	let mut seen = HashSet::new();
-	let mut validated = Vec::with_capacity(files.len());
+	let mut validated = Vec::with_capacity(paths.len());
 
-	for file in files {
-		let trimmed = validate_repo_relative_path(file, "Commit file path")?;
+	for path in paths {
+		let trimmed = validate_repo_relative_path(path, label)?;
 		if seen.insert(trimmed.to_string()) {
 			validated.push(trimmed);
 		}
@@ -625,6 +681,45 @@ fn extract_conflicting_ref(stderr: &str) -> Option<String> {
 		return None;
 	}
 	Some(name.to_string())
+}
+
+fn partition_paths_by_tracking(
+	folder: &str,
+	paths: &[String],
+) -> Result<(Vec<String>, Vec<String>), AppError> {
+	let mut tracked_paths = Vec::new();
+	let mut untracked_paths = Vec::new();
+
+	for path in paths {
+		if is_path_tracked(folder, path)? {
+			tracked_paths.push(path.clone());
+		} else {
+			untracked_paths.push(path.clone());
+		}
+	}
+
+	Ok((tracked_paths, untracked_paths))
+}
+
+fn is_path_tracked(folder: &str, path: &str) -> Result<bool, AppError> {
+	let output = Command::new("git")
+		.args(["ls-files", "--error-unmatch", "--", path])
+		.current_dir(folder)
+		.output()?;
+
+	if output.status.success() {
+		return Ok(true);
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if stderr.contains("did not match any file(s) known to git") {
+		return Ok(false);
+	}
+
+	Err(AppError::GitError(command_error(
+		"git ls-files failed",
+		&output,
+	)))
 }
 
 fn command_error(prefix: &str, output: &std::process::Output) -> String {
@@ -848,6 +943,12 @@ mod tests {
 	fn validate_commit_files_rejects_absolute_paths() {
 		let files = vec!["/tmp/a.txt".into()];
 		assert!(validate_commit_files(&files).is_err());
+	}
+
+	#[test]
+	fn validate_discard_paths_rejects_empty_list() {
+		let paths: Vec<String> = Vec::new();
+		assert!(validate_discard_paths(&paths).is_err());
 	}
 
 	#[test]
@@ -1336,5 +1437,46 @@ mod tests {
 		let diff_output = result.unwrap();
 		assert!(diff_output.contains("new.txt"));
 		assert!(diff_output.contains("+new content"));
+	}
+
+	#[test]
+	fn discard_changes_restores_tracked_untracked_and_renamed_paths() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "tracked.txt", "hello", "Init tracked");
+		add_commit(&dir, "rename-me.txt", "rename me", "Init rename");
+
+		std::fs::write(dir.join("tracked.txt"), "updated").unwrap();
+		std::fs::write(dir.join("new.txt"), "new content").unwrap();
+		std::fs::rename(dir.join("rename-me.txt"), dir.join("renamed.txt"))
+			.unwrap();
+
+		discard_changes(
+			&dir.to_string_lossy(),
+			&[
+				"tracked.txt".into(),
+				"new.txt".into(),
+				"renamed.txt".into(),
+				"rename-me.txt".into(),
+			],
+		)
+		.unwrap();
+
+		assert_eq!(
+			std::fs::read_to_string(dir.join("tracked.txt")).unwrap(),
+			"hello"
+		);
+		assert!(!dir.join("new.txt").exists());
+		assert!(!dir.join("renamed.txt").exists());
+		assert_eq!(
+			std::fs::read_to_string(dir.join("rename-me.txt")).unwrap(),
+			"rename me"
+		);
+
+		let status = Command::new("git")
+			.args(["status", "--short"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
 	}
 }

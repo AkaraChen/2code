@@ -46,12 +46,14 @@ function GitDiffDialogWithBranch({
 	isActive,
 	onClose,
 	profileId,
+	worktreePath,
 }: {
 	cwd: string;
 	isOpen: boolean;
 	isActive: boolean;
 	onClose: () => void;
 	profileId: string;
+	worktreePath: string;
 }) {
 	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
 	return (
@@ -59,6 +61,7 @@ function GitDiffDialogWithBranch({
 			isOpen={isOpen}
 			onClose={onClose}
 			profileId={profileId}
+			worktreePath={worktreePath}
 			branchName={branch ?? undefined}
 		/>
 	);
@@ -260,6 +263,7 @@ export default function ProjectTopBar({
 						isActive={isActive}
 						onClose={() => setGitDiffOpen(false)}
 						profileId={profile.id}
+						worktreePath={profile.worktree_path}
 					/>
 				</Suspense>
 			) : (
@@ -267,6 +271,7 @@ export default function ProjectTopBar({
 					isOpen={gitDiffOpen}
 					onClose={() => setGitDiffOpen(false)}
 					profileId={profile.id}
+					worktreePath={profile.worktree_path}
 					branchName={profile.branch_name}
 				/>
 			)}

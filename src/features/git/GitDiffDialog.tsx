@@ -42,6 +42,7 @@ interface GitDiffDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
 	profileId: string;
+	worktreePath: string;
 	branchName?: string;
 }
 
@@ -49,6 +50,7 @@ export default function GitDiffDialog({
 	isOpen,
 	onClose,
 	profileId,
+	worktreePath,
 	branchName,
 }: GitDiffDialogProps) {
 	const termThemeId = useTerminalThemeId();
@@ -87,6 +89,8 @@ export default function GitDiffDialog({
 							<Suspense fallback={<LoadingSpinner />}>
 								<GitDiffContent
 									profileId={profileId}
+									worktreePath={worktreePath}
+									onClose={onClose}
 									state={state}
 									dispatch={dispatch}
 									options={options}
