@@ -124,7 +124,7 @@
 	"gitPushButton": "Push",
 	"gitPushSuccessTitle": "Push successful",
 	"gitPushErrorTitle": "Push failed",
-	"gitDiscardFileAction": "Discard this file",
+	"gitDiscardFileAction": "Discard changes to this file",
 	"gitDiscardFileSuccessTitle": "File changes discarded",
 	"gitDiscardFileSuccessDescription": "Reverted changes in {file}",
 	"gitDiscardFileErrorTitle": "Discard failed",

@@ -45,7 +45,7 @@ function renderList(props?: Partial<ComponentProps<typeof ChangesFileList>>) {
 	return { onSelect, onOpenFile, onDiscardFile };
 }
 
-describe("ChangesFileList", () => {
+describe("changesFileList", () => {
 	beforeEach(() => {
 		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
 			configurable: true,
