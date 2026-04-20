@@ -54,6 +54,7 @@ interface TerminalStore {
 	notifiedTabs: Set<string>;
 	addTab: (profileId: string, sessionId: string, title: string) => void;
 	closeTab: (profileId: string, tabId: string) => void;
+	reorderTabs: (profileId: string, fromIndex: number, toIndex: number) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
@@ -111,6 +112,26 @@ export const useTerminalStore = create<TerminalStore>()(
 						clearProfileActiveTabNotification(state, profileId);
 					}
 				}
+			});
+		},
+
+		reorderTabs(profileId, fromIndex, toIndex) {
+			set((state) => {
+				const profile = state.profiles[profileId];
+				if (
+					!profile ||
+					fromIndex === toIndex ||
+					fromIndex < 0 ||
+					toIndex < 0 ||
+					fromIndex >= profile.tabs.length ||
+					toIndex >= profile.tabs.length
+				) {
+					return;
+				}
+
+				const [movedTab] = profile.tabs.splice(fromIndex, 1);
+				if (!movedTab) return;
+				profile.tabs.splice(toIndex, 0, movedTab);
 			});
 		},
 

@@ -186,6 +186,52 @@ describe("useTerminalStore", () => {
 		});
 	});
 
+	describe("reorderTabs", () => {
+		it("moves a tab to the requested index", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().addTab("p1", "s3", "T3");
+
+			getState().reorderTabs("p1", 0, 2);
+
+			expect(getState().profiles.p1.tabs.map((tab) => tab.id)).toEqual([
+				"s2",
+				"s3",
+				"s1",
+			]);
+		});
+
+		it("keeps the active tab selection after reordering", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().addTab("p1", "s3", "T3");
+			getState().setActiveTab("p1", "s1");
+
+			getState().reorderTabs("p1", 0, 2);
+
+			expect(getState().profiles.p1.activeTabId).toBe("s1");
+		});
+
+		it("no-ops for invalid indices", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+
+			getState().reorderTabs("p1", -1, 1);
+			getState().reorderTabs("p1", 0, 99);
+
+			expect(getState().profiles.p1.tabs.map((tab) => tab.id)).toEqual([
+				"s1",
+				"s2",
+			]);
+		});
+
+		it("no-ops when the profile does not exist", () => {
+			expect(() =>
+				getState().reorderTabs("missing", 0, 1),
+			).not.toThrow();
+		});
+	});
+
 	describe("removeProfile", () => {
 		it("deletes the profile from state", () => {
 			getState().addTab("p1", "s1", "T1");
