@@ -42,14 +42,12 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 }
 
 /// Get the full diff (staged + unstaged) without affecting the real index.
-/// Uses a temporary index file to stage all changes, then diffs against HEAD.
+/// Uses a temporary index file seeded from the repo's current index so tracked
+/// files that are now ignored still remain tracked in the temporary view.
 pub fn diff(folder: &str) -> Result<String, AppError> {
-	let tmp_dir = tempfile::tempdir().map_err(|e| {
-		AppError::GitError(format!("Failed to create temp dir: {e}"))
-	})?;
-	let tmp_index = tmp_dir.path().join("index");
+	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
-	// Stage all changes into a fresh temporary index (git add -A builds it from scratch)
+	// Stage all changes into the temporary index without mutating the real one.
 	let add_output = Command::new("git")
 		.args(["add", "-A"])
 		.current_dir(folder)
@@ -91,10 +89,7 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 }
 
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
-	let tmp_dir = tempfile::tempdir().map_err(|e| {
-		AppError::GitError(format!("Failed to create temp dir: {e}"))
-	})?;
-	let tmp_index = tmp_dir.path().join("index");
+	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
 	let add_output = Command::new("git")
 		.args(["add", "-A"])
@@ -144,6 +139,55 @@ pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 		insertions,
 		deletions,
 	})
+}
+
+fn create_temp_index_from_repo(
+	folder: &str,
+) -> Result<(tempfile::TempDir, std::path::PathBuf), AppError> {
+	let tmp_dir = tempfile::tempdir().map_err(|e| {
+		AppError::GitError(format!("Failed to create temp dir: {e}"))
+	})?;
+	let tmp_index = tmp_dir.path().join("index");
+
+	if let Some(repo_index) = resolve_git_index_path(folder)? {
+		if repo_index.exists() {
+			std::fs::copy(&repo_index, &tmp_index).map_err(|e| {
+				AppError::GitError(format!(
+					"Failed to copy git index from {}: {e}",
+					repo_index.display()
+				))
+			})?;
+		}
+	}
+
+	Ok((tmp_dir, tmp_index))
+}
+
+fn resolve_git_index_path(
+	folder: &str,
+) -> Result<Option<std::path::PathBuf>, AppError> {
+	let output = Command::new("git")
+		.args(["rev-parse", "--git-path", "index"])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		return Ok(None);
+	}
+
+	let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if path.is_empty() {
+		return Ok(None);
+	}
+
+	let path = Path::new(&path);
+	let resolved = if path.is_absolute() {
+		path.to_path_buf()
+	} else {
+		Path::new(folder).join(path)
+	};
+
+	Ok(Some(resolved))
 }
 
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
@@ -1437,6 +1481,48 @@ mod tests {
 		let diff_output = result.unwrap();
 		assert!(diff_output.contains("new.txt"));
 		assert!(diff_output.contains("+new content"));
+	}
+
+	#[test]
+	fn diff_excludes_tracked_files_that_are_now_ignored() {
+		let dir = create_temp_git_repo();
+		std::fs::create_dir_all(dir.join("build")).unwrap();
+		std::fs::write(
+			dir.join("build/entitlements.mac.plist"),
+			"<plist>tracked</plist>",
+		)
+		.unwrap();
+		Command::new("git")
+			.args(["add", "build/entitlements.mac.plist"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "Add tracked entitlements"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		std::fs::write(dir.join(".gitignore"), "build/\n").unwrap();
+		Command::new("git")
+			.args(["add", ".gitignore"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "Ignore build output"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let diff_output = diff(&dir.to_string_lossy()).unwrap();
+		let stats = diff_stats(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(diff_output, "");
+		assert_eq!(stats.files_changed, 0);
+		assert_eq!(stats.insertions, 0);
+		assert_eq!(stats.deletions, 0);
 	}
 
 	#[test]
