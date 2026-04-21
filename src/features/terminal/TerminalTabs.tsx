@@ -27,6 +27,12 @@ import { useShallow } from "zustand/react/shallow";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import FileViewerPane from "@/features/projects/FileViewerPane";
 import { getFileIconUrl } from "@/shared/lib/fileIcons";
+import {
+	buildSortableId,
+	FILE_SORTABLE_PREFIX,
+	resolveSortableReorder,
+	TERMINAL_SORTABLE_PREFIX,
+} from "./tabSorting";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
@@ -45,8 +51,6 @@ const TAB_EXIT_ANIMATION = {
 	ease: [0.4, 0, 1, 1],
 } as const;
 const TAB_MIN_WIDTH = "140px";
-const TERMINAL_SORTABLE_PREFIX = "terminal";
-const FILE_SORTABLE_PREFIX = "file";
 const FULL_TAB_MOTION_PROPS = {
 	layout: "position" as const,
 	initial: { opacity: 0, scale: 0.92, y: 6 },
@@ -62,30 +66,6 @@ interface TabTriggerProps {
 	maxTitleLength: number;
 	badge?: React.ReactNode;
 	onClose: () => void;
-}
-
-function buildSortableId(
-	kind: typeof TERMINAL_SORTABLE_PREFIX | typeof FILE_SORTABLE_PREFIX,
-	index: number,
-) {
-	return `${kind}:${index}`;
-}
-
-function parseSortableId(id: string) {
-	const [kind, rawIndex] = id.split(":");
-	const index = Number(rawIndex);
-	if (
-		(kind !== TERMINAL_SORTABLE_PREFIX &&
-			kind !== FILE_SORTABLE_PREFIX) ||
-		Number.isNaN(index)
-	) {
-		return null;
-	}
-
-	return {
-		kind,
-		index,
-	} as const;
 }
 
 function TabTrigger({
@@ -222,17 +202,17 @@ export default function TerminalTabs({
 	);
 	const terminalSortableItems = useMemo(
 		() =>
-			tabs.map((tab, index) => ({
+			tabs.map((tab) => ({
 				...tab,
-				sortableId: buildSortableId(TERMINAL_SORTABLE_PREFIX, index),
+				sortableId: buildSortableId(TERMINAL_SORTABLE_PREFIX, tab.id),
 			})),
 		[tabs],
 	);
 	const fileSortableItems = useMemo(
 		() =>
-			fileTabs.map((tab, index) => ({
+			fileTabs.map((tab) => ({
 				...tab,
-				sortableId: buildSortableId(FILE_SORTABLE_PREFIX, index),
+				sortableId: buildSortableId(FILE_SORTABLE_PREFIX, tab.filePath),
 			})),
 		[fileTabs],
 	);
@@ -257,35 +237,28 @@ export default function TerminalTabs({
 		const { active, over } = event;
 		if (!over || active.id === over.id) return;
 
-		const activeItem = parseSortableId(String(active.id));
-		const overItem = parseSortableId(String(over.id));
-		if (!activeItem || !overItem) return;
+		const reorderRequest = resolveSortableReorder(
+			String(active.id),
+			String(over.id),
+			tabs.map((tab) => tab.id),
+			fileTabs.map((tab) => tab.filePath),
+		);
+		if (!reorderRequest) return;
 
-		if (activeItem.kind === overItem.kind) {
-			if (activeItem.kind === TERMINAL_SORTABLE_PREFIX) {
-				reorderTerminalTabs(profileId, activeItem.index, overItem.index);
-			} else {
-				reorderFileTabs(profileId, activeItem.index, overItem.index);
-			}
+		if (reorderRequest.kind === TERMINAL_SORTABLE_PREFIX) {
+			reorderTerminalTabs(
+				profileId,
+				reorderRequest.fromIndex,
+				reorderRequest.toIndex,
+			);
 			return;
 		}
 
-		if (
-			activeItem.kind === TERMINAL_SORTABLE_PREFIX &&
-			overItem.kind === FILE_SORTABLE_PREFIX &&
-			tabs.length > 0
-		) {
-			reorderTerminalTabs(profileId, activeItem.index, tabs.length - 1);
-			return;
-		}
-
-		if (
-			activeItem.kind === FILE_SORTABLE_PREFIX &&
-			overItem.kind === TERMINAL_SORTABLE_PREFIX &&
-			fileTabs.length > 0
-		) {
-			reorderFileTabs(profileId, activeItem.index, 0);
-		}
+		reorderFileTabs(
+			profileId,
+			reorderRequest.fromIndex,
+			reorderRequest.toIndex,
+		);
 	}
 
 	if (tabs.length === 0 && fileTabs.length === 0) return null;
@@ -313,7 +286,7 @@ export default function TerminalTabs({
 								<AnimatePresence initial={false}>
 									{terminalSortableItems.map((tab) => (
 										<SortableTabItem
-											key={tab.sortableId}
+											key={tab.id}
 											sortableId={tab.sortableId}
 											value={tab.id}
 											icon={<FiTerminal />}
@@ -344,7 +317,7 @@ export default function TerminalTabs({
 								<AnimatePresence initial={false}>
 									{fileSortableItems.map((tab) => (
 										<SortableTabItem
-											key={tab.sortableId}
+											key={tab.filePath}
 											sortableId={tab.sortableId}
 											value={tab.filePath}
 											icon={
