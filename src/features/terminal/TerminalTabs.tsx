@@ -83,13 +83,17 @@ function TabTrigger({
 	return (
 		<Tabs.Trigger value={value} flexShrink={0} minW={TAB_MIN_WIDTH}>
 			{icon}
-			<HStack gap="2">
-				{displayTitle}
+			<HStack gap="2" flex="1" minW="0">
+				<Box as="span" minW="0" flexShrink={1}>
+					{displayTitle}
+				</Box>
 				{badge}
 				<CloseButton
 					as="span"
 					role="button"
 					size="2xs"
+					ml="auto"
+					flexShrink={0}
 					onPointerDown={(event) => event.stopPropagation()}
 					onClick={(event) => {
 						event.stopPropagation();
