@@ -1,4 +1,5 @@
 import {
+	keepPreviousData,
 	useMutation,
 	useQuery,
 	useQueryClient,
@@ -160,6 +161,7 @@ export function useFileSearch(
 		queryKey: queryKeys.fs.search(profileId, trimmedQuery),
 		queryFn: () => searchFile({ profileId, query: trimmedQuery }),
 		enabled: !!profileId && !!trimmedQuery && enabled,
+		placeholderData: keepPreviousData,
 		staleTime: 30000,
 	});
 }
