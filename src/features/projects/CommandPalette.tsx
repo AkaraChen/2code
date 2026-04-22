@@ -22,7 +22,14 @@ function CommandPaletteEmptyState() {
 	const search = useCommandState((state) => state.search.trim());
 
 	return (
-		<Box asChild px="4" py="6">
+		<Box
+			asChild
+			display="flex"
+			alignItems="center"
+			justifyContent="center"
+			px="4"
+			py="8"
+		>
 			<Command.Empty>
 				<Text textAlign="center" color="fg.muted">
 					{search.length > 0
@@ -42,11 +49,14 @@ export default function CommandPalette({
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const deferredSearch = useDeferredValue(search.trim());
 	const openFile = useFileViewerTabsStore((state) => state.openFile);
-	const { data: results = [], isPending } = useFileSearch(
+	const { data: results = [], isFetching } = useFileSearch(
 		profileId,
 		deferredSearch,
 		isOpen,
 	);
+	const shouldShowEmptyState =
+		results.length === 0
+		&& (deferredSearch.length === 0 || !isFetching);
 
 	useEffect(() => {
 		if (!profileId) return;
@@ -145,7 +155,7 @@ export default function CommandPalette({
 				p="1"
 			>
 				<Command.List label={m.commandPaletteTitle()}>
-					{!isPending ? <CommandPaletteEmptyState /> : null}
+					{shouldShowEmptyState ? <CommandPaletteEmptyState /> : null}
 					{results.map((result) => (
 						<Box
 							key={result.path}
