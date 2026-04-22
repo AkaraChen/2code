@@ -39,6 +39,24 @@ if (typeof window !== "undefined" && !window.HTMLElement.prototype.scrollTo) {
 if (typeof window !== "undefined") {
 	window.scrollTo = vi.fn();
 }
+if (typeof globalThis.ResizeObserver === "undefined") {
+	class MockResizeObserver implements ResizeObserver {
+		observe() {}
+		unobserve() {}
+		disconnect() {}
+	}
+
+	Object.defineProperty(globalThis, "ResizeObserver", {
+		value: MockResizeObserver,
+		configurable: true,
+	});
+	if (typeof window !== "undefined") {
+		Object.defineProperty(window, "ResizeObserver", {
+			value: MockResizeObserver,
+			configurable: true,
+		});
+	}
+}
 
 // ─── Mock @tauri-apps/api/event ───
 // terminal/store.ts calls listen() at module scope

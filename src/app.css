@@ -33,3 +33,38 @@
 		opacity: 0;
 	}
 }
+
+.project-command-palette__overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1400;
+	background: rgba(2, 6, 23, 0.38);
+	backdrop-filter: blur(18px);
+}
+
+.project-command-palette__dialog {
+	position: fixed;
+	inset-inline: 0;
+	top: clamp(64px, 12vh, 112px);
+	display: flex;
+	justify-content: center;
+	padding-inline: 16px;
+	pointer-events: none;
+	z-index: 1401;
+	outline: none;
+}
+
+.project-command-palette__root {
+	pointer-events: auto;
+	width: min(100%, 48rem);
+	max-height: calc(100vh - clamp(96px, 18vh, 144px));
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--chakra-colors-border-subtle);
+	border-radius: 24px;
+	background:
+		linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 36%),
+		var(--chakra-colors-bg-panel);
+	box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+}
