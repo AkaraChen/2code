@@ -5,20 +5,6 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			{
-				find: "@/paraglide/messages.js",
-				replacement: path.resolve(
-					__dirname,
-					"./src/test/paraglide/messages.ts",
-				),
-			},
-			{
-				find: "@/paraglide/runtime.js",
-				replacement: path.resolve(
-					__dirname,
-					"./src/test/paraglide/runtime.ts",
-				),
-			},
-			{
 				find: "@",
 				replacement: path.resolve(__dirname, "./src"),
 			},

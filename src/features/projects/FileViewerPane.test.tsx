@@ -6,6 +6,7 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as m from "@/paraglide/messages.js";
 import { appSystem } from "@/theme/system";
 import FileViewerPane from "./FileViewerPane";
 import { useFileContent } from "./hooks";
@@ -71,7 +72,7 @@ describe("fileViewerPane", () => {
 		fireEvent.keyDown(window, { key: "f", metaKey: true });
 
 		const searchInput = await screen.findByRole("searchbox", {
-			name: "fileViewerFindInFile",
+			name: m.fileViewerFindInFile(),
 		});
 		await waitFor(() => expect(searchInput).toHaveFocus());
 	});
@@ -81,7 +82,7 @@ describe("fileViewerPane", () => {
 
 		fireEvent.keyDown(window, { key: "f", ctrlKey: true });
 		const searchInput = await screen.findByRole("searchbox", {
-			name: "fileViewerFindInFile",
+			name: m.fileViewerFindInFile(),
 		});
 
 		fireEvent.change(searchInput, { target: { value: "function" } });
@@ -101,7 +102,7 @@ describe("fileViewerPane", () => {
 		await waitFor(() => {
 			expect(
 				screen.queryByRole("searchbox", {
-					name: "fileViewerFindInFile",
+					name: m.fileViewerFindInFile(),
 				}),
 			).not.toBeInTheDocument();
 		});

@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileSearchResult } from "@/generated";
+import * as m from "@/paraglide/messages.js";
 import { appSystem } from "@/theme/system";
 import { useFileViewerTabsStore } from "./fileViewerTabsStore";
 import CommandPalette from "./CommandPalette";
@@ -70,11 +71,11 @@ describe("commandPalette", () => {
 		fireEvent.keyDown(window, { key: "k", metaKey: true });
 
 		const input = await screen.findByRole("combobox", {
-			name: "commandPaletteTitle",
+			name: m.commandPaletteTitle(),
 		});
 		await waitFor(() => expect(input).toHaveFocus());
 		expect(document.querySelector("[cmdk-root]")).toBeInTheDocument();
-		expect(screen.getByText("commandPaletteEmpty")).toBeInTheDocument();
+		expect(screen.getByText(m.commandPaletteEmpty())).toBeInTheDocument();
 	});
 
 	it("opens the current file selection with Enter", async () => {
@@ -83,7 +84,7 @@ describe("commandPalette", () => {
 		fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 
 		const input = await screen.findByRole("combobox", {
-			name: "commandPaletteTitle",
+			name: m.commandPaletteTitle(),
 		});
 		fireEvent.change(input, { target: { value: "main" } });
 
@@ -105,7 +106,7 @@ describe("commandPalette", () => {
 		});
 		expect(
 			screen.queryByRole("combobox", {
-				name: "commandPaletteTitle",
+				name: m.commandPaletteTitle(),
 			}),
 		).not.toBeInTheDocument();
 	});

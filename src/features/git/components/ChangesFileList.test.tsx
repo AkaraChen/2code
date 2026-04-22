@@ -3,6 +3,7 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as m from "@/paraglide/messages.js";
 import { appSystem } from "@/theme/system";
 import ChangesFileList from "./ChangesFileList";
 
@@ -72,12 +73,12 @@ describe("changesFileList", () => {
 		expect(onSelect).toHaveBeenCalledWith(0);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "gitDiscardFileAction" }),
+			screen.getByRole("button", { name: m.gitDiscardFileAction() }),
 		);
 
 		await waitFor(() => expect(onDiscardFile).toHaveBeenCalledWith(file));
 		expect(
-			screen.queryByRole("button", { name: "gitDiscardFileAction" }),
+			screen.queryByRole("button", { name: m.gitDiscardFileAction() }),
 		).not.toBeInTheDocument();
 	});
 });
