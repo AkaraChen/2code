@@ -52,11 +52,10 @@ const TAB_EXIT_ANIMATION = {
 } as const;
 const TAB_MIN_WIDTH = "140px";
 const FULL_TAB_MOTION_PROPS = {
-	layout: "position" as const,
 	initial: { opacity: 0, scale: 0.92, y: 6 },
 	animate: { opacity: 1, scale: 1, y: 0 },
 	exit: { opacity: 0, scale: 0.88, y: -6, width: 0 },
-	transition: { layout: TAB_ANIMATION, default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
+	transition: { default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
 } as const;
 
 interface TabTriggerProps {
