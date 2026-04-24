@@ -268,6 +268,16 @@ describe("fileTreePanel", () => {
 		});
 	});
 
+	it("allows folder rename when Trees passes the public folder path", () => {
+		renderPanel();
+		const renaming = useFileTreeOptionsRef.current?.renaming;
+		if (!renaming || typeof renaming === "boolean") {
+			throw new Error("expected renaming config");
+		}
+
+		expect(renaming.canRename?.({ isFolder: true, path: "src" })).toBe(true);
+	});
+
 	it("persists drag and drop events through the backend mutation", () => {
 		renderPanel();
 		const dragAndDrop = useFileTreeOptionsRef.current?.dragAndDrop;

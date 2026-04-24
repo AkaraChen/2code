@@ -169,6 +169,11 @@ function getContextMenuActionPaths(
 	return selectedPaths.includes(itemPath) ? selectedPaths : [itemPath];
 }
 
+function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
+	const directoryPath = `${path.replace(TRAILING_PATH_SEPARATOR_RE, "")}/`;
+	return pathSet.has(path) || pathSet.has(directoryPath);
+}
+
 interface FileTreeContextMenuButtonProps {
 	children: ReactNode;
 	disabled?: boolean;
@@ -228,7 +233,8 @@ function FileTreeContextMenu({
 }: FileTreeContextMenuProps) {
 	const actionPaths = getContextMenuActionPaths(item.path, selectedPaths);
 	const canOpen = item.kind === "file" && filePathSet.has(item.path);
-	const canRename = actionPaths.length === 1 && renamablePathSet.has(item.path);
+	const canRename =
+		actionPaths.length === 1 && hasTreePath(renamablePathSet, item.path);
 
 	const handleOpen = () => {
 		if (canOpen) openAndCloseContextMenu(context, () => onOpenFile(item.path));
@@ -417,7 +423,7 @@ export default function FileTreePanel({
 		},
 		paths: [],
 		renaming: {
-			canRename: (item) => treePathSetRef.current.has(item.path),
+			canRename: (item) => hasTreePath(treePathSetRef.current, item.path),
 			onError: () => {
 				restoreModelRef.current();
 			},
