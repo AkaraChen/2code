@@ -1,107 +1,170 @@
+import "@/shared/lib/monaco";
 import {
 	Box,
-	CloseButton,
 	Flex,
-	HStack,
-	IconButton,
-	Input,
 	Spinner,
 	Text,
 } from "@chakra-ui/react";
-import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useEffectEvent, useRef } from "react";
-import { FiChevronDown, FiChevronUp } from "react-icons/fi";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import Editor from "@monaco-editor/react";
+import type {
+	BeforeMount,
+	EditorProps,
+	OnChange,
+	OnMount,
+} from "@monaco-editor/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
-import * as m from "@/paraglide/messages.js";
-import { isEditableElement } from "@/shared/lib/dom";
-import { detectLanguage } from "@/shared/lib/languageDetection";
-import { isSearchShortcut, useSearch } from "@/shared/hooks/useSearch";
-import { getPrismTheme } from "./prismThemes";
-import { useFileContent } from "./hooks";
+import { detectMonacoLanguage } from "@/shared/lib/languageDetection";
+import { useFileContent, useSaveFileContent } from "./hooks";
 
 interface FileViewerPaneProps {
 	filePath: string;
+	profileId: string;
 }
 
-export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
+function getMonacoTheme(themeId: string) {
+	return themeId.includes("light") ? "light" : "vs-dark";
+}
+
+export default function FileViewerPane({
+	filePath,
+	profileId,
+}: FileViewerPaneProps) {
 	const themeId = useTerminalThemeId();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const prismStyle = getPrismTheme(themeId);
+	const [draftsByPath, setDraftsByPath] = useState<Record<string, string>>({});
+	const [savedValuesByPath, setSavedValuesByPath] = useState<
+		Record<string, string>
+	>({});
 	const paneRef = useRef<HTMLDivElement | null>(null);
-	const scrollRef = useRef<HTMLDivElement | null>(null);
-	const searchInputRef = useRef<HTMLInputElement | null>(null);
+	const saveHandlerRef = useRef<() => void>(() => {});
+	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
 	const { data: content, isLoading, error } = useFileContent(filePath, true);
+	const {
+		isPending: isSaving,
+		mutate: saveFileContent,
+	} = useSaveFileContent(profileId);
 
 	const filename = filePath.split("/").pop() ?? "";
-	const language = detectLanguage(filename);
-	const {
-		currentMatchIndex,
-		currentMatchLine,
-		handleCloseSearch,
-		handleNextMatch,
-		handleOpenSearch,
-		handlePreviousMatch,
-		handleSearchChange,
-		handleSearchInputKeyDown,
-		isSearchOpen,
-		matchLabel,
-		matchedLineNumbers,
-		matches,
-		searchFocusRequest,
-		searchQuery,
-	} = useSearch(content ?? "");
+	const language = detectMonacoLanguage(filename);
+	const monacoTheme = getMonacoTheme(themeId);
+	const draftValue = draftsByPath[filePath];
+	const savedValue = savedValuesByPath[filePath];
+	const editorValue = draftValue ?? content ?? "";
+	const lastSavedValue = savedValue ?? content ?? "";
+	const hasLoadedFile = content != null || draftValue != null;
+	const hasUnsavedChanges = editorValue !== lastSavedValue;
 
-	const handleOpenSearchFromShortcut = useEffectEvent(() => {
-		handleOpenSearch();
-	});
+	useEffect(() => {
+		if (!hasLoadedFile) return;
+		setFileDirty(profileId, filePath, hasUnsavedChanges);
+	}, [
+		filePath,
+		hasLoadedFile,
+		hasUnsavedChanges,
+		profileId,
+		setFileDirty,
+	]);
+
+	const editorOptions = useMemo<NonNullable<EditorProps["options"]>>(
+		() => ({
+			automaticLayout: true,
+			fontFamily: `"${fontFamily}", monospace`,
+			fontLigatures: true,
+			fontSize,
+			minimap: { enabled: false },
+			padding: { top: 12, bottom: 12 },
+			renderWhitespace: "selection",
+			scrollBeyondLastLine: false,
+			wordWrap: "off",
+		}),
+		[fontFamily, fontSize],
+	);
+
+	const handleEditorBeforeMount = useCallback<BeforeMount>((monaco) => {
+		const diagnosticsOptions = {
+			noSemanticValidation: true,
+			noSyntaxValidation: true,
+		};
+		monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(
+			diagnosticsOptions,
+		);
+		monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(
+			diagnosticsOptions,
+		);
+	}, []);
+
+	const handleEditorChange = useCallback<OnChange>(
+		(nextValue) => {
+			setDraftsByPath((prev) => ({
+				...prev,
+				[filePath]: nextValue ?? "",
+			}));
+		},
+		[filePath],
+	);
+
+	const handleSave = useCallback(() => {
+		if (!hasLoadedFile || !hasUnsavedChanges || isSaving) return;
+
+		saveFileContent(
+			{ path: filePath, content: editorValue },
+			{
+				onSuccess: (_result, variables) => {
+					setDraftsByPath((prev) => ({
+						...prev,
+						[variables.path]: variables.content,
+					}));
+					setSavedValuesByPath((prev) => ({
+						...prev,
+						[variables.path]: variables.content,
+					}));
+					setFileDirty(profileId, variables.path, false);
+				},
+			},
+		);
+	}, [
+		editorValue,
+		filePath,
+		hasLoadedFile,
+		hasUnsavedChanges,
+		isSaving,
+		profileId,
+		saveFileContent,
+		setFileDirty,
+	]);
+
+	saveHandlerRef.current = handleSave;
 
 	useEffect(() => {
 		const handleWindowKeyDown = (event: KeyboardEvent) => {
-			if (event.defaultPrevented || !isSearchShortcut(event)) return;
+			if (event.defaultPrevented) return;
+			if (event.key.toLowerCase() !== "s") return;
+			if (!event.metaKey && !event.ctrlKey) return;
 
 			const pane = paneRef.current;
 			if (!pane || pane.getClientRects().length === 0) return;
-			if (
-				event.target instanceof Node &&
-				!pane.contains(event.target) &&
-				isEditableElement(event.target)
-			) {
-				return;
-			}
 
 			event.preventDefault();
-			handleOpenSearchFromShortcut();
+			saveHandlerRef.current();
 		};
 
 		window.addEventListener("keydown", handleWindowKeyDown);
 		return () => window.removeEventListener("keydown", handleWindowKeyDown);
 	}, []);
 
-	useEffect(() => {
-		if (!isSearchOpen || searchFocusRequest === 0) return;
-
-		const frame = window.requestAnimationFrame(() => {
-			searchInputRef.current?.focus({ preventScroll: true });
-			searchInputRef.current?.select();
-		});
-
-		return () => window.cancelAnimationFrame(frame);
-	}, [isSearchOpen, searchFocusRequest]);
-
-	useEffect(() => {
-		if (!isSearchOpen || currentMatchLine == null) return;
-
-		const line = scrollRef.current?.querySelector<HTMLElement>(
-			`[data-search-line="${currentMatchLine}"]`,
+	const handleEditorMount = useCallback<OnMount>((editor, monaco) => {
+		editor.addCommand(
+			monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+			() => saveHandlerRef.current(),
 		);
-		line?.scrollIntoView?.({ block: "center", inline: "nearest" });
-	}, [currentMatchIndex, currentMatchLine, isSearchOpen]);
+	}, []);
 
-	if (isLoading) {
+	if (isLoading && !hasLoadedFile) {
 		return (
 			<Flex align="center" justify="center" h="32">
 				<Spinner size="sm" />
@@ -109,7 +172,7 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 		);
 	}
 
-	if (error) {
+	if (error && !hasLoadedFile) {
 		return (
 			<Flex align="center" justify="center" h="32" px="6">
 				<Text color="fg.muted" fontSize="sm" textAlign="center">
@@ -119,124 +182,26 @@ export default function FileViewerPane({ filePath }: FileViewerPaneProps) {
 		);
 	}
 
-	if (content == null) return null;
+	if (!hasLoadedFile) return null;
 
 	return (
-		<Box h="full" overflow="hidden" position="relative" ref={paneRef}>
-			<AnimatePresence initial={false}>
-				{isSearchOpen && (
-					<Box
-						asChild
-						position="absolute"
-						top="3"
-						right="4"
-						zIndex="1"
-					>
-						<motion.div
-							initial={{ opacity: 0, y: -6, scale: 0.98 }}
-							animate={{ opacity: 1, y: 0, scale: 1 }}
-							exit={{ opacity: 0, y: -6, scale: 0.98 }}
-							transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
-						>
-							<HStack
-								gap="1"
-								p="1"
-								rounded="l2"
-								borderWidth="1px"
-								borderColor="border.emphasized"
-								bg="bg.panel"
-								boxShadow="lg"
-							>
-								<Input
-									ref={searchInputRef}
-									type="search"
-									size="xs"
-									w="44"
-									value={searchQuery}
-									placeholder={m.fileViewerFindInFile()}
-									aria-label={m.fileViewerFindInFile()}
-									autoComplete="off"
-									onChange={handleSearchChange}
-									onKeyDown={handleSearchInputKeyDown}
-								/>
-								<Text minW="9" textAlign="right" fontSize="xs" color="fg.muted">
-									{matchLabel}
-								</Text>
-								<IconButton
-									size="2xs"
-									variant="ghost"
-									aria-label={m.fileViewerPreviousMatch()}
-									disabled={matches.length === 0}
-									onClick={handlePreviousMatch}
-								>
-									<FiChevronUp />
-								</IconButton>
-								<IconButton
-									size="2xs"
-									variant="ghost"
-									aria-label={m.fileViewerNextMatch()}
-									disabled={matches.length === 0}
-									onClick={handleNextMatch}
-								>
-									<FiChevronDown />
-								</IconButton>
-								<CloseButton
-									size="2xs"
-									aria-label={m.fileViewerCloseFileSearch()}
-									onClick={handleCloseSearch}
-								/>
-							</HStack>
-						</motion.div>
-					</Box>
+		<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+			<Editor
+				height="100%"
+				path={filePath}
+				language={language}
+				theme={monacoTheme}
+				value={editorValue}
+				options={editorOptions}
+				beforeMount={handleEditorBeforeMount}
+				onChange={handleEditorChange}
+				onMount={handleEditorMount}
+				loading={(
+					<Flex align="center" justify="center" h="full">
+						<Spinner size="sm" />
+					</Flex>
 				)}
-			</AnimatePresence>
-
-			<Box
-				ref={scrollRef}
-				h="full"
-				overflow="auto"
-				css={{
-					"& pre": {
-						margin: "0 !important",
-						borderRadius: "0 !important",
-						fontSize: `${fontSize}px !important`,
-						fontFamily: `"${fontFamily}", monospace !important`,
-					},
-				}}
-			>
-				<SyntaxHighlighter
-					language={language}
-					style={prismStyle}
-					showLineNumbers
-					wrapLines
-					lineProps={(lineNumber) => {
-						const isMatch = matchedLineNumbers.has(lineNumber);
-						const isCurrentMatch = currentMatchLine === lineNumber;
-
-						return {
-							"data-search-line": isMatch ? String(lineNumber) : undefined,
-							style: {
-								display: "block",
-								backgroundColor: isCurrentMatch
-									? "rgba(56, 189, 248, 0.28)"
-									: isMatch
-										? "rgba(250, 204, 21, 0.18)"
-										: undefined,
-							},
-						};
-					}}
-					wrapLongLines={false}
-					customStyle={{
-						margin: 0,
-						borderRadius: 0,
-						minHeight: "100%",
-						fontSize: `${fontSize}px`,
-						fontFamily: `"${fontFamily}", monospace`,
-					}}
-				>
-					{content}
-				</SyntaxHighlighter>
-			</Box>
+			/>
 		</Box>
 	);
 }

@@ -20,6 +20,7 @@ import {
 	saveProjectConfig,
 	searchFile,
 	updateProject,
+	writeFileContent,
 } from "@/generated";
 import type { ProjectConfig, ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -228,6 +229,29 @@ export function useFileContent(path: string, enabled = true) {
 		queryFn: () => readFileContent({ path }),
 		enabled: !!path && enabled,
 		staleTime: 10000,
+	});
+}
+
+export function useSaveFileContent(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ path, content }: { path: string; content: string }) =>
+			writeFileContent({ path, content }),
+		onSuccess: async (_result, { path, content }) => {
+			queryClient.setQueryData(queryKeys.fs.file(path), content);
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: queryKeys.fs.file(path) }),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
 	});
 }
 

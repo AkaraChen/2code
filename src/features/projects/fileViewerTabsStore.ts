@@ -25,6 +25,43 @@ interface FileViewerTabsStore {
 	setTerminalActive: (profileId: string) => void;
 }
 
+interface FileViewerDirtyStore {
+	profiles: Record<string, string[]>;
+	setFileDirty: (
+		profileId: string,
+		filePath: string,
+		isDirty: boolean,
+	) => void;
+}
+
+export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
+	immer((set) => ({
+		profiles: {},
+
+		setFileDirty(profileId, filePath, isDirty) {
+			set((state) => {
+				const dirtyFiles = state.profiles[profileId] ?? [];
+				const alreadyDirty = dirtyFiles.includes(filePath);
+
+				if (isDirty) {
+					if (!alreadyDirty) {
+						state.profiles[profileId] = [...dirtyFiles, filePath];
+					}
+					return;
+				}
+
+				if (!alreadyDirty) return;
+				const nextDirtyFiles = dirtyFiles.filter((path) => path !== filePath);
+				if (nextDirtyFiles.length > 0) {
+					state.profiles[profileId] = nextDirtyFiles;
+				} else {
+					delete state.profiles[profileId];
+				}
+			});
+		},
+	})),
+);
+
 export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 	persist(
 		immer((set) => ({
@@ -74,6 +111,9 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 						delete state.profiles[profileId];
 					}
 				});
+				useFileViewerDirtyStore
+					.getState()
+					.setFileDirty(profileId, filePath, false);
 			},
 
 			reorderTabs(profileId, fromIndex, toIndex) {

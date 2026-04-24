@@ -85,6 +85,33 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 }
 
 #[tauri::command]
+pub async fn write_file_content(
+	path: String,
+	content: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		let file_path = Path::new(&path);
+		if !file_path.exists() {
+			return Err(AppError::NotFound(format!("File: {path}")));
+		}
+		if file_path.is_dir() {
+			return Err(AppError::IoError(std::io::Error::other(
+				"Path is a directory",
+			)));
+		}
+		if content.len() > 1_000_000 {
+			return Err(AppError::IoError(std::io::Error::other(
+				"File too large (> 1MB)",
+			)));
+		}
+
+		std::fs::write(&path, content)?;
+		Ok(())
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn search_file(
 	profile_id: String,
 	query: String,

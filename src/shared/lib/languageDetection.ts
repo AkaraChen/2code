@@ -71,3 +71,17 @@ export function detectLanguage(filename: string): string {
 	const baseName = filename.toLowerCase();
 	return NAME_MAP[baseName] ?? EXT_MAP[ext] ?? "text";
 }
+
+const MONACO_LANGUAGE_OVERRIDES: Record<string, string> = {
+	bash: "shell",
+	docker: "dockerfile",
+	jsx: "javascript",
+	markup: "html",
+	text: "plaintext",
+	tsx: "typescript",
+};
+
+export function detectMonacoLanguage(filename: string): string {
+	const language = detectLanguage(filename);
+	return MONACO_LANGUAGE_OVERRIDES[language] ?? language;
+}

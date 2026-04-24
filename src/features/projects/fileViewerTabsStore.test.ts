@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useTerminalStore } from "@/features/terminal/store";
 import {
 	useActiveProfileIds,
+	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "./fileViewerTabsStore";
 
 function resetStores() {
 	useFileViewerTabsStore.setState({ profiles: {} });
+	useFileViewerDirtyStore.setState({ profiles: {} });
 	useTerminalStore.setState({
 		profiles: {},
 		notifiedTabs: new Set<string>(),
@@ -74,6 +76,21 @@ describe("fileViewerTabsStore", () => {
 
 		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/src/a.ts");
 		expect(useFileViewerTabsStore.getState().profiles["profile-1"]).toBeUndefined();
+	});
+
+	it("tracks dirty file tabs and clears dirty state when a tab closes", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
+		useFileViewerDirtyStore
+			.getState()
+			.setFileDirty("profile-1", "/repo/src/a.ts", true);
+
+		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toEqual([
+			"/repo/src/a.ts",
+		]);
+
+		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/src/a.ts");
+
+		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toBeUndefined();
 	});
 
 	it("switches between file and terminal focus for a profile", () => {

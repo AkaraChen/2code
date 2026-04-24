@@ -2,6 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const replacements = [
 	{
+		path: new URL("../src/generated/types.ts", import.meta.url),
+		pairs: [],
+	},
+	{
 		path: new URL("../src/generated/commands.ts", import.meta.url),
 		pairs: [
 			[
@@ -27,5 +31,6 @@ for (const { path, pairs } of replacements) {
 	for (const [from, to] of pairs) {
 		content = content.replace(from, to);
 	}
+	content = `${content.trimEnd()}\n`;
 	await writeFile(path, content);
 }

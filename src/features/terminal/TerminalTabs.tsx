@@ -4,6 +4,7 @@ import {
 	CloseButton,
 	Flex,
 	HStack,
+	Spinner,
 	Tabs,
 } from "@chakra-ui/react";
 import {
@@ -21,11 +22,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
-import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
-import FileViewerPane from "@/features/projects/FileViewerPane";
+import {
+	useFileViewerDirtyStore,
+	useFileViewerTabsStore,
+} from "@/features/projects/fileViewerTabsStore";
 import { getFileIconUrl } from "@/shared/lib/fileIcons";
 import {
 	buildSortableId,
@@ -38,10 +41,13 @@ import { useTerminalStore } from "./store";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
+const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
+
 // Stable fallbacks — module-level constants prevent new object refs each render,
 // which would break useShallow's equality check and cause infinite re-renders.
 const EMPTY_TERMINAL_PROFILE = { tabs: [] as { id: string; title: string }[], activeTabId: null as string | null };
 const EMPTY_FILE_PROFILE = { tabs: [] as { filePath: string; title: string }[], activeFilePath: null as string | null, fileTabActive: false };
+const EMPTY_DIRTY_FILE_PATHS: string[] = [];
 const TAB_ANIMATION = {
 	duration: 0.18,
 	ease: [0.22, 1, 0.36, 1],
@@ -83,7 +89,7 @@ function TabTrigger({
 		<Tabs.Trigger value={value} flexShrink={0} minW={TAB_MIN_WIDTH}>
 			{icon}
 			<HStack gap="2" flex="1" minW="0">
-				<Box as="span" minW="0" flexShrink={1}>
+				<Box as="span" minW="0" flex="1" flexShrink={1}>
 					{displayTitle}
 				</Box>
 				{badge}
@@ -91,7 +97,6 @@ function TabTrigger({
 					as="span"
 					role="button"
 					size="2xs"
-					ml="auto"
 					flexShrink={0}
 					onPointerDown={(event) => event.stopPropagation()}
 					onClick={(event) => {
@@ -189,6 +194,9 @@ export default function TerminalTabs({
 	const fileViewerState = useFileViewerTabsStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_FILE_PROFILE),
 	);
+	const dirtyFilePaths = useFileViewerDirtyStore(
+		useShallow((state) => state.profiles[profileId] ?? EMPTY_DIRTY_FILE_PATHS),
+	);
 	const closeFileTab = useFileViewerTabsStore((state) => state.closeTab);
 	const reorderFileTabs = useFileViewerTabsStore((state) => state.reorderTabs);
 	const setFileActive = useFileViewerTabsStore((state) => state.setFileActive);
@@ -197,6 +205,10 @@ export default function TerminalTabs({
 	const fileTabs = fileViewerState.tabs;
 	const activeFilePath = fileViewerState.activeFilePath;
 	const fileTabActive = fileViewerState.fileTabActive;
+	const dirtyFilePathSet = useMemo(
+		() => new Set(dirtyFilePaths),
+		[dirtyFilePaths],
+	);
 
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
@@ -335,6 +347,11 @@ export default function TerminalTabs({
 											title={tab.title}
 											maxTitleLength={14}
 											motionProps={tabMotionProps}
+											badge={
+												dirtyFilePathSet.has(tab.filePath) ? (
+													<Circle size="2" bg="fg.muted" />
+												) : undefined
+											}
 											onClose={() =>
 												closeFileTab(profileId, tab.filePath)
 											}
@@ -356,7 +373,15 @@ export default function TerminalTabs({
 			{/* File viewer — static content, safe to conditionally render */}
 			{fileTabActive && activeFilePath && (
 				<Box flex="1" minH="0" overflow="hidden">
-					<FileViewerPane filePath={activeFilePath} />
+					<Suspense
+						fallback={(
+							<Flex align="center" justify="center" h="32">
+								<Spinner size="sm" />
+							</Flex>
+						)}
+					>
+						<FileViewerPane filePath={activeFilePath} profileId={profileId} />
+					</Suspense>
 				</Box>
 			)}
 

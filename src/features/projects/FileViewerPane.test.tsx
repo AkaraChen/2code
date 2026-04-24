@@ -1,24 +1,61 @@
 import { ChakraProvider } from "@chakra-ui/react";
 import {
+	act,
 	fireEvent,
 	render,
 	screen,
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as m from "@/paraglide/messages.js";
 import { appSystem } from "@/theme/system";
 import FileViewerPane from "./FileViewerPane";
-import { useFileContent } from "./hooks";
+import {
+	useFileViewerDirtyStore,
+} from "./fileViewerTabsStore";
+import { useFileContent, useSaveFileContent } from "./hooks";
+
+const { saveMutateMock } = vi.hoisted(() => ({
+	saveMutateMock: vi.fn(),
+}));
+
+vi.mock("@/shared/lib/monaco", () => ({}));
+
+vi.mock("@monaco-editor/react", () => ({
+	default: ({
+		language,
+		onChange,
+		path,
+		theme,
+		value,
+	}: {
+		language?: string;
+		onChange?: (value: string | undefined) => void;
+		path?: string;
+		theme?: string;
+		value?: string;
+	}) => (
+		<textarea
+			aria-label="Monaco Editor"
+			data-language={language}
+			data-path={path}
+			data-theme={theme}
+			value={value ?? ""}
+			onChange={(event) => onChange?.(event.currentTarget.value)}
+		/>
+	),
+}));
 
 vi.mock("./hooks", () => ({
 	useFileContent: vi.fn(),
+	useSaveFileContent: vi.fn(),
 }));
 
 vi.mock("@/features/terminal/hooks", () => ({
 	useTerminalThemeId: () => "github-dark",
 }));
 
+const filePath = "/repo/src/index.ts";
+const profileId = "profile-1";
 const fileContent = [
 	"function alpha() {}",
 	"const beta = 1;",
@@ -26,6 +63,7 @@ const fileContent = [
 ].join("\n");
 
 type FileContentResult = ReturnType<typeof useFileContent>;
+type SaveFileContentResult = ReturnType<typeof useSaveFileContent>;
 
 function createVisibleRectList(): DOMRectList {
 	const rect = new DOMRect(0, 0, 640, 480);
@@ -42,7 +80,7 @@ function createVisibleRectList(): DOMRectList {
 function renderPane() {
 	return render(
 		<ChakraProvider value={appSystem}>
-			<FileViewerPane filePath="/repo/src/index.ts" />
+			<FileViewerPane filePath={filePath} profileId={profileId} />
 		</ChakraProvider>,
 	);
 }
@@ -51,60 +89,63 @@ describe("fileViewerPane", () => {
 	let getClientRectsSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
+		saveMutateMock.mockReset();
+		useFileViewerDirtyStore.setState({ profiles: {} });
 		getClientRectsSpy = vi
 			.spyOn(HTMLElement.prototype, "getClientRects")
 			.mockReturnValue(createVisibleRectList());
-
 		vi.mocked(useFileContent).mockReturnValue({
 			data: fileContent,
 			isLoading: false,
 			error: null,
 		} as FileContentResult);
+		vi.mocked(useSaveFileContent).mockReturnValue({
+			error: null,
+			isPending: false,
+			mutate: saveMutateMock,
+		} as unknown as SaveFileContentResult);
 	});
 
 	afterEach(() => {
 		getClientRectsSpy.mockRestore();
 	});
 
-	it("opens and focuses file search with Cmd+F", async () => {
+	it("renders Monaco with the file content and detected language", async () => {
 		renderPane();
 
-		fireEvent.keyDown(window, { key: "f", metaKey: true });
+		const editor = await screen.findByLabelText("Monaco Editor");
 
-		const searchInput = await screen.findByRole("searchbox", {
-			name: m.fileViewerFindInFile(),
-		});
-		await waitFor(() => expect(searchInput).toHaveFocus());
+		expect(editor).toHaveValue(fileContent);
+		expect(editor).toHaveAttribute("data-language", "typescript");
+		expect(editor).toHaveAttribute("data-path", filePath);
+		expect(editor).toHaveAttribute("data-theme", "vs-dark");
+		expect(screen.queryByRole("button")).not.toBeInTheDocument();
 	});
 
-	it("supports browser-like match navigation from the search input", async () => {
+	it("marks the file dirty and saves edited content with Cmd+S", async () => {
+		const nextContent = `${fileContent}\nconsole.log(beta);`;
+		saveMutateMock.mockImplementation((_variables, options) => {
+			options?.onSuccess?.(undefined, _variables);
+		});
 		renderPane();
 
-		fireEvent.keyDown(window, { key: "f", ctrlKey: true });
-		const searchInput = await screen.findByRole("searchbox", {
-			name: m.fileViewerFindInFile(),
-		});
-
-		fireEvent.change(searchInput, { target: { value: "function" } });
+		const editor = await screen.findByLabelText("Monaco Editor");
+		fireEvent.change(editor, { target: { value: nextContent } });
 
 		await waitFor(() => {
-			expect(screen.getByText("1/2")).toBeInTheDocument();
+			expect(useFileViewerDirtyStore.getState().profiles[profileId]).toContain(
+				filePath,
+			);
 		});
 
-		fireEvent.keyDown(searchInput, { key: "Enter" });
-
-		await waitFor(() => {
-			expect(screen.getByText("2/2")).toBeInTheDocument();
+		act(() => {
+			fireEvent.keyDown(window, { key: "s", metaKey: true });
 		});
 
-		fireEvent.keyDown(searchInput, { key: "Escape" });
-
-		await waitFor(() => {
-			expect(
-				screen.queryByRole("searchbox", {
-					name: m.fileViewerFindInFile(),
-				}),
-			).not.toBeInTheDocument();
-		});
+		expect(saveMutateMock).toHaveBeenCalledWith(
+			{ path: filePath, content: nextContent },
+			expect.objectContaining({ onSuccess: expect.any(Function) }),
+		);
+		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
 	});
 });
