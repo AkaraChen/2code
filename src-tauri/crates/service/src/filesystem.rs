@@ -1,7 +1,7 @@
 use diesel::SqliteConnection;
 
 use model::error::AppError;
-use model::filesystem::FileSearchResult;
+use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
 
 pub fn search_file(
 	conn: &mut SqliteConnection,
@@ -11,6 +11,14 @@ pub fn search_file(
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	let root = std::path::Path::new(&profile.worktree_path);
 	infra::filesystem::search_files(root, query)
+}
+
+pub fn get_file_tree_git_status(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	infra::git::status(&profile.worktree_path)
 }
 
 #[cfg(test)]

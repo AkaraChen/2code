@@ -10,10 +10,13 @@ import {
 	createProjectTemporary,
 	deleteProject,
 	getGitBranch,
+	getFileTreeGitStatus,
 	getProjectConfig,
-	listDirectory,
+	listFileTreePaths,
 	listProjects,
+	moveFileTreePaths,
 	readFileContent,
+	renameFileTreePath,
 	saveProjectConfig,
 	searchFile,
 	updateProject,
@@ -132,12 +135,90 @@ export function useDeleteProject() {
 	});
 }
 
-export function useDirectoryListing(path: string, enabled = true) {
+export function useFileTreePaths(path: string, enabled = true) {
 	return useQuery({
-		queryKey: queryKeys.fs.dir(path),
-		queryFn: () => listDirectory({ path }),
+		queryKey: queryKeys.fs.tree(path),
+		queryFn: () => listFileTreePaths({ path }),
 		enabled: !!path && enabled,
 		staleTime: 5000,
+	});
+}
+
+export function useFileTreeGitStatus(profileId: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.git.status(profileId),
+		queryFn: () => getFileTreeGitStatus({ profileId }),
+		enabled: !!profileId && enabled,
+		staleTime: 0,
+		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+	});
+}
+
+export function useRenameFileTreePath(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			sourcePath,
+			destinationPath,
+		}: {
+			sourcePath: string;
+			destinationPath: string;
+		}) =>
+			renameFileTreePath({
+				rootPath,
+				sourcePath,
+				destinationPath,
+			}),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useMoveFileTreePaths(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			sourcePaths,
+			targetDirPath,
+		}: {
+			sourcePaths: string[];
+			targetDirPath: string | null;
+		}) =>
+			moveFileTreePaths({
+				rootPath,
+				sourcePaths,
+				targetDirPath,
+			}),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
 	});
 }
 

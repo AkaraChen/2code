@@ -107,6 +107,7 @@ export default function ProjectDetailPage() {
 					/>
 					<Flex flex="1" overflow="hidden">
 						<FileTreePanel
+							profileId={profile.id}
 							rootPath={profile.worktree_path}
 							isOpen={fileTreeOpen}
 							onOpenFile={(filePath) => openFileTab(profile.id, filePath)}

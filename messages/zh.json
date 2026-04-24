@@ -208,5 +208,8 @@
 	"templates": "模板",
 	"noTemplatesDropdownHint": "可在项目设置中添加项目模板，或在全局设置中添加全局模板。",
 	"fileTreeLoading": "加载中...",
-	"fileTreeEmptyDirectory": "空文件夹"
+	"fileTreeEmptyDirectory": "空文件夹",
+	"fileTreeContextMenuOpen": "打开",
+	"fileTreeContextMenuCopyRelativePath": "复制相对路径",
+	"fileTreeContextMenuCopyAbsolutePath": "复制绝对路径"
 }

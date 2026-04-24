@@ -112,6 +112,7 @@ export default function TerminalLayer() {
 						/>
 						<Flex flex="1" minH="0" minW="0">
 							<FileTreePanel
+								profileId={profileId}
 								rootPath={profile.worktree_path}
 								isOpen={fileTreeIsOpen(profileId)}
 								onOpenFile={(filePath) =>

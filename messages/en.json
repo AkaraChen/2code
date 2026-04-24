@@ -208,5 +208,8 @@
 	"templates": "Templates",
 	"noTemplatesDropdownHint": "Add project templates in Project Settings, or global templates in Settings.",
 	"fileTreeLoading": "Loading...",
-	"fileTreeEmptyDirectory": "Empty"
+	"fileTreeEmptyDirectory": "Empty",
+	"fileTreeContextMenuOpen": "Open",
+	"fileTreeContextMenuCopyRelativePath": "Copy Relative Path",
+	"fileTreeContextMenuCopyAbsolutePath": "Copy Absolute Path"
 }

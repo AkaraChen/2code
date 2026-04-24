@@ -6,6 +6,7 @@ use std::path::{Component, Path};
 use std::process::Command;
 
 use model::error::AppError;
+use model::filesystem::FileTreeGitStatusEntry;
 use model::project::{GitAuthor, GitCommit, GitDiffStats};
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
@@ -39,6 +40,29 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 		return Ok("main".to_string());
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
+	let output = Command::new("git")
+		.args([
+			"status",
+			"--porcelain=v1",
+			"-z",
+			"--untracked-files=all",
+			"--ignored=matching",
+		])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		if stderr.contains("not a git repository") {
+			return Ok(Vec::new());
+		}
+		return Err(AppError::GitError(stderr));
+	}
+
+	Ok(parse_porcelain_status_z(&output.stdout))
 }
 
 /// Get the full diff (staged + unstaged) without affecting the real index.
@@ -712,6 +736,65 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	commits
 }
 
+fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
+	let records: Vec<&[u8]> = output
+		.split(|byte| *byte == 0)
+		.filter(|record| !record.is_empty())
+		.collect();
+	let mut entries = Vec::new();
+	let mut index = 0usize;
+
+	while let Some(record) = records.get(index) {
+		if record.len() < 4 {
+			index += 1;
+			continue;
+		}
+
+		let status_code = String::from_utf8_lossy(&record[..2]).to_string();
+		let path = String::from_utf8_lossy(&record[3..]).to_string();
+		let status = map_porcelain_status(&status_code);
+		if status_code.contains('R') || status_code.contains('C') {
+			index += 1;
+		}
+
+		if let Some(status) = status {
+			entries.push(FileTreeGitStatusEntry {
+				path,
+				status: status.to_string(),
+			});
+		}
+
+		index += 1;
+	}
+
+	entries
+}
+
+fn map_porcelain_status(status_code: &str) -> Option<&'static str> {
+	if status_code.contains('!') {
+		return Some("ignored");
+	}
+	if status_code.contains('?') {
+		return Some("untracked");
+	}
+	if status_code.contains('R') {
+		return Some("renamed");
+	}
+	if status_code.contains('A') {
+		return Some("added");
+	}
+	if status_code.contains('D') {
+		return Some("deleted");
+	}
+	if status_code
+		.chars()
+		.any(|value| matches!(value, 'M' | 'T' | 'U' | 'C'))
+	{
+		return Some("modified");
+	}
+	None
+}
+
 /// Parse "'refs/heads/feat' exists" from git error to extract "feat".
 fn extract_conflicting_ref(stderr: &str) -> Option<String> {
 	// Look for: 'refs/heads/XXX' exists
@@ -1014,6 +1097,39 @@ mod tests {
 			"Preview file path"
 		)
 		.is_err());
+	}
+
+	#[test]
+	fn parses_porcelain_status_for_file_tree() {
+		let output = b" M src/main.rs\0?? scratch.txt\0!! target/\0R  src/new.rs\0src/old.rs\0D  gone.rs\0";
+
+		let entries = parse_porcelain_status_z(output);
+
+		assert_eq!(
+			entries,
+			vec![
+				FileTreeGitStatusEntry {
+					path: "src/main.rs".to_string(),
+					status: "modified".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "scratch.txt".to_string(),
+					status: "untracked".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "target/".to_string(),
+					status: "ignored".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "src/new.rs".to_string(),
+					status: "renamed".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "gone.rs".to_string(),
+					status: "deleted".to_string(),
+				},
+			]
+		);
 	}
 
 	// --- parse_shortstat ---

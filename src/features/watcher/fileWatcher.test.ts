@@ -64,13 +64,19 @@ describe("fileWatcher", () => {
 			],
 			[
 				{
+					queryKey: ["git-status"],
+					exact: false,
+				},
+			],
+			[
+				{
 					queryKey: ["git-log"],
 					exact: false,
 				},
 			],
 			[
 				{
-					queryKey: ["fs-dir"],
+					queryKey: ["fs-tree"],
 					exact: false,
 				},
 			],
@@ -87,6 +93,6 @@ describe("fileWatcher", () => {
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
 		vi.advanceTimersByTime(1);
-		expect(invalidateQueriesMock).toHaveBeenCalledTimes(4);
+		expect(invalidateQueriesMock).toHaveBeenCalledTimes(5);
 	});
 });

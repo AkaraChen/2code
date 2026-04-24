@@ -4,14 +4,15 @@ export const queryNamespaces = {
 	"git-branch": "git-branch",
 	"git-diff": "git-diff",
 	"git-diff-stats": "git-diff-stats",
+	"git-status": "git-status",
 	"git-log": "git-log",
 	"git-commit-diff": "git-commit-diff",
 	"git-binary-preview": "git-binary-preview",
 	"git-ahead-count": "git-ahead-count",
 	"topbar-apps": "topbar-apps",
-	"fs-dir": "fs-dir",
 	"fs-file": "fs-file",
 	"fs-search": "fs-search",
+	"fs-tree": "fs-tree",
 };
 
 export const queryKeys = {
@@ -28,6 +29,7 @@ export const queryKeys = {
 		diff: (profileId: string) => ["git-diff", profileId] as const,
 		diffStats: (profileId: string) =>
 			["git-diff-stats", profileId] as const,
+		status: (profileId: string) => ["git-status", profileId] as const,
 		log: (profileId: string) => ["git-log", profileId] as const,
 		commitDiff: (profileId: string, hash: string) =>
 			["git-commit-diff", profileId, hash] as const,
@@ -50,9 +52,9 @@ export const queryKeys = {
 			["git-ahead-count", profileId] as const,
 	},
 	fs: {
-		dir: (path: string) => ["fs-dir", path] as const,
 		file: (path: string) => ["fs-file", path] as const,
 		search: (profileId: string, query: string) =>
 			["fs-search", profileId, query] as const,
+		tree: (path: string) => ["fs-tree", path] as const,
 	},
 };

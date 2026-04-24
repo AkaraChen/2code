@@ -9,14 +9,15 @@ describe("queryNamespaces", () => {
 			"git-branch": "git-branch",
 			"git-diff": "git-diff",
 			"git-diff-stats": "git-diff-stats",
+			"git-status": "git-status",
 			"git-log": "git-log",
 			"git-commit-diff": "git-commit-diff",
 			"git-binary-preview": "git-binary-preview",
 			"git-ahead-count": "git-ahead-count",
 			"topbar-apps": "topbar-apps",
-			"fs-dir": "fs-dir",
 			"fs-file": "fs-file",
 			"fs-search": "fs-search",
+			"fs-tree": "fs-tree",
 		});
 	});
 });
@@ -65,6 +66,13 @@ describe("queryKeys", () => {
 		it("diffStats() includes profileId in key", () => {
 			expect(queryKeys.git.diffStats("profile-1")).toEqual([
 				"git-diff-stats",
+				"profile-1",
+			]);
+		});
+
+		it("status() includes profileId in key", () => {
+			expect(queryKeys.git.status("profile-1")).toEqual([
+				"git-status",
 				"profile-1",
 			]);
 		});
@@ -120,9 +128,9 @@ describe("queryKeys", () => {
 	});
 
 	describe("filesystem", () => {
-		it("dir() includes the folder path", () => {
-			expect(queryKeys.fs.dir("/tmp/worktree")).toEqual([
-				"fs-dir",
+		it("tree() includes the folder path", () => {
+			expect(queryKeys.fs.tree("/tmp/worktree")).toEqual([
+				"fs-tree",
 				"/tmp/worktree",
 			]);
 		});

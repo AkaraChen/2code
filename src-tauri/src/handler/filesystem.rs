@@ -4,40 +4,46 @@ use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::filesystem::{FileEntry, FileSearchResult};
+use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
 
 #[tauri::command]
-pub async fn list_directory(path: String) -> Result<Vec<FileEntry>, AppError> {
+pub async fn list_file_tree_paths(
+	path: String,
+) -> Result<Vec<String>, AppError> {
 	super::run_blocking(move || {
-		let dir = Path::new(&path);
-		if !dir.is_dir() {
-			return Err(AppError::NotFound(format!("Directory: {path}")));
-		}
+		infra::filesystem::list_file_tree_paths(Path::new(&path))
+	})
+	.await
+}
 
-		let mut entries = Vec::new();
-		for entry in std::fs::read_dir(dir)? {
-			let entry = entry?;
-			let name = entry.file_name().to_string_lossy().to_string();
-			// Skip hidden files/dirs and the .git directory
-			if name.starts_with('.') {
-				continue;
-			}
-			let file_type = entry.file_type()?;
-			entries.push(FileEntry {
-				name,
-				path: entry.path().to_string_lossy().to_string(),
-				is_dir: file_type.is_dir(),
-			});
-		}
+#[tauri::command]
+pub async fn rename_file_tree_path(
+	root_path: String,
+	source_path: String,
+	destination_path: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::rename_file_tree_path(
+			Path::new(&root_path),
+			&source_path,
+			&destination_path,
+		)
+	})
+	.await
+}
 
-		// Directories first, then files, both case-insensitively alphabetical
-		entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-			(true, false) => std::cmp::Ordering::Less,
-			(false, true) => std::cmp::Ordering::Greater,
-			_ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-		});
-
-		Ok(entries)
+#[tauri::command]
+pub async fn move_file_tree_paths(
+	root_path: String,
+	source_paths: Vec<String>,
+	target_dir_path: Option<String>,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::move_file_tree_paths(
+			Path::new(&root_path),
+			&source_paths,
+			target_dir_path.as_deref(),
+		)
 	})
 	.await
 }
@@ -88,6 +94,19 @@ pub async fn search_file(
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::filesystem::search_file(conn, &profile_id, &query)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_file_tree_git_status(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::filesystem::get_file_tree_git_status(conn, &profile_id)
 	})
 	.await
 }

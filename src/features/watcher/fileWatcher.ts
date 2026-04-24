@@ -29,11 +29,15 @@ channel.onmessage = () => {
 			exact: false,
 		});
 		queryClient.invalidateQueries({
+			queryKey: [queryNamespaces["git-status"]],
+			exact: false,
+		});
+		queryClient.invalidateQueries({
 			queryKey: [queryNamespaces["git-log"]],
 			exact: false,
 		});
 		queryClient.invalidateQueries({
-			queryKey: [queryNamespaces["fs-dir"]],
+			queryKey: [queryNamespaces["fs-tree"]],
 			exact: false,
 		});
 	}, INVALIDATION_DEBOUNCE_MS);
