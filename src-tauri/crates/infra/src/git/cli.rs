@@ -453,6 +453,22 @@ pub fn push(folder: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Cancellable variant of `push`. Killed when the token fires.
+pub fn push_cancellable(
+	folder: &str,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	let mut cmd = Command::new("git");
+	cmd.args(["push"]).current_dir(folder);
+	let output = super::cancel::run_cancellable(cmd, token)?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!("git push failed: {stderr}")));
+	}
+	Ok(())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),

@@ -4,7 +4,10 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
 use infra::db::DbPool;
-use infra::git::{watch_git_dir, Identity, IdentityScope, WatchHandle};
+use infra::git::{
+	push_cancellable, watch_git_dir, CancelToken, Identity, IdentityScope,
+	WatchHandle,
+};
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
@@ -15,6 +18,14 @@ use model::project::{
 pub type GitWatchers = Mutex<HashMap<String, WatchHandle>>;
 
 pub fn create_git_watchers() -> GitWatchers {
+	Mutex::new(HashMap::new())
+}
+
+/// Managed state: cancellation tokens for in-flight git operations,
+/// keyed by op_id (a uuid the frontend generates per call).
+pub type GitCancelTokens = Mutex<HashMap<String, CancelToken>>;
+
+pub fn create_git_cancel_tokens() -> GitCancelTokens {
 	Mutex::new(HashMap::new())
 }
 
@@ -208,6 +219,49 @@ pub async fn git_push(
 ) -> Result<(), AppError> {
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || service::project::push(&folder)).await
+}
+
+/// Cancellable push. Caller passes an op_id (uuid); they can later call
+/// cancel_git_operation(op_id) to abort. Token is removed from the
+/// registry when the op completes (success or failure).
+#[tauri::command]
+pub async fn git_push_cancellable(
+	profile_id: String,
+	op_id: String,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+
+	let token = CancelToken::new();
+	{
+		let mut map = tokens.lock().map_err(|_| AppError::LockError)?;
+		map.insert(op_id.clone(), token.clone());
+	}
+
+	let result =
+		super::run_blocking(move || push_cancellable(&folder, &token)).await;
+
+	// Clear the token regardless of outcome.
+	if let Ok(mut map) = tokens.lock() {
+		map.remove(&op_id);
+	}
+
+	result
+}
+
+/// Signal cancellation for an in-flight op_id. No-op if the op already
+/// finished or never registered. Idempotent.
+#[tauri::command]
+pub async fn cancel_git_operation(
+	op_id: String,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let map = tokens.lock().map_err(|_| AppError::LockError)?;
+	if let Some(token) = map.get(&op_id) {
+		token.cancel();
+	}
+	Ok(())
 }
 
 async fn resolve_identity_folders(

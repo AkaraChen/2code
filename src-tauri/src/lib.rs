@@ -31,6 +31,7 @@ pub fn run() {
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
 	let git_watchers = handler::project::create_git_watchers();
+	let git_cancel_tokens = handler::project::create_git_cancel_tokens();
 
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_opener::init())
@@ -43,6 +44,7 @@ pub fn run() {
 		.manage(flush_senders)
 		.manage(shutdown_flag)
 		.manage(git_watchers)
+		.manage(git_cancel_tokens)
 		.manage(layer_handle)
 		.setup(|app| {
 			use tauri::Manager;
@@ -96,6 +98,8 @@ pub fn run() {
 			handler::project::unset_git_identity,
 			handler::project::start_git_watcher,
 			handler::project::stop_git_watcher,
+			handler::project::git_push_cancellable,
+			handler::project::cancel_git_operation,
 			handler::project::get_project_config,
 			handler::project::save_project_config,
 			handler::filesystem::list_file_tree_paths,
