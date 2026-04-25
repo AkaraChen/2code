@@ -416,6 +416,85 @@ pub fn commit(
 		.to_string())
 }
 
+/// Stage one or more hunks by applying a synthesized patch to the index.
+///
+/// `file_header` is the file-level header (the `diff --git` line through
+/// `+++ b/<path>`). `hunks` is one or more `@@ ... @@` blocks (each starting
+/// with the hunk header and including all `+`, `-`, and ` ` context lines).
+///
+/// Implementation: write `<file_header>\n<hunk1>\n<hunk2>...` to a temp file,
+/// then `git apply --cached --recount`. `--recount` lets git fix up hunk
+/// counts in case the synthesis is slightly off.
+pub fn stage_hunk(
+	folder: &str,
+	file_header: &str,
+	hunks: &[String],
+) -> Result<(), AppError> {
+	apply_hunks(folder, file_header, hunks, false)
+}
+
+/// Unstage one or more hunks. Inverse of `stage_hunk`.
+pub fn unstage_hunk(
+	folder: &str,
+	file_header: &str,
+	hunks: &[String],
+) -> Result<(), AppError> {
+	apply_hunks(folder, file_header, hunks, true)
+}
+
+fn apply_hunks(
+	folder: &str,
+	file_header: &str,
+	hunks: &[String],
+	reverse: bool,
+) -> Result<(), AppError> {
+	if file_header.trim().is_empty() {
+		return Err(AppError::GitError("empty file header".into()));
+	}
+	if hunks.is_empty() {
+		return Err(AppError::GitError("no hunks supplied".into()));
+	}
+	for hunk in hunks {
+		if !hunk.trim_start().starts_with("@@") {
+			return Err(AppError::GitError(
+				"hunk must begin with @@ header".into(),
+			));
+		}
+	}
+
+	// Synthesize the patch.
+	let mut patch = String::new();
+	patch.push_str(file_header.trim_end());
+	patch.push('\n');
+	for hunk in hunks {
+		patch.push_str(hunk.trim_end());
+		patch.push('\n');
+	}
+
+	// Write to a temp file so git apply can read it.
+	let mut tmp = tempfile::NamedTempFile::new()?;
+	tmp.write_all(patch.as_bytes())?;
+	tmp.flush()?;
+
+	let mut args = vec!["apply", "--cached", "--recount"];
+	if reverse {
+		args.push("--reverse");
+	}
+	let tmp_path = tmp.path().to_string_lossy().to_string();
+	args.push(&tmp_path);
+
+	let output = Command::new("git")
+		.args(&args)
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!("git apply failed: {stderr}")));
+	}
+	Ok(())
+}
+
 pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	let paths = validate_discard_paths(paths)?;
 	let (tracked_paths, untracked_paths) =
@@ -2000,5 +2079,161 @@ mod tests {
 		let status =
 			index_status(&dir.path().to_string_lossy()).expect("index_status");
 		assert!(status.staged.is_empty() && status.unstaged.is_empty());
+	}
+
+	// --- stage_hunk / unstage_hunk ---
+
+	/// Helper: get the worktree-vs-HEAD patch for a single file.
+	fn patch_for_file(dir: &std::path::Path, path: &str) -> (String, Vec<String>) {
+		let out = Command::new("git")
+			.args(["diff", "--no-color", "--", path])
+			.current_dir(dir)
+			.output()
+			.unwrap();
+		let s = String::from_utf8_lossy(&out.stdout).to_string();
+
+		// Split into header (everything before first @@) and hunk(s).
+		let header_end = s.find("\n@@").map(|i| i + 1).unwrap_or(s.len());
+		let header = s[..header_end].trim_end_matches('\n').to_string();
+
+		let mut hunks = Vec::new();
+		let mut current = String::new();
+		for line in s[header_end..].lines() {
+			if line.starts_with("@@") && !current.is_empty() {
+				hunks.push(std::mem::take(&mut current));
+			}
+			current.push_str(line);
+			current.push('\n');
+		}
+		if !current.is_empty() {
+			hunks.push(current);
+		}
+		(header, hunks)
+	}
+
+	#[test]
+	fn stage_hunk_moves_change_to_index() {
+		let dir = create_index_status_repo();
+		std::fs::write(
+			dir.path().join("a.txt"),
+			"alpha\nadded line\n",
+		)
+		.unwrap();
+
+		let (header, hunks) = patch_for_file(dir.path(), "a.txt");
+		assert!(!hunks.is_empty(), "expected at least one hunk");
+
+		stage_hunk(&dir.path().to_string_lossy(), &header, &hunks)
+			.expect("stage_hunk");
+
+		let status = index_status(&dir.path().to_string_lossy()).unwrap();
+		assert_eq!(status.staged.len(), 1);
+		assert_eq!(status.staged[0].path, "a.txt");
+		assert_eq!(status.staged[0].kind, GitChangeKind::Modified);
+		assert!(
+			status.unstaged.is_empty(),
+			"after staging, no unstaged changes"
+		);
+	}
+
+	#[test]
+	fn unstage_hunk_moves_change_back_to_worktree() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha\nadded\n").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+
+		// Get the staged patch so we can unstage it.
+		let out = Command::new("git")
+			.args(["diff", "--cached", "--no-color", "--", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let s = String::from_utf8_lossy(&out.stdout).to_string();
+		let header_end = s.find("\n@@").map(|i| i + 1).unwrap_or(s.len());
+		let header = s[..header_end].trim_end_matches('\n').to_string();
+		let hunk = s[header_end..].to_string();
+
+		unstage_hunk(&dir.path().to_string_lossy(), &header, &[hunk])
+			.expect("unstage_hunk");
+
+		let status = index_status(&dir.path().to_string_lossy()).unwrap();
+		assert!(status.staged.is_empty(), "after unstage, nothing staged");
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.unstaged[0].kind, GitChangeKind::Modified);
+	}
+
+	#[test]
+	fn stage_hunk_partial_keeps_other_hunks_unstaged() {
+		let dir = create_index_status_repo();
+		// Make a file with two distinct hunks (header changes + footer changes)
+		std::fs::write(
+			dir.path().join("multi.txt"),
+			"line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n",
+		)
+		.unwrap();
+		Command::new("git")
+			.args(["add", "multi.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add multi"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+
+		// Modify both top and bottom — should produce two hunks.
+		std::fs::write(
+			dir.path().join("multi.txt"),
+			"LINE1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nLINE10\n",
+		)
+		.unwrap();
+
+		let (header, hunks) = patch_for_file(dir.path(), "multi.txt");
+		assert_eq!(hunks.len(), 2, "expected 2 hunks, got {}", hunks.len());
+
+		// Stage only the first hunk.
+		stage_hunk(&dir.path().to_string_lossy(), &header, &[hunks[0].clone()])
+			.expect("stage_hunk");
+
+		let status = index_status(&dir.path().to_string_lossy()).unwrap();
+		// File should appear in BOTH staged and unstaged: first hunk staged,
+		// second still unstaged.
+		assert_eq!(status.staged.len(), 1);
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.staged[0].path, "multi.txt");
+		assert_eq!(status.unstaged[0].path, "multi.txt");
+	}
+
+	#[test]
+	fn stage_hunk_rejects_empty_header() {
+		let result = stage_hunk("/tmp/anywhere", "   ", &["@@ -1 +1 @@".into()]);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn stage_hunk_rejects_empty_hunks() {
+		let dir = create_index_status_repo();
+		let result = stage_hunk(
+			&dir.path().to_string_lossy(),
+			"diff --git a/x b/x",
+			&[],
+		);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn stage_hunk_rejects_hunk_missing_header() {
+		let dir = create_index_status_repo();
+		let result = stage_hunk(
+			&dir.path().to_string_lossy(),
+			"diff --git a/x b/x",
+			&["+just a line\n".into()],
+		);
+		assert!(result.is_err());
 	}
 }

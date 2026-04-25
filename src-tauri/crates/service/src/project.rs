@@ -126,6 +126,22 @@ pub fn get_index_status(folder: &str) -> Result<IndexStatus, AppError> {
 	infra::git::index_status(folder)
 }
 
+pub fn stage_hunk(
+	folder: &str,
+	file_header: &str,
+	hunks: &[String],
+) -> Result<(), AppError> {
+	infra::git::stage_hunk(folder, file_header, hunks)
+}
+
+pub fn unstage_hunk(
+	folder: &str,
+	file_header: &str,
+	hunks: &[String],
+) -> Result<(), AppError> {
+	infra::git::unstage_hunk(folder, file_header, hunks)
+}
+
 pub fn get_diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	infra::git::diff_stats(folder)
 }
