@@ -10,6 +10,7 @@ diesel_migrations = "2"
 portable-pty = "0.9"
 notify = "8"
 tempfile = "3"
+gix = { version = "0.66", default-features = false, features = ["max-performance-safe", "blocking-network-client"] }
 pinyin = "0.11"
 slug = "0.1"
 serde = { version = "1", features = ["derive"] }
