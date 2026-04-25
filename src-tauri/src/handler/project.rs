@@ -1,12 +1,22 @@
-use tauri::State;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use tauri::{AppHandle, Emitter, State};
 
 use infra::db::DbPool;
-use infra::git::{Identity, IdentityScope};
+use infra::git::{watch_git_dir, Identity, IdentityScope, WatchHandle};
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
 	ProjectWithProfiles,
 };
+
+/// Managed state: live `.git/` watchers keyed by profile_id.
+pub type GitWatchers = Mutex<HashMap<String, WatchHandle>>;
+
+pub fn create_git_watchers() -> GitWatchers {
+	Mutex::new(HashMap::new())
+}
 
 #[tauri::command]
 pub async fn create_project_temporary(
@@ -246,6 +256,43 @@ pub async fn set_git_identity(
 		)
 	})
 	.await
+}
+
+#[tauri::command]
+pub async fn start_git_watcher(
+	profile_id: String,
+	app: AppHandle,
+	state: State<'_, DbPool>,
+	watchers: State<'_, GitWatchers>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id.clone()).await?;
+
+	let event_name = format!("git-state-changed-{profile_id}");
+	let app_for_cb = app.clone();
+	let event_for_cb = event_name.clone();
+
+	let handle = super::run_blocking(move || {
+		watch_git_dir(&folder, move || {
+			let _ = app_for_cb.emit(&event_for_cb, ());
+		})
+	})
+	.await?;
+
+	let mut map = watchers.lock().map_err(|_| AppError::LockError)?;
+	// Replace any existing watcher for this profile (idempotent).
+	map.insert(profile_id, handle);
+	Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_git_watcher(
+	profile_id: String,
+	watchers: State<'_, GitWatchers>,
+) -> Result<(), AppError> {
+	let mut map = watchers.lock().map_err(|_| AppError::LockError)?;
+	map.remove(&profile_id);
+	// Drop runs the WatchHandle's stop logic.
+	Ok(())
 }
 
 #[tauri::command]
