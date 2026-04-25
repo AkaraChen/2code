@@ -1,6 +1,7 @@
 pub mod debug;
 pub mod error;
 pub mod filesystem;
+pub mod git_error;
 pub mod notification;
 pub mod profile;
 pub mod project;
