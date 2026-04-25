@@ -14,6 +14,7 @@ import {
 import { useMemo } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
+import GitPanel from "@/features/git/GitPanel";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import CommandPalette from "@/features/projects/CommandPalette";
 import FileTreePanel from "@/features/projects/FileTreePanel";
@@ -112,7 +113,7 @@ export default function ProjectDetailPage() {
 							isOpen={fileTreeOpen}
 							onOpenFile={(filePath) => openFileTab(profile.id, filePath)}
 						/>
-						<Center flex="1">
+						<Center flex="1" minW="0">
 							<EmptyState.Root>
 								<EmptyState.Content>
 									<EmptyState.Indicator>
@@ -241,6 +242,7 @@ export default function ProjectDetailPage() {
 								</EmptyState.Content>
 							</EmptyState.Root>
 						</Center>
+						<GitPanel profileId={profile.id} />
 					</Flex>
 				</Flex>
 			) : null}

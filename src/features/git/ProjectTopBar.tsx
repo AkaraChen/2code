@@ -11,8 +11,8 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
-import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitDiffStats } from "@/features/git/hooks";
+import { useGitPanelStore } from "@/features/git/gitPanelStore";
 import { useGitStateSubscription } from "@/features/git/useGitStateSubscription";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -103,33 +103,6 @@ function DefaultProfileBranchAndChanges({
 	);
 }
 
-function GitDiffDialogWithBranch({
-	cwd,
-	isOpen,
-	isActive,
-	onClose,
-	profileId,
-	worktreePath,
-}: {
-	cwd: string;
-	isOpen: boolean;
-	isActive: boolean;
-	onClose: () => void;
-	profileId: string;
-	worktreePath: string;
-}) {
-	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
-	return (
-		<GitDiffDialog
-			isOpen={isOpen}
-			onClose={onClose}
-			profileId={profileId}
-			worktreePath={worktreePath}
-			branchName={branch ?? undefined}
-		/>
-	);
-}
-
 interface ProjectTopBarProps {
 	projectId: string;
 	projectName: string;
@@ -150,7 +123,7 @@ export default function ProjectTopBar({
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
-	const [gitDiffOpen, setGitDiffOpen] = useState(false);
+	const togglePanel = useGitPanelStore((s) => s.togglePanel);
 	const prefersReducedMotion = useReducedMotion() ?? false;
 
 	// Event-driven invalidation of git queries; replaces the 1s polling
@@ -162,7 +135,7 @@ export default function ProjectTopBar({
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === "g") {
 				e.preventDefault();
-				setGitDiffOpen(true);
+				togglePanel(profile.id);
 			}
 			if ((e.metaKey || e.ctrlKey) && e.key === "e") {
 				e.preventDefault();
@@ -171,7 +144,7 @@ export default function ProjectTopBar({
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isActive, onToggleFileTree]);
+	}, [isActive, onToggleFileTree, profile.id, togglePanel]);
 	const supportedControlIdSet = new Set(getSupportedControlIds());
 	const visibleActiveControls = activeControls.filter((id) =>
 		supportedControlIdSet.has(id),
@@ -263,7 +236,7 @@ export default function ProjectTopBar({
 										cwd={profile.worktree_path}
 										profileId={profile.id}
 										isActive={isActive}
-										onOpen={() => setGitDiffOpen(true)}
+										onOpen={() => togglePanel(profile.id)}
 									/>
 								</Suspense>
 							) : null
@@ -272,7 +245,7 @@ export default function ProjectTopBar({
 								branchName={profile.branch_name}
 								profileId={profile.id}
 								isActive={isActive}
-								onOpen={() => setGitDiffOpen(true)}
+								onOpen={() => togglePanel(profile.id)}
 							/>
 						)}
 					</Box>
@@ -318,27 +291,6 @@ export default function ProjectTopBar({
 				onClose={() => setSettingsOpen(false)}
 				projectId={projectId}
 			/>
-
-			{profile.is_default ? (
-				<Suspense>
-					<GitDiffDialogWithBranch
-						cwd={profile.worktree_path}
-						isOpen={gitDiffOpen}
-						isActive={isActive}
-						onClose={() => setGitDiffOpen(false)}
-						profileId={profile.id}
-						worktreePath={profile.worktree_path}
-					/>
-				</Suspense>
-			) : (
-				<GitDiffDialog
-					isOpen={gitDiffOpen}
-					onClose={() => setGitDiffOpen(false)}
-					profileId={profile.id}
-					worktreePath={profile.worktree_path}
-					branchName={profile.branch_name}
-				/>
-			)}
 		</>
 	);
 }

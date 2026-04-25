@@ -3,6 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { use, useCallback, useEffect, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
+import GitPanel from "@/features/git/GitPanel";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import FileTreePanel from "@/features/projects/FileTreePanel";
 import { useFileTreeStore } from "@/features/projects/fileTreeStore";
@@ -172,6 +173,7 @@ export default function TerminalLayer() {
 									cwd={profile.worktree_path}
 								/>
 							</Box>
+							<GitPanel profileId={profileId} />
 						</Flex>
 					</Flex>
 				);
