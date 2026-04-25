@@ -7,7 +7,9 @@ use std::process::Command;
 
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
-use model::project::{GitAuthor, GitCommit, GitDiffStats};
+use model::project::{
+	GitAuthor, GitChangeKind, GitCommit, GitDiffStats, IndexEntry, IndexStatus,
+};
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
@@ -63,6 +65,33 @@ pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	}
 
 	Ok(parse_porcelain_status_z(&output.stdout))
+}
+
+/// Structured index status: separate staged/unstaged file lists with rename
+/// info. Backs the GitPanel "Changes" tab.
+///
+/// Uses `git status --porcelain=v2 -z` for the rich format that includes
+/// rename detection and clean per-side change codes (XY: X=index, Y=worktree).
+pub fn index_status(folder: &str) -> Result<IndexStatus, AppError> {
+	let output = Command::new("git")
+		.args([
+			"status",
+			"--porcelain=v2",
+			"-z",
+			"--untracked-files=all",
+		])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		if stderr.contains("not a git repository") {
+			return Ok(IndexStatus::default());
+		}
+		return Err(AppError::GitError(stderr));
+	}
+
+	Ok(parse_porcelain_v2_z(&output.stdout))
 }
 
 /// Get the full diff (staged + unstaged) without affecting the real index.
@@ -750,6 +779,142 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	}
 
 	commits
+}
+
+/// Parse `git status --porcelain=v2 -z` output into structured staged/unstaged
+/// lists. Each record is NUL-terminated; rename records (type "2") have two
+/// NUL-separated paths.
+fn parse_porcelain_v2_z(output: &[u8]) -> IndexStatus {
+	let mut staged = Vec::new();
+	let mut unstaged = Vec::new();
+
+	// Split on NUL but keep enough context to handle rename records (type 2)
+	// which include two paths. We process records token-by-token.
+	let mut iter = output.split(|&b| b == 0).peekable();
+	while let Some(record) = iter.next() {
+		if record.is_empty() {
+			continue;
+		}
+		let s = String::from_utf8_lossy(record);
+		let mut parts = s.splitn(2, ' ');
+		let kind_marker = parts.next().unwrap_or("");
+		let rest = parts.next().unwrap_or("");
+
+		match kind_marker {
+			"1" => {
+				// "1 XY sub modeH modeI modeW hashH hashI path"
+				let mut fields = rest.splitn(8, ' ');
+				let xy = fields.next().unwrap_or("..");
+				// Skip the next 6 fields (sub, 3 modes, 2 hashes).
+				for _ in 0..6 {
+					if fields.next().is_none() {
+						break;
+					}
+				}
+				let path = fields.next().unwrap_or("").to_string();
+				if path.is_empty() {
+					continue;
+				}
+				push_xy(&mut staged, &mut unstaged, xy, path, None);
+			}
+			"2" => {
+				// "2 XY sub modeH modeI modeW hashH hashI X<score> path"
+				// Then a SECOND record (the original path) follows the NUL.
+				let mut fields = rest.splitn(9, ' ');
+				let xy = fields.next().unwrap_or("..");
+				for _ in 0..6 {
+					if fields.next().is_none() {
+						break;
+					}
+				}
+				let _score = fields.next().unwrap_or("");
+				let path = fields.next().unwrap_or("").to_string();
+				let original = iter
+					.next()
+					.map(|b| String::from_utf8_lossy(b).to_string())
+					.unwrap_or_default();
+				if path.is_empty() {
+					continue;
+				}
+				push_xy(&mut staged, &mut unstaged, xy, path, Some(original));
+			}
+			"u" => {
+				// "u XY sub modeH modeI modeW modeS hashH hashI hashS path"
+				let mut fields = rest.splitn(11, ' ');
+				let _xy = fields.next();
+				for _ in 0..9 {
+					if fields.next().is_none() {
+						break;
+					}
+				}
+				let path = fields.next().unwrap_or("").to_string();
+				if !path.is_empty() {
+					unstaged.push(IndexEntry {
+						path,
+						original_path: None,
+						kind: GitChangeKind::Unmerged,
+					});
+				}
+			}
+			"?" => {
+				// "? path" — but with `1 ` prefix consumed, rest holds path
+				let path = rest.to_string();
+				if !path.is_empty() {
+					unstaged.push(IndexEntry {
+						path,
+						original_path: None,
+						kind: GitChangeKind::Untracked,
+					});
+				}
+			}
+			_ => {
+				// "!" ignored, or unknown — skip silently.
+			}
+		}
+	}
+
+	IndexStatus { staged, unstaged }
+}
+
+fn push_xy(
+	staged: &mut Vec<IndexEntry>,
+	unstaged: &mut Vec<IndexEntry>,
+	xy: &str,
+	path: String,
+	original_path: Option<String>,
+) {
+	let mut chars = xy.chars();
+	let x = chars.next().unwrap_or('.');
+	let y = chars.next().unwrap_or('.');
+
+	if let Some(kind) = porcelain_v2_kind(x) {
+		staged.push(IndexEntry {
+			path: path.clone(),
+			original_path: original_path.clone(),
+			kind,
+		});
+	}
+	if let Some(kind) = porcelain_v2_kind(y) {
+		unstaged.push(IndexEntry {
+			path,
+			original_path,
+			kind,
+		});
+	}
+}
+
+fn porcelain_v2_kind(c: char) -> Option<GitChangeKind> {
+	match c {
+		'A' => Some(GitChangeKind::Added),
+		'M' => Some(GitChangeKind::Modified),
+		'D' => Some(GitChangeKind::Deleted),
+		'R' => Some(GitChangeKind::Renamed),
+		'C' => Some(GitChangeKind::Copied),
+		'T' => Some(GitChangeKind::TypeChanged),
+		'U' => Some(GitChangeKind::Unmerged),
+		'.' | ' ' => None,
+		_ => None,
+	}
 }
 
 fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
@@ -1696,5 +1861,144 @@ mod tests {
 			.output()
 			.unwrap();
 		assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
+	}
+
+	// --- index_status / parse_porcelain_v2_z ---
+
+	fn create_index_status_repo() -> tempfile::TempDir {
+		let dir = tempfile::tempdir().unwrap();
+		Command::new("git").arg("init").current_dir(dir.path()).output().unwrap();
+		Command::new("git")
+			.args(["config", "user.email", "test@test.com"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["config", "user.name", "Test"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		std::fs::write(dir.path().join("a.txt"), "alpha\n").unwrap();
+		std::fs::write(dir.path().join("b.txt"), "bravo\n").unwrap();
+		Command::new("git")
+			.args(["add", "."])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "init"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		dir
+	}
+
+	#[test]
+	fn index_status_empty_when_clean() {
+		let dir = create_index_status_repo();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert!(status.staged.is_empty());
+		assert!(status.unstaged.is_empty());
+	}
+
+	#[test]
+	fn index_status_classifies_unstaged_modifications() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha modified\n").unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.staged.len(), 0);
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.unstaged[0].path, "a.txt");
+		assert_eq!(status.unstaged[0].kind, GitChangeKind::Modified);
+	}
+
+	#[test]
+	fn index_status_classifies_staged_modifications() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha modified\n").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.staged.len(), 1);
+		assert_eq!(status.staged[0].kind, GitChangeKind::Modified);
+		assert!(status.unstaged.is_empty());
+	}
+
+	#[test]
+	fn index_status_classifies_untracked() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.unstaged[0].path, "c.txt");
+		assert_eq!(status.unstaged[0].kind, GitChangeKind::Untracked);
+	}
+
+	#[test]
+	fn index_status_classifies_deleted() {
+		let dir = create_index_status_repo();
+		std::fs::remove_file(dir.path().join("a.txt")).unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.unstaged[0].kind, GitChangeKind::Deleted);
+	}
+
+	#[test]
+	fn index_status_classifies_added_then_modified() {
+		// Same file: staged add + further unstaged modification.
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		Command::new("git")
+			.args(["add", "c.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		std::fs::write(dir.path().join("c.txt"), "charlie modified\n").unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.staged.len(), 1);
+		assert_eq!(status.staged[0].kind, GitChangeKind::Added);
+		assert_eq!(status.unstaged.len(), 1);
+		assert_eq!(status.unstaged[0].kind, GitChangeKind::Modified);
+	}
+
+	#[test]
+	fn index_status_classifies_renames() {
+		let dir = create_index_status_repo();
+		std::fs::rename(
+			dir.path().join("a.txt"),
+			dir.path().join("a-renamed.txt"),
+		)
+		.unwrap();
+		Command::new("git")
+			.args(["add", "."])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert_eq!(status.staged.len(), 1);
+		assert_eq!(status.staged[0].kind, GitChangeKind::Renamed);
+		assert_eq!(status.staged[0].path, "a-renamed.txt");
+		assert_eq!(
+			status.staged[0].original_path.as_deref(),
+			Some("a.txt")
+		);
+	}
+
+	#[test]
+	fn index_status_handles_non_repo() {
+		let dir = tempfile::tempdir().unwrap();
+		let status =
+			index_status(&dir.path().to_string_lossy()).expect("index_status");
+		assert!(status.staged.is_empty() && status.unstaged.is_empty());
 	}
 }

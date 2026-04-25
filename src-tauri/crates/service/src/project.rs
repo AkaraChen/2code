@@ -6,7 +6,8 @@ use uuid::Uuid;
 use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
+	ProjectWithProfiles,
 };
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
@@ -119,6 +120,10 @@ pub fn get_branch(folder: &str) -> Result<String, AppError> {
 
 pub fn get_diff(folder: &str) -> Result<String, AppError> {
 	infra::git::diff(folder)
+}
+
+pub fn get_index_status(folder: &str) -> Result<IndexStatus, AppError> {
+	infra::git::index_status(folder)
 }
 
 pub fn get_diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {

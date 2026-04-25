@@ -87,3 +87,39 @@ pub struct GitDiffStats {
 pub struct GitBinaryPreview {
 	pub file_path: String,
 }
+
+/// A file's change kind in the index or worktree.
+#[derive(
+	Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum GitChangeKind {
+	Added,
+	Modified,
+	Deleted,
+	Renamed,
+	Copied,
+	Untracked,
+	TypeChanged,
+	Unmerged,
+}
+
+/// One entry in the structured index status. Either staged or unstaged
+/// (the IndexStatus groups them).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct IndexEntry {
+	pub path: String,
+	/// Set when `kind` is `Renamed` or `Copied`.
+	pub original_path: Option<String>,
+	pub kind: GitChangeKind,
+}
+
+/// Structured view of the working tree: what's staged, what's not.
+/// Backs the Phase 2 GitPanel "Changes" tab. Separate from the file-tree
+/// icon view (`FileTreeGitStatusEntry`) which doesn't need split staged/
+/// unstaged or rename info.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct IndexStatus {
+	pub staged: Vec<IndexEntry>,
+	pub unstaged: Vec<IndexEntry>,
+}

@@ -10,8 +10,8 @@ use infra::git::{
 };
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
-	ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
+	ProjectConfig, ProjectWithProfiles,
 };
 
 /// Managed state: live `.git/` watchers keyed by profile_id.
@@ -121,6 +121,15 @@ pub async fn get_git_diff_stats(
 ) -> Result<GitDiffStats, AppError> {
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || service::project::get_diff_stats(&folder)).await
+}
+
+#[tauri::command]
+pub async fn get_git_index_status(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<IndexStatus, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::get_index_status(&folder)).await
 }
 
 #[tauri::command]
