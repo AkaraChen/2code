@@ -63,3 +63,26 @@ export const unstageGitLines = (args: {
 	hunk: string;
 	selectedIndices: number[];
 }) => invoke<void>("unstage_git_lines", args);
+
+// --- identity ---
+
+export interface Identity {
+	name: string;
+	email: string;
+}
+
+export type IdentityScope = "profile" | "project";
+
+export const getGitIdentity = (args: { profileId: string }) =>
+	invoke<Identity | null>("get_git_identity", args);
+
+export const setGitIdentityCmd = (args: {
+	profileId: string;
+	identity: Identity;
+	scope: IdentityScope;
+}) => invoke<void>("set_git_identity", args);
+
+export const unsetGitIdentityCmd = (args: {
+	profileId: string;
+	scope: IdentityScope;
+}) => invoke<void>("unset_git_identity", args);

@@ -22,6 +22,7 @@ import {
 } from "@chakra-ui/react";
 import { useEffect } from "react";
 
+import IdentityDropdown from "./IdentityDropdown";
 import {
 	useCommitGitChanges,
 	useGitIndexStatus,
@@ -133,6 +134,7 @@ export default function CommitComposer({ profileId }: CommitComposerProps) {
 						/>
 						<Text fontSize="xs">Amend last</Text>
 					</label>
+					<IdentityDropdown profileId={profileId} />
 				</HStack>
 				<Text
 					fontSize="2xs"

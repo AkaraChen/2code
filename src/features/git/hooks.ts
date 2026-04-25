@@ -18,13 +18,18 @@ import {
 	gitPush,
 } from "@/generated";
 import {
+	getGitIdentity,
 	getGitIndexStatus,
+	setGitIdentityCmd,
 	stageGitFiles,
 	stageGitHunk,
 	stageGitLines,
+	unsetGitIdentityCmd,
 	unstageGitFiles,
 	unstageGitHunk,
 	unstageGitLines,
+	type Identity,
+	type IdentityScope,
 } from "@/features/git/changesTabBindings";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
@@ -146,6 +151,38 @@ export function useUnstageLines(profileId: string) {
 		hunk: string;
 		selectedIndices: number[];
 	}>(profileId, unstageGitLines);
+}
+
+const gitIdentityKey = (profileId: string) =>
+	["git-identity", profileId] as const;
+
+export function useGitIdentity(profileId: string) {
+	return useQuery({
+		queryKey: gitIdentityKey(profileId),
+		queryFn: () => getGitIdentity({ profileId }),
+	});
+}
+
+export function useSetGitIdentity(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { identity: Identity; scope: IdentityScope }) =>
+			setGitIdentityCmd({ profileId, ...args }),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: gitIdentityKey(profileId) });
+		},
+	});
+}
+
+export function useUnsetGitIdentity(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { scope: IdentityScope }) =>
+			unsetGitIdentityCmd({ profileId, ...args }),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: gitIdentityKey(profileId) });
+		},
+	});
 }
 
 export function useGitPush(profileId: string) {
