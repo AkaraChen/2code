@@ -3,6 +3,7 @@ use std::path::Path;
 use diesel::SqliteConnection;
 use uuid::Uuid;
 
+use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectWithProfiles,
@@ -192,6 +193,57 @@ pub fn get_ahead_count(folder: &str) -> u32 {
 
 pub fn push(folder: &str) -> Result<(), AppError> {
 	infra::git::push(folder)
+}
+
+// ── Git identity ──
+
+/// Resolve `(profile_folder, project_folder)` for an identity write or read.
+/// For the default profile both paths are the same. For non-default profiles
+/// the worktree (profile_folder) is separate from the project's main repo.
+pub fn resolve_identity_folders(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<(String, String), AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	let project = repo::project::find_by_id(conn, &profile.project_id)?;
+	Ok((profile.worktree_path, project.folder))
+}
+
+pub fn set_git_identity(
+	profile_folder: &str,
+	project_folder: &str,
+	identity: &Identity,
+	scope: IdentityScope,
+) -> Result<(), AppError> {
+	let target = match scope {
+		IdentityScope::Profile => profile_folder,
+		IdentityScope::Project => project_folder,
+	};
+	infra::git::identity::set_identity(target, identity)
+}
+
+pub fn unset_git_identity(
+	profile_folder: &str,
+	project_folder: &str,
+	scope: IdentityScope,
+) -> Result<(), AppError> {
+	let target = match scope {
+		IdentityScope::Profile => profile_folder,
+		IdentityScope::Project => project_folder,
+	};
+	infra::git::identity::unset_identity(target)
+}
+
+/// Resolve the effective identity for commits in this profile.
+/// Walks profile → project → global.
+pub fn resolve_git_identity(
+	profile_folder: &str,
+	project_folder: &str,
+) -> Option<Identity> {
+	infra::git::identity::resolve_identity(
+		Some(profile_folder),
+		Some(project_folder),
+	)
 }
 
 #[cfg(test)]

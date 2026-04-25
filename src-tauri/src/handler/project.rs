@@ -1,6 +1,7 @@
 use tauri::State;
 
 use infra::db::DbPool;
+use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
@@ -197,6 +198,72 @@ pub async fn git_push(
 ) -> Result<(), AppError> {
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || service::project::push(&folder)).await
+}
+
+async fn resolve_identity_folders(
+	db: &DbPool,
+	profile_id: String,
+) -> Result<(String, String), AppError> {
+	let db = db.clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::resolve_identity_folders(conn, &profile_id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_git_identity(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Option<Identity>, AppError> {
+	let (profile_folder, project_folder) =
+		resolve_identity_folders(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		Ok(service::project::resolve_git_identity(
+			&profile_folder,
+			&project_folder,
+		))
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn set_git_identity(
+	profile_id: String,
+	identity: Identity,
+	scope: IdentityScope,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let (profile_folder, project_folder) =
+		resolve_identity_folders(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::set_git_identity(
+			&profile_folder,
+			&project_folder,
+			&identity,
+			scope,
+		)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn unset_git_identity(
+	profile_id: String,
+	scope: IdentityScope,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let (profile_folder, project_folder) =
+		resolve_identity_folders(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::unset_git_identity(
+			&profile_folder,
+			&project_folder,
+			scope,
+		)
+	})
+	.await
 }
 
 #[tauri::command]
