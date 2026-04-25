@@ -13,6 +13,7 @@ import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitDiffStats } from "@/features/git/hooks";
+import { useGitStateSubscription } from "@/features/git/useGitStateSubscription";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import {
@@ -151,6 +152,10 @@ export default function ProjectTopBar({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
 	const prefersReducedMotion = useReducedMotion() ?? false;
+
+	// Event-driven invalidation of git queries; replaces the 1s polling
+	// that used to live inside each useGit* hook.
+	useGitStateSubscription(isActive ? profile.id : undefined);
 
 	useEffect(() => {
 		if (!isActive) return;

@@ -20,14 +20,14 @@ import {
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
 
-const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+// Polling is gone: useGitStateSubscription (mounted by the git surface that
+// owns these queries) starts a backend file watcher and invalidates the
+// queries below when .git/HEAD, .git/refs/, or .git/index change.
 
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
 		queryFn: () => getGitDiff({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -35,8 +35,6 @@ export function useGitLog(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.log(profileId),
 		queryFn: () => getGitLog({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -52,8 +50,6 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
 	});
 
 	return useMemo(() => {
@@ -71,8 +67,6 @@ export function useGitAheadCount(profileId: string) {
 	const { data } = useQuery({
 		queryKey: queryKeys.git.aheadCount(profileId),
 		queryFn: () => getGitAheadCount({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 	return data ?? 0;
 }
