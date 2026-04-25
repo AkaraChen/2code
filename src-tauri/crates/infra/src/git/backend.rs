@@ -202,21 +202,26 @@ impl GitBackend for GixBackend {
 	}
 
 	fn branch(&self, folder: &str) -> Result<String, AppError> {
-		super::cli::branch(folder)
+		super::gix::branch(folder)
 	}
 
 	fn status(
 		&self,
 		folder: &str,
 	) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
+		// gix status output format would need to match CLI byte-for-byte
+		// for the file-tree icons; defer to CLI for now.
 		super::cli::status(folder)
 	}
 
 	fn diff(&self, folder: &str) -> Result<String, AppError> {
+		// Diff text rendering is intricate (the @pierre/diffs frontend parser
+		// expects exact CLI output); keep on CLI.
 		super::cli::diff(folder)
 	}
 
 	fn diff_stats(&self, folder: &str) -> Result<GitDiffStats, AppError> {
+		// Same reason as diff().
 		super::cli::diff_stats(folder)
 	}
 
@@ -225,7 +230,7 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		limit: u32,
 	) -> Result<Vec<GitCommit>, AppError> {
-		super::cli::log(folder, limit)
+		super::gix::log(folder, limit)
 	}
 
 	fn show(
@@ -237,7 +242,7 @@ impl GitBackend for GixBackend {
 	}
 
 	fn ahead_count(&self, folder: &str) -> u32 {
-		super::cli::ahead_count(folder)
+		super::gix::ahead_count(folder)
 	}
 
 	fn read_worktree_file(
@@ -306,10 +311,12 @@ impl GitBackend for GixBackend {
 	}
 }
 
-/// The default backend used by the dispatcher. CLI for now; flips to a hybrid
-/// (gix reads + CLI writes) once `GixBackend` methods are implemented.
+/// The default backend used by the dispatcher. `GixBackend` is a hybrid
+/// today: gix-powered read paths (branch, log, ahead_count) and CLI for
+/// everything else. As more gix implementations land, more methods on
+/// `GixBackend` flip from cli:: delegation to gix:: implementations.
 pub fn default_backend() -> &'static dyn GitBackend {
-	&CliBackend
+	&GixBackend
 }
 
 #[cfg(test)]
@@ -336,7 +343,7 @@ mod tests {
 	}
 
 	#[test]
-	fn default_backend_returns_cli_for_now() {
+	fn default_backend_branch_works() {
 		let tmp = tempfile::tempdir().expect("tmp");
 		let dir = tmp.path();
 		std::process::Command::new("git")
@@ -346,8 +353,45 @@ mod tests {
 			.expect("git init");
 
 		let folder = dir.to_string_lossy().to_string();
-		// Just exercises the dispatch path; if the default ever flips to gix
-		// and gix has a regression, this catches it.
+		// Smoke test the dispatcher path. As of Phase 1 task #4 this routes
+		// branch() through gix.
 		let _ = default_backend().branch(&folder).expect("default branch");
+	}
+
+	#[test]
+	fn default_backend_log_uses_gix() {
+		let tmp = tempfile::tempdir().expect("tmp");
+		let dir = tmp.path();
+		std::process::Command::new("git")
+			.arg("init")
+			.current_dir(dir)
+			.output()
+			.expect("git init");
+		std::process::Command::new("git")
+			.args(["config", "user.name", "Test"])
+			.current_dir(dir)
+			.output()
+			.expect("config name");
+		std::process::Command::new("git")
+			.args(["config", "user.email", "test@test.com"])
+			.current_dir(dir)
+			.output()
+			.expect("config email");
+		std::fs::write(dir.join("a.txt"), "a").expect("write");
+		std::process::Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(dir)
+			.output()
+			.expect("add");
+		std::process::Command::new("git")
+			.args(["commit", "-m", "init"])
+			.current_dir(dir)
+			.output()
+			.expect("commit");
+
+		let folder = dir.to_string_lossy().to_string();
+		let commits = default_backend().log(&folder, 10).expect("default log");
+		assert_eq!(commits.len(), 1);
+		assert_eq!(commits[0].message, "init");
 	}
 }

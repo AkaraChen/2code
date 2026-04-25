@@ -2258,8 +2258,10 @@ dependencies = [
  "bstr",
  "gix-date",
  "gix-hash",
+ "gix-hashtable",
  "gix-object",
  "gix-revwalk",
+ "gix-trace",
  "thiserror 1.0.69",
 ]
 
