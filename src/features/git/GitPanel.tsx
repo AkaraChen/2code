@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FiX } from "react-icons/fi";
 
 import ChangesTab from "./ChangesTab";
+import CommitComposer from "./CommitComposer";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
 interface GitPanelProps {
@@ -158,20 +159,26 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 					</Tooltip.Root>
 				</HStack>
 
-				<Box flex="1" minH="0" overflow="auto" p="2">
-					{tab === "changes" && (
-						<ChangesTab
-							profileId={profileId}
-							selectedPath={selectedPath}
-							onSelectFile={setSelectedPath}
-						/>
-					)}
-					{tab === "history" && <SoonPlaceholder label="History — Phase 3" />}
-					{tab === "branches" && (
-						<SoonPlaceholder label="Branches — Phase 4" />
-					)}
-					{tab === "stash" && <SoonPlaceholder label="Stash — Phase 4" />}
-				</Box>
+				{tab === "changes" ? (
+					<Flex direction="column" flex="1" minH="0">
+						<Box flex="1" minH="0" overflow="auto" p="2">
+							<ChangesTab
+								profileId={profileId}
+								selectedPath={selectedPath}
+								onSelectFile={setSelectedPath}
+							/>
+						</Box>
+						<CommitComposer profileId={profileId} />
+					</Flex>
+				) : (
+					<Box flex="1" minH="0" overflow="auto" p="2">
+						{tab === "history" && <SoonPlaceholder label="History — Phase 3" />}
+						{tab === "branches" && (
+							<SoonPlaceholder label="Branches — Phase 4" />
+						)}
+						{tab === "stash" && <SoonPlaceholder label="Stash — Phase 4" />}
+					</Box>
+				)}
 			</Flex>
 		</Flex>
 	);
