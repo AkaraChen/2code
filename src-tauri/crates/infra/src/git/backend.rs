@@ -198,11 +198,13 @@ pub struct GixBackend;
 
 impl GitBackend for GixBackend {
 	fn init(&self, dir: &Path) -> Result<(), AppError> {
-		super::cli::init(dir)
+		super::audit::audited("init", &dir.to_string_lossy(), || {
+			super::cli::init(dir)
+		})
 	}
 
 	fn branch(&self, folder: &str) -> Result<String, AppError> {
-		super::gix::branch(folder)
+		super::audit::audited("branch", folder, || super::gix::branch(folder))
 	}
 
 	fn status(
@@ -211,18 +213,20 @@ impl GitBackend for GixBackend {
 	) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 		// gix status output format would need to match CLI byte-for-byte
 		// for the file-tree icons; defer to CLI for now.
-		super::cli::status(folder)
+		super::audit::audited("status", folder, || super::cli::status(folder))
 	}
 
 	fn diff(&self, folder: &str) -> Result<String, AppError> {
 		// Diff text rendering is intricate (the @pierre/diffs frontend parser
 		// expects exact CLI output); keep on CLI.
-		super::cli::diff(folder)
+		super::audit::audited("diff", folder, || super::cli::diff(folder))
 	}
 
 	fn diff_stats(&self, folder: &str) -> Result<GitDiffStats, AppError> {
 		// Same reason as diff().
-		super::cli::diff_stats(folder)
+		super::audit::audited("diff_stats", folder, || {
+			super::cli::diff_stats(folder)
+		})
 	}
 
 	fn log(
@@ -230,7 +234,7 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		limit: u32,
 	) -> Result<Vec<GitCommit>, AppError> {
-		super::gix::log(folder, limit)
+		super::audit::audited("log", folder, || super::gix::log(folder, limit))
 	}
 
 	fn show(
@@ -238,11 +242,15 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		commit_hash: &str,
 	) -> Result<String, AppError> {
-		super::cli::show(folder, commit_hash)
+		super::audit::audited("show", folder, || {
+			super::cli::show(folder, commit_hash)
+		})
 	}
 
 	fn ahead_count(&self, folder: &str) -> u32 {
-		super::gix::ahead_count(folder)
+		super::audit::audited_unit("ahead_count", folder, || {
+			super::gix::ahead_count(folder)
+		})
 	}
 
 	fn read_worktree_file(
@@ -250,7 +258,9 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		path: &str,
 	) -> Result<Option<String>, AppError> {
-		super::cli::read_worktree_file(folder, path)
+		super::audit::audited("read_worktree_file", folder, || {
+			super::cli::read_worktree_file(folder, path)
+		})
 	}
 
 	fn read_head_file(
@@ -258,7 +268,9 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		path: &str,
 	) -> Result<Option<String>, AppError> {
-		super::cli::read_head_file(folder, path)
+		super::audit::audited("read_head_file", folder, || {
+			super::cli::read_head_file(folder, path)
+		})
 	}
 
 	fn read_commit_file(
@@ -267,7 +279,9 @@ impl GitBackend for GixBackend {
 		commit_hash: &str,
 		path: &str,
 	) -> Result<Option<String>, AppError> {
-		super::cli::read_commit_file(folder, commit_hash, path)
+		super::audit::audited("read_commit_file", folder, || {
+			super::cli::read_commit_file(folder, commit_hash, path)
+		})
 	}
 
 	fn read_parent_commit_file(
@@ -276,7 +290,9 @@ impl GitBackend for GixBackend {
 		commit_hash: &str,
 		path: &str,
 	) -> Result<Option<String>, AppError> {
-		super::cli::read_parent_commit_file(folder, commit_hash, path)
+		super::audit::audited("read_parent_commit_file", folder, || {
+			super::cli::read_parent_commit_file(folder, commit_hash, path)
+		})
 	}
 
 	fn commit(
@@ -286,7 +302,9 @@ impl GitBackend for GixBackend {
 		message: &str,
 		body: Option<&str>,
 	) -> Result<String, AppError> {
-		super::cli::commit(folder, files, message, body)
+		super::audit::audited("commit", folder, || {
+			super::cli::commit(folder, files, message, body)
+		})
 	}
 
 	fn discard_changes(
@@ -294,11 +312,13 @@ impl GitBackend for GixBackend {
 		folder: &str,
 		paths: &[String],
 	) -> Result<(), AppError> {
-		super::cli::discard_changes(folder, paths)
+		super::audit::audited("discard_changes", folder, || {
+			super::cli::discard_changes(folder, paths)
+		})
 	}
 
 	fn push(&self, folder: &str) -> Result<(), AppError> {
-		super::cli::push(folder)
+		super::audit::audited("push", folder, || super::cli::push(folder))
 	}
 
 	fn worktree_add(
@@ -307,7 +327,9 @@ impl GitBackend for GixBackend {
 		branch_name: &str,
 		worktree_path: &str,
 	) -> Result<(), AppError> {
-		super::cli::worktree_add(project_folder, branch_name, worktree_path)
+		super::audit::audited("worktree_add", project_folder, || {
+			super::cli::worktree_add(project_folder, branch_name, worktree_path)
+		})
 	}
 }
 

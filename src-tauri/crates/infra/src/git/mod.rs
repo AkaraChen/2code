@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod backend;
 pub mod cli;
 pub mod gix;
