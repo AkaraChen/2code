@@ -141,6 +141,35 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
 }
 
+/// Get a single file's patch (worktree vs index, or index vs HEAD).
+/// Used by the Phase 2 GitPanel to render one file in MonacoFileDiff.
+///
+/// `staged=false` → `git diff -- <path>` (worktree vs index)
+/// `staged=true` → `git diff --cached -- <path>` (index vs HEAD)
+pub fn file_patch(
+	folder: &str,
+	path: &str,
+	staged: bool,
+) -> Result<String, AppError> {
+	let path = validate_repo_relative_path(path, "Diff path")?;
+	let mut args: Vec<&str> = vec!["diff", "--no-color"];
+	if staged {
+		args.push("--cached");
+	}
+	args.push("--");
+	args.push(&path);
+
+	let output = Command::new("git")
+		.args(&args)
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 

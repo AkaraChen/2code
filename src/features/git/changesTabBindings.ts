@@ -28,6 +28,12 @@ export interface IndexStatus {
 export const getGitIndexStatus = (args: { profileId: string }) =>
 	invoke<IndexStatus>("get_git_index_status", args);
 
+export const getGitFilePatch = (args: {
+	profileId: string;
+	path: string;
+	staged: boolean;
+}) => invoke<string>("get_git_file_patch", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

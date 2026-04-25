@@ -2,6 +2,7 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 import {
 	changeBadge,
+	extractFilePatch,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
 	getChangedLineCount,
 	getGitBinaryPreviewPath,
@@ -477,5 +478,47 @@ describe("getGitBinaryPreviewRevision", () => {
 				"after",
 			),
 		).toBe("next.png");
+	});
+});
+
+describe("extractFilePatch", () => {
+	const fullPatch = `diff --git a/src/foo.ts b/src/foo.ts
+index abc..def 100644
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -1 +1 @@
+-old
++new
+diff --git a/src/bar.ts b/src/bar.ts
+index 111..222 100644
+--- a/src/bar.ts
++++ b/src/bar.ts
+@@ -1 +1 @@
+-bar1
++bar2
+`;
+
+	it("extracts the first file's block", () => {
+		const out = extractFilePatch(fullPatch, "src/foo.ts");
+		expect(out).toContain("diff --git a/src/foo.ts");
+		expect(out).toContain("-old");
+		expect(out).toContain("+new");
+		expect(out).not.toContain("bar1");
+	});
+
+	it("extracts the last file's block", () => {
+		const out = extractFilePatch(fullPatch, "src/bar.ts");
+		expect(out).toContain("diff --git a/src/bar.ts");
+		expect(out).toContain("-bar1");
+		expect(out).not.toContain("foo.ts");
+	});
+
+	it("returns null when the path is not present", () => {
+		expect(extractFilePatch(fullPatch, "src/nope.ts")).toBeNull();
+	});
+
+	it("returns null for empty input", () => {
+		expect(extractFilePatch("", "src/foo.ts")).toBeNull();
+		expect(extractFilePatch("   \n  \n", "src/foo.ts")).toBeNull();
 	});
 });

@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FiX } from "react-icons/fi";
 
 import ChangesTab from "./ChangesTab";
+import ChangesDiffPane from "./ChangesDiffPane";
 import CommitComposer from "./CommitComposer";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
@@ -161,13 +162,29 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 
 				{tab === "changes" ? (
 					<Flex direction="column" flex="1" minH="0">
-						<Box flex="1" minH="0" overflow="auto" p="2">
+						<Box
+							flex={selectedPath ? "0 0 35%" : "1"}
+							minH="0"
+							overflow="auto"
+							p="2"
+							borderBottomWidth={selectedPath ? "1px" : "0"}
+							borderColor="border.subtle"
+						>
 							<ChangesTab
 								profileId={profileId}
 								selectedPath={selectedPath}
 								onSelectFile={setSelectedPath}
 							/>
 						</Box>
+						{selectedPath && (
+							<Box flex="1" minH="0">
+								<ChangesDiffPane
+									profileId={profileId}
+									filePath={selectedPath}
+									onClose={() => setSelectedPath(null)}
+								/>
+							</Box>
+						)}
 						<CommitComposer profileId={profileId} />
 					</Flex>
 				) : (

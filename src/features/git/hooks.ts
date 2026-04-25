@@ -18,6 +18,7 @@ import {
 	gitPush,
 } from "@/generated";
 import {
+	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
 	setGitIdentityCmd,
@@ -92,6 +93,17 @@ export function useGitIndexStatus(profileId: string) {
 	});
 }
 
+export function useGitFilePatch(
+	profileId: string,
+	path: string,
+	staged: boolean,
+) {
+	return useQuery({
+		queryKey: ["git-file-patch", profileId, path, staged] as const,
+		queryFn: () => getGitFilePatch({ profileId, path, staged }),
+	});
+}
+
 function useStagingMutation<TArgs>(
 	profileId: string,
 	mutationFn: (args: TArgs & { profileId: string }) => Promise<void>,
@@ -109,6 +121,9 @@ function useStagingMutation<TArgs>(
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-patch", profileId],
 				}),
 			]);
 		},

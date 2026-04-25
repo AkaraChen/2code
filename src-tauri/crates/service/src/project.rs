@@ -126,6 +126,14 @@ pub fn get_index_status(folder: &str) -> Result<IndexStatus, AppError> {
 	infra::git::index_status(folder)
 }
 
+pub fn get_file_patch(
+	folder: &str,
+	path: &str,
+	staged: bool,
+) -> Result<String, AppError> {
+	infra::git::file_patch(folder, path, staged)
+}
+
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	infra::git::stage_files(folder, paths)
 }

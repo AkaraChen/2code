@@ -133,6 +133,20 @@ pub async fn get_git_index_status(
 }
 
 #[tauri::command]
+pub async fn get_git_file_patch(
+	profile_id: String,
+	path: String,
+	staged: bool,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::get_file_patch(&folder, &path, staged)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn stage_git_files(
 	profile_id: String,
 	paths: Vec<String>,

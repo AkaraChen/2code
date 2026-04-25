@@ -64,6 +64,11 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.indexStatus(profileId),
 				});
+				// Per-file patches share a synthetic key prefix; refetch all of
+				// them on any git state change.
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-patch", profileId],
+				});
 			});
 
 			if (cancelled) {

@@ -2,6 +2,45 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 
 export const GIT_DIFF_LARGE_FILE_LINE_THRESHOLD = 500;
 
+/// Extract a single file's patch text from a multi-file `git diff` blob.
+/// Returns null if the path isn't found in the blob.
+///
+/// The patch shape is a series of `diff --git a/p b/p` blocks; each block
+/// runs until the next `diff --git` line (or EOF).
+export function extractFilePatch(
+	fullPatch: string,
+	filePath: string,
+): string | null {
+	if (!fullPatch.trim()) return null;
+
+	const lines = fullPatch.split("\n");
+	let blockStart: number | null = null;
+	let foundEnd: number | null = null;
+
+	const headerMatches = (line: string) =>
+		line.includes(` b/${filePath}`) ||
+		line.includes(` a/${filePath}`) ||
+		line.includes(` "b/${filePath}"`) ||
+		line.includes(` "a/${filePath}"`);
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line.startsWith("diff --git ")) {
+			if (blockStart !== null) {
+				foundEnd = i;
+				break;
+			}
+			if (headerMatches(line)) {
+				blockStart = i;
+			}
+		}
+	}
+
+	if (blockStart === null) return null;
+	const end = foundEnd ?? lines.length;
+	return lines.slice(blockStart, end).join("\n");
+}
+
 export const gitBinaryPreviewSources = {
 	workingTree: "working_tree",
 	head: "head",
