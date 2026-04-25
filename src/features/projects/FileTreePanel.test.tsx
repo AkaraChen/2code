@@ -12,23 +12,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
 import FileTreePanel from "./FileTreePanel";
 import {
+	useCreateFileTreeFile,
+	useCreateFileTreeFolder,
+	useDeleteFileTreePath,
 	useFileTreeGitStatus,
 	useFileTreePaths,
 	useMoveFileTreePaths,
 	useRenameFileTreePath,
+	useSaveFileContent,
 } from "./hooks";
 
 const {
+	addMock,
+	createFileMutateAsyncMock,
+	createFolderMutateAsyncMock,
+	deleteMutateAsyncMock,
 	moveMutateAsyncMock,
+	onMutationMock,
+	removeMock,
 	renameMutateAsyncMock,
 	resetPathsMock,
+	saveFileMutateAsyncMock,
 	setGitStatusMock,
 	startRenamingMock,
 	useFileTreeOptionsRef,
 } = vi.hoisted(() => ({
+	addMock: vi.fn(),
+	createFileMutateAsyncMock: vi.fn(),
+	createFolderMutateAsyncMock: vi.fn(),
+	deleteMutateAsyncMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
+	onMutationMock: vi.fn(() => () => {}),
+	removeMock: vi.fn(),
 	renameMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
+	saveFileMutateAsyncMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
 	startRenamingMock: vi.fn(),
 	useFileTreeOptionsRef: {
@@ -67,6 +85,9 @@ vi.mock("@pierre/trees/react", () => ({
 		useFileTreeOptionsRef.current = options;
 		return {
 			model: {
+				add: addMock,
+				onMutation: onMutationMock,
+				remove: removeMock,
 				resetPaths: resetPathsMock,
 				setGitStatus: setGitStatusMock,
 				startRenaming: startRenamingMock,
@@ -76,10 +97,14 @@ vi.mock("@pierre/trees/react", () => ({
 }));
 
 vi.mock("./hooks", () => ({
+	useCreateFileTreeFile: vi.fn(),
+	useCreateFileTreeFolder: vi.fn(),
+	useDeleteFileTreePath: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
 	useFileTreePaths: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
+	useSaveFileContent: vi.fn(),
 }));
 
 vi.mock("./FileViewerDialog", () => ({
@@ -129,13 +154,26 @@ function renderPanel(onOpenFile = vi.fn()) {
 
 describe("fileTreePanel", () => {
 	beforeEach(() => {
+		addMock.mockReset();
+		createFileMutateAsyncMock.mockReset();
+		createFileMutateAsyncMock.mockResolvedValue(undefined);
+		createFolderMutateAsyncMock.mockReset();
+		createFolderMutateAsyncMock.mockResolvedValue(undefined);
+		deleteMutateAsyncMock.mockReset();
+		deleteMutateAsyncMock.mockResolvedValue(undefined);
 		moveMutateAsyncMock.mockReset();
 		moveMutateAsyncMock.mockResolvedValue(undefined);
+		onMutationMock.mockReset();
+		onMutationMock.mockReturnValue(() => {});
+		removeMock.mockReset();
 		renameMutateAsyncMock.mockReset();
 		renameMutateAsyncMock.mockResolvedValue(undefined);
 		resetPathsMock.mockReset();
+		saveFileMutateAsyncMock.mockReset();
+		saveFileMutateAsyncMock.mockResolvedValue(undefined);
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
+		startRenamingMock.mockReturnValue(true);
 		useFileTreeOptionsRef.current = null;
 		vi.mocked(useFileTreePaths).mockReturnValue(
 			createFileTreePathsResult(treePaths, false),
@@ -149,6 +187,18 @@ describe("fileTreePanel", () => {
 		vi.mocked(useMoveFileTreePaths).mockReturnValue({
 			mutateAsync: moveMutateAsyncMock,
 		} as unknown as ReturnType<typeof useMoveFileTreePaths>);
+		vi.mocked(useDeleteFileTreePath).mockReturnValue({
+			mutateAsync: deleteMutateAsyncMock,
+		} as unknown as ReturnType<typeof useDeleteFileTreePath>);
+		vi.mocked(useCreateFileTreeFolder).mockReturnValue({
+			mutateAsync: createFolderMutateAsyncMock,
+		} as unknown as ReturnType<typeof useCreateFileTreeFolder>);
+		vi.mocked(useCreateFileTreeFile).mockReturnValue({
+			mutateAsync: createFileMutateAsyncMock,
+		} as unknown as ReturnType<typeof useCreateFileTreeFile>);
+		vi.mocked(useSaveFileContent).mockReturnValue({
+			mutateAsync: saveFileMutateAsyncMock,
+		} as unknown as ReturnType<typeof useSaveFileContent>);
 	});
 
 	it("resets the Pierre tree model with loaded paths", async () => {

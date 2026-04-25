@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { launchAppControlIds, staticControlIds } from "./types";
+import { staticControlIds } from "./types";
 import {
 	allControlIds,
 	controlRegistry,
@@ -7,11 +7,8 @@ import {
 } from "./registry";
 
 describe("topbar registry", () => {
-	it("registers every declared control id exactly once", () => {
-		expect(allControlIds).toEqual([
-			...launchAppControlIds,
-			...staticControlIds,
-		]);
+	it("registers every declared static control exactly once", () => {
+		expect(allControlIds).toEqual([...staticControlIds]);
 		expect(new Set(allControlIds).size).toBe(allControlIds.length);
 		expect(controlRegistry.size).toBe(allControlIds.length);
 	});
@@ -26,11 +23,9 @@ describe("topbar registry", () => {
 		}
 	});
 
-	it("filters supported app controls while always keeping static controls", () => {
-		expect(getSupportedControlIds(["cursor", "warp"])).toEqual([
-			"cursor",
-			"warp",
-			"git-diff",
+	it("returns all static controls as supported", () => {
+		expect(getSupportedControlIds()).toEqual([
+			"open-with",
 			"reveal-in-finder",
 		]);
 	});

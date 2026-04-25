@@ -14,8 +14,9 @@ import {
 } from "./fileViewerTabsStore";
 import { useFileContent, useSaveFileContent } from "./hooks";
 
-const { saveMutateMock } = vi.hoisted(() => ({
+const { saveMutateMock, saveMutateAsyncMock } = vi.hoisted(() => ({
 	saveMutateMock: vi.fn(),
+	saveMutateAsyncMock: vi.fn(),
 }));
 
 vi.mock("@/shared/lib/monaco", () => ({}));
@@ -90,6 +91,8 @@ describe("fileViewerPane", () => {
 
 	beforeEach(() => {
 		saveMutateMock.mockReset();
+		saveMutateAsyncMock.mockReset();
+		saveMutateAsyncMock.mockResolvedValue(undefined);
 		useFileViewerDirtyStore.setState({ profiles: {} });
 		getClientRectsSpy = vi
 			.spyOn(HTMLElement.prototype, "getClientRects")
@@ -103,6 +106,7 @@ describe("fileViewerPane", () => {
 			error: null,
 			isPending: false,
 			mutate: saveMutateMock,
+			mutateAsync: saveMutateAsyncMock,
 		} as unknown as SaveFileContentResult);
 	});
 
@@ -124,9 +128,6 @@ describe("fileViewerPane", () => {
 
 	it("marks the file dirty and saves edited content with Cmd+S", async () => {
 		const nextContent = `${fileContent}\nconsole.log(beta);`;
-		saveMutateMock.mockImplementation((_variables, options) => {
-			options?.onSuccess?.(undefined, _variables);
-		});
 		renderPane();
 
 		const editor = await screen.findByLabelText("Monaco Editor");
@@ -138,14 +139,20 @@ describe("fileViewerPane", () => {
 			);
 		});
 
-		act(() => {
+		await act(async () => {
 			fireEvent.keyDown(window, { key: "s", metaKey: true });
 		});
 
-		expect(saveMutateMock).toHaveBeenCalledWith(
-			{ path: filePath, content: nextContent },
-			expect.objectContaining({ onSuccess: expect.any(Function) }),
-		);
-		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
+		await waitFor(() => {
+			expect(saveMutateAsyncMock).toHaveBeenCalledWith({
+				path: filePath,
+				content: nextContent,
+			});
+		});
+		await waitFor(() => {
+			expect(
+				useFileViewerDirtyStore.getState().profiles[profileId],
+			).toBeUndefined();
+		});
 	});
 });

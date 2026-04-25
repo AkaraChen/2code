@@ -1,6 +1,7 @@
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import { Box, Center, Spinner } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
+import { Command, open as openShellPath } from "@tauri-apps/plugin-shell";
 import {
 	type CSSProperties,
 	type MouseEvent,
@@ -23,6 +24,9 @@ import type {
 import * as m from "@/paraglide/messages.js";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
+import { toaster } from "@/shared/providers/Toaster";
+import FileTreeDeleteDialog from "./FileTreeDeleteDialog";
+import FileTreeNewFolderDialog from "./FileTreeNewFolderDialog";
 import FileViewerDialog from "./FileViewerDialog";
 import {
 	FILE_TREE_PANEL_MAX_WIDTH,
@@ -30,11 +34,26 @@ import {
 	useFileTreeStore,
 } from "./fileTreeStore";
 import {
+	useFileViewerDirtyStore,
+	useFileViewerTabsStore,
+} from "./fileViewerTabsStore";
+import {
+	useCreateFileTreeFile,
+	useCreateFileTreeFolder,
+	useDeleteFileTreePath,
 	useFileTreeGitStatus,
 	useFileTreePaths,
 	useMoveFileTreePaths,
 	useRenameFileTreePath,
+	useSaveFileContent,
 } from "./hooks";
+import {
+	mintUntitledFilePath,
+	NEW_FILE_CANCEL_EVENT,
+	type NewFileCancelDetail,
+	useFileDraftStore,
+	useNewFileSessionStore,
+} from "./untitledDrafts";
 
 const FILE_TREE_PANEL_TRANSITION = {
 	type: "spring",
@@ -57,7 +76,8 @@ const FILE_TREE_GIT_STATUSES = new Set<GitStatusEntry["status"]>([
 ]);
 
 const FILE_TREE_HOST_STYLE = {
-	height: "100%",
+	flex: 1,
+	minHeight: 0,
 	minWidth: 0,
 	width: "100%",
 	"--trees-bg-muted-override": "var(--chakra-colors-bg-subtle)",
@@ -177,13 +197,19 @@ function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
 interface FileTreeContextMenuButtonProps {
 	children: ReactNode;
 	disabled?: boolean;
-	onClick: () => void;
+	onClick?: () => void;
+	onMouseEnter?: () => void;
+	hasSubmenu?: boolean;
+	isSubmenuOpen?: boolean;
 }
 
 function FileTreeContextMenuButton({
 	children,
 	disabled = false,
 	onClick,
+	onMouseEnter,
+	hasSubmenu = false,
+	isSubmenuOpen = false,
 }: FileTreeContextMenuButtonProps) {
 	return (
 		<button
@@ -192,22 +218,75 @@ function FileTreeContextMenuButton({
 			style={{
 				...FILE_TREE_CONTEXT_MENU_BUTTON_STYLE,
 				opacity: disabled ? 0.45 : 1,
+				background: isSubmenuOpen
+					? "var(--chakra-colors-bg-subtle)"
+					: "transparent",
 			}}
 			type="button"
 			onClick={onClick}
 			onMouseEnter={(event) => {
-				if (!disabled) {
-					event.currentTarget.style.background =
-						"var(--chakra-colors-bg-subtle)";
-				}
+				if (disabled) return;
+				event.currentTarget.style.background =
+					"var(--chakra-colors-bg-subtle)";
+				onMouseEnter?.();
 			}}
 			onMouseLeave={(event) => {
+				if (isSubmenuOpen) return;
 				event.currentTarget.style.background = "transparent";
 			}}
 		>
-			{children}
+			<span style={{ flex: 1 }}>{children}</span>
+			{hasSubmenu && (
+				<span
+					aria-hidden="true"
+					style={{ marginInlineStart: "8px", opacity: 0.6 }}
+				>
+					▸
+				</span>
+			)}
 		</button>
 	);
+}
+
+interface FileTreeContextSubmenuProps {
+	children: ReactNode;
+}
+
+function FileTreeContextSubmenu({ children }: FileTreeContextSubmenuProps) {
+	return (
+		<div
+			role="menu"
+			style={{
+				...FILE_TREE_CONTEXT_MENU_STYLE,
+				position: "absolute",
+				top: 0,
+				left: "100%",
+				right: "auto",
+				marginInlineStart: "2px",
+			}}
+		>
+			{children}
+		</div>
+	);
+}
+
+async function revealAbsolutePathInFinder(absolutePath: string) {
+	const isMac = navigator.platform.toUpperCase().includes("MAC");
+	const cmd = isMac ? "open" : "explorer";
+	const args = isMac ? ["-R", absolutePath] : [absolutePath];
+	try {
+		await Command.create(cmd, args).execute();
+	} catch (error) {
+		console.error("Failed to reveal in finder", error);
+	}
+}
+
+async function openAbsolutePathInDefaultEditor(absolutePath: string) {
+	try {
+		await openShellPath(absolutePath);
+	} catch (error) {
+		console.error("Failed to open in default editor", error);
+	}
 }
 
 interface FileTreeContextMenuProps {
@@ -219,6 +298,10 @@ interface FileTreeContextMenuProps {
 	selectedPaths: readonly string[];
 	onOpenFile: (relativePath: string) => void;
 	onStartRename: (path: string) => void;
+	onRequestNewFile: (parentRelativePath: string) => void;
+	onRequestNewFolder: (parentRelativePath: string) => void;
+	onRequestDelete: (path: string, isFolder: boolean) => void;
+	onSuppressNextSelectionOpen: () => void;
 }
 
 function FileTreeContextMenu({
@@ -230,17 +313,27 @@ function FileTreeContextMenu({
 	selectedPaths,
 	onOpenFile,
 	onStartRename,
+	onRequestNewFile,
+	onRequestNewFolder,
+	onRequestDelete,
+	onSuppressNextSelectionOpen,
 }: FileTreeContextMenuProps) {
+	const [openSubmenu, setOpenSubmenu] = useState<"copy-path" | null>(null);
 	const actionPaths = getContextMenuActionPaths(item.path, selectedPaths);
 	const canOpen = item.kind === "file" && filePathSet.has(item.path);
 	const canRename =
 		actionPaths.length === 1 && hasTreePath(renamablePathSet, item.path);
+	const isFolder = item.kind === "directory";
+	const parentRelativePath = isFolder
+		? item.path
+		: getParentRelativePath(item.path);
 
 	const handleOpen = () => {
 		if (canOpen) openAndCloseContextMenu(context, () => onOpenFile(item.path));
 	};
 	const handleRename = () => {
 		if (!canRename) return;
+		onSuppressNextSelectionOpen();
 		context.close({ restoreFocus: false });
 		onStartRename(item.path);
 	};
@@ -254,30 +347,142 @@ function FileTreeContextMenu({
 		).catch(() => {});
 		context.close();
 	};
+	const handleRevealInFinder = () => {
+		void revealAbsolutePathInFinder(toAbsolutePath(rootPath, item.path));
+		context.close();
+	};
+	const handleOpenInDefaultEditor = () => {
+		void openAbsolutePathInDefaultEditor(toAbsolutePath(rootPath, item.path));
+		context.close();
+	};
+	const handleNewFile = () => {
+		onSuppressNextSelectionOpen();
+		context.close();
+		onRequestNewFile(parentRelativePath);
+	};
+	const handleNewFolder = () => {
+		onSuppressNextSelectionOpen();
+		context.close();
+		onRequestNewFolder(parentRelativePath);
+	};
+	const handleDelete = () => {
+		onSuppressNextSelectionOpen();
+		context.close();
+		onRequestDelete(item.path, isFolder);
+	};
 
 	return (
 		<div
 			data-file-tree-context-menu-root="true"
 			role="menu"
 			style={FILE_TREE_CONTEXT_MENU_STYLE}
+			onMouseLeave={() => setOpenSubmenu(null)}
 		>
-			<FileTreeContextMenuButton disabled={!canOpen} onClick={handleOpen}>
+			<FileTreeContextMenuButton
+				disabled={!canOpen}
+				onClick={handleOpen}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
 				{m.fileTreeContextMenuOpen()}
+			</FileTreeContextMenuButton>
+			<FileTreeContextMenuButton
+				disabled={!canOpen}
+				onClick={handleOpenInDefaultEditor}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
+				{m.fileTreeContextMenuOpenInDefaultEditor()}
+			</FileTreeContextMenuButton>
+			<FileTreeContextMenuButton
+				onClick={handleRevealInFinder}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
+				{m.fileTreeContextMenuRevealInFinder()}
+			</FileTreeContextMenuButton>
+			<FileTreeContextMenuButton
+				onClick={handleNewFile}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
+				{m.fileTreeContextMenuNewFile()}
+			</FileTreeContextMenuButton>
+			<FileTreeContextMenuButton
+				onClick={handleNewFolder}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
+				{m.fileTreeContextMenuNewFolder()}
 			</FileTreeContextMenuButton>
 			<FileTreeContextMenuButton
 				disabled={!canRename}
 				onClick={handleRename}
+				onMouseEnter={() => setOpenSubmenu(null)}
 			>
 				{m.rename()}
 			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton onClick={handleCopyRelativePath}>
-				{m.fileTreeContextMenuCopyRelativePath()}
-			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton onClick={handleCopyAbsolutePath}>
-				{m.fileTreeContextMenuCopyAbsolutePath()}
+			<div style={{ position: "relative" }}>
+				<FileTreeContextMenuButton
+					hasSubmenu
+					isSubmenuOpen={openSubmenu === "copy-path"}
+					onMouseEnter={() => setOpenSubmenu("copy-path")}
+					onClick={() =>
+						setOpenSubmenu(
+							openSubmenu === "copy-path" ? null : "copy-path",
+						)
+					}
+				>
+					{m.fileTreeContextMenuCopyPath()}
+				</FileTreeContextMenuButton>
+				{openSubmenu === "copy-path" && (
+					<FileTreeContextSubmenu>
+						<FileTreeContextMenuButton onClick={handleCopyRelativePath}>
+							{m.fileTreeContextMenuCopyRelativePath()}
+						</FileTreeContextMenuButton>
+						<FileTreeContextMenuButton onClick={handleCopyAbsolutePath}>
+							{m.fileTreeContextMenuCopyAbsolutePath()}
+						</FileTreeContextMenuButton>
+					</FileTreeContextSubmenu>
+				)}
+			</div>
+			<FileTreeContextMenuButton
+				onClick={handleDelete}
+				onMouseEnter={() => setOpenSubmenu(null)}
+			>
+				{m.fileTreeContextMenuDelete()}
 			</FileTreeContextMenuButton>
 		</div>
 	);
+}
+
+function getParentRelativePath(relativePath: string) {
+	const trimmed = relativePath.replace(TRAILING_PATH_SEPARATOR_RE, "");
+	const lastSeparator = trimmed.lastIndexOf("/");
+	if (lastSeparator < 0) return "";
+	return trimmed.slice(0, lastSeparator);
+}
+
+function joinPlaceholderPath(parent: string, name: string) {
+	const trimmedParent = parent.replace(TRAILING_PATH_SEPARATOR_RE, "");
+	if (!trimmedParent) return name;
+	return `${trimmedParent}/${name}`;
+}
+
+function pickUniquePlaceholderPath(
+	parent: string,
+	existingPaths: ReadonlySet<string>,
+) {
+	const baseName = "untitled";
+	let candidate = joinPlaceholderPath(parent, baseName);
+	if (!existingPaths.has(candidate) && !existingPaths.has(`${candidate}/`)) {
+		return candidate;
+	}
+	for (let i = 1; i < 1000; i += 1) {
+		candidate = joinPlaceholderPath(parent, `${baseName}-${i}`);
+		if (
+			!existingPaths.has(candidate)
+			&& !existingPaths.has(`${candidate}/`)
+		) {
+			return candidate;
+		}
+	}
+	return joinPlaceholderPath(parent, `${baseName}-${Date.now()}`);
 }
 
 function openAndCloseContextMenu(
@@ -296,6 +501,18 @@ export default function FileTreePanel({
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
 	const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
+	const [newFolderParentPath, setNewFolderParentPath] = useState<
+		string | null
+	>(null);
+	const [deleteTarget, setDeleteTarget] = useState<{
+		path: string;
+		isFolder: boolean;
+	} | null>(null);
+	const [emptyAreaMenu, setEmptyAreaMenu] = useState<{
+		x: number;
+		y: number;
+	} | null>(null);
+	const [newFileError, setNewFileError] = useState<string | null>(null);
 	const rootPathRef = useRef(rootPath);
 	const onOpenFileRef = useRef(onOpenFile);
 	const filePathSetRef = useRef<ReadonlySet<string>>(new Set());
@@ -307,6 +524,7 @@ export default function FileTreePanel({
 	const restoreModelRef = useRef(() => {});
 	const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
 	const moveFileTreePathsRef = useRef((_event: FileTreeDropResult) => {});
+	const pendingNewFilePathRef = useRef<string | null>(null);
 	const prefersReducedMotion = useReducedMotion() ?? false;
 	const panelWidth = useFileTreeStore((s) => s.panelWidth);
 	const setPanelWidth = useFileTreeStore((s) => s.setPanelWidth);
@@ -322,6 +540,23 @@ export default function FileTreePanel({
 	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
+	const deleteFileTreePath = useDeleteFileTreePath(rootPath, profileId);
+	const createFileTreeFolder = useCreateFileTreeFolder(rootPath, profileId);
+	const createFileTreeFile = useCreateFileTreeFile(rootPath, profileId);
+	const saveFileContent = useSaveFileContent(profileId);
+	const openUntitledTab = useFileViewerTabsStore(
+		(state) => state.openUntitled,
+	);
+	const renameFileTab = useFileViewerTabsStore((state) => state.renameTab);
+	const closeFileTab = useFileViewerTabsStore((state) => state.closeTab);
+	const renameDirty = useFileViewerDirtyStore((state) => state.renameDirty);
+	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
+	const registerNewFileSession = useNewFileSessionStore(
+		(state) => state.register,
+	);
+	const consumeNewFileSession = useNewFileSessionStore(
+		(state) => state.consume,
+	);
 	const gitStatus = useMemo(
 		() => toFileTreeGitStatus(gitStatusEntries),
 		[gitStatusEntries],
@@ -357,6 +592,115 @@ export default function FileTreePanel({
 		modelRef.current?.setGitStatus(gitStatusRef.current);
 	};
 	renameFileTreePathRef.current = (event) => {
+		const pendingPlaceholder = pendingNewFilePathRef.current;
+		if (pendingPlaceholder && event.sourcePath === pendingPlaceholder) {
+			pendingNewFilePathRef.current = null;
+			const session = consumeNewFileSession(pendingPlaceholder);
+			const newAbsolutePath = toAbsolutePath(
+				rootPathRef.current,
+				event.destinationPath,
+			);
+			const newTitle =
+				event.destinationPath.split("/").pop()
+					?? event.destinationPath;
+
+			void createFileTreeFile
+				.mutateAsync({ targetPath: event.destinationPath })
+				.then(async () => {
+					setNewFileError(null);
+					if (session) {
+						const draftStore = useFileDraftStore.getState();
+						const buffer = draftStore.drafts[session.untitledPath];
+						const hasBuffer =
+							buffer != null && buffer.length > 0;
+
+						// Re-key the open untitled tab to the real path so the
+						// editor follows the user's typed filename instead of
+						// opening a second tab.
+						draftStore.rename(session.untitledPath, newAbsolutePath);
+						renameDirty(
+							session.profileId,
+							session.untitledPath,
+							newAbsolutePath,
+						);
+						renameFileTab(
+							session.profileId,
+							session.untitledPath,
+							newAbsolutePath,
+							newTitle,
+						);
+
+						if (hasBuffer) {
+							try {
+								await saveFileContent.mutateAsync({
+									path: newAbsolutePath,
+									content: buffer,
+								});
+								useFileDraftStore
+									.getState()
+									.setSavedValue(newAbsolutePath, buffer);
+								setFileDirty(
+									session.profileId,
+									newAbsolutePath,
+									false,
+								);
+							} catch (err) {
+								toaster.create({
+									title: "Save failed",
+									description:
+										err instanceof Error
+											? err.message
+											: String(err),
+									type: "error",
+									closable: true,
+								});
+							}
+						} else {
+							useFileDraftStore
+								.getState()
+								.setSavedValue(newAbsolutePath, "");
+							setFileDirty(
+								session.profileId,
+								newAbsolutePath,
+								false,
+							);
+						}
+					} else {
+						// No untitled session linked (shouldn't normally
+						// happen, but fall back to opening the new file).
+						openRelativeFile(event.destinationPath);
+					}
+				})
+				.catch((err) => {
+					// Backend rejected the create (e.g. a gitignored file
+					// already exists at that path on disk and the tree
+					// model didn't know about it). Restore the placeholder
+					// row in the tree, keep the open untitled tab so the
+					// user's buffer isn't lost, and surface an inline error
+					// banner so they can correct the filename.
+					const message =
+						err instanceof Error ? err.message : String(err);
+					try {
+						model.move(event.destinationPath, pendingPlaceholder);
+					} catch {
+						// If the move fails (e.g. the destination row was
+						// already removed by a refetch), restore from the
+						// canonical paths and re-add the placeholder.
+						restoreModelRef.current();
+						model.add(pendingPlaceholder);
+					}
+					pendingNewFilePathRef.current = pendingPlaceholder;
+					if (session) {
+						registerNewFileSession(
+							pendingPlaceholder,
+							session.profileId,
+							session.untitledPath,
+						);
+					}
+					reportNewFileError(message);
+				});
+			return;
+		}
 		void renameFileTreePath
 			.mutateAsync({
 				sourcePath: event.sourcePath,
@@ -423,8 +767,17 @@ export default function FileTreePanel({
 		},
 		paths: [],
 		renaming: {
-			canRename: (item) => hasTreePath(treePathSetRef.current, item.path),
-			onError: () => {
+			canRename: (item) =>
+				item.path === pendingNewFilePathRef.current
+				|| hasTreePath(treePathSetRef.current, item.path),
+			onError: (error: string) => {
+				if (pendingNewFilePathRef.current) {
+					// Inline-create flow: keep the placeholder, reopen the
+					// rename input, and surface the error in a banner so the
+					// user can correct the name.
+					reportNewFileError(error);
+					return;
+				}
 				restoreModelRef.current();
 			},
 			onRename: (event) => {
@@ -436,8 +789,82 @@ export default function FileTreePanel({
 	modelRef.current = model;
 
 	useEffect(() => {
+		// While a placeholder is pending (inline rename for a new file), skip
+		// the resetPaths call so the rename input is not torn down by background
+		// git-status refetches. The placeholder will be reconciled with the
+		// real path once the create mutation succeeds.
+		if (pendingNewFilePathRef.current) return;
 		model.resetPaths(modelPaths);
 	}, [model, modelPaths]);
+
+	useEffect(() => {
+		return model.onMutation("remove", (event) => {
+			if (event.path === pendingNewFilePathRef.current) {
+				const placeholderPath = pendingNewFilePathRef.current;
+				pendingNewFilePathRef.current = null;
+				const session = consumeNewFileSession(placeholderPath);
+				setNewFileError(null);
+				model.resetPaths(modelPathsRef.current);
+
+				// Clean up the editor tab tied to this aborted New File
+				// session. If the user typed buffer content into the
+				// untitled tab, leave it open as a blank canvas (per
+				// VS Code behaviour); otherwise close it so an empty
+				// scratch tab doesn't linger after the user gives up.
+				if (session) {
+					const buffer =
+						useFileDraftStore.getState().drafts[session.untitledPath];
+					const hasBuffer = buffer != null && buffer.length > 0;
+					if (!hasBuffer) {
+						closeFileTab(session.profileId, session.untitledPath);
+						useFileDraftStore
+							.getState()
+							.clearForPath(session.untitledPath);
+					}
+				}
+			}
+		});
+	}, [closeFileTab, consumeNewFileSession, model]);
+
+	useEffect(() => {
+		const handler = (event: Event) => {
+			const detail = (event as CustomEvent<NewFileCancelDetail>).detail;
+			const placeholderPath = detail?.placeholderPath;
+			if (!placeholderPath) return;
+			if (pendingNewFilePathRef.current !== placeholderPath) return;
+
+			// If the rename input is still active in the tree, simulate
+			// pressing Escape on it so the library cleanly tears down its
+			// internal renaming state machine. Falls back to a direct
+			// `model.remove` (which the library does itself on Escape with
+			// `removeIfCanceled: true`) if the DOM lookup fails.
+			const host = model.getFileTreeContainer();
+			const renameInput = host?.shadowRoot?.querySelector(
+				"[data-item-rename-input]",
+			) as HTMLElement | null;
+			if (renameInput) {
+				renameInput.dispatchEvent(
+					new KeyboardEvent("keydown", {
+						key: "Escape",
+						bubbles: true,
+						cancelable: true,
+					}),
+				);
+				return;
+			}
+			try {
+				model.remove(placeholderPath);
+			} catch {
+				// If the placeholder is already gone (e.g. another listener
+				// removed it first) the mutation throws; the state was
+				// already consistent so we can ignore.
+			}
+		};
+		window.addEventListener(NEW_FILE_CANCEL_EVENT, handler);
+		return () => {
+			window.removeEventListener(NEW_FILE_CANCEL_EVENT, handler);
+		};
+	}, [model]);
 
 	useEffect(() => {
 		model.setGitStatus(gitStatus);
@@ -468,6 +895,138 @@ export default function FileTreePanel({
 		},
 		[model],
 	);
+
+	const reportNewFileError = useCallback(
+		(message: string) => {
+			const placeholderPath = pendingNewFilePathRef.current;
+			if (!placeholderPath) return;
+			setNewFileError(message);
+			// Re-open the rename input on the placeholder so the user can
+			// retype. Defer one microtask so the library finishes resetting
+			// its internal renaming state before we try to start it again.
+			queueMicrotask(() => {
+				if (pendingNewFilePathRef.current !== placeholderPath) return;
+				skipNextSelectionOpenRef.current = true;
+				const reopened = model.startRenaming(placeholderPath, {
+					removeIfCanceled: true,
+				});
+				if (!reopened) {
+					pendingNewFilePathRef.current = null;
+					setNewFileError(null);
+				}
+			});
+		},
+		[model],
+	);
+
+	const handleSuppressNextSelectionOpen = useCallback(() => {
+		skipNextSelectionOpenRef.current = true;
+	}, []);
+
+	const handleRequestNewFolder = useCallback((parentRelativePath: string) => {
+		setNewFolderParentPath(parentRelativePath);
+	}, []);
+
+	const handleRequestNewFile = useCallback(
+		(parentRelativePath: string) => {
+			const existing = new Set(modelPathsRef.current);
+			if (pendingNewFilePathRef.current) {
+				existing.delete(pendingNewFilePathRef.current);
+			}
+			const placeholderPath = pickUniquePlaceholderPath(
+				parentRelativePath,
+				existing,
+			);
+			pendingNewFilePathRef.current = placeholderPath;
+			skipNextSelectionOpenRef.current = true;
+			setNewFileError(null);
+
+			// Open a blank untitled tab so the editor surface is visible
+			// while the user types the filename in the tree.
+			const untitledPath = mintUntitledFilePath();
+			const placeholderName =
+				placeholderPath.split("/").pop() ?? "untitled";
+			openUntitledTab(profileId, untitledPath, placeholderName);
+			registerNewFileSession(placeholderPath, profileId, untitledPath);
+
+			model.add(placeholderPath);
+			const started = model.startRenaming(placeholderPath, {
+				removeIfCanceled: true,
+			});
+			if (!started) {
+				pendingNewFilePathRef.current = null;
+				model.remove(placeholderPath);
+			}
+		},
+		[model, openUntitledTab, profileId, registerNewFileSession],
+	);
+
+	const handleRequestDelete = useCallback(
+		(path: string, isFolder: boolean) => {
+			setDeleteTarget({ path, isFolder });
+		},
+		[],
+	);
+
+	const handleSubmitNewFolder = useCallback(
+		async (relativePath: string) => {
+			await createFileTreeFolder.mutateAsync({ targetPath: relativePath });
+		},
+		[createFileTreeFolder],
+	);
+
+	const handleConfirmDelete = useCallback(async () => {
+		if (!deleteTarget) return;
+		await deleteFileTreePath.mutateAsync({
+			targetPath: deleteTarget.path,
+		});
+	}, [deleteFileTreePath, deleteTarget]);
+
+	const handleEmptyAreaContextMenu = useCallback(
+		(event: MouseEvent<HTMLElement>) => {
+			if (getTreeItemPath(event)) return;
+			event.preventDefault();
+			setEmptyAreaMenu({ x: event.clientX, y: event.clientY });
+		},
+		[],
+	);
+
+	const closeEmptyAreaMenu = useCallback(() => {
+		setEmptyAreaMenu(null);
+	}, []);
+
+	useEffect(() => {
+		if (!emptyAreaMenu) return;
+		const handlePointer = (event: PointerEvent) => {
+			const target = event.target;
+			if (target instanceof HTMLElement) {
+				if (target.closest("[data-file-tree-empty-menu]")) return;
+			}
+			closeEmptyAreaMenu();
+		};
+		const handleKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") closeEmptyAreaMenu();
+		};
+		window.addEventListener("pointerdown", handlePointer, true);
+		window.addEventListener("keydown", handleKey);
+		return () => {
+			window.removeEventListener("pointerdown", handlePointer, true);
+			window.removeEventListener("keydown", handleKey);
+		};
+	}, [closeEmptyAreaMenu, emptyAreaMenu]);
+
+	const handleEmptyMenuRevealInFinder = () => {
+		void revealAbsolutePathInFinder(rootPath);
+		closeEmptyAreaMenu();
+	};
+	const handleEmptyMenuNewFile = () => {
+		closeEmptyAreaMenu();
+		handleRequestNewFile("");
+	};
+	const handleEmptyMenuNewFolder = () => {
+		closeEmptyAreaMenu();
+		setNewFolderParentPath("");
+	};
 
 	return (
 		<>
@@ -515,7 +1074,34 @@ export default function FileTreePanel({
 										minWidth: 0,
 									}}
 								>
-									<Box flex="1" minH="0" minW="0" position="relative" py="1">
+									<Box
+										flex="1"
+										minH="0"
+										minW="0"
+										position="relative"
+										py="1"
+										display="flex"
+										flexDirection="column"
+										onContextMenu={handleEmptyAreaContextMenu}
+									>
+										{newFileError && (
+											<Box
+												role="alert"
+												mx="2"
+												mb="1"
+												px="2"
+												py="1"
+												borderWidth="1px"
+												borderColor="red.solid"
+												bg="red.subtle"
+												color="red.fg"
+												borderRadius="md"
+												fontSize="xs"
+												lineHeight="1.4"
+											>
+												{newFileError}
+											</Box>
+										)}
 										<FileTree
 											model={model}
 											onClick={handleTreeClick}
@@ -530,6 +1116,12 @@ export default function FileTreePanel({
 													selectedPaths={selectedPaths}
 													onOpenFile={openRelativeFile}
 													onStartRename={handleStartRename}
+													onRequestNewFile={handleRequestNewFile}
+													onRequestNewFolder={handleRequestNewFolder}
+													onRequestDelete={handleRequestDelete}
+													onSuppressNextSelectionOpen={
+														handleSuppressNextSelectionOpen
+													}
 												/>
 											)}
 											style={FILE_TREE_HOST_STYLE}
@@ -576,6 +1168,43 @@ export default function FileTreePanel({
 				filePath={openFilePath}
 				onClose={() => setOpenFilePath(null)}
 			/>
+			<FileTreeNewFolderDialog
+				isOpen={newFolderParentPath !== null}
+				parentRelativePath={newFolderParentPath ?? ""}
+				onClose={() => setNewFolderParentPath(null)}
+				onSubmit={handleSubmitNewFolder}
+			/>
+			<FileTreeDeleteDialog
+				isOpen={deleteTarget !== null}
+				targetPath={deleteTarget?.path ?? null}
+				isFolder={deleteTarget?.isFolder ?? false}
+				onClose={() => setDeleteTarget(null)}
+				onConfirm={handleConfirmDelete}
+			/>
+			{emptyAreaMenu && (
+				<div
+					data-file-tree-empty-menu="true"
+					role="menu"
+					style={{
+						...FILE_TREE_CONTEXT_MENU_STYLE,
+						position: "fixed",
+						top: emptyAreaMenu.y,
+						left: emptyAreaMenu.x,
+						right: "auto",
+						zIndex: 1000,
+					}}
+				>
+					<FileTreeContextMenuButton onClick={handleEmptyMenuRevealInFinder}>
+						{m.fileTreeContextMenuRevealInFinder()}
+					</FileTreeContextMenuButton>
+					<FileTreeContextMenuButton onClick={handleEmptyMenuNewFile}>
+						{m.fileTreeContextMenuNewFile()}
+					</FileTreeContextMenuButton>
+					<FileTreeContextMenuButton onClick={handleEmptyMenuNewFolder}>
+						{m.fileTreeContextMenuNewFolder()}
+					</FileTreeContextMenuButton>
+				</div>
+			)}
 		</>
 	);
 }

@@ -29,6 +29,7 @@ import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
+import { useCloseFileTabFlow } from "@/features/projects/useCloseFileTabFlow";
 import { getFileIconUrl } from "@/shared/lib/fileIcons";
 import {
 	buildSortableId,
@@ -197,7 +198,7 @@ export default function TerminalTabs({
 	const dirtyFilePaths = useFileViewerDirtyStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_DIRTY_FILE_PATHS),
 	);
-	const closeFileTab = useFileViewerTabsStore((state) => state.closeTab);
+	const closeFileTabFlow = useCloseFileTabFlow(profileId);
 	const reorderFileTabs = useFileViewerTabsStore((state) => state.reorderTabs);
 	const setFileActive = useFileViewerTabsStore((state) => state.setFileActive);
 	const setTerminalActive = useFileViewerTabsStore((state) => state.setTerminalActive);
@@ -353,7 +354,7 @@ export default function TerminalTabs({
 												) : undefined
 											}
 											onClose={() =>
-												closeFileTab(profileId, tab.filePath)
+												void closeFileTabFlow(tab.filePath)
 											}
 										/>
 									))}

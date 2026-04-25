@@ -103,6 +103,76 @@ pub fn rename_file_tree_path(
 	Ok(())
 }
 
+pub fn delete_file_tree_path(
+	root: &Path,
+	target_path: &str,
+) -> Result<(), AppError> {
+	ensure_root_directory(root)?;
+	let target_path =
+		validate_file_tree_relative_path(target_path, "Target path")?;
+
+	let target = root.join(&target_path);
+	if !target.exists() {
+		return Err(AppError::NotFound(format!(
+			"File tree path: {target_path}"
+		)));
+	}
+
+	let metadata = std::fs::symlink_metadata(&target)?;
+	if metadata.is_dir() {
+		std::fs::remove_dir_all(&target)?;
+	} else {
+		std::fs::remove_file(&target)?;
+	}
+
+	Ok(())
+}
+
+pub fn create_file_tree_folder(
+	root: &Path,
+	target_path: &str,
+) -> Result<(), AppError> {
+	ensure_root_directory(root)?;
+	let target_path =
+		validate_file_tree_relative_path(target_path, "Folder path")?;
+
+	let target = root.join(&target_path);
+	if target.exists() {
+		return Err(AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::AlreadyExists,
+			format!("Folder already exists: {target_path}"),
+		)));
+	}
+
+	std::fs::create_dir_all(&target)?;
+
+	Ok(())
+}
+
+pub fn create_file_tree_file(
+	root: &Path,
+	target_path: &str,
+) -> Result<(), AppError> {
+	ensure_root_directory(root)?;
+	let target_path =
+		validate_file_tree_relative_path(target_path, "File path")?;
+
+	let target = root.join(&target_path);
+	if target.exists() {
+		return Err(AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::AlreadyExists,
+			format!("File already exists: {target_path}"),
+		)));
+	}
+
+	if let Some(parent) = target.parent() {
+		std::fs::create_dir_all(parent)?;
+	}
+	std::fs::File::create(&target)?;
+
+	Ok(())
+}
+
 pub fn move_file_tree_paths(
 	root: &Path,
 	source_paths: &[String],
@@ -557,6 +627,83 @@ mod tests {
 		assert!(root.join("target/b.txt").exists());
 		assert!(!root.join("a.txt").exists());
 		assert!(!root.join("src/b.txt").exists());
+	}
+
+	#[test]
+	fn deletes_file_tree_file() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join("a.txt"), "a").expect("write a");
+
+		delete_file_tree_path(root, "a.txt").expect("delete file");
+
+		assert!(!root.join("a.txt").exists());
+	}
+
+	#[test]
+	fn deletes_file_tree_directory_recursively() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src/nested")).expect("create dirs");
+		std::fs::write(root.join("src/nested/a.txt"), "a").expect("write a");
+
+		delete_file_tree_path(root, "src/").expect("delete dir");
+
+		assert!(!root.join("src").exists());
+	}
+
+	#[test]
+	fn rejects_deleting_root_via_escape() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join("a.txt"), "a").expect("write a");
+
+		let result = delete_file_tree_path(root, "../a.txt");
+
+		assert!(result.is_err());
+		assert!(root.join("a.txt").exists());
+	}
+
+	#[test]
+	fn creates_nested_file_tree_folder() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+
+		create_file_tree_folder(root, "src/utils").expect("create folder");
+
+		assert!(root.join("src/utils").is_dir());
+	}
+
+	#[test]
+	fn creates_nested_file_tree_file() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+
+		create_file_tree_file(root, "src/utils/index.ts").expect("create file");
+
+		assert!(root.join("src/utils/index.ts").is_file());
+	}
+
+	#[test]
+	fn rejects_creating_existing_file() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join("a.txt"), "a").expect("write a");
+
+		let result = create_file_tree_file(root, "a.txt");
+
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn rejects_creating_existing_folder() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src")).expect("create src");
+
+		let result = create_file_tree_folder(root, "src");
+
+		assert!(result.is_err());
 	}
 
 	#[test]

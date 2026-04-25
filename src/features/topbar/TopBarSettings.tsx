@@ -10,11 +10,10 @@ import {
 	type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
-import { useSupportedTopbarAppIds } from "./hooks";
 import { controlRegistry, getSupportedControlIds } from "./registry";
 import { useTopBarStore } from "./store";
 import { TopBarPreview } from "./TopBarPreview";
@@ -25,16 +24,8 @@ export function TopBarSettings() {
 	const setActiveControls = useTopBarStore((s) => s.setActiveControls);
 	const resetToDefaults = useTopBarStore((s) => s.resetToDefaults);
 	const [activeId, setActiveId] = useState<ControlId | null>(null);
-	const {
-		data: supportedAppIds = [],
-		isPending,
-		isSuccess,
-	} = useSupportedTopbarAppIds();
 
-	const supportedControlIds = useMemo(
-		() => getSupportedControlIds(supportedAppIds),
-		[supportedAppIds],
-	);
+	const supportedControlIds = useMemo(() => getSupportedControlIds(), []);
 	const supportedControlIdSet = useMemo(
 		() => new Set(supportedControlIds),
 		[supportedControlIds],
@@ -47,21 +38,6 @@ export function TopBarSettings() {
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
 	);
-
-	useEffect(() => {
-		if (
-			!isSuccess ||
-			visibleActiveControls.length === activeControls.length
-		) {
-			return;
-		}
-		setActiveControls(visibleActiveControls);
-	}, [
-		activeControls.length,
-		isSuccess,
-		setActiveControls,
-		visibleActiveControls,
-	]);
 
 	function handleDragStart(event: DragStartEvent) {
 		setActiveId(event.active.id as ControlId);
@@ -117,14 +93,6 @@ export function TopBarSettings() {
 	}
 
 	const activeDef = activeId ? controlRegistry.get(activeId) : null;
-
-	if (isPending) {
-		return (
-			<Text fontSize="sm" color="fg.muted">
-				{m.topbarDetectingApps()}
-			</Text>
-		);
-	}
 
 	return (
 		<Stack gap="6" maxW="2xl">

@@ -128,6 +128,21 @@ export async function moveFileTreePaths(params: types.MoveFileTreePathsParams): 
 }
 
 
+export async function deleteFileTreePath(params: types.DeleteFileTreePathParams): Promise<void> {
+  return invoke('delete_file_tree_path', params);
+}
+
+
+export async function createFileTreeFolder(params: types.CreateFileTreeFolderParams): Promise<void> {
+  return invoke('create_file_tree_folder', params);
+}
+
+
+export async function createFileTreeFile(params: types.CreateFileTreeFileParams): Promise<void> {
+  return invoke('create_file_tree_file', params);
+}
+
+
 export async function readFileContent(params: types.ReadFileContentParams): Promise<string> {
   return invoke('read_file_content', params);
 }

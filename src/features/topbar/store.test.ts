@@ -19,9 +19,7 @@ describe("useTopBarStore", () => {
 	describe("initial state", () => {
 		it("has default active controls", () => {
 			expect(getState().activeControls).toEqual([
-				"github-desktop",
-				"vscode",
-				"git-diff",
+				"open-with",
 				"reveal-in-finder",
 			]);
 		});
@@ -33,8 +31,11 @@ describe("useTopBarStore", () => {
 
 	describe("setActiveControls", () => {
 		it("replaces the active controls list", () => {
-			getState().setActiveControls(["cursor", "windsurf"]);
-			expect(getState().activeControls).toEqual(["cursor", "windsurf"]);
+			getState().setActiveControls(["reveal-in-finder", "open-with"]);
+			expect(getState().activeControls).toEqual([
+				"reveal-in-finder",
+				"open-with",
+			]);
 		});
 
 		it("can set to empty array", () => {
@@ -45,51 +46,57 @@ describe("useTopBarStore", () => {
 
 	describe("setControlOption", () => {
 		it("sets a single option for a control", () => {
-			getState().setControlOption("vscode", "path", "/usr/bin/code");
-			expect(getState().controlOptions.vscode).toEqual({
-				path: "/usr/bin/code",
+			getState().setControlOption("open-with", "lastUsed", "vscode");
+			expect(getState().controlOptions["open-with"]).toEqual({
+				lastUsed: "vscode",
 			});
 		});
 
 		it("merges with existing options for the same control", () => {
-			getState().setControlOption("vscode", "path", "/usr/bin/code");
-			getState().setControlOption("vscode", "args", "--new-window");
-			expect(getState().controlOptions.vscode).toEqual({
-				path: "/usr/bin/code",
-				args: "--new-window",
+			getState().setControlOption("open-with", "lastUsed", "vscode");
+			getState().setControlOption("open-with", "pinned", true);
+			expect(getState().controlOptions["open-with"]).toEqual({
+				lastUsed: "vscode",
+				pinned: true,
 			});
 		});
 
 		it("merges options from different controls", () => {
-			getState().setControlOption("vscode", "path", "a");
-			getState().setControlOption("cursor", "path", "b");
-			expect(getState().controlOptions.vscode).toEqual({ path: "a" });
-			expect(getState().controlOptions.cursor).toEqual({ path: "b" });
+			getState().setControlOption("open-with", "lastUsed", "a");
+			getState().setControlOption("reveal-in-finder", "lastUsed", "b");
+			expect(getState().controlOptions["open-with"]).toEqual({
+				lastUsed: "a",
+			});
+			expect(getState().controlOptions["reveal-in-finder"]).toEqual({
+				lastUsed: "b",
+			});
 		});
 
 		it("overwrites an existing key for the same control", () => {
-			getState().setControlOption("vscode", "path", "old");
-			getState().setControlOption("vscode", "path", "new");
-			expect(getState().controlOptions.vscode.path).toBe("new");
+			getState().setControlOption("open-with", "lastUsed", "old");
+			getState().setControlOption("open-with", "lastUsed", "new");
+			expect(getState().controlOptions["open-with"].lastUsed).toBe("new");
 		});
 
 		it("preserves other controls when updating one", () => {
-			getState().setControlOption("vscode", "path", "a");
-			getState().setControlOption("cursor", "path", "b");
-			getState().setControlOption("vscode", "args", "c");
-			expect(getState().controlOptions.cursor).toEqual({ path: "b" });
+			getState().setControlOption("open-with", "lastUsed", "a");
+			getState().setControlOption("reveal-in-finder", "lastUsed", "b");
+			getState().setControlOption("open-with", "pinned", true);
+			expect(getState().controlOptions["reveal-in-finder"]).toEqual({
+				lastUsed: "b",
+			});
 		});
 	});
 
 	describe("resetToDefaults", () => {
 		it("restores activeControls to defaults", () => {
-			getState().setActiveControls(["cursor"]);
+			getState().setActiveControls(["open-with"]);
 			getState().resetToDefaults();
 			expect(getState().activeControls).toEqual(defaultActiveControls);
 		});
 
 		it("clears all controlOptions", () => {
-			getState().setControlOption("vscode", "path", "a");
+			getState().setControlOption("open-with", "lastUsed", "a");
 			getState().resetToDefaults();
 			expect(getState().controlOptions).toEqual({});
 		});
@@ -103,46 +110,58 @@ describe("useTopBarStore", () => {
 
 	describe("setControlOption edge cases", () => {
 		it("stores null as a value", () => {
-			getState().setControlOption("vscode", "path", null);
-			expect(getState().controlOptions.vscode.path).toBeNull();
+			getState().setControlOption("open-with", "lastUsed", null);
+			expect(getState().controlOptions["open-with"].lastUsed).toBeNull();
 		});
 
 		it("stores undefined as a value", () => {
-			getState().setControlOption("vscode", "path", undefined);
-			expect(getState().controlOptions.vscode.path).toBeUndefined();
+			getState().setControlOption("open-with", "lastUsed", undefined);
+			expect(
+				getState().controlOptions["open-with"].lastUsed,
+			).toBeUndefined();
 		});
 
 		it("stores complex objects as values", () => {
 			const complex = { nested: { arr: [1, 2, 3] } };
-			getState().setControlOption("vscode", "config", complex);
-			expect(getState().controlOptions.vscode.config).toEqual(complex);
+			getState().setControlOption("open-with", "config", complex);
+			expect(getState().controlOptions["open-with"].config).toEqual(
+				complex,
+			);
 		});
 
 		it("handles rapid sequential updates to the same key", () => {
 			for (let i = 0; i < 100; i++) {
-				getState().setControlOption("vscode", "count", i);
+				getState().setControlOption("open-with", "count", i);
 			}
-			expect(getState().controlOptions.vscode.count).toBe(99);
+			expect(getState().controlOptions["open-with"].count).toBe(99);
 		});
 
 		it("spreading undefined controlOptions[controlId] does not throw", () => {
 			// First time setting an option for a control — ...state.controlOptions[controlId] is ...undefined
 			expect(() =>
-				getState().setControlOption("windsurf", "path", "/bin/ws"),
+				getState().setControlOption(
+					"reveal-in-finder",
+					"lastUsed",
+					"/tmp",
+				),
 			).not.toThrow();
-			expect(getState().controlOptions.windsurf).toEqual({
-				path: "/bin/ws",
+			expect(getState().controlOptions["reveal-in-finder"]).toEqual({
+				lastUsed: "/tmp",
 			});
 		});
 	});
 
 	describe("setActiveControls edge cases", () => {
 		it("accepts duplicate entries", () => {
-			getState().setActiveControls(["vscode", "vscode", "vscode"]);
+			getState().setActiveControls([
+				"open-with",
+				"open-with",
+				"open-with",
+			]);
 			expect(getState().activeControls).toEqual([
-				"vscode",
-				"vscode",
-				"vscode",
+				"open-with",
+				"open-with",
+				"open-with",
 			]);
 		});
 	});

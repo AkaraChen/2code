@@ -275,6 +275,27 @@ export interface MoveFileTreePathsParams {
 }
 
 
+export interface DeleteFileTreePathParams {
+  rootPath: string;
+  targetPath: string;
+  [key: string]: unknown;
+}
+
+
+export interface CreateFileTreeFolderParams {
+  rootPath: string;
+  targetPath: string;
+  [key: string]: unknown;
+}
+
+
+export interface CreateFileTreeFileParams {
+  rootPath: string;
+  targetPath: string;
+  [key: string]: unknown;
+}
+
+
 export interface ReadFileContentParams {
   path: string;
   [key: string]: unknown;

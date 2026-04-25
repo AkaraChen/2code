@@ -33,6 +33,48 @@ pub async fn rename_file_tree_path(
 }
 
 #[tauri::command]
+pub async fn delete_file_tree_path(
+	root_path: String,
+	target_path: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::delete_file_tree_path(
+			Path::new(&root_path),
+			&target_path,
+		)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn create_file_tree_folder(
+	root_path: String,
+	target_path: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::create_file_tree_folder(
+			Path::new(&root_path),
+			&target_path,
+		)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn create_file_tree_file(
+	root_path: String,
+	target_path: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::create_file_tree_file(
+			Path::new(&root_path),
+			&target_path,
+		)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn move_file_tree_paths(
 	root_path: String,
 	source_paths: Vec<String>,
@@ -91,9 +133,6 @@ pub async fn write_file_content(
 ) -> Result<(), AppError> {
 	super::run_blocking(move || {
 		let file_path = Path::new(&path);
-		if !file_path.exists() {
-			return Err(AppError::NotFound(format!("File: {path}")));
-		}
 		if file_path.is_dir() {
 			return Err(AppError::IoError(std::io::Error::other(
 				"Path is a directory",
@@ -105,6 +144,14 @@ pub async fn write_file_content(
 			)));
 		}
 
+		// Create parent directories if needed so save-as flows from the
+		// system file picker work even when the user selects a brand-new
+		// path. Existing files are overwritten.
+		if let Some(parent) = file_path.parent() {
+			if !parent.as_os_str().is_empty() {
+				std::fs::create_dir_all(parent)?;
+			}
+		}
 		std::fs::write(&path, content)?;
 		Ok(())
 	})

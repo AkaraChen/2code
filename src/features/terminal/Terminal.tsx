@@ -227,6 +227,15 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 					return false;
 				}
 
+				if (action.type === "close-tab") {
+					window.dispatchEvent(
+						new CustomEvent("2code:close-active-tab", {
+							detail: { profileId },
+						}),
+					);
+					return false;
+				}
+
 				void writeToPty({ sessionId, data: action.sequence });
 				return false;
 			});

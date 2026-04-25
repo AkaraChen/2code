@@ -1,6 +1,6 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { use, useMemo } from "react";
+import { use, useCallback, useEffect, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
@@ -10,6 +10,10 @@ import {
 	useActiveProfileIds,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
+import {
+	UnsavedFileDialogHost,
+	useCloseFileTabFlow,
+} from "@/features/projects/useCloseFileTabFlow";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -74,20 +78,62 @@ export default function TerminalLayer() {
 		});
 	});
 
+	// `useCloseFileTabFlow` is parameterized by profileId, but Cmd+W can fire
+	// at any time for whichever profile is active. Bind the flow to the
+	// currently active profile so its TanStack mutations are correctly keyed.
+	const closeFileTabFlow = useCloseFileTabFlow(activeProfileId ?? "");
+
+	const closeActiveTabForProfile = useCallback(
+		(profileId: string) => {
+			const fileProfile =
+				useFileViewerTabsStore.getState().profiles[profileId];
+			if (fileProfile?.fileTabActive && fileProfile.activeFilePath) {
+				if (profileId === activeProfileId) {
+					void closeFileTabFlow(fileProfile.activeFilePath);
+				} else {
+					// Falls back to a direct close for non-active profiles.
+					// In practice Cmd+W only fires for the active profile.
+					useFileViewerTabsStore
+						.getState()
+						.closeTab(profileId, fileProfile.activeFilePath);
+				}
+				return;
+			}
+
+			const profileState =
+				useTerminalStore.getState().profiles[profileId];
+			if (!profileState?.activeTabId) return;
+			closeTab.mutate({
+				profileId,
+				sessionId: profileState.activeTabId,
+			});
+		},
+		[activeProfileId, closeFileTabFlow, closeTab],
+	);
+
 	useKey(["w"], (e) => {
-		if (!e.metaKey || !activeProfileId) return;
+		const isCloseCombo = e.metaKey || e.ctrlKey;
+		if (!isCloseCombo || e.altKey || !activeProfileId) return;
 		e.preventDefault();
-		const profileState =
-			useTerminalStore.getState().profiles[activeProfileId];
-		if (!profileState?.activeTabId) return;
-		closeTab.mutate({
-			profileId: activeProfileId,
-			sessionId: profileState.activeTabId,
-		});
+		closeActiveTabForProfile(activeProfileId);
 	});
+
+	useEffect(() => {
+		const handler = (event: Event) => {
+			const detail = (event as CustomEvent<{ profileId?: string }>).detail;
+			const profileId = detail?.profileId ?? activeProfileId;
+			if (!profileId) return;
+			closeActiveTabForProfile(profileId);
+		};
+		window.addEventListener("2code:close-active-tab", handler);
+		return () => {
+			window.removeEventListener("2code:close-active-tab", handler);
+		};
+	}, [activeProfileId, closeActiveTabForProfile]);
 
 	return (
 		<>
+			<UnsavedFileDialogHost />
 			{activeProfileIds.map((profileId) => {
 				const profile = profileMap.get(profileId);
 				if (!profile) return null;

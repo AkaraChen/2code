@@ -1,121 +1,16 @@
-import {
-	SiCursor,
-	SiGhostty,
-	SiGit,
-	SiGithub,
-	SiIterm2,
-	SiSublimetext,
-	SiVscodium,
-	SiWarp,
-	SiWindsurf,
-	SiZedindustries,
-} from "@icons-pack/react-simple-icons";
-import { FiFolder, FiTerminal } from "react-icons/fi";
+import { FiFolder, FiPackage } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
-import {
-	CursorControl,
-	GhosttyControl,
-	GitDiffControl,
-	GithubDesktopControl,
-	Iterm2Control,
-	KittyControl,
-	RevealInFinderControl,
-	SublimeTextControl,
-	VscodeControl,
-	WarpControl,
-	WindsurfControl,
-	ZedControl,
-} from "./controls";
-import type { ControlDefinition, ControlId, LaunchAppControlId } from "./types";
+import { OpenWithControl, RevealInFinderControl } from "./controls";
+import type { ControlDefinition, ControlId } from "./types";
 
 const definitions: ControlDefinition[] = [
 	{
-		id: "github-desktop",
-		kind: "app",
-		label: () => m.topbarGithubDesktop(),
-		icon: SiGithub,
-		optionFields: [],
-		component: GithubDesktopControl,
-	},
-	{
-		id: "vscode",
-		kind: "app",
-		label: () => m.topbarVscode(),
-		icon: SiVscodium,
-		optionFields: [],
-		component: VscodeControl,
-	},
-	{
-		id: "windsurf",
-		kind: "app",
-		label: () => m.topbarWindsurf(),
-		icon: SiWindsurf,
-		optionFields: [],
-		component: WindsurfControl,
-	},
-	{
-		id: "cursor",
-		kind: "app",
-		label: () => m.topbarCursor(),
-		icon: SiCursor,
-		optionFields: [],
-		component: CursorControl,
-	},
-	{
-		id: "zed",
-		kind: "app",
-		label: () => m.topbarZed(),
-		icon: SiZedindustries,
-		optionFields: [],
-		component: ZedControl,
-	},
-	{
-		id: "sublime-text",
-		kind: "app",
-		label: () => m.topbarSublimeText(),
-		icon: SiSublimetext,
-		optionFields: [],
-		component: SublimeTextControl,
-	},
-	{
-		id: "ghostty",
-		kind: "app",
-		label: () => m.topbarGhostty(),
-		icon: SiGhostty,
-		optionFields: [],
-		component: GhosttyControl,
-	},
-	{
-		id: "iterm2",
-		kind: "app",
-		label: () => m.topbarIterm2(),
-		icon: SiIterm2,
-		optionFields: [],
-		component: Iterm2Control,
-	},
-	{
-		id: "kitty",
-		kind: "app",
-		label: () => m.topbarKitty(),
-		icon: FiTerminal,
-		optionFields: [],
-		component: KittyControl,
-	},
-	{
-		id: "warp",
-		kind: "app",
-		label: () => m.topbarWarp(),
-		icon: SiWarp,
-		optionFields: [],
-		component: WarpControl,
-	},
-	{
-		id: "git-diff",
+		id: "open-with",
 		kind: "static",
-		label: () => m.topbarGitDiff(),
-		icon: SiGit,
+		label: () => m.topbarOpenWith(),
+		icon: FiPackage,
 		optionFields: [],
-		component: GitDiffControl,
+		component: OpenWithControl,
 	},
 	{
 		id: "reveal-in-finder",
@@ -133,15 +28,6 @@ export const controlRegistry = new Map<ControlId, ControlDefinition>(
 
 export const allControlIds: ControlId[] = definitions.map((d) => d.id);
 
-export function getSupportedControlIds(
-	supportedAppIds: readonly LaunchAppControlId[],
-) {
-	const supportedAppIdSet = new Set(supportedAppIds);
-	return definitions
-		.filter(
-			(def) =>
-				def.kind === "static" ||
-				supportedAppIdSet.has(def.id as LaunchAppControlId),
-		)
-		.map((def) => def.id);
+export function getSupportedControlIds() {
+	return definitions.map((def) => def.id);
 }

@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalStore } from "@/features/terminal/store";
+import { isUntitledFilePath } from "./untitledDrafts";
 
 export interface FileViewerTab {
 	filePath: string;
@@ -19,7 +20,18 @@ interface ProfileFileViewerState {
 interface FileViewerTabsStore {
 	profiles: Record<string, ProfileFileViewerState>;
 	openFile: (profileId: string, filePath: string) => void;
+	openUntitled: (
+		profileId: string,
+		untitledPath: string,
+		title: string,
+	) => void;
 	closeTab: (profileId: string, filePath: string) => void;
+	renameTab: (
+		profileId: string,
+		oldFilePath: string,
+		newFilePath: string,
+		newTitle: string,
+	) => void;
 	reorderTabs: (profileId: string, fromIndex: number, toIndex: number) => void;
 	setFileActive: (profileId: string, filePath: string) => void;
 	setTerminalActive: (profileId: string) => void;
@@ -31,6 +43,11 @@ interface FileViewerDirtyStore {
 		profileId: string,
 		filePath: string,
 		isDirty: boolean,
+	) => void;
+	renameDirty: (
+		profileId: string,
+		oldFilePath: string,
+		newFilePath: string,
 	) => void;
 }
 
@@ -59,6 +76,19 @@ export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 				}
 			});
 		},
+
+		renameDirty(profileId, oldFilePath, newFilePath) {
+			if (oldFilePath === newFilePath) return;
+			set((state) => {
+				const dirtyFiles = state.profiles[profileId];
+				if (!dirtyFiles) return;
+				const idx = dirtyFiles.indexOf(oldFilePath);
+				if (idx < 0) return;
+				const next = [...dirtyFiles];
+				next[idx] = newFilePath;
+				state.profiles[profileId] = next;
+			});
+		},
 	})),
 );
 
@@ -85,6 +115,53 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 						activeFilePath: filePath,
 						fileTabActive: true,
 					};
+				});
+			},
+
+			openUntitled(profileId, untitledPath, title) {
+				set((state) => {
+					const existing = state.profiles[profileId] ?? {
+						tabs: [],
+						activeFilePath: null,
+						fileTabActive: false,
+					};
+					state.profiles[profileId] = {
+						tabs: [...existing.tabs, { filePath: untitledPath, title }],
+						activeFilePath: untitledPath,
+						fileTabActive: true,
+					};
+				});
+			},
+
+			renameTab(profileId, oldFilePath, newFilePath, newTitle) {
+				if (oldFilePath === newFilePath) return;
+				set((state) => {
+					const profile = state.profiles[profileId];
+					if (!profile) return;
+					const tab = profile.tabs.find(
+						(t) => t.filePath === oldFilePath,
+					);
+					if (!tab) return;
+
+					const collidingIdx = profile.tabs.findIndex(
+						(t) => t.filePath === newFilePath,
+					);
+					if (collidingIdx >= 0) {
+						// A tab for the destination path already exists. Drop the
+						// untitled tab and activate the existing one.
+						profile.tabs = profile.tabs.filter(
+							(t) => t.filePath !== oldFilePath,
+						);
+						profile.activeFilePath = newFilePath;
+						profile.fileTabActive = true;
+						return;
+					}
+
+					tab.filePath = newFilePath;
+					tab.title = newTitle;
+					if (profile.activeFilePath === oldFilePath) {
+						profile.activeFilePath = newFilePath;
+					}
 				});
 			},
 
@@ -152,7 +229,41 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 				});
 			},
 		})),
-		{ name: "file-viewer-tabs-v1" },
+		{
+			name: "file-viewer-tabs-v1",
+			// Untitled drafts only live in memory — drop them from the
+			// persisted snapshot so they don't ghost-restore as broken tabs.
+			partialize: (state) => ({
+				profiles: Object.fromEntries(
+					(
+						Object.entries(state.profiles) as Array<
+							[string, ProfileFileViewerState]
+						>
+					)
+						.map(([profileId, profile]) => {
+							const persistedTabs = profile.tabs.filter(
+								(tab) => !isUntitledFilePath(tab.filePath),
+							);
+							const wasActiveUntitled =
+								profile.activeFilePath != null &&
+								isUntitledFilePath(profile.activeFilePath);
+							const nextProfile: ProfileFileViewerState = {
+								...profile,
+								tabs: persistedTabs,
+								activeFilePath: wasActiveUntitled
+									? (persistedTabs[persistedTabs.length - 1]
+											?.filePath ?? null)
+									: profile.activeFilePath,
+								fileTabActive:
+									persistedTabs.length > 0 &&
+									profile.fileTabActive,
+							};
+							return [profileId, nextProfile] as const;
+						})
+						.filter(([, profile]) => profile.tabs.length > 0),
+				),
+			}),
+		},
 	),
 );
 

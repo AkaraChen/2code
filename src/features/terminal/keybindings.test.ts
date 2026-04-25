@@ -121,4 +121,22 @@ describe("getTerminalShortcutAction", () => {
 			getTerminalShortcutAction(makeEvent({ ctrlKey: true, key: "l" })),
 		).toEqual({ type: "clear-screen" });
 	});
+
+	it("maps Cmd+W to close-tab on macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ metaKey: true, key: "w" }),
+				"MacIntel",
+			),
+		).toEqual({ type: "close-tab" });
+	});
+
+	it("maps Ctrl+W to close-tab on non-macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, key: "w" }),
+				"Win32",
+			),
+		).toEqual({ type: "close-tab" });
+	});
 });

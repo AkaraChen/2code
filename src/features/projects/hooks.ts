@@ -6,8 +6,11 @@ import {
 } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
+	createFileTreeFile,
+	createFileTreeFolder,
 	createProjectFromFolder,
 	createProjectTemporary,
+	deleteFileTreePath,
 	deleteProject,
 	getGitBranch,
 	getFileTreeGitStatus,
@@ -183,6 +186,66 @@ export function useRenameFileTreePath(rootPath: string, profileId: string) {
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useDeleteFileTreePath(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ targetPath }: { targetPath: string }) =>
+			deleteFileTreePath({ rootPath, targetPath }),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useCreateFileTreeFile(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ targetPath }: { targetPath: string }) =>
+			createFileTreeFile({ rootPath, targetPath }),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useCreateFileTreeFolder(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ targetPath }: { targetPath: string }) =>
+			createFileTreeFolder({ rootPath, targetPath }),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
 				}),
 			]);
 		},

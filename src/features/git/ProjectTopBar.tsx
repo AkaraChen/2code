@@ -1,5 +1,6 @@
 import {
 	Box,
+	Button,
 	Flex,
 	HStack,
 	IconButton,
@@ -11,9 +12,9 @@ import { motion, useReducedMotion } from "motion/react";
 import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
+import { useGitDiffStats } from "@/features/git/hooks";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
-import { useSupportedTopbarAppIds } from "@/features/topbar/hooks";
 import {
 	controlRegistry,
 	getSupportedControlIds,
@@ -29,14 +30,75 @@ const FILE_TREE_TOGGLE_ICON_TRANSITION = {
 	mass: 0.55,
 } as const;
 
-function GitBranchLabel({ cwd }: { cwd: string }) {
+interface BranchAndChangesButtonProps {
+	branchName: string;
+	profileId: string;
+	isActive: boolean;
+	onOpen: () => void;
+}
+
+function BranchAndChangesButton({
+	branchName,
+	profileId,
+	isActive,
+	onOpen,
+}: BranchAndChangesButtonProps) {
+	const stats = useGitDiffStats(profileId, isActive);
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<Button
+					aria-label={m.topbarBranchAndChanges()}
+					size="xs"
+					variant="ghost"
+					gap="1.5"
+					color="fg.muted"
+					onClick={onOpen}
+				>
+					<FiGitBranch />
+					<Text as="span">{branchName}</Text>
+					{stats && (
+						<>
+							<Text as="span" color="green.400" fontSize="xs">
+								+{stats.additions}
+							</Text>
+							<Text as="span" color="red.400" fontSize="xs">
+								-{stats.deletions}
+							</Text>
+						</>
+					)}
+				</Button>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{m.topbarGitDiff()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
+	);
+}
+
+function DefaultProfileBranchAndChanges({
+	cwd,
+	profileId,
+	isActive,
+	onOpen,
+}: {
+	cwd: string;
+	profileId: string;
+	isActive: boolean;
+	onOpen: () => void;
+}) {
 	const { data: branch } = useGitBranch(cwd);
 	if (!branch) return null;
 	return (
-		<HStack gap="1">
-			<FiGitBranch />
-			<Text as="span">{branch}</Text>
-		</HStack>
+		<BranchAndChangesButton
+			branchName={branch}
+			profileId={profileId}
+			isActive={isActive}
+			onOpen={onOpen}
+		/>
 	);
 }
 
@@ -88,7 +150,6 @@ export default function ProjectTopBar({
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
-	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
 	const prefersReducedMotion = useReducedMotion() ?? false;
 
 	useEffect(() => {
@@ -106,9 +167,7 @@ export default function ProjectTopBar({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [isActive, onToggleFileTree]);
-	const supportedControlIdSet = new Set(
-		getSupportedControlIds(supportedAppIds),
-	);
+	const supportedControlIdSet = new Set(getSupportedControlIds());
 	const visibleActiveControls = activeControls.filter((id) =>
 		supportedControlIdSet.has(id),
 	);
@@ -191,20 +250,25 @@ export default function ProjectTopBar({
 							</Tooltip.Positioner>
 						</Portal>
 					</Tooltip.Root>
-					<Box color="fg.muted">
+					<Box>
 						{profile.is_default ? (
 							isActive ? (
 								<Suspense>
-									<GitBranchLabel
+									<DefaultProfileBranchAndChanges
 										cwd={profile.worktree_path}
+										profileId={profile.id}
+										isActive={isActive}
+										onOpen={() => setGitDiffOpen(true)}
 									/>
 								</Suspense>
 							) : null
 						) : (
-							<HStack gap="1">
-								<FiGitBranch />
-								<Text as="span">{profile.branch_name}</Text>
-							</HStack>
+							<BranchAndChangesButton
+								branchName={profile.branch_name}
+								profileId={profile.id}
+								isActive={isActive}
+								onOpen={() => setGitDiffOpen(true)}
+							/>
 						)}
 					</Box>
 				</HStack>
@@ -218,12 +282,7 @@ export default function ProjectTopBar({
 								key={controlId}
 								profile={profile}
 								isActive={isActive}
-								options={{
-									...(controlOptions[controlId] ?? {}),
-									...(controlId === "git-diff"
-										? { onOpen: () => setGitDiffOpen(true) }
-										: {}),
-								}}
+								options={controlOptions[controlId] ?? {}}
 							/>
 						);
 					})}
