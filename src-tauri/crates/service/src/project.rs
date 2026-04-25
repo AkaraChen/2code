@@ -102,68 +102,55 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	repo::project::delete(conn, id)
 }
 
+/// Resolve a profile id to its worktree folder. Brief DB lookup — used by
+/// handlers to drop the SQLite mutex before kicking off long-running git work.
+pub fn resolve_profile_folder(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	Ok(profile.worktree_path)
+}
+
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
 }
 
-pub fn get_diff(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::diff(&profile.worktree_path)
+pub fn get_diff(folder: &str) -> Result<String, AppError> {
+	infra::git::diff(folder)
 }
 
-pub fn get_diff_stats(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<GitDiffStats, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::diff_stats(&profile.worktree_path)
+pub fn get_diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
+	infra::git::diff_stats(folder)
 }
 
-pub fn get_log(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-	limit: u32,
-) -> Result<Vec<GitCommit>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::log(&profile.worktree_path, limit)
+pub fn get_log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
+	infra::git::log(folder, limit)
 }
 
 pub fn get_commit_diff(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
+	folder: &str,
 	commit_hash: &str,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::show(&profile.worktree_path, commit_hash)
+	infra::git::show(folder, commit_hash)
 }
 
 pub fn get_binary_preview(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
+	folder: &str,
 	path: &str,
 	source: &str,
 	commit_hash: Option<&str>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	let file_path = match source {
-		"working_tree" => {
-			infra::git::read_worktree_file(&profile.worktree_path, path)?
-		}
-		"head" => infra::git::read_head_file(&profile.worktree_path, path)?,
+		"working_tree" => infra::git::read_worktree_file(folder, path)?,
+		"head" => infra::git::read_head_file(folder, path)?,
 		"commit" => {
 			let commit_hash = commit_hash.ok_or_else(|| {
 				AppError::GitError(
 					"commit_hash is required for commit previews".into(),
 				)
 			})?;
-			infra::git::read_commit_file(
-				&profile.worktree_path,
-				commit_hash,
-				path,
-			)?
+			infra::git::read_commit_file(folder, commit_hash, path)?
 		}
 		"parent_commit" => {
 			let commit_hash = commit_hash.ok_or_else(|| {
@@ -171,11 +158,7 @@ pub fn get_binary_preview(
 					"commit_hash is required for parent commit previews".into(),
 				)
 			})?;
-			infra::git::read_parent_commit_file(
-				&profile.worktree_path,
-				commit_hash,
-				path,
-			)?
+			infra::git::read_parent_commit_file(folder, commit_hash, path)?
 		}
 		other => {
 			return Err(AppError::GitError(format!(
@@ -188,39 +171,27 @@ pub fn get_binary_preview(
 }
 
 pub fn commit_changes(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
+	folder: &str,
 	files: &[String],
 	message: &str,
 	body: Option<&str>,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::commit(&profile.worktree_path, files, message, body)
+	infra::git::commit(folder, files, message, body)
 }
 
 pub fn discard_file_changes(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
+	folder: &str,
 	paths: &[String],
 ) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::discard_changes(&profile.worktree_path, paths)
+	infra::git::discard_changes(folder, paths)
 }
 
-pub fn get_ahead_count(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<u32, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	Ok(infra::git::ahead_count(&profile.worktree_path))
+pub fn get_ahead_count(folder: &str) -> u32 {
+	infra::git::ahead_count(folder)
 }
 
-pub fn push(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::push(&profile.worktree_path)
+pub fn push(folder: &str) -> Result<(), AppError> {
+	infra::git::push(folder)
 }
 
 #[cfg(test)]

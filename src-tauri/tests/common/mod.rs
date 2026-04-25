@@ -70,6 +70,15 @@ pub fn cleanup(dir: &std::path::Path) {
 	let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Resolve a profile id to its worktree folder. Test convenience for the
+/// two-phase pattern (handlers do this lookup synchronously inside the mutex,
+/// then drop the lock before running git ops).
+#[allow(dead_code)]
+pub fn folder_for(conn: &mut SqliteConnection, profile_id: &str) -> String {
+	service::project::resolve_profile_folder(conn, profile_id)
+		.expect("resolve profile folder")
+}
+
 /// Create a git repo, insert a project + default profile into the DB, and return all three.
 /// The project folder points to the temp git repo.
 pub fn create_project_with_git_repo(

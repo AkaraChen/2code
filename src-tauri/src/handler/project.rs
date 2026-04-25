@@ -66,17 +66,30 @@ pub async fn get_git_branch(folder: String) -> Result<String, AppError> {
 	super::run_blocking(move || service::project::get_branch(&folder)).await
 }
 
+// Git handlers below use the two-phase pattern: brief DB lookup to resolve
+// profile → folder, then drop the SQLite mutex before running the git op.
+// See `service::project::resolve_profile_folder`. This prevents long git
+// operations (push/log on large repos) from blocking unrelated DB queries.
+
+async fn resolve_folder(
+	db: &DbPool,
+	profile_id: String,
+) -> Result<String, AppError> {
+	let db = db.clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::resolve_profile_folder(conn, &profile_id)
+	})
+	.await
+}
+
 #[tauri::command]
 pub async fn get_git_diff(
 	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_diff(conn, &profile_id)
-	})
-	.await
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::get_diff(&folder)).await
 }
 
 #[tauri::command]
@@ -84,12 +97,8 @@ pub async fn get_git_diff_stats(
 	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<GitDiffStats, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_diff_stats(conn, &profile_id)
-	})
-	.await
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::get_diff_stats(&folder)).await
 }
 
 #[tauri::command]
@@ -98,10 +107,9 @@ pub async fn get_git_log(
 	limit: Option<u32>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let db = state.inner().clone();
+	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
+		service::project::get_log(&folder, limit.unwrap_or(50))
 	})
 	.await
 }
@@ -112,10 +120,9 @@ pub async fn get_commit_diff(
 	commit_hash: String,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
-	let db = state.inner().clone();
+	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+		service::project::get_commit_diff(&folder, &commit_hash)
 	})
 	.await
 }
@@ -128,12 +135,10 @@ pub async fn get_git_binary_preview(
 	commit_hash: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
-	let db = state.inner().clone();
+	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::project::get_binary_preview(
-			conn,
-			&profile_id,
+			&folder,
 			&path,
 			&source,
 			commit_hash.as_deref(),
@@ -150,12 +155,10 @@ pub async fn commit_git_changes(
 	body: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
-	let db = state.inner().clone();
+	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::project::commit_changes(
-			conn,
-			&profile_id,
+			&folder,
 			&files,
 			&message,
 			body.as_deref(),
@@ -170,10 +173,9 @@ pub async fn discard_git_file_changes(
 	paths: Vec<String>,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let db = state.inner().clone();
+	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::discard_file_changes(conn, &profile_id, &paths)
+		service::project::discard_file_changes(&folder, &paths)
 	})
 	.await
 }
@@ -183,12 +185,9 @@ pub async fn get_git_ahead_count(
 	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<u32, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_ahead_count(conn, &profile_id)
-	})
-	.await
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || Ok(service::project::get_ahead_count(&folder)))
+		.await
 }
 
 #[tauri::command]
@@ -196,12 +195,8 @@ pub async fn git_push(
 	profile_id: String,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::push(conn, &profile_id)
-	})
-	.await
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::push(&folder)).await
 }
 
 #[tauri::command]
