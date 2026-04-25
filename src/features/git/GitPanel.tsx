@@ -21,6 +21,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FiX } from "react-icons/fi";
 
+import ChangesTab from "./ChangesTab";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
 interface GitPanelProps {
@@ -34,6 +35,8 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 	const setTab = useGitPanelStore((s) => s.setTab);
 	const setOpen = useGitPanelStore((s) => s.setOpen);
 	const setWidth = useGitPanelStore((s) => s.setWidth);
+
+	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
 	// Drag-to-resize handle. Mouse down starts a drag; mouse move resizes;
 	// mouse up commits. Uses requestAnimationFrame to coalesce rapid moves.
@@ -157,7 +160,11 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 
 				<Box flex="1" minH="0" overflow="auto" p="2">
 					{tab === "changes" && (
-						<ChangesTabPlaceholder profileId={profileId} />
+						<ChangesTab
+							profileId={profileId}
+							selectedPath={selectedPath}
+							onSelectFile={setSelectedPath}
+						/>
 					)}
 					{tab === "history" && <SoonPlaceholder label="History — Phase 3" />}
 					{tab === "branches" && (
@@ -167,18 +174,6 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 				</Box>
 			</Flex>
 		</Flex>
-	);
-}
-
-// Placeholder until task #16 wires the real tree.
-function ChangesTabPlaceholder({ profileId }: { profileId: string }) {
-	const [debug, setDebug] = useState(false);
-	return (
-		<Box fontSize="sm" color="fg.muted">
-			Changes tab will mount here for profile {profileId}.
-			<br />
-			<button onClick={() => setDebug((d) => !d)}>{debug ? "✓" : "·"}</button>
-		</Box>
 	);
 }
 

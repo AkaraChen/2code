@@ -10,6 +10,7 @@ describe("queryNamespaces", () => {
 			"git-diff": "git-diff",
 			"git-diff-stats": "git-diff-stats",
 			"git-status": "git-status",
+			"git-index-status": "git-index-status",
 			"git-log": "git-log",
 			"git-commit-diff": "git-commit-diff",
 			"git-binary-preview": "git-binary-preview",
@@ -73,6 +74,13 @@ describe("queryKeys", () => {
 		it("status() includes profileId in key", () => {
 			expect(queryKeys.git.status("profile-1")).toEqual([
 				"git-status",
+				"profile-1",
+			]);
+		});
+
+		it("indexStatus() includes profileId in key", () => {
+			expect(queryKeys.git.indexStatus("profile-1")).toEqual([
+				"git-index-status",
 				"profile-1",
 			]);
 		});

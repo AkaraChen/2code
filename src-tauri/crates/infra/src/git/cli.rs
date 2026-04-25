@@ -416,6 +416,53 @@ pub fn commit(
 		.to_string())
 }
 
+/// Stage whole files (equivalent of `git add <paths>`). For partial staging,
+/// use `stage_hunk` or `stage_lines` instead.
+pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
+	let paths = validate_repo_relative_paths(
+		paths,
+		"Stage path",
+		"no paths supplied",
+	)?;
+	let mut args: Vec<&str> = vec!["add", "--"];
+	for p in &paths {
+		args.push(p);
+	}
+	let output = Command::new("git")
+		.args(&args)
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!("git add failed: {stderr}")));
+	}
+	Ok(())
+}
+
+/// Unstage whole files (equivalent of `git restore --staged <paths>`).
+pub fn unstage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
+	let paths = validate_repo_relative_paths(
+		paths,
+		"Unstage path",
+		"no paths supplied",
+	)?;
+	let mut args: Vec<&str> = vec!["restore", "--staged", "--"];
+	for p in &paths {
+		args.push(p);
+	}
+	let output = Command::new("git")
+		.args(&args)
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!(
+			"git restore --staged failed: {stderr}"
+		)));
+	}
+	Ok(())
+}
+
 /// Stage one or more hunks by applying a synthesized patch to the index.
 ///
 /// `file_header` is the file-level header (the `diff --git` line through
@@ -2409,6 +2456,50 @@ mod tests {
 	#[test]
 	fn synthesize_rejects_hunk_without_header() {
 		let result = synthesize_partial_hunk("+just a line\n", &[0], false);
+		assert!(result.is_err());
+	}
+
+	// --- stage_files / unstage_files (whole-file) ---
+
+	#[test]
+	fn stage_files_stages_modifications() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha changed\n").unwrap();
+		stage_files(&dir.path().to_string_lossy(), &["a.txt".into()])
+			.expect("stage_files");
+		let s = index_status(&dir.path().to_string_lossy()).unwrap();
+		assert_eq!(s.staged.len(), 1);
+		assert!(s.unstaged.is_empty());
+	}
+
+	#[test]
+	fn unstage_files_unstages_modifications() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha changed\n").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		unstage_files(&dir.path().to_string_lossy(), &["a.txt".into()])
+			.expect("unstage_files");
+		let s = index_status(&dir.path().to_string_lossy()).unwrap();
+		assert!(s.staged.is_empty());
+		assert_eq!(s.unstaged.len(), 1);
+	}
+
+	#[test]
+	fn stage_files_rejects_empty_path_list() {
+		let dir = create_index_status_repo();
+		let result = stage_files(&dir.path().to_string_lossy(), &[]);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn stage_files_rejects_path_escape() {
+		let dir = create_index_status_repo();
+		let result =
+			stage_files(&dir.path().to_string_lossy(), &["../escape".into()]);
 		assert!(result.is_err());
 	}
 

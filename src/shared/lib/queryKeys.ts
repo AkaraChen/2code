@@ -5,6 +5,7 @@ export const queryNamespaces = {
 	"git-diff": "git-diff",
 	"git-diff-stats": "git-diff-stats",
 	"git-status": "git-status",
+	"git-index-status": "git-index-status",
 	"git-log": "git-log",
 	"git-commit-diff": "git-commit-diff",
 	"git-binary-preview": "git-binary-preview",
@@ -30,6 +31,8 @@ export const queryKeys = {
 		diffStats: (profileId: string) =>
 			["git-diff-stats", profileId] as const,
 		status: (profileId: string) => ["git-status", profileId] as const,
+		indexStatus: (profileId: string) =>
+			["git-index-status", profileId] as const,
 		log: (profileId: string) => ["git-log", profileId] as const,
 		commitDiff: (profileId: string, hash: string) =>
 			["git-commit-diff", profileId, hash] as const,

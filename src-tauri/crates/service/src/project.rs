@@ -126,6 +126,14 @@ pub fn get_index_status(folder: &str) -> Result<IndexStatus, AppError> {
 	infra::git::index_status(folder)
 }
 
+pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
+	infra::git::stage_files(folder, paths)
+}
+
+pub fn unstage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
+	infra::git::unstage_files(folder, paths)
+}
+
 pub fn stage_hunk(
 	folder: &str,
 	file_header: &str,

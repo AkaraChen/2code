@@ -61,6 +61,9 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),
 				});
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				});
 			});
 
 			if (cancelled) {

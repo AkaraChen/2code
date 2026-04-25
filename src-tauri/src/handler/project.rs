@@ -133,6 +133,28 @@ pub async fn get_git_index_status(
 }
 
 #[tauri::command]
+pub async fn stage_git_files(
+	profile_id: String,
+	paths: Vec<String>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::stage_files(&folder, &paths))
+		.await
+}
+
+#[tauri::command]
+pub async fn unstage_git_files(
+	profile_id: String,
+	paths: Vec<String>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::unstage_files(&folder, &paths))
+		.await
+}
+
+#[tauri::command]
 pub async fn stage_git_hunk(
 	profile_id: String,
 	file_header: String,

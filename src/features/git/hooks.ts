@@ -17,6 +17,15 @@ import {
 	getGitLog,
 	gitPush,
 } from "@/generated";
+import {
+	getGitIndexStatus,
+	stageGitFiles,
+	stageGitHunk,
+	stageGitLines,
+	unstageGitFiles,
+	unstageGitHunk,
+	unstageGitLines,
+} from "@/features/git/changesTabBindings";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
 
@@ -69,6 +78,74 @@ export function useGitAheadCount(profileId: string) {
 		queryFn: () => getGitAheadCount({ profileId }),
 	});
 	return data ?? 0;
+}
+
+export function useGitIndexStatus(profileId: string) {
+	return useSuspenseQuery({
+		queryKey: queryKeys.git.indexStatus(profileId),
+		queryFn: () => getGitIndexStatus({ profileId }),
+	});
+}
+
+function useStagingMutation<TArgs>(
+	profileId: string,
+	mutationFn: (args: TArgs & { profileId: string }) => Promise<void>,
+) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: TArgs) => mutationFn({ ...args, profileId }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useStageFiles(profileId: string) {
+	return useStagingMutation<{ paths: string[] }>(profileId, stageGitFiles);
+}
+
+export function useUnstageFiles(profileId: string) {
+	return useStagingMutation<{ paths: string[] }>(profileId, unstageGitFiles);
+}
+
+export function useStageHunk(profileId: string) {
+	return useStagingMutation<{ fileHeader: string; hunks: string[] }>(
+		profileId,
+		stageGitHunk,
+	);
+}
+
+export function useUnstageHunk(profileId: string) {
+	return useStagingMutation<{ fileHeader: string; hunks: string[] }>(
+		profileId,
+		unstageGitHunk,
+	);
+}
+
+export function useStageLines(profileId: string) {
+	return useStagingMutation<{
+		fileHeader: string;
+		hunk: string;
+		selectedIndices: number[];
+	}>(profileId, stageGitLines);
+}
+
+export function useUnstageLines(profileId: string) {
+	return useStagingMutation<{
+		fileHeader: string;
+		hunk: string;
+		selectedIndices: number[];
+	}>(profileId, unstageGitLines);
 }
 
 export function useGitPush(profileId: string) {
