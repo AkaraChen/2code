@@ -89,6 +89,8 @@ pub fn run() {
 			handler::project::get_git_index_status,
 			handler::project::stage_git_hunk,
 			handler::project::unstage_git_hunk,
+			handler::project::stage_git_lines,
+			handler::project::unstage_git_lines,
 			handler::project::get_git_log,
 			handler::project::get_commit_diff,
 			handler::project::get_git_binary_preview,

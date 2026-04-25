@@ -142,6 +142,24 @@ pub fn unstage_hunk(
 	infra::git::unstage_hunk(folder, file_header, hunks)
 }
 
+pub fn stage_lines(
+	folder: &str,
+	file_header: &str,
+	hunk: &str,
+	selected_indices: &[usize],
+) -> Result<(), AppError> {
+	infra::git::stage_lines(folder, file_header, hunk, selected_indices)
+}
+
+pub fn unstage_lines(
+	folder: &str,
+	file_header: &str,
+	hunk: &str,
+	selected_indices: &[usize],
+) -> Result<(), AppError> {
+	infra::git::unstage_lines(folder, file_header, hunk, selected_indices)
+}
+
 pub fn get_diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	infra::git::diff_stats(folder)
 }

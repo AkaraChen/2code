@@ -442,6 +442,134 @@ pub fn unstage_hunk(
 	apply_hunks(folder, file_header, hunks, true)
 }
 
+/// Stage individual lines within a hunk. `selected_indices` are 0-based
+/// indices into the hunk body (lines after the `@@` header).
+///
+/// Behavior matches `git add --patch -e`:
+/// - selected `+` line: kept (added to index)
+/// - unselected `+` line: dropped (not added)
+/// - selected `-` line: kept (removed from index)
+/// - unselected `-` line: converted to context (line stays as-is)
+/// - context line: always kept
+pub fn stage_lines(
+	folder: &str,
+	file_header: &str,
+	hunk: &str,
+	selected_indices: &[usize],
+) -> Result<(), AppError> {
+	let synthesized = synthesize_partial_hunk(hunk, selected_indices, false)?;
+	apply_hunks(folder, file_header, &[synthesized], false)
+}
+
+/// Unstage individual lines. Inverse of `stage_lines` — applies a reverse
+/// patch built from selected lines in a staged hunk.
+pub fn unstage_lines(
+	folder: &str,
+	file_header: &str,
+	hunk: &str,
+	selected_indices: &[usize],
+) -> Result<(), AppError> {
+	// For unstage, we synthesize the same forward patch (selected lines)
+	// then apply with --reverse.
+	let synthesized = synthesize_partial_hunk(hunk, selected_indices, true)?;
+	apply_hunks(folder, file_header, &[synthesized], true)
+}
+
+/// Build a smaller hunk from a larger one by selecting specific change-line
+/// indices. Returns the new hunk text (including a recomputed `@@` header
+/// — but `apply_hunks` passes `--recount` so it's tolerant of small drifts).
+///
+/// `for_unstage` flips how unselected change lines are treated: when staging
+/// from worktree, unselected `+` are dropped and unselected `-` become
+/// context. When unstaging from index, the input hunk represents staged
+/// changes, and we want the inverse: unselected lines convert symmetrically.
+fn synthesize_partial_hunk(
+	hunk: &str,
+	selected_indices: &[usize],
+	_for_unstage: bool,
+) -> Result<String, AppError> {
+	let mut lines = hunk.lines();
+	let header = lines
+		.next()
+		.ok_or_else(|| AppError::GitError("empty hunk".into()))?;
+	if !header.starts_with("@@") {
+		return Err(AppError::GitError(
+			"hunk must begin with @@ header".into(),
+		));
+	}
+
+	let body: Vec<&str> = lines.collect();
+	if body.is_empty() {
+		return Err(AppError::GitError("hunk body is empty".into()));
+	}
+
+	let selected: std::collections::HashSet<usize> =
+		selected_indices.iter().copied().collect();
+
+	let mut out = String::new();
+	for (i, line) in body.iter().enumerate() {
+		if line.is_empty() {
+			out.push('\n');
+			continue;
+		}
+		let first = line.chars().next().unwrap();
+		match first {
+			'+' => {
+				if selected.contains(&i) {
+					out.push_str(line);
+					out.push('\n');
+				}
+				// else: drop the line entirely
+			}
+			'-' => {
+				if selected.contains(&i) {
+					out.push_str(line);
+					out.push('\n');
+				} else {
+					// Convert to context: the deletion is unselected, so
+					// the line stays. Replace the leading '-' with ' '.
+					out.push(' ');
+					out.push_str(&line[1..]);
+					out.push('\n');
+				}
+			}
+			' ' | '\\' => {
+				// Context, or "\ No newline at end of file" — keep verbatim.
+				out.push_str(line);
+				out.push('\n');
+			}
+			_ => {
+				// Defensive: keep unknown lines verbatim so apply --recount
+				// can still try to make sense of them.
+				out.push_str(line);
+				out.push('\n');
+			}
+		}
+	}
+
+	// Recompute the @@ header. Old lines = context + unselected '-' (now
+	// context) + selected '-'. New lines = context + selected '+'.
+	// `--recount` will fix any small mistakes here, so we just use the
+	// original header as a starting point.
+	let mut result = String::with_capacity(out.len() + header.len() + 1);
+	result.push_str(header);
+	result.push('\n');
+	result.push_str(&out);
+
+	// Sanity check: did we produce any actual changes?
+	let has_change = result
+		.lines()
+		.skip(1)
+		.any(|l| l.starts_with('+') || l.starts_with('-'));
+	if !has_change {
+		return Err(AppError::GitError(
+			"no lines selected — patch would be empty".into(),
+		));
+	}
+
+	Ok(result)
+}
+
 fn apply_hunks(
 	folder: &str,
 	file_header: &str,
@@ -2235,5 +2363,91 @@ mod tests {
 			&["+just a line\n".into()],
 		);
 		assert!(result.is_err());
+	}
+
+	// --- stage_lines / synthesize_partial_hunk ---
+
+	#[test]
+	fn synthesize_drops_unselected_added_lines() {
+		// Hunk body indices: 0=context, 1='+a', 2='+b', 3=context
+		let hunk = "@@ -1,2 +1,4 @@\n line1\n+added a\n+added b\n line2\n";
+		// Select only line index 1 (the first '+')
+		let result = synthesize_partial_hunk(hunk, &[1], false).unwrap();
+		assert!(result.contains("+added a"));
+		assert!(!result.contains("+added b"));
+		assert!(result.contains(" line1"));
+		assert!(result.contains(" line2"));
+	}
+
+	#[test]
+	fn synthesize_converts_unselected_deletions_to_context() {
+		// Body: 0='-old1', 1='-old2', 2='+new'
+		let hunk = "@@ -1,2 +1,1 @@\n-old1\n-old2\n+new\n";
+		// Select only the '+new' line at index 2 — both deletions become context
+		let result = synthesize_partial_hunk(hunk, &[2], false).unwrap();
+		assert!(result.contains("+new"));
+		assert!(result.contains(" old1"));
+		assert!(result.contains(" old2"));
+		// Should not contain '-old1' or '-old2' anymore
+		assert!(!result.contains("-old1"));
+		assert!(!result.contains("-old2"));
+	}
+
+	#[test]
+	fn synthesize_rejects_no_selection() {
+		let hunk = "@@ -1 +1 @@\n-old\n+new\n";
+		let result = synthesize_partial_hunk(hunk, &[], false);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn synthesize_rejects_empty_hunk() {
+		let result = synthesize_partial_hunk("", &[0], false);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn synthesize_rejects_hunk_without_header() {
+		let result = synthesize_partial_hunk("+just a line\n", &[0], false);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn stage_lines_stages_only_selected_addition() {
+		let dir = create_index_status_repo();
+		// Set up a file with two consecutive additions (one hunk, two '+' lines)
+		std::fs::write(
+			dir.path().join("a.txt"),
+			"alpha\nadded one\nadded two\n",
+		)
+		.unwrap();
+
+		let (header, hunks) = patch_for_file(dir.path(), "a.txt");
+		assert_eq!(hunks.len(), 1);
+
+		// Find the index of the first '+' line in the hunk body.
+		let body: Vec<&str> = hunks[0].lines().skip(1).collect();
+		let first_plus = body
+			.iter()
+			.position(|l| l.starts_with('+'))
+			.expect("should have a + line");
+
+		stage_lines(
+			&dir.path().to_string_lossy(),
+			&header,
+			&hunks[0],
+			&[first_plus],
+		)
+		.expect("stage_lines");
+
+		// Confirm the staged diff contains the first added line but not both.
+		let staged = Command::new("git")
+			.args(["diff", "--cached", "--no-color", "--", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let staged_text = String::from_utf8_lossy(&staged.stdout);
+		assert!(staged_text.contains("+added one"));
+		assert!(!staged_text.contains("+added two"));
 	}
 }

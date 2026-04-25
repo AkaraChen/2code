@@ -161,6 +161,36 @@ pub async fn unstage_git_hunk(
 }
 
 #[tauri::command]
+pub async fn stage_git_lines(
+	profile_id: String,
+	file_header: String,
+	hunk: String,
+	selected_indices: Vec<usize>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::stage_lines(&folder, &file_header, &hunk, &selected_indices)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn unstage_git_lines(
+	profile_id: String,
+	file_header: String,
+	hunk: String,
+	selected_indices: Vec<usize>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::unstage_lines(&folder, &file_header, &hunk, &selected_indices)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn get_git_log(
 	profile_id: String,
 	limit: Option<u32>,
