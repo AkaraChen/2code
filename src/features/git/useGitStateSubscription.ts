@@ -87,6 +87,12 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: ["git-stashes", profileId],
 				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-in-progress", profileId],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-conflict-state", profileId],
+				});
 			});
 
 			if (cancelled) {

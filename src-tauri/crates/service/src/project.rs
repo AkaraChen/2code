@@ -281,6 +281,41 @@ pub fn stash_drop(folder: &str, ref_name: &str) -> Result<(), AppError> {
 	infra::git::stash_drop(folder, ref_name)
 }
 
+// ── Phase 4: in-progress merge / rebase / cherry-pick + 3-way resolver ──
+
+pub fn get_in_progress_op(folder: &str) -> Option<infra::git::InProgressOp> {
+	infra::git::get_in_progress_op(folder)
+}
+
+pub fn continue_op(
+	folder: &str,
+	kind: infra::git::InProgressKind,
+) -> Result<(), AppError> {
+	infra::git::continue_op(folder, kind)
+}
+
+pub fn abort_op(
+	folder: &str,
+	kind: infra::git::InProgressKind,
+) -> Result<(), AppError> {
+	infra::git::abort_op(folder, kind)
+}
+
+pub fn get_conflict_state(
+	folder: &str,
+	path: &str,
+) -> Result<infra::git::ConflictState, AppError> {
+	infra::git::get_conflict_state(folder, path)
+}
+
+pub fn mark_conflict_resolved(
+	folder: &str,
+	path: &str,
+	resolved_contents: &str,
+) -> Result<(), AppError> {
+	infra::git::mark_conflict_resolved(folder, path, resolved_contents)
+}
+
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	infra::git::stage_files(folder, paths)
 }

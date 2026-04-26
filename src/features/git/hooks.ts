@@ -18,18 +18,22 @@ import {
 	gitPush,
 } from "@/generated";
 import {
+	abortInProgressOp,
 	addGitRemote,
 	cancelGitOperation,
 	checkoutGitBranch,
+	continueInProgressOp,
 	createGitBranch,
 	deleteGitBranch,
 	getCommitFileDiffSides,
 	getCommitFiles,
 	getCommitGraph,
+	getConflictState,
 	getGitFileDiffSides,
 	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
+	getInProgressOp,
 	gitFetch,
 	gitInitRepo,
 	gitPull,
@@ -43,6 +47,7 @@ import {
 	listGitRemotes,
 	listGitStashes,
 	listGitTags,
+	markConflictResolved,
 	renameGitBranch,
 	revertFileInCommit,
 	setGitIdentityCmd,
@@ -55,6 +60,7 @@ import {
 	unstageGitLines,
 	type Identity,
 	type IdentityScope,
+	type InProgressKind,
 	type LogFilter,
 	type PullModeWire,
 } from "@/features/git/changesTabBindings";
@@ -400,6 +406,82 @@ export function useStashApply(profileId: string) {
 
 export function useStashDrop(profileId: string) {
 	return useStashMutation<{ refName: string }>(profileId, gitStashDrop);
+}
+
+// ── Phase 4: in-progress operation + 3-way merge resolver ──
+
+export function useInProgressOp(profileId: string) {
+	return useQuery({
+		queryKey: ["git-in-progress", profileId] as const,
+		queryFn: () => getInProgressOp({ profileId }),
+	});
+}
+
+function useInProgressMutation<TArgs>(
+	profileId: string,
+	fn: (args: TArgs & { profileId: string }) => Promise<void>,
+) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: TArgs) => fn({ ...args, profileId }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: ["git-in-progress", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-commit-graph", profileId],
+				}),
+			]);
+		},
+	});
+}
+
+export function useContinueInProgressOp(profileId: string) {
+	return useInProgressMutation<{ kind: InProgressKind }>(
+		profileId,
+		continueInProgressOp,
+	);
+}
+
+export function useAbortInProgressOp(profileId: string) {
+	return useInProgressMutation<{ kind: InProgressKind }>(
+		profileId,
+		abortInProgressOp,
+	);
+}
+
+export function useConflictState(profileId: string, path: string | null) {
+	return useQuery({
+		queryKey: ["git-conflict-state", profileId, path] as const,
+		queryFn: () =>
+			path ? getConflictState({ profileId, path }) : Promise.resolve(null),
+		enabled: !!path,
+	});
+}
+
+export function useMarkConflictResolved(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { path: string; resolvedContents: string }) =>
+			markConflictResolved({ profileId, ...args }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: ["git-in-progress", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-conflict-state", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+			]);
+		},
+	});
 }
 
 export function useRevertFileInCommit(profileId: string) {

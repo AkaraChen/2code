@@ -26,6 +26,7 @@ import BranchesTab from "./BranchesTab";
 import ChangesTab from "./ChangesTab";
 import CommitComposer from "./CommitComposer";
 import GraphLogTab from "./GraphLogTab";
+import InProgressBanner from "./InProgressBanner";
 import InitRepoFlow from "./InitRepoFlow";
 import StashTab from "./StashTab";
 import { buildDiffTabPath, diffTabTitle, type DiffSide } from "./diffTabs";
@@ -153,6 +154,8 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 						</Portal>
 					</Tooltip.Root>
 				</HStack>
+
+				{isRepo && <InProgressBanner profileId={profileId} />}
 
 				{!isRepo ? (
 					<InitRepoFlow profileId={profileId} />

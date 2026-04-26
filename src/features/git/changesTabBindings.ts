@@ -238,6 +238,44 @@ export const gitStashDrop = (args: {
 	refName: string;
 }) => invoke<void>("git_stash_drop", args);
 
+export type InProgressKind = "merge" | "rebase" | "cherry_pick" | "revert";
+
+export interface InProgressOp {
+	kind: InProgressKind;
+	conflicts: string[];
+}
+
+export interface ConflictState {
+	base: string | null;
+	ours: string | null;
+	theirs: string | null;
+	current: string | null;
+}
+
+export const getInProgressOp = (args: { profileId: string }) =>
+	invoke<InProgressOp | null>("get_in_progress_op", args);
+
+export const continueInProgressOp = (args: {
+	profileId: string;
+	kind: InProgressKind;
+}) => invoke<void>("continue_in_progress_op", args);
+
+export const abortInProgressOp = (args: {
+	profileId: string;
+	kind: InProgressKind;
+}) => invoke<void>("abort_in_progress_op", args);
+
+export const getConflictState = (args: {
+	profileId: string;
+	path: string;
+}) => invoke<ConflictState>("get_conflict_state", args);
+
+export const markConflictResolved = (args: {
+	profileId: string;
+	path: string;
+	resolvedContents: string;
+}) => invoke<void>("mark_conflict_resolved", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

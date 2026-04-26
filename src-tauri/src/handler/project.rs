@@ -483,6 +483,67 @@ pub async fn git_stash_drop(
 		.await
 }
 
+// ── Phase 4: in-progress merge / rebase / cherry-pick + 3-way resolver ──
+
+#[tauri::command]
+pub async fn get_in_progress_op(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Option<infra::git::InProgressOp>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || Ok(service::project::get_in_progress_op(&folder)))
+		.await
+}
+
+#[tauri::command]
+pub async fn continue_in_progress_op(
+	profile_id: String,
+	kind: infra::git::InProgressKind,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::continue_op(&folder, kind)).await
+}
+
+#[tauri::command]
+pub async fn abort_in_progress_op(
+	profile_id: String,
+	kind: infra::git::InProgressKind,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::abort_op(&folder, kind)).await
+}
+
+#[tauri::command]
+pub async fn get_conflict_state(
+	profile_id: String,
+	path: String,
+	state: State<'_, DbPool>,
+) -> Result<infra::git::ConflictState, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::get_conflict_state(&folder, &path))
+		.await
+}
+
+#[tauri::command]
+pub async fn mark_conflict_resolved(
+	profile_id: String,
+	path: String,
+	resolved_contents: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::mark_conflict_resolved(
+			&folder,
+			&path,
+			&resolved_contents,
+		)
+	})
+	.await
+}
+
 #[tauri::command]
 pub async fn stage_git_files(
 	profile_id: String,
