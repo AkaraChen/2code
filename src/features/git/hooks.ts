@@ -19,6 +19,8 @@ import {
 } from "@/generated";
 import {
 	addGitRemote,
+	getCommitFileDiffSides,
+	getCommitFiles,
 	getGitFileDiffSides,
 	getGitFilePatch,
 	getGitIdentity,
@@ -160,6 +162,39 @@ export function useGitFileDiffSides(
 	return useQuery({
 		queryKey: ["git-file-diff-sides", profileId, path, staged] as const,
 		queryFn: () => getGitFileDiffSides({ profileId, path, staged }),
+	});
+}
+
+export function useCommitFiles(profileId: string, commitHash: string) {
+	return useQuery({
+		queryKey: ["git-commit-files", profileId, commitHash] as const,
+		queryFn: () => getCommitFiles({ profileId, commitHash }),
+		staleTime: Number.POSITIVE_INFINITY, // commit contents never change
+	});
+}
+
+export function useCommitFileDiffSides(
+	profileId: string,
+	commitHash: string,
+	path: string,
+	mergedWith: string | null,
+) {
+	return useQuery({
+		queryKey: [
+			"git-commit-file-diff-sides",
+			profileId,
+			commitHash,
+			path,
+			mergedWith,
+		] as const,
+		queryFn: () =>
+			getCommitFileDiffSides({
+				profileId,
+				commitHash,
+				path,
+				mergedWith,
+			}),
+		staleTime: Number.POSITIVE_INFINITY,
 	});
 }
 

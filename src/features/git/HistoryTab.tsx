@@ -28,7 +28,9 @@ import {
 import EditMessageDialog from "./EditMessageDialog";
 import EditAuthorDialog from "./EditAuthorDialog";
 import SquashDialog from "./SquashDialog";
+import { buildCommitTabPath, commitTabTitle } from "./diffTabs";
 import { useGitLog } from "@/features/git/hooks";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import type { GitCommit } from "@/generated";
 
 interface HistoryTabProps {
@@ -104,6 +106,33 @@ function HistoryTabInner({ profileId }: HistoryTabProps) {
 	const [editAuthorFor, setEditAuthorFor] = useState<GitCommit[] | null>(null);
 	const [squashFor, setSquashFor] = useState<GitCommit[] | null>(null);
 
+	const openUntitled = useFileViewerTabsStore((s) => s.openUntitled);
+
+	const openCommitTab = useCallback(
+		(selected: GitCommit[]) => {
+			if (selected.length === 0) return;
+			// Sort oldest → newest using log order (log is newest-first, so
+			// reverse the indices). Stable across reselects.
+			const indexed = selected
+				.map((c) => ({
+					c,
+					idx: commits.findIndex((cc) => cc.full_hash === c.full_hash),
+				}))
+				.sort((a, b) => b.idx - a.idx);
+			const sorted = indexed.map((i) => i.c);
+			const hashes = sorted.map((c) => c.full_hash);
+			openUntitled(
+				profileId,
+				buildCommitTabPath(hashes),
+				commitTabTitle(
+					hashes,
+					sorted.length === 1 ? sorted[0].message : null,
+				),
+			);
+		},
+		[commits, openUntitled, profileId],
+	);
+
 	const handleRowClick = useCallback(
 		(index: number, commit: GitCommit, e: React.MouseEvent) => {
 			if (e.shiftKey && anchorIndex !== null) {
@@ -129,10 +158,12 @@ function HistoryTabInner({ profileId }: HistoryTabProps) {
 				setAnchorIndex(index);
 				return;
 			}
+			// Plain click: single-select + open the commit detail tab.
 			setSelectedHashes(new Set([commit.full_hash]));
 			setAnchorIndex(index);
+			openCommitTab([commit]);
 		},
-		[anchorIndex, commits],
+		[anchorIndex, commits, openCommitTab],
 	);
 
 	const handleContextMenu = useCallback(
@@ -188,6 +219,16 @@ function HistoryTabInner({ profileId }: HistoryTabProps) {
 					<Text fontSize="xs" color="fg.muted" flex="1">
 						{selectedCommits.length} selected
 					</Text>
+					{selectedCommits.length >= 2 && (
+						<Button
+							size="2xs"
+							variant="ghost"
+							onClick={() => openCommitTab(selectedCommits)}
+							title="Open a tab showing the combined changes"
+						>
+							View commits
+						</Button>
+					)}
 					{selectedCommits.length >= 2 && (
 						<Button
 							size="2xs"

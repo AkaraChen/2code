@@ -490,6 +490,143 @@ pub fn file_diff_sides(
 	})
 }
 
+/// Both sides of a per-file diff at a specific commit. Used by the commit
+/// detail view to render each file the commit touched in syntax-highlighted
+/// side-by-side mode.
+///
+/// Resolution: `original` = file at `<commit>^` (parent), `modified` = file
+/// at `<commit>`. For the very first commit (no parent), original = None.
+/// Either side may also be None when the commit added (no original) or
+/// deleted (no modified) the file.
+///
+/// `merged_with` lets callers stitch a single tab across multiple commits:
+/// when it's `Some(other_commit)`, `original` is taken from `<other_commit>^`
+/// (the parent of the OLDEST selected commit) instead of `<commit>^`. This
+/// way the diff shows the full delta from before the entire range to the
+/// final state, not just the last commit's piece.
+pub fn commit_file_diff_sides(
+	folder: &str,
+	commit_hash: &str,
+	path: &str,
+	merged_with: Option<&str>,
+) -> Result<FileDiffSides, AppError> {
+	validate_commit_hash(commit_hash)?;
+	let path = validate_repo_relative_path(path, "Diff path")?;
+
+	let original_spec = if let Some(oldest) = merged_with {
+		validate_commit_hash(oldest)?;
+		format!("{oldest}^:{path}")
+	} else {
+		format!("{commit_hash}^:{path}")
+	};
+
+	let original = read_blob_text(folder, &original_spec)?;
+	let modified = read_blob_text(folder, &format!("{commit_hash}:{path}"))?;
+
+	let too_large = original
+		.as_ref()
+		.is_some_and(|s| s.len() > MAX_DIFF_TEXT_BYTES)
+		|| modified
+			.as_ref()
+			.is_some_and(|s| s.len() > MAX_DIFF_TEXT_BYTES);
+
+	Ok(FileDiffSides {
+		original,
+		modified,
+		too_large,
+	})
+}
+
+/// File list (with per-file change kind) for one commit. Used to populate
+/// the file explorer in the commit detail tab.
+///
+/// Uses `git diff-tree --no-commit-id --name-status -r -z` for fast,
+/// machine-readable output.
+pub fn commit_files(
+	folder: &str,
+	commit_hash: &str,
+) -> Result<Vec<IndexEntry>, AppError> {
+	validate_commit_hash(commit_hash)?;
+
+	let output = Command::new("git")
+		.args([
+			"diff-tree",
+			"--no-commit-id",
+			"--name-status",
+			"-r",
+			"-z",
+			commit_hash,
+		])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+
+	parse_diff_tree_z(&output.stdout)
+}
+
+/// Parse `git diff-tree --name-status -r -z` output. Each record is:
+///   <status>\0<path>\0
+/// Rename/copy records have a similarity score in the status (R100, C75, …)
+/// and TWO NUL-separated paths:
+///   R100\0<old>\0<new>\0
+fn parse_diff_tree_z(output: &[u8]) -> Result<Vec<IndexEntry>, AppError> {
+	let mut entries = Vec::new();
+	let mut iter = output.split(|&b| b == 0).peekable();
+	while let Some(token) = iter.next() {
+		if token.is_empty() {
+			continue;
+		}
+		let status = String::from_utf8_lossy(token);
+		let kind_char = status.chars().next().unwrap_or('M');
+
+		let path1 = match iter.next() {
+			Some(b) => String::from_utf8_lossy(b).to_string(),
+			None => break,
+		};
+		if path1.is_empty() {
+			continue;
+		}
+
+		match kind_char {
+			'R' | 'C' => {
+				// Rename/copy carries a second path.
+				let new_path = match iter.next() {
+					Some(b) => String::from_utf8_lossy(b).to_string(),
+					None => continue,
+				};
+				entries.push(IndexEntry {
+					path: new_path,
+					original_path: Some(path1),
+					kind: if kind_char == 'R' {
+						GitChangeKind::Renamed
+					} else {
+						GitChangeKind::Copied
+					},
+				});
+			}
+			_ => {
+				let kind = match kind_char {
+					'A' => GitChangeKind::Added,
+					'M' => GitChangeKind::Modified,
+					'D' => GitChangeKind::Deleted,
+					'T' => GitChangeKind::TypeChanged,
+					'U' => GitChangeKind::Unmerged,
+					_ => GitChangeKind::Modified,
+				};
+				entries.push(IndexEntry {
+					path: path1,
+					original_path: None,
+					kind,
+				});
+			}
+		}
+	}
+	Ok(entries)
+}
+
 /// Read a git blob's text via `cat-file -p`. Returns Ok(None) when the spec
 /// doesn't resolve (e.g., HEAD:foo for a file that didn't exist at HEAD).
 /// Returns Ok(None) for binary content (NUL-byte detection) so Monaco
@@ -2867,6 +3004,164 @@ mod tests {
 		)
 		.unwrap();
 		assert!(patch.contains("+alpha staged"));
+	}
+
+	#[test]
+	fn commit_files_returns_added_modified_deleted() {
+		let dir = create_index_status_repo();
+		// Existing commit added a.txt + b.txt.
+		std::fs::write(dir.path().join("a.txt"), "alpha edited\n").unwrap();
+		std::fs::remove_file(dir.path().join("b.txt")).unwrap();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		Command::new("git")
+			.args(["add", "-A"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "mixed"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		let entries =
+			commit_files(&dir.path().to_string_lossy(), &head).unwrap();
+		assert_eq!(entries.len(), 3);
+
+		let by_path: std::collections::HashMap<_, _> =
+			entries.iter().map(|e| (e.path.as_str(), e.kind)).collect();
+		assert_eq!(by_path.get("a.txt"), Some(&GitChangeKind::Modified));
+		assert_eq!(by_path.get("b.txt"), Some(&GitChangeKind::Deleted));
+		assert_eq!(by_path.get("c.txt"), Some(&GitChangeKind::Added));
+	}
+
+	#[test]
+	fn commit_files_rejects_invalid_hash() {
+		let dir = create_index_status_repo();
+		assert!(
+			commit_files(&dir.path().to_string_lossy(), "not-hex").is_err()
+		);
+	}
+
+	#[test]
+	fn commit_file_diff_sides_returns_both_sides() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha v2\n").unwrap();
+		Command::new("git")
+			.args(["commit", "-am", "v2"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		let sides = commit_file_diff_sides(
+			&dir.path().to_string_lossy(),
+			&head,
+			"a.txt",
+			None,
+		)
+		.unwrap();
+		assert_eq!(sides.original.as_deref(), Some("alpha\n"));
+		assert_eq!(sides.modified.as_deref(), Some("alpha v2\n"));
+	}
+
+	#[test]
+	fn commit_file_diff_sides_added_file_has_no_original() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		Command::new("git")
+			.args(["add", "c.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add c"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		let sides = commit_file_diff_sides(
+			&dir.path().to_string_lossy(),
+			&head,
+			"c.txt",
+			None,
+		)
+		.unwrap();
+		assert!(sides.original.is_none());
+		assert_eq!(sides.modified.as_deref(), Some("charlie\n"));
+	}
+
+	#[test]
+	fn commit_file_diff_sides_merged_with_uses_older_parent() {
+		// Three commits modifying the same file. Diff for the newest with
+		// merged_with=oldest should span the full history.
+		let dir = create_index_status_repo();
+
+		std::fs::write(dir.path().join("a.txt"), "alpha v2\n").unwrap();
+		Command::new("git")
+			.args(["commit", "-am", "v2"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let v2 = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let v2 = String::from_utf8_lossy(&v2.stdout).trim().to_string();
+
+		std::fs::write(dir.path().join("a.txt"), "alpha v3\n").unwrap();
+		Command::new("git")
+			.args(["commit", "-am", "v3"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let v3 = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let v3 = String::from_utf8_lossy(&v3.stdout).trim().to_string();
+
+		// Without merged_with: original = v3's parent = v2's content.
+		let sides_single = commit_file_diff_sides(
+			&dir.path().to_string_lossy(),
+			&v3,
+			"a.txt",
+			None,
+		)
+		.unwrap();
+		assert_eq!(sides_single.original.as_deref(), Some("alpha v2\n"));
+		assert_eq!(sides_single.modified.as_deref(), Some("alpha v3\n"));
+
+		// With merged_with=v2 (the older selected commit): original = v2's
+		// parent = original "alpha\n".
+		let sides_range = commit_file_diff_sides(
+			&dir.path().to_string_lossy(),
+			&v3,
+			"a.txt",
+			Some(&v2),
+		)
+		.unwrap();
+		assert_eq!(sides_range.original.as_deref(), Some("alpha\n"));
+		assert_eq!(sides_range.modified.as_deref(), Some("alpha v3\n"));
 	}
 
 	#[test]

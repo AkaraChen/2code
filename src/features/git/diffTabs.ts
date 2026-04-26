@@ -40,3 +40,39 @@ export function diffTabTitle(side: DiffSide, filePath: string): string {
 	const basename = filePath.split("/").pop() ?? filePath;
 	return `${basename} · diff${side === "staged" ? " [staged]" : ""}`;
 }
+
+// ── Commit detail tabs ──
+//
+// Format:  2code-commit://<hash1>+<hash2>+.../
+// One entry per selected commit, oldest → newest. The trailing slash keeps
+// the path scheme symmetric with diff tabs and avoids a special case for
+// the "no path" portion.
+
+const COMMIT_SCHEME = "2code-commit://";
+
+export function isCommitTabPath(path: string): boolean {
+	return path.startsWith(COMMIT_SCHEME);
+}
+
+export function buildCommitTabPath(commitHashes: string[]): string {
+	return `${COMMIT_SCHEME}${commitHashes.join("+")}/`;
+}
+
+export function parseCommitTabPath(path: string): string[] | null {
+	if (!path.startsWith(COMMIT_SCHEME)) return null;
+	const rest = path.slice(COMMIT_SCHEME.length).replace(/\/$/, "");
+	if (!rest) return null;
+	return rest.split("+").filter(Boolean);
+}
+
+export function commitTabTitle(
+	commitHashes: string[],
+	primarySubject: string | null | undefined,
+): string {
+	if (commitHashes.length === 0) return "commit";
+	if (commitHashes.length === 1) {
+		const short = commitHashes[0].slice(0, 7);
+		return primarySubject ? `${short} · ${primarySubject}` : short;
+	}
+	return `${commitHashes.length} commits · ${commitHashes[0].slice(0, 7)}…`;
+}

@@ -10,8 +10,8 @@ use infra::git::{
 };
 use model::error::AppError;
 use model::project::{
-	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus,
-	Project, ProjectConfig, ProjectWithProfiles,
+	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexEntry,
+	IndexStatus, Project, ProjectConfig, ProjectWithProfiles,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -189,6 +189,39 @@ pub async fn get_git_file_diff_sides(
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
 		service::project::get_file_diff_sides(&folder, &path, staged)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_commit_files(
+	profile_id: String,
+	commit_hash: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<IndexEntry>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::get_commit_files(&folder, &commit_hash)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_commit_file_diff_sides(
+	profile_id: String,
+	commit_hash: String,
+	path: String,
+	merged_with: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<FileDiffSides, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::get_commit_file_diff_sides(
+			&folder,
+			&commit_hash,
+			&path,
+			merged_with.as_deref(),
+		)
 	})
 	.await
 }

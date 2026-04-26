@@ -58,6 +58,18 @@ export const getGitFileDiffSides = (args: {
 	staged: boolean;
 }) => invoke<FileDiffSides>("get_git_file_diff_sides", args);
 
+export const getCommitFiles = (args: {
+	profileId: string;
+	commitHash: string;
+}) => invoke<IndexEntry[]>("get_commit_files", args);
+
+export const getCommitFileDiffSides = (args: {
+	profileId: string;
+	commitHash: string;
+	path: string;
+	mergedWith: string | null;
+}) => invoke<FileDiffSides>("get_commit_file_diff_sides", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];
