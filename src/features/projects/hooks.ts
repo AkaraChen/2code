@@ -30,6 +30,47 @@ import { queryKeys } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 
+/// All git query keys that depend on the working tree / index. Any
+/// filesystem mutation (create, delete, rename, move, save) needs to
+/// invalidate these so the Changes tab, History graph, diff tabs, and
+/// per-file diff sides all reflect reality.
+///
+/// Centralized here because invalidating piecemeal in every mutation hook
+/// led to drift — e.g., useDeleteFileTreePath was missing
+/// queryKeys.git.indexStatus, which is what powers the Changes tab, so
+/// deleted files lingered in the staged/unstaged view until the watcher
+/// caught up.
+function gitStateKeysForProfile(profileId: string) {
+	return [
+		queryKeys.git.status(profileId),
+		queryKeys.git.indexStatus(profileId),
+		queryKeys.git.diff(profileId),
+		queryKeys.git.diffStats(profileId),
+		// Synthetic keys used by Phase 2/3 hooks; prefix-match invalidation.
+		["git-file-patch", profileId] as const,
+		["git-file-diff-sides", profileId] as const,
+		["git-commit-graph", profileId] as const,
+	];
+}
+
+async function invalidateGitState(
+	queryClient: ReturnType<typeof useQueryClient>,
+	profileId: string,
+	rootPath?: string,
+) {
+	const tasks = gitStateKeysForProfile(profileId).map((key) =>
+		queryClient.invalidateQueries({ queryKey: key }),
+	);
+	if (rootPath) {
+		tasks.push(
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.fs.tree(rootPath),
+			}),
+		);
+	}
+	await Promise.all(tasks);
+}
+
 export function useProjects() {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.all,
@@ -173,22 +214,7 @@ export function useRenameFileTreePath(rootPath: string, profileId: string) {
 				sourcePath,
 				destinationPath,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: () => invalidateGitState(queryClient, profileId, rootPath),
 	});
 }
 
@@ -197,22 +223,7 @@ export function useDeleteFileTreePath(rootPath: string, profileId: string) {
 	return useMutation({
 		mutationFn: ({ targetPath }: { targetPath: string }) =>
 			deleteFileTreePath({ rootPath, targetPath }),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: () => invalidateGitState(queryClient, profileId, rootPath),
 	});
 }
 
@@ -221,16 +232,7 @@ export function useCreateFileTreeFile(rootPath: string, profileId: string) {
 	return useMutation({
 		mutationFn: ({ targetPath }: { targetPath: string }) =>
 			createFileTreeFile({ rootPath, targetPath }),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-			]);
-		},
+		onSettled: () => invalidateGitState(queryClient, profileId, rootPath),
 	});
 }
 
@@ -239,16 +241,7 @@ export function useCreateFileTreeFolder(rootPath: string, profileId: string) {
 	return useMutation({
 		mutationFn: ({ targetPath }: { targetPath: string }) =>
 			createFileTreeFolder({ rootPath, targetPath }),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-			]);
-		},
+		onSettled: () => invalidateGitState(queryClient, profileId, rootPath),
 	});
 }
 
@@ -267,22 +260,7 @@ export function useMoveFileTreePaths(rootPath: string, profileId: string) {
 				sourcePaths,
 				targetDirPath,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: () => invalidateGitState(queryClient, profileId, rootPath),
 	});
 }
 
@@ -304,15 +282,7 @@ export function useSaveFileContent(profileId: string) {
 			queryClient.setQueryData(queryKeys.fs.file(path), content);
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: queryKeys.fs.file(path) }),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
+				invalidateGitState(queryClient, profileId),
 			]);
 		},
 	});

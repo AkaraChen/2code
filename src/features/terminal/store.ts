@@ -99,6 +99,7 @@ export const useTerminalStore = create<TerminalStore>()(
 				state.notifiedTabs.delete(tabId);
 
 				const idx = profile.tabs.findIndex((t) => t.id === tabId);
+				if (idx < 0) return;
 				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
 
 				if (profile.tabs.length === 0) {
@@ -107,8 +108,12 @@ export const useTerminalStore = create<TerminalStore>()(
 				}
 
 				if (wasActiveTab) {
-					const newIdx = Math.min(idx, profile.tabs.length - 1);
-					profile.activeTabId = profile.tabs[newIdx].id;
+					// VSCode-style focus shift: next active is the tab
+					// that *was* to the right of the closed one. When the
+					// closed tab was the rightmost, fall back to the new
+					// rightmost (its left neighbor).
+					const nextIdx = Math.min(idx, profile.tabs.length - 1);
+					profile.activeTabId = profile.tabs[nextIdx].id;
 					if (getFocusedProfileId() === profileId) {
 						clearProfileActiveTabNotification(state, profileId);
 					}

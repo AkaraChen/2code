@@ -173,13 +173,23 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 					const idx = profile.tabs.findIndex(
 						(t) => t.filePath === filePath,
 					);
+					if (idx < 0) return;
 					profile.tabs = profile.tabs.filter(
 						(t) => t.filePath !== filePath,
 					);
 					if (profile.activeFilePath === filePath) {
+						// VSCode-style focus shift: next active is the tab
+						// that *was* to the right of the closed one. When the
+						// closed tab was the rightmost, fall back to the new
+						// rightmost (i.e., what was previously its left
+						// neighbor).
 						if (profile.tabs.length > 0) {
-							const newIdx = Math.min(idx, profile.tabs.length - 1);
-							profile.activeFilePath = profile.tabs[newIdx].filePath;
+							const nextIdx = Math.min(
+								idx,
+								profile.tabs.length - 1,
+							);
+							profile.activeFilePath =
+								profile.tabs[nextIdx].filePath;
 						} else {
 							profile.activeFilePath = null;
 							profile.fileTabActive = false;

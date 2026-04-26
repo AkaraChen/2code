@@ -78,6 +78,41 @@ describe("fileViewerTabsStore", () => {
 		expect(useFileViewerTabsStore.getState().profiles["profile-1"]).toBeUndefined();
 	});
 
+	it("closing the rightmost active tab activates the new rightmost (left neighbor)", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/a.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/b.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/c.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/d.ts");
+		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/d.ts");
+		expect(
+			useFileViewerTabsStore.getState().profiles["profile-1"].activeFilePath,
+		).toBe("/repo/c.ts");
+	});
+
+	it("closing a middle active tab activates its right neighbor", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/a.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/b.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/c.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/d.ts");
+		useFileViewerTabsStore
+			.getState()
+			.setFileActive("profile-1", "/repo/b.ts");
+		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/b.ts");
+		expect(
+			useFileViewerTabsStore.getState().profiles["profile-1"].activeFilePath,
+		).toBe("/repo/c.ts");
+	});
+
+	it("closing a non-active tab does NOT change the active tab", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/a.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/b.ts");
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/c.ts");
+		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/a.ts");
+		expect(
+			useFileViewerTabsStore.getState().profiles["profile-1"].activeFilePath,
+		).toBe("/repo/c.ts");
+	});
+
 	it("tracks dirty file tabs and clears dirty state when a tab closes", () => {
 		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
 		useFileViewerDirtyStore
