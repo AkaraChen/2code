@@ -25,6 +25,7 @@ import { FiX } from "react-icons/fi";
 import ChangesTab from "./ChangesTab";
 import ChangesDiffPane from "./ChangesDiffPane";
 import CommitComposer from "./CommitComposer";
+import HistoryTab from "./HistoryTab";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
 interface GitPanelProps {
@@ -206,9 +207,12 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 							</Flex>
 						</Suspense>
 					</ErrorBoundary>
+				) : tab === "history" ? (
+					<Box flex="1" minH="0" overflow="hidden">
+						<HistoryTab profileId={profileId} />
+					</Box>
 				) : (
 					<Box flex="1" minH="0" overflow="auto" p="2">
-						{tab === "history" && <SoonPlaceholder label="History — Phase 3" />}
 						{tab === "branches" && (
 							<SoonPlaceholder label="Branches — Phase 4" />
 						)}
