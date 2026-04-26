@@ -273,8 +273,6 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 					>
 						{virtualizer.getVirtualItems().map((vItem) => {
 							const row = rows[vItem.index];
-							const previousRow =
-								vItem.index > 0 ? rows[vItem.index - 1] : null;
 							const selected = selectedHashes.has(
 								row.commit.full_hash,
 							);
@@ -310,7 +308,6 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 									>
 										<GraphCanvas
 											row={row}
-											previousRow={previousRow}
 											rowHeight={ROW_HEIGHT}
 											width={graphWidth}
 										/>

@@ -37,6 +37,17 @@ pub fn get_commit_graph(
 ) -> Result<Vec<GraphRow>, AppError> {
 	let limit = filter.limit.unwrap_or(DEFAULT_LIMIT).min(50_000);
 
+	// `text_query` does double duty: if it looks like a hex commit hash
+	// prefix (≥4 chars, all hex), we search by HASH instead of message.
+	// Falls back to message search when not hex. We could OR them but the
+	// hash case is way more common when users paste a SHA.
+	let hash_prefix = filter
+		.text_query
+		.as_deref()
+		.filter(|s| !s.is_empty())
+		.filter(|s| s.len() >= 4 && s.chars().all(|c| c.is_ascii_hexdigit()))
+		.map(|s| s.to_lowercase());
+
 	// Build `git log` args.
 	let mut args: Vec<String> = vec![
 		"log".into(),
@@ -52,10 +63,17 @@ pub fn get_commit_graph(
 		args.push("--author".into());
 		args.push(author.to_string());
 	}
-	if let Some(text) = filter.text_query.as_deref().filter(|s| !s.is_empty()) {
-		args.push("--grep".into());
-		args.push(text.to_string());
-		args.push("--regexp-ignore-case".into());
+	// Only apply --grep when the text_query is NOT a hex hash prefix.
+	if hash_prefix.is_none() {
+		if let Some(text) = filter
+			.text_query
+			.as_deref()
+			.filter(|s| !s.is_empty())
+		{
+			args.push("--grep".into());
+			args.push(text.to_string());
+			args.push("--regexp-ignore-case".into());
+		}
 	}
 	if let Some(content) = filter
 		.content_query
@@ -103,7 +121,14 @@ pub fn get_commit_graph(
 	}
 
 	let stdout = String::from_utf8_lossy(&output.stdout);
-	let commits = parse_log_records(&stdout);
+	let mut commits = parse_log_records(&stdout);
+
+	// Hash-prefix search: filter the parsed commits by hash. Done after
+	// parsing because git log itself can't filter by hash prefix (only by
+	// exact rev). For users who paste a short SHA into the search bar.
+	if let Some(prefix) = hash_prefix.as_deref() {
+		commits.retain(|c| c.hash.to_lowercase().starts_with(prefix));
+	}
 
 	let refs_by_hash = read_refs(folder).unwrap_or_default();
 	let head_hash = read_head_hash(folder).ok();
@@ -239,35 +264,62 @@ fn assign_lanes(
 	head_hash: Option<&str>,
 	upstream_set: &std::collections::HashSet<String>,
 ) -> Vec<GraphRow> {
-	// active_lanes[i] = Some(<expected next commit hash on this lane>) or None
-	// for a freed lane.
+	// active_lanes[i] = Some(<expected next commit hash on this lane>) or
+	// None for a freed lane.
 	let mut active_lanes: Vec<Option<String>> = Vec::new();
 
 	let mut rows = Vec::with_capacity(commits.len());
 
 	for c in commits {
-		// Find this commit's lane: a lane currently expecting this hash.
+		// Snapshot lanes BEFORE mutating, so we can compute edges_up
+		// (top-half lines coming INTO this row) accurately. Each lane that
+		// was expecting this commit feeds INTO this commit's lane;
+		// every other active lane passes straight through.
+		let lanes_before = active_lanes.clone();
+
+		// Find this commit's lane: a lane already expecting this hash.
 		let mut lane = active_lanes
 			.iter()
 			.position(|slot| slot.as_deref() == Some(c.hash.as_str()));
 
 		if lane.is_none() {
-			// New tip — allocate a lane (reuse the leftmost free slot).
+			// New tip — allocate the leftmost free slot, or extend.
 			let free = active_lanes.iter().position(|s| s.is_none());
 			match free {
-				Some(idx) => {
-					lane = Some(idx);
-				}
+				Some(idx) => lane = Some(idx),
 				None => {
 					active_lanes.push(None);
 					lane = Some(active_lanes.len() - 1);
 				}
 			}
 		}
-
 		let lane = lane.expect("lane always assigned above");
 
-		// Free any OTHER lane that was also expecting this hash (merge target).
+		// edges_up: every lane on the previous row either passes through
+		// or merges into this commit's lane (if it was expecting this
+		// hash). This is the bit that draws "branch-out" lines for fork
+		// points where two children landed on the same parent.
+		let mut edges_up: Vec<GraphEdge> = Vec::new();
+		for (i, slot) in lanes_before.iter().enumerate() {
+			match slot {
+				Some(expected) if expected == &c.hash => {
+					edges_up.push(GraphEdge {
+						from_lane: i as u32,
+						to_lane: lane as u32,
+					});
+				}
+				Some(_) => {
+					edges_up.push(GraphEdge {
+						from_lane: i as u32,
+						to_lane: i as u32,
+					});
+				}
+				None => {}
+			}
+		}
+
+		// Free OTHER lanes that were expecting this hash — they merged
+		// into our lane.
 		for (i, slot) in active_lanes.iter_mut().enumerate() {
 			if i == lane {
 				continue;
@@ -277,35 +329,57 @@ fn assign_lanes(
 			}
 		}
 
-		// First parent inherits this lane; additional parents get new lanes
-		// (reusing free slots).
-		let mut edges_down: Vec<GraphEdge> = Vec::new();
-		for (idx, parent) in c.parents.iter().enumerate() {
-			let target_lane = if idx == 0 {
-				active_lanes[lane] = Some(parent.clone());
-				lane
-			} else {
-				let free = active_lanes.iter().position(|s| s.is_none());
-				match free {
-					Some(idx) => {
-						active_lanes[idx] = Some(parent.clone());
-						idx
-					}
-					None => {
-						active_lanes.push(Some(parent.clone()));
-						active_lanes.len() - 1
+		// First parent inherits this lane; additional parents take fresh
+		// or freed lanes.
+		let parent_lanes: Vec<usize> = c
+			.parents
+			.iter()
+			.enumerate()
+			.map(|(idx, parent)| {
+				if idx == 0 {
+					active_lanes[lane] = Some(parent.clone());
+					lane
+				} else {
+					let free = active_lanes.iter().position(|s| s.is_none());
+					match free {
+						Some(i) => {
+							active_lanes[i] = Some(parent.clone());
+							i
+						}
+						None => {
+							active_lanes.push(Some(parent.clone()));
+							active_lanes.len() - 1
+						}
 					}
 				}
-			};
-			edges_down.push(GraphEdge {
-				from_lane: lane as u32,
-				to_lane: target_lane as u32,
-			});
-		}
+			})
+			.collect();
 
-		// If the commit had no parents (root), free its lane.
+		// Root commit (no parents) frees its lane.
 		if c.parents.is_empty() {
 			active_lanes[lane] = None;
+		}
+
+		// edges_down: one per parent (this lane → parent's lane), plus
+		// pass-throughs for any OTHER active lane.
+		let mut edges_down: Vec<GraphEdge> = Vec::new();
+		for parent_lane in &parent_lanes {
+			edges_down.push(GraphEdge {
+				from_lane: lane as u32,
+				to_lane: *parent_lane as u32,
+			});
+		}
+		for (i, slot) in active_lanes.iter().enumerate() {
+			if slot.is_none() {
+				continue;
+			}
+			if parent_lanes.contains(&i) {
+				continue;
+			}
+			edges_down.push(GraphEdge {
+				from_lane: i as u32,
+				to_lane: i as u32,
+			});
 		}
 
 		let mut refs = refs_by_hash.get(&c.hash).cloned().unwrap_or_default();
@@ -333,6 +407,7 @@ fn assign_lanes(
 			parents: c.parents.clone(),
 			lane: lane as u32,
 			color: lane as u32,
+			edges_up,
 			edges_down,
 			refs,
 			needs_push,
@@ -408,6 +483,65 @@ mod tests {
 		assert_eq!(rows[0].edges_down[0].from_lane, 0);
 		assert_eq!(rows[0].edges_down[0].to_lane, 0);
 		assert_eq!(rows[2].edges_down.len(), 0);
+	}
+
+	#[test]
+	fn branch_out_point_emits_inbound_edges() {
+		// A fork: two children both point at the same parent (no merge).
+		// The parent row should show edges_up containing TWO entries (one
+		// from each child's lane → parent's lane), so the renderer can
+		// draw both lines down into the fork point.
+		let dir = init_repo();
+		add_commit(dir.path(), "a.txt", "base");
+		Cmd::new("git")
+			.args(["checkout", "-b", "feature"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		add_commit(dir.path(), "b.txt", "on feature");
+		Cmd::new("git")
+			.args(["checkout", "-"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		add_commit(dir.path(), "c.txt", "on main");
+
+		let rows = get_commit_graph(
+			&dir.path().to_string_lossy(),
+			&LogFilter {
+				branch: Some("--all".into()),
+				..Default::default()
+			},
+		)
+		.unwrap();
+
+		assert_eq!(rows.len(), 3);
+		// rows[0] and rows[1] are the two tip commits in some order; rows[2]
+		// is the shared parent.
+		let parent_row = &rows[2];
+		assert_eq!(parent_row.commit.message, "base");
+
+		// Two distinct lanes feed into the parent (one per child).
+		let inbound_to_parent_lane: Vec<u32> = parent_row
+			.edges_up
+			.iter()
+			.filter(|e| e.to_lane == parent_row.lane)
+			.map(|e| e.from_lane)
+			.collect();
+		assert!(
+			inbound_to_parent_lane.len() >= 2,
+			"expected ≥2 lanes feeding the fork point, got {inbound_to_parent_lane:?}"
+		);
+		// And those source lanes are different (it's a real fork, not the
+		// same child twice).
+		let mut sorted = inbound_to_parent_lane.clone();
+		sorted.sort();
+		sorted.dedup();
+		assert_eq!(
+			sorted.len(),
+			inbound_to_parent_lane.len(),
+			"duplicate inbound lanes: {inbound_to_parent_lane:?}"
+		);
 	}
 
 	#[test]
@@ -508,6 +642,51 @@ mod tests {
 			&dir.path().to_string_lossy(),
 			&LogFilter {
 				text_query: Some("feat".into()),
+				..Default::default()
+			},
+		)
+		.unwrap();
+		assert_eq!(rows.len(), 2);
+		assert!(rows.iter().all(|r| r.commit.message.contains("feat")));
+	}
+
+	#[test]
+	fn text_query_with_hash_prefix_searches_by_hash() {
+		let dir = init_repo();
+		add_commit(dir.path(), "a.txt", "subject without hex");
+		let h2 = add_commit(dir.path(), "b.txt", "another subject");
+		add_commit(dir.path(), "c.txt", "third");
+
+		// Use the first 5 chars of h2 as the search query.
+		let prefix: String = h2.chars().take(5).collect();
+		let rows = get_commit_graph(
+			&dir.path().to_string_lossy(),
+			&LogFilter {
+				text_query: Some(prefix.clone()),
+				..Default::default()
+			},
+		)
+		.unwrap();
+		assert_eq!(rows.len(), 1, "expected only the matching commit");
+		assert!(
+			rows[0].commit.full_hash.starts_with(&prefix),
+			"expected hash starting with {prefix}"
+		);
+	}
+
+	#[test]
+	fn text_query_with_non_hex_falls_back_to_message_search() {
+		let dir = init_repo();
+		add_commit(dir.path(), "a.txt", "feat: add a");
+		add_commit(dir.path(), "b.txt", "fix: tweak b");
+		add_commit(dir.path(), "c.txt", "feat: add c");
+
+		// "fea" is hex (3 chars) but below the 4-char prefix threshold —
+		// should fall back to message search.
+		let rows = get_commit_graph(
+			&dir.path().to_string_lossy(),
+			&LogFilter {
+				text_query: Some("fea".into()),
 				..Default::default()
 			},
 		)

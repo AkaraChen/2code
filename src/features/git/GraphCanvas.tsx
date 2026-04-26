@@ -1,15 +1,16 @@
 // Phase 3 graph column.
 //
 // One Canvas per row. Paints:
-//   - vertical lane lines from the previous row's edges (drawn from top
-//     mid-y to mid-y) into THIS row's lane positions
-//   - lane lines continuing past this row to the next (drawn from mid-y
-//     to bottom) using THIS row's edges_down
-//   - a colored dot at this row's lane × mid-y
+//   - top half (0 → midY): from edges_up. Each edge is (lane on row above
+//     → destination lane on THIS row). Pass-through lanes go straight
+//     down; "branch-out" lines for fork points come into this commit's
+//     lane from sibling lanes.
+//   - bottom half (midY → rowHeight): from edges_down. Each edge is (lane
+//     on THIS row → lane on the NEXT row). Includes parent edges and
+//     pass-throughs.
+//   - a colored dot at this row's lane × midY.
 //
-// Color = lane index, mapped through a 12-color palette. Future work can
-// swap in branching-model coloring (main = blue forever, feature = green
-// per branch tip, etc.) by extending the backend's GraphRow.color field.
+// Color = lane index, mapped through a 12-color palette.
 
 import { useEffect, useRef } from "react";
 
@@ -45,14 +46,12 @@ function laneX(lane: number): number {
 
 interface GraphCanvasProps {
 	row: GraphRow;
-	previousRow: GraphRow | null;
 	rowHeight: number;
 	width: number;
 }
 
 export default function GraphCanvas({
 	row,
-	previousRow,
 	rowHeight,
 	width,
 }: GraphCanvasProps) {
@@ -63,13 +62,15 @@ export default function GraphCanvas({
 		if (!canvas) return;
 
 		const dpr = window.devicePixelRatio ?? 1;
+		// Reset transform before re-sizing — getContext('2d').scale is
+		// cumulative across re-renders and would compound DPR each pass.
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
 		canvas.width = width * dpr;
 		canvas.height = rowHeight * dpr;
 		canvas.style.width = `${width}px`;
 		canvas.style.height = `${rowHeight}px`;
-
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return;
 		ctx.scale(dpr, dpr);
 		ctx.clearRect(0, 0, width, rowHeight);
 		ctx.lineWidth = LINE_WIDTH;
@@ -77,35 +78,30 @@ export default function GraphCanvas({
 
 		const midY = rowHeight / 2;
 
-		// Top half: draw lines from the previous row down to this row.
-		// Use the previous row's edges_down — each one ends at a lane on
-		// THIS row. (The first edge always ends at this row's lane.)
-		if (previousRow) {
-			for (const edge of previousRow.edges_down) {
-				const startX = laneX(edge.from_lane);
-				const endX = laneX(edge.to_lane);
-				ctx.strokeStyle = laneColor(edge.to_lane);
-				ctx.beginPath();
-				if (startX === endX) {
-					ctx.moveTo(startX, 0);
-					ctx.lineTo(endX, midY);
-				} else {
-					// S-curve between lanes
-					ctx.moveTo(startX, 0);
-					ctx.bezierCurveTo(
-						startX,
-						midY * 0.5,
-						endX,
-						midY * 0.5,
-						endX,
-						midY,
-					);
-				}
-				ctx.stroke();
+		// Top half: edges_up — lines coming INTO this row from above.
+		for (const edge of row.edges_up) {
+			const startX = laneX(edge.from_lane);
+			const endX = laneX(edge.to_lane);
+			ctx.strokeStyle = laneColor(edge.to_lane);
+			ctx.beginPath();
+			if (startX === endX) {
+				ctx.moveTo(startX, 0);
+				ctx.lineTo(endX, midY);
+			} else {
+				ctx.moveTo(startX, 0);
+				ctx.bezierCurveTo(
+					startX,
+					midY * 0.5,
+					endX,
+					midY * 0.5,
+					endX,
+					midY,
+				);
 			}
+			ctx.stroke();
 		}
 
-		// Bottom half: this row's edges_down go to the next row's lanes.
+		// Bottom half: edges_down — lines leaving this row toward the next.
 		for (const edge of row.edges_down) {
 			const startX = laneX(edge.from_lane);
 			const endX = laneX(edge.to_lane);
@@ -128,16 +124,14 @@ export default function GraphCanvas({
 			ctx.stroke();
 		}
 
-		// The dot for this commit.
+		// The dot for this commit. Use a literal background color for the
+		// 1px ring (Canvas doesn't resolve CSS variables).
 		const dotX = laneX(row.lane);
 		ctx.fillStyle = laneColor(row.color);
 		ctx.beginPath();
 		ctx.arc(dotX, midY, DOT_RADIUS, 0, Math.PI * 2);
 		ctx.fill();
-		ctx.strokeStyle = "var(--chakra-colors-bg, #fff)";
-		ctx.lineWidth = 1;
-		ctx.stroke();
-	}, [row, previousRow, rowHeight, width]);
+	}, [row, rowHeight, width]);
 
 	return <canvas ref={canvasRef} />;
 }

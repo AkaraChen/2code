@@ -154,8 +154,16 @@ pub struct GraphRow {
 	/// Lane "color" — currently equals `lane` since we don't do branching-
 	/// model coloring yet. Kept separate so we can swap in color logic later.
 	pub color: u32,
-	/// Edges leaving this row, drawn DOWN to the next row (i.e., to this
-	/// commit's parents). Each edge is (this_commit's lane → parent's lane).
+	/// Edges arriving at this row from above. Each edge is
+	/// (lane on row above → this row's destination lane). Includes:
+	///   - the commit's own continuation from its child (lane → lane)
+	///   - "branch-out" edges where another lane was also expecting this
+	///     commit and merges into this commit's lane
+	///   - any pass-through lanes that aren't this commit (lane → lane)
+	pub edges_up: Vec<GraphEdge>,
+	/// Edges leaving this row, drawn DOWN to the next row. Includes:
+	///   - one edge per parent (this lane → parent's lane)
+	///   - pass-through lanes that aren't this commit (lane → lane)
 	pub edges_down: Vec<GraphEdge>,
 	/// Branch/tag/HEAD chips pointing at this commit.
 	pub refs: Vec<CommitRef>,

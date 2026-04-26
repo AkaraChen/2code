@@ -114,6 +114,7 @@ export interface GraphRow {
 	parents: string[];
 	lane: number;
 	color: number;
+	edges_up: GraphEdge[];
 	edges_down: GraphEdge[];
 	refs: CommitRef[];
 	needs_push: boolean;
