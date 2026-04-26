@@ -99,6 +99,43 @@ pub struct FileDiffSides {
 	pub too_large: bool,
 }
 
+// ── Phase 4: branches / remotes / tags ──
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct BranchInfo {
+	/// Display name without the refs/heads/ prefix (e.g. "feat/auth/login").
+	pub name: String,
+	/// Full ref name (e.g. "refs/heads/feat/auth/login").
+	pub full_ref: String,
+	pub is_current: bool,
+	/// Upstream tracking ref short name (e.g. "origin/main"), if any.
+	pub upstream: Option<String>,
+	/// Commits ahead of upstream. 0 when no upstream.
+	pub ahead: u32,
+	/// Commits behind upstream. 0 when no upstream.
+	pub behind: u32,
+	pub last_commit_hash: String,
+	pub last_commit_subject: String,
+	pub last_commit_date: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RemoteInfo {
+	pub name: String,
+	pub url: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct TagInfo {
+	/// Tag name without the refs/tags/ prefix.
+	pub name: String,
+	/// SHA the tag points at (the commit, not the tag object for annotated).
+	pub target_hash: String,
+	/// Tag message body (annotated tags only).
+	pub message: Option<String>,
+	pub is_annotated: bool,
+}
+
 // ── Phase 3: log graph ──
 
 /// What to show in the log. None means "no filter on this dimension".

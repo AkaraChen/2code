@@ -6,8 +6,9 @@ use uuid::Uuid;
 use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
-	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, GraphRow,
-	IndexEntry, IndexStatus, LogFilter, Project, ProjectWithProfiles,
+	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
+	GraphRow, IndexEntry, IndexStatus, LogFilter, Project,
+	ProjectWithProfiles, RemoteInfo, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -188,6 +189,48 @@ pub fn get_commit_graph(
 	filter: &LogFilter,
 ) -> Result<Vec<GraphRow>, AppError> {
 	infra::git::get_commit_graph(folder, filter)
+}
+
+// ── Phase 4: branches/remotes/tags ──
+
+pub fn list_branches(folder: &str) -> Result<Vec<BranchInfo>, AppError> {
+	infra::git::list_branches(folder)
+}
+
+pub fn list_remotes(folder: &str) -> Result<Vec<RemoteInfo>, AppError> {
+	infra::git::list_remotes(folder)
+}
+
+pub fn list_tags(folder: &str) -> Result<Vec<TagInfo>, AppError> {
+	infra::git::list_tags(folder)
+}
+
+pub fn checkout_branch(folder: &str, branch: &str) -> Result<(), AppError> {
+	infra::git::checkout_branch(folder, branch)
+}
+
+pub fn create_branch(
+	folder: &str,
+	name: &str,
+	start_point: Option<&str>,
+) -> Result<(), AppError> {
+	infra::git::create_branch(folder, name, start_point)
+}
+
+pub fn delete_branch(
+	folder: &str,
+	name: &str,
+	force: bool,
+) -> Result<(), AppError> {
+	infra::git::delete_branch(folder, name, force)
+}
+
+pub fn rename_branch(
+	folder: &str,
+	old_name: &str,
+	new_name: &str,
+) -> Result<(), AppError> {
+	infra::git::rename_branch(folder, old_name, new_name)
 }
 
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {

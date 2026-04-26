@@ -10,9 +10,9 @@ use infra::git::{
 };
 use model::error::AppError;
 use model::project::{
-	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, GraphRow,
-	IndexEntry, IndexStatus, LogFilter, Project, ProjectConfig,
-	ProjectWithProfiles,
+	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
+	GraphRow, IndexEntry, IndexStatus, LogFilter, Project, ProjectConfig,
+	ProjectWithProfiles, RemoteInfo, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -250,6 +250,90 @@ pub async fn get_commit_graph(
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || service::project::get_commit_graph(&folder, &filter))
 		.await
+}
+
+#[tauri::command]
+pub async fn list_git_branches(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<BranchInfo>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::list_branches(&folder)).await
+}
+
+#[tauri::command]
+pub async fn list_git_remotes(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<RemoteInfo>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::list_remotes(&folder)).await
+}
+
+#[tauri::command]
+pub async fn list_git_tags(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<TagInfo>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::list_tags(&folder)).await
+}
+
+#[tauri::command]
+pub async fn checkout_git_branch(
+	profile_id: String,
+	branch: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::checkout_branch(&folder, &branch))
+		.await
+}
+
+#[tauri::command]
+pub async fn create_git_branch(
+	profile_id: String,
+	name: String,
+	start_point: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::create_branch(
+			&folder,
+			&name,
+			start_point.as_deref(),
+		)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn delete_git_branch(
+	profile_id: String,
+	name: String,
+	force: bool,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::delete_branch(&folder, &name, force)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn rename_git_branch(
+	profile_id: String,
+	old_name: String,
+	new_name: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::rename_branch(&folder, &old_name, &new_name)
+	})
+	.await
 }
 
 #[tauri::command]

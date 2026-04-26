@@ -126,6 +126,64 @@ export const getCommitGraph = (args: {
 	filter: LogFilter;
 }) => invoke<GraphRow[]>("get_commit_graph", args);
 
+// ── Phase 4: branches / remotes / tags ──
+
+export interface BranchInfo {
+	name: string;
+	full_ref: string;
+	is_current: boolean;
+	upstream: string | null;
+	ahead: number;
+	behind: number;
+	last_commit_hash: string;
+	last_commit_subject: string;
+	last_commit_date: string;
+}
+
+export interface RemoteInfo {
+	name: string;
+	url: string;
+}
+
+export interface TagInfo {
+	name: string;
+	target_hash: string;
+	message: string | null;
+	is_annotated: boolean;
+}
+
+export const listGitBranches = (args: { profileId: string }) =>
+	invoke<BranchInfo[]>("list_git_branches", args);
+
+export const listGitRemotes = (args: { profileId: string }) =>
+	invoke<RemoteInfo[]>("list_git_remotes", args);
+
+export const listGitTags = (args: { profileId: string }) =>
+	invoke<TagInfo[]>("list_git_tags", args);
+
+export const checkoutGitBranch = (args: {
+	profileId: string;
+	branch: string;
+}) => invoke<void>("checkout_git_branch", args);
+
+export const createGitBranch = (args: {
+	profileId: string;
+	name: string;
+	startPoint: string | null;
+}) => invoke<void>("create_git_branch", args);
+
+export const deleteGitBranch = (args: {
+	profileId: string;
+	name: string;
+	force: boolean;
+}) => invoke<void>("delete_git_branch", args);
+
+export const renameGitBranch = (args: {
+	profileId: string;
+	oldName: string;
+	newName: string;
+}) => invoke<void>("rename_git_branch", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

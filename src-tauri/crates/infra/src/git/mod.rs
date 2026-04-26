@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod backend;
+pub mod branches;
 pub mod cancel;
 pub mod cli;
 pub mod gix;
@@ -9,6 +10,10 @@ pub mod rewrite;
 pub mod watcher;
 
 pub use backend::{default_backend, CliBackend, GitBackend, GixBackend};
+pub use branches::{
+	checkout_branch, create_branch, delete_branch, list_branches,
+	list_remotes, list_tags, rename_branch,
+};
 pub use cancel::{run_cancellable, CancelToken};
 pub use cli::*;
 pub use graph::get_commit_graph;

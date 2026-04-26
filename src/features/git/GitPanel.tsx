@@ -22,6 +22,7 @@ import { Suspense, useCallback } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { FiX } from "react-icons/fi";
 
+import BranchesTab from "./BranchesTab";
 import ChangesTab from "./ChangesTab";
 import CommitComposer from "./CommitComposer";
 import GraphLogTab from "./GraphLogTab";
@@ -178,11 +179,12 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 					<Box flex="1" minH="0" overflow="hidden">
 						<GraphLogTab profileId={profileId} />
 					</Box>
+				) : tab === "branches" ? (
+					<Box flex="1" minH="0" overflow="auto" p="2">
+						<BranchesTab profileId={profileId} />
+					</Box>
 				) : (
 					<Box flex="1" minH="0" overflow="auto" p="2">
-						{tab === "branches" && (
-							<SoonPlaceholder label="Branches — Phase 4" />
-						)}
 						{tab === "stash" && <SoonPlaceholder label="Stash — Phase 4" />}
 					</Box>
 				)}

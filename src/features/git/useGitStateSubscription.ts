@@ -75,6 +75,15 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: ["git-commit-graph", profileId],
 				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-branches", profileId],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-remotes", profileId],
+				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-tags", profileId],
+				});
 			});
 
 			if (cancelled) {

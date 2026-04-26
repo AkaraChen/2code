@@ -19,6 +19,9 @@ import {
 } from "@/generated";
 import {
 	addGitRemote,
+	checkoutGitBranch,
+	createGitBranch,
+	deleteGitBranch,
 	getCommitFileDiffSides,
 	getCommitFiles,
 	getCommitGraph,
@@ -28,6 +31,10 @@ import {
 	getGitIndexStatus,
 	gitInitRepo,
 	isGitRepo,
+	listGitBranches,
+	listGitRemotes,
+	listGitTags,
+	renameGitBranch,
 	revertFileInCommit,
 	setGitIdentityCmd,
 	stageGitFiles,
@@ -217,6 +224,83 @@ export function useCommitGraph(profileId: string, filter: LogFilter) {
 		] as const,
 		queryFn: () => getCommitGraph({ profileId, filter }),
 	});
+}
+
+// ── Phase 4: branches / remotes / tags ──
+
+export function useGitBranches(profileId: string) {
+	return useQuery({
+		queryKey: ["git-branches", profileId] as const,
+		queryFn: () => listGitBranches({ profileId }),
+	});
+}
+
+export function useGitRemotes(profileId: string) {
+	return useQuery({
+		queryKey: ["git-remotes", profileId] as const,
+		queryFn: () => listGitRemotes({ profileId }),
+	});
+}
+
+export function useGitTags(profileId: string) {
+	return useQuery({
+		queryKey: ["git-tags", profileId] as const,
+		queryFn: () => listGitTags({ profileId }),
+	});
+}
+
+function useBranchMutation<TArgs>(
+	profileId: string,
+	fn: (args: TArgs & { profileId: string }) => Promise<void>,
+) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: TArgs) => fn({ ...args, profileId }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: ["git-branches", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-commit-graph", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useCheckoutBranch(profileId: string) {
+	return useBranchMutation<{ branch: string }>(profileId, checkoutGitBranch);
+}
+
+export function useCreateBranch(profileId: string) {
+	return useBranchMutation<{ name: string; startPoint: string | null }>(
+		profileId,
+		createGitBranch,
+	);
+}
+
+export function useDeleteBranch(profileId: string) {
+	return useBranchMutation<{ name: string; force: boolean }>(
+		profileId,
+		deleteGitBranch,
+	);
+}
+
+export function useRenameBranch(profileId: string) {
+	return useBranchMutation<{ oldName: string; newName: string }>(
+		profileId,
+		renameGitBranch,
+	);
 }
 
 export function useRevertFileInCommit(profileId: string) {
