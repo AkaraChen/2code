@@ -1164,6 +1164,97 @@ pub fn push_cancellable(
 	Ok(())
 }
 
+/// `git push --force-with-lease`. Safer than raw `--force`: refuses if the
+/// remote ref has changed since we last fetched it, so we don't clobber
+/// commits a teammate pushed.
+///
+/// `force_raw=true` upgrades to `--force` (no lease check). The frontend
+/// gates this behind a branch-name confirmation so it's hard to do by
+/// accident.
+pub fn push_with_lease(
+	folder: &str,
+	force_raw: bool,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder);
+	if force_raw {
+		cmd.args(["push", "--force"]);
+	} else {
+		cmd.args(["push", "--force-with-lease"]);
+	}
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
+/// `git fetch` — fetches the named remote, or all remotes when `remote` is
+/// None / empty. Cancellable.
+pub fn fetch(
+	folder: &str,
+	remote: Option<&str>,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder);
+	let remote = remote.unwrap_or("").trim();
+	if remote.is_empty() {
+		cmd.args(["fetch", "--all", "--prune"]);
+	} else {
+		// Defend against argv injection on the remote name.
+		if remote.starts_with('-')
+			|| remote.contains('\0')
+			|| remote.contains('\n')
+		{
+			return Err(AppError::GitError(
+				"invalid remote name".into(),
+			));
+		}
+		cmd.args(["fetch", remote, "--prune"]);
+	}
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PullMode {
+	Merge,
+	Rebase,
+	FastForwardOnly,
+}
+
+/// `git pull` with the user-chosen merge strategy. Cancellable.
+pub fn pull(
+	folder: &str,
+	mode: PullMode,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder).arg("pull");
+	match mode {
+		PullMode::Merge => {}
+		PullMode::Rebase => {
+			cmd.arg("--rebase");
+		}
+		PullMode::FastForwardOnly => {
+			cmd.arg("--ff-only");
+		}
+	}
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),

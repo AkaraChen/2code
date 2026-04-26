@@ -184,6 +184,60 @@ export const renameGitBranch = (args: {
 	newName: string;
 }) => invoke<void>("rename_git_branch", args);
 
+export type PullModeWire = "merge" | "rebase" | "fast_forward_only";
+
+export const gitFetch = (args: {
+	profileId: string;
+	opId: string;
+	remote: string | null;
+}) => invoke<void>("git_fetch", args);
+
+export const gitPull = (args: {
+	profileId: string;
+	opId: string;
+	mode: PullModeWire;
+}) => invoke<void>("git_pull", args);
+
+export const gitPushWithLease = (args: {
+	profileId: string;
+	opId: string;
+	forceRaw: boolean;
+}) => invoke<void>("git_push_with_lease", args);
+
+export const cancelGitOperation = (args: { opId: string }) =>
+	invoke<void>("cancel_git_operation", args);
+
+export interface StashEntry {
+	ref_name: string;
+	message: string;
+	date: string;
+	hash: string;
+}
+
+export const listGitStashes = (args: { profileId: string }) =>
+	invoke<StashEntry[]>("list_git_stashes", args);
+
+export const gitStashPush = (args: {
+	profileId: string;
+	message: string | null;
+	includeUntracked: boolean;
+}) => invoke<boolean>("git_stash_push", args);
+
+export const gitStashPop = (args: {
+	profileId: string;
+	refName: string;
+}) => invoke<void>("git_stash_pop", args);
+
+export const gitStashApply = (args: {
+	profileId: string;
+	refName: string;
+}) => invoke<void>("git_stash_apply", args);
+
+export const gitStashDrop = (args: {
+	profileId: string;
+	refName: string;
+}) => invoke<void>("git_stash_drop", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

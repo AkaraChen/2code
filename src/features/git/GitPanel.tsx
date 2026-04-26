@@ -27,6 +27,7 @@ import ChangesTab from "./ChangesTab";
 import CommitComposer from "./CommitComposer";
 import GraphLogTab from "./GraphLogTab";
 import InitRepoFlow from "./InitRepoFlow";
+import StashTab from "./StashTab";
 import { buildDiffTabPath, diffTabTitle, type DiffSide } from "./diffTabs";
 import { useIsGitRepo, useGitIndexStatus } from "@/features/git/hooks";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
@@ -185,7 +186,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 					</Box>
 				) : (
 					<Box flex="1" minH="0" overflow="auto" p="2">
-						{tab === "stash" && <SoonPlaceholder label="Stash — Phase 4" />}
+						{tab === "stash" && <StashTab profileId={profileId} />}
 					</Box>
 				)}
 			</Flex>
@@ -193,13 +194,6 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 	);
 }
 
-function SoonPlaceholder({ label }: { label: string }) {
-	return (
-		<Box fontSize="sm" color="fg.muted">
-			{label}
-		</Box>
-	);
-}
 
 // Suspense-protected pane that owns the file → diff-tab dispatch. Selecting
 // a file in the Changes tab opens a read-only diff in the main editor area

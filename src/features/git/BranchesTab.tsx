@@ -41,12 +41,16 @@ import { ErrorBoundary } from "react-error-boundary";
 import {
 	FiChevronDown,
 	FiChevronRight,
+	FiDownload,
+	FiDownloadCloud,
 	FiEdit2,
 	FiGitBranch,
 	FiPlus,
+	FiRefreshCw,
 	FiStar,
 	FiTag,
 	FiTrash2,
+	FiUpload,
 } from "react-icons/fi";
 
 import RewriteDialogShell from "./RewriteDialogShell";
@@ -57,10 +61,14 @@ import {
 	useCreateBranch,
 	useDeleteBranch,
 	useGitBranches,
+	useGitFetch,
+	useGitPull,
+	useGitPushWithLease,
 	useGitRemotes,
 	useGitTags,
 	useRenameBranch,
 } from "@/features/git/hooks";
+import { showGitErrorToast } from "@/features/git/gitError";
 import type {
 	BranchInfo,
 	TagInfo,
@@ -173,27 +181,16 @@ function BranchesInner({ profileId }: { profileId: string }) {
 				open={localOpen}
 				onToggle={() => setLocalOpen((v) => !v)}
 				rightSlot={
-					<Tooltip.Root>
-						<Tooltip.Trigger asChild>
-							<IconButton
-								aria-label="New branch"
-								size="2xs"
-								variant="ghost"
-								onClick={(e) => {
-									e.stopPropagation();
-									setCreateFromBranch(null);
-									setCreateOpen(true);
-								}}
-							>
-								<FiPlus />
-							</IconButton>
-						</Tooltip.Trigger>
-						<Portal>
-							<Tooltip.Positioner>
-								<Tooltip.Content>New branch from HEAD</Tooltip.Content>
-							</Tooltip.Positioner>
-						</Portal>
-					</Tooltip.Root>
+					<RemoteOpsToolbar
+						profileId={profileId}
+						currentBranch={
+							branches?.find((b) => b.is_current) ?? null
+						}
+						onCreate={() => {
+							setCreateFromBranch(null);
+							setCreateOpen(true);
+						}}
+					/>
 				}
 			>
 				{localOpen && (
@@ -889,6 +886,238 @@ function DeleteBranchDialog({
 	);
 }
 
+// ── Remote ops toolbar (Fetch / Pull / Push / + New) ──
+
+function RemoteOpsToolbar({
+	profileId,
+	currentBranch,
+	onCreate,
+}: {
+	profileId: string;
+	currentBranch: BranchInfo | null;
+	onCreate: () => void;
+}) {
+	const fetch = useGitFetch(profileId);
+	const pull = useGitPull(profileId);
+	const push = useGitPushWithLease(profileId);
+
+	const hasUpstream = !!currentBranch?.upstream;
+	const ahead = currentBranch?.ahead ?? 0;
+	const behind = currentBranch?.behind ?? 0;
+	const [forceConfirmFor, setForceConfirmFor] = useState<string | null>(
+		null,
+	);
+
+	const handle = useCallback(
+		async <T,>(
+			label: string,
+			fn: () => Promise<T>,
+		) => {
+			try {
+				await fn();
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				if (!showGitErrorToast(e)) {
+					// Fallback: showGitErrorToast already showed a generic
+					// toast for unstructured errors; nothing more to do.
+					void label;
+					void msg;
+				}
+			}
+		},
+		[],
+	);
+
+	return (
+		<HStack gap="0">
+			<ToolbarIcon
+				label="Fetch all remotes"
+				icon={<FiRefreshCw />}
+				busy={fetch.isPending}
+				onClick={(e) => {
+					e.stopPropagation();
+					handle("fetch", () => fetch.mutateAsync({ remote: null }));
+				}}
+			/>
+			{hasUpstream && (
+				<ToolbarIcon
+					label={
+						behind > 0
+							? `Pull (rebase) — ${behind} behind`
+							: "Pull (rebase)"
+					}
+					icon={<FiDownloadCloud />}
+					badge={behind > 0 ? behind : undefined}
+					busy={pull.isPending}
+					onClick={(e) => {
+						e.stopPropagation();
+						handle("pull", () =>
+							pull.mutateAsync({ mode: "rebase" }),
+						);
+					}}
+				/>
+			)}
+			{hasUpstream && (
+				<ToolbarIcon
+					label={
+						ahead > 0
+							? `Push — ${ahead} ahead (force-with-lease on shift-click)`
+							: "Push (force-with-lease on shift-click)"
+					}
+					icon={<FiUpload />}
+					badge={ahead > 0 ? ahead : undefined}
+					busy={push.isPending}
+					onClick={(e) => {
+						e.stopPropagation();
+						if (e.shiftKey && currentBranch) {
+							setForceConfirmFor(currentBranch.name);
+							return;
+						}
+						handle("push", () =>
+							push.mutateAsync({ forceRaw: false }),
+						);
+					}}
+				/>
+			)}
+			<ToolbarIcon
+				label="New branch from HEAD"
+				icon={<FiPlus />}
+				onClick={(e) => {
+					e.stopPropagation();
+					onCreate();
+				}}
+			/>
+
+			{forceConfirmFor && (
+				<ForcePushConfirmDialog
+					branchName={forceConfirmFor}
+					onClose={() => setForceConfirmFor(null)}
+					onConfirm={async (raw) => {
+						setForceConfirmFor(null);
+						await handle("push", () =>
+							push.mutateAsync({ forceRaw: raw }),
+						);
+					}}
+				/>
+			)}
+		</HStack>
+	);
+}
+
+function ToolbarIcon({
+	label,
+	icon,
+	onClick,
+	busy,
+	badge,
+}: {
+	label: string;
+	icon: React.ReactNode;
+	onClick: (e: React.MouseEvent) => void;
+	busy?: boolean;
+	badge?: number;
+}) {
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<HStack gap="0.5" position="relative">
+					<IconButton
+						aria-label={label}
+						size="2xs"
+						variant="ghost"
+						onClick={onClick}
+						disabled={busy}
+					>
+						{busy ? <Spinner size="xs" /> : icon}
+					</IconButton>
+					{badge !== undefined && badge > 0 && (
+						<Text
+							position="absolute"
+							top="-1"
+							right="-1"
+							fontSize="2xs"
+							color="orange.fg"
+							fontWeight="semibold"
+						>
+							{badge}
+						</Text>
+					)}
+				</HStack>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{label}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
+	);
+}
+
+function ForcePushConfirmDialog({
+	branchName,
+	onClose,
+	onConfirm,
+}: {
+	branchName: string;
+	onClose: () => void;
+	onConfirm: (raw: boolean) => void;
+}) {
+	const [typed, setTyped] = useState("");
+	const [useRaw, setUseRaw] = useState(false);
+	const matches = typed === branchName;
+
+	return (
+		<RewriteDialogShell
+			title="Force push"
+			onClose={onClose}
+			submitting={false}
+			submitDisabled={!matches}
+			submitLabel={useRaw ? "Force push (raw)" : "Force-with-lease"}
+			onSubmit={() => onConfirm(useRaw)}
+		>
+			<Stack gap="3">
+				<Text fontSize="sm">
+					Force-pushing rewrites the remote branch. Type the branch
+					name to confirm:
+				</Text>
+				<Field.Root>
+					<Field.Label>
+						<code>{branchName}</code>
+					</Field.Label>
+					<Input
+						value={typed}
+						onChange={(e) => setTyped(e.target.value)}
+						placeholder={branchName}
+						autoFocus
+					/>
+				</Field.Root>
+				<label
+					style={{
+						display: "flex",
+						alignItems: "center",
+						gap: "6px",
+						cursor: "pointer",
+					}}
+				>
+					<input
+						type="checkbox"
+						checked={useRaw}
+						onChange={(e) => setUseRaw(e.target.checked)}
+					/>
+					<Text fontSize="sm" color={useRaw ? "red.fg" : undefined}>
+						Use raw <code>--force</code> (skip lease check)
+					</Text>
+				</label>
+				<Text fontSize="xs" color="fg.muted">
+					{useRaw
+						? "Will clobber any commits the remote has that you don't. Use only if the lease check is wrong."
+						: "Refuses if the remote ref changed since your last fetch — protects against clobbering teammates' commits."}
+				</Text>
+			</Stack>
+		</RewriteDialogShell>
+	);
+}
+
 // Avoid unused-import warnings while we still don't have Button-only fallbacks.
-const _unused = Button;
+const _unused = [Button, FiDownload];
 void _unused;

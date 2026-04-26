@@ -136,6 +136,17 @@ pub struct TagInfo {
 	pub is_annotated: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct StashEntry {
+	/// e.g. "stash@{0}"
+	pub ref_name: String,
+	/// Subject line of the stash commit (git's default is "WIP on
+	/// <branch>: <hash> <subject>").
+	pub message: String,
+	pub date: String,
+	pub hash: String,
+}
+
 // ── Phase 3: log graph ──
 
 /// What to show in the log. None means "no filter on this dimension".

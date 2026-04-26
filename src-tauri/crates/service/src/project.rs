@@ -8,7 +8,7 @@ use model::error::AppError;
 use model::project::{
 	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
 	GraphRow, IndexEntry, IndexStatus, LogFilter, Project,
-	ProjectWithProfiles, RemoteInfo, TagInfo,
+	ProjectWithProfiles, RemoteInfo, StashEntry, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -231,6 +231,54 @@ pub fn rename_branch(
 	new_name: &str,
 ) -> Result<(), AppError> {
 	infra::git::rename_branch(folder, old_name, new_name)
+}
+
+pub fn fetch(
+	folder: &str,
+	remote: Option<&str>,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::fetch(folder, remote, token)
+}
+
+pub fn pull(
+	folder: &str,
+	mode: infra::git::PullMode,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::pull(folder, mode, token)
+}
+
+pub fn push_with_lease(
+	folder: &str,
+	force_raw: bool,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::push_with_lease(folder, force_raw, token)
+}
+
+pub fn stash_list(folder: &str) -> Result<Vec<StashEntry>, AppError> {
+	infra::git::stash_list(folder)
+}
+
+pub fn stash_push(
+	folder: &str,
+	message: Option<&str>,
+	include_untracked: bool,
+) -> Result<bool, AppError> {
+	infra::git::stash_push(folder, message, include_untracked)
+}
+
+pub fn stash_pop(folder: &str, ref_name: &str) -> Result<(), AppError> {
+	infra::git::stash_pop(folder, ref_name)
+}
+
+pub fn stash_apply(folder: &str, ref_name: &str) -> Result<(), AppError> {
+	infra::git::stash_apply(folder, ref_name)
+}
+
+pub fn stash_drop(folder: &str, ref_name: &str) -> Result<(), AppError> {
+	infra::git::stash_drop(folder, ref_name)
 }
 
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {

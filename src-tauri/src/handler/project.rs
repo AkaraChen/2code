@@ -12,7 +12,7 @@ use model::error::AppError;
 use model::project::{
 	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
 	GraphRow, IndexEntry, IndexStatus, LogFilter, Project, ProjectConfig,
-	ProjectWithProfiles, RemoteInfo, TagInfo,
+	ProjectWithProfiles, RemoteInfo, StashEntry, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -334,6 +334,153 @@ pub async fn rename_git_branch(
 		service::project::rename_branch(&folder, &old_name, &new_name)
 	})
 	.await
+}
+
+/// Run a function inside the cancel-token registry pattern. Inserts a
+/// fresh token under `op_id`, runs `f` inside spawn_blocking, removes the
+/// token afterward (success or failure).
+async fn run_cancellable_op<F>(
+	op_id: String,
+	tokens: &GitCancelTokens,
+	f: F,
+) -> Result<(), AppError>
+where
+	F: FnOnce(infra::git::CancelToken) -> Result<(), AppError> + Send + 'static,
+{
+	let token = infra::git::CancelToken::new();
+	{
+		let mut map = tokens.lock().map_err(|_| AppError::LockError)?;
+		map.insert(op_id.clone(), token.clone());
+	}
+	let token_for_op = token.clone();
+	let result = super::run_blocking(move || f(token_for_op)).await;
+	if let Ok(mut map) = tokens.lock() {
+		map.remove(&op_id);
+	}
+	result
+}
+
+#[tauri::command]
+pub async fn git_fetch(
+	profile_id: String,
+	op_id: String,
+	remote: Option<String>,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::fetch(&folder, remote.as_deref(), &token)
+	})
+	.await
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum PullModeWire {
+	Merge,
+	Rebase,
+	FastForwardOnly,
+}
+
+impl From<PullModeWire> for infra::git::PullMode {
+	fn from(value: PullModeWire) -> Self {
+		match value {
+			PullModeWire::Merge => infra::git::PullMode::Merge,
+			PullModeWire::Rebase => infra::git::PullMode::Rebase,
+			PullModeWire::FastForwardOnly => infra::git::PullMode::FastForwardOnly,
+		}
+	}
+}
+
+#[tauri::command]
+pub async fn git_pull(
+	profile_id: String,
+	op_id: String,
+	mode: PullModeWire,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::pull(&folder, mode.into(), &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_push_with_lease(
+	profile_id: String,
+	op_id: String,
+	force_raw: bool,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::push_with_lease(&folder, force_raw, &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn list_git_stashes(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<StashEntry>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::stash_list(&folder)).await
+}
+
+#[tauri::command]
+pub async fn git_stash_push(
+	profile_id: String,
+	message: Option<String>,
+	include_untracked: bool,
+	state: State<'_, DbPool>,
+) -> Result<bool, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::stash_push(
+			&folder,
+			message.as_deref(),
+			include_untracked,
+		)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_stash_pop(
+	profile_id: String,
+	ref_name: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::stash_pop(&folder, &ref_name))
+		.await
+}
+
+#[tauri::command]
+pub async fn git_stash_apply(
+	profile_id: String,
+	ref_name: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::stash_apply(&folder, &ref_name))
+		.await
+}
+
+#[tauri::command]
+pub async fn git_stash_drop(
+	profile_id: String,
+	ref_name: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::stash_drop(&folder, &ref_name))
+		.await
 }
 
 #[tauri::command]

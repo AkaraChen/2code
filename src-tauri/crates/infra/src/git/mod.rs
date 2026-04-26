@@ -7,6 +7,7 @@ pub mod gix;
 pub mod graph;
 pub mod identity;
 pub mod rewrite;
+pub mod stash;
 pub mod watcher;
 
 pub use backend::{default_backend, CliBackend, GitBackend, GixBackend};
@@ -20,5 +21,8 @@ pub use graph::get_commit_graph;
 pub use identity::{Identity, IdentityScope};
 pub use rewrite::{
 	amend_head_message, compute_force_push_required, rewrite_commits_safe,
+};
+pub use stash::{
+	stash_apply, stash_drop, stash_list, stash_pop, stash_push,
 };
 pub use watcher::{watch_git_dir, WatchHandle};

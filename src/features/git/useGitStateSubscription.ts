@@ -84,6 +84,9 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: ["git-tags", profileId],
 				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-stashes", profileId],
+				});
 			});
 
 			if (cancelled) {

@@ -19,6 +19,7 @@ import {
 } from "@/generated";
 import {
 	addGitRemote,
+	cancelGitOperation,
 	checkoutGitBranch,
 	createGitBranch,
 	deleteGitBranch,
@@ -29,10 +30,18 @@ import {
 	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
+	gitFetch,
 	gitInitRepo,
+	gitPull,
+	gitPushWithLease,
+	gitStashApply,
+	gitStashDrop,
+	gitStashPop,
+	gitStashPush,
 	isGitRepo,
 	listGitBranches,
 	listGitRemotes,
+	listGitStashes,
 	listGitTags,
 	renameGitBranch,
 	revertFileInCommit,
@@ -47,6 +56,7 @@ import {
 	type Identity,
 	type IdentityScope,
 	type LogFilter,
+	type PullModeWire,
 } from "@/features/git/changesTabBindings";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
@@ -301,6 +311,95 @@ export function useRenameBranch(profileId: string) {
 		profileId,
 		renameGitBranch,
 	);
+}
+
+// Each remote op generates a fresh op_id so the user can cancel one
+// without affecting another (e.g., a slow fetch + a quick push).
+function newOpId(): string {
+	return `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function useGitFetch(profileId: string) {
+	return useBranchMutation<{ remote: string | null }>(
+		profileId,
+		({ profileId: pid, remote }) =>
+			gitFetch({ profileId: pid, opId: newOpId(), remote }),
+	);
+}
+
+export function useGitPull(profileId: string) {
+	return useBranchMutation<{ mode: PullModeWire }>(
+		profileId,
+		({ profileId: pid, mode }) =>
+			gitPull({ profileId: pid, opId: newOpId(), mode }),
+	);
+}
+
+export function useGitPushWithLease(profileId: string) {
+	return useBranchMutation<{ forceRaw: boolean }>(
+		profileId,
+		({ profileId: pid, forceRaw }) =>
+			gitPushWithLease({ profileId: pid, opId: newOpId(), forceRaw }),
+	);
+}
+
+export function useCancelGitOperation() {
+	return useMutation({
+		mutationFn: ({ opId }: { opId: string }) =>
+			cancelGitOperation({ opId }),
+	});
+}
+
+export function useGitStashes(profileId: string) {
+	return useQuery({
+		queryKey: ["git-stashes", profileId] as const,
+		queryFn: () => listGitStashes({ profileId }),
+	});
+}
+
+function useStashMutation<TArgs>(
+	profileId: string,
+	fn: (args: TArgs & { profileId: string }) => Promise<unknown>,
+) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: TArgs) => fn({ ...args, profileId }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: ["git-stashes", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useStashPush(profileId: string) {
+	return useStashMutation<{
+		message: string | null;
+		includeUntracked: boolean;
+	}>(profileId, gitStashPush);
+}
+
+export function useStashPop(profileId: string) {
+	return useStashMutation<{ refName: string }>(profileId, gitStashPop);
+}
+
+export function useStashApply(profileId: string) {
+	return useStashMutation<{ refName: string }>(profileId, gitStashApply);
+}
+
+export function useStashDrop(profileId: string) {
+	return useStashMutation<{ refName: string }>(profileId, gitStashDrop);
 }
 
 export function useRevertFileInCommit(profileId: string) {
