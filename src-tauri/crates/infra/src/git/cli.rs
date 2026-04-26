@@ -213,6 +213,16 @@ pub fn file_patch(
 	staged: bool,
 ) -> Result<String, AppError> {
 	let path = validate_repo_relative_path(path, "Diff path")?;
+
+	// Untracked files: `git diff --` returns empty for them. Synthesize a
+	// patch via `git diff --no-index /dev/null <path>` so the user actually
+	// sees the file's contents instead of a blank "No diff" pane. Also
+	// rewrite the synthetic header so the path shows as repo-relative
+	// (matching the tracked-file format the frontend parsers expect).
+	if !staged && is_untracked(folder, &path) {
+		return untracked_file_as_patch(folder, &path);
+	}
+
 	let mut args: Vec<&str> = vec!["diff", "--no-color"];
 	if staged {
 		args.push("--cached");
@@ -229,6 +239,51 @@ pub fn file_patch(
 		return Err(AppError::GitError(stderr));
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn is_untracked(folder: &str, path: &str) -> bool {
+	let output = Command::new("git")
+		.args(["status", "--porcelain=v1", "-z", "--", path])
+		.current_dir(folder)
+		.output();
+	let Ok(output) = output else {
+		return false;
+	};
+	if !output.status.success() {
+		return false;
+	}
+	// `?? <path>\0` is the porcelain v1 marker for untracked.
+	output.stdout.starts_with(b"?? ")
+}
+
+fn untracked_file_as_patch(folder: &str, path: &str) -> Result<String, AppError> {
+	// `git diff --no-index` exits with status 1 when there's a diff (which
+	// is the entire file here). Don't treat that as an error.
+	let output = Command::new("git")
+		.args([
+			"diff",
+			"--no-color",
+			"--no-index",
+			"--",
+			"/dev/null",
+			path,
+		])
+		.current_dir(folder)
+		.output()?;
+
+	let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+	let code = output.status.code().unwrap_or(-1);
+	// Status 0 = identical (impossible here), 1 = differ (the normal case).
+	// Anything else is a real error.
+	if code > 1 {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+
+	// `--no-index` emits `--- /dev/null` and `+++ b/<path>` headers — that
+	// already matches what the frontend parser expects for an added file,
+	// so no rewrite is needed.
+	Ok(stdout)
 }
 
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
@@ -2679,5 +2734,75 @@ mod tests {
 		let staged_text = String::from_utf8_lossy(&staged.stdout);
 		assert!(staged_text.contains("+added one"));
 		assert!(!staged_text.contains("+added two"));
+	}
+
+	// --- file_patch (per-file diff used by the diff tab) ---
+
+	#[test]
+	fn file_patch_returns_diff_for_modified_tracked_file() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha modified\n").unwrap();
+		let patch = file_patch(
+			&dir.path().to_string_lossy(),
+			"a.txt",
+			false,
+		)
+		.unwrap();
+		assert!(patch.contains("a.txt"), "patch should reference path");
+		assert!(patch.contains("+alpha modified"));
+	}
+
+	#[test]
+	fn file_patch_returns_synthetic_diff_for_untracked_file() {
+		let dir = create_index_status_repo();
+		std::fs::write(
+			dir.path().join("brand-new.txt"),
+			"line one\nline two\n",
+		)
+		.unwrap();
+		let patch = file_patch(
+			&dir.path().to_string_lossy(),
+			"brand-new.txt",
+			false,
+		)
+		.unwrap();
+		assert!(
+			!patch.is_empty(),
+			"untracked file should still produce a patch"
+		);
+		assert!(patch.contains("brand-new.txt"));
+		assert!(patch.contains("+line one"));
+		assert!(patch.contains("+line two"));
+	}
+
+	#[test]
+	fn file_patch_staged_returns_index_diff() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha staged\n").unwrap();
+		Command::new("git")
+			.args(["add", "a.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let patch = file_patch(
+			&dir.path().to_string_lossy(),
+			"a.txt",
+			true,
+		)
+		.unwrap();
+		assert!(patch.contains("+alpha staged"));
+	}
+
+	#[test]
+	fn file_patch_empty_for_unchanged_tracked_file() {
+		let dir = create_index_status_repo();
+		// a.txt was committed unchanged; no diff expected.
+		let patch = file_patch(
+			&dir.path().to_string_lossy(),
+			"a.txt",
+			false,
+		)
+		.unwrap();
+		assert!(patch.is_empty(), "no diff for unchanged file");
 	}
 }
