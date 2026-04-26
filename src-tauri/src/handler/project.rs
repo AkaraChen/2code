@@ -10,8 +10,9 @@ use infra::git::{
 };
 use model::error::AppError;
 use model::project::{
-	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexEntry,
-	IndexStatus, Project, ProjectConfig, ProjectWithProfiles,
+	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, GraphRow,
+	IndexEntry, IndexStatus, LogFilter, Project, ProjectConfig,
+	ProjectWithProfiles,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -238,6 +239,17 @@ pub async fn revert_file_in_commit(
 		service::project::revert_file_in_commit(&folder, &commit_hash, &path)
 	})
 	.await
+}
+
+#[tauri::command]
+pub async fn get_commit_graph(
+	profile_id: String,
+	filter: LogFilter,
+	state: State<'_, DbPool>,
+) -> Result<Vec<GraphRow>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::get_commit_graph(&folder, &filter))
+		.await
 }
 
 #[tauri::command]

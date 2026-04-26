@@ -6,8 +6,8 @@ use uuid::Uuid;
 use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
-	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexEntry,
-	IndexStatus, Project, ProjectWithProfiles,
+	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, GraphRow,
+	IndexEntry, IndexStatus, LogFilter, Project, ProjectWithProfiles,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -181,6 +181,13 @@ pub fn revert_file_in_commit(
 	path: &str,
 ) -> Result<(), AppError> {
 	infra::git::revert_file_in_commit(folder, commit_hash, path)
+}
+
+pub fn get_commit_graph(
+	folder: &str,
+	filter: &LogFilter,
+) -> Result<Vec<GraphRow>, AppError> {
+	infra::git::get_commit_graph(folder, filter)
 }
 
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {

@@ -76,6 +76,55 @@ export const revertFileInCommit = (args: {
 	path: string;
 }) => invoke<void>("revert_file_in_commit", args);
 
+// ── Phase 3: log graph ──
+
+export interface LogFilter {
+	branch?: string | null;
+	author?: string | null;
+	since?: string | null;
+	until?: string | null;
+	path?: string | null;
+	text_query?: string | null;
+	content_query?: string | null;
+	limit?: number | null;
+}
+
+export type CommitRef =
+	| { kind: "branch"; name: string }
+	| { kind: "tag"; name: string }
+	| { kind: "remote_branch"; name: string }
+	| { kind: "head" };
+
+export interface GraphEdge {
+	from_lane: number;
+	to_lane: number;
+}
+
+export interface GraphRow {
+	commit: {
+		hash: string;
+		full_hash: string;
+		author: { name: string; email: string };
+		date: string;
+		message: string;
+		files_changed: number;
+		insertions: number;
+		deletions: number;
+	};
+	parents: string[];
+	lane: number;
+	color: number;
+	edges_down: GraphEdge[];
+	refs: CommitRef[];
+	needs_push: boolean;
+	signed: boolean;
+}
+
+export const getCommitGraph = (args: {
+	profileId: string;
+	filter: LogFilter;
+}) => invoke<GraphRow[]>("get_commit_graph", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

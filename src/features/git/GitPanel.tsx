@@ -24,7 +24,7 @@ import { FiX } from "react-icons/fi";
 
 import ChangesTab from "./ChangesTab";
 import CommitComposer from "./CommitComposer";
-import HistoryTab from "./HistoryTab";
+import GraphLogTab from "./GraphLogTab";
 import InitRepoFlow from "./InitRepoFlow";
 import { buildDiffTabPath, diffTabTitle, type DiffSide } from "./diffTabs";
 import { useIsGitRepo, useGitIndexStatus } from "@/features/git/hooks";
@@ -176,7 +176,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 					</ErrorBoundary>
 				) : tab === "history" ? (
 					<Box flex="1" minH="0" overflow="hidden">
-						<HistoryTab profileId={profileId} />
+						<GraphLogTab profileId={profileId} />
 					</Box>
 				) : (
 					<Box flex="1" minH="0" overflow="auto" p="2">

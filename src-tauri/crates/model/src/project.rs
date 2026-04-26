@@ -99,6 +99,72 @@ pub struct FileDiffSides {
 	pub too_large: bool,
 }
 
+// ── Phase 3: log graph ──
+
+/// What to show in the log. None means "no filter on this dimension".
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct LogFilter {
+	/// Branch / ref to walk from. None = HEAD.
+	pub branch: Option<String>,
+	/// Substring match against author name OR email (case-insensitive).
+	pub author: Option<String>,
+	/// ISO 8601 date or git-relative ("2 weeks ago"). Passed through to git.
+	pub since: Option<String>,
+	pub until: Option<String>,
+	/// Path filter — only commits touching this path.
+	pub path: Option<String>,
+	/// Substring match against commit message (subject + body).
+	pub text_query: Option<String>,
+	/// Substring match against added/removed lines via `git log -G`.
+	pub content_query: Option<String>,
+	/// Hard cap on rows returned. Default 5000.
+	pub limit: Option<u32>,
+}
+
+/// Branch / tag tip pointing at a commit.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "name")]
+pub enum CommitRef {
+	Branch(String),
+	Tag(String),
+	RemoteBranch(String),
+	Head,
+}
+
+/// One incoming/outgoing edge to draw between this row and the next.
+/// `from_lane` is this row's source lane, `to_lane` is the lane of the
+/// child / parent on the next row.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GraphEdge {
+	pub from_lane: u32,
+	pub to_lane: u32,
+}
+
+/// One commit in the graph view. Wraps GitCommit with the lane assignment
+/// + edges so the frontend Canvas renderer can paint without knowing about
+/// git internals.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GraphRow {
+	pub commit: GitCommit,
+	/// Parent hashes (already on GitCommit? no — re-emit here for the frontend
+	/// graph walker).
+	pub parents: Vec<String>,
+	/// 0-based lane index this commit sits on.
+	pub lane: u32,
+	/// Lane "color" — currently equals `lane` since we don't do branching-
+	/// model coloring yet. Kept separate so we can swap in color logic later.
+	pub color: u32,
+	/// Edges leaving this row, drawn DOWN to the next row (i.e., to this
+	/// commit's parents). Each edge is (this_commit's lane → parent's lane).
+	pub edges_down: Vec<GraphEdge>,
+	/// Branch/tag/HEAD chips pointing at this commit.
+	pub refs: Vec<CommitRef>,
+	/// Best-effort: is this commit ahead of its branch's upstream?
+	pub needs_push: bool,
+	/// GPG/SSH signature good? (`git log %G?` returned 'G' or 'U')
+	pub signed: bool,
+}
+
 /// A file's change kind in the index or worktree.
 #[derive(
 	Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq,

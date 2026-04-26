@@ -95,6 +95,7 @@ pub fn run() {
 			handler::project::get_commit_files,
 			handler::project::get_commit_file_diff_sides,
 			handler::project::revert_file_in_commit,
+			handler::project::get_commit_graph,
 			handler::project::stage_git_files,
 			handler::project::unstage_git_files,
 			handler::project::stage_git_hunk,

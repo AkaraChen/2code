@@ -72,6 +72,9 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: ["git-file-diff-sides", profileId],
 				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-commit-graph", profileId],
+				});
 			});
 
 			if (cancelled) {

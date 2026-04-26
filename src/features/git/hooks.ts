@@ -21,6 +21,7 @@ import {
 	addGitRemote,
 	getCommitFileDiffSides,
 	getCommitFiles,
+	getCommitGraph,
 	getGitFileDiffSides,
 	getGitFilePatch,
 	getGitIdentity,
@@ -38,6 +39,7 @@ import {
 	unstageGitLines,
 	type Identity,
 	type IdentityScope,
+	type LogFilter,
 } from "@/features/git/changesTabBindings";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
@@ -196,6 +198,24 @@ export function useCommitFileDiffSides(
 				mergedWith,
 			}),
 		staleTime: Number.POSITIVE_INFINITY,
+	});
+}
+
+export function useCommitGraph(profileId: string, filter: LogFilter) {
+	return useQuery({
+		queryKey: [
+			"git-commit-graph",
+			profileId,
+			filter.branch ?? null,
+			filter.author ?? null,
+			filter.since ?? null,
+			filter.until ?? null,
+			filter.path ?? null,
+			filter.text_query ?? null,
+			filter.content_query ?? null,
+			filter.limit ?? null,
+		] as const,
+		queryFn: () => getCommitGraph({ profileId, filter }),
 	});
 }
 
