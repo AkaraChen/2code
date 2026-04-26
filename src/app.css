@@ -8,6 +8,16 @@
 
 :root {
 	--sidebar-width: 250px;
+
+	/* Motion tokens — used across the app, calibrated for the
+	   "professional dashboard, crisp and fast" personality. */
+	--ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+	--ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+	--ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+	--motion-fast: 120ms;
+	--motion-base: 180ms;
+	--motion-slow: 240ms;
+
 	font-family:
 		"OPPO Sans",
 		-apple-system,
@@ -63,4 +73,182 @@
 	border: 1px solid var(--chakra-colors-border-subtle);
 	border-radius: var(--chakra-radii-l2);
 	background: var(--chakra-colors-bg-panel);
+}
+
+/* ───────── Git panel motion ─────────
+   Scoped to [data-git-panel] so we don't perturb the rest of the app.
+   Animation philosophy: see CLAUDE-equivalent guidance — the panel is a
+   high-frequency dashboard surface, so we animate rare/state-change moments
+   (banner appearance, bulk bar entry, section expand) and keep frequent
+   interactions (tab switches, file row hover/select) instant. */
+
+[data-git-panel] button:not(:disabled):active,
+[data-git-panel] [role="button"]:not([aria-disabled="true"]):active {
+	transform: scale(0.97);
+	transition: transform 100ms var(--ease-out-strong);
+}
+
+/* Section body expand/collapse via grid-template-rows. No JS measurement
+   needed; interruptible. Falls back to instant snap on browsers without
+   support for animating grid-template-rows (older Safari/Firefox), which is
+   acceptable for this UI. */
+[data-git-section-body] {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	/* visibility transitions discretely, but we delay it so children remain
+	   focusable/visible during the open animation and are hidden only after
+	   the collapse finishes — keeps a11y in sync with the visual state. */
+	visibility: hidden;
+	transition:
+		grid-template-rows var(--motion-base) var(--ease-out-strong),
+		opacity var(--motion-fast) ease,
+		visibility 0s linear var(--motion-base);
+}
+
+[data-git-section-body][data-open="true"] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	visibility: visible;
+	transition:
+		grid-template-rows var(--motion-base) var(--ease-out-strong),
+		opacity var(--motion-fast) ease,
+		visibility 0s linear 0s;
+}
+
+[data-git-section-body] > [data-git-section-body-inner] {
+	min-height: 0;
+	overflow: hidden;
+}
+
+/* BulkActionBar: small scale + fade entry, anchored to the top so it
+   visually emerges from the section it belongs to. */
+[data-git-bulk-bar] {
+	transform-origin: top;
+	transform: scale(0.97);
+	opacity: 0;
+	transition:
+		transform var(--motion-base) var(--ease-out-strong),
+		opacity var(--motion-base) ease;
+}
+[data-git-bulk-bar][data-mounted="true"] {
+	transform: scale(1);
+	opacity: 1;
+}
+
+/* InProgressBanner: drawer-style slide-down. The banner is rare and
+   important (merge/rebase started); a deliberate entrance helps users
+   notice. Drawer easing gives it weight. */
+[data-git-banner] {
+	transform-origin: top;
+	transform: translateY(-100%);
+	opacity: 0;
+	transition:
+		transform var(--motion-slow) var(--ease-drawer),
+		opacity var(--motion-slow) ease;
+}
+[data-git-banner][data-mounted="true"] {
+	transform: translateY(0);
+	opacity: 1;
+}
+
+/* Conflict rows stagger in after the banner lands. Stagger is decorative
+   and capped at 6 rows (≈240ms total). Long lists fall back to instant by
+   only applying the animation to the first 6 :nth-child positions. */
+@keyframes gitConflictRowIn {
+	from {
+		opacity: 0;
+		transform: translateX(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+[data-git-banner][data-mounted="true"] [data-git-conflict-row] {
+	animation: gitConflictRowIn var(--motion-base) var(--ease-out-strong) backwards;
+}
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(1) { animation-delay: 80ms; }
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(2) { animation-delay: 120ms; }
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(3) { animation-delay: 160ms; }
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(4) { animation-delay: 200ms; }
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(5) { animation-delay: 240ms; }
+[data-git-banner][data-mounted="true"] [data-git-conflict-row]:nth-child(6) { animation-delay: 280ms; }
+/* 7+ render instantly (no animation-delay match) */
+
+/* Modal scrim + content: scrim fades, content scales from 0.96.
+   Center transform-origin is correct here per the framework: modals are
+   not anchored to a trigger. Exit isn't animated because these dialogs
+   unmount on close (no chance to retain a closing state without
+   restructuring) — the drop is acceptable for a rare interaction. */
+[data-git-modal] {
+	opacity: 0;
+	transition: opacity var(--motion-base) ease;
+}
+[data-git-modal][data-mounted="true"] {
+	opacity: 1;
+}
+[data-git-modal-content] {
+	transform: scale(0.96);
+	opacity: 0;
+	transform-origin: center;
+	transition:
+		transform var(--motion-base) var(--ease-out-strong),
+		opacity var(--motion-base) ease;
+}
+[data-git-modal][data-mounted="true"] [data-git-modal-content] {
+	transform: scale(1);
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-git-bulk-bar],
+	[data-git-banner],
+	[data-git-modal-content] {
+		transform: none !important;
+		transition: opacity var(--motion-fast) ease !important;
+	}
+	[data-git-banner][data-mounted="true"] [data-git-conflict-row] {
+		animation: none;
+	}
+}
+
+/* Empty-state ↔ populated crossfade. Single-state fade-in on whichever
+   branch is currently rendered; the React `key` swap forces a remount so
+   the animation runs on the destination. Layout shift between the two
+   states is masked by a brief blur. Rare event (typically only after a
+   commit clears the worktree). */
+@keyframes gitStateFadeIn {
+	from {
+		opacity: 0;
+		filter: blur(2px);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0);
+	}
+}
+[data-git-state] {
+	animation: gitStateFadeIn 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-git-panel] button:not(:disabled):active,
+	[data-git-panel] [role="button"]:not([aria-disabled="true"]):active {
+		transform: none;
+		transition: none;
+	}
+	[data-git-section-body] {
+		transition:
+			opacity var(--motion-fast) ease,
+			visibility 0s linear var(--motion-fast);
+	}
+	[data-git-section-body][data-open="true"] {
+		transition:
+			opacity var(--motion-fast) ease,
+			visibility 0s linear 0s;
+	}
+	[data-git-state] {
+		animation: none;
+	}
 }

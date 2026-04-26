@@ -14,7 +14,7 @@ import {
 	Spinner,
 	Text,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FiAlertCircle } from "react-icons/fi";
 
 import MergeResolverPane from "./MergeResolverPane";
@@ -41,6 +41,17 @@ export default function InProgressBanner({ profileId }: InProgressBannerProps) {
 	const continueOp = useContinueInProgressOp(profileId);
 	const abortOp = useAbortInProgressOp(profileId);
 	const [resolverPath, setResolverPath] = useState<string | null>(null);
+	// Two-frame mount toggle so the slide-in transition runs from the
+	// initial unmounted state (translateY(-100%) + opacity 0).
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		if (!op) {
+			setMounted(false);
+			return;
+		}
+		const id = requestAnimationFrame(() => setMounted(true));
+		return () => cancelAnimationFrame(id);
+	}, [op]);
 
 	if (!op) return null;
 
@@ -59,6 +70,8 @@ export default function InProgressBanner({ profileId }: InProgressBannerProps) {
 	return (
 		<>
 			<Box
+				data-git-banner
+				data-mounted={mounted ? "true" : "false"}
 				borderBottomWidth="1px"
 				borderColor="orange.subtle"
 				bg="orange.subtle"
@@ -115,6 +128,7 @@ export default function InProgressBanner({ profileId }: InProgressBannerProps) {
 						{op.conflicts.map((path) => (
 							<Flex
 								key={path}
+								data-git-conflict-row
 								as="button"
 								align="center"
 								gap="2"

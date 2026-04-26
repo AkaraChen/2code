@@ -3,6 +3,7 @@
 // rows + an inline error banner.
 
 import { Button, HStack, Portal, Stack, Text } from "@chakra-ui/react";
+import { useEffect, useState } from "react";
 
 interface RewriteDialogShellProps {
 	title: string;
@@ -27,9 +28,16 @@ export default function RewriteDialogShell({
 	error,
 	maxWidth = "560px",
 }: RewriteDialogShellProps) {
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		const id = requestAnimationFrame(() => setMounted(true));
+		return () => cancelAnimationFrame(id);
+	}, []);
 	return (
 		<Portal>
 			<div
+				data-git-modal
+				data-mounted={mounted ? "true" : "false"}
 				style={{
 					position: "fixed",
 					inset: 0,
@@ -42,6 +50,7 @@ export default function RewriteDialogShell({
 				onClick={onClose}
 			>
 				<div
+					data-git-modal-content
 					onClick={(e) => e.stopPropagation()}
 					style={{
 						background: "var(--chakra-colors-bg)",

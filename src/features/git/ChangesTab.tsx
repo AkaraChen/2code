@@ -25,7 +25,14 @@ import {
 	Tooltip,
 	Portal,
 } from "@chakra-ui/react";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import {
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { FiChevronDown, FiChevronRight, FiTrash2 } from "react-icons/fi";
 
 import {
@@ -76,6 +83,18 @@ function ChangesTabInner({
 	const [unstagedCheckedRaw, setUnstagedChecked] = useState<Set<string>>(
 		() => new Set(),
 	);
+
+	// Track empty/populated transitions so the empty-state crossfade only
+	// runs when the state actually flips (e.g. after a commit clears the
+	// worktree, or the first edit appears). Without this guard the fade
+	// plays on initial mount and on every tab re-entry — frequent paths
+	// where animation feels like lag.
+	const isEmpty = data.staged.length === 0 && data.unstaged.length === 0;
+	const prevEmptyRef = useRef(isEmpty);
+	const animateState = prevEmptyRef.current !== isEmpty;
+	useEffect(() => {
+		prevEmptyRef.current = isEmpty;
+	}, [isEmpty]);
 
 	const stagedChecked = useMemo(() => {
 		const valid = new Set(data.staged.map((e) => e.path));
@@ -136,16 +155,22 @@ function ChangesTabInner({
 		discard.mutate({ paths });
 	}, [discard, unstagedChecked]);
 
-	if (data.staged.length === 0 && data.unstaged.length === 0) {
+	if (isEmpty) {
 		return (
-			<Box fontSize="sm" color="fg.muted" textAlign="center" py="6">
+			<Box
+				data-git-state={animateState ? "" : undefined}
+				fontSize="sm"
+				color="fg.muted"
+				textAlign="center"
+				py="6"
+			>
 				No changes
 			</Box>
 		);
 	}
 
 	return (
-		<Stack gap="2" pb="2">
+		<Stack data-git-state={animateState ? "" : undefined} gap="2" pb="2">
 			<Section
 				label="Staged"
 				count={data.staged.length}
@@ -363,8 +388,12 @@ function Section({
 					<Text fontSize="xs">({count})</Text>
 				</HStack>
 			</HStack>
-			{open && <Stack gap="0">{children}</Stack>}
-			{open && bulkActions}
+			<Box data-git-section-body data-open={open ? "true" : "false"}>
+				<Box data-git-section-body-inner>
+					<Stack gap="0">{children}</Stack>
+					{bulkActions}
+				</Box>
+			</Box>
 		</Box>
 	);
 }
@@ -378,8 +407,17 @@ function BulkActionBar({
 	onClear: () => void;
 	children: React.ReactNode;
 }) {
+	// Two-frame mount toggle: the first paint applies the unmounted styles
+	// from CSS, the second tick flips data-mounted so the transition runs.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		const id = requestAnimationFrame(() => setMounted(true));
+		return () => cancelAnimationFrame(id);
+	}, []);
 	return (
 		<HStack
+			data-git-bulk-bar
+			data-mounted={mounted ? "true" : "false"}
 			gap="2"
 			px="2"
 			py="1.5"

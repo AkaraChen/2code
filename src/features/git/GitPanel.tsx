@@ -87,6 +87,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 
 	return (
 		<Flex
+			data-git-panel
 			direction="row"
 			h="full"
 			minW="0"

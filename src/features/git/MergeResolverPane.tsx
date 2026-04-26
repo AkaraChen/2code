@@ -74,6 +74,12 @@ export default function MergeResolverPane({
 	// trampled by background watcher invalidations.
 	const [resolved, setResolved] = useState<string | null>(null);
 	const seededRef = useRef(false);
+	// Two-frame mount toggle for the entry animation.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		const id = requestAnimationFrame(() => setMounted(true));
+		return () => cancelAnimationFrame(id);
+	}, []);
 
 	useEffect(() => {
 		if (state?.current != null && !seededRef.current) {
@@ -124,6 +130,8 @@ export default function MergeResolverPane({
 	return (
 		<Portal>
 			<div
+				data-git-modal
+				data-mounted={mounted ? "true" : "false"}
 				style={{
 					position: "fixed",
 					inset: 0,
@@ -135,6 +143,7 @@ export default function MergeResolverPane({
 				onClick={onClose}
 			>
 				<div
+					data-git-modal-content
 					onClick={(e) => e.stopPropagation()}
 					style={{
 						margin: "auto",
