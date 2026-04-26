@@ -13,6 +13,7 @@ use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
 	ProjectConfig, ProjectWithProfiles,
 };
+use model::rewrite::{RewriteOutcome, RewritePlan};
 
 /// Managed state: live `.git/` watchers keyed by profile_id.
 pub type GitWatchers = Mutex<HashMap<String, WatchHandle>>;
@@ -450,6 +451,45 @@ pub async fn stop_git_watcher(
 	map.remove(&profile_id);
 	// Drop runs the WatchHandle's stop logic.
 	Ok(())
+}
+
+#[tauri::command]
+pub async fn amend_head_commit_message(
+	profile_id: String,
+	message: String,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::amend_head_message(&folder, &message)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn rewrite_git_commits(
+	profile_id: String,
+	plan: RewritePlan,
+	state: State<'_, DbPool>,
+) -> Result<RewriteOutcome, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::rewrite_commits(&folder, &plan)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn rewrite_force_push_required(
+	profile_id: String,
+	plan: RewritePlan,
+	state: State<'_, DbPool>,
+) -> Result<bool, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::rewrite_force_push_required(&folder, &plan)
+	})
+	.await
 }
 
 #[tauri::command]

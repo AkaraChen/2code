@@ -9,6 +9,7 @@ use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
 	ProjectWithProfiles,
 };
+use model::rewrite::{RewriteOutcome, RewritePlan};
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
 	let short_id = &uuid[..4];
@@ -299,6 +300,29 @@ pub fn resolve_git_identity(
 		Some(profile_folder),
 		Some(project_folder),
 	)
+}
+
+// ── History rewrites ──
+
+pub fn amend_head_message(
+	folder: &str,
+	message: &str,
+) -> Result<String, AppError> {
+	infra::git::amend_head_message(folder, message)
+}
+
+pub fn rewrite_commits(
+	folder: &str,
+	plan: &RewritePlan,
+) -> Result<RewriteOutcome, AppError> {
+	infra::git::rewrite_commits_safe(folder, plan)
+}
+
+pub fn rewrite_force_push_required(
+	folder: &str,
+	plan: &RewritePlan,
+) -> Result<bool, AppError> {
+	infra::git::compute_force_push_required(folder, plan)
 }
 
 #[cfg(test)]
