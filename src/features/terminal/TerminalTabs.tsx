@@ -21,7 +21,7 @@ import {
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
 import { lazy, Suspense, useMemo } from "react";
 import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
@@ -121,7 +121,11 @@ interface SortableTabItemProps extends TabTriggerProps {
 
 function SortableTabItem({
 	sortableId,
-	motionProps,
+	// motionProps intentionally unused — entry/exit animations conflict
+	// with dnd-kit's own transform animation during reorder. The
+	// sortable's transform/transition handles the "slide into place"
+	// feel after a drop on its own.
+	motionProps: _motionProps,
 	...props
 }: SortableTabItemProps) {
 	const {
@@ -132,36 +136,31 @@ function SortableTabItem({
 		transition,
 		isDragging,
 	} = useSortable({ id: sortableId });
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		display: "flex",
-		flexShrink: 0,
-		minWidth: 0,
-		opacity: isDragging ? 0.45 : 1,
-		zIndex: isDragging ? 1 : 0,
-	};
 
+	// One animated element only: dnd-kit's transform + transition live on
+	// the same node that owns setNodeRef + listeners + attributes. No outer
+	// motion.div, no AnimatePresence — both fight dnd-kit over `transform`
+	// and produce the "tab jumps to wrong slot after drop" bug.
 	return (
-		<motion.div
+		<Box
+			ref={setNodeRef}
 			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
 				display: "flex",
 				flexShrink: 0,
+				minWidth: 0,
 				overflow: "hidden",
 				transformOrigin: "left center",
+				opacity: isDragging ? 0.45 : 1,
+				zIndex: isDragging ? 1 : 0,
 			}}
-			{...motionProps}
+			{...attributes}
+			{...listeners}
+			cursor={isDragging ? "grabbing" : "grab"}
 		>
-			<Box
-				ref={setNodeRef}
-				style={style}
-				{...attributes}
-				{...listeners}
-				cursor={isDragging ? "grabbing" : "grab"}
-			>
-				<TabTrigger {...props} />
-			</Box>
-		</motion.div>
+			<TabTrigger {...props} />
+		</Box>
 	);
 }
 
@@ -303,66 +302,62 @@ export default function TerminalTabs({
 								items={terminalSortableItems.map((tab) => tab.sortableId)}
 								strategy={horizontalListSortingStrategy}
 							>
-								<AnimatePresence initial={false}>
-									{terminalSortableItems.map((tab) => (
-										<SortableTabItem
-											key={tab.id}
-											sortableId={tab.sortableId}
-											value={tab.id}
-											icon={<FiTerminal />}
-											title={tab.title}
-											maxTitleLength={10}
-											motionProps={tabMotionProps}
-											badge={
-												notifiedTabSet.has(tab.id) &&
-												tab.id !== activeTabId ? (
-													<Circle size="2" bg="green.500" />
-												) : undefined
-											}
-											onClose={() =>
-												closeTab.mutate({
-													profileId,
-													sessionId: tab.id,
-												})
-											}
-										/>
-									))}
-								</AnimatePresence>
+								{terminalSortableItems.map((tab) => (
+									<SortableTabItem
+										key={tab.id}
+										sortableId={tab.sortableId}
+										value={tab.id}
+										icon={<FiTerminal />}
+										title={tab.title}
+										maxTitleLength={10}
+										motionProps={tabMotionProps}
+										badge={
+											notifiedTabSet.has(tab.id) &&
+											tab.id !== activeTabId ? (
+												<Circle size="2" bg="green.500" />
+											) : undefined
+										}
+										onClose={() =>
+											closeTab.mutate({
+												profileId,
+												sessionId: tab.id,
+											})
+										}
+									/>
+								))}
 							</SortableContext>
 
 							<SortableContext
 								items={fileSortableItems.map((tab) => tab.sortableId)}
 								strategy={horizontalListSortingStrategy}
 							>
-								<AnimatePresence initial={false}>
-									{fileSortableItems.map((tab) => (
-										<SortableTabItem
-											key={tab.filePath}
-											sortableId={tab.sortableId}
-											value={tab.filePath}
-											icon={
-												<img
-													src={getFileIconUrl(tab.title)}
-													width={14}
-													height={14}
-													alt=""
-													draggable={false}
-												/>
-											}
-											title={tab.title}
-											maxTitleLength={14}
-											motionProps={tabMotionProps}
-											badge={
-												dirtyFilePathSet.has(tab.filePath) ? (
-													<Circle size="2" bg="fg.muted" />
-												) : undefined
-											}
-											onClose={() =>
-												void closeFileTabFlow(tab.filePath)
-											}
-										/>
-									))}
-								</AnimatePresence>
+								{fileSortableItems.map((tab) => (
+									<SortableTabItem
+										key={tab.filePath}
+										sortableId={tab.sortableId}
+										value={tab.filePath}
+										icon={
+											<img
+												src={getFileIconUrl(tab.title)}
+												width={14}
+												height={14}
+												alt=""
+												draggable={false}
+											/>
+										}
+										title={tab.title}
+										maxTitleLength={14}
+										motionProps={tabMotionProps}
+										badge={
+											dirtyFilePathSet.has(tab.filePath) ? (
+												<Circle size="2" bg="fg.muted" />
+											) : undefined
+										}
+										onClose={() =>
+											void closeFileTabFlow(tab.filePath)
+										}
+									/>
+								))}
 							</SortableContext>
 
 							<TerminalTemplateMenu

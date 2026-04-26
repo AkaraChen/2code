@@ -1,3 +1,4 @@
+import { arrayMove } from "@dnd-kit/sortable";
 import { listen } from "@tauri-apps/api/event";
 import { enableMapSet } from "immer";
 import { create } from "zustand";
@@ -128,10 +129,11 @@ export const useTerminalStore = create<TerminalStore>()(
 				) {
 					return;
 				}
-
-				const [movedTab] = profile.tabs.splice(fromIndex, 1);
-				if (!movedTab) return;
-				profile.tabs.splice(toIndex, 0, movedTab);
+				// arrayMove handles the splice-shift correctly. Hand-rolled
+				// `splice(from, 1)` then `splice(to, 0, item)` is off by one
+				// when from < to because the removal shifts everything left
+				// before the insertion runs.
+				profile.tabs = arrayMove(profile.tabs, fromIndex, toIndex);
 			});
 		},
 
