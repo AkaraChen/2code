@@ -307,34 +307,18 @@ function UnionFileList({
 		);
 	}, [hashes, resultsByHash]);
 
-	if (!allLoaded) {
-		return (
-			<Flex align="center" justify="center" h="32">
-				<Spinner size="sm" />
-			</Flex>
-		);
-	}
-	if (error) {
-		return (
-			<Box p="2" fontSize="xs" color="red.fg">
-				{String(error)}
-			</Box>
-		);
-	}
-	if (union.length === 0) {
-		return (
-			<Box p="3" fontSize="xs" color="fg.muted">
-				No files in this commit
-			</Box>
-		);
-	}
+	// Auto-select the first file once results land. Effect (not render-time)
+	// so we don't re-trigger on every render.
+	useEffect(() => {
+		if (!selectedFile && allLoaded && union[0]) {
+			onSelectFile(union[0].path);
+		}
+	}, [selectedFile, allLoaded, union, onSelectFile]);
 
-	// Auto-select the first file when nothing is selected yet.
-	if (!selectedFile && union[0]) {
-		queueMicrotask(() => onSelectFile(union[0].path));
-	}
-
-	return (
+	// IMPORTANT: always render the CommitFilesLoader children, even while
+	// loading or showing an error. Otherwise the loaders never mount and
+	// resultsByHash stays empty forever — producing an infinite spinner.
+	const loaders = (
 		<>
 			{hashes.map((h) => (
 				<CommitFilesLoader
@@ -345,6 +329,30 @@ function UnionFileList({
 					onError={reportError}
 				/>
 			))}
+		</>
+	);
+
+	let body: React.ReactNode;
+	if (error && !allLoaded) {
+		body = (
+			<Box p="2" fontSize="xs" color="red.fg">
+				{String(error)}
+			</Box>
+		);
+	} else if (!allLoaded) {
+		body = (
+			<Flex align="center" justify="center" h="32">
+				<Spinner size="sm" />
+			</Flex>
+		);
+	} else if (union.length === 0) {
+		body = (
+			<Box p="3" fontSize="xs" color="fg.muted">
+				No files in this commit
+			</Box>
+		);
+	} else {
+		body = (
 			<Stack gap="0" py="1">
 				{union.map((entry) => {
 					const selected = entry.path === selectedFile;
@@ -376,6 +384,13 @@ function UnionFileList({
 					);
 				})}
 			</Stack>
+		);
+	}
+
+	return (
+		<>
+			{loaders}
+			{body}
 		</>
 	);
 }
