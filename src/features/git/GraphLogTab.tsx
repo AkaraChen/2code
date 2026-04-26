@@ -13,13 +13,15 @@ import {
 	Button,
 	Flex,
 	HStack,
+	IconButton,
 	Portal,
 	Text,
+	Tooltip,
 } from "@chakra-ui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { FiCheck, FiEdit2, FiUser } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiUser, FiX } from "react-icons/fi";
 
 import EditAuthorDialog from "./EditAuthorDialog";
 import EditMessageDialog from "./EditMessageDialog";
@@ -278,17 +280,28 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 					>
 						<FiUser /> Edit identity…
 					</Button>
-					<Button
-						size="2xs"
-						variant="ghost"
-						onClick={() => {
-							setSelectedHashes(new Set());
-							setAnchorIndex(null);
-						}}
-						title="Clear selection (Esc)"
-					>
-						Clear
-					</Button>
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>
+							<IconButton
+								aria-label="Clear selection"
+								size="2xs"
+								variant="ghost"
+								onClick={() => {
+									setSelectedHashes(new Set());
+									setAnchorIndex(null);
+								}}
+							>
+								<FiX />
+							</IconButton>
+						</Tooltip.Trigger>
+						<Portal>
+							<Tooltip.Positioner>
+								<Tooltip.Content>
+									Clear selection (Esc)
+								</Tooltip.Content>
+							</Tooltip.Positioner>
+						</Portal>
+					</Tooltip.Root>
 				</HStack>
 			)}
 
