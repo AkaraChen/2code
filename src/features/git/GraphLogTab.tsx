@@ -236,7 +236,7 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 				loading={isFetching}
 			/>
 
-			{selectedCommits.length > 0 && (
+			{selectedCommits.length >= 2 && (
 				<HStack
 					gap="2"
 					px="2"
@@ -249,30 +249,26 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 					<Text fontSize="xs" color="fg.muted" flex="1">
 						{selectedCommits.length} selected
 					</Text>
-					{selectedCommits.length >= 2 && (
-						<Button
-							size="2xs"
-							variant="ghost"
-							onClick={() => openCommitTab(selectedCommits)}
-						>
-							View commits
-						</Button>
-					)}
-					{selectedCommits.length >= 2 && (
-						<Button
-							size="2xs"
-							variant="ghost"
-							disabled={!isContiguousSelection}
-							onClick={() => setSquashFor(selectedCommits)}
-							title={
-								isContiguousSelection
-									? "Squash into one"
-									: "Squash needs adjacent commits"
-							}
-						>
-							Squash…
-						</Button>
-					)}
+					<Button
+						size="2xs"
+						variant="ghost"
+						onClick={() => openCommitTab(selectedCommits)}
+					>
+						View commits
+					</Button>
+					<Button
+						size="2xs"
+						variant="ghost"
+						disabled={!isContiguousSelection}
+						onClick={() => setSquashFor(selectedCommits)}
+						title={
+							isContiguousSelection
+								? "Squash into one"
+								: "Squash needs adjacent commits"
+						}
+					>
+						Squash…
+					</Button>
 					<Button
 						size="2xs"
 						variant="ghost"
