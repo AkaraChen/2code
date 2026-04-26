@@ -18,7 +18,8 @@ import {
 	Tooltip,
 	Portal,
 } from "@chakra-ui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { FiX } from "react-icons/fi";
 
 import ChangesTab from "./ChangesTab";
@@ -161,32 +162,50 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 				</HStack>
 
 				{tab === "changes" ? (
-					<Flex direction="column" flex="1" minH="0">
-						<Box
-							flex={selectedPath ? "0 0 35%" : "1"}
-							minH="0"
-							overflow="auto"
-							p="2"
-							borderBottomWidth={selectedPath ? "1px" : "0"}
-							borderColor="border.subtle"
-						>
-							<ChangesTab
-								profileId={profileId}
-								selectedPath={selectedPath}
-								onSelectFile={setSelectedPath}
+					<ErrorBoundary
+						fallbackRender={({ error, resetErrorBoundary }) => (
+							<PanelError
+								error={error}
+								onRetry={resetErrorBoundary}
 							/>
-						</Box>
-						{selectedPath && (
-							<Box flex="1" minH="0">
-								<ChangesDiffPane
-									profileId={profileId}
-									filePath={selectedPath}
-									onClose={() => setSelectedPath(null)}
-								/>
-							</Box>
 						)}
-						<CommitComposer profileId={profileId} />
-					</Flex>
+						resetKeys={[profileId]}
+					>
+						<Suspense
+							fallback={
+								<Box p="2" fontSize="sm" color="fg.muted">
+									Loading…
+								</Box>
+							}
+						>
+							<Flex direction="column" flex="1" minH="0">
+								<Box
+									flex={selectedPath ? "0 0 35%" : "1"}
+									minH="0"
+									overflow="auto"
+									p="2"
+									borderBottomWidth={selectedPath ? "1px" : "0"}
+									borderColor="border.subtle"
+								>
+									<ChangesTab
+										profileId={profileId}
+										selectedPath={selectedPath}
+										onSelectFile={setSelectedPath}
+									/>
+								</Box>
+								{selectedPath && (
+									<Box flex="1" minH="0">
+										<ChangesDiffPane
+											profileId={profileId}
+											filePath={selectedPath}
+											onClose={() => setSelectedPath(null)}
+										/>
+									</Box>
+								)}
+								<CommitComposer profileId={profileId} />
+							</Flex>
+						</Suspense>
+					</ErrorBoundary>
 				) : (
 					<Box flex="1" minH="0" overflow="auto" p="2">
 						{tab === "history" && <SoonPlaceholder label="History — Phase 3" />}
@@ -206,5 +225,54 @@ function SoonPlaceholder({ label }: { label: string }) {
 		<Box fontSize="sm" color="fg.muted">
 			{label}
 		</Box>
+	);
+}
+
+function PanelError({
+	error,
+	onRetry,
+}: {
+	error: unknown;
+	onRetry: () => void;
+}) {
+	const message = error instanceof Error ? error.message : String(error);
+	return (
+		<Flex
+			direction="column"
+			flex="1"
+			align="center"
+			justify="center"
+			p="4"
+			gap="2"
+		>
+			<Box fontSize="sm" color="fg.muted" textAlign="center">
+				Couldn't load git state
+			</Box>
+			<Box
+				fontSize="xs"
+				color="fg.muted"
+				textAlign="center"
+				maxWidth="full"
+				wordBreak="break-word"
+				whiteSpace="pre-wrap"
+			>
+				{message}
+			</Box>
+			<button
+				type="button"
+				onClick={onRetry}
+				style={{
+					padding: "4px 10px",
+					fontSize: "12px",
+					border: "1px solid var(--chakra-colors-border-emphasized)",
+					borderRadius: "4px",
+					background: "transparent",
+					color: "inherit",
+					cursor: "pointer",
+				}}
+			>
+				Retry
+			</button>
+		</Flex>
 	);
 }
