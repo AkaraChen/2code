@@ -51,10 +51,8 @@ impl Drop for WatchHandle {
 
 /// Watch the .git directory inside `folder`. Calls `on_change` (debounced)
 /// when relevant git state files change. Returns a handle that stops
-/// watching when dropped.
-///
-/// For worktrees (where `folder/.git` is a file, not a dir), this resolves
-/// the actual gitdir from that file's contents.
+/// watching when dropped. Errors if `folder` isn't a git repo — callers
+/// (handlers) should pre-check via `is_git_repo` and skip this entirely.
 pub fn watch_git_dir(
 	folder: &str,
 	on_change: impl Fn() + Send + Sync + 'static,

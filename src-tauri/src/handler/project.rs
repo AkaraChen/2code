@@ -89,6 +89,15 @@ pub async fn get_git_branch(folder: String) -> Result<String, AppError> {
 	super::run_blocking(move || service::project::get_branch(&folder)).await
 }
 
+#[tauri::command]
+pub async fn is_git_repo(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<bool, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || Ok(service::project::is_git_repo(&folder))).await
+}
+
 // Git handlers below use the two-phase pattern: brief DB lookup to resolve
 // profile → folder, then drop the SQLite mutex before running the git op.
 // See `service::project::resolve_profile_folder`. This prevents long git
@@ -424,6 +433,18 @@ pub async fn start_git_watcher(
 	watchers: State<'_, GitWatchers>,
 ) -> Result<(), AppError> {
 	let folder = resolve_folder(state.inner(), profile_id.clone()).await?;
+
+	// No-op for non-git folders — the frontend already gates the git UI on
+	// is_git_repo, but be defensive in case the call slips through (e.g.,
+	// a profile pointing at a folder that lost its .git/ between renders).
+	let folder_for_check = folder.clone();
+	let is_repo = super::run_blocking(move || {
+		Ok(service::project::is_git_repo(&folder_for_check))
+	})
+	.await?;
+	if !is_repo {
+		return Ok(());
+	}
 
 	let event_name = format!("git-state-changed-{profile_id}");
 	let app_for_cb = app.clone();

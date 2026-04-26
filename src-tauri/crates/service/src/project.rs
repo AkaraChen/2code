@@ -115,6 +115,10 @@ pub fn resolve_profile_folder(
 	Ok(profile.worktree_path)
 }
 
+pub fn is_git_repo(folder: &str) -> bool {
+	infra::git::is_git_repo(folder)
+}
+
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
 }

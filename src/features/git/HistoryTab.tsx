@@ -18,6 +18,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { Suspense, useCallback, useMemo, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import {
 	FiCheck,
 	FiEdit2,
@@ -36,11 +37,55 @@ interface HistoryTabProps {
 
 export default function HistoryTab({ profileId }: HistoryTabProps) {
 	return (
-		<Suspense
-			fallback={<Box p="2" fontSize="sm" color="fg.muted">Loading…</Box>}
+		<HistoryTabBoundary profileId={profileId}>
+			<Suspense
+				fallback={<Box p="2" fontSize="sm" color="fg.muted">Loading…</Box>}
+			>
+				<HistoryTabInner profileId={profileId} />
+			</Suspense>
+		</HistoryTabBoundary>
+	);
+}
+
+// History tab uses its own ErrorBoundary so a backend failure (e.g.,
+// transient git error) doesn't bubble to the panel-level boundary and
+// blank the whole panel.
+function HistoryTabBoundary({
+	profileId,
+	children,
+}: {
+	profileId: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<ErrorBoundary
+			resetKeys={[profileId]}
+			fallbackRender={({ error, resetErrorBoundary }) => (
+				<Box p="3" fontSize="xs" color="fg.muted">
+					<Box mb="1">Couldn't load history</Box>
+					<Box mb="2" wordBreak="break-word">
+						{error instanceof Error ? error.message : String(error)}
+					</Box>
+					<button
+						type="button"
+						onClick={resetErrorBoundary}
+						style={{
+							padding: "2px 8px",
+							fontSize: "11px",
+							border: "1px solid var(--chakra-colors-border-emphasized)",
+							borderRadius: "3px",
+							background: "transparent",
+							color: "inherit",
+							cursor: "pointer",
+						}}
+					>
+						Retry
+					</button>
+				</Box>
+			)}
 		>
-			<HistoryTabInner profileId={profileId} />
-		</Suspense>
+			{children}
+		</ErrorBoundary>
 	);
 }
 

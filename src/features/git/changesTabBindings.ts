@@ -28,6 +28,9 @@ export interface IndexStatus {
 export const getGitIndexStatus = (args: { profileId: string }) =>
 	invoke<IndexStatus>("get_git_index_status", args);
 
+export const isGitRepo = (args: { profileId: string }) =>
+	invoke<boolean>("is_git_repo", args);
+
 export const getGitFilePatch = (args: {
 	profileId: string;
 	path: string;

@@ -11,7 +11,7 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { Suspense, useEffect, useState } from "react";
 import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
-import { useGitDiffStats } from "@/features/git/hooks";
+import { useGitDiffStats, useIsGitRepo } from "@/features/git/hooks";
 import { useGitPanelStore } from "@/features/git/gitPanelStore";
 import { useGitStateSubscription } from "@/features/git/useGitStateSubscription";
 import { useGitBranch } from "@/features/projects/hooks";
@@ -125,10 +125,12 @@ export default function ProjectTopBar({
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const togglePanel = useGitPanelStore((s) => s.togglePanel);
 	const prefersReducedMotion = useReducedMotion() ?? false;
+	const isRepo = useIsGitRepo(profile.id);
 
 	// Event-driven invalidation of git queries; replaces the 1s polling
-	// that used to live inside each useGit* hook.
-	useGitStateSubscription(isActive ? profile.id : undefined);
+	// that used to live inside each useGit* hook. Skip for non-repo folders
+	// (start_git_watcher is also defensive but the round-trip is wasted).
+	useGitStateSubscription(isActive && isRepo ? profile.id : undefined);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -228,27 +230,29 @@ export default function ProjectTopBar({
 							</Tooltip.Positioner>
 						</Portal>
 					</Tooltip.Root>
-					<Box>
-						{profile.is_default ? (
-							isActive ? (
-								<Suspense>
-									<DefaultProfileBranchAndChanges
-										cwd={profile.worktree_path}
-										profileId={profile.id}
-										isActive={isActive}
-										onOpen={() => togglePanel(profile.id)}
-									/>
-								</Suspense>
-							) : null
-						) : (
-							<BranchAndChangesButton
-								branchName={profile.branch_name}
-								profileId={profile.id}
-								isActive={isActive}
-								onOpen={() => togglePanel(profile.id)}
-							/>
-						)}
-					</Box>
+					{isRepo && (
+						<Box>
+							{profile.is_default ? (
+								isActive ? (
+									<Suspense>
+										<DefaultProfileBranchAndChanges
+											cwd={profile.worktree_path}
+											profileId={profile.id}
+											isActive={isActive}
+											onOpen={() => togglePanel(profile.id)}
+										/>
+									</Suspense>
+								) : null
+							) : (
+								<BranchAndChangesButton
+									branchName={profile.branch_name}
+									profileId={profile.id}
+									isActive={isActive}
+									onOpen={() => togglePanel(profile.id)}
+								/>
+							)}
+						</Box>
+					)}
 				</HStack>
 				<HStack gap="2">
 					{visibleActiveControls.map((controlId) => {

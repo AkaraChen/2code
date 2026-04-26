@@ -26,6 +26,7 @@ import ChangesTab from "./ChangesTab";
 import ChangesDiffPane from "./ChangesDiffPane";
 import CommitComposer from "./CommitComposer";
 import HistoryTab from "./HistoryTab";
+import { useIsGitRepo } from "@/features/git/hooks";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
 interface GitPanelProps {
@@ -39,6 +40,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 	const setTab = useGitPanelStore((s) => s.setTab);
 	const setOpen = useGitPanelStore((s) => s.setOpen);
 	const setWidth = useGitPanelStore((s) => s.setWidth);
+	const isRepo = useIsGitRepo(profileId);
 
 	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
@@ -162,7 +164,9 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 					</Tooltip.Root>
 				</HStack>
 
-				{tab === "changes" ? (
+				{!isRepo ? (
+					<NotARepoEmptyState />
+				) : tab === "changes" ? (
 					<ErrorBoundary
 						fallbackRender={({ error, resetErrorBoundary }) => (
 							<PanelError
@@ -229,6 +233,27 @@ function SoonPlaceholder({ label }: { label: string }) {
 		<Box fontSize="sm" color="fg.muted">
 			{label}
 		</Box>
+	);
+}
+
+function NotARepoEmptyState() {
+	return (
+		<Flex
+			direction="column"
+			flex="1"
+			align="center"
+			justify="center"
+			p="4"
+			gap="2"
+		>
+			<Box fontSize="sm" color="fg.muted" textAlign="center">
+				Not a git repository
+			</Box>
+			<Box fontSize="xs" color="fg.muted" textAlign="center">
+				Initialize git in this folder to see changes, history, and
+				branches here.
+			</Box>
+		</Flex>
 	);
 }
 

@@ -13,6 +13,23 @@ use model::project::{
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
+/// Cheap check: is `folder` inside a git working tree? Returns false (not an
+/// error) for plain folders, missing folders, or anything git can't make
+/// sense of. Used by the frontend to gate the git UI before any other git
+/// command runs.
+pub fn is_git_repo(folder: &str) -> bool {
+	let output = Command::new("git")
+		.args(["rev-parse", "--is-inside-work-tree"])
+		.current_dir(folder)
+		.output();
+	match output {
+		Ok(o) if o.status.success() => {
+			String::from_utf8_lossy(&o.stdout).trim() == "true"
+		}
+		_ => false,
+	}
+}
+
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
 

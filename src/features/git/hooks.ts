@@ -21,6 +21,7 @@ import {
 	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
+	isGitRepo,
 	setGitIdentityCmd,
 	stageGitFiles,
 	stageGitHunk,
@@ -91,6 +92,18 @@ export function useGitIndexStatus(profileId: string) {
 		queryKey: queryKeys.git.indexStatus(profileId),
 		queryFn: () => getGitIndexStatus({ profileId }),
 	});
+}
+
+/// Cheap check: is this profile's worktree actually a git repo? Returns
+/// false (not undefined) for plain folders so consumers can gate without
+/// flicker. Cached aggressively — non-repo state rarely changes.
+export function useIsGitRepo(profileId: string) {
+	const { data } = useQuery({
+		queryKey: ["git-is-repo", profileId] as const,
+		queryFn: () => isGitRepo({ profileId }),
+		staleTime: 60_000,
+	});
+	return data ?? false;
 }
 
 export function useGitFilePatch(
