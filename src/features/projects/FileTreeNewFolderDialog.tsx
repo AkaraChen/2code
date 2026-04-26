@@ -96,7 +96,6 @@ export default function FileTreeNewFolderDialog({
 								<Field.Root invalid={!!error}>
 									<Field.Label>{label}</Field.Label>
 									<Input
-										autoFocus
 										value={name}
 										placeholder={placeholder}
 										onChange={(e) => {

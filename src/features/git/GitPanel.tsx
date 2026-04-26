@@ -18,7 +18,7 @@ import {
 	Tooltip,
 	Portal,
 } from "@chakra-ui/react";
-import { Suspense, useCallback, useEffect, useRef } from "react";
+import { Suspense, useCallback } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { FiX } from "react-icons/fi";
 
@@ -46,51 +46,39 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 
 	// Drag-to-resize handle. Mouse down starts a drag; mouse move resizes;
 	// mouse up commits. Uses requestAnimationFrame to coalesce rapid moves.
-	const dragRef = useRef<{
-		startX: number;
-		startWidth: number;
-		raf?: number;
-	} | null>(null);
-
-	const onMouseMove = useCallback(
-		(e: MouseEvent) => {
-			if (!dragRef.current) return;
-			const drag = dragRef.current;
-			if (drag.raf) return;
-			drag.raf = requestAnimationFrame(() => {
-				if (!dragRef.current) return;
-				const dx = drag.startX - e.clientX; // dragging left grows panel
-				setWidth(drag.startWidth + dx);
-				drag.raf = undefined;
-			});
-		},
-		[setWidth],
-	);
-
-	const stopDrag = useCallback(() => {
-		dragRef.current = null;
-		document.body.style.cursor = "";
-		document.body.style.userSelect = "";
-		window.removeEventListener("mousemove", onMouseMove);
-		window.removeEventListener("mouseup", stopDrag);
-	}, [onMouseMove]);
-
+	// All handlers live inside startDrag so we don't need named refs to each
+	// other (which the React Compiler can't optimize through).
 	const startDrag = useCallback(
 		(e: React.MouseEvent) => {
 			e.preventDefault();
-			dragRef.current = { startX: e.clientX, startWidth: width };
+			const startX = e.clientX;
+			const startWidth = width;
+			let raf: number | undefined;
+
+			const onMouseMove = (ev: MouseEvent) => {
+				if (raf !== undefined) return;
+				raf = requestAnimationFrame(() => {
+					const dx = startX - ev.clientX; // dragging left grows panel
+					setWidth(startWidth + dx);
+					raf = undefined;
+				});
+			};
+
+			const onMouseUp = () => {
+				if (raf !== undefined) cancelAnimationFrame(raf);
+				document.body.style.cursor = "";
+				document.body.style.userSelect = "";
+				window.removeEventListener("mousemove", onMouseMove);
+				window.removeEventListener("mouseup", onMouseUp);
+			};
+
 			document.body.style.cursor = "col-resize";
 			document.body.style.userSelect = "none";
 			window.addEventListener("mousemove", onMouseMove);
-			window.addEventListener("mouseup", stopDrag);
+			window.addEventListener("mouseup", onMouseUp);
 		},
-		[width, onMouseMove, stopDrag],
+		[width, setWidth],
 	);
-
-	useEffect(() => {
-		// Defensive cleanup in case the component unmounts mid-drag.
-		return () => stopDrag();
-	}, [stopDrag]);
 
 	if (!open) return null;
 

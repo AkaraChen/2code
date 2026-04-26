@@ -25,7 +25,7 @@ import {
 	Tooltip,
 	Portal,
 } from "@chakra-ui/react";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { FiChevronDown, FiChevronRight, FiTrash2 } from "react-icons/fi";
 
 import {
@@ -66,28 +66,26 @@ function ChangesTabInner({
 	const [stagedOpen, setStagedOpen] = useState(true);
 	const [unstagedOpen, setUnstagedOpen] = useState(true);
 
-	// Per-section bulk-select sets. Keyed by file path.
-	const [stagedChecked, setStagedChecked] = useState<Set<string>>(
+	// Per-section bulk-select sets. Keyed by file path. Stored sets may
+	// contain stale paths (entries that disappeared after a stage / commit /
+	// discard) — we filter them out on read via useMemo so the displayed
+	// state always matches reality without a cascading-render effect.
+	const [stagedCheckedRaw, setStagedChecked] = useState<Set<string>>(
 		() => new Set(),
 	);
-	const [unstagedChecked, setUnstagedChecked] = useState<Set<string>>(
+	const [unstagedCheckedRaw, setUnstagedChecked] = useState<Set<string>>(
 		() => new Set(),
 	);
 
-	// Drop checked entries that no longer exist in the underlying list (after
-	// stage / unstage / discard / commit invalidations).
-	useEffect(() => {
-		const stagedPaths = new Set(data.staged.map((e) => e.path));
-		setStagedChecked(
-			(prev) => filterSet(prev, stagedPaths) ?? prev,
-		);
-	}, [data.staged]);
-	useEffect(() => {
-		const unstagedPaths = new Set(data.unstaged.map((e) => e.path));
-		setUnstagedChecked(
-			(prev) => filterSet(prev, unstagedPaths) ?? prev,
-		);
-	}, [data.unstaged]);
+	const stagedChecked = useMemo(() => {
+		const valid = new Set(data.staged.map((e) => e.path));
+		return filterSet(stagedCheckedRaw, valid) ?? stagedCheckedRaw;
+	}, [stagedCheckedRaw, data.staged]);
+
+	const unstagedChecked = useMemo(() => {
+		const valid = new Set(data.unstaged.map((e) => e.path));
+		return filterSet(unstagedCheckedRaw, valid) ?? unstagedCheckedRaw;
+	}, [unstagedCheckedRaw, data.unstaged]);
 
 	const stageWholeFile = useCallback(
 		(entry: IndexEntry) => {
