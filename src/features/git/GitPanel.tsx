@@ -18,17 +18,18 @@ import {
 	Tooltip,
 	Portal,
 } from "@chakra-ui/react";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { FiX } from "react-icons/fi";
 
 import ChangesTab from "./ChangesTab";
-import ChangesDiffPane from "./ChangesDiffPane";
 import CommitComposer from "./CommitComposer";
 import HistoryTab from "./HistoryTab";
 import InitRepoFlow from "./InitRepoFlow";
-import { useIsGitRepo } from "@/features/git/hooks";
+import { buildDiffTabPath, diffTabTitle, type DiffSide } from "./diffTabs";
+import { useIsGitRepo, useGitIndexStatus } from "@/features/git/hooks";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 
 interface GitPanelProps {
 	profileId: string;
@@ -42,8 +43,6 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 	const setOpen = useGitPanelStore((s) => s.setOpen);
 	const setWidth = useGitPanelStore((s) => s.setWidth);
 	const isRepo = useIsGitRepo(profileId);
-
-	const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
 	// Drag-to-resize handle. Mouse down starts a drag; mouse move resizes;
 	// mouse up commits. Uses requestAnimationFrame to coalesce rapid moves.
@@ -184,32 +183,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 								</Box>
 							}
 						>
-							<Flex direction="column" flex="1" minH="0">
-								<Box
-									flex={selectedPath ? "0 0 35%" : "1"}
-									minH="0"
-									overflow="auto"
-									p="2"
-									borderBottomWidth={selectedPath ? "1px" : "0"}
-									borderColor="border.subtle"
-								>
-									<ChangesTab
-										profileId={profileId}
-										selectedPath={selectedPath}
-										onSelectFile={setSelectedPath}
-									/>
-								</Box>
-								{selectedPath && (
-									<Box flex="1" minH="0">
-										<ChangesDiffPane
-											profileId={profileId}
-											filePath={selectedPath}
-											onClose={() => setSelectedPath(null)}
-										/>
-									</Box>
-								)}
-								<CommitComposer profileId={profileId} />
-							</Flex>
+							<ChangesTabPane profileId={profileId} />
 						</Suspense>
 					</ErrorBoundary>
 				) : tab === "history" ? (
@@ -234,6 +208,51 @@ function SoonPlaceholder({ label }: { label: string }) {
 		<Box fontSize="sm" color="fg.muted">
 			{label}
 		</Box>
+	);
+}
+
+// Suspense-protected pane that owns the file → diff-tab dispatch. Selecting
+// a file in the Changes tab opens a read-only diff in the main editor area
+// (via the FileViewerTabs store) instead of cramming it into the panel.
+function ChangesTabPane({ profileId }: { profileId: string }) {
+	const { data: status } = useGitIndexStatus(profileId);
+	const openUntitled = useFileViewerTabsStore((s) => s.openUntitled);
+
+	const sideForPath = useCallback(
+		(filePath: string): DiffSide => {
+			// If a path appears on both sides (partial staging), prefer
+			// unstaged — that's the more common edit target in Fork/IntelliJ.
+			if (status.unstaged.some((e) => e.path === filePath)) return "unstaged";
+			if (status.staged.some((e) => e.path === filePath)) return "staged";
+			return "unstaged";
+		},
+		[status.staged, status.unstaged],
+	);
+
+	const handleSelectFile = useCallback(
+		(filePath: string | null) => {
+			if (!filePath) return;
+			const side = sideForPath(filePath);
+			openUntitled(
+				profileId,
+				buildDiffTabPath(side, filePath),
+				diffTabTitle(side, filePath),
+			);
+		},
+		[profileId, openUntitled, sideForPath],
+	);
+
+	return (
+		<Flex direction="column" flex="1" minH="0">
+			<Box flex="1" minH="0" overflow="auto" p="2">
+				<ChangesTab
+					profileId={profileId}
+					selectedPath={null}
+					onSelectFile={handleSelectFile}
+				/>
+			</Box>
+			<CommitComposer profileId={profileId} />
+		</Flex>
 	);
 }
 

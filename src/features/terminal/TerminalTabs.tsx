@@ -43,6 +43,7 @@ import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
 const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
+const DiffTabPane = lazy(() => import("@/features/git/DiffTabPane"));
 
 // Stable fallbacks — module-level constants prevent new object refs each render,
 // which would break useShallow's equality check and cause infinite re-renders.
@@ -381,7 +382,14 @@ export default function TerminalTabs({
 							</Flex>
 						)}
 					>
-						<FileViewerPane filePath={activeFilePath} profileId={profileId} />
+						{activeFilePath.startsWith("2code-diff://") ? (
+							<DiffTabPane
+								tabPath={activeFilePath}
+								profileId={profileId}
+							/>
+						) : (
+							<FileViewerPane filePath={activeFilePath} profileId={profileId} />
+						)}
 					</Suspense>
 				</Box>
 			)}
