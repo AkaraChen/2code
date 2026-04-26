@@ -17,7 +17,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { FiCheck, FiEdit2, FiUser } from "react-icons/fi";
 
@@ -201,6 +201,31 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 		overscan: 12,
 	});
 
+	// Esc clears selection — only when there IS one, so dialogs and the
+	// context menu (which both have their own Esc handlers) aren't shadowed.
+	useEffect(() => {
+		if (selectedCommits.length === 0) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== "Escape") return;
+			// Defer to dialogs/menus: skip when something else has focus
+			// (input, textarea, dialog).
+			const target = e.target as HTMLElement | null;
+			if (
+				target &&
+				(target.tagName === "INPUT" ||
+					target.tagName === "TEXTAREA" ||
+					target.closest("[role='dialog']") ||
+					target.closest("[role='menu']"))
+			) {
+				return;
+			}
+			setSelectedHashes(new Set());
+			setAnchorIndex(null);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [selectedCommits.length]);
+
 	return (
 		<Flex direction="column" h="full" minH="0">
 			<LogFiltersBar
@@ -252,6 +277,17 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 						onClick={() => setEditAuthorFor(selectedCommits)}
 					>
 						<FiUser /> Edit identity…
+					</Button>
+					<Button
+						size="2xs"
+						variant="ghost"
+						onClick={() => {
+							setSelectedHashes(new Set());
+							setAnchorIndex(null);
+						}}
+						title="Clear selection (Esc)"
+					>
+						Clear
 					</Button>
 				</HStack>
 			)}
