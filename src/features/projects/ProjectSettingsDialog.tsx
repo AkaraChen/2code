@@ -22,6 +22,7 @@ import {
 import * as m from "@/paraglide/messages.js";
 import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 import { ProjectTemplatesEditor } from "./components/ProjectTemplatesEditor";
+import GitSettingsTab from "./GitSettingsTab";
 
 interface ProjectSettingsDialogProps {
 	isOpen: boolean;
@@ -77,6 +78,7 @@ function ProjectSettingsForm({
 					<Tabs.List bg="bg.muted" rounded="l3" p="1" mb="3">
 						<Tabs.Trigger value="scripts">{m.scripts()}</Tabs.Trigger>
 						<Tabs.Trigger value="templates">{m.templates()}</Tabs.Trigger>
+						<Tabs.Trigger value="git">Git</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 
@@ -131,6 +133,10 @@ function ProjectSettingsForm({
 							templateDrafts={templateDrafts}
 							onChange={setTemplateDrafts}
 						/>
+					</Tabs.Content>
+
+					<Tabs.Content value="git">
+						<GitSettingsTab projectId={projectId} />
 					</Tabs.Content>
 				</Tabs.Root>
 			</Dialog.Body>
