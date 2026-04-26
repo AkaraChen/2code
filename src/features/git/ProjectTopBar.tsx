@@ -38,6 +38,39 @@ interface BranchAndChangesButtonProps {
 	onOpen: () => void;
 }
 
+function InitGitButton({
+	profileId: _profileId,
+	onOpen,
+}: {
+	profileId: string;
+	onOpen: () => void;
+}) {
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<Button
+					aria-label="Initialize git repository"
+					size="xs"
+					variant="ghost"
+					gap="1.5"
+					color="fg.muted"
+					onClick={onOpen}
+				>
+					<FiGitBranch />
+					<Text as="span">Initialize git…</Text>
+				</Button>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>
+						Not a git repo — click to initialize
+					</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
+	);
+}
+
 function BranchAndChangesButton({
 	branchName,
 	profileId,
@@ -230,29 +263,32 @@ export default function ProjectTopBar({
 							</Tooltip.Positioner>
 						</Portal>
 					</Tooltip.Root>
-					{isRepo && (
-						<Box>
-							{profile.is_default ? (
-								isActive ? (
-									<Suspense>
-										<DefaultProfileBranchAndChanges
-											cwd={profile.worktree_path}
-											profileId={profile.id}
-											isActive={isActive}
-											onOpen={() => togglePanel(profile.id)}
-										/>
-									</Suspense>
-								) : null
-							) : (
-								<BranchAndChangesButton
-									branchName={profile.branch_name}
-									profileId={profile.id}
-									isActive={isActive}
-									onOpen={() => togglePanel(profile.id)}
-								/>
-							)}
-						</Box>
-					)}
+					<Box>
+						{!isRepo ? (
+							<InitGitButton
+								profileId={profile.id}
+								onOpen={() => togglePanel(profile.id)}
+							/>
+						) : profile.is_default ? (
+							isActive ? (
+								<Suspense>
+									<DefaultProfileBranchAndChanges
+										cwd={profile.worktree_path}
+										profileId={profile.id}
+										isActive={isActive}
+										onOpen={() => togglePanel(profile.id)}
+									/>
+								</Suspense>
+							) : null
+						) : (
+							<BranchAndChangesButton
+								branchName={profile.branch_name}
+								profileId={profile.id}
+								isActive={isActive}
+								onOpen={() => togglePanel(profile.id)}
+							/>
+						)}
+					</Box>
 				</HStack>
 				<HStack gap="2">
 					{visibleActiveControls.map((controlId) => {
