@@ -439,6 +439,14 @@ type BranchTarget =
 	| { kind: "local"; branch: BranchInfo }
 	| { kind: "remote"; rb: RemoteBranchInfo };
 
+// Git refuses any whitespace in branch names. Replace runs of whitespace
+// with a single hyphen so users can type "my new branch" and get
+// "my-new-branch" without thinking about it. Applied on each keystroke so
+// the field never shows an invalid intermediate state.
+function sanitizeBranchInput(raw: string): string {
+	return raw.replace(/\s+/g, "-");
+}
+
 // ── Section + tree-render primitives ──
 
 function Section({
@@ -1023,7 +1031,9 @@ function CreateBranchDialog({
 					<Field.Label>Name</Field.Label>
 					<Input
 						value={name}
-						onChange={(e) => setName(e.target.value)}
+						onChange={(e) =>
+							setName(sanitizeBranchInput(e.target.value))
+						}
 						placeholder="feat/my-branch"
 						autoFocus
 					/>
@@ -1097,7 +1107,9 @@ function RenameBranchDialog({
 				<Field.Label>New name</Field.Label>
 				<Input
 					value={newName}
-					onChange={(e) => setNewName(e.target.value)}
+					onChange={(e) =>
+						setNewName(sanitizeBranchInput(e.target.value))
+					}
 				/>
 			</Field.Root>
 		</RewriteDialogShell>
@@ -1294,7 +1306,9 @@ function RenameRemoteBranchDialog({
 					<Field.Label>New branch name on {rb.remote}</Field.Label>
 					<Input
 						value={newName}
-						onChange={(e) => setNewName(e.target.value)}
+						onChange={(e) =>
+							setNewName(sanitizeBranchInput(e.target.value))
+						}
 					/>
 				</Field.Root>
 			</Stack>
