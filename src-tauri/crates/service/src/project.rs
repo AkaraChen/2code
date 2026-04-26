@@ -119,6 +119,18 @@ pub fn is_git_repo(folder: &str) -> bool {
 	infra::git::is_git_repo(folder)
 }
 
+pub fn init_git_repo(folder: &str) -> Result<(), AppError> {
+	infra::git::init(std::path::Path::new(folder))
+}
+
+pub fn add_git_remote(
+	folder: &str,
+	name: &str,
+	url: &str,
+) -> Result<(), AppError> {
+	infra::git::remote_add(folder, name, url)
+}
+
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
 }

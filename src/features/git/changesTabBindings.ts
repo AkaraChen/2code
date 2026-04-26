@@ -31,6 +31,15 @@ export const getGitIndexStatus = (args: { profileId: string }) =>
 export const isGitRepo = (args: { profileId: string }) =>
 	invoke<boolean>("is_git_repo", args);
 
+export const gitInitRepo = (args: { profileId: string }) =>
+	invoke<void>("git_init_repo", args);
+
+export const addGitRemote = (args: {
+	profileId: string;
+	name: string;
+	url: string;
+}) => invoke<void>("add_git_remote", args);
+
 export const getGitFilePatch = (args: {
 	profileId: string;
 	path: string;

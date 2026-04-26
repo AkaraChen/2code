@@ -85,6 +85,8 @@ pub fn run() {
 			handler::project::delete_project,
 			handler::project::get_git_branch,
 			handler::project::is_git_repo,
+			handler::project::git_init_repo,
+			handler::project::add_git_remote,
 			handler::project::get_git_diff,
 			handler::project::get_git_diff_stats,
 			handler::project::get_git_index_status,

@@ -18,9 +18,11 @@ import {
 	gitPush,
 } from "@/generated";
 import {
+	addGitRemote,
 	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
+	gitInitRepo,
 	isGitRepo,
 	setGitIdentityCmd,
 	stageGitFiles,
@@ -104,6 +106,38 @@ export function useIsGitRepo(profileId: string) {
 		staleTime: 60_000,
 	});
 	return data ?? false;
+}
+
+export function useGitInitRepo(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => gitInitRepo({ profileId }),
+		onSuccess: () => {
+			// Repo just appeared — refetch the gate query and the index/log
+			// queries so the panel re-renders with real content. The branch
+			// query keys by folder path (not profile id), so a broad
+			// invalidation by namespace covers them.
+			queryClient.invalidateQueries({
+				queryKey: ["git-is-repo", profileId],
+			});
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.git.indexStatus(profileId),
+			});
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.git.log(profileId),
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["git-branch"],
+			});
+		},
+	});
+}
+
+export function useAddGitRemote(profileId: string) {
+	return useMutation({
+		mutationFn: (args: { name: string; url: string }) =>
+			addGitRemote({ profileId, ...args }),
+	});
 }
 
 export function useGitFilePatch(

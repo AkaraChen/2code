@@ -98,6 +98,29 @@ pub async fn is_git_repo(
 	super::run_blocking(move || Ok(service::project::is_git_repo(&folder))).await
 }
 
+#[tauri::command]
+pub async fn git_init_repo(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::init_git_repo(&folder)).await
+}
+
+#[tauri::command]
+pub async fn add_git_remote(
+	profile_id: String,
+	name: String,
+	url: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::add_git_remote(&folder, &name, &url)
+	})
+	.await
+}
+
 // Git handlers below use the two-phase pattern: brief DB lookup to resolve
 // profile → folder, then drop the SQLite mutex before running the git op.
 // See `service::project::resolve_profile_folder`. This prevents long git

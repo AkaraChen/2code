@@ -26,6 +26,7 @@ import ChangesTab from "./ChangesTab";
 import ChangesDiffPane from "./ChangesDiffPane";
 import CommitComposer from "./CommitComposer";
 import HistoryTab from "./HistoryTab";
+import InitRepoFlow from "./InitRepoFlow";
 import { useIsGitRepo } from "@/features/git/hooks";
 import { useGitPanelStore, type GitPanelTab } from "./gitPanelStore";
 
@@ -165,7 +166,7 @@ export default function GitPanel({ profileId }: GitPanelProps) {
 				</HStack>
 
 				{!isRepo ? (
-					<NotARepoEmptyState />
+					<InitRepoFlow profileId={profileId} />
 				) : tab === "changes" ? (
 					<ErrorBoundary
 						fallbackRender={({ error, resetErrorBoundary }) => (
@@ -236,26 +237,6 @@ function SoonPlaceholder({ label }: { label: string }) {
 	);
 }
 
-function NotARepoEmptyState() {
-	return (
-		<Flex
-			direction="column"
-			flex="1"
-			align="center"
-			justify="center"
-			p="4"
-			gap="2"
-		>
-			<Box fontSize="sm" color="fg.muted" textAlign="center">
-				Not a git repository
-			</Box>
-			<Box fontSize="xs" color="fg.muted" textAlign="center">
-				Initialize git in this folder to see changes, history, and
-				branches here.
-			</Box>
-		</Flex>
-	);
-}
 
 function PanelError({
 	error,

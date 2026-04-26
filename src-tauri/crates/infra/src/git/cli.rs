@@ -40,6 +40,50 @@ pub fn init(dir: &Path) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Add a remote (`git remote add <name> <url>`). Validates the inputs:
+/// - name: non-empty, no whitespace, no shell metachars
+/// - url: non-empty, no leading dash (defends against argv injection),
+///   no NUL bytes
+///
+/// Doesn't enforce URL scheme — git itself accepts ssh://, https://, git://,
+/// scp-style (`user@host:path`), or even local paths.
+pub fn remote_add(folder: &str, name: &str, url: &str) -> Result<(), AppError> {
+	let name = name.trim();
+	let url = url.trim();
+	if name.is_empty() {
+		return Err(AppError::GitError("remote name cannot be empty".into()));
+	}
+	if url.is_empty() {
+		return Err(AppError::GitError("remote URL cannot be empty".into()));
+	}
+	if name.starts_with('-') || url.starts_with('-') {
+		return Err(AppError::GitError(
+			"remote name/URL cannot start with '-'".into(),
+		));
+	}
+	if name.chars().any(|c| c.is_whitespace() || c == '\0') {
+		return Err(AppError::GitError(
+			"remote name cannot contain whitespace".into(),
+		));
+	}
+	if url.contains('\0') {
+		return Err(AppError::GitError("remote URL contains NUL".into()));
+	}
+
+	let output = Command::new("git")
+		.args(["remote", "add", name, url])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!(
+			"git remote add failed: {stderr}"
+		)));
+	}
+	Ok(())
+}
+
 pub fn branch(folder: &str) -> Result<String, AppError> {
 	let output = Command::new("git")
 		.args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -2546,6 +2590,55 @@ mod tests {
 		let dir = create_index_status_repo();
 		let result =
 			stage_files(&dir.path().to_string_lossy(), &["../escape".into()]);
+		assert!(result.is_err());
+	}
+
+	// --- remote_add ---
+
+	#[test]
+	fn remote_add_creates_remote() {
+		let dir = create_index_status_repo();
+		remote_add(
+			&dir.path().to_string_lossy(),
+			"origin",
+			"https://github.com/foo/bar.git",
+		)
+		.unwrap();
+		let out = Command::new("git")
+			.args(["remote", "-v"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let listing = String::from_utf8_lossy(&out.stdout);
+		assert!(listing.contains("origin"));
+		assert!(listing.contains("github.com/foo/bar"));
+	}
+
+	#[test]
+	fn remote_add_rejects_empty_name_or_url() {
+		let dir = create_index_status_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		assert!(remote_add(&folder, "", "https://x").is_err());
+		assert!(remote_add(&folder, "origin", "").is_err());
+		assert!(remote_add(&folder, "  ", "https://x").is_err());
+	}
+
+	#[test]
+	fn remote_add_rejects_argv_injection_attempts() {
+		let dir = create_index_status_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		assert!(remote_add(&folder, "-flag", "https://x").is_err());
+		assert!(remote_add(&folder, "origin", "--upload-pack=evil").is_err());
+		assert!(remote_add(&folder, "bad name", "https://x").is_err());
+	}
+
+	#[test]
+	fn remote_add_rejects_duplicate() {
+		let dir = create_index_status_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		remote_add(&folder, "origin", "https://github.com/a/b.git").unwrap();
+		// git itself errors on duplicate; we surface the stderr.
+		let result = remote_add(&folder, "origin", "https://github.com/c/d.git");
 		assert!(result.is_err());
 	}
 
