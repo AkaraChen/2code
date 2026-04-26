@@ -70,6 +70,13 @@ export default function MonacoSideBySideDiff({
 					readOnly: true,
 					originalEditable: false,
 					renderSideBySide: mode === "side-by-side",
+					// Default is 900 — Monaco silently collapses side-by-side to
+					// inline when the editor is narrower than this, which makes
+					// modified files render as a single pane with no diff
+					// indicators on tighter layouts. Lower the threshold so we
+					// only collapse on truly cramped widths.
+					renderSideBySideInlineBreakpoint: 400,
+					useInlineViewWhenSpaceIsLimited: false,
 					renderOverviewRuler: false,
 					minimap: { enabled: false },
 					scrollBeyondLastLine: false,
@@ -77,11 +84,12 @@ export default function MonacoSideBySideDiff({
 					fontFamily,
 					fontSize,
 					lineNumbers: "on",
-					glyphMargin: false,
+					glyphMargin: true,
 					folding: false,
 					wordWrap: "off",
 					renderWhitespace: "none",
 					ignoreTrimWhitespace: false,
+					diffWordWrap: "off",
 				}}
 			/>
 		</Box>
