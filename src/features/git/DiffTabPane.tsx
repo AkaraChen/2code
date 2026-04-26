@@ -339,10 +339,6 @@ function SidesView({
 		);
 	}
 
-	// Binary or missing file (added → no original; deleted → no modified).
-	const original = data.original ?? "";
-	const modified = data.modified ?? "";
-
 	if (data.original === null && data.modified === null) {
 		return (
 			<Flex
@@ -357,11 +353,13 @@ function SidesView({
 		);
 	}
 
+	// Pass nulls through verbatim — MonacoSideBySideDiff renders a single-
+	// pane Editor when only one side exists (added / deleted file).
 	return (
 		<MonacoSideBySideDiff
 			filePath={filePath}
-			original={original}
-			modified={modified}
+			original={data.original}
+			modified={data.modified}
 			mode={mode === "split" ? "side-by-side" : "inline"}
 		/>
 	);

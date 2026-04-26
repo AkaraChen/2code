@@ -490,8 +490,8 @@ function CommitFileDiff({
 	return (
 		<MonacoSideBySideDiff
 			filePath={filePath}
-			original={data.original ?? ""}
-			modified={data.modified ?? ""}
+			original={data.original}
+			modified={data.modified}
 			mode="side-by-side"
 		/>
 	);

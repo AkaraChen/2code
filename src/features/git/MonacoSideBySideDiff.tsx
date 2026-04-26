@@ -1,20 +1,20 @@
-// Side-by-side / inline diff with full language-aware syntax highlighting.
+// Diff viewer that switches between two layouts based on what's present:
 //
-// Uses Monaco's DiffEditor (not the patch text view). Original = HEAD, modified
-// = worktree (or index for staged side). Detects language from the file
-// extension via the existing detectMonacoLanguage helper, so TypeScript /
-// Rust / etc. light up the same way they do in regular file tabs.
+//   - Both sides present  → Monaco DiffEditor side-by-side / inline.
+//   - One side present    → plain Monaco Editor with a single header
+//                            ("Added" / "Deleted") and full syntax
+//                            highlighting. No diff gutters since there
+//                            is nothing to compare against.
 //
-// Read-only on both sides — this is a viewer, not an editor. Hunk-level
-// stage/unstage actions stay in the patch view (MonacoFileDiff). When users
-// want to stage hunks they switch to the patch view via the header toggle in
-// DiffTabPane.
+// Pass `original` or `modified` as `null` to indicate the side doesn't
+// exist (added file = no original; deleted file = no modified). Pass `""`
+// only for an actually-empty file at that revision.
 
 import "@/shared/lib/monaco";
 
-import { Box, Spinner } from "@chakra-ui/react";
-import { DiffEditor } from "@monaco-editor/react";
-import type { DiffOnMount } from "@monaco-editor/react";
+import { Box, Flex, Spinner, Text } from "@chakra-ui/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
+import type { DiffOnMount, OnMount } from "@monaco-editor/react";
 import { useCallback, useMemo, useRef } from "react";
 
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
@@ -23,8 +23,8 @@ import { detectMonacoLanguage } from "@/shared/lib/languageDetection";
 
 interface MonacoSideBySideDiffProps {
 	filePath: string;
-	original: string;
-	modified: string;
+	original: string | null;
+	modified: string | null;
 	mode: "side-by-side" | "inline";
 }
 
@@ -42,8 +42,62 @@ export default function MonacoSideBySideDiff({
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const language = useMemo(() => detectMonacoLanguage(filePath), [filePath]);
-	const editorRef = useRef<unknown>(null);
+	const theme = getMonacoTheme(themeId);
 
+	const onlyOneSide = original === null || modified === null;
+	const presentContent = original ?? modified ?? "";
+	const presentKind: "added" | "deleted" | null =
+		original === null && modified !== null
+			? "added"
+			: modified === null && original !== null
+				? "deleted"
+				: null;
+
+	if (onlyOneSide) {
+		return (
+			<SinglePaneViewer
+				filePath={filePath}
+				content={presentContent}
+				language={language}
+				theme={theme}
+				fontFamily={fontFamily}
+				fontSize={fontSize}
+				kind={presentKind}
+			/>
+		);
+	}
+
+	return (
+		<TwoPaneDiff
+			original={original ?? ""}
+			modified={modified ?? ""}
+			language={language}
+			theme={theme}
+			fontFamily={fontFamily}
+			fontSize={fontSize}
+			mode={mode}
+		/>
+	);
+}
+
+function TwoPaneDiff({
+	original,
+	modified,
+	language,
+	theme,
+	fontFamily,
+	fontSize,
+	mode,
+}: {
+	original: string;
+	modified: string;
+	language: string;
+	theme: string;
+	fontFamily: string;
+	fontSize: number;
+	mode: "side-by-side" | "inline";
+}) {
+	const editorRef = useRef<unknown>(null);
 	const onMount: DiffOnMount = useCallback((editor) => {
 		editorRef.current = editor;
 	}, []);
@@ -54,27 +108,16 @@ export default function MonacoSideBySideDiff({
 				original={original}
 				modified={modified}
 				language={language}
-				theme={getMonacoTheme(themeId)}
+				theme={theme}
 				onMount={onMount}
-				loading={
-					<Box
-						display="flex"
-						alignItems="center"
-						justifyContent="center"
-						height="full"
-					>
-						<Spinner size="sm" />
-					</Box>
-				}
+				loading={<DiffLoading />}
 				options={{
 					readOnly: true,
 					originalEditable: false,
 					renderSideBySide: mode === "side-by-side",
-					// Default is 900 — Monaco silently collapses side-by-side to
-					// inline when the editor is narrower than this, which makes
-					// modified files render as a single pane with no diff
-					// indicators on tighter layouts. Lower the threshold so we
-					// only collapse on truly cramped widths.
+					// Default 900 — Monaco silently collapses side-by-side to
+					// inline below this width. Lower so we only collapse on
+					// truly cramped layouts.
 					renderSideBySideInlineBreakpoint: 400,
 					useInlineViewWhenSpaceIsLimited: false,
 					renderOverviewRuler: false,
@@ -92,6 +135,88 @@ export default function MonacoSideBySideDiff({
 					diffWordWrap: "off",
 				}}
 			/>
+		</Box>
+	);
+}
+
+function SinglePaneViewer({
+	filePath,
+	content,
+	language,
+	theme,
+	fontFamily,
+	fontSize,
+	kind,
+}: {
+	filePath: string;
+	content: string;
+	language: string;
+	theme: string;
+	fontFamily: string;
+	fontSize: number;
+	kind: "added" | "deleted" | null;
+}) {
+	const editorRef = useRef<unknown>(null);
+	const onMount: OnMount = useCallback((editor) => {
+		editorRef.current = editor;
+	}, []);
+
+	return (
+		<Flex direction="column" h="full" minH="0">
+			{kind && (
+				<Flex
+					align="center"
+					gap="2"
+					px="3"
+					py="1"
+					borderBottomWidth="1px"
+					borderColor="border.subtle"
+					bg={kind === "added" ? "green.subtle" : "red.subtle"}
+					flexShrink={0}
+				>
+					<Text fontSize="xs" fontWeight="medium">
+						{kind === "added" ? "Added" : "Deleted"}
+					</Text>
+					<Text fontSize="xs" color="fg.muted" truncate>
+						{filePath}
+					</Text>
+				</Flex>
+			)}
+			<Box flex="1" minH="0">
+				<Editor
+					value={content}
+					language={language}
+					theme={theme}
+					onMount={onMount}
+					loading={<DiffLoading />}
+					options={{
+						readOnly: true,
+						minimap: { enabled: false },
+						scrollBeyondLastLine: false,
+						automaticLayout: true,
+						fontFamily,
+						fontSize,
+						lineNumbers: "on",
+						glyphMargin: false,
+						folding: false,
+						wordWrap: "off",
+						renderWhitespace: "none",
+					}}
+				/>
+			</Box>
+		</Flex>
+	);
+}
+
+function DiffLoading() {
+	return (
+		<Box
+			display="flex"
+			alignItems="center"
+			justifyContent="center"
+			height="full"
+		>
+			<Spinner size="sm" />
 		</Box>
 	);
 }
