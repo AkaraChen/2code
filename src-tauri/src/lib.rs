@@ -91,6 +91,7 @@ pub fn run() {
 			handler::project::get_git_diff_stats,
 			handler::project::get_git_index_status,
 			handler::project::get_git_file_patch,
+			handler::project::get_git_file_diff_sides,
 			handler::project::stage_git_files,
 			handler::project::unstage_git_files,
 			handler::project::stage_git_hunk,

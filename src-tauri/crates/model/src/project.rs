@@ -88,6 +88,17 @@ pub struct GitBinaryPreview {
 	pub file_path: String,
 }
 
+/// Both sides of a per-file diff for language-aware rendering in the
+/// Monaco DiffEditor. Either side may be `None` (added/deleted file or
+/// binary). `too_large` is set when the file exceeds the diff editor's
+/// safe size — the frontend should fall back to the patch view.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FileDiffSides {
+	pub original: Option<String>,
+	pub modified: Option<String>,
+	pub too_large: bool,
+}
+
 /// A file's change kind in the index or worktree.
 #[derive(
 	Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq,

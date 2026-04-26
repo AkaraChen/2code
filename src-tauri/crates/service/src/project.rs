@@ -6,8 +6,8 @@ use uuid::Uuid;
 use infra::git::{Identity, IdentityScope};
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
-	ProjectWithProfiles,
+	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus,
+	Project, ProjectWithProfiles,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -149,6 +149,14 @@ pub fn get_file_patch(
 	staged: bool,
 ) -> Result<String, AppError> {
 	infra::git::file_patch(folder, path, staged)
+}
+
+pub fn get_file_diff_sides(
+	folder: &str,
+	path: &str,
+	staged: bool,
+) -> Result<FileDiffSides, AppError> {
+	infra::git::file_diff_sides(folder, path, staged)
 }
 
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {

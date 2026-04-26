@@ -19,6 +19,7 @@ import {
 } from "@/generated";
 import {
 	addGitRemote,
+	getGitFileDiffSides,
 	getGitFilePatch,
 	getGitIdentity,
 	getGitIndexStatus,
@@ -151,6 +152,17 @@ export function useGitFilePatch(
 	});
 }
 
+export function useGitFileDiffSides(
+	profileId: string,
+	path: string,
+	staged: boolean,
+) {
+	return useQuery({
+		queryKey: ["git-file-diff-sides", profileId, path, staged] as const,
+		queryFn: () => getGitFileDiffSides({ profileId, path, staged }),
+	});
+}
+
 function useStagingMutation<TArgs>(
 	profileId: string,
 	mutationFn: (args: TArgs & { profileId: string }) => Promise<void>,
@@ -171,6 +183,9 @@ function useStagingMutation<TArgs>(
 				}),
 				queryClient.invalidateQueries({
 					queryKey: ["git-file-patch", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-diff-sides", profileId],
 				}),
 			]);
 		},

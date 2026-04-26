@@ -69,6 +69,9 @@ export function useGitStateSubscription(profileId: string | undefined) {
 				queryClient.invalidateQueries({
 					queryKey: ["git-file-patch", profileId],
 				});
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-diff-sides", profileId],
+				});
 			});
 
 			if (cancelled) {

@@ -8,7 +8,8 @@ use std::process::Command;
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
 use model::project::{
-	GitAuthor, GitChangeKind, GitCommit, GitDiffStats, IndexEntry, IndexStatus,
+	FileDiffSides, GitAuthor, GitChangeKind, GitCommit, GitDiffStats,
+	IndexEntry, IndexStatus,
 };
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
@@ -447,6 +448,81 @@ pub fn read_worktree_file(
 	}
 
 	Ok(Some(file_path.to_string_lossy().to_string()))
+}
+
+const MAX_DIFF_TEXT_BYTES: usize = 5 * 1024 * 1024;
+
+/// Both sides of a per-file diff as plain text (or `None` when the side
+/// doesn't exist — e.g., HEAD side for an added file, worktree side for a
+/// deleted file). Used by the Monaco DiffEditor for language-aware syntax
+/// highlighting.
+///
+/// `staged=false` → original = HEAD revision, modified = worktree.
+/// `staged=true` → original = HEAD revision, modified = INDEX (staged version).
+///
+/// Skips files larger than 5MB on either side; the diff editor would choke
+/// and the patch view in MonacoFileDiff handles those cases acceptably.
+pub fn file_diff_sides(
+	folder: &str,
+	path: &str,
+	staged: bool,
+) -> Result<FileDiffSides, AppError> {
+	let path = validate_repo_relative_path(path, "Diff path")?;
+
+	let original = read_blob_text(folder, &format!("HEAD:{path}"))?;
+	let modified = if staged {
+		read_blob_text(folder, &format!(":0:{path}"))?
+	} else {
+		read_worktree_text(folder, &path)?
+	};
+
+	let too_large = original
+		.as_ref()
+		.is_some_and(|s| s.len() > MAX_DIFF_TEXT_BYTES)
+		|| modified
+			.as_ref()
+			.is_some_and(|s| s.len() > MAX_DIFF_TEXT_BYTES);
+
+	Ok(FileDiffSides {
+		original,
+		modified,
+		too_large,
+	})
+}
+
+/// Read a git blob's text via `cat-file -p`. Returns Ok(None) when the spec
+/// doesn't resolve (e.g., HEAD:foo for a file that didn't exist at HEAD).
+/// Returns Ok(None) for binary content (NUL-byte detection) so Monaco
+/// doesn't try to render it.
+fn read_blob_text(folder: &str, spec: &str) -> Result<Option<String>, AppError> {
+	let output = Command::new("git")
+		.args(["cat-file", "-p", spec])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		// Spec doesn't exist (e.g., file didn't exist at HEAD).
+		return Ok(None);
+	}
+	if output.stdout.contains(&0) {
+		return Ok(None);
+	}
+	Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()))
+}
+
+/// Read a worktree file as text. Returns Ok(None) for missing/binary files.
+fn read_worktree_text(
+	folder: &str,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	let file_path = Path::new(folder).join(path);
+	if !file_path.exists() || file_path.is_dir() {
+		return Ok(None);
+	}
+	let bytes = std::fs::read(&file_path)?;
+	if bytes.contains(&0) {
+		return Ok(None);
+	}
+	Ok(Some(String::from_utf8_lossy(&bytes).to_string()))
 }
 
 pub fn read_head_file(

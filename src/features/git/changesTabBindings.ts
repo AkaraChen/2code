@@ -46,6 +46,18 @@ export const getGitFilePatch = (args: {
 	staged: boolean;
 }) => invoke<string>("get_git_file_patch", args);
 
+export interface FileDiffSides {
+	original: string | null;
+	modified: string | null;
+	too_large: boolean;
+}
+
+export const getGitFileDiffSides = (args: {
+	profileId: string;
+	path: string;
+	staged: boolean;
+}) => invoke<FileDiffSides>("get_git_file_diff_sides", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

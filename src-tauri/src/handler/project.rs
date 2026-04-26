@@ -10,8 +10,8 @@ use infra::git::{
 };
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus, Project,
-	ProjectConfig, ProjectWithProfiles,
+	FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats, IndexStatus,
+	Project, ProjectConfig, ProjectWithProfiles,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -175,6 +175,20 @@ pub async fn get_git_file_patch(
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	super::run_blocking(move || {
 		service::project::get_file_patch(&folder, &path, staged)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_git_file_diff_sides(
+	profile_id: String,
+	path: String,
+	staged: bool,
+	state: State<'_, DbPool>,
+) -> Result<FileDiffSides, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::get_file_diff_sides(&folder, &path, staged)
 	})
 	.await
 }
