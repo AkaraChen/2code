@@ -27,6 +27,7 @@ import {
 	getGitIndexStatus,
 	gitInitRepo,
 	isGitRepo,
+	revertFileInCommit,
 	setGitIdentityCmd,
 	stageGitFiles,
 	stageGitHunk,
@@ -195,6 +196,34 @@ export function useCommitFileDiffSides(
 				mergedWith,
 			}),
 		staleTime: Number.POSITIVE_INFINITY,
+	});
+}
+
+export function useRevertFileInCommit(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: { commitHash: string; path: string }) =>
+			revertFileInCommit({ profileId, ...args }),
+		onSuccess: async () => {
+			// Index status, diff, and per-file patch all change after revert.
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-patch", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-file-diff-sides", profileId],
+				}),
+			]);
+		},
 	});
 }
 

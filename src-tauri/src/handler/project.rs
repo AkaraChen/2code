@@ -227,6 +227,20 @@ pub async fn get_commit_file_diff_sides(
 }
 
 #[tauri::command]
+pub async fn revert_file_in_commit(
+	profile_id: String,
+	commit_hash: String,
+	path: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || {
+		service::project::revert_file_in_commit(&folder, &commit_hash, &path)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn stage_git_files(
 	profile_id: String,
 	paths: Vec<String>,

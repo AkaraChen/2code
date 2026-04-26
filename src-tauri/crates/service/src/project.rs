@@ -175,6 +175,14 @@ pub fn get_commit_file_diff_sides(
 	infra::git::commit_file_diff_sides(folder, commit_hash, path, merged_with)
 }
 
+pub fn revert_file_in_commit(
+	folder: &str,
+	commit_hash: &str,
+	path: &str,
+) -> Result<(), AppError> {
+	infra::git::revert_file_in_commit(folder, commit_hash, path)
+}
+
 pub fn stage_files(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	infra::git::stage_files(folder, paths)
 }

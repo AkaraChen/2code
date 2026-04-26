@@ -70,6 +70,12 @@ export const getCommitFileDiffSides = (args: {
 	mergedWith: string | null;
 }) => invoke<FileDiffSides>("get_commit_file_diff_sides", args);
 
+export const revertFileInCommit = (args: {
+	profileId: string;
+	commitHash: string;
+	path: string;
+}) => invoke<void>("revert_file_in_commit", args);
+
 export const stageGitFiles = (args: {
 	profileId: string;
 	paths: string[];

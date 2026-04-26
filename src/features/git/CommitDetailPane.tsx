@@ -22,16 +22,23 @@ import {
 	Box,
 	Flex,
 	HStack,
+	Portal,
 	Spinner,
 	Stack,
 	Text,
 } from "@chakra-ui/react";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { FiRotateCcw } from "react-icons/fi";
 
 import MonacoSideBySideDiff from "./MonacoSideBySideDiff";
 import { parseCommitTabPath } from "./diffTabs";
-import { useCommitFileDiffSides, useCommitFiles, useGitLog } from "./hooks";
+import {
+	useCommitFileDiffSides,
+	useCommitFiles,
+	useGitLog,
+	useRevertFileInCommit,
+} from "./hooks";
 import type { GitChangeKind, IndexEntry } from "./changesTabBindings";
 import type { GitCommit } from "@/generated";
 
@@ -149,6 +156,7 @@ function CommitDetailInner({
 					<UnionFileList
 						profileId={profileId}
 						hashes={sorted}
+						newestHash={newest}
 						selectedFile={selectedFile}
 						onSelectFile={setSelectedFile}
 					/>
@@ -257,14 +265,29 @@ function CommitHeader({
 function UnionFileList({
 	profileId,
 	hashes,
+	newestHash,
 	selectedFile,
 	onSelectFile,
 }: {
 	profileId: string;
 	hashes: string[];
+	newestHash: string;
 	selectedFile: string | null;
 	onSelectFile: (path: string) => void;
 }) {
+	const revertFile = useRevertFileInCommit(profileId);
+	const [menuFor, setMenuFor] = useState<{
+		path: string;
+		x: number;
+		y: number;
+	} | null>(null);
+
+	const handleRevert = useCallback(
+		(path: string) => {
+			revertFile.mutate({ commitHash: newestHash, path });
+		},
+		[revertFile, newestHash],
+	);
 	// Each hash gets its own loader child so we don't violate the rules of
 	// hooks (which would happen if we map() over a useCommitFiles call). The
 	// children push results into a state map keyed by hash; we aggregate
@@ -367,6 +390,15 @@ function UnionFileList({
 							bg={selected ? "bg.muted" : "transparent"}
 							_hover={{ bg: selected ? "bg.muted" : "bg.subtle" }}
 							onClick={() => onSelectFile(entry.path)}
+							onContextMenu={(e) => {
+								e.preventDefault();
+								onSelectFile(entry.path);
+								setMenuFor({
+									path: entry.path,
+									x: e.clientX,
+									y: e.clientY,
+								});
+							}}
 						>
 							<KindBadge kind={entry.kind} />
 							<Text
@@ -391,7 +423,102 @@ function UnionFileList({
 		<>
 			{loaders}
 			{body}
+			{menuFor && (
+				<FileContextMenu
+					x={menuFor.x}
+					y={menuFor.y}
+					onClose={() => setMenuFor(null)}
+					onRevert={() => {
+						handleRevert(menuFor.path);
+						setMenuFor(null);
+					}}
+					reverting={revertFile.isPending}
+				/>
+			)}
 		</>
+	);
+}
+
+// Right-click menu for a file in the commit's file list. Currently exposes
+// "Revert this file's changes" — restores the file to its pre-commit state
+// in worktree + index. The user can then review and commit the revert
+// themselves (we don't auto-commit).
+function FileContextMenu({
+	x,
+	y,
+	onClose,
+	onRevert,
+	reverting,
+}: {
+	x: number;
+	y: number;
+	onClose: () => void;
+	onRevert: () => void;
+	reverting: boolean;
+}) {
+	return (
+		<Portal>
+			<div
+				style={{
+					position: "fixed",
+					inset: 0,
+					zIndex: 1000,
+				}}
+				onClick={onClose}
+				onContextMenu={(e) => {
+					e.preventDefault();
+					onClose();
+				}}
+			>
+				<div
+					style={{
+						position: "absolute",
+						left: x,
+						top: y,
+						background: "var(--chakra-colors-bg)",
+						border: "1px solid var(--chakra-colors-border-subtle)",
+						borderRadius: "6px",
+						boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
+						minWidth: "220px",
+						padding: "4px",
+					}}
+					onClick={(e) => e.stopPropagation()}
+				>
+					<button
+						type="button"
+						onClick={onRevert}
+						disabled={reverting}
+						style={{
+							display: "flex",
+							alignItems: "center",
+							gap: "8px",
+							width: "100%",
+							padding: "6px 10px",
+							border: 0,
+							background: "transparent",
+							color: reverting
+								? "var(--chakra-colors-fg-muted)"
+								: "inherit",
+							cursor: reverting ? "not-allowed" : "pointer",
+							fontSize: "13px",
+							borderRadius: "4px",
+							textAlign: "left",
+						}}
+						onMouseEnter={(e) => {
+							if (!reverting)
+								e.currentTarget.style.background =
+									"var(--chakra-colors-bg-subtle)";
+						}}
+						onMouseLeave={(e) => {
+							e.currentTarget.style.background = "transparent";
+						}}
+					>
+						<FiRotateCcw />
+						Revert this file's changes
+					</button>
+				</div>
+			</div>
+		</Portal>
 	);
 }
 

@@ -537,6 +537,60 @@ pub fn commit_file_diff_sides(
 	})
 }
 
+/// Revert one file's changes from a commit by checking out the file from
+/// the commit's parent. Restores the file to its pre-commit state in both
+/// the worktree and the index, so the user can review and commit the
+/// reverted version themselves.
+///
+/// For an added-by-commit file, the parent doesn't have it — we delete
+/// it from the worktree and index instead. For a deleted-by-commit file,
+/// the parent has it — checkout brings it back. For modified/renamed,
+/// checkout pulls the parent version.
+pub fn revert_file_in_commit(
+	folder: &str,
+	commit_hash: &str,
+	path: &str,
+) -> Result<(), AppError> {
+	validate_commit_hash(commit_hash)?;
+	let path = validate_repo_relative_path(path, "Revert path")?;
+
+	// Did the file exist in the parent? If not, this is an added-by-commit
+	// file and we should delete it instead of trying to checkout.
+	let parent_has = Command::new("git")
+		.args(["cat-file", "-e", &format!("{commit_hash}^:{path}")])
+		.current_dir(folder)
+		.output()?;
+
+	if !parent_has.status.success() {
+		// Parent doesn't have the file → commit added it → revert by removing.
+		// `git rm --quiet --cached --ignore-unmatch` clears index, then unlink
+		// from worktree. Use --ignore-unmatch so a missing index entry doesn't
+		// fail the whole op.
+		let _ = Command::new("git")
+			.args(["rm", "--quiet", "--cached", "--ignore-unmatch", "--", &path])
+			.current_dir(folder)
+			.output()?;
+		let abs = std::path::Path::new(folder).join(&path);
+		if abs.exists() {
+			std::fs::remove_file(&abs)?;
+		}
+		return Ok(());
+	}
+
+	let output = Command::new("git")
+		.args(["checkout", &format!("{commit_hash}^"), "--", &path])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!(
+			"git checkout failed: {stderr}"
+		)));
+	}
+	Ok(())
+}
+
 /// File list (with per-file change kind) for one commit. Used to populate
 /// the file explorer in the commit detail tab.
 ///
@@ -3046,6 +3100,115 @@ mod tests {
 		let dir = create_index_status_repo();
 		assert!(
 			commit_files(&dir.path().to_string_lossy(), "not-hex").is_err()
+		);
+	}
+
+	#[test]
+	fn revert_file_in_commit_restores_modified_file() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("a.txt"), "alpha v2\n").unwrap();
+		Command::new("git")
+			.args(["commit", "-am", "v2"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		// Pre-condition: worktree has v2 contents.
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+			"alpha v2\n"
+		);
+
+		revert_file_in_commit(
+			&dir.path().to_string_lossy(),
+			&head,
+			"a.txt",
+		)
+		.unwrap();
+
+		// After revert: worktree has the parent (v1) contents.
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+			"alpha\n"
+		);
+	}
+
+	#[test]
+	fn revert_file_in_commit_removes_added_file() {
+		let dir = create_index_status_repo();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		Command::new("git")
+			.args(["add", "c.txt"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["commit", "-m", "add c"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		assert!(dir.path().join("c.txt").exists());
+		revert_file_in_commit(
+			&dir.path().to_string_lossy(),
+			&head,
+			"c.txt",
+		)
+		.unwrap();
+		assert!(!dir.path().join("c.txt").exists());
+	}
+
+	#[test]
+	fn revert_file_in_commit_restores_deleted_file() {
+		let dir = create_index_status_repo();
+		std::fs::remove_file(dir.path().join("a.txt")).unwrap();
+		Command::new("git")
+			.args(["commit", "-am", "remove a"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = Command::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+
+		assert!(!dir.path().join("a.txt").exists());
+		revert_file_in_commit(
+			&dir.path().to_string_lossy(),
+			&head,
+			"a.txt",
+		)
+		.unwrap();
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+			"alpha\n"
+		);
+	}
+
+	#[test]
+	fn revert_file_in_commit_rejects_invalid_hash() {
+		let dir = create_index_status_repo();
+		assert!(
+			revert_file_in_commit(
+				&dir.path().to_string_lossy(),
+				"not-hex",
+				"a.txt"
+			)
+			.is_err()
 		);
 	}
 
