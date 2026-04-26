@@ -14,7 +14,7 @@ pub mod watcher;
 pub use backend::{default_backend, CliBackend, GitBackend, GixBackend};
 pub use branches::{
 	checkout_branch, create_branch, delete_branch, list_branches,
-	list_remotes, list_tags, rename_branch,
+	list_remote_branches, list_remotes, list_tags, rename_branch,
 };
 pub use cancel::{run_cancellable, CancelToken};
 pub use cli::*;

@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Persistent PTY (pseudo-terminal) sessions with scrollback restoration
 - SQLite database for project/session/profile storage
 - Project-level configuration (`2code.json`) for setup/teardown scripts
-- Git diff/commit history browsing
+- Full git client: dock-style panel with Changes / History / Branches / Stash tabs, hunk/line staging, virtualized commit graph with lane assignment, history-rewrite engine (reword / squash / drop / bulk identity), Monaco-powered diff + 3-way merge resolver, and remote ops (fetch / pull / push-with-lease / merge / rebase / rename-on-remote / delete-on-remote)
 - i18n support via Paraglide.js (English + Chinese)
 
 ## Commands
@@ -59,7 +59,7 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, `useProjectProfiles`, etc.) and dialogs (Create/Delete/Rename)
 - `features/profiles/` — Profile hooks (`useCreateProfile`, `useDeleteProfile`) and dialogs
 - `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
-- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger), and components (ChangesFileList, CommitList, GitDiffPane, HistoryFileList)
+- `features/git/` — Full git client: `GitPanel` (dock with Changes / History / Branches / Stash tabs), virtualized `GraphLogTab` + `GraphCanvas`, `BranchesTab` with shared local+remote context menu, hunk/line staging in `MonacoFileDiff`, 3-way `MergeResolverPane`, history-rewrite dialogs (`EditMessageDialog`, `SquashDialog`, `EditAuthorDialog`), `InProgressBanner`, `InitRepoFlow`, `ProjectTopBar` (branch indicator). See `src/features/git/CLAUDE.md` for the full file map
 - `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/terminalSettingsStore`, `stores/themeStore`, `stores/notificationStore`)
 - `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
 - `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
@@ -89,7 +89,7 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
 2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
 3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
+4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git/` (split submodule: `cli.rs` for shell-out writes, `gix.rs` for `gitoxide` reads, `branches.rs`, `graph.rs`, `stash.rs`, `inprogress.rs`, `rewrite.rs`, `identity.rs`, `cancel.rs`, `audit.rs`, `watcher.rs` — see `crates/infra/CLAUDE.md`), `pty.rs` (PTY session lifecycle), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
@@ -134,7 +134,11 @@ Terminals never unmount — tab switches and route changes use CSS `display: non
 
 ### Context ID Resolution
 
-Git operations (`get_git_diff`, `get_git_log`, `get_commit_diff`) accept a `contextId` parameter that can be either a project ID or a profile ID. The backend resolves this polymorphically via `repo::project::resolve_context_folder()`: profile ID → profile's worktree path; project ID → project's folder. This lets git operations work seamlessly with both regular project folders and profile worktrees.
+Git operations accept a `profileId` parameter that resolves polymorphically via `repo::project::resolve_context_folder()`: profile ID → profile's worktree path; project ID → project's folder. This lets git operations work seamlessly with both regular project folders and profile worktrees, and the frontend never needs to branch on which kind it has.
+
+### Git Backend (gix + CLI hybrid)
+
+Reads use `gix` (gitoxide) where it's stable enough; writes shell out to the `git` CLI (committing, rebasing, fetching, pushing, merging, etc.). The `GitBackend` trait in `infra::git::backend` dispatches between them. Cancellable long-running ops use `Arc<AtomicBool>` tokens registered under an `op_id` — frontend calls `cancel_git_operation(op_id)` to abort. The `.git/` watcher (`infra::git::watcher`) emits Tauri events that the frontend (`useGitStateSubscription`) turns into TanStack query invalidations, so the UI stays consistent without polling.
 
 ### Profile System (Git Worktrees)
 
@@ -206,3 +210,6 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
 - **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
 - **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too
+- **gix is pinned to 0.82** with `default-features = false` + explicit `sha1` feature — without `sha1`, `gix-hash`'s `Kind` enum has zero variants and matches become non-exhaustive on rustc ≥ 1.94. In gix 0.82 `SignatureRef::time` is `&str` (raw header) — call `.time()?.seconds` to parse, not `.time.seconds`
+- **Cancellable git ops**: every long-running git op (`fetch`, `pull`, `push_*`, `merge_ref`, `rebase_onto`, `delete_remote_branch`, `rename_remote_branch`) takes an `op_id` and a `CancelToken`. Frontend generates op_ids via `newOpId()` in `src/features/git/hooks.ts` and can abort with `cancelGitOperation`. Don't add a long-running git op without this — UI hangs with no way out
+- **Git arg validation**: `infra::git::cli` and `branches.rs` each have validators (`validate_branch_name`, `validate_commit_hash`, `validate_remote_token`, `validate_revspec`). Add a validator for any new argument-position string passed to `git` — handlers receive raw strings from JS

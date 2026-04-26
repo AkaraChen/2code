@@ -145,6 +145,16 @@ export interface RemoteInfo {
 	url: string;
 }
 
+export interface RemoteBranchInfo {
+	remote: string;
+	branch: string;
+	name: string;
+	full_ref: string;
+	last_commit_hash: string;
+	last_commit_subject: string;
+	last_commit_date: string;
+}
+
 export interface TagInfo {
 	name: string;
 	target_hash: string;
@@ -157,6 +167,9 @@ export const listGitBranches = (args: { profileId: string }) =>
 
 export const listGitRemotes = (args: { profileId: string }) =>
 	invoke<RemoteInfo[]>("list_git_remotes", args);
+
+export const listGitRemoteBranches = (args: { profileId: string }) =>
+	invoke<RemoteBranchInfo[]>("list_git_remote_branches", args);
 
 export const listGitTags = (args: { profileId: string }) =>
 	invoke<TagInfo[]>("list_git_tags", args);
@@ -203,6 +216,33 @@ export const gitPushWithLease = (args: {
 	opId: string;
 	forceRaw: boolean;
 }) => invoke<void>("git_push_with_lease", args);
+
+export const gitMergeRef = (args: {
+	profileId: string;
+	opId: string;
+	target: string;
+}) => invoke<void>("git_merge_ref", args);
+
+export const gitRebaseOnto = (args: {
+	profileId: string;
+	opId: string;
+	target: string;
+}) => invoke<void>("git_rebase_onto", args);
+
+export const gitDeleteRemoteBranch = (args: {
+	profileId: string;
+	opId: string;
+	remote: string;
+	branch: string;
+}) => invoke<void>("git_delete_remote_branch", args);
+
+export const gitRenameRemoteBranch = (args: {
+	profileId: string;
+	opId: string;
+	remote: string;
+	oldBranch: string;
+	newBranch: string;
+}) => invoke<void>("git_rename_remote_branch", args);
 
 export const cancelGitOperation = (args: { opId: string }) =>
 	invoke<void>("cancel_git_operation", args);

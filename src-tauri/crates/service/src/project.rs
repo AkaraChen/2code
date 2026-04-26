@@ -8,7 +8,7 @@ use model::error::AppError;
 use model::project::{
 	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
 	GraphRow, IndexEntry, IndexStatus, LogFilter, Project,
-	ProjectWithProfiles, RemoteInfo, StashEntry, TagInfo,
+	ProjectWithProfiles, RemoteBranchInfo, RemoteInfo, StashEntry, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -201,6 +201,12 @@ pub fn list_remotes(folder: &str) -> Result<Vec<RemoteInfo>, AppError> {
 	infra::git::list_remotes(folder)
 }
 
+pub fn list_remote_branches(
+	folder: &str,
+) -> Result<Vec<RemoteBranchInfo>, AppError> {
+	infra::git::list_remote_branches(folder)
+}
+
 pub fn list_tags(folder: &str) -> Result<Vec<TagInfo>, AppError> {
 	infra::git::list_tags(folder)
 }
@@ -255,6 +261,41 @@ pub fn push_with_lease(
 	token: &infra::git::CancelToken,
 ) -> Result<(), AppError> {
 	infra::git::push_with_lease(folder, force_raw, token)
+}
+
+pub fn merge_ref(
+	folder: &str,
+	target: &str,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::merge_ref(folder, target, token)
+}
+
+pub fn rebase_onto(
+	folder: &str,
+	target: &str,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::rebase_onto(folder, target, token)
+}
+
+pub fn delete_remote_branch(
+	folder: &str,
+	remote: &str,
+	branch: &str,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::delete_remote_branch(folder, remote, branch, token)
+}
+
+pub fn rename_remote_branch(
+	folder: &str,
+	remote: &str,
+	old_branch: &str,
+	new_branch: &str,
+	token: &infra::git::CancelToken,
+) -> Result<(), AppError> {
+	infra::git::rename_remote_branch(folder, remote, old_branch, new_branch, token)
 }
 
 pub fn stash_list(folder: &str) -> Result<Vec<StashEntry>, AppError> {

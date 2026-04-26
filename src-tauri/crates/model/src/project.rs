@@ -126,6 +126,21 @@ pub struct RemoteInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RemoteBranchInfo {
+	/// Remote name parsed from the ref, e.g. "origin".
+	pub remote: String,
+	/// Branch name on the remote, e.g. "feat/auth/login" (the part after
+	/// "refs/remotes/<remote>/").
+	pub branch: String,
+	/// Display name including the remote prefix, e.g. "origin/feat/auth/login".
+	pub name: String,
+	pub full_ref: String,
+	pub last_commit_hash: String,
+	pub last_commit_subject: String,
+	pub last_commit_date: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TagInfo {
 	/// Tag name without the refs/tags/ prefix.
 	pub name: String,

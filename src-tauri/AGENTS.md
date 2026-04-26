@@ -1,7 +1,5 @@
 # AGENTS.md — src-tauri
 
-**Generated:** 2026-04-09 | **Commit:** 93661da
-
 ## OVERVIEW
 Rust Cargo workspace. Tauri 2 application binary + 4 domain crates + 1 sidecar binary. Layered architecture: handler → service → repo → infra.
 
@@ -13,37 +11,40 @@ src-tauri/
 │   ├── main.rs         # Binary entry (DO NOT REMOVE windows_subsystem attribute)
 │   ├── bridge.rs       # Trait impls (TauriPtyEmitter, TauriWatchSender) — decouples service from Tauri
 │   ├── helper.rs       # Sidecar port/path state management
-│   └── handler/        # #[tauri::command] entry points — 8 files, thin delegation only
+│   └── handler/        # #[tauri::command] entry points — thin delegation
 ├── crates/
-│   ├── infra/          # DB, PTY, git, shell init, watcher, logger, slug, helper (Axum)
-│   ├── service/        # Business logic: project, profile, pty, watcher, debug
+│   ├── infra/          # DB, PTY, git/, shell init, watcher, logger, slug, helper (Axum)
+│   ├── service/        # Business logic: project, profile, pty, watcher, filesystem
 │   ├── repo/           # Diesel CRUD: project, profile, pty
-│   └── model/          # Diesel models, DTOs, error types, schema
+│   └── model/          # Diesel models, DTOs, error types, schema, git_error, rewrite
 ├── bins/
 │   └── 2code-helper/   # CLI sidecar — PTY notification endpoint
 ├── migrations/         # Diesel SQL migrations (embedded via embed_migrations!())
-├── tests/              # Integration tests: git, project, pty_db (4 files)
+├── tests/              # Integration tests
 └── capabilities/       # Tauri plugin permission definitions
 ```
 
 ## MANAGED STATE (passed to handlers)
-- `Arc<Mutex<SqliteConnection>>` — single DB connection; acquire/release fast
+- `DbPool = Arc<Mutex<SqliteConnection>>` — single DB connection; acquire/release fast (use the resolve-then-drop pattern)
 - `Arc<Mutex<HashMap<String, PtySession>>>` — active PTY sessions map
+- `GitCancelTokens = Arc<Mutex<HashMap<String, CancelToken>>>` — keyed by `op_id` for cancellable git operations
+- `GitWatchers` — live `.git/` watchers keyed by profile_id
 - `AppHandle` — Tauri app handle for events and window management
 
-## COMMANDS EXPOSED (handler/mod.rs)
-PTY (9): `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`, `flush_pty_output`, `restore_pty_session`
+## COMMAND CATEGORIES
 
-Projects (7): `create_project_temporary`, `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config`
-
-Git (5): `get_git_branch`, `get_git_diff`, `get_git_diff_stats`, `get_git_log`, `get_commit_diff`
-
-System (7): `list_system_fonts`, `list_system_sounds`, `play_system_sound`, `create_profile`, `delete_profile`, `watch_projects`, `start_debug_log`, `stop_debug_log`
+The `tauri::generate_handler![]` block in `lib.rs` registers ~90 commands across:
+- **PTY**: 9 commands for session lifecycle, I/O, restore
+- **Projects**: 7 commands for CRUD + config
+- **Git**: ~50 commands. See `src/handler/CLAUDE.md` for the full breakdown — split into reads, non-cancellable writes, and cancellable writes (which take an `op_id` for `cancel_git_operation`)
+- **Filesystem**: file search and read for the file viewer
+- **System**: fonts, sounds, profile create/delete, watcher, debug logging, topbar
 
 ## ADDING A COMMAND
-1. Implement in `handler/*.rs` — thin: extract state, acquire lock, call service
-2. Register in `lib.rs` via `tauri::generate_handler![]`
-3. `cargo tauri-typegen generate` → regenerates `src/generated/`
+1. Implement in `handler/*.rs` — thin: extract state, resolve folder/IDs, drop the DB lock, call service inside `run_blocking` (or `run_cancellable_op` for long-running ops)
+2. Add a service-layer passthrough if needed
+3. Register in `lib.rs` via `tauri::generate_handler![]`
+4. `cargo tauri-typegen generate` → regenerates `src/generated/` (until typegen output is the source of truth, the git layer hand-writes bindings in `src/features/git/changesTabBindings.ts`)
 
 ## TEST PATTERN
 ```rust
@@ -56,8 +57,16 @@ fn setup_db() -> SqliteConnection {
 ```
 Tests colocated in `#[cfg(test)]` modules. Integration tests in `tests/`.
 
+For git tests that need a real repository, see helpers in `crates/infra/src/git/cli.rs::tests` (`create_index_status_repo`, `make_bare_remote`, `clone_with_remote_branches`).
+
+## KEY DEPENDENCY NOTES
+- **gix 0.82** — pinned with `default-features = false` + explicit `sha1` feature in `crates/infra/Cargo.toml`. Without `sha1`, `gix-hash`'s `Kind` enum has zero variants and matches become non-exhaustive on rustc ≥ 1.94.
+- **`SignatureRef::time` is `&str`** (raw header) in gix 0.82 — call `.time()?.seconds` to parse, not `.time.seconds`.
+
 ## ANTI-PATTERNS
 - Business logic in handlers — delegate to service layer
-- Long-held `Mutex` locks across async operations — causes deadlocks
+- Long-held `Mutex` locks across async operations — causes deadlocks; use resolve-then-drop
+- Long-running git ops without a cancel token — UI hangs with no way out
 - Editing `src/schema.rs` manually — Diesel generated
 - Font/sound APIs without `#[cfg(target_os = "macos")]` guard
+- Skipping arg validation when adding a git CLI shell-out — see the validators in `infra::git::cli` (`validate_branch_name`, `validate_commit_hash`, `validate_remote_token`, `validate_revspec`)

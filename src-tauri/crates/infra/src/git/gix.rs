@@ -138,8 +138,9 @@ pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 		let hash = full_hash.chars().take(7).collect::<String>();
 		let author = commit.author().map_err(to_app_err)?;
 
-		let date_seconds = author.time.seconds;
-		let offset_seconds = author.time.offset;
+		let parsed_time = author.time().map_err(to_app_err)?;
+		let date_seconds = parsed_time.seconds;
+		let offset_seconds = parsed_time.offset;
 		let date = format_iso8601(date_seconds, offset_seconds);
 
 		let message_full = commit.message_raw().map_err(to_app_err)?.to_string();

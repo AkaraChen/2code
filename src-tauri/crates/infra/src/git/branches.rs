@@ -11,7 +11,7 @@
 use std::process::Command;
 
 use model::error::AppError;
-use model::project::{BranchInfo, RemoteInfo, TagInfo};
+use model::project::{BranchInfo, RemoteBranchInfo, RemoteInfo, TagInfo};
 
 const FIELD_SEP: &str = "\x1e";
 const RECORD_SEP: &str = "\x1f";
@@ -273,6 +273,79 @@ pub fn list_remotes(folder: &str) -> Result<Vec<RemoteInfo>, AppError> {
 	Ok(remotes)
 }
 
+/// List remote-tracking branches under refs/remotes/. Skips the "<remote>/HEAD"
+/// symref entries — those are pointers, not branches the user thinks of as
+/// distinct rows.
+pub fn list_remote_branches(folder: &str) -> Result<Vec<RemoteBranchInfo>, AppError> {
+	let format = format!(
+		concat!(
+			"%(refname)", "{f}",
+			"%(refname:short)", "{f}",
+			"%(symref)", "{f}",
+			"%(objectname)", "{f}",
+			"%(contents:subject)", "{f}",
+			"%(committerdate:iso8601-strict)",
+			"{r}",
+		),
+		f = FIELD_SEP,
+		r = RECORD_SEP,
+	);
+
+	let output = Command::new("git")
+		.args([
+			"for-each-ref",
+			&format!("--format={format}"),
+			"refs/remotes",
+		])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+
+	let stdout = String::from_utf8_lossy(&output.stdout);
+	let mut out = Vec::new();
+	for record in stdout.split(RECORD_SEP) {
+		let record = record.trim_start_matches('\n');
+		if record.is_empty() {
+			continue;
+		}
+		let mut fields = record.split(FIELD_SEP);
+		let full_ref = fields.next().unwrap_or("").to_string();
+		let short = fields.next().unwrap_or("").to_string();
+		let symref = fields.next().unwrap_or("");
+		let last_commit_hash = fields.next().unwrap_or("").to_string();
+		let last_commit_subject = fields.next().unwrap_or("").to_string();
+		let last_commit_date = fields.next().unwrap_or("").to_string();
+
+		// Skip the "<remote>/HEAD → <remote>/main" symref pointers.
+		if !symref.is_empty() {
+			continue;
+		}
+		if short.is_empty() {
+			continue;
+		}
+		// short is "<remote>/<branch>"; split at the first slash.
+		let Some((remote, branch)) = short.split_once('/') else {
+			continue;
+		};
+
+		out.push(RemoteBranchInfo {
+			remote: remote.to_string(),
+			branch: branch.to_string(),
+			name: short.clone(),
+			full_ref,
+			last_commit_hash,
+			last_commit_subject,
+			last_commit_date,
+		});
+	}
+
+	Ok(out)
+}
+
 pub fn list_tags(folder: &str) -> Result<Vec<TagInfo>, AppError> {
 	// %(*objectname) is the dereferenced commit hash for annotated tags;
 	// for lightweight tags it's empty so %(objectname) (the commit itself)
@@ -422,6 +495,71 @@ mod tests {
 			remotes.iter().map(|r| (r.name.as_str(), r.url.as_str())).collect();
 		assert_eq!(by_name.get("origin"), Some(&"https://example.com/r.git"));
 		assert_eq!(by_name.get("upstream"), Some(&"git@example.com:r.git"));
+	}
+
+	#[test]
+	fn list_remote_branches_returns_refs_under_refs_remotes() {
+		let dir = init_repo();
+		// Simulate a fetched remote by hand-rolling the refs. Avoids needing
+		// an actual remote during the test.
+		let git_dir = dir.path().join(".git").join("refs").join("remotes")
+			.join("origin");
+		std::fs::create_dir_all(&git_dir).unwrap();
+		// Get HEAD's commit hash.
+		let head = Cmd::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let hash = String::from_utf8(head.stdout).unwrap().trim().to_string();
+		std::fs::write(git_dir.join("main"), format!("{hash}\n")).unwrap();
+		std::fs::write(git_dir.join("HEAD"), "ref: refs/remotes/origin/main\n")
+			.unwrap();
+
+		let branches =
+			list_remote_branches(&dir.path().to_string_lossy()).unwrap();
+		// Should see "origin/main" but NOT the "origin/HEAD" symref entry.
+		assert_eq!(branches.len(), 1);
+		assert_eq!(branches[0].remote, "origin");
+		assert_eq!(branches[0].branch, "main");
+		assert_eq!(branches[0].name, "origin/main");
+		assert_eq!(branches[0].last_commit_hash, hash);
+	}
+
+	#[test]
+	fn list_remote_branches_handles_slash_in_branch_name() {
+		let dir = init_repo();
+		let head = Cmd::new("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		let hash = String::from_utf8(head.stdout).unwrap().trim().to_string();
+		let dir_remote = dir
+			.path()
+			.join(".git")
+			.join("refs")
+			.join("remotes")
+			.join("origin")
+			.join("feat")
+			.join("auth");
+		std::fs::create_dir_all(&dir_remote).unwrap();
+		std::fs::write(dir_remote.join("login"), format!("{hash}\n")).unwrap();
+
+		let branches =
+			list_remote_branches(&dir.path().to_string_lossy()).unwrap();
+		assert_eq!(branches.len(), 1);
+		assert_eq!(branches[0].remote, "origin");
+		assert_eq!(branches[0].branch, "feat/auth/login");
+		assert_eq!(branches[0].name, "origin/feat/auth/login");
+	}
+
+	#[test]
+	fn list_remote_branches_returns_empty_with_no_remotes() {
+		let dir = init_repo();
+		let branches =
+			list_remote_branches(&dir.path().to_string_lossy()).unwrap();
+		assert!(branches.is_empty());
 	}
 
 	#[test]

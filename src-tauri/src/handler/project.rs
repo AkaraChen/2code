@@ -12,7 +12,7 @@ use model::error::AppError;
 use model::project::{
 	BranchInfo, FileDiffSides, GitBinaryPreview, GitCommit, GitDiffStats,
 	GraphRow, IndexEntry, IndexStatus, LogFilter, Project, ProjectConfig,
-	ProjectWithProfiles, RemoteInfo, StashEntry, TagInfo,
+	ProjectWithProfiles, RemoteBranchInfo, RemoteInfo, StashEntry, TagInfo,
 };
 use model::rewrite::{RewriteOutcome, RewritePlan};
 
@@ -271,6 +271,16 @@ pub async fn list_git_remotes(
 }
 
 #[tauri::command]
+pub async fn list_git_remote_branches(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<RemoteBranchInfo>, AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	super::run_blocking(move || service::project::list_remote_branches(&folder))
+		.await
+}
+
+#[tauri::command]
 pub async fn list_git_tags(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -419,6 +429,75 @@ pub async fn git_push_with_lease(
 	let folder = resolve_folder(state.inner(), profile_id).await?;
 	run_cancellable_op(op_id, tokens.inner(), move |token| {
 		service::project::push_with_lease(&folder, force_raw, &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_merge_ref(
+	profile_id: String,
+	op_id: String,
+	target: String,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::merge_ref(&folder, &target, &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_rebase_onto(
+	profile_id: String,
+	op_id: String,
+	target: String,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::rebase_onto(&folder, &target, &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_delete_remote_branch(
+	profile_id: String,
+	op_id: String,
+	remote: String,
+	branch: String,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::delete_remote_branch(&folder, &remote, &branch, &token)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn git_rename_remote_branch(
+	profile_id: String,
+	op_id: String,
+	remote: String,
+	old_branch: String,
+	new_branch: String,
+	state: State<'_, DbPool>,
+	tokens: State<'_, GitCancelTokens>,
+) -> Result<(), AppError> {
+	let folder = resolve_folder(state.inner(), profile_id).await?;
+	run_cancellable_op(op_id, tokens.inner(), move |token| {
+		service::project::rename_remote_branch(
+			&folder,
+			&remote,
+			&old_branch,
+			&new_branch,
+			&token,
+		)
 	})
 	.await
 }

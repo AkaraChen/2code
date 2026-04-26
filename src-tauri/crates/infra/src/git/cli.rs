@@ -1230,6 +1230,153 @@ pub enum PullMode {
 	FastForwardOnly,
 }
 
+/// `git merge <ref>` — merges the named ref (commit, branch, remote-tracking
+/// ref, etc.) into the current branch. Conflicts are surfaced as a normal
+/// error here; the InProgressBanner picks up the .git/MERGE_HEAD state
+/// independently, so the UI flow is identical to a CLI conflict.
+pub fn merge_ref(
+	folder: &str,
+	target: &str,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	validate_revspec(target)?;
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder).args(["merge", "--no-edit", target]);
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
+/// `git rebase <ref>` — rebases the current branch onto the named ref.
+/// Conflicts surface via .git/rebase-merge — InProgressBanner handles it.
+pub fn rebase_onto(
+	folder: &str,
+	target: &str,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	validate_revspec(target)?;
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder).args(["rebase", target]);
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
+/// `git push <remote> --delete <branch>` — deletes a branch on the remote.
+/// Network op, cancellable. Caller is responsible for confirming intent.
+pub fn delete_remote_branch(
+	folder: &str,
+	remote: &str,
+	branch: &str,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	validate_remote_token(remote)?;
+	validate_remote_token(branch)?;
+	let mut cmd = Command::new("git");
+	cmd.current_dir(folder)
+		.args(["push", remote, "--delete", branch]);
+	let output = super::cancel::run_cancellable(cmd, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(stderr));
+	}
+	Ok(())
+}
+
+/// Rename a branch on the remote. Git has no first-class rename op for remote
+/// refs, so we push the new name (`<remote> <old>:<new>`) and then delete the
+/// old name. If the second push fails the new ref is left in place — which is
+/// the safer state of the two ("both branches exist" is recoverable, "only
+/// the new one exists but the second push raced and failed" would lose work
+/// if we'd deleted first). Cancellable.
+pub fn rename_remote_branch(
+	folder: &str,
+	remote: &str,
+	old_branch: &str,
+	new_branch: &str,
+	token: &super::cancel::CancelToken,
+) -> Result<(), AppError> {
+	validate_remote_token(remote)?;
+	validate_remote_token(old_branch)?;
+	validate_remote_token(new_branch)?;
+	if old_branch == new_branch {
+		return Err(AppError::GitError(
+			"new branch name must differ from the old name".into(),
+		));
+	}
+
+	// Step 1: push old → new, creating the new remote ref.
+	let mut push_new = Command::new("git");
+	push_new.current_dir(folder).args([
+		"push",
+		remote,
+		&format!("refs/remotes/{remote}/{old_branch}:refs/heads/{new_branch}"),
+	]);
+	let output = super::cancel::run_cancellable(push_new, token)?;
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		return Err(AppError::GitError(format!(
+			"failed to create new remote branch: {stderr}"
+		)));
+	}
+
+	// Step 2: delete the old name. If this fails, both refs exist and the
+	// user can clean up via Delete… on the old one.
+	delete_remote_branch(folder, remote, old_branch, token).map_err(|e| {
+		AppError::GitError(format!(
+			"new branch '{new_branch}' was created on '{remote}', but \
+			 deleting the old name '{old_branch}' failed: {e}. Delete it \
+			 manually with the Delete… action.",
+			e = match e {
+				AppError::GitError(s) => s,
+				other => other.to_string(),
+			},
+		))
+	})
+}
+
+/// Loose validation for arg-position tokens passed to git (remote, branch).
+/// Same defenses as branch validation but lives here to avoid pulling in
+/// the branches.rs validators (which are private).
+fn validate_remote_token(token: &str) -> Result<(), AppError> {
+	let t = token.trim();
+	if t.is_empty() {
+		return Err(AppError::GitError("name cannot be empty".into()));
+	}
+	if t.starts_with('-') {
+		return Err(AppError::GitError("name cannot start with '-'".into()));
+	}
+	if t.contains('\0') || t.contains('\n') || t.contains(':') {
+		return Err(AppError::GitError(
+			"name contains invalid characters".into(),
+		));
+	}
+	Ok(())
+}
+
+/// Loose validation for a refspec/commit-ish argument (e.g. "origin/main",
+/// "abc1234", "refs/heads/foo"). Allows '/' (refs use it) but rejects
+/// dash-prefixed names and embedded NUL/newline.
+fn validate_revspec(rs: &str) -> Result<(), AppError> {
+	let t = rs.trim();
+	if t.is_empty() {
+		return Err(AppError::GitError("ref cannot be empty".into()));
+	}
+	if t.starts_with('-') {
+		return Err(AppError::GitError("ref cannot start with '-'".into()));
+	}
+	if t.contains('\0') || t.contains('\n') {
+		return Err(AppError::GitError("ref contains invalid characters".into()));
+	}
+	Ok(())
+}
+
 /// `git pull` with the user-chosen merge strategy. Cancellable.
 pub fn pull(
 	folder: &str,
@@ -3429,5 +3576,184 @@ mod tests {
 		)
 		.unwrap();
 		assert!(patch.is_empty(), "no diff for unchanged file");
+	}
+
+	// --- merge_ref / rebase_onto / delete_remote_branch / rename_remote_branch ---
+
+	fn current_branch_name(folder: &str) -> String {
+		let out = Command::new("git")
+			.args(["rev-parse", "--abbrev-ref", "HEAD"])
+			.current_dir(folder)
+			.output()
+			.unwrap();
+		String::from_utf8(out.stdout).unwrap().trim().to_string()
+	}
+
+	#[test]
+	fn merge_ref_fast_forwards_clean_branch() {
+		let dir = create_index_status_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		let initial = current_branch_name(&folder);
+		// Create a feature branch with one extra commit, then return to
+		// the initial branch and merge — should fast-forward.
+		Command::new("git")
+			.args(["checkout", "-b", "feat"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		std::fs::write(dir.path().join("c.txt"), "charlie\n").unwrap();
+		Command::new("git").args(["add", "c.txt"]).current_dir(dir.path()).output().unwrap();
+		Command::new("git").args(["commit", "-m", "feat"]).current_dir(dir.path()).output().unwrap();
+		Command::new("git").args(["checkout", &initial]).current_dir(dir.path()).output().unwrap();
+
+		let token = super::super::cancel::CancelToken::new();
+		merge_ref(&folder, "feat", &token).unwrap();
+		assert!(dir.path().join("c.txt").exists(), "fast-forwarded file should be present");
+	}
+
+	#[test]
+	fn rebase_onto_replays_commits() {
+		let dir = create_index_status_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		let initial = current_branch_name(&folder);
+		// Branch off, add one commit on initial branch, switch to feat,
+		// add another commit, then rebase feat onto initial.
+		Command::new("git")
+			.args(["checkout", "-b", "feat"])
+			.current_dir(dir.path())
+			.output()
+			.unwrap();
+		Command::new("git").args(["checkout", &initial]).current_dir(dir.path()).output().unwrap();
+		std::fs::write(dir.path().join("d.txt"), "delta\n").unwrap();
+		Command::new("git").args(["add", "d.txt"]).current_dir(dir.path()).output().unwrap();
+		Command::new("git").args(["commit", "-m", "delta"]).current_dir(dir.path()).output().unwrap();
+		Command::new("git").args(["checkout", "feat"]).current_dir(dir.path()).output().unwrap();
+		std::fs::write(dir.path().join("e.txt"), "echo\n").unwrap();
+		Command::new("git").args(["add", "e.txt"]).current_dir(dir.path()).output().unwrap();
+		Command::new("git").args(["commit", "-m", "echo"]).current_dir(dir.path()).output().unwrap();
+
+		let token = super::super::cancel::CancelToken::new();
+		rebase_onto(&folder, &initial, &token).unwrap();
+		// After rebase, both d.txt (from initial) and e.txt (from feat) are present.
+		assert!(dir.path().join("d.txt").exists());
+		assert!(dir.path().join("e.txt").exists());
+	}
+
+	fn make_bare_remote() -> tempfile::TempDir {
+		let bare = tempfile::tempdir().unwrap();
+		Command::new("git")
+			.args(["init", "--bare"])
+			.current_dir(bare.path())
+			.output()
+			.unwrap();
+		bare
+	}
+
+	fn clone_with_remote_branches(
+		bare: &tempfile::TempDir,
+		branches: &[&str],
+	) -> tempfile::TempDir {
+		// Working clone, seed it, push each requested branch.
+		let work = tempfile::tempdir().unwrap();
+		Command::new("git")
+			.args(["clone", &bare.path().to_string_lossy(), "."])
+			.current_dir(work.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["config", "user.email", "test@test.com"])
+			.current_dir(work.path())
+			.output()
+			.unwrap();
+		Command::new("git")
+			.args(["config", "user.name", "Test"])
+			.current_dir(work.path())
+			.output()
+			.unwrap();
+		std::fs::write(work.path().join("a.txt"), "a\n").unwrap();
+		Command::new("git").args(["add", "a.txt"]).current_dir(work.path()).output().unwrap();
+		Command::new("git").args(["commit", "-m", "init"]).current_dir(work.path()).output().unwrap();
+		// Force the initial branch name we'll push as.
+		Command::new("git").args(["branch", "-M", branches[0]]).current_dir(work.path()).output().unwrap();
+		Command::new("git").args(["push", "-u", "origin", branches[0]]).current_dir(work.path()).output().unwrap();
+		for b in &branches[1..] {
+			Command::new("git").args(["checkout", "-b", b]).current_dir(work.path()).output().unwrap();
+			Command::new("git").args(["push", "-u", "origin", b]).current_dir(work.path()).output().unwrap();
+		}
+		// Switch back to the first branch so subsequent operations (delete,
+		// rename) don't try to mutate the currently-checked-out branch.
+		Command::new("git").args(["checkout", branches[0]]).current_dir(work.path()).output().unwrap();
+		Command::new("git").args(["fetch", "--prune"]).current_dir(work.path()).output().unwrap();
+		work
+	}
+
+	#[test]
+	fn delete_remote_branch_removes_ref_on_remote() {
+		let bare = make_bare_remote();
+		let work = clone_with_remote_branches(&bare, &["main", "to-delete"]);
+		let folder = work.path().to_string_lossy().to_string();
+		let token = super::super::cancel::CancelToken::new();
+
+		delete_remote_branch(&folder, "origin", "to-delete", &token).unwrap();
+
+		// Re-fetch and verify the remote ref no longer exists.
+		Command::new("git").args(["fetch", "--prune"]).current_dir(work.path()).output().unwrap();
+		let out = Command::new("git")
+			.args(["branch", "-r"])
+			.current_dir(work.path())
+			.output()
+			.unwrap();
+		let s = String::from_utf8_lossy(&out.stdout);
+		assert!(!s.contains("origin/to-delete"), "deleted ref should be gone from `git branch -r`: {s}");
+	}
+
+	#[test]
+	fn rename_remote_branch_pushes_new_then_drops_old() {
+		let bare = make_bare_remote();
+		let work = clone_with_remote_branches(&bare, &["main", "old-name"]);
+		let folder = work.path().to_string_lossy().to_string();
+		let token = super::super::cancel::CancelToken::new();
+
+		rename_remote_branch(&folder, "origin", "old-name", "new-name", &token)
+			.unwrap();
+
+		Command::new("git").args(["fetch", "--prune"]).current_dir(work.path()).output().unwrap();
+		let out = Command::new("git")
+			.args(["branch", "-r"])
+			.current_dir(work.path())
+			.output()
+			.unwrap();
+		let s = String::from_utf8_lossy(&out.stdout);
+		assert!(s.contains("origin/new-name"), "new ref should exist: {s}");
+		assert!(!s.contains("origin/old-name"), "old ref should be gone: {s}");
+	}
+
+	#[test]
+	fn rename_remote_branch_rejects_same_name() {
+		let bare = make_bare_remote();
+		let work = clone_with_remote_branches(&bare, &["main"]);
+		let folder = work.path().to_string_lossy().to_string();
+		let token = super::super::cancel::CancelToken::new();
+		assert!(
+			rename_remote_branch(&folder, "origin", "main", "main", &token)
+				.is_err()
+		);
+	}
+
+	#[test]
+	fn validate_remote_token_rejects_dash_and_colon() {
+		assert!(validate_remote_token("-rf").is_err());
+		assert!(validate_remote_token("foo:bar").is_err());
+		assert!(validate_remote_token("").is_err());
+		assert!(validate_remote_token("origin").is_ok());
+		assert!(validate_remote_token("feat/auth").is_ok());
+	}
+
+	#[test]
+	fn validate_revspec_allows_slash_rejects_dash() {
+		assert!(validate_revspec("origin/main").is_ok());
+		assert!(validate_revspec("abc1234").is_ok());
+		assert!(validate_revspec("--all").is_err());
+		assert!(validate_revspec("").is_err());
 	}
 }

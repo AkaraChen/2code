@@ -34,16 +34,21 @@ import {
 	getGitIdentity,
 	getGitIndexStatus,
 	getInProgressOp,
+	gitDeleteRemoteBranch,
 	gitFetch,
 	gitInitRepo,
+	gitMergeRef,
 	gitPull,
 	gitPushWithLease,
+	gitRebaseOnto,
+	gitRenameRemoteBranch,
 	gitStashApply,
 	gitStashDrop,
 	gitStashPop,
 	gitStashPush,
 	isGitRepo,
 	listGitBranches,
+	listGitRemoteBranches,
 	listGitRemotes,
 	listGitStashes,
 	listGitTags,
@@ -258,6 +263,13 @@ export function useGitRemotes(profileId: string) {
 	});
 }
 
+export function useGitRemoteBranches(profileId: string) {
+	return useQuery({
+		queryKey: ["git-remote-branches", profileId] as const,
+		queryFn: () => listGitRemoteBranches({ profileId }),
+	});
+}
+
 export function useGitTags(profileId: string) {
 	return useQuery({
 		queryKey: ["git-tags", profileId] as const,
@@ -276,6 +288,9 @@ function useBranchMutation<TArgs>(
 			await Promise.all([
 				queryClient.invalidateQueries({
 					queryKey: ["git-branches", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-remote-branches", profileId],
 				}),
 				queryClient.invalidateQueries({
 					queryKey: ["git-commit-graph", profileId],
@@ -346,6 +361,94 @@ export function useGitPushWithLease(profileId: string) {
 		profileId,
 		({ profileId: pid, forceRaw }) =>
 			gitPushWithLease({ profileId: pid, opId: newOpId(), forceRaw }),
+	);
+}
+
+// Same as useBranchMutation but also invalidates the in-progress-op query —
+// merge / rebase can leave the repo in MERGE_HEAD / rebase-merge state that
+// the InProgressBanner watches for. The .git/ watcher would catch it anyway,
+// but invalidating here makes the banner appear without waiting for the
+// debounce.
+function useRebaseMergeMutation<TArgs>(
+	profileId: string,
+	fn: (args: TArgs & { profileId: string }) => Promise<void>,
+) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (args: TArgs) => fn({ ...args, profileId }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: ["git-branches", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-remote-branches", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-commit-graph", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: ["git-in-progress", profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.indexStatus(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.log(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useGitMergeRef(profileId: string) {
+	return useRebaseMergeMutation<{ target: string }>(
+		profileId,
+		({ profileId: pid, target }) =>
+			gitMergeRef({ profileId: pid, opId: newOpId(), target }),
+	);
+}
+
+export function useGitRebaseOnto(profileId: string) {
+	return useRebaseMergeMutation<{ target: string }>(
+		profileId,
+		({ profileId: pid, target }) =>
+			gitRebaseOnto({ profileId: pid, opId: newOpId(), target }),
+	);
+}
+
+export function useGitDeleteRemoteBranch(profileId: string) {
+	return useBranchMutation<{ remote: string; branch: string }>(
+		profileId,
+		({ profileId: pid, remote, branch }) =>
+			gitDeleteRemoteBranch({
+				profileId: pid,
+				opId: newOpId(),
+				remote,
+				branch,
+			}),
+	);
+}
+
+export function useGitRenameRemoteBranch(profileId: string) {
+	return useBranchMutation<{
+		remote: string;
+		oldBranch: string;
+		newBranch: string;
+	}>(profileId, ({ profileId: pid, remote, oldBranch, newBranch }) =>
+		gitRenameRemoteBranch({
+			profileId: pid,
+			opId: newOpId(),
+			remote,
+			oldBranch,
+			newBranch,
+		}),
 	);
 }
 

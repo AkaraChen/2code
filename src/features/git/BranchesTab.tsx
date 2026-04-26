@@ -34,17 +34,21 @@ import {
 import {
 	Suspense,
 	useCallback,
+	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
 	FiChevronDown,
 	FiChevronRight,
+	FiCornerDownRight,
 	FiDownload,
 	FiDownloadCloud,
 	FiEdit2,
 	FiGitBranch,
+	FiGitMerge,
 	FiPlus,
 	FiRefreshCw,
 	FiStar,
@@ -61,16 +65,23 @@ import {
 	useCreateBranch,
 	useDeleteBranch,
 	useGitBranches,
+	useGitDeleteRemoteBranch,
 	useGitFetch,
+	useGitMergeRef,
 	useGitPull,
 	useGitPushWithLease,
+	useGitRebaseOnto,
+	useGitRemoteBranches,
 	useGitRemotes,
+	useGitRenameRemoteBranch,
 	useGitTags,
 	useRenameBranch,
 } from "@/features/git/hooks";
 import { showGitErrorToast } from "@/features/git/gitError";
 import type {
 	BranchInfo,
+	RemoteBranchInfo,
+	RemoteInfo,
 	TagInfo,
 } from "@/features/git/changesTabBindings";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
@@ -124,18 +135,33 @@ export default function BranchesTab({ profileId }: BranchesTabProps) {
 function BranchesInner({ profileId }: { profileId: string }) {
 	const { data: branches } = useGitBranches(profileId);
 	const { data: remotes } = useGitRemotes(profileId);
+	const { data: remoteBranches } = useGitRemoteBranches(profileId);
 	const { data: tags } = useGitTags(profileId);
+
+	// Auto-fetch on first mount per profile so a fresh clone (or a long-idle
+	// repo) shows up-to-date remote branches without the user clicking
+	// "Fetch". Errors are swallowed — no network is a normal state and we
+	// don't want a toast every time the user opens the panel offline.
+	useAutoFetchOnce(profileId);
 
 	const localTree = useMemo(
 		() => buildBranchTree(branches ?? [], (b) => b.name),
 		[branches],
 	);
 
-	// For remotes: group branches by their leading remote name. The branch
-	// "name" field for a remote-tracking ref isn't returned by list_branches
-	// (we list refs/heads/ only) — Phase 4 would need a separate remote-
-	// branch listing for that. For now, this section just shows the named
-	// remotes themselves. Remote-branch list TODO when fetch is wired.
+	// Group remote-tracking branches by remote name so each remote in the
+	// "Remotes" section expands into its own slash-grouped tree (e.g.
+	// origin → feat/ → auth/ → login).
+	const remoteBranchesByRemote = useMemo(() => {
+		const map = new Map<string, RemoteBranchInfo[]>();
+		for (const rb of remoteBranches ?? []) {
+			const list = map.get(rb.remote) ?? [];
+			list.push(rb);
+			map.set(rb.remote, list);
+		}
+		return map;
+	}, [remoteBranches]);
+
 	const tagTree = useMemo(
 		() => buildBranchTree(tags ?? [], (t) => t.name),
 		[tags],
@@ -146,8 +172,11 @@ function BranchesInner({ profileId }: { profileId: string }) {
 	const [tagsOpen, setTagsOpen] = useState(false);
 	const [createOpen, setCreateOpen] = useState(false);
 
+	// Both local and remote branch rows share one context menu. The target
+	// is a discriminated union so the menu can render the same six actions
+	// while dispatching to local-vs-remote-flavored dialogs underneath.
 	const [menu, setMenu] = useState<{
-		branch: BranchInfo;
+		target: BranchTarget;
 		x: number;
 		y: number;
 	} | null>(null);
@@ -156,6 +185,23 @@ function BranchesInner({ profileId }: { profileId: string }) {
 	const [renameFor, setRenameFor] = useState<BranchInfo | null>(null);
 	const [createFromBranch, setCreateFromBranch] =
 		useState<BranchInfo | null>(null);
+
+	const [deleteRemoteFor, setDeleteRemoteFor] =
+		useState<RemoteBranchInfo | null>(null);
+	const [renameRemoteFor, setRenameRemoteFor] =
+		useState<RemoteBranchInfo | null>(null);
+	// Rebase / merge dialogs work the same for local and remote targets — the
+	// only difference is the ref string we pass to git.
+	const [confirmRebaseFor, setConfirmRebaseFor] = useState<{
+		ref: string;
+		label: string;
+	} | null>(null);
+	const [confirmMergeFor, setConfirmMergeFor] = useState<{
+		ref: string;
+		label: string;
+	} | null>(null);
+
+	const currentBranchName = branches?.find((b) => b.is_current)?.name ?? null;
 
 	const openUntitled = useFileViewerTabsStore((s) => s.openUntitled);
 	const openCommitTab = useCallback(
@@ -203,7 +249,7 @@ function BranchesInner({ profileId }: { profileId: string }) {
 								onClick={() => openCommitTab(node.value)}
 								onContextMenu={(e) =>
 									setMenu({
-										branch: node.value,
+										target: { kind: "local", branch: node.value },
 										x: e.clientX,
 										y: e.clientY,
 									})
@@ -217,35 +263,34 @@ function BranchesInner({ profileId }: { profileId: string }) {
 			<Section
 				icon={<FiGitBranch />}
 				label="Remotes"
-				count={remotes?.length ?? 0}
+				count={remoteBranches?.length ?? remotes?.length ?? 0}
 				open={remotesOpen}
 				onToggle={() => setRemotesOpen((v) => !v)}
 			>
 				{remotesOpen && (
-					<Stack gap="0" pl="3">
+					<Stack gap="0">
 						{(remotes ?? []).map((r) => (
-							<Flex
+							<RemoteGroup
 								key={r.name}
-								align="center"
-								gap="2"
-								py="0.5"
-								px="1"
-								_hover={{ bg: "bg.subtle" }}
-								borderRadius="sm"
-								title={r.url}
-							>
-								<Text fontSize="sm" truncate>
-									{r.name}
-								</Text>
-								<Text
-									fontSize="2xs"
-									color="fg.muted"
-									flex="1"
-									truncate
-								>
-									{r.url}
-								</Text>
-							</Flex>
+								remote={r}
+								branches={
+									remoteBranchesByRemote.get(r.name) ?? []
+								}
+								onSelectBranch={(rb) =>
+									openCommitTab({
+										last_commit_hash: rb.last_commit_hash,
+										last_commit_subject:
+											rb.last_commit_subject,
+									} as BranchInfo)
+								}
+								onContextMenu={(rb, e) =>
+									setMenu({
+										target: { kind: "remote", rb },
+										x: e.clientX,
+										y: e.clientY,
+									})
+								}
+							/>
 						))}
 						{(remotes?.length ?? 0) === 0 && (
 							<Text fontSize="xs" color="fg.muted" px="2" py="1">
@@ -276,21 +321,49 @@ function BranchesInner({ profileId }: { profileId: string }) {
 				<BranchContextMenu
 					x={menu.x}
 					y={menu.y}
-					branch={menu.branch}
-					onClose={() => setMenu(null)}
-					onCheckout={() => setMenu(null)}
+					target={menu.target}
 					profileId={profileId}
+					currentBranchName={currentBranchName}
+					onClose={() => setMenu(null)}
+					onCreateFrom={() => {
+						const startName =
+							menu.target.kind === "local"
+								? menu.target.branch.name
+								: menu.target.rb.name;
+						setCreateFromBranch({ name: startName } as BranchInfo);
+						setCreateOpen(true);
+						setMenu(null);
+					}}
 					onRename={() => {
-						setRenameFor(menu.branch);
+						if (menu.target.kind === "local") {
+							setRenameFor(menu.target.branch);
+						} else {
+							setRenameRemoteFor(menu.target.rb);
+						}
 						setMenu(null);
 					}}
 					onDelete={() => {
-						setDeleteFor(menu.branch);
+						if (menu.target.kind === "local") {
+							setDeleteFor(menu.target.branch);
+						} else {
+							setDeleteRemoteFor(menu.target.rb);
+						}
 						setMenu(null);
 					}}
-					onCreateFrom={() => {
-						setCreateFromBranch(menu.branch);
-						setCreateOpen(true);
+					onRebase={() => {
+						const ref =
+							menu.target.kind === "local"
+								? menu.target.branch.name
+								: menu.target.rb.name;
+						setConfirmRebaseFor({ ref, label: ref });
+						setMenu(null);
+					}}
+					onMerge={() => {
+						const ref =
+							menu.target.kind === "local"
+								? menu.target.branch.name
+								: menu.target.rb.name;
+						setConfirmMergeFor({ ref, label: ref });
 						setMenu(null);
 					}}
 				/>
@@ -322,9 +395,49 @@ function BranchesInner({ profileId }: { profileId: string }) {
 					onClose={() => setRenameFor(null)}
 				/>
 			)}
+
+			{deleteRemoteFor && (
+				<DeleteRemoteBranchDialog
+					profileId={profileId}
+					rb={deleteRemoteFor}
+					onClose={() => setDeleteRemoteFor(null)}
+				/>
+			)}
+
+			{renameRemoteFor && (
+				<RenameRemoteBranchDialog
+					profileId={profileId}
+					rb={renameRemoteFor}
+					onClose={() => setRenameRemoteFor(null)}
+				/>
+			)}
+
+			{confirmRebaseFor && (
+				<ConfirmRebaseDialog
+					profileId={profileId}
+					targetRef={confirmRebaseFor.ref}
+					targetLabel={confirmRebaseFor.label}
+					currentBranchName={currentBranchName}
+					onClose={() => setConfirmRebaseFor(null)}
+				/>
+			)}
+
+			{confirmMergeFor && (
+				<ConfirmMergeDialog
+					profileId={profileId}
+					targetRef={confirmMergeFor.ref}
+					targetLabel={confirmMergeFor.label}
+					currentBranchName={currentBranchName}
+					onClose={() => setConfirmMergeFor(null)}
+				/>
+			)}
 		</Stack>
 	);
 }
+
+type BranchTarget =
+	| { kind: "local"; branch: BranchInfo }
+	| { kind: "remote"; rb: RemoteBranchInfo };
 
 // ── Section + tree-render primitives ──
 
@@ -515,6 +628,139 @@ function BranchLeafRow({
 	);
 }
 
+// Per-profile guard so the auto-fetch doesn't re-run on every render. We
+// gate by a module-level Set rather than useRef because the panel can
+// remount across tab switches but we still want only one fetch per session.
+const autoFetchedProfiles = new Set<string>();
+
+function useAutoFetchOnce(profileId: string) {
+	const fetcher = useGitFetch(profileId);
+	const startedRef = useRef(false);
+	useEffect(() => {
+		if (startedRef.current) return;
+		if (autoFetchedProfiles.has(profileId)) return;
+		startedRef.current = true;
+		autoFetchedProfiles.add(profileId);
+		// fire-and-forget — failures are silent (offline, no remote, auth
+		// prompt, etc.). The visible "Fetch" button gives users an explicit
+		// retry path with toasts.
+		fetcher.mutate(
+			{ remote: null },
+			{
+				onError: () => {
+					// Allow a future remount to retry once the env changes.
+					autoFetchedProfiles.delete(profileId);
+				},
+			},
+		);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [profileId]);
+}
+
+function RemoteGroup({
+	remote,
+	branches,
+	onSelectBranch,
+	onContextMenu,
+}: {
+	remote: RemoteInfo;
+	branches: RemoteBranchInfo[];
+	onSelectBranch: (rb: RemoteBranchInfo) => void;
+	onContextMenu: (rb: RemoteBranchInfo, e: React.MouseEvent) => void;
+}) {
+	const [open, setOpen] = useState(true);
+	const tree = useMemo(
+		() => buildBranchTree(branches, (b) => b.branch),
+		[branches],
+	);
+	return (
+		<Box>
+			<HStack
+				as="button"
+				width="full"
+				gap="1"
+				px="1"
+				py="0.5"
+				cursor="pointer"
+				_hover={{ bg: "bg.subtle" }}
+				borderRadius="sm"
+				onClick={() => setOpen((v) => !v)}
+				title={remote.url}
+			>
+				{open ? <FiChevronDown /> : <FiChevronRight />}
+				<FiGitBranch />
+				<Text fontSize="sm" fontWeight="medium" truncate>
+					{remote.name}
+				</Text>
+				<Text fontSize="2xs" color="fg.muted">
+					{branches.length}
+				</Text>
+				<Box flex="1" />
+				<Text
+					fontSize="2xs"
+					color="fg.muted"
+					maxW="40%"
+					truncate
+					textAlign="right"
+				>
+					{remote.url}
+				</Text>
+			</HStack>
+			{open && (
+				<TreeRender<RemoteBranchInfo>
+					nodes={tree}
+					depth={0}
+					renderLeaf={(node) => (
+						<RemoteBranchLeafRow
+							rb={node.value}
+							onClick={() => onSelectBranch(node.value)}
+							onContextMenu={(e) => onContextMenu(node.value, e)}
+						/>
+					)}
+				/>
+			)}
+			{branches.length === 0 && open && (
+				<Text fontSize="xs" color="fg.muted" pl="6" py="1">
+					No remote branches — try Fetch
+				</Text>
+			)}
+		</Box>
+	);
+}
+
+function RemoteBranchLeafRow({
+	rb,
+	onClick,
+	onContextMenu,
+}: {
+	rb: RemoteBranchInfo;
+	onClick: () => void;
+	onContextMenu: (e: React.MouseEvent) => void;
+}) {
+	return (
+		<Flex
+			align="center"
+			gap="2"
+			px="1.5"
+			py="0.5"
+			borderRadius="sm"
+			cursor="pointer"
+			_hover={{ bg: "bg.subtle" }}
+			onClick={onClick}
+			onContextMenu={(e) => {
+				e.preventDefault();
+				onContextMenu(e);
+			}}
+			title={rb.name}
+		>
+			<Box style={{ width: 12, flexShrink: 0 }} />
+			<Text fontSize="sm" flex="1" truncate>
+				{rb.branch}
+			</Text>
+		</Flex>
+	);
+}
+
 function TagLeafRow({ tag }: { tag: TagInfo }) {
 	return (
 		<Flex
@@ -541,37 +787,68 @@ function TagLeafRow({ tag }: { tag: TagInfo }) {
 
 // ── Context menu + dialogs ──
 
+// Unified context menu for both local and remote branch rows. The action
+// list is identical; only the underlying dialog/op flavor differs (the
+// caller picks via the `target` discriminator in setMenu).
 function BranchContextMenu({
 	x,
 	y,
-	branch,
+	target,
 	profileId,
+	currentBranchName,
 	onClose,
-	onCheckout,
+	onCreateFrom,
 	onRename,
 	onDelete,
-	onCreateFrom,
+	onRebase,
+	onMerge,
 }: {
 	x: number;
 	y: number;
-	branch: BranchInfo;
+	target: BranchTarget;
 	profileId: string;
+	currentBranchName: string | null;
 	onClose: () => void;
-	onCheckout: () => void;
+	onCreateFrom: () => void;
 	onRename: () => void;
 	onDelete: () => void;
-	onCreateFrom: () => void;
+	onRebase: () => void;
+	onMerge: () => void;
 }) {
 	const checkout = useCheckoutBranch(profileId);
+
+	// For local: checkout the branch by its own name.
+	// For remote: checkout `<branch>` (the part after "<remote>/") — git
+	// auto-creates a tracking branch when the name is unambiguous.
+	const checkoutName =
+		target.kind === "local" ? target.branch.name : target.rb.branch;
+	const displayName =
+		target.kind === "local" ? target.branch.name : target.rb.name;
+
+	// "Already on this branch": local sets is_current; for a remote ref
+	// we treat it as on-this-branch when the local current matches the
+	// remote's branch portion (rebase/merge into yourself is a no-op).
+	const onThisBranch =
+		target.kind === "local"
+			? target.branch.is_current
+			: currentBranchName != null && currentBranchName === target.rb.branch;
+
 	const handleCheckout = async () => {
 		try {
-			await checkout.mutateAsync({ branch: branch.name });
-			onCheckout();
-		} catch {
-			// errors surface via TanStack; menu stays closed via onCheckout()
-			onCheckout();
+			await checkout.mutateAsync({ branch: checkoutName });
+			onClose();
+		} catch (e) {
+			showGitErrorToast(e);
+			onClose();
 		}
 	};
+
+	const noCurrent = currentBranchName == null;
+
+	const renameLabel =
+		target.kind === "local" ? "Rename…" : "Rename on remote…";
+	const deleteLabel =
+		target.kind === "local" ? "Delete…" : "Delete on remote…";
 
 	return (
 		<Portal>
@@ -592,31 +869,53 @@ function BranchContextMenu({
 						border: "1px solid var(--chakra-colors-border-subtle)",
 						borderRadius: "6px",
 						boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
-						minWidth: "220px",
+						minWidth: "260px",
 						padding: "4px",
 					}}
 					onClick={(e) => e.stopPropagation()}
 				>
-					{!branch.is_current && (
-						<MenuItem icon={<FiGitBranch />} onClick={handleCheckout}>
-							Checkout
+					{!onThisBranch && (
+						<MenuItem
+							icon={<FiGitBranch />}
+							onClick={handleCheckout}
+						>
+							Checkout {checkoutName}
 						</MenuItem>
 					)}
 					<MenuItem icon={<FiPlus />} onClick={onCreateFrom}>
 						New branch from this…
 					</MenuItem>
-					<MenuItem icon={<FiEdit2 />} onClick={onRename}>
-						Rename…
+					<MenuItem
+						icon={<FiCornerDownRight />}
+						onClick={onRebase}
+						disabled={noCurrent || onThisBranch}
+					>
+						Rebase {currentBranchName ?? "current"} onto this
 					</MenuItem>
-					{!branch.is_current && (
+					<MenuItem
+						icon={<FiGitMerge />}
+						onClick={onMerge}
+						disabled={noCurrent || onThisBranch}
+					>
+						Merge into {currentBranchName ?? "current"}
+					</MenuItem>
+					<MenuItem icon={<FiEdit2 />} onClick={onRename}>
+						{renameLabel}
+					</MenuItem>
+					{!onThisBranch && (
 						<MenuItem
 							icon={<FiTrash2 />}
 							onClick={onDelete}
 							danger
 						>
-							Delete…
+							{deleteLabel}
 						</MenuItem>
 					)}
+					<Box pt="1" pl="2" pr="2">
+						<Text fontSize="2xs" color="fg.muted" truncate>
+							{displayName}
+						</Text>
+					</Box>
 				</div>
 			</div>
 		</Portal>
@@ -880,6 +1179,223 @@ function DeleteBranchDialog({
 					{force
 						? "Will use git branch -D — discards unmerged commits."
 						: "Refuses if the branch has unmerged commits."}
+				</Text>
+			</Stack>
+		</RewriteDialogShell>
+	);
+}
+
+// ── Remote-branch dialogs ──
+
+function DeleteRemoteBranchDialog({
+	profileId,
+	rb,
+	onClose,
+}: {
+	profileId: string;
+	rb: RemoteBranchInfo;
+	onClose: () => void;
+}) {
+	const remove = useGitDeleteRemoteBranch(profileId);
+	const [confirm, setConfirm] = useState("");
+	const [error, setError] = useState<string | null>(null);
+	const armed = confirm.trim() === rb.branch;
+
+	const handleSubmit = async () => {
+		if (!armed) return;
+		setError(null);
+		try {
+			await remove.mutateAsync({ remote: rb.remote, branch: rb.branch });
+			onClose();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	return (
+		<RewriteDialogShell
+			title={`Delete "${rb.name}" from remote?`}
+			onClose={onClose}
+			submitting={remove.isPending}
+			submitDisabled={!armed || remove.isPending}
+			submitLabel="Delete on remote"
+			onSubmit={handleSubmit}
+			error={error}
+		>
+			<Stack gap="3">
+				<Text fontSize="sm">
+					This will run <code>git push {rb.remote} --delete {rb.branch}</code>,
+					removing the branch from <code>{rb.remote}</code>. Anyone else
+					tracking this branch will lose it on their next fetch.
+				</Text>
+				<Field.Root>
+					<Field.Label>
+						Type the branch name <code>{rb.branch}</code> to confirm
+					</Field.Label>
+					<Input
+						value={confirm}
+						onChange={(e) => setConfirm(e.target.value)}
+						placeholder={rb.branch}
+					/>
+				</Field.Root>
+			</Stack>
+		</RewriteDialogShell>
+	);
+}
+
+function RenameRemoteBranchDialog({
+	profileId,
+	rb,
+	onClose,
+}: {
+	profileId: string;
+	rb: RemoteBranchInfo;
+	onClose: () => void;
+}) {
+	const rename = useGitRenameRemoteBranch(profileId);
+	const [newName, setNewName] = useState(rb.branch);
+	const [error, setError] = useState<string | null>(null);
+
+	const trimmed = newName.trim();
+	const valid = trimmed && trimmed !== rb.branch;
+
+	const handleSubmit = async () => {
+		if (!valid) return;
+		setError(null);
+		try {
+			await rename.mutateAsync({
+				remote: rb.remote,
+				oldBranch: rb.branch,
+				newBranch: trimmed,
+			});
+			onClose();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	return (
+		<RewriteDialogShell
+			title={`Rename "${rb.name}" on remote`}
+			onClose={onClose}
+			submitting={rename.isPending}
+			submitDisabled={!valid || rename.isPending}
+			submitLabel="Rename on remote"
+			onSubmit={handleSubmit}
+			error={error}
+		>
+			<Stack gap="3">
+				<Text fontSize="sm">
+					Git has no first-class rename for remote branches. We'll push the
+					new name to <code>{rb.remote}</code>, then delete the old one.
+					Both names exist briefly while this runs.
+				</Text>
+				<Field.Root>
+					<Field.Label>New branch name on {rb.remote}</Field.Label>
+					<Input
+						value={newName}
+						onChange={(e) => setNewName(e.target.value)}
+					/>
+				</Field.Root>
+			</Stack>
+		</RewriteDialogShell>
+	);
+}
+
+function ConfirmRebaseDialog({
+	profileId,
+	targetRef,
+	targetLabel,
+	currentBranchName,
+	onClose,
+}: {
+	profileId: string;
+	targetRef: string;
+	targetLabel: string;
+	currentBranchName: string | null;
+	onClose: () => void;
+}) {
+	const rebase = useGitRebaseOnto(profileId);
+	const [error, setError] = useState<string | null>(null);
+
+	const handleSubmit = async () => {
+		setError(null);
+		try {
+			await rebase.mutateAsync({ target: targetRef });
+			onClose();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	return (
+		<RewriteDialogShell
+			title={`Rebase ${currentBranchName ?? "current branch"} onto ${targetLabel}?`}
+			onClose={onClose}
+			submitting={rebase.isPending}
+			submitDisabled={rebase.isPending || currentBranchName == null}
+			submitLabel="Rebase"
+			onSubmit={handleSubmit}
+			error={error}
+		>
+			<Stack gap="3">
+				<Text fontSize="sm">
+					Replays your <code>{currentBranchName ?? "?"}</code> commits on top
+					of <code>{targetLabel}</code>. Conflicts pause the rebase — the
+					In-Progress banner will show resolve / continue / abort.
+				</Text>
+				<Text fontSize="xs" color="fg.muted">
+					Rewrites your branch's history. If you've already pushed{" "}
+					<code>{currentBranchName ?? "this branch"}</code>, you'll need a
+					force-push afterward.
+				</Text>
+			</Stack>
+		</RewriteDialogShell>
+	);
+}
+
+function ConfirmMergeDialog({
+	profileId,
+	targetRef,
+	targetLabel,
+	currentBranchName,
+	onClose,
+}: {
+	profileId: string;
+	targetRef: string;
+	targetLabel: string;
+	currentBranchName: string | null;
+	onClose: () => void;
+}) {
+	const merge = useGitMergeRef(profileId);
+	const [error, setError] = useState<string | null>(null);
+
+	const handleSubmit = async () => {
+		setError(null);
+		try {
+			await merge.mutateAsync({ target: targetRef });
+			onClose();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	return (
+		<RewriteDialogShell
+			title={`Merge ${targetLabel} into ${currentBranchName ?? "current branch"}?`}
+			onClose={onClose}
+			submitting={merge.isPending}
+			submitDisabled={merge.isPending || currentBranchName == null}
+			submitLabel="Merge"
+			onSubmit={handleSubmit}
+			error={error}
+		>
+			<Stack gap="3">
+				<Text fontSize="sm">
+					Merges <code>{targetLabel}</code> into{" "}
+					<code>{currentBranchName ?? "?"}</code> with{" "}
+					<code>--no-edit</code>. Conflicts pause the merge — the In-Progress
+					banner will show resolve / continue / abort.
 				</Text>
 			</Stack>
 		</RewriteDialogShell>
