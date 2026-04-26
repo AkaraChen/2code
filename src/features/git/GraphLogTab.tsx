@@ -256,7 +256,13 @@ function GraphLogInner({ profileId }: { profileId: string }) {
 				</HStack>
 			)}
 
-			<Box ref={scrollRef} flex="1" minH="0" overflow="auto">
+			<Box
+				ref={scrollRef}
+				flex="1"
+				minH="0"
+				overflow="auto"
+				userSelect="none"
+			>
 				{isLoading ? (
 					<Box p="3" fontSize="sm" color="fg.muted">
 						Loading…
