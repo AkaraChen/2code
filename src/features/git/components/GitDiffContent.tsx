@@ -4,6 +4,7 @@ import {
 	Activity,
 	Suspense,
 	startTransition,
+	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
@@ -111,6 +112,24 @@ export default function GitDiffContent({
 			),
 		[changesFiles, includedFileNames],
 	);
+
+	const handlePush = useCallback(async () => {
+		try {
+			await gitPush.mutateAsync();
+			toaster.create({
+				title: m.gitPushSuccessTitle(),
+				type: "success",
+				closable: true,
+			});
+		} catch (error) {
+			toaster.create({
+				title: m.gitPushErrorTitle(),
+				description: error instanceof Error ? error.message : String(error),
+				type: "error",
+				closable: true,
+			});
+		}
+	}, [gitPush]);
 
 	const handleTabChange = (value: string) => {
 		startTransition(() => {
@@ -257,6 +276,19 @@ export default function GitDiffContent({
 		}
 	};
 
+	// Cmd+Enter triggers push when push button is visible (no local changes, commits ahead)
+	useEffect(() => {
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (!(e.metaKey || e.ctrlKey) || e.key !== "Enter") return;
+			if (changesFiles.length === 0 && aheadCount > 0 && !gitPush.isPending) {
+				e.preventDefault();
+				handlePush();
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [changesFiles.length, aheadCount, gitPush.isPending, handlePush]);
+
 	// Auto-focus sidebar on tab change (also covers initial dialog open)
 	useEffect(() => {
 		const timer = setTimeout(() => {
@@ -355,26 +387,7 @@ export default function GitDiffContent({
 										onIncludeNone={() => setIncludedFileNames(new Set())}
 										onCommitMessageChange={setCommitMessage}
 										onCommitBodyChange={setCommitBody}
-										onPush={async () => {
-											try {
-												await gitPush.mutateAsync();
-												toaster.create({
-													title: m.gitPushSuccessTitle(),
-													type: "success",
-													closable: true,
-												});
-											} catch (error) {
-												toaster.create({
-													title: m.gitPushErrorTitle(),
-													description:
-														error instanceof Error
-															? error.message
-															: String(error),
-													type: "error",
-													closable: true,
-												});
-											}
-										}}
+										onPush={handlePush}
 										onCommit={async () => {
 											try {
 												const hash =
