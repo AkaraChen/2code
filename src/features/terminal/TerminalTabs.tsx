@@ -7,6 +7,13 @@ import {
 	Spinner,
 	Tabs,
 } from "@chakra-ui/react";
+import claudeIconUrl from "@lobehub/icons-static-svg/icons/claude-color.svg";
+import clineIconUrl from "@lobehub/icons-static-svg/icons/cline.svg";
+import codexIconUrl from "@lobehub/icons-static-svg/icons/codex-color.svg";
+import geminiIconUrl from "@lobehub/icons-static-svg/icons/gemini-color.svg";
+import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
+import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
+import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import {
 	DndContext,
 	PointerSensor,
@@ -57,6 +64,15 @@ const TAB_EXIT_ANIMATION = {
 	ease: [0.4, 0, 1, 1],
 } as const;
 const TAB_MIN_WIDTH = "140px";
+const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
+	{ keyword: "claude", iconUrl: claudeIconUrl },
+	{ keyword: "codex", iconUrl: codexIconUrl },
+	{ keyword: "gemini", iconUrl: geminiIconUrl },
+	{ keyword: "kimi", iconUrl: kimiIconUrl },
+	{ keyword: "cline", iconUrl: clineIconUrl },
+	{ keyword: "openclaw", iconUrl: openClawIconUrl },
+	{ keyword: "qoder", iconUrl: qoderIconUrl },
+];
 const FULL_TAB_MOTION_PROPS = {
 	initial: { opacity: 0, scale: 0.92, y: 6 },
 	animate: { opacity: 1, scale: 1, y: 0 },
@@ -106,6 +122,24 @@ function TabTrigger({
 				/>
 			</HStack>
 		</Tabs.Trigger>
+	);
+}
+
+function getTerminalTabIcon(title: string) {
+	const lowerTitle = title.toLowerCase();
+	const match = AGENT_TAB_ICONS.find(({ keyword }) =>
+		lowerTitle.includes(keyword),
+	);
+
+	if (!match) return <FiTerminal size={14} />;
+
+	return (
+		<img
+			alt=""
+			aria-hidden="true"
+			src={match.iconUrl}
+			style={{ width: 14, height: 14, flexShrink: 0 }}
+		/>
 	);
 }
 
@@ -304,7 +338,7 @@ export default function TerminalTabs({
 											key={tab.id}
 											sortableId={tab.sortableId}
 											value={tab.id}
-											icon={<FiTerminal />}
+											icon={getTerminalTabIcon(tab.title)}
 											title={tab.title}
 											maxTitleLength={10}
 											motionProps={tabMotionProps}

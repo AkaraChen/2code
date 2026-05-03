@@ -13,6 +13,7 @@
         "@emotion/react": "^11.14.0",
         "@fontsource-variable/bricolage-grotesque": "^5.2.10",
         "@icons-pack/react-simple-icons": "^13.13.0",
+        "@lobehub/icons-static-svg": "^1.88.0",
         "@monaco-editor/react": "^4.7.0",
         "@pierre/diffs": "^1.1.13",
         "@pierre/trees": "^1.0.0-beta.3",
@@ -280,6 +281,8 @@
     "@lix-js/sdk": ["@lix-js/sdk@0.4.9", "", { "dependencies": { "@lix-js/server-protocol-schema": "0.1.1", "dedent": "1.5.1", "human-id": "^4.1.1", "js-sha256": "^0.11.0", "kysely": "^0.28.12", "sqlite-wasm-kysely": "0.3.0", "uuid": "^10.0.0" } }, "sha512-30mDkXpx704359oRrJI42bjfCspCiaMItngVBbPkiTGypS7xX4jYbHWQkXI8XuJ7VDB69D0MsVU6xfrBAIrM4A=="],
 
     "@lix-js/server-protocol-schema": ["@lix-js/server-protocol-schema@0.1.1", "", {}, "sha512-jBeALB6prAbtr5q4vTuxnRZZv1M2rKe8iNqRQhFJ4Tv7150unEa0vKyz0hs8Gl3fUGsWaNJBh3J8++fpbrpRBQ=="],
+
+    "@lobehub/icons-static-svg": ["@lobehub/icons-static-svg@1.88.0", "", {}, "sha512-46rnH5oNDr7OiBJ5s/T/1z8gs59E8hPpMhzSV3gi0KxziN8sJq+VIz7TA0BVduMGgv6p9BGk519Ig5vJXgK6hA=="],
 
     "@monaco-editor/loader": ["@monaco-editor/loader@1.7.0", "", { "dependencies": { "state-local": "^1.0.6" } }, "sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA=="],
 
