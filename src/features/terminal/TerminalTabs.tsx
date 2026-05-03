@@ -29,7 +29,7 @@ import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
-import { getFileIconUrl } from "@/shared/lib/fileIcons";
+import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import {
 	buildSortableId,
 	FILE_SORTABLE_PREFIX,
@@ -336,12 +336,9 @@ export default function TerminalTabs({
 											sortableId={tab.sortableId}
 											value={tab.filePath}
 											icon={
-												<img
-													src={getFileIconUrl(tab.title)}
-													width={14}
-													height={14}
-													alt=""
-													draggable={false}
+												<FileTreeFileIcon
+													fileName={tab.title}
+													size={14}
 												/>
 											}
 											title={tab.title}
