@@ -74,8 +74,10 @@ export function useCreateProject(options?: {
 		},
 		onSuccess: async (project) => {
 			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all);
-			const createdProject = projects?.find((p) => p.id === project.id);
+			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(
+				queryKeys.projects.all,
+			);
+			const createdProject = projects?.find((item) => item.id === project.id);
 			if (createdProject) {
 				options?.onSuccess?.(createdProject);
 			}
@@ -130,7 +132,11 @@ export function useDeleteProject() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => deleteProject({ id }),
-		onSuccess: () => {
+		onSuccess: (_data, id) => {
+			queryClient.setQueryData<ProjectWithProfiles[]>(
+				queryKeys.projects.all,
+				(projects) => projects?.filter((project) => project.id !== id),
+			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
 	});
