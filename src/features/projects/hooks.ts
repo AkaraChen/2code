@@ -31,9 +31,9 @@ import {
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
-type UseProjectAvatarOptions = {
+interface UseProjectAvatarOptions {
 	enabled?: boolean;
-};
+}
 
 export function useProjects() {
 	return useSuspenseQuery({
@@ -162,12 +162,21 @@ export function useSaveProjectConfig() {
 	});
 }
 
-export function useDeleteProject() {
+export function useDeleteProject(options?: {
+	onSuccess?: (
+		deletedProjectId: string,
+		projectsBeforeDelete: ProjectWithProfiles[],
+	) => void | Promise<void>;
+}) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => deleteProject({ id }),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+		onSuccess: async (_result, id) => {
+			const projectsBeforeDelete =
+				queryClient.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all)
+				?? [];
+			await options?.onSuccess?.(id, projectsBeforeDelete);
+			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
 	});
 }
