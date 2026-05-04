@@ -156,8 +156,8 @@ pub fn delete_session(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::project;
 	use crate::profile;
+	use crate::project;
 	use crate::test_utils::setup_db;
 
 	fn setup_profile(conn: &mut SqliteConnection) -> String {
@@ -197,7 +197,8 @@ mod tests {
 		insert_session(&mut conn, &session_record("session-1", &profile_id))
 			.expect("insert session");
 
-		let sessions = list_by_project(&mut conn, "proj-1").expect("list sessions");
+		let sessions =
+			list_by_project(&mut conn, "proj-1").expect("list sessions");
 		assert_eq!(sessions.len(), 1);
 		assert_eq!(sessions[0].id, "session-1");
 		assert_eq!(
@@ -215,8 +216,7 @@ mod tests {
 
 		append_output(&mut conn, "session-1", &vec![b'a'; 1_048_576])
 			.expect("append first chunk");
-		append_output(&mut conn, "session-1", b"tail")
-			.expect("append tail");
+		append_output(&mut conn, "session-1", b"tail").expect("append tail");
 
 		let history =
 			get_session_history(&mut conn, "session-1").expect("history");
@@ -225,11 +225,9 @@ mod tests {
 		assert_eq!(history[0], b'a');
 
 		clear_output(&mut conn, "session-1");
-		assert!(
-			get_session_history(&mut conn, "session-1")
-				.expect("cleared history")
-				.is_empty(),
-		);
+		assert!(get_session_history(&mut conn, "session-1")
+			.expect("cleared history")
+			.is_empty(),);
 	}
 
 	#[test]
