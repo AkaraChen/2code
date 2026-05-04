@@ -13,6 +13,7 @@ import codexIconUrl from "@lobehub/icons-static-svg/icons/codex-color.svg";
 import geminiIconUrl from "@lobehub/icons-static-svg/icons/gemini-color.svg";
 import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
 import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
+import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import {
 	DndContext,
@@ -71,6 +72,7 @@ const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "kimi", iconUrl: kimiIconUrl },
 	{ keyword: "cline", iconUrl: clineIconUrl },
 	{ keyword: "openclaw", iconUrl: openClawIconUrl },
+	{ keyword: "opencode", iconUrl: opencodeIconUrl },
 	{ keyword: "qoder", iconUrl: qoderIconUrl },
 ];
 const FULL_TAB_MOTION_PROPS = {
