@@ -11,6 +11,7 @@ import {
 	deleteProject,
 	getGitBranch,
 	getFileTreeGitStatus,
+	getProjectGithubAvatar,
 	getProjectConfig,
 	listFileTreePaths,
 	listProjects,
@@ -23,9 +24,16 @@ import {
 	writeFileContent,
 } from "@/generated";
 import type { ProjectConfig, ProjectWithProfiles } from "@/generated";
+import {
+	getCachedProjectAvatar,
+	setCachedProjectAvatar,
+} from "@/features/projects/projectAvatarCache";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+type UseProjectAvatarOptions = {
+	enabled?: boolean;
+};
 
 export function useProjects() {
 	return useSuspenseQuery({
@@ -47,6 +55,34 @@ export function useGitBranch(folder: string, enabled = true) {
 export function useProject(id: string) {
 	const { data: projects } = useProjects();
 	return useMemo(() => projects.find((p) => p.id === id), [projects, id]);
+}
+
+export function useProjectAvatar(
+	projectId: string,
+	options: UseProjectAvatarOptions = {},
+) {
+	const cachedAvatar = useMemo(
+		() => getCachedProjectAvatar(projectId),
+		[projectId],
+	);
+	const shouldCacheFallback = cachedAvatar !== undefined;
+	const { enabled = true } = options;
+
+	return useQuery({
+		queryKey: queryKeys.projectAvatar(projectId),
+		queryFn: async () => {
+			const avatarUrl = await getProjectGithubAvatar({ projectId });
+			setCachedProjectAvatar(projectId, avatarUrl);
+			return avatarUrl;
+		},
+		enabled,
+		initialData: shouldCacheFallback ? cachedAvatar : undefined,
+		staleTime: shouldCacheFallback && cachedAvatar !== null
+			? Number.POSITIVE_INFINITY
+			: 0,
+		gcTime: Number.POSITIVE_INFINITY,
+		refetchOnWindowFocus: false,
+	});
 }
 
 export function useProjectProfiles(projectId: string) {

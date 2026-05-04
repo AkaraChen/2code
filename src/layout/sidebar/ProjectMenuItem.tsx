@@ -21,6 +21,7 @@ import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
+import { ProjectAvatar } from "./ProjectAvatar";
 import { ProfileList } from "./ProfileList";
 
 export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
@@ -88,7 +89,15 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							data-sidebar-item
 						>
 							<NavLink to={defaultProfileUrl}>
-								{project.name}
+								<HStack gap="2" align="center">
+									<ProjectAvatar
+										projectId={project.id}
+										projectName={project.name}
+									/>
+									<Text whiteSpace="nowrap" flexShrink={0}>
+										{project.name}
+									</Text>
+								</HStack>
 							</NavLink>
 						</Box>
 

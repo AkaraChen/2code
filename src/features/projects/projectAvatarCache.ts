@@ -1,0 +1,69 @@
+type ProjectAvatarCache = Record<string, string | null>;
+
+const PROJECT_AVATAR_CACHE_KEY = "2code.project-avatar-cache";
+
+let inMemoryCache: ProjectAvatarCache | null = null;
+
+function readCacheFromStorage(): ProjectAvatarCache {
+	if (inMemoryCache !== null) {
+		return inMemoryCache;
+	}
+
+	inMemoryCache = {};
+
+	try {
+		const raw = localStorage.getItem(PROJECT_AVATAR_CACHE_KEY);
+		if (!raw) {
+			return inMemoryCache;
+		}
+
+		const parsed: unknown = JSON.parse(raw);
+		if (
+			typeof parsed === "object" &&
+			parsed !== null &&
+			!Array.isArray(parsed)
+		) {
+			const entries = Object.entries(parsed);
+			for (const [key, value] of entries) {
+				if (typeof value === "string" || value === null) {
+					inMemoryCache[key] = value;
+				}
+			}
+		}
+	} catch (_error) {
+		inMemoryCache = {};
+	}
+
+	return inMemoryCache;
+}
+
+function writeCacheToStorage(cache: ProjectAvatarCache): void {
+	try {
+		localStorage.setItem(
+			PROJECT_AVATAR_CACHE_KEY,
+			JSON.stringify(cache),
+		);
+	} catch (_error) {
+		// ignore localStorage failures in restricted environments
+	}
+}
+
+export function getCachedProjectAvatar(
+	projectId: string,
+): string | null | undefined {
+	return readCacheFromStorage()[projectId];
+}
+
+export function setCachedProjectAvatar(
+	projectId: string,
+	avatarUrl: string | null,
+): void {
+	const cache = readCacheFromStorage();
+	cache[projectId] = avatarUrl;
+	writeCacheToStorage(cache);
+}
+
+export function clearProjectAvatarCacheForTests(): void {
+	inMemoryCache = {};
+	writeCacheToStorage({});
+}

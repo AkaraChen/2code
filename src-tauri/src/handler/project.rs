@@ -245,3 +245,16 @@ pub async fn save_project_config(
 	})
 	.await
 }
+
+#[tauri::command]
+pub async fn get_project_github_avatar(
+	project_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Option<String>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::get_github_avatar(conn, &project_id)
+	})
+	.await
+}

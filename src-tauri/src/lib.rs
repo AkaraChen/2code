@@ -91,6 +91,7 @@ pub fn run() {
 			handler::project::git_push,
 			handler::project::get_project_config,
 			handler::project::save_project_config,
+			handler::project::get_project_github_avatar,
 			handler::filesystem::list_file_tree_paths,
 			handler::filesystem::rename_file_tree_path,
 			handler::filesystem::move_file_tree_paths,

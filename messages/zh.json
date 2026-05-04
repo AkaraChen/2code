@@ -133,6 +133,8 @@
 	"gitCommitErrorTitle": "提交失败",
 	"debugMode": "调试模式",
 	"debugModeDescription": "在浮动面板中显示后端日志事件。",
+	"showProjectAvatars": "显示项目头像",
+	"showProjectAvatarsDescription": "在左侧边栏中显示项目头像。",
 	"debugLog": "调试日志",
 	"debugSearchPlaceholder": "搜索日志...",
 	"debugClear": "清除",

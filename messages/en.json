@@ -133,6 +133,8 @@
 	"gitCommitErrorTitle": "Commit failed",
 	"debugMode": "Debug Mode",
 	"debugModeDescription": "Show backend log events in a floating panel.",
+	"showProjectAvatars": "Show Project Avatars",
+	"showProjectAvatarsDescription": "Display project avatars in the left sidebar.",
 	"debugLog": "Debug Log",
 	"debugSearchPlaceholder": "Search logs...",
 	"debugClear": "Clear",

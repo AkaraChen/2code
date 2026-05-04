@@ -25,6 +25,7 @@ import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
 import { GlobalTerminalTemplatesSettings } from "./GlobalTerminalTemplatesSettings";
 import { NotificationSettings } from "./NotificationSettings";
+import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 
@@ -186,6 +187,7 @@ export default function SettingsPage() {
 									</Switch.Label>
 								</Switch.Root>
 							</Field.Root>
+							<SidebarAppearanceSettings />
 						</Stack>
 					</Tabs.Content>
 					<Tabs.Content value="terminal">

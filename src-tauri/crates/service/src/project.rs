@@ -223,6 +223,14 @@ pub fn push(
 	infra::git::push(&profile.worktree_path)
 }
 
+pub fn get_github_avatar(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<Option<String>, AppError> {
+	let project = repo::project::find_by_id(conn, project_id)?;
+	Ok(infra::git::github_avatar_url(&project.folder))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -11,6 +11,66 @@ use model::project::{GitAuthor, GitCommit, GitDiffStats};
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
+pub fn github_avatar_url(folder: &str) -> Option<String> {
+	let remote_url = remote_url(folder).ok().flatten()?;
+	let (owner, _) = parse_github_owner_and_repo(&remote_url)?;
+	if let Some(avatar_url) = github_avatar_url_from_api(&owner) {
+		return Some(avatar_url);
+	}
+	Some(format!("https://avatars.githubusercontent.com/{owner}?v=4"))
+}
+
+fn github_avatar_url_from_api(owner: &str) -> Option<String> {
+	let output = Command::new("gh")
+		.args(["api", &format!("users/{owner}"), "--jq", ".avatar_url"])
+		.output();
+
+	let output = match output {
+		Ok(output) if output.status.success() => output,
+		_ => return None,
+	};
+
+	let avatar = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if avatar.is_empty() {
+		return None;
+	}
+
+	Some(avatar)
+}
+
+pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
+	let output = Command::new("git")
+		.args(["remote", "get-url", "origin"])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
+		let nonfatal_patterns = [
+			"no such remote",
+			"not a git repository",
+			"not in a git directory",
+			"failed to run",
+		];
+		if nonfatal_patterns
+			.iter()
+			.any(|pattern| stderr.contains(pattern))
+		{
+			return Ok(None);
+		}
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+
+	let remote = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if remote.is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(remote))
+}
+
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = Command::new("git").arg("init").current_dir(dir).output()?;
 
@@ -992,10 +1052,122 @@ fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 	)))
 }
 
+fn parse_github_owner_and_repo(remote_url: &str) -> Option<(String, String)> {
+	let normalized_url = remote_url.trim().trim_end_matches(".git");
+	let normalized_url = normalized_url
+		.split('?')
+		.next()
+		.unwrap_or(normalized_url)
+		.split('#')
+		.next()
+		.unwrap_or(normalized_url)
+		.trim()
+		.trim_end_matches('/')
+		.to_string();
+	let (host, path) = split_remote_host_and_path(&normalized_url)?;
+
+	if !is_github_host(&host) {
+		return None;
+	}
+
+	let path = path
+		.trim_start_matches('/')
+		.trim_end_matches('/')
+		.trim_end_matches(".git")
+		.trim();
+
+	if path.is_empty() {
+		return None;
+	}
+
+	let mut segments = path.split('/').filter(|segment| !segment.is_empty());
+	let owner = segments.next()?.to_lowercase();
+	let repo = segments.next()?.to_lowercase();
+
+	if owner.is_empty() || repo.is_empty() {
+		return None;
+	}
+
+	Some((owner, repo))
+}
+
+fn split_remote_host_and_path(remote_url: &str) -> Option<(String, String)> {
+	if let Some(scheme_pos) = remote_url.find("://") {
+		let without_scheme = &remote_url[scheme_pos + 3..];
+		let without_auth = without_scheme.split('@').next_back()?;
+		let mut host_and_path = without_auth.splitn(2, '/');
+		let host = normalize_host(host_and_path.next()?);
+		let path = host_and_path.next()?;
+		return Some((host, path.to_string()));
+	}
+
+	if let Some(colon_pos) = remote_url.find(':') {
+		let host_part = &remote_url[..colon_pos];
+		let path = &remote_url[colon_pos + 1..];
+		if is_github_host(host_part) {
+			return Some((normalize_host(host_part), path.to_string()));
+		}
+	}
+
+	let mut host_and_path = remote_url.splitn(2, '/');
+	let host = host_and_path.next()?;
+	if !is_github_host(host) {
+		return None;
+	}
+
+	let path = host_and_path.next().unwrap_or_default();
+	Some((normalize_host(host), path.to_string()))
+}
+
+fn is_github_host(host: &str) -> bool {
+	matches!(
+		normalize_host(host).as_str(),
+		"github.com" | "www.github.com"
+	)
+}
+
+fn normalize_host(host: &str) -> String {
+	let host = host.split('@').next_back().unwrap_or(host);
+	let host = host.split(':').next().unwrap_or(host);
+	host.trim().to_ascii_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use std::process::Command;
+
+	#[test]
+	fn parse_github_owner_and_repo_with_https_url() {
+		assert_eq!(
+			parse_github_owner_and_repo("https://github.com/Owner/Repo.git"),
+			Some(("owner".to_string(), "repo".to_string())),
+		);
+	}
+
+	#[test]
+	fn parse_github_owner_and_repo_with_scp_style_url() {
+		assert_eq!(
+			parse_github_owner_and_repo("git@github.com:Owner/Repo"),
+			Some(("owner".to_string(), "repo".to_string())),
+		);
+	}
+
+	#[test]
+	fn parse_github_owner_and_repo_with_ssh_scheme() {
+		assert_eq!(
+			parse_github_owner_and_repo("ssh://git@github.com/owner/repo.git"),
+			Some(("owner".to_string(), "repo".to_string())),
+		);
+	}
+
+	#[test]
+	fn parse_github_owner_and_repo_for_non_github_remote() {
+		assert_eq!(
+			parse_github_owner_and_repo("git@gitlab.com:owner/repo.git"),
+			None,
+		);
+	}
 
 	// --- validate_commit_hash ---
 
