@@ -86,7 +86,23 @@ export default function ProjectDetailPage() {
 		});
 	}
 
-	if (!project || !profile) {
+	if (!project) {
+		return <Navigate to="/" replace />;
+	}
+
+	if (!profile) {
+		const fallbackProfile =
+			profiles.find((item) => item.is_default) ?? profiles[0];
+
+		if (fallbackProfile) {
+			return (
+				<Navigate
+					to={`/projects/${project.id}/profiles/${fallbackProfile.id}`}
+					replace
+				/>
+			);
+		}
+
 		return <Navigate to="/" replace />;
 	}
 

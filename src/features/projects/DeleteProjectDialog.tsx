@@ -1,5 +1,5 @@
 import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
-import { useNavigate } from "react-router";
+import { useMatch, useNavigate } from "react-router";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDeleteProject } from "./hooks";
@@ -36,8 +36,13 @@ export default function DeleteProjectDialog({
 	project,
 }: DeleteProjectDialogProps) {
 	const navigate = useNavigate();
+	const projectMatch = useMatch("/projects/:projectId/profiles/:profileId");
 	const deleteProject = useDeleteProject({
 		onSuccess: (deletedProjectId, projectsBeforeDelete) => {
+			if (projectMatch?.params.projectId !== deletedProjectId) {
+				onClose();
+				return;
+			}
 			const replacement = getReplacementProject(
 				projectsBeforeDelete,
 				deletedProjectId,
