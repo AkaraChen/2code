@@ -1,15 +1,12 @@
 import {
 	CloseButton,
-	createListCollection,
 	Dialog,
 	Flex,
 	HStack,
 	Icon,
-	Select,
-	Portal,
+	SegmentGroup,
 	Text,
 } from "@chakra-ui/react";
-import { useMemo } from "react";
 import { FiGitBranch } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import type { GitDiffAction, GitDiffViewMode } from "../gitDiffReducer";
@@ -25,16 +22,10 @@ export default function GitDiffHeader({
 	viewMode,
 	dispatch,
 }: GitDiffHeaderProps) {
-	const previewModeCollection = useMemo(
-		() =>
-			createListCollection({
-				items: [
-					{ value: "unified", label: m.gitDiffPreviewModeUnified() },
-					{ value: "split", label: m.gitDiffPreviewModeSplit() },
-				],
-			}),
-		[],
-	);
+	const previewModeItems = [
+		{ value: "unified", label: m.gitDiffPreviewModeUnified() },
+		{ value: "split", label: m.gitDiffPreviewModeSplit() },
+	];
 
 	return (
 		<Dialog.Header py="2" pl="4" pr="16">
@@ -48,47 +39,23 @@ export default function GitDiffHeader({
 					</HStack>
 				</Dialog.Title>
 
-				<Flex align="center" gap="2" flexShrink={0}>
-					<Text fontSize="xs" color="fg.muted">
-						{m.gitDiffPreviewMode()}
-					</Text>
-					<Select.Root
-						collection={previewModeCollection}
-						value={[viewMode]}
+				<Flex align="center" flexShrink={0}>
+					<SegmentGroup.Root
+						aria-label={m.gitDiffPreviewMode()}
+						size="xs"
+						value={viewMode}
 						onValueChange={(e) => {
-							const nextViewMode = e.value[0];
+							const nextViewMode = e.value;
 							if (!nextViewMode) return;
 							dispatch({
 								type: "setViewMode",
 								viewMode: nextViewMode as GitDiffViewMode,
 							});
 						}}
-						size="xs"
-						width="140px"
-						positioning={{ sameWidth: false }}
 					>
-						<Select.HiddenSelect />
-						<Select.Control>
-							<Select.Trigger>
-								<Select.ValueText />
-							</Select.Trigger>
-							<Select.IndicatorGroup>
-								<Select.Indicator />
-							</Select.IndicatorGroup>
-						</Select.Control>
-						<Portal>
-							<Select.Positioner>
-								<Select.Content>
-									{previewModeCollection.items.map((item) => (
-										<Select.Item item={item} key={item.value}>
-											{item.label}
-											<Select.ItemIndicator />
-										</Select.Item>
-									))}
-								</Select.Content>
-							</Select.Positioner>
-						</Portal>
-					</Select.Root>
+						<SegmentGroup.Indicator />
+						<SegmentGroup.Items items={previewModeItems} />
+					</SegmentGroup.Root>
 				</Flex>
 
 				<Dialog.CloseTrigger asChild>
