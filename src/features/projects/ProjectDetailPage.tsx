@@ -104,13 +104,13 @@ export default function ProjectDetailPage() {
 	return (
 		<>
 			<CommandPalette profileId={profile.id} />
-			<ProfileLayout
-				projectId={project.id}
-				projectName={project.name}
-				profile={profile}
-				isActive
-			>
-				{shouldRenderEmptyState ? (
+			{shouldRenderEmptyState ? (
+				<ProfileLayout
+					projectId={project.id}
+					projectName={project.name}
+					profile={profile}
+					isActive
+				>
 					<Center h="full">
 						<EmptyState.Root>
 							<EmptyState.Content>
@@ -240,8 +240,8 @@ export default function ProjectDetailPage() {
 							</EmptyState.Content>
 						</EmptyState.Root>
 					</Center>
-				) : null}
-			</ProfileLayout>
+				</ProfileLayout>
+			) : null}
 		</>
 	);
 }
