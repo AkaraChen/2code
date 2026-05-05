@@ -7,7 +7,6 @@ import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
-import QuickTaskFloat from "./features/quickTasks/QuickTaskFloat";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import AppSidebar from "./layout/AppSidebar";
@@ -71,7 +70,6 @@ export default function App() {
 					</Suspense>
 				</Box>
 			</Flex>
-			<QuickTaskFloat />
 			<DebugFloat />
 		</Flex>
 	);

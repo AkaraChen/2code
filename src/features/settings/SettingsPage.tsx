@@ -13,9 +13,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { Suspense, use, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
 import { useDebugStore } from "@/features/debug/debugStore";
-import { QuickTasksSettings } from "@/features/quickTasks/QuickTasksSettings";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
@@ -31,16 +29,6 @@ import { NotificationSettings } from "./NotificationSettings";
 import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 
-const settingsTabs = new Set([
-	"general",
-	"terminal",
-	"template",
-	"quick-tasks",
-	"notification",
-	"topbar",
-	"profile",
-]);
-
 const localeCollection = createListCollection({
 	items: [
 		{ value: "en", label: "English" },
@@ -53,11 +41,8 @@ export default function SettingsPage() {
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
 	const locale = useLocale();
-	const [searchParams, setSearchParams] = useSearchParams();
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
-	const tab = searchParams.get("tab");
-	const activeTab = tab && settingsTabs.has(tab) ? tab : "general";
 
 	const themeCollection = useMemo(() => {
 		void locale;
@@ -76,20 +61,7 @@ export default function SettingsPage() {
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
 				</Heading>
-				<Tabs.Root
-					value={activeTab}
-					variant="plain"
-					onValueChange={(event) => {
-						const next = new URLSearchParams(searchParams);
-						if (event.value === "general") {
-							next.delete("tab");
-						} else {
-							next.set("tab", event.value);
-						}
-						if (next.toString() === searchParams.toString()) return;
-						setSearchParams(next, { replace: true });
-					}}
-				>
+				<Tabs.Root defaultValue="general" variant="plain">
 					<Tabs.List bg="bg.muted" rounded="l3" p="1">
 						<Tabs.Trigger value="general">
 							{m.general()}
@@ -99,9 +71,6 @@ export default function SettingsPage() {
 						</Tabs.Trigger>
 						<Tabs.Trigger value="template">
 							{m.terminalTemplates()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="quick-tasks">
-							{m.quickTasks()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
 							{m.notification()}
@@ -235,11 +204,6 @@ export default function SettingsPage() {
 					<Tabs.Content value="template">
 						<Stack gap="6" maxW="2xl">
 							<GlobalTerminalTemplatesSettings />
-						</Stack>
-					</Tabs.Content>
-					<Tabs.Content value="quick-tasks">
-						<Stack gap="6" maxW="2xl">
-							<QuickTasksSettings />
 						</Stack>
 					</Tabs.Content>
 					<Tabs.Content value="notification">
