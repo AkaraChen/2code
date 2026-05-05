@@ -234,8 +234,7 @@ export default function QuickTaskFloat() {
 					zIndex="overlay"
 					rounded="full"
 					size="md"
-					colorPalette="green"
-					variant="solid"
+					variant="subtle"
 					boxShadow="lg"
 					onClick={() => setMenuOpen(!isMenuOpen)}
 				>
