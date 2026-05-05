@@ -78,7 +78,6 @@ pub fn run() {
 			handler::quick_task::write_quick_task_pty,
 			handler::quick_task::resize_quick_task_pty,
 			handler::quick_task::stop_quick_task_pty,
-			handler::project::create_project_temporary,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,
 			handler::project::update_project,

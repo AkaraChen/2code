@@ -53,8 +53,8 @@ The app SHALL wrap the component tree in a `ProjectProvider` that manages the pr
 
 #### Scenario: Context provides create function
 
-- **WHEN** a component calls `createProject()` from the context
-- **THEN** the function invokes `create_project_temporary`, refreshes the list, and returns the new project
+- **WHEN** a component calls `createProject({ folder: "/path/to/dir" })` from the context
+- **THEN** the function invokes `create_project_from_folder`, refreshes the list, and returns the new project
 
 #### Scenario: Context provides delete function
 

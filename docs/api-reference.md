@@ -8,7 +8,6 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 
 | Command                      | Parameters                                   | Returns                 | Description                                                         |
 | ---------------------------- | -------------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `create_project_temporary`   | `name?: string`                              | `Project`               | Create project with temp directory                                  |
 | `create_project_from_folder` | `name: string, folder: string`               | `Project`               | Create project from existing folder                                 |
 | `list_projects`              | —                                            | `ProjectWithProfiles[]` | List all projects with their profiles                               |
 | `update_project`             | `id: string, name?: string, folder?: string` | `Project`               | Update project name or folder                                       |

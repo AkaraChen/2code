@@ -7,7 +7,6 @@ import {
 import { useMemo } from "react";
 import {
 	createProjectFromFolder,
-	createProjectTemporary,
 	deleteProject,
 	getGitBranch,
 	getFileTreeGitStatus,
@@ -98,16 +97,11 @@ export function useCreateProject(options?: {
 }) {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: async (opts?: { name?: string; folder?: string }) => {
-			if (opts?.folder) {
-				return createProjectFromFolder({
-					name:
-						opts.name || opts.folder.split("/").pop() || "Untitled",
-					folder: opts.folder,
-				});
-			}
-			return createProjectTemporary({ name: opts?.name });
-		},
+		mutationFn: (opts: { name?: string; folder: string }) =>
+			createProjectFromFolder({
+				name: opts.name || opts.folder.split("/").pop() || "Untitled",
+				folder: opts.folder,
+			}),
 		onSuccess: async (project) => {
 			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(

@@ -8,19 +8,6 @@ use model::project::{
 };
 
 #[tauri::command]
-pub async fn create_project_temporary(
-	name: Option<String>,
-	state: State<'_, DbPool>,
-) -> Result<Project, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::create_temporary(conn, name)
-	})
-	.await
-}
-
-#[tauri::command]
 pub async fn create_project_from_folder(
 	name: String,
 	folder: String,

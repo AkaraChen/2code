@@ -34,7 +34,7 @@ src-tauri/
 ## COMMANDS EXPOSED (handler/mod.rs)
 PTY (9): `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`, `flush_pty_output`, `restore_pty_session`
 
-Projects (7): `create_project_temporary`, `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config`
+Projects (6): `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config`
 
 Git (5): `get_git_branch`, `get_git_diff`, `get_git_diff_stats`, `get_git_log`, `get_commit_diff`
 
