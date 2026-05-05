@@ -102,14 +102,16 @@ export default function TerminalLayer() {
 							profileId === activeProfileId ? "flex" : "none"
 						}
 					>
-						<ProjectTopBar
-							projectId={project?.id ?? profile.project_id}
-							projectName={project?.name ?? ""}
-							profile={profile}
-							isActive={profileId === activeProfileId}
-							isFileTreeOpen={fileTreeIsOpen(profileId)}
-							onToggleFileTree={() => toggleFileTree(profileId)}
-						/>
+						<Box borderBottomWidth="1px" borderColor="border">
+							<ProjectTopBar
+								projectId={project?.id ?? profile.project_id}
+								projectName={project?.name ?? ""}
+								profile={profile}
+								isActive={profileId === activeProfileId}
+								isFileTreeOpen={fileTreeIsOpen(profileId)}
+								onToggleFileTree={() => toggleFileTree(profileId)}
+							/>
+						</Box>
 						<Flex flex="1" minH="0" minW="0">
 							<FileTreePanel
 								profileId={profileId}
@@ -119,7 +121,13 @@ export default function TerminalLayer() {
 									openFileTab(profileId, filePath)
 								}
 							/>
-							<Box flex="1" minH="0" minW="0">
+							<Box
+								flex="1"
+								minH="0"
+								minW="0"
+								borderLeftWidth={fileTreeIsOpen(profileId) ? "1px" : "0"}
+								borderColor="border"
+							>
 								<TerminalTabs
 									projectId={project?.id ?? profile.project_id}
 									profileId={profileId}

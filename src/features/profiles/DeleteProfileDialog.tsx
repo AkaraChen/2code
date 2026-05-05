@@ -9,8 +9,9 @@ import {
 	Stack,
 	Text,
 } from "@chakra-ui/react";
-import { useNavigate } from "react-router";
+import { useMatch, useNavigate } from "react-router";
 import type { GitDiffStats } from "@/generated";
+import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useDeleteProfile, useProfileDeleteCheck } from "./hooks";
 
@@ -36,13 +37,32 @@ export default function DeleteProfileDialog({
 	const deleteProfile = useDeleteProfile();
 	const deleteCheck = useProfileDeleteCheck(profile.id, isOpen);
 	const navigate = useNavigate();
+	const { data: projects } = useProjects();
+	const profileMatch = useMatch("/projects/:projectId/profiles/:profileId");
 
 	const handleDelete = async () => {
+		const isDeletingActiveProfile =
+			profileMatch?.params.profileId === profile.id;
+		const project = projects.find((item) => item.id === profile.project_id);
+		const fallbackProfile =
+			project?.profiles.find(
+				(item) => item.id !== profile.id && item.is_default,
+			) ?? project?.profiles.find((item) => item.id !== profile.id);
+
 		await deleteProfile.mutateAsync({
 			id: profile.id,
 			projectId: profile.project_id,
 		});
-		navigate(`/projects/${profile.project_id}`);
+		if (isDeletingActiveProfile) {
+			if (fallbackProfile) {
+				navigate(
+					`/projects/${profile.project_id}/profiles/${fallbackProfile.id}`,
+					{ replace: true },
+				);
+			} else {
+				navigate("/", { replace: true });
+			}
+		}
 		onClose();
 	};
 
