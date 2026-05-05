@@ -5,6 +5,7 @@ describe("queryNamespaces", () => {
 	it("contains all expected namespace strings", () => {
 		expect(queryNamespaces).toEqual({
 			project: "project",
+			"project-avatar": "project-avatar",
 			"project-config": "project-config",
 			"git-branch": "git-branch",
 			"git-diff": "git-diff",
@@ -37,6 +38,15 @@ describe("queryKeys", () => {
 		it("includes projectId in key", () => {
 			expect(queryKeys.projectConfig("project-1")).toEqual([
 				"project-config",
+				"project-1",
+			]);
+		});
+	});
+
+	describe("projectAvatar", () => {
+		it("includes projectId in key", () => {
+			expect(queryKeys.projectAvatar("project-1")).toEqual([
+				"project-avatar",
 				"project-1",
 			]);
 		});

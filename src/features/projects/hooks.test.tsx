@@ -5,10 +5,12 @@ import {
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FileSearchResult } from "@/generated";
-import { useFileSearch } from "./hooks";
+import type { FileSearchResult, ProjectWithProfiles } from "@/generated";
+import { queryKeys } from "@/shared/lib/queryKeys";
+import { useDeleteProject, useFileSearch } from "./hooks";
 
-const { searchFileMock } = vi.hoisted(() => ({
+const { deleteProjectMock, searchFileMock } = vi.hoisted(() => ({
+	deleteProjectMock: vi.fn(),
 	searchFileMock: vi.fn(),
 }));
 
@@ -18,6 +20,7 @@ vi.mock("@/generated", async () => {
 	);
 	return {
 		...actual,
+		deleteProject: deleteProjectMock,
 		searchFile: searchFileMock,
 	};
 });
@@ -31,20 +34,77 @@ function createDeferred<T>() {
 }
 
 function createWrapper() {
-	const queryClient = new QueryClient({
+	return createWrapperWithClient(createQueryClient());
+}
+
+function createQueryClient() {
+	return new QueryClient({
 		defaultOptions: {
 			queries: {
 				retry: false,
 			},
 		},
 	});
+}
 
+function createWrapperWithClient(queryClient: QueryClient) {
 	return ({ children }: { children: ReactNode }) => (
 		<QueryClientProvider client={queryClient}>
 			{children}
 		</QueryClientProvider>
 	);
 }
+
+describe("useDeleteProject", () => {
+	beforeEach(() => {
+		deleteProjectMock.mockReset();
+	});
+
+	it("runs success callback before invalidating projects cache", async () => {
+		const queryClient = createQueryClient();
+		const projects: ProjectWithProfiles[] = [
+			{
+				id: "project-1",
+				name: "Project 1",
+				folder: "/projects/one",
+				created_at: "2026-01-01T00:00:00Z",
+				profiles: [],
+			},
+			{
+				id: "project-2",
+				name: "Project 2",
+				folder: "/projects/two",
+				created_at: "2026-01-01T00:00:00Z",
+				profiles: [],
+			},
+		];
+		const events: string[] = [];
+		const invalidateQueriesSpy = vi
+			.spyOn(queryClient, "invalidateQueries")
+			.mockImplementation(async () => {
+				events.push("invalidate");
+			});
+		const onSuccess = vi.fn(() => {
+			events.push("success");
+		});
+		queryClient.setQueryData(queryKeys.projects.all, projects);
+		deleteProjectMock.mockResolvedValue(undefined);
+
+		const { result } = renderHook(
+			() => useDeleteProject({ onSuccess }),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.mutateAsync("project-1");
+		});
+
+		expect(deleteProjectMock).toHaveBeenCalledWith({ id: "project-1" });
+		expect(onSuccess).toHaveBeenCalledWith("project-1", projects);
+		expect(events).toEqual(["success", "invalidate"]);
+		invalidateQueriesSpy.mockRestore();
+	});
+});
 
 describe("useFileSearch", () => {
 	beforeEach(() => {

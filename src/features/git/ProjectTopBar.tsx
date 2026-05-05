@@ -9,7 +9,11 @@ import {
 } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import { Suspense, useEffect, useState } from "react";
-import { FiGitBranch, FiSettings, FiSidebar } from "react-icons/fi";
+import {
+	PiGearSixFill,
+	PiGitBranchFill,
+	PiSidebarSimpleFill,
+} from "react-icons/pi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -34,7 +38,7 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	if (!branch) return null;
 	return (
 		<HStack gap="1">
-			<FiGitBranch />
+			<PiGitBranchFill />
 			<Text as="span">{branch}</Text>
 		</HStack>
 	);
@@ -158,7 +162,7 @@ export default function ProjectTopBar({
 										}
 										style={{ display: "inline-flex" }}
 									>
-										<FiSidebar />
+										<PiSidebarSimpleFill />
 									</motion.span>
 								</IconButton>
 							</Tooltip.Trigger>
@@ -202,7 +206,7 @@ export default function ProjectTopBar({
 							) : null
 						) : (
 							<HStack gap="1">
-								<FiGitBranch />
+								<PiGitBranchFill />
 								<Text as="span">{profile.branch_name}</Text>
 							</HStack>
 						)}
@@ -235,7 +239,7 @@ export default function ProjectTopBar({
 								variant="subtle"
 								onClick={() => setSettingsOpen(true)}
 							>
-								<FiSettings />
+								<PiGearSixFill />
 							</IconButton>
 						</Tooltip.Trigger>
 						<Portal>

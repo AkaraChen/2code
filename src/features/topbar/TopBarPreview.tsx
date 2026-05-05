@@ -4,7 +4,7 @@ import {
 	horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { FiGitBranch } from "react-icons/fi";
+import { PiGitBranchFill } from "react-icons/pi";
 import * as m from "@/paraglide/messages.js";
 import { controlRegistry } from "./registry";
 import { DraggableControl } from "./DraggableControl";
@@ -40,7 +40,7 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 							My Project
 						</Text>
 						<HStack gap="1" color="fg.muted" fontSize="sm">
-							<FiGitBranch />
+							<PiGitBranchFill />
 							<Text as="span">main</Text>
 						</HStack>
 					</HStack>

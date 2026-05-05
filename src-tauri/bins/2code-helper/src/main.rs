@@ -31,9 +31,10 @@ fn main() {
 			};
 			match ureq::get(&notify_url).call() {
 				Ok(mut resp) => {
-					let body: NotifyResponse = resp.body_mut().read_json().unwrap_or(
-						NotifyResponse { played: false },
-					);
+					let body: NotifyResponse = resp
+						.body_mut()
+						.read_json()
+						.unwrap_or(NotifyResponse { played: false });
 					if !body.played {
 						std::process::exit(1);
 					}

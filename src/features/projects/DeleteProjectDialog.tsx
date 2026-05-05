@@ -1,7 +1,8 @@
 import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
 import { useMatch, useNavigate } from "react-router";
+import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { useDeleteProject, useProjects } from "./hooks";
+import { useDeleteProject } from "./hooks";
 
 interface DeleteProjectDialogProps {
 	isOpen: boolean;
@@ -9,35 +10,57 @@ interface DeleteProjectDialogProps {
 	project: { id: string; name: string };
 }
 
+function getReplacementProject(
+	projects: ProjectWithProfiles[],
+	deletedProjectId: string,
+) {
+	const deletedIndex = projects.findIndex((item) => item.id === deletedProjectId);
+	const remainingProjects = projects.filter((item) => item.id !== deletedProjectId);
+	if (remainingProjects.length === 0) return null;
+
+	const replacementIndex = deletedIndex >= 0
+		? Math.min(deletedIndex, remainingProjects.length - 1)
+		: 0;
+	const replacementProject = remainingProjects[replacementIndex];
+	const replacementProfile =
+		replacementProject.profiles.find((profile) => profile.is_default)
+		?? replacementProject.profiles[0];
+
+	if (!replacementProfile) return null;
+	return { project: replacementProject, profile: replacementProfile };
+}
+
 export default function DeleteProjectDialog({
 	isOpen,
 	onClose,
 	project,
 }: DeleteProjectDialogProps) {
-	const deleteProject = useDeleteProject();
 	const navigate = useNavigate();
-	const { data: projects } = useProjects();
 	const projectMatch = useMatch("/projects/:projectId/profiles/:profileId");
-
-	const handleDelete = async () => {
-		const isDeletingActiveProject =
-			projectMatch?.params.projectId === project.id;
-		const nextProject = projects.find((item) => item.id !== project.id);
-		const nextProfile =
-			nextProject?.profiles.find((profile) => profile.is_default) ??
-			nextProject?.profiles[0];
-
-		await deleteProject.mutateAsync(project.id);
-		if (isDeletingActiveProject) {
-			if (nextProject && nextProfile) {
-				navigate(`/projects/${nextProject.id}/profiles/${nextProfile.id}`, {
-					replace: true,
-				});
+	const deleteProject = useDeleteProject({
+		onSuccess: (deletedProjectId, projectsBeforeDelete) => {
+			if (projectMatch?.params.projectId !== deletedProjectId) {
+				onClose();
+				return;
+			}
+			const replacement = getReplacementProject(
+				projectsBeforeDelete,
+				deletedProjectId,
+			);
+			if (replacement) {
+				navigate(
+					`/projects/${replacement.project.id}/profiles/${replacement.profile.id}`,
+					{ replace: true },
+				);
 			} else {
 				navigate("/", { replace: true });
 			}
-		}
-		onClose();
+			onClose();
+		},
+	});
+
+	const handleDelete = () => {
+		deleteProject.mutate(project.id);
 	};
 
 	return (
@@ -62,7 +85,11 @@ export default function DeleteProjectDialog({
 							<Dialog.ActionTrigger asChild>
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
-							<Button colorPalette="red" onClick={handleDelete}>
+							<Button
+								colorPalette="red"
+								loading={deleteProject.isPending}
+								onClick={handleDelete}
+							>
 								{m.delete()}
 							</Button>
 						</Dialog.Footer>

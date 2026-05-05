@@ -1,8 +1,8 @@
 import "@fontsource-variable/bricolage-grotesque";
-import { Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
+import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useRef } from "react";
-import { FiHome, FiPlus, FiSettings } from "react-icons/fi";
+import { FiFolder, FiHome, FiPlus, FiSettings } from "react-icons/fi";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
@@ -105,16 +105,21 @@ export default function AppSidebar() {
 							)}
 
 							<HStack px="4" pt="2" pb="2" justify="space-between">
-								<Text
-									fontSize="xs"
-									fontWeight="semibold"
-									color="fg.muted"
-									textTransform="uppercase"
-									letterSpacing="wider"
-									whiteSpace="nowrap"
-								>
-									{m.projects()}
-								</Text>
+								<HStack gap="2" minW={0}>
+									<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
+										<FiFolder />
+									</Icon>
+									<Text
+										fontSize="xs"
+										fontWeight="semibold"
+										color="fg.muted"
+										textTransform="uppercase"
+										letterSpacing="wider"
+										whiteSpace="nowrap"
+									>
+										{m.projects()}
+									</Text>
+								</HStack>
 								<IconButton
 									id="add-project-button"
 									aria-label={m.newProject()}

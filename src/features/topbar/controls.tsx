@@ -2,7 +2,6 @@ import { Button, IconButton, Portal, Text, Tooltip } from "@chakra-ui/react";
 import {
 	SiCursor,
 	SiGhostty,
-	SiGit,
 	SiGithub,
 	SiIterm2,
 	SiSublimetext,
@@ -13,7 +12,11 @@ import {
 } from "@icons-pack/react-simple-icons";
 import { Command } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
-import { FiFolder, FiTerminal } from "react-icons/fi";
+import {
+	PiFolderOpenFill,
+	PiGitDiffFill,
+	PiTerminalWindowFill,
+} from "react-icons/pi";
 import { useGitDiffStats } from "@/features/git/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useOpenTopbarApp } from "./hooks";
@@ -151,7 +154,7 @@ export function KittyControl(props: ControlProps) {
 			{...props}
 			label={m.topbarKitty()}
 			appId="kitty"
-			icon={FiTerminal}
+			icon={PiTerminalWindowFill}
 		/>
 	);
 }
@@ -180,7 +183,7 @@ export function GitDiffControl({ profile, isActive, options }: ControlProps) {
 					variant="subtle"
 					onClick={() => onOpen?.()}
 				>
-					<SiGit size={14} />
+					<PiGitDiffFill size={14} />
 					{stats && (
 						<>
 							<Text as="span" color="green.400" fontSize="xs">
@@ -221,7 +224,7 @@ export function RevealInFinderControl({ profile }: ControlProps) {
 					variant="subtle"
 					onClick={handleReveal}
 				>
-					<FiFolder />
+					<PiFolderOpenFill />
 				</IconButton>
 			</Tooltip.Trigger>
 			<Portal>

@@ -33,7 +33,7 @@ export function SidebarLink({
 			style={style}
 		>
 			<NavLink to={to}>
-				{isActive && <SidebarActiveIndicator insetInlineStart="1" />}
+				{isActive && <SidebarActiveIndicator insetInlineStart="0" />}
 				<Icon fontSize="md" flexShrink={0}>
 					{icon}
 				</Icon>

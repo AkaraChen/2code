@@ -1,7 +1,6 @@
 import {
 	SiCursor,
 	SiGhostty,
-	SiGit,
 	SiGithub,
 	SiIterm2,
 	SiSublimetext,
@@ -10,7 +9,11 @@ import {
 	SiWindsurf,
 	SiZedindustries,
 } from "@icons-pack/react-simple-icons";
-import { FiFolder, FiTerminal } from "react-icons/fi";
+import {
+	PiFolderOpenFill,
+	PiGitDiffFill,
+	PiTerminalWindowFill,
+} from "react-icons/pi";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
@@ -97,7 +100,7 @@ const definitions: ControlDefinition[] = [
 		id: "kitty",
 		kind: "app",
 		label: () => m.topbarKitty(),
-		icon: FiTerminal,
+		icon: PiTerminalWindowFill,
 		optionFields: [],
 		component: KittyControl,
 	},
@@ -113,7 +116,7 @@ const definitions: ControlDefinition[] = [
 		id: "git-diff",
 		kind: "static",
 		label: () => m.topbarGitDiff(),
-		icon: SiGit,
+		icon: PiGitDiffFill,
 		optionFields: [],
 		component: GitDiffControl,
 	},
@@ -121,7 +124,7 @@ const definitions: ControlDefinition[] = [
 		id: "reveal-in-finder",
 		kind: "static",
 		label: () => m.revealInFinder(),
-		icon: FiFolder,
+		icon: PiFolderOpenFill,
 		optionFields: [],
 		component: RevealInFinderControl,
 	},
