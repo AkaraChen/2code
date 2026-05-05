@@ -15,12 +15,14 @@ import {
 	getGitDiff,
 	getGitDiffStats,
 	getGitLog,
+	getGitPullRequestStatus,
 	gitPush,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+const PR_STATUS_REFRESH_INTERVAL_MS = 2 * 60 * 1_000;
 
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
@@ -75,6 +77,21 @@ export function useGitAheadCount(profileId: string) {
 		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
 	});
 	return data ?? 0;
+}
+
+export function useGitPullRequestStatus(
+	profileId: string,
+	branchName: string | null | undefined,
+	enabled = true,
+) {
+	return useQuery({
+		queryKey: queryKeys.git.pullRequestStatus(profileId, branchName ?? null),
+		queryFn: () => getGitPullRequestStatus({ profileId }),
+		enabled: !!profileId && !!branchName && enabled,
+		staleTime: 30_000,
+		refetchInterval: enabled ? PR_STATUS_REFRESH_INTERVAL_MS : false,
+		retry: false,
+	});
 }
 
 export function useGitPush(profileId: string) {

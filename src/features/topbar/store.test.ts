@@ -22,6 +22,7 @@ describe("useTopBarStore", () => {
 				"github-desktop",
 				"vscode",
 				"git-diff",
+				"pr-status",
 				"reveal-in-finder",
 			]);
 		});

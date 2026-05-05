@@ -28,10 +28,10 @@ The expanded projects menu SHALL display an "Add" action as its first child item
 - **WHEN** the projects menu is expanded
 - **THEN** the first item in the list is the "New Project" action with an `Add` icon
 
-#### Scenario: Clicking add creates a temporary project
+#### Scenario: Clicking add opens the create dialog
 
 - **WHEN** the user clicks the "New Project" action
-- **THEN** the system invokes `create_project_temporary` via Tauri IPC, the project list refreshes to include the new project, and the app navigates to `/projects/<new-project-id>`
+- **THEN** the Create Project dialog opens so the user can select an existing folder
 
 ### Requirement: Project list items in sidebar
 

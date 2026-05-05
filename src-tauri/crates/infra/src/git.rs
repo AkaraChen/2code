@@ -7,7 +7,20 @@ use std::process::Command;
 
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
-use model::project::{GitAuthor, GitCommit, GitDiffStats};
+use model::project::{
+	GitAuthor, GitCommit, GitDiffStats, GitPullRequestStatus,
+};
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GhPullRequest {
+	number: u32,
+	title: String,
+	state: String,
+	url: String,
+	is_draft: bool,
+	head_ref_name: String,
+}
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
@@ -569,6 +582,50 @@ pub fn push(folder: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+pub fn pull_request_status(
+	folder: &str,
+) -> Result<Option<GitPullRequestStatus>, AppError> {
+	let branch_name = branch(folder)?;
+	if branch_name.is_empty() || branch_name == "HEAD" {
+		return Ok(None);
+	}
+
+	let output = Command::new("gh")
+		.args([
+			"pr",
+			"list",
+			"--head",
+			&branch_name,
+			"--state",
+			"all",
+			"--json",
+			"number,title,state,url,isDraft,headRefName",
+			"--limit",
+			"1",
+		])
+		.current_dir(folder)
+		.output();
+
+	let output = match output {
+		Ok(output) => output,
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+			return Err(AppError::GitError("gh CLI not found".into()));
+		}
+		Err(error) => return Err(AppError::IoError(error)),
+	};
+
+	if !output.status.success() {
+		let message = command_error("gh pr list failed", &output);
+		if is_non_github_pr_lookup_error(&message) {
+			return Ok(None);
+		}
+		return Err(AppError::GitError(message));
+	}
+
+	let prs = parse_pull_request_list(&output.stdout)?;
+	Ok(prs.into_iter().next())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
@@ -1017,6 +1074,41 @@ fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	prefix.to_string()
 }
 
+fn parse_pull_request_list(
+	output: &[u8],
+) -> Result<Vec<GitPullRequestStatus>, AppError> {
+	let prs: Vec<GhPullRequest> =
+		serde_json::from_slice(output).map_err(|error| {
+			AppError::GitError(format!(
+				"Failed to parse gh pr list output: {error}"
+			))
+		})?;
+
+	Ok(prs
+		.into_iter()
+		.map(|pr| GitPullRequestStatus {
+			number: pr.number,
+			title: pr.title,
+			state: pr.state,
+			url: pr.url,
+			is_draft: pr.is_draft,
+			head_ref_name: pr.head_ref_name,
+		})
+		.collect())
+}
+
+fn is_non_github_pr_lookup_error(message: &str) -> bool {
+	let lower = message.to_ascii_lowercase();
+	[
+		"not a git repository",
+		"none of the git remotes configured",
+		"no github remotes found",
+		"could not resolve to a repository",
+	]
+	.iter()
+	.any(|pattern| lower.contains(pattern))
+}
+
 fn read_git_blob_to_cache(
 	folder: &str,
 	spec: &str,
@@ -1431,6 +1523,31 @@ mod tests {
 		let (f, i, d) =
 			parse_shortstat(" 1 file changed, 1 insertion(+), 1 deletion(-)");
 		assert_eq!((f, i, d), (1, 1, 1));
+	}
+
+	#[test]
+	fn parse_pull_request_list_maps_gh_json() {
+		let output = br#"[{"number":42,"title":"Add PR chip","state":"OPEN","url":"https://github.com/acme/repo/pull/42","isDraft":true,"headRefName":"feature/pr-chip"}]"#;
+
+		let prs = parse_pull_request_list(output).unwrap();
+
+		assert_eq!(
+			prs,
+			vec![GitPullRequestStatus {
+				number: 42,
+				title: "Add PR chip".to_string(),
+				state: "OPEN".to_string(),
+				url: "https://github.com/acme/repo/pull/42".to_string(),
+				is_draft: true,
+				head_ref_name: "feature/pr-chip".to_string(),
+			}]
+		);
+	}
+
+	#[test]
+	fn parse_pull_request_list_accepts_empty_list() {
+		let prs = parse_pull_request_list(br#"[]"#).unwrap();
+		assert!(prs.is_empty());
 	}
 
 	#[test]

@@ -31,6 +31,7 @@ describe("topbar registry", () => {
 			"cursor",
 			"warp",
 			"git-diff",
+			"pr-status",
 			"reveal-in-finder",
 		]);
 	});

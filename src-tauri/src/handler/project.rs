@@ -3,22 +3,9 @@ use tauri::State;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectConfig,
-	ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
+	ProjectConfig, ProjectWithProfiles,
 };
-
-#[tauri::command]
-pub async fn create_project_temporary(
-	name: Option<String>,
-	state: State<'_, DbPool>,
-) -> Result<Project, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::create_temporary(conn, name)
-	})
-	.await
-}
 
 #[tauri::command]
 pub async fn create_project_from_folder(
@@ -200,6 +187,22 @@ pub async fn git_push(
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::project::push(conn, &profile_id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_git_pull_request_status(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Option<GitPullRequestStatus>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree_path = {
+			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+			repo::profile::find_by_id(conn, &profile_id)?.worktree_path
+		};
+		service::project::get_pull_request_status_for_folder(&worktree_path)
 	})
 	.await
 }
