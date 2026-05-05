@@ -216,7 +216,6 @@
 	"deleteQuickTask": "Delete Task",
 	"noQuickTasks": "No quick tasks yet.",
 	"manageQuickTasks": "Manage Tasks",
-	"clearFinishedQuickTasks": "Clear Finished",
 	"quickTaskName": "Task Name",
 	"quickTaskNamePlaceholder": "e.g. Start Web",
 	"quickTaskCwd": "Working Directory",

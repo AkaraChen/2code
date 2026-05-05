@@ -36,9 +36,6 @@ export function QuickTasksSettings() {
 	const upsertTask = useQuickTaskStore((s) => s.upsertTask);
 	const deleteTask = useQuickTaskStore((s) => s.deleteTask);
 	const runs = useQuickTaskRuntimeStore((s) => s.runs);
-	const clearFinishedRuns = useQuickTaskRuntimeStore(
-		(s) => s.clearFinishedRuns,
-	);
 	const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 	const [draft, setDraft] = useState<QuickTaskDraft | null>(null);
 
@@ -98,13 +95,6 @@ export function QuickTasksSettings() {
 						</Text>
 					</Stack>
 					<HStack gap="2">
-						<Button
-							size="sm"
-							variant="ghost"
-							onClick={clearFinishedRuns}
-						>
-							{m.clearFinishedQuickTasks()}
-						</Button>
 						<Button
 							size="sm"
 							variant="outline"

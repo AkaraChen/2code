@@ -216,7 +216,6 @@
 	"deleteQuickTask": "删除任务",
 	"noQuickTasks": "还没有快捷任务。",
 	"manageQuickTasks": "管理任务",
-	"clearFinishedQuickTasks": "清除已结束",
 	"quickTaskName": "任务名称",
 	"quickTaskNamePlaceholder": "例如 Start Web",
 	"quickTaskCwd": "工作目录",

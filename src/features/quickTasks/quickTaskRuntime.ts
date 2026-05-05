@@ -33,7 +33,6 @@ type QuickTaskOutputListener = (event: QuickTaskOutputEvent) => void;
 
 interface QuickTaskRuntimeStore {
 	runs: Record<string, QuickTaskRun>;
-	runOrder: string[];
 	focusedRunId: string | null;
 	isPanelOpen: boolean;
 	isMenuOpen: boolean;
@@ -45,7 +44,6 @@ interface QuickTaskRuntimeStore {
 	focusRun: (runId: string) => void;
 	setPanelOpen: (isOpen: boolean) => void;
 	setMenuOpen: (isOpen: boolean) => void;
-	clearFinishedRuns: () => void;
 }
 
 const MAX_OUTPUT_CHARS = 1_000_000;
@@ -88,24 +86,39 @@ function getErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
 }
 
+function removeQuickTaskOutput(runId: string) {
+	outputBuffers.delete(runId);
+	outputLengths.delete(runId);
+	outputListeners.delete(runId);
+}
+
 export const useQuickTaskRuntimeStore = create<QuickTaskRuntimeStore>()(
 	(set, get) => ({
 		runs: {},
-		runOrder: [],
 		focusedRunId: null,
 		isPanelOpen: false,
 		isMenuOpen: false,
 
 		addRun(run) {
-			set((state) => ({
-				runs: { ...state.runs, [run.runId]: run },
-				runOrder: [
-					run.runId,
-					...state.runOrder.filter((id) => id !== run.runId),
-				],
-				focusedRunId: run.runId,
-				isPanelOpen: true,
-			}));
+			set((state) => {
+				const runs = Object.fromEntries(
+					Object.entries(state.runs).filter(([runId, existing]) => {
+						const keep =
+							existing.taskId !== run.taskId ||
+							isActiveStatus(existing.status);
+						if (!keep) {
+							removeQuickTaskOutput(runId);
+						}
+						return keep;
+					}),
+				) as Record<string, QuickTaskRun>;
+
+				return {
+					runs: { ...runs, [run.runId]: run },
+					focusedRunId: run.runId,
+					isPanelOpen: true,
+				};
+			});
 		},
 
 		markRunning(runId) {
@@ -192,33 +205,6 @@ export const useQuickTaskRuntimeStore = create<QuickTaskRuntimeStore>()(
 		setMenuOpen(isMenuOpen) {
 			if (get().isMenuOpen === isMenuOpen) return;
 			set({ isMenuOpen });
-		},
-
-		clearFinishedRuns() {
-			set((state) => {
-				const activeIds = state.runOrder.filter((runId) => {
-					const run = state.runs[runId];
-					return run && isActiveStatus(run.status);
-				});
-				const activeRuns = Object.fromEntries(
-					activeIds.map((runId) => [runId, state.runs[runId]]),
-				) as Record<string, QuickTaskRun>;
-
-				for (const runId of state.runOrder) {
-					if (!activeRuns[runId]) {
-						outputBuffers.delete(runId);
-						outputLengths.delete(runId);
-					}
-				}
-
-				return {
-					runs: activeRuns,
-					runOrder: activeIds,
-					focusedRunId: activeIds.includes(state.focusedRunId ?? "")
-						? state.focusedRunId
-						: (activeIds[0] ?? null),
-				};
-			});
 		},
 	}),
 );
