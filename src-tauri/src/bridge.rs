@@ -4,9 +4,10 @@ use tauri::{ipc::Channel, AppHandle, Emitter, Manager};
 
 use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
+use model::quick_task::QuickTaskPtyEvent;
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders};
-use service::{PtyEventEmitter, WatchEventSender};
+use service::{PtyEventEmitter, QuickTaskEventSender, WatchEventSender};
 
 /// Tauri implementation of the PtyEventEmitter trait.
 pub struct TauriPtyEmitter(pub AppHandle);
@@ -28,6 +29,15 @@ pub struct TauriWatchSender(pub Channel<WatchEvent>);
 
 impl WatchEventSender for TauriWatchSender {
 	fn send(&self, event: WatchEvent) -> bool {
+		self.0.send(event).is_ok()
+	}
+}
+
+/// Tauri implementation of the QuickTaskEventSender trait.
+pub struct TauriQuickTaskSender(pub Channel<QuickTaskPtyEvent>);
+
+impl QuickTaskEventSender for TauriQuickTaskSender {
+	fn send(&self, event: QuickTaskPtyEvent) -> bool {
 		self.0.send(event).is_ok()
 	}
 }

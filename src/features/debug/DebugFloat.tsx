@@ -17,7 +17,7 @@ export default function DebugFloat() {
 				aria-label={m.debugLog()}
 				position="fixed"
 				bottom="4"
-				right="4"
+				right="16"
 				zIndex="overlay"
 				rounded="full"
 				size="sm"

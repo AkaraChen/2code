@@ -13,9 +13,12 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { Suspense, use, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useDebugStore } from "@/features/debug/debugStore";
+import { QuickTasksSettings } from "@/features/quickTasks/QuickTasksSettings";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
+import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
 import { setAppLocale, useLocale } from "@/shared/lib/locale";
@@ -26,8 +29,17 @@ import { FontSizePicker } from "./FontSizePicker";
 import { GlobalTerminalTemplatesSettings } from "./GlobalTerminalTemplatesSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
-import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
+
+const settingsTabs = new Set([
+	"general",
+	"terminal",
+	"template",
+	"quick-tasks",
+	"notification",
+	"topbar",
+	"profile",
+]);
 
 const localeCollection = createListCollection({
 	items: [
@@ -41,22 +53,22 @@ export default function SettingsPage() {
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
 	const locale = useLocale();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
+	const tab = searchParams.get("tab");
+	const activeTab = tab && settingsTabs.has(tab) ? tab : "general";
 
-	const themeCollection = useMemo(
-		() => {
-			void locale;
-			return createListCollection({
-				items: [
-					{ value: "system", label: m.themeSystem() },
-					{ value: "light", label: m.themeLight() },
-					{ value: "dark", label: m.themeDark() },
-				],
-			});
-		},
-		[locale],
-	);
+	const themeCollection = useMemo(() => {
+		void locale;
+		return createListCollection({
+			items: [
+				{ value: "system", label: m.themeSystem() },
+				{ value: "light", label: m.themeLight() },
+				{ value: "dark", label: m.themeDark() },
+			],
+		});
+	}, [locale]);
 
 	return (
 		<Box p="8" pt="16">
@@ -64,7 +76,19 @@ export default function SettingsPage() {
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
 				</Heading>
-				<Tabs.Root defaultValue="general" variant="plain">
+				<Tabs.Root
+					value={activeTab}
+					variant="plain"
+					onValueChange={(event) => {
+						const next = new URLSearchParams(searchParams);
+						if (event.value === "general") {
+							next.delete("tab");
+						} else {
+							next.set("tab", event.value);
+						}
+						setSearchParams(next, { replace: true });
+					}}
+				>
 					<Tabs.List bg="bg.muted" rounded="l3" p="1">
 						<Tabs.Trigger value="general">
 							{m.general()}
@@ -75,12 +99,13 @@ export default function SettingsPage() {
 						<Tabs.Trigger value="template">
 							{m.terminalTemplates()}
 						</Tabs.Trigger>
+						<Tabs.Trigger value="quick-tasks">
+							{m.quickTasks()}
+						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
 							{m.notification()}
 						</Tabs.Trigger>
-						<Tabs.Trigger value="topbar">
-							{m.topbar()}
-						</Tabs.Trigger>
+						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
 						<Tabs.Trigger value="profile">
 							{m.profile()}
 						</Tabs.Trigger>
@@ -209,6 +234,11 @@ export default function SettingsPage() {
 					<Tabs.Content value="template">
 						<Stack gap="6" maxW="2xl">
 							<GlobalTerminalTemplatesSettings />
+						</Stack>
+					</Tabs.Content>
+					<Tabs.Content value="quick-tasks">
+						<Stack gap="6" maxW="2xl">
+							<QuickTasksSettings />
 						</Stack>
 					</Tabs.Content>
 					<Tabs.Content value="notification">
