@@ -20,7 +20,6 @@ interface FileViewerTabsStore {
 	profiles: Record<string, ProfileFileViewerState>;
 	openFile: (profileId: string, filePath: string) => void;
 	closeTab: (profileId: string, filePath: string) => void;
-	reorderTabs: (profileId: string, fromIndex: number, toIndex: number) => void;
 	setFileActive: (profileId: string, filePath: string) => void;
 	setTerminalActive: (profileId: string) => void;
 }
@@ -114,26 +113,6 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 				useFileViewerDirtyStore
 					.getState()
 					.setFileDirty(profileId, filePath, false);
-			},
-
-			reorderTabs(profileId, fromIndex, toIndex) {
-				set((state) => {
-					const profile = state.profiles[profileId];
-					if (
-						!profile ||
-						fromIndex === toIndex ||
-						fromIndex < 0 ||
-						toIndex < 0 ||
-						fromIndex >= profile.tabs.length ||
-						toIndex >= profile.tabs.length
-					) {
-						return;
-					}
-
-					const [movedTab] = profile.tabs.splice(fromIndex, 1);
-					if (!movedTab) return;
-					profile.tabs.splice(toIndex, 0, movedTab);
-				});
 			},
 
 			setFileActive(profileId, filePath) {
