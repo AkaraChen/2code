@@ -228,6 +228,8 @@
 	"runQuickTask": "Run Task",
 	"stopQuickTask": "Stop Task",
 	"restartQuickTask": "Restart Task",
+	"hideQuickTaskPanel": "Hide Window",
+	"showQuickTaskPanel": "Show Window",
 	"clearQuickTaskOutput": "Clear Output",
 	"quickTaskStatusStarting": "Starting",
 	"quickTaskStatusRunning": "Running",

@@ -228,6 +228,8 @@
 	"runQuickTask": "运行任务",
 	"stopQuickTask": "停止任务",
 	"restartQuickTask": "重启任务",
+	"hideQuickTaskPanel": "隐藏窗口",
+	"showQuickTaskPanel": "显示窗口",
 	"clearQuickTaskOutput": "清除输出",
 	"quickTaskStatusStarting": "启动中",
 	"quickTaskStatusRunning": "运行中",

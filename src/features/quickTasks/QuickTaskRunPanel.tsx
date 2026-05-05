@@ -1,13 +1,5 @@
-import {
-	Badge,
-	Box,
-	CloseButton,
-	Flex,
-	HStack,
-	IconButton,
-	Text,
-} from "@chakra-ui/react";
-import { FiRefreshCw, FiSquare, FiTrash2 } from "react-icons/fi";
+import { Badge, Box, Flex, HStack, IconButton, Text } from "@chakra-ui/react";
+import { FiMinus, FiRefreshCw, FiSquare, FiTrash2 } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { QuickTaskTerminal } from "./QuickTaskTerminal";
 import {
@@ -158,10 +150,15 @@ export function QuickTaskRunPanel() {
 							<FiRefreshCw />
 						</IconButton>
 					)}
-					<CloseButton
-						size="sm"
+					<IconButton
+						size="xs"
+						variant="ghost"
+						aria-label={m.hideQuickTaskPanel()}
+						title={m.hideQuickTaskPanel()}
 						onClick={() => setPanelOpen(false)}
-					/>
+					>
+						<FiMinus />
+					</IconButton>
 				</HStack>
 			</Flex>
 			<Box flex="1" minH="0">
