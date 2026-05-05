@@ -61,13 +61,9 @@ function isPtyReady(run: QuickTaskRun) {
 }
 
 export function QuickTaskRunPanel() {
-	const { runs, focusedRunId, isPanelOpen } = useQuickTaskRuntimeStore(
-		(s) => ({
-			runs: s.runs,
-			focusedRunId: s.focusedRunId,
-			isPanelOpen: s.isPanelOpen,
-		}),
-	);
+	const runs = useQuickTaskRuntimeStore((s) => s.runs);
+	const focusedRunId = useQuickTaskRuntimeStore((s) => s.focusedRunId);
+	const isPanelOpen = useQuickTaskRuntimeStore((s) => s.isPanelOpen);
 	const setPanelOpen = useQuickTaskRuntimeStore((s) => s.setPanelOpen);
 	const run = focusedRunId ? runs[focusedRunId] : null;
 

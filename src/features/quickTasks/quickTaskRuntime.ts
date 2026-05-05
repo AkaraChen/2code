@@ -185,10 +185,12 @@ export const useQuickTaskRuntimeStore = create<QuickTaskRuntimeStore>()(
 		},
 
 		setPanelOpen(isPanelOpen) {
+			if (get().isPanelOpen === isPanelOpen) return;
 			set({ isPanelOpen });
 		},
 
 		setMenuOpen(isMenuOpen) {
+			if (get().isMenuOpen === isMenuOpen) return;
 			set({ isMenuOpen });
 		},
 

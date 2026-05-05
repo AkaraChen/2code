@@ -38,10 +38,8 @@ function isActiveStatus(status: QuickTaskRunStatus) {
 export default function QuickTaskFloat() {
 	const navigate = useNavigate();
 	const tasks = useQuickTaskStore((s) => s.tasks);
-	const { runs, isMenuOpen } = useQuickTaskRuntimeStore((s) => ({
-		runs: s.runs,
-		isMenuOpen: s.isMenuOpen,
-	}));
+	const runs = useQuickTaskRuntimeStore((s) => s.runs);
+	const isMenuOpen = useQuickTaskRuntimeStore((s) => s.isMenuOpen);
 	const setMenuOpen = useQuickTaskRuntimeStore((s) => s.setMenuOpen);
 	const prefersReducedMotion = useReducedMotion();
 	const menuMotionProps = prefersReducedMotion ? {} : MENU_MOTION_PROPS;

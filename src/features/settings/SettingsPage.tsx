@@ -86,6 +86,7 @@ export default function SettingsPage() {
 						} else {
 							next.set("tab", event.value);
 						}
+						if (next.toString() === searchParams.toString()) return;
 						setSearchParams(next, { replace: true });
 					}}
 				>
