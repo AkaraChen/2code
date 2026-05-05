@@ -6,5 +6,23 @@
   "init_script": [
     "alias dev=\"gco dev\""
   ],
-  "terminal_templates": []
+  "terminal_templates": [
+    {
+      "id": "93b449a8-6c54-4a2c-b525-7b1dba13974f",
+      "name": "Build",
+      "cwd": "",
+      "commands": [
+        "./build.sh"
+      ]
+    },
+    {
+      "id": "0da4e0d3-c125-4902-9f2f-2b8685de790b",
+      "name": "Run",
+      "cwd": "",
+      "commands": [
+        "just build-helper",
+        "nr start"
+      ]
+    }
+  ]
 }
