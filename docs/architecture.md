@@ -57,7 +57,7 @@ Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `PtySe
 
 | File         | Commands                                                                                                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project.rs` | `create_project_temporary`, `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_git_branch`, `get_git_diff`, `get_git_log`, `get_commit_diff` |
+| `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_git_branch`, `get_git_diff`, `get_git_log`, `get_commit_diff` |
 | `pty.rs`     | `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`                          |
 | `profile.rs` | `create_profile`, `delete_profile`                                                                                                                                                |
 | `watcher.rs` | `watch_projects`                                                                                                                                                                  |

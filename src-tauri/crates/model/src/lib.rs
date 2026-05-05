@@ -5,6 +5,7 @@ pub mod notification;
 pub mod profile;
 pub mod project;
 pub mod pty;
+pub mod quick_task;
 pub mod schema;
 pub mod topbar;
 pub mod watcher;

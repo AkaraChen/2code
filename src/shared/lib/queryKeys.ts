@@ -11,6 +11,7 @@ export const queryNamespaces = {
 	"git-binary-preview": "git-binary-preview",
 	"git-ahead-count": "git-ahead-count",
 	"git-pull-request-status": "git-pull-request-status",
+	"profile-delete-check": "profile-delete-check",
 	"topbar-apps": "topbar-apps",
 	"fs-file": "fs-file",
 	"fs-search": "fs-search",
@@ -56,6 +57,10 @@ export const queryKeys = {
 			["git-ahead-count", profileId] as const,
 		pullRequestStatus: (profileId: string, branchName: string | null) =>
 			["git-pull-request-status", profileId, branchName] as const,
+	},
+	profile: {
+		deleteCheck: (profileId: string) =>
+			["profile-delete-check", profileId] as const,
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,

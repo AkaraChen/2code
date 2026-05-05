@@ -2,6 +2,21 @@ import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
 export const appThemeConfig = defineConfig({
   theme: {
+    tokens: {
+      radii: {
+        none: { value: "0" },
+        "2xs": { value: "0" },
+        xs: { value: "0" },
+        sm: { value: "0" },
+        md: { value: "0" },
+        lg: { value: "0" },
+        xl: { value: "0" },
+        "2xl": { value: "0" },
+        "3xl": { value: "0" },
+        "4xl": { value: "0" },
+        full: { value: "0" },
+      },
+    },
     semanticTokens: {
       colors: {
         bg: {
@@ -82,6 +97,11 @@ export const appThemeConfig = defineConfig({
             },
           },
         },
+      },
+      radii: {
+        l1: { value: "0" },
+        l2: { value: "0" },
+        l3: { value: "0" },
       },
     },
   },

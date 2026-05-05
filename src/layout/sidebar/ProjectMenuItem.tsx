@@ -19,6 +19,7 @@ import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProjectAvatar } from "./ProjectAvatar";
@@ -49,6 +50,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 		defaultProfile?.id ?? "",
 	);
 	const markProfileRead = useTerminalStore((s) => s.markProfileRead);
+	const defaultProfileLabel = m.defaultProfile();
 
 	const renameDialog = useDialogState();
 	const deleteDialog = useDialogState();
@@ -186,7 +188,9 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						data-sidebar-item
 						gap="2"
 						w="full"
-						minW="max-content"
+						minW="0"
+						maxW="var(--sidebar-width)"
+						overflow="hidden"
 						position="relative"
 						ps="9"
 						pe="4"
@@ -207,12 +211,16 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							{isDefaultActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
-							<Icon fontSize="xs" color="fg.muted">
+							<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
 								<FiTerminal />
 							</Icon>
-							<Text whiteSpace="nowrap" flexShrink={0}>
-								{m.defaultProfile()}
-							</Text>
+							<OverflowTooltipText
+								displayValue={defaultProfileLabel}
+								tooltipValue={defaultProfileLabel}
+								fontSize="sm"
+								flex="1 1 auto"
+								minW="0"
+							/>
 							{hasDefaultNotification && (
 								<Circle
 									size="2"

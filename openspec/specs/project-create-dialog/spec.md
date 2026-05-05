@@ -63,7 +63,7 @@ When a folder is selected and the name field is empty, the dialog SHALL auto-fil
 
 ### Requirement: Create button dispatches correct backend command
 
-The dialog's "Create" button SHALL call `createProject` with the appropriate parameters based on form state.
+The dialog's "Create" button SHALL call `createProject` only when a folder is selected.
 
 #### Scenario: Create with folder selected
 
@@ -72,13 +72,8 @@ The dialog's "Create" button SHALL call `createProject` with the appropriate par
 
 #### Scenario: Create with no folder selected
 
-- **WHEN** the user clicks "Create" and no folder is selected
-- **THEN** the system calls `createProject` with the name only (if provided), routing to `create_project_temporary`
-
-#### Scenario: Create with no name and no folder
-
-- **WHEN** the user clicks "Create" with both fields empty
-- **THEN** the system calls `createProject` with no arguments, creating an "Untitled" project in `/tmp`
+- **WHEN** no folder is selected
+- **THEN** the "Create" action is disabled and no project is created
 
 ### Requirement: Dialog closes after successful creation
 

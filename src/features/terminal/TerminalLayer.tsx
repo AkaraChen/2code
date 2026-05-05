@@ -1,15 +1,9 @@
-import { Box, Flex } from "@chakra-ui/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { use, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
-import ProjectTopBar from "@/features/git/ProjectTopBar";
-import FileTreePanel from "@/features/projects/FileTreePanel";
-import { useFileTreeStore } from "@/features/projects/fileTreeStore";
-import {
-	useActiveProfileIds,
-	useFileViewerTabsStore,
-} from "@/features/projects/fileViewerTabsStore";
+import ProfileLayout from "@/features/projects/ProfileLayout";
+import { useActiveProfileIds } from "@/features/projects/fileViewerTabsStore";
 import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -30,11 +24,6 @@ export default function TerminalLayer() {
 	const activeProfileIds = useActiveProfileIds();
 	const createTab = useCreateTerminalTab();
 	const closeTab = useCloseTerminalTab();
-	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
-	const fileTreeOpenProfiles = useFileTreeStore((s) => s.openProfiles);
-	const toggleFileTree = useFileTreeStore((s) => s.toggle);
-	const fileTreeIsOpen = (profileId: string) =>
-		fileTreeOpenProfiles[profileId] ?? true;
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -93,41 +82,28 @@ export default function TerminalLayer() {
 				if (!profile) return null;
 				const project = projectMap.get(profile.project_id);
 				return (
-					<Flex
+					<div
 						key={profileId}
-						position="absolute"
-						inset="0"
-						direction="column"
-						display={
-							profileId === activeProfileId ? "flex" : "none"
-						}
+						style={{
+							position: "absolute",
+							inset: 0,
+							display: profileId === activeProfileId ? "flex" : "none",
+							flexDirection: "column",
+						}}
 					>
-						<ProjectTopBar
+						<ProfileLayout
 							projectId={project?.id ?? profile.project_id}
 							projectName={project?.name ?? ""}
 							profile={profile}
 							isActive={profileId === activeProfileId}
-							isFileTreeOpen={fileTreeIsOpen(profileId)}
-							onToggleFileTree={() => toggleFileTree(profileId)}
-						/>
-						<Flex flex="1" minH="0" minW="0">
-							<FileTreePanel
+						>
+							<TerminalTabs
+								projectId={project?.id ?? profile.project_id}
 								profileId={profileId}
-								rootPath={profile.worktree_path}
-								isOpen={fileTreeIsOpen(profileId)}
-								onOpenFile={(filePath) =>
-									openFileTab(profileId, filePath)
-								}
+								cwd={profile.worktree_path}
 							/>
-							<Box flex="1" minH="0" minW="0">
-								<TerminalTabs
-									projectId={project?.id ?? profile.project_id}
-									profileId={profileId}
-									cwd={profile.worktree_path}
-								/>
-							</Box>
-						</Flex>
-					</Flex>
+						</ProfileLayout>
+					</div>
 				);
 			})}
 		</>

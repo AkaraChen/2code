@@ -31,21 +31,11 @@ interface FormValues {
 	folder: string | null;
 }
 
-function getProjectNamePlaceholder(folder: string | null) {
-	return folder
-		? m.projectNamePlaceholderFolder()
-		: m.projectNamePlaceholderTemporary();
-}
-
 function getProjectNameHint(folder: string | null, name: string) {
-	const hasFolder = !!folder;
 	const hasName = !!name.trim();
 
-	if (!hasFolder && !hasName) {
-		return m.createProjectHintTemporaryEmpty();
-	}
-	if (!hasFolder) {
-		return m.createProjectHintTemporaryNamed();
+	if (!folder) {
+		return m.createProjectChooseFolderHint();
 	}
 	if (!hasName) {
 		return m.createProjectHintFolderEmpty();
@@ -90,15 +80,13 @@ export default function CreateProjectDialog({
 	});
 
 	const handleCreate = form.handleSubmit(async (data) => {
+		if (!data.folder) return;
+
 		const name = data.name.trim();
-		await createProject.mutateAsync(
-			name || data.folder
-				? {
-						name: name || undefined,
-						folder: data.folder ?? undefined,
-					}
-				: undefined,
-		);
+		await createProject.mutateAsync({
+			name: name || undefined,
+			folder: data.folder,
+		});
 	});
 
 	return (
@@ -192,7 +180,7 @@ export default function CreateProjectDialog({
 								<Field.Root>
 									<Field.Label>{m.projectName()}</Field.Label>
 									<Input
-										placeholder={getProjectNamePlaceholder(folder)}
+										placeholder={m.projectNamePlaceholderFolder()}
 										{...form.register("name")}
 										onKeyDown={(e) => {
 											if (e.key === "Enter")
@@ -209,7 +197,13 @@ export default function CreateProjectDialog({
 							<Dialog.ActionTrigger asChild>
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
-							<Button onClick={handleCreate}>{m.create()}</Button>
+							<Button
+								onClick={handleCreate}
+								disabled={!folder || createProject.isPending}
+								loading={createProject.isPending}
+							>
+								{m.create()}
+							</Button>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />

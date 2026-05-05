@@ -2,7 +2,7 @@ use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::profile::Profile;
+use model::profile::{Profile, ProfileDeleteCheck};
 
 #[tauri::command]
 pub async fn create_profile(
@@ -27,6 +27,19 @@ pub async fn delete_profile(
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::profile::delete(conn, &id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_profile_delete_check(
+	id: String,
+	state: State<'_, DbPool>,
+) -> Result<ProfileDeleteCheck, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::profile::delete_check(conn, &id)
 	})
 	.await
 }

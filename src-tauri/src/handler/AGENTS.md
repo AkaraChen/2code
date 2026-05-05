@@ -10,7 +10,7 @@ Tauri IPC entry points. Thin delegation layer — no business logic here.
 | `font.rs` | `list_system_fonts` (macOS only) |
 | `mod.rs` | `tauri::generate_handler![]` registration |
 | `profile.rs` | `create_profile`, `delete_profile` |
-| `project.rs` | `create_project_temporary`, `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config` |
+| `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config` |
 | `pty.rs` | `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`, `flush_pty_output`, `restore_pty_session` |
 | `sound.rs` | `list_system_sounds`, `play_system_sound` (macOS only) |
 | `watcher.rs` | `watch_projects` |

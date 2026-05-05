@@ -1,24 +1,5 @@
 ## ADDED Requirements
 
-### Requirement: Create temporary project
-
-The `create_project_temporary` command SHALL generate a UUID, create a directory at `/tmp/<uuid>/`, run `git init` inside it, create a project record with a default name, and return the project.
-
-#### Scenario: Successful temporary project creation
-
-- **WHEN** `create_project_temporary` is invoked with an optional `name`
-- **THEN** the system generates a UUID, creates `/tmp/<uuid>/`, runs `git init` in that directory, inserts a project record with the UUID as id, the provided name (or `"Untitled"` if omitted) as name, and `/tmp/<uuid>` as folder, and returns the full `Project`
-
-#### Scenario: git init fails
-
-- **WHEN** `git init` fails in the created directory (e.g., git not installed)
-- **THEN** the command returns an error string and no project record is persisted
-
-#### Scenario: Frontend passes a name
-
-- **WHEN** `create_project_temporary` is invoked from the frontend with `{ name: "My Project" }`
-- **THEN** the created project record uses `"My Project"` as the name instead of `"Untitled"`
-
 ### Requirement: Create project from existing folder
 
 The `create_project_from_folder` command SHALL accept a `name` and `folder` path, validate the folder exists on disk, and create a project record.
@@ -94,30 +75,25 @@ The `delete_project` command SHALL remove the project record from the database. 
 - **WHEN** `delete_project` is invoked with an `id` that does not exist
 - **THEN** the command returns an error string indicating the project was not found
 
-### Requirement: Frontend createProject routes to correct backend command
+### Requirement: Frontend createProject creates from an existing folder
 
-The `createProject` function in `ProjectContext` SHALL accept optional `name` and `folder` parameters and route to the correct backend command.
+The `createProject` function SHALL require a `folder` parameter and invoke `create_project_from_folder`.
 
-#### Scenario: Called with folder
+#### Scenario: Called with folder and name
 
 - **WHEN** `createProject({ name: "foo", folder: "/path/to/dir" })` is called
 - **THEN** the function invokes `create_project_from_folder` with `name: "foo"` and `folder: "/path/to/dir"`
 
-#### Scenario: Called with name only
+#### Scenario: Called with folder only
 
-- **WHEN** `createProject({ name: "foo" })` is called (no folder)
-- **THEN** the function invokes `create_project_temporary` with `name: "foo"`
-
-#### Scenario: Called with no arguments
-
-- **WHEN** `createProject()` is called with no arguments
-- **THEN** the function invokes `create_project_temporary` with no name, preserving the existing "Untitled" + `/tmp` behavior
+- **WHEN** `createProject({ folder: "/path/to/dir" })` is called
+- **THEN** the function invokes `create_project_from_folder` with the folder basename as `name` and `folder: "/path/to/dir"`
 
 ### Requirement: All commands registered in invoke handler
 
-All project commands (`create_project_temporary`, `create_project_from_folder`, `list_projects`, `get_project`, `update_project`, `delete_project`) SHALL be registered in the `tauri::generate_handler!` macro in `lib.rs`.
+All project commands (`create_project_from_folder`, `list_projects`, `get_project`, `update_project`, `delete_project`) SHALL be registered in the `tauri::generate_handler!` macro in `lib.rs`.
 
 #### Scenario: Frontend can invoke all project commands
 
-- **WHEN** the frontend calls `invoke("create_project_temporary")`, `invoke("create_project_from_folder", ...)`, `invoke("list_projects")`, `invoke("get_project", ...)`, `invoke("update_project", ...)`, or `invoke("delete_project", ...)`
+- **WHEN** the frontend calls `invoke("create_project_from_folder", ...)`, `invoke("list_projects")`, `invoke("get_project", ...)`, `invoke("update_project", ...)`, or `invoke("delete_project", ...)`
 - **THEN** each call routes to the corresponding Rust command handler

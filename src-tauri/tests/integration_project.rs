@@ -7,54 +7,22 @@ use common::{
 	setup_db,
 };
 
+fn create_project_named(
+	conn: &mut SqliteConnection,
+	name: &str,
+) -> (model::project::Project, std::path::PathBuf) {
+	let dir = create_temp_git_repo();
+	add_commit(&dir, "README.md", "# Test", "Initial commit");
+	let folder = dir.to_string_lossy().to_string();
+	let project = service::project::create_from_folder(conn, name, &folder)
+		.expect("create project from folder");
+
+	(project, dir)
+}
+
 // ============================================================
 // Project Creation (basic)
 // ============================================================
-
-#[test]
-fn create_temporary_returns_complete_project() {
-	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("My App".into()))
-			.unwrap();
-
-	assert!(!project.id.is_empty());
-	assert_eq!(project.name, "My App");
-	assert!(!project.folder.is_empty());
-	assert!(!project.created_at.is_empty());
-	assert!(std::path::Path::new(&project.folder).exists());
-
-	// git should be initialized
-	let branch = service::project::get_branch(&project.folder).unwrap();
-	assert!(!branch.is_empty());
-
-	cleanup(std::path::Path::new(&project.folder));
-}
-
-#[test]
-fn create_temporary_with_none_name_uses_untitled() {
-	let mut conn = setup_db();
-	let project = service::project::create_temporary(&mut conn, None).unwrap();
-
-	assert_eq!(project.name, "Untitled");
-	cleanup(std::path::Path::new(&project.folder));
-}
-
-#[test]
-fn create_temporary_also_creates_default_profile() {
-	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("Test".into()))
-			.unwrap();
-
-	let list = service::project::list(&mut conn).unwrap();
-	assert_eq!(list.len(), 1);
-	assert_eq!(list[0].profiles.len(), 1);
-	assert!(list[0].profiles[0].is_default);
-	assert_eq!(list[0].profiles[0].project_id, project.id);
-
-	cleanup(std::path::Path::new(&project.folder));
-}
 
 #[test]
 fn create_from_folder_returns_correct_project() {
@@ -111,12 +79,8 @@ fn create_from_folder_creates_default_profile() {
 #[test]
 fn create_duplicate_project_names_allowed() {
 	let mut conn = setup_db();
-	let p1 =
-		service::project::create_temporary(&mut conn, Some("Same Name".into()))
-			.unwrap();
-	let p2 =
-		service::project::create_temporary(&mut conn, Some("Same Name".into()))
-			.unwrap();
+	let (p1, dir1) = create_project_named(&mut conn, "Same Name");
+	let (p2, dir2) = create_project_named(&mut conn, "Same Name");
 
 	assert_ne!(p1.id, p2.id);
 	assert_eq!(p1.name, p2.name);
@@ -124,8 +88,8 @@ fn create_duplicate_project_names_allowed() {
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 2);
 
-	cleanup(std::path::Path::new(&p1.folder));
-	cleanup(std::path::Path::new(&p2.folder));
+	cleanup(&dir1);
+	cleanup(&dir2);
 }
 
 #[test]
@@ -149,74 +113,53 @@ fn create_duplicate_project_folders_allowed() {
 #[test]
 fn create_with_whitespace_only_name() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("   ".into()))
-			.unwrap();
+	let (project, dir) = create_project_named(&mut conn, "   ");
 
-	// Name preserved as-is, but slug is empty so dir uses UUID
 	assert_eq!(project.name, "   ");
 	assert!(!project.folder.is_empty());
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
 fn create_with_emoji_name() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("🚀🔥".into()))
-			.unwrap();
+	let (project, dir) = create_project_named(&mut conn, "🚀🔥");
 
 	assert_eq!(project.name, "🚀🔥");
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
 fn create_with_very_long_name() {
 	let mut conn = setup_db();
-	// Use a moderate length that won't exceed filesystem limits (slug + UUID short id)
 	let long_name = "a".repeat(100);
-	let project =
-		service::project::create_temporary(&mut conn, Some(long_name.clone()))
-			.unwrap();
+	let (project, dir) = create_project_named(&mut conn, &long_name);
 
 	assert_eq!(project.name, long_name);
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
 fn create_with_special_chars_name() {
 	let mut conn = setup_db();
-	let project = service::project::create_temporary(
-		&mut conn,
-		Some("!@#$%^&*()".into()),
-	)
-	.unwrap();
+	let (project, dir) = create_project_named(&mut conn, "!@#$%^&*()");
 
 	assert_eq!(project.name, "!@#$%^&*()");
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
 fn create_with_cjk_name() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("我的项目".into()))
-			.unwrap();
+	let (project, dir) = create_project_named(&mut conn, "我的项目");
 
 	assert_eq!(project.name, "我的项目");
-	// Dir name should contain pinyin slug
-	let dir_name = std::path::Path::new(&project.folder)
-		.file_name()
-		.unwrap()
-		.to_string_lossy()
-		.to_string();
-	assert!(dir_name.contains("wo-de-xiang-mu"), "dir_name: {dir_name}");
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 // ============================================================
@@ -226,9 +169,8 @@ fn create_with_cjk_name() {
 #[test]
 fn list_returns_project_with_profiles_shape() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("Shape".into()))
-			.unwrap();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 1);
@@ -248,7 +190,7 @@ fn list_returns_project_with_profiles_shape() {
 	assert!(!profile.created_at.is_empty());
 	assert!(profile.is_default);
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
@@ -261,10 +203,8 @@ fn list_empty_database() {
 #[test]
 fn list_multiple_projects_each_with_profiles() {
 	let mut conn = setup_db();
-	let p1 = service::project::create_temporary(&mut conn, Some("A".into()))
-		.unwrap();
-	let p2 = service::project::create_temporary(&mut conn, Some("B".into()))
-		.unwrap();
+	let (_p1, _profile1, dir1) = create_project_with_git_repo(&mut conn);
+	let (_p2, _profile2, dir2) = create_project_with_git_repo(&mut conn);
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 2);
@@ -273,8 +213,8 @@ fn list_multiple_projects_each_with_profiles() {
 		assert!(pwp.profiles.iter().any(|p| p.is_default));
 	}
 
-	cleanup(std::path::Path::new(&p1.folder));
-	cleanup(std::path::Path::new(&p2.folder));
+	cleanup(&dir1);
+	cleanup(&dir2);
 }
 
 // ============================================================
@@ -284,9 +224,7 @@ fn list_multiple_projects_each_with_profiles() {
 #[test]
 fn update_name_only() {
 	let mut conn = setup_db();
-	let project =
-		service::project::create_temporary(&mut conn, Some("Old".into()))
-			.unwrap();
+	let (project, dir) = create_project_named(&mut conn, "Old");
 
 	let updated = service::project::update(
 		&mut conn,
@@ -299,7 +237,7 @@ fn update_name_only() {
 	assert_eq!(updated.name, "New");
 	assert_eq!(updated.folder, project.folder);
 
-	cleanup(std::path::Path::new(&project.folder));
+	cleanup(&dir);
 }
 
 #[test]
