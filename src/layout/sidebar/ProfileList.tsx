@@ -31,7 +31,9 @@ export function ProfileList({
 				as="button"
 				gap="2"
 				w="full"
-				minW="max-content"
+				minW="0"
+				maxW="var(--sidebar-width)"
+				overflow="hidden"
 				ps="9"
 				pe="4"
 				py="1"
@@ -41,10 +43,10 @@ export function ProfileList({
 				_hover={{ bg: "bg.subtle", color: "fg" }}
 				onClick={createDialog.onOpen}
 			>
-				<Icon fontSize="xs">
+				<Icon fontSize="xs" flexShrink={0}>
 					<FiPlus />
 				</Icon>
-				<Text whiteSpace="nowrap" flexShrink={0}>
+				<Text flex="0 1 auto" minW="0" truncate>
 					{m.createProfile()}
 				</Text>
 			</HStack>

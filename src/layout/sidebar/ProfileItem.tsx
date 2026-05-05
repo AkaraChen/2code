@@ -1,10 +1,11 @@
-import { Circle, HStack, Icon, Menu, Portal, Text } from "@chakra-ui/react";
+import { Circle, HStack, Icon, Menu, Portal } from "@chakra-ui/react";
 import { FiGitBranch } from "react-icons/fi";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
 import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 
@@ -30,7 +31,9 @@ export function ProfileItem({
 						data-sidebar-item
 						gap="2"
 						w="full"
-						minW="max-content"
+						minW="0"
+						maxW="var(--sidebar-width)"
+						overflow="hidden"
 						position="relative"
 						ps="9"
 						pe="4"
@@ -47,12 +50,16 @@ export function ProfileItem({
 							{isActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
-							<Icon fontSize="xs" color="fg.muted">
+							<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
 								<FiGitBranch />
 							</Icon>
-							<Text whiteSpace="nowrap" flexShrink={0}>
-								{profile.branch_name}
-							</Text>
+							<OverflowTooltipText
+								displayValue={profile.branch_name}
+								tooltipValue={profile.branch_name}
+								fontSize="sm"
+								flex="1 1 auto"
+								minW="0"
+							/>
 							{hasNotification && (
 								<Circle
 									size="2"
