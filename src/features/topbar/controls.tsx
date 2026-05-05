@@ -10,14 +10,20 @@ import {
 	SiWindsurf,
 	SiZedindustries,
 } from "@icons-pack/react-simple-icons";
-import { Command } from "@tauri-apps/plugin-shell";
+import { Command, open } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
 import {
 	PiFolderOpenFill,
 	PiGitDiffFill,
+	PiGitPullRequestFill,
 	PiTerminalWindowFill,
 } from "react-icons/pi";
-import { useGitDiffStats } from "@/features/git/hooks";
+import {
+	useGitDiffStats,
+	useGitPullRequestStatus,
+} from "@/features/git/hooks";
+import { useGitBranch } from "@/features/projects/hooks";
+import type { GitPullRequestStatus } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useOpenTopbarApp } from "./hooks";
 import type { ControlProps, LaunchAppControlId } from "./types";
@@ -199,6 +205,76 @@ export function GitDiffControl({ profile, isActive, options }: ControlProps) {
 			<Portal>
 				<Tooltip.Positioner>
 					<Tooltip.Content>{m.topbarGitDiff()}</Tooltip.Content>
+				</Tooltip.Positioner>
+			</Portal>
+		</Tooltip.Root>
+	);
+}
+
+function getPullRequestStateMeta(pr: GitPullRequestStatus) {
+	const state = pr.state.toUpperCase();
+
+	if (state === "OPEN" && pr.is_draft) {
+		return { label: m.topbarPrDraft() };
+	}
+
+	if (state === "OPEN") {
+		return { label: m.topbarPrOpen() };
+	}
+
+	if (state === "MERGED") {
+		return { label: m.topbarPrMerged() };
+	}
+
+	if (state === "CLOSED") {
+		return { label: m.topbarPrClosed() };
+	}
+
+	return { label: pr.state || "PR" };
+}
+
+export function GitPullRequestStatusControl({
+	profile,
+	isActive,
+}: ControlProps) {
+	const { data: branch } = useGitBranch(profile.worktree_path, isActive);
+	const { data: pr } = useGitPullRequestStatus(
+		profile.id,
+		branch,
+		isActive,
+	);
+	if (!pr) return null;
+
+	const stateMeta = getPullRequestStateMeta(pr);
+	const label = `#${pr.number} ${stateMeta.label}`;
+	const tooltip = m.topbarPrTooltip({
+		number: pr.number,
+		title: pr.title,
+		state: stateMeta.label,
+	});
+
+	const handleOpen = () => {
+		void open(pr.url);
+	};
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<Button
+					aria-label={m.topbarPrStatus()}
+					size="xs"
+					variant="subtle"
+					onClick={handleOpen}
+				>
+					<PiGitPullRequestFill size={14} />
+					<Text as="span" fontSize="xs">
+						{label}
+					</Text>
+				</Button>
+			</Tooltip.Trigger>
+			<Portal>
+				<Tooltip.Positioner>
+					<Tooltip.Content>{tooltip}</Tooltip.Content>
 				</Tooltip.Positioner>
 			</Portal>
 		</Tooltip.Root>

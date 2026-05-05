@@ -12,6 +12,7 @@ import {
 import {
 	PiFolderOpenFill,
 	PiGitDiffFill,
+	PiGitPullRequestFill,
 	PiTerminalWindowFill,
 } from "react-icons/pi";
 import * as m from "@/paraglide/messages.js";
@@ -19,6 +20,7 @@ import {
 	CursorControl,
 	GhosttyControl,
 	GitDiffControl,
+	GitPullRequestStatusControl,
 	GithubDesktopControl,
 	Iterm2Control,
 	KittyControl,
@@ -119,6 +121,14 @@ const definitions: ControlDefinition[] = [
 		icon: PiGitDiffFill,
 		optionFields: [],
 		component: GitDiffControl,
+	},
+	{
+		id: "pr-status",
+		kind: "static",
+		label: () => m.topbarPrStatus(),
+		icon: PiGitPullRequestFill,
+		optionFields: [],
+		component: GitPullRequestStatusControl,
 	},
 	{
 		id: "reveal-in-finder",

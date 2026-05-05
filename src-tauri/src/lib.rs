@@ -92,6 +92,7 @@ pub fn run() {
 			handler::project::discard_git_file_changes,
 			handler::project::get_git_ahead_count,
 			handler::project::git_push,
+			handler::project::get_git_pull_request_status,
 			handler::project::get_project_config,
 			handler::project::save_project_config,
 			handler::project::get_project_github_avatar,
