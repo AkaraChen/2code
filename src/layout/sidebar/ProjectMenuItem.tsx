@@ -79,7 +79,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						_hover={{ bg: "bg.subtle" }}
 					>
 						{hasOnlyDefaultProfile && isDefaultActive && (
-							<SidebarActiveIndicator insetInlineStart="1" />
+							<SidebarActiveIndicator insetInlineStart="0" />
 						)}
 						<Box
 							asChild
@@ -205,7 +205,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							}}
 						>
 							{isDefaultActive && (
-								<SidebarActiveIndicator insetInlineStart="6" />
+								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
 							<Icon fontSize="xs" color="fg.muted">
 								<FiTerminal />

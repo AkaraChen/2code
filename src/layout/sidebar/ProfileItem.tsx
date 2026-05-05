@@ -45,7 +45,7 @@ export function ProfileItem({
 							onClick={() => markProfileRead(profile.id)}
 						>
 							{isActive && (
-								<SidebarActiveIndicator insetInlineStart="6" />
+								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
 							<Icon fontSize="xs" color="fg.muted">
 								<FiGitBranch />
