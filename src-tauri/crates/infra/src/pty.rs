@@ -53,6 +53,32 @@ pub fn create_session(
 	helper_url: Option<&str>,
 	helper_bin: Option<&str>,
 ) -> Result<Box<dyn std::io::Read + Send>, AppError> {
+	create_session_with_args(
+		sessions,
+		session_id,
+		shell,
+		&[],
+		cwd,
+		rows,
+		cols,
+		init_dir,
+		helper_url,
+		helper_bin,
+	)
+}
+
+pub fn create_session_with_args(
+	sessions: &PtySessionMap,
+	session_id: &str,
+	shell: &str,
+	args: &[String],
+	cwd: &str,
+	rows: u16,
+	cols: u16,
+	init_dir: Option<&Path>,
+	helper_url: Option<&str>,
+	helper_bin: Option<&str>,
+) -> Result<Box<dyn std::io::Read + Send>, AppError> {
 	let pty_system = native_pty_system();
 
 	let pair = pty_system
@@ -65,6 +91,9 @@ pub fn create_session(
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
 	let mut cmd = CommandBuilder::new(shell);
+	for arg in args {
+		cmd.arg(arg);
+	}
 	cmd.env("TERM", "xterm-256color");
 
 	// Inject helper env vars for CLI sidecar communication
