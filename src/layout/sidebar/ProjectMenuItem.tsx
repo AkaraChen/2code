@@ -67,7 +67,8 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						className="group"
 						gap="1"
 						w="full"
-						minW="max-content"
+						minW="0"
+						overflow="hidden"
 						px="4"
 						py="1.5"
 						cursor="pointer"
@@ -85,18 +86,24 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						)}
 						<Box
 							asChild
-							flex="1"
-							minW="fit-content"
-							whiteSpace="nowrap"
+							flex="1 1 auto"
+							minW="0"
+							overflow="hidden"
 							data-sidebar-item
 						>
 							<NavLink to={defaultProfileUrl}>
-								<HStack gap="2" align="center">
+								<HStack
+									gap="2"
+									align="center"
+									w="full"
+									minW="0"
+									overflow="hidden"
+								>
 									<ProjectAvatar
 										projectId={project.id}
 										projectName={project.name}
 									/>
-									<Text whiteSpace="nowrap" flexShrink={0}>
+									<Text flex="1 1 auto" minW="0" truncate>
 										{project.name}
 									</Text>
 								</HStack>
@@ -110,6 +117,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 										as="span"
 										variant="ghost"
 										size="2xs"
+										flexShrink={0}
 										opacity="0"
 										_groupHover={{ opacity: 1 }}
 										onClick={(e) => {
@@ -134,6 +142,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 								as="span"
 								variant="ghost"
 								size="2xs"
+								flexShrink={0}
 								onClick={(e) => {
 									e.preventDefault();
 									e.stopPropagation();
