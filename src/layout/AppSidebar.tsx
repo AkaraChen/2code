@@ -70,9 +70,9 @@ export default function AppSidebar() {
 				bg="bg.subtle"
 				onKeyDown={handleKeyDown}
 			>
-				<Box h="full" overflow="auto">
+				<Box h="full" overflowY="auto" overflowX="hidden">
 					<LayoutGroup id="app-sidebar">
-						<Flex direction="column" h="full" minW="max-content" pb="3">
+						<Flex direction="column" h="full" w="full" minW="0" pb="3">
 							<Flex
 								data-tauri-drag-region
 								h="80px"
@@ -104,8 +104,15 @@ export default function AppSidebar() {
 								</SidebarLink>
 							)}
 
-							<HStack px="4" pt="2" pb="2" justify="space-between">
-								<HStack gap="2" minW={0}>
+							<HStack
+								px="4"
+								pt="2"
+								pb="2"
+								justify="space-between"
+								w="full"
+								minW="0"
+							>
+								<HStack gap="2" flex="1 1 auto" minW="0">
 									<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
 										<FiFolder />
 									</Icon>
@@ -115,7 +122,7 @@ export default function AppSidebar() {
 										color="fg.muted"
 										textTransform="uppercase"
 										letterSpacing="wider"
-										whiteSpace="nowrap"
+										truncate
 									>
 										{m.projects()}
 									</Text>
@@ -125,6 +132,7 @@ export default function AppSidebar() {
 									aria-label={m.newProject()}
 									variant="ghost"
 									size="2xs"
+									flexShrink={0}
 									onClick={createDialog.onOpen}
 								>
 									<FiPlus />
