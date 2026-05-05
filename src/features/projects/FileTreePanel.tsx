@@ -515,7 +515,7 @@ export default function FileTreePanel({
 										minWidth: 0,
 									}}
 								>
-									<Box flex="1" minH="0" minW="0" position="relative" py="1">
+									<Box flex="1" minH="0" minW="0" position="relative" py="1" px="1.5">
 										<FileTree
 											model={model}
 											onClick={handleTreeClick}

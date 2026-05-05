@@ -13,16 +13,16 @@ export const BORDER_RADIUS_MAP: Record<
 	{ l1: string; l2: string; l3: string }
 > = {
 	none: { l1: "0", l2: "0", l3: "0" },
-	sm: { l1: "0.125rem", l2: "0.25rem", l3: "0.375rem" },
-	md: { l1: "0.25rem", l2: "0.375rem", l3: "0.5rem" },
-	lg: { l1: "0.5rem", l2: "0.75rem", l3: "1rem" },
-	xl: { l1: "0.75rem", l2: "1rem", l3: "1.5rem" },
+	sm: { l1: "0", l2: "0", l3: "0" },
+	md: { l1: "0", l2: "0", l3: "0" },
+	lg: { l1: "0", l2: "0", l3: "0" },
+	xl: { l1: "0", l2: "0", l3: "0" },
 };
 
 export const useThemeStore = create<ThemeStore>()(
 	persist(
 		(set) => ({
-			borderRadius: "sm",
+			borderRadius: "none",
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
 		}),
 		{ name: "theme-settings" },

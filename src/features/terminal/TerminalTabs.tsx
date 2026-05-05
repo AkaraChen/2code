@@ -106,13 +106,12 @@ function TabPill({
 			px="3"
 			textStyle="sm"
 			fontWeight="medium"
-			bg={isSelected ? "bg.muted" : "transparent"}
+			bg="transparent"
 			color={isSelected ? "fg" : "fg.muted"}
-			borderWidth="1px"
-			borderColor={isSelected ? "border.muted" : "transparent"}
-			rounded="md"
+			borderTopWidth="2px"
+			borderTopColor={isSelected ? "fg" : "transparent"}
 			userSelect="none"
-			transition="background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease"
+			transition="background-color 120ms ease, color 120ms ease"
 			css={{
 				WebkitUserDrag: "none",
 				"&::before": {
