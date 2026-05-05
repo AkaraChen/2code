@@ -46,7 +46,7 @@ export function ProfileList({
 				<Icon fontSize="xs" flexShrink={0}>
 					<FiPlus />
 				</Icon>
-				<Text flex="1 1 auto" minW="0" truncate>
+				<Text flex="0 1 auto" minW="0" truncate>
 					{m.createProfile()}
 				</Text>
 			</HStack>
