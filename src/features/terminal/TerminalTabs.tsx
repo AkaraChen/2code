@@ -5,7 +5,6 @@ import {
 	Flex,
 	HStack,
 	Spinner,
-	Tabs,
 } from "@chakra-ui/react";
 import claudeIconUrl from "@lobehub/icons-static-svg/icons/claude-color.svg";
 import clineIconUrl from "@lobehub/icons-static-svg/icons/cline.svg";
@@ -15,20 +14,6 @@ import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
 import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
-import {
-	DndContext,
-	PointerSensor,
-	closestCenter,
-	useSensor,
-	useSensors,
-	type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-	SortableContext,
-	horizontalListSortingStrategy,
-	useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { lazy, Suspense, useMemo } from "react";
 import { FiTerminal } from "react-icons/fi";
@@ -38,12 +23,6 @@ import {
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
-import {
-	buildSortableId,
-	FILE_SORTABLE_PREFIX,
-	resolveSortableReorder,
-	TERMINAL_SORTABLE_PREFIX,
-} from "./tabSorting";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
@@ -88,42 +67,114 @@ interface TabTriggerProps {
 	title: string;
 	maxTitleLength: number;
 	badge?: React.ReactNode;
+	isSelected?: boolean;
+	onSelect: (value: string) => void;
 	onClose: () => void;
 }
 
-function TabTrigger({
-	value,
+interface TabPillProps
+	extends Omit<TabTriggerProps, "value" | "onClose" | "onSelect"> {
+	onClose?: () => void;
+	ref?: React.Ref<HTMLDivElement>;
+}
+
+function TabPill({
 	icon,
 	title,
 	maxTitleLength,
 	badge,
+	isSelected,
 	onClose,
-}: TabTriggerProps) {
+	ref,
+	...triggerProps
+}: TabPillProps & React.HTMLAttributes<HTMLDivElement>) {
 	const displayTitle = title.length > maxTitleLength
 		? `${title.slice(0, maxTitleLength)}...`
 		: title;
 
 	return (
-		<Tabs.Trigger value={value} flexShrink={0} minW={TAB_MIN_WIDTH}>
+		<Box
+			{...triggerProps}
+			ref={ref}
+			as="div"
+			flexShrink={0}
+			minW={TAB_MIN_WIDTH}
+			display="flex"
+			alignItems="center"
+			gap="2"
+			py="1"
+			px="3"
+			textStyle="sm"
+			fontWeight="medium"
+			bg={isSelected ? "bg.muted" : "transparent"}
+			color={isSelected ? "fg" : "fg.muted"}
+			borderWidth="1px"
+			borderColor={isSelected ? "border.muted" : "transparent"}
+			rounded="md"
+			userSelect="none"
+			transition="background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease"
+			css={{
+				WebkitUserDrag: "none",
+				"&::before": {
+					display: "none",
+				},
+				"& *": {
+					WebkitUserDrag: "none",
+				},
+			}}
+			_hover={{ bg: "bg.subtle", color: "fg" }}
+			_active={{ bg: "bg.muted", color: "fg" }}
+			_focusVisible={{
+				outline: "2px solid",
+				outlineColor: "colorPalette.focusRing",
+				outlineOffset: "-2px",
+			}}
+			draggable={false}
+		>
 			{icon}
 			<HStack gap="2" flex="1" minW="0">
 				<Box as="span" minW="0" flex="1" flexShrink={1}>
 					{displayTitle}
 				</Box>
 				{badge}
-				<CloseButton
-					as="span"
-					role="button"
-					size="2xs"
-					flexShrink={0}
-					onPointerDown={(event) => event.stopPropagation()}
-					onClick={(event) => {
-						event.stopPropagation();
-						onClose();
-					}}
-				/>
+				{onClose ? (
+					<CloseButton
+						as="span"
+						role="button"
+						size="2xs"
+						flexShrink={0}
+						onPointerDown={(event) => event.stopPropagation()}
+						onClick={(event) => {
+							event.stopPropagation();
+							onClose();
+						}}
+					/>
+				) : null}
 			</HStack>
-		</Tabs.Trigger>
+		</Box>
+	);
+}
+
+function TabTrigger({ value, onSelect, ...props }: TabTriggerProps) {
+	function selectTab() {
+		onSelect(value);
+	}
+
+	function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+		if (event.key !== "Enter" && event.key !== " ") return;
+		event.preventDefault();
+		selectTab();
+	}
+
+	return (
+		<TabPill
+			{...props}
+			role="tab"
+			aria-selected={props.isSelected}
+			tabIndex={props.isSelected ? 0 : -1}
+			onClick={selectTab}
+			onKeyDown={handleKeyDown}
+		/>
 	);
 }
 
@@ -139,40 +190,21 @@ function getTerminalTabIcon(title: string) {
 		<img
 			alt=""
 			aria-hidden="true"
+			draggable={false}
 			src={match.iconUrl}
 			style={{ width: 14, height: 14, flexShrink: 0 }}
 		/>
 	);
 }
 
-interface SortableTabItemProps extends TabTriggerProps {
-	sortableId: string;
+interface TabItemProps extends TabTriggerProps {
 	motionProps: Record<string, unknown>;
 }
 
-function SortableTabItem({
-	sortableId,
+function TabItem({
 	motionProps,
 	...props
-}: SortableTabItemProps) {
-	const {
-		attributes,
-		listeners,
-		setNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({ id: sortableId });
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		display: "flex",
-		flexShrink: 0,
-		minWidth: 0,
-		opacity: isDragging ? 0.45 : 1,
-		zIndex: isDragging ? 1 : 0,
-	};
-
+}: TabItemProps) {
 	return (
 		<motion.div
 			style={{
@@ -183,13 +215,7 @@ function SortableTabItem({
 			}}
 			{...motionProps}
 		>
-			<Box
-				ref={setNodeRef}
-				style={style}
-				{...attributes}
-				{...listeners}
-				cursor={isDragging ? "grabbing" : "grab"}
-			>
+			<Box display="flex" flexShrink={0} minW="0">
 				<TabTrigger {...props} />
 			</Box>
 		</motion.div>
@@ -224,7 +250,6 @@ export default function TerminalTabs({
 		() => new Set(notifiedTabIds),
 		[notifiedTabIds],
 	);
-	const reorderTerminalTabs = useTerminalStore((state) => state.reorderTabs);
 	const setActiveTab = useTerminalStore((state) => state.setActiveTab);
 
 	const fileViewerState = useFileViewerTabsStore(
@@ -234,7 +259,6 @@ export default function TerminalTabs({
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_DIRTY_FILE_PATHS),
 	);
 	const closeFileTab = useFileViewerTabsStore((state) => state.closeTab);
-	const reorderFileTabs = useFileViewerTabsStore((state) => state.reorderTabs);
 	const setFileActive = useFileViewerTabsStore((state) => state.setFileActive);
 	const setTerminalActive = useFileViewerTabsStore((state) => state.setTerminalActive);
 
@@ -248,25 +272,6 @@ export default function TerminalTabs({
 
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
-	const sensors = useSensors(
-		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-	);
-	const terminalSortableItems = useMemo(
-		() =>
-			tabs.map((tab) => ({
-				...tab,
-				sortableId: buildSortableId(TERMINAL_SORTABLE_PREFIX, tab.id),
-			})),
-		[tabs],
-	);
-	const fileSortableItems = useMemo(
-		() =>
-			fileTabs.map((tab) => ({
-				...tab,
-				sortableId: buildSortableId(FILE_SORTABLE_PREFIX, tab.filePath),
-			})),
-		[fileTabs],
-	);
 
 	// Unified active tab value: file path when a file tab is active, session ID otherwise
 	const activeValue = fileTabActive
@@ -278,130 +283,94 @@ export default function TerminalTabs({
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
 			setFileActive(profileId, value);
-		} else {
-			setActiveTab(profileId, value);
-			setTerminalActive(profileId);
-		}
-	}
-
-	function handleDragEnd(event: DragEndEvent) {
-		const { active, over } = event;
-		if (!over || active.id === over.id) return;
-
-		const reorderRequest = resolveSortableReorder(
-			String(active.id),
-			String(over.id),
-			tabs.map((tab) => tab.id),
-			fileTabs.map((tab) => tab.filePath),
-		);
-		if (!reorderRequest) return;
-
-		if (reorderRequest.kind === TERMINAL_SORTABLE_PREFIX) {
-			reorderTerminalTabs(
-				profileId,
-				reorderRequest.fromIndex,
-				reorderRequest.toIndex,
-			);
 			return;
 		}
 
-		reorderFileTabs(
-			profileId,
-			reorderRequest.fromIndex,
-			reorderRequest.toIndex,
-		);
+		const isTerminalTab = tabs.some((tab) => tab.id === value);
+		if (!isTerminalTab) return;
+
+		setActiveTab(profileId, value);
+		setTerminalActive(profileId);
 	}
 
 	if (tabs.length === 0 && fileTabs.length === 0) return null;
 
 	return (
 		<Flex direction="column" h="full" w="full" minW="0">
-			<Tabs.Root
-				size="sm"
+			<Box
+				overflowX="auto"
+				overflowY="hidden"
 				w="full"
 				minW="0"
-				value={activeValue}
-				onValueChange={(event) => handleTabChange(event.value)}
+				borderBottomWidth="1px"
+				borderColor="border"
 			>
-				<DndContext
-					sensors={sensors}
-					collisionDetection={closestCenter}
-					onDragEnd={handleDragEnd}
+				<Box
+					role="tablist"
+					aria-orientation="horizontal"
+					display="flex"
+					w="full"
+					minW="max-content"
 				>
-					<Box overflowX="auto" overflowY="hidden" w="full" minW="0">
-						<Tabs.List w="full" minW="max-content">
-							<SortableContext
-								items={terminalSortableItems.map((tab) => tab.sortableId)}
-								strategy={horizontalListSortingStrategy}
-							>
-								<AnimatePresence initial={false}>
-									{terminalSortableItems.map((tab) => (
-										<SortableTabItem
-											key={tab.id}
-											sortableId={tab.sortableId}
-											value={tab.id}
-											icon={getTerminalTabIcon(tab.title)}
-											title={tab.title}
-											maxTitleLength={10}
-											motionProps={tabMotionProps}
-											badge={
-												notifiedTabSet.has(tab.id) &&
-												tab.id !== activeTabId ? (
-													<Circle size="2" bg="green.500" />
-												) : undefined
-											}
-											onClose={() =>
-												closeTab.mutate({
-													profileId,
-													sessionId: tab.id,
-												})
-											}
-										/>
-									))}
-								</AnimatePresence>
-							</SortableContext>
-
-							<SortableContext
-								items={fileSortableItems.map((tab) => tab.sortableId)}
-								strategy={horizontalListSortingStrategy}
-							>
-								<AnimatePresence initial={false}>
-									{fileSortableItems.map((tab) => (
-										<SortableTabItem
-											key={tab.filePath}
-											sortableId={tab.sortableId}
-											value={tab.filePath}
-											icon={
-												<FileTreeFileIcon
-													fileName={tab.title}
-													size={14}
-												/>
-											}
-											title={tab.title}
-											maxTitleLength={14}
-											motionProps={tabMotionProps}
-											badge={
-												dirtyFilePathSet.has(tab.filePath) ? (
-													<Circle size="2" bg="fg.muted" />
-												) : undefined
-											}
-											onClose={() =>
-												closeFileTab(profileId, tab.filePath)
-											}
-										/>
-									))}
-								</AnimatePresence>
-							</SortableContext>
-
-							<TerminalTemplateMenu
-								profileId={profileId}
-								cwd={cwd}
-								projectId={projectId}
+					<AnimatePresence initial={false}>
+						{tabs.map((tab) => (
+							<TabItem
+								key={tab.id}
+								value={tab.id}
+								icon={getTerminalTabIcon(tab.title)}
+								title={tab.title}
+								maxTitleLength={10}
+								motionProps={tabMotionProps}
+								isSelected={!fileTabActive && tab.id === activeValue}
+								onSelect={handleTabChange}
+								badge={
+									notifiedTabSet.has(tab.id) &&
+									tab.id !== activeTabId ? (
+										<Circle size="2" bg="green.500" />
+									) : undefined
+								}
+								onClose={() =>
+									closeTab.mutate({
+										profileId,
+										sessionId: tab.id,
+									})
+								}
 							/>
-						</Tabs.List>
-					</Box>
-				</DndContext>
-			</Tabs.Root>
+						))}
+						{fileTabs.map((tab) => (
+							<TabItem
+								key={tab.filePath}
+								value={tab.filePath}
+								icon={
+									<FileTreeFileIcon
+										fileName={tab.title}
+										size={14}
+									/>
+								}
+								title={tab.title}
+								maxTitleLength={14}
+								motionProps={tabMotionProps}
+								isSelected={fileTabActive && tab.filePath === activeValue}
+								onSelect={handleTabChange}
+								badge={
+									dirtyFilePathSet.has(tab.filePath) ? (
+										<Circle size="2" bg="fg.muted" />
+									) : undefined
+								}
+								onClose={() =>
+									closeFileTab(profileId, tab.filePath)
+								}
+							/>
+						))}
+					</AnimatePresence>
+
+					<TerminalTemplateMenu
+						profileId={profileId}
+						cwd={cwd}
+						projectId={projectId}
+					/>
+				</Box>
+			</Box>
 
 			{/* File viewer — static content, safe to conditionally render */}
 			{fileTabActive && activeFilePath && (
