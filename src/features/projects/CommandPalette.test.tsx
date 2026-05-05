@@ -91,6 +91,12 @@ describe("commandPalette", () => {
 		await waitFor(() => {
 			expect(screen.getByText("main.ts")).toBeInTheDocument();
 		});
+		expect(
+			screen
+				.getByText("main.ts")
+				.closest("[cmdk-item]")
+				?.querySelector("svg[data-icon-token='typescript']"),
+		).not.toBeNull();
 		await waitFor(() => {
 			expect(
 				document.querySelector("[cmdk-item][aria-selected='true']"),

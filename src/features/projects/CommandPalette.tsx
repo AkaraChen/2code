@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import type { FileSearchResult } from "@/generated";
 import * as m from "@/paraglide/messages.js";
+import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import { useFileSearch } from "./hooks";
 
 interface CommandPaletteProps {
@@ -160,6 +161,10 @@ export default function CommandPalette({
 						<Box
 							key={result.path}
 							asChild
+							display="flex"
+							alignItems="center"
+							gap="2"
+							minW="0"
 							px="3"
 							py="2"
 							rounded="l1"
@@ -174,6 +179,10 @@ export default function CommandPalette({
 								value={result.path}
 								onSelect={() => commitSelection(result)}
 							>
+								<FileTreeFileIcon
+									fileName={result.name}
+									size={16}
+								/>
 								<Box flex="1" minW="0">
 									<Text fontSize="sm" truncate>
 										{result.name}
