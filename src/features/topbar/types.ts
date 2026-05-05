@@ -14,7 +14,11 @@ export const launchAppControlIds = [
 	"warp",
 ] as const;
 
-export const staticControlIds = ["git-diff", "reveal-in-finder"] as const;
+export const staticControlIds = [
+	"git-diff",
+	"pr-status",
+	"reveal-in-finder",
+] as const;
 
 export type LaunchAppControlId = (typeof launchAppControlIds)[number];
 export type StaticControlId = (typeof staticControlIds)[number];

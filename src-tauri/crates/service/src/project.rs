@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, Project, ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
+	ProjectWithProfiles,
 };
 
 fn generate_dir_name(name: &Option<String>, uuid: &str) -> String {
@@ -221,6 +222,12 @@ pub fn push(
 ) -> Result<(), AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	infra::git::push(&profile.worktree_path)
+}
+
+pub fn get_pull_request_status_for_folder(
+	folder: &str,
+) -> Result<Option<GitPullRequestStatus>, AppError> {
+	infra::git::pull_request_status(folder)
 }
 
 pub fn get_github_avatar(

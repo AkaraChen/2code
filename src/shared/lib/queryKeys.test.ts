@@ -15,6 +15,7 @@ describe("queryNamespaces", () => {
 			"git-commit-diff": "git-commit-diff",
 			"git-binary-preview": "git-binary-preview",
 			"git-ahead-count": "git-ahead-count",
+			"git-pull-request-status": "git-pull-request-status",
 			"topbar-apps": "topbar-apps",
 			"fs-file": "fs-file",
 			"fs-search": "fs-search",
@@ -125,6 +126,14 @@ describe("queryKeys", () => {
 			expect(queryKeys.git.aheadCount("profile-1")).toEqual([
 				"git-ahead-count",
 				"profile-1",
+			]);
+		});
+
+		it("pullRequestStatus() includes profileId in key", () => {
+			expect(queryKeys.git.pullRequestStatus("profile-1", "main")).toEqual([
+				"git-pull-request-status",
+				"profile-1",
+				"main",
 			]);
 		});
 

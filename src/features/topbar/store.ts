@@ -6,6 +6,7 @@ export const defaultActiveControls: ControlId[] = [
 	"github-desktop",
 	"vscode",
 	"git-diff",
+	"pr-status",
 	"reveal-in-finder",
 ];
 
@@ -19,6 +20,24 @@ interface TopBarStore {
 		value: unknown,
 	) => void;
 	resetToDefaults: () => void;
+}
+
+interface PersistedTopBarState {
+	activeControls?: ControlId[];
+	controlOptions?: Record<string, Record<string, unknown>>;
+}
+
+function withPrStatusControl(controls: ControlId[]) {
+	if (controls.includes("pr-status")) return controls;
+
+	const gitDiffIndex = controls.indexOf("git-diff");
+	if (gitDiffIndex === -1) return [...controls, "pr-status"];
+
+	return [
+		...controls.slice(0, gitDiffIndex + 1),
+		"pr-status",
+		...controls.slice(gitDiffIndex + 1),
+	];
 }
 
 export const useTopBarStore = create<TopBarStore>()(
@@ -43,6 +62,20 @@ export const useTopBarStore = create<TopBarStore>()(
 					controlOptions: {},
 				}),
 		}),
-		{ name: "topbar-settings", version: 1 },
+		{
+			name: "topbar-settings",
+			version: 2,
+			migrate: (persistedState, version) => {
+				if (version >= 2 || !persistedState) return persistedState;
+
+				const state = persistedState as PersistedTopBarState;
+				return {
+					...state,
+					activeControls: withPrStatusControl(
+						state.activeControls ?? defaultActiveControls,
+					),
+				};
+			},
+		},
 	),
 );

@@ -87,3 +87,13 @@ pub struct GitDiffStats {
 pub struct GitBinaryPreview {
 	pub file_path: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct GitPullRequestStatus {
+	pub number: u32,
+	pub title: String,
+	pub state: String,
+	pub url: String,
+	pub is_draft: bool,
+	pub head_ref_name: String,
+}
