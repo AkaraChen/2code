@@ -5,7 +5,8 @@ use diesel::SqliteConnection;
 use uuid::Uuid;
 
 use model::error::AppError;
-use model::profile::Profile;
+use model::profile::{Profile, ProfileDeleteCheck};
+use model::project::GitDiffStats;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
 const AUTO_BRANCH_CITIES: &[&str] = &[
@@ -199,6 +200,37 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	infra::git::branch_delete(&project_folder, &profile.branch_name);
 
 	Ok(())
+}
+
+pub fn delete_check(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<ProfileDeleteCheck, AppError> {
+	let profile = repo::profile::find_by_id(conn, id)?;
+	let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
+	let unpushed_commits = infra::git::branch_unique_commits(
+		&profile.worktree_path,
+		&profile.branch_name,
+	)?;
+	let unpushed_commit_diff = infra::git::commit_diff_stats(
+		&profile.worktree_path,
+		&unpushed_commits,
+	)?;
+
+	Ok(ProfileDeleteCheck {
+		total_diff: add_diff_stats(&working_tree_diff, &unpushed_commit_diff),
+		working_tree_diff,
+		unpushed_commit_count: unpushed_commits.len() as u32,
+		unpushed_commit_diff,
+	})
+}
+
+fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
+	GitDiffStats {
+		files_changed: left.files_changed + right.files_changed,
+		insertions: left.insertions + right.insertions,
+		deletions: left.deletions + right.deletions,
+	}
 }
 
 #[cfg(test)]

@@ -500,6 +500,62 @@ pub fn ahead_count(folder: &str) -> u32 {
 	}
 }
 
+pub fn branch_unique_commits(
+	folder: &str,
+	branch_name: &str,
+) -> Result<Vec<String>, AppError> {
+	let branch_ref = format!("refs/heads/{branch_name}");
+	let other_refs = refs_except_branch(folder, &branch_ref)?;
+	let mut command = Command::new("git");
+	command
+		.args(["rev-list", "--reverse", &branch_ref])
+		.current_dir(folder);
+
+	if !other_refs.is_empty() {
+		command.arg("--not").args(&other_refs);
+	}
+
+	let output = command.output()?;
+	if !output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git rev-list failed",
+			&output,
+		)));
+	}
+
+	Ok(String::from_utf8_lossy(&output.stdout)
+		.lines()
+		.map(str::trim)
+		.filter(|line| !line.is_empty())
+		.map(ToOwned::to_owned)
+		.collect())
+}
+
+pub fn commit_diff_stats(
+	folder: &str,
+	commits: &[String],
+) -> Result<GitDiffStats, AppError> {
+	if commits.is_empty() {
+		return Ok(GitDiffStats::default());
+	}
+
+	let output = Command::new("git")
+		.args(["show", "--format=", "--shortstat"])
+		.args(commits)
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git show failed",
+			&output,
+		)));
+	}
+
+	let stdout = String::from_utf8_lossy(&output.stdout);
+	Ok(sum_shortstat_lines(&stdout))
+}
+
 pub fn push(folder: &str) -> Result<(), AppError> {
 	let output = Command::new("git")
 		.args(["push"])
@@ -603,6 +659,31 @@ pub fn branch_delete(project_folder: &str, branch_name: &str) {
 		}
 		_ => {}
 	}
+}
+
+fn refs_except_branch(
+	folder: &str,
+	branch_ref: &str,
+) -> Result<Vec<String>, AppError> {
+	let output = Command::new("git")
+		.args(["for-each-ref", "--format=%(refname)"])
+		.args(["refs/heads", "refs/remotes", "refs/tags"])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git for-each-ref failed",
+			&output,
+		)));
+	}
+
+	Ok(String::from_utf8_lossy(&output.stdout)
+		.lines()
+		.map(str::trim)
+		.filter(|line| !line.is_empty() && *line != branch_ref)
+		.map(ToOwned::to_owned)
+		.collect())
 }
 
 // --- Private helpers ---
@@ -729,6 +810,19 @@ pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	}
 
 	(files, insertions, deletions)
+}
+
+fn sum_shortstat_lines(output: &str) -> GitDiffStats {
+	let mut stats = GitDiffStats::default();
+
+	for line in output.lines().filter(|line| line.contains("file")) {
+		let (files_changed, insertions, deletions) = parse_shortstat(line);
+		stats.files_changed += files_changed;
+		stats.insertions += insertions;
+		stats.deletions += deletions;
+	}
+
+	stats
 }
 
 pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
@@ -1339,6 +1433,22 @@ mod tests {
 		assert_eq!((f, i, d), (1, 1, 1));
 	}
 
+	#[test]
+	fn sum_shortstat_lines_adds_multiple_commit_stats() {
+		let stats = sum_shortstat_lines(
+			" 1 file changed, 2 insertions(+)\n\n 2 files changed, 3 deletions(-)",
+		);
+
+		assert_eq!(
+			stats,
+			GitDiffStats {
+				files_changed: 3,
+				insertions: 2,
+				deletions: 3,
+			}
+		);
+	}
+
 	// --- parse_git_log ---
 
 	#[test]
@@ -1811,6 +1921,59 @@ mod tests {
 		assert_eq!(stats.files_changed, 0);
 		assert_eq!(stats.insertions, 0);
 		assert_eq!(stats.deletions, 0);
+	}
+
+	#[test]
+	fn branch_unique_commits_counts_no_upstream_branch_commits() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "base", "Init");
+		Command::new("git")
+			.args(["checkout", "-b", "feature/delete-risk"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		add_commit(&dir, "feature-a.txt", "a", "Feature A");
+		add_commit(&dir, "feature-b.txt", "b", "Feature B");
+
+		let commits = branch_unique_commits(
+			&dir.to_string_lossy(),
+			"feature/delete-risk",
+		)
+		.unwrap();
+		let stats =
+			commit_diff_stats(&dir.to_string_lossy(), &commits).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(commits.len(), 2);
+		assert_eq!(stats.files_changed, 2);
+		assert_eq!(stats.insertions, 2);
+		assert_eq!(stats.deletions, 0);
+	}
+
+	#[test]
+	fn branch_unique_commits_ignores_commits_kept_by_another_ref() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "base", "Init");
+		Command::new("git")
+			.args(["checkout", "-b", "feature/delete-risk"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		add_commit(&dir, "feature-a.txt", "a", "Feature A");
+		Command::new("git")
+			.args(["branch", "backup/delete-risk"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let commits = branch_unique_commits(
+			&dir.to_string_lossy(),
+			"feature/delete-risk",
+		)
+		.unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(commits.is_empty());
 	}
 
 	#[test]

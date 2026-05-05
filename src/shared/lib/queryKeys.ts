@@ -10,6 +10,7 @@ export const queryNamespaces = {
 	"git-commit-diff": "git-commit-diff",
 	"git-binary-preview": "git-binary-preview",
 	"git-ahead-count": "git-ahead-count",
+	"profile-delete-check": "profile-delete-check",
 	"topbar-apps": "topbar-apps",
 	"fs-file": "fs-file",
 	"fs-search": "fs-search",
@@ -53,6 +54,10 @@ export const queryKeys = {
 			] as const,
 		aheadCount: (profileId: string) =>
 			["git-ahead-count", profileId] as const,
+	},
+	profile: {
+		deleteCheck: (profileId: string) =>
+			["profile-delete-check", profileId] as const,
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,

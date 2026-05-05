@@ -106,6 +106,7 @@ pub fn run() {
 			handler::topbar::open_topbar_app,
 			handler::profile::create_profile,
 			handler::profile::delete_profile,
+			handler::profile::get_profile_delete_check,
 			handler::watcher::watch_projects,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,

@@ -1,6 +1,8 @@
 use crate::schema::profiles;
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+use crate::project::GitDiffStats;
 
 #[derive(Queryable, Selectable, Serialize)]
 #[diesel(table_name = profiles)]
@@ -22,4 +24,12 @@ pub struct NewProfile<'a> {
 	pub branch_name: &'a str,
 	pub worktree_path: &'a str,
 	pub is_default: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ProfileDeleteCheck {
+	pub working_tree_diff: GitDiffStats,
+	pub unpushed_commit_count: u32,
+	pub unpushed_commit_diff: GitDiffStats,
+	pub total_diff: GitDiffStats,
 }
