@@ -15,6 +15,7 @@ describe("queryNamespaces", () => {
 			"git-commit-diff": "git-commit-diff",
 			"git-binary-preview": "git-binary-preview",
 			"git-ahead-count": "git-ahead-count",
+			"profile-delete-check": "profile-delete-check",
 			"topbar-apps": "topbar-apps",
 			"fs-file": "fs-file",
 			"fs-search": "fs-search",
@@ -157,6 +158,15 @@ describe("queryKeys", () => {
 				"fs-search",
 				"profile-1",
 				"readme",
+			]);
+		});
+	});
+
+	describe("profile", () => {
+		it("deleteCheck() includes profileId in key", () => {
+			expect(queryKeys.profile.deleteCheck("profile-1")).toEqual([
+				"profile-delete-check",
+				"profile-1",
 			]);
 		});
 	});
