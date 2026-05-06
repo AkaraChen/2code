@@ -84,7 +84,7 @@ export function ProjectTemplatesEditor({
 					<Box
 						rounded="l3"
 						borderWidth="1px"
-						borderColor="border.subtle"
+						borderColor="border"
 						bg="bg.panel"
 						px="4"
 						py="3"
@@ -100,7 +100,7 @@ export function ProjectTemplatesEditor({
 								key={t.id}
 								rounded="l3"
 								borderWidth="1px"
-								borderColor="border.subtle"
+								borderColor="border"
 								bg="bg.panel"
 								px="4"
 								py="3"
