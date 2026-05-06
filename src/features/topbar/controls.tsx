@@ -5,7 +5,6 @@ import {
 	SiGithub,
 	SiIterm2,
 	SiSublimetext,
-	SiVscodium,
 	SiWarp,
 	SiWindsurf,
 	SiZedindustries,
@@ -27,6 +26,20 @@ import type { GitPullRequestStatus } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useOpenTopbarApp } from "./hooks";
 import type { ControlProps, LaunchAppControlId } from "./types";
+
+export function VscodeIcon({ size = 24 }: { size?: number | string }) {
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="currentColor"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path d="M16.89 1.2 7.8 9.18 3.28 5.83a1 1 0 0 0-1.28.08L.25 7.35a1 1 0 0 0 0 1.48L3.9 12 .25 15.17a1 1 0 0 0 0 1.48l1.75 1.44a1 1 0 0 0 1.28.08L7.8 14.82l9.09 7.98a1.5 1.5 0 0 0 1.7.33l4.97-2.39A1.5 1.5 0 0 0 24 19.37V4.63a1.5 1.5 0 0 0-.85-1.35l-4.56-2.39a1.5 1.5 0 0 0-1.7.31zM18.1 6.17v11.66L10.6 12l7.5-5.83z" />
+		</svg>
+	);
+}
 
 function AppButton({
 	label,
@@ -83,7 +96,7 @@ export function VscodeControl(props: ControlProps) {
 			{...props}
 			label={m.topbarVscode()}
 			appId="vscode"
-			icon={SiVscodium}
+			icon={VscodeIcon}
 		/>
 	);
 }
