@@ -1,8 +1,12 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense, use } from "react";
+import { use } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import * as m from "@/paraglide/messages.js";
-import { LoadingSpinner } from "@/shared/components/Fallbacks";
+import {
+	AsyncBoundary,
+	LoadingError,
+	LoadingSpinner,
+} from "@/shared/components/Fallbacks";
 import ChangesFileList from "./ChangesFileList";
 import CommitComposer from "./CommitComposer";
 import GitDiffPane from "./GitDiffPane";
@@ -107,7 +111,12 @@ export function ChangesDiffPane({ visible }: { visible: boolean }) {
 
 	return (
 		<VisibleBox visible={visible}>
-			<Suspense fallback={<LoadingSpinner />}>
+			<AsyncBoundary
+				fallback={<LoadingSpinner />}
+				errorFallback={({ error, onRetry }) => (
+					<LoadingError error={error} onRetry={onRetry} />
+				)}
+			>
 				<GitDiffPane
 					activeFile={activeFile}
 					options={options}
@@ -119,7 +128,7 @@ export function ChangesDiffPane({ visible }: { visible: boolean }) {
 							: m.selectFileToView()
 					}
 				/>
-			</Suspense>
+			</AsyncBoundary>
 		</VisibleBox>
 	);
 }

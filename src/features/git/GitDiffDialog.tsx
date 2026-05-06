@@ -1,10 +1,14 @@
 import { Dialog, Portal } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import type { Dispatch } from "react";
-import { Suspense, useMemo } from "react";
+import { useMemo } from "react";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
-import { LoadingSpinner } from "@/shared/components/Fallbacks";
+import {
+	AsyncBoundary,
+	LoadingError,
+	LoadingSpinner,
+} from "@/shared/components/Fallbacks";
 import GitDiffContent from "./components/GitDiffContent";
 import GitDiffHeader from "./components/GitDiffHeader";
 import type { GitDiffAction, GitDiffState } from "./gitDiffReducer";
@@ -89,7 +93,12 @@ export default function GitDiffDialog({
 						/>
 
 						<Dialog.Body p="0" flex="1" overflow="hidden" display="flex">
-							<Suspense fallback={<LoadingSpinner />}>
+							<AsyncBoundary
+								fallback={<LoadingSpinner />}
+								errorFallback={({ error, onRetry }) => (
+									<LoadingError error={error} onRetry={onRetry} />
+								)}
+							>
 								<GitDiffContent
 									profileId={profileId}
 									worktreePath={worktreePath}
@@ -98,7 +107,7 @@ export default function GitDiffDialog({
 									dispatch={dispatch}
 									options={options}
 								/>
-							</Suspense>
+							</AsyncBoundary>
 						</Dialog.Body>
 					</Dialog.Content>
 				</Dialog.Positioner>

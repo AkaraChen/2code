@@ -43,7 +43,12 @@ export default function FileViewerPane({
 	const saveHandlerRef = useRef<() => void>(() => {});
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
-	const { data: content, isLoading, error } = useFileContent(filePath, true);
+	const {
+		data: content,
+		error,
+		isError,
+		isLoading,
+	} = useFileContent(filePath, true);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
@@ -172,7 +177,7 @@ export default function FileViewerPane({
 		);
 	}
 
-	if (error && !hasLoadedFile) {
+	if (isError && !hasLoadedFile) {
 		return (
 			<Flex align="center" justify="center" h="32" px="6">
 				<Text color="fg.muted" fontSize="sm" textAlign="center">

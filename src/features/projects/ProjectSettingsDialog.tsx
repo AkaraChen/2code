@@ -10,7 +10,7 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import {
 	commandsToText,
@@ -20,6 +20,7 @@ import {
 	type ProjectTerminalTemplateDraft,
 } from "@/features/terminal/templates";
 import * as m from "@/paraglide/messages.js";
+import { AsyncBoundary, DialogBodyError } from "@/shared/components/Fallbacks";
 import { useProjectConfig, useSaveProjectConfig } from "./hooks";
 import { ProjectTemplatesEditor } from "./components/ProjectTemplatesEditor";
 
@@ -168,7 +169,7 @@ export default function ProjectSettingsDialog({
 						<Dialog.Header>
 							<Dialog.Title>{m.projectSettings()}</Dialog.Title>
 						</Dialog.Header>
-						<Suspense
+						<AsyncBoundary
 							fallback={
 								<Dialog.Body>
 									<Stack alignItems="center" justifyContent="center" minH="200px">
@@ -176,9 +177,12 @@ export default function ProjectSettingsDialog({
 									</Stack>
 								</Dialog.Body>
 							}
+							errorFallback={({ error, onRetry }) => (
+								<DialogBodyError error={error} onRetry={onRetry} />
+							)}
 						>
 							<ProjectSettingsForm projectId={projectId} onClose={onClose} />
-						</Suspense>
+						</AsyncBoundary>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />
 						</Dialog.CloseTrigger>

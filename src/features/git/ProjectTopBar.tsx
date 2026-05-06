@@ -9,7 +9,7 @@ import {
 } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { Dispatch } from "react";
-import { Suspense, useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import {
 	PiGearSixFill,
 	PiGitBranchFill,
@@ -219,11 +219,7 @@ export default function ProjectTopBar({
 					<Box color="fg.muted">
 						{profile.is_default ? (
 							isActive ? (
-								<Suspense>
-									<GitBranchLabel
-										cwd={profile.worktree_path}
-									/>
-								</Suspense>
+								<GitBranchLabel cwd={profile.worktree_path} />
 							) : null
 						) : (
 							<HStack gap="1">
@@ -281,18 +277,16 @@ export default function ProjectTopBar({
 			/>
 
 			{profile.is_default ? (
-				<Suspense>
-					<GitDiffDialogWithBranch
-						cwd={profile.worktree_path}
-						isOpen={gitDiffOpen}
-						isActive={isActive}
-						onClose={() => setGitDiffOpen(false)}
-						profileId={profile.id}
-						worktreePath={profile.worktree_path}
-						state={gitDiffState}
-						dispatch={dispatchGitDiff}
-					/>
-				</Suspense>
+				<GitDiffDialogWithBranch
+					cwd={profile.worktree_path}
+					isOpen={gitDiffOpen}
+					isActive={isActive}
+					onClose={() => setGitDiffOpen(false)}
+					profileId={profile.id}
+					worktreePath={profile.worktree_path}
+					state={gitDiffState}
+					dispatch={dispatchGitDiff}
+				/>
 			) : (
 				<GitDiffDialog
 					isOpen={gitDiffOpen}

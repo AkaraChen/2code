@@ -1,6 +1,4 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { Suspense } from "react";
-import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
@@ -11,8 +9,10 @@ import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import AppSidebar from "./layout/AppSidebar";
 import {
+	AsyncBoundary,
 	PageError,
 	PageSkeleton,
+	SidebarError,
 	SidebarSkeleton,
 } from "./shared/components/Fallbacks";
 import "./app.css";
@@ -29,45 +29,46 @@ export default function App() {
 	return (
 		<Flex direction="column" h="full">
 			<Flex flex="1" minH="0">
-				<Suspense fallback={<SidebarSkeleton />}>
+				<AsyncBoundary
+					fallback={<SidebarSkeleton />}
+					errorFallback={({ error, onRetry }) => (
+						<SidebarError error={error} onRetry={onRetry} />
+					)}
+				>
 					<AppSidebar />
-				</Suspense>
+				</AsyncBoundary>
 				<Box as="main" flex="1" overflowY="auto" position="relative">
-					<ErrorBoundary
-						fallbackRender={({ error, resetErrorBoundary }) => (
-							<PageError
-								error={
-									error instanceof Error
-										? error
-										: new Error(String(error))
-								}
-								onRetry={resetErrorBoundary}
-							/>
+					<AsyncBoundary
+						fallback={<PageSkeleton />}
+						errorFallback={({ error, onRetry }) => (
+							<PageError error={error} onRetry={onRetry} />
 						)}
 					>
-						<Suspense fallback={<PageSkeleton />}>
-							<Routes>
-								<Route path="/" element={<HomePage />} />
-								<Route
-									path="/projects/:id/profiles/:profileId"
-									element={<ProjectDetailPage />}
-								/>
-								<Route
-									path="/settings"
-									element={<SettingsPage />}
-								/>
-								<Route
-									path="*"
-									element={<Navigate to="/" replace />}
-								/>
-							</Routes>
-						</Suspense>
-					</ErrorBoundary>
+						<Routes>
+							<Route path="/" element={<HomePage />} />
+							<Route
+								path="/projects/:id/profiles/:profileId"
+								element={<ProjectDetailPage />}
+							/>
+							<Route
+								path="/settings"
+								element={<SettingsPage />}
+							/>
+							<Route
+								path="*"
+								element={<Navigate to="/" replace />}
+							/>
+						</Routes>
+					</AsyncBoundary>
 
 					{/* Persistent terminal layer — survives route changes */}
-					<Suspense>
+					<AsyncBoundary
+						errorFallback={({ error, onRetry }) => (
+							<PageError error={error} onRetry={onRetry} />
+						)}
+					>
 						<TerminalLayer />
-					</Suspense>
+					</AsyncBoundary>
 				</Box>
 			</Flex>
 			<DebugFloat />

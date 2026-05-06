@@ -1,10 +1,17 @@
 import { Box, Text } from "@chakra-ui/react";
 import { Command, useCommandState } from "cmdk";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import {
+	type ReactNode,
+	useDeferredValue,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import type { FileSearchResult } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
+import { getErrorMessage } from "@/shared/components/Fallbacks";
 import { useFileSearch } from "./hooks";
 
 interface CommandPaletteProps {
@@ -23,6 +30,20 @@ function CommandPaletteEmptyState() {
 	const search = useCommandState((state) => state.search.trim());
 
 	return (
+		<CommandPaletteStatusMessage>
+			{search.length > 0
+				? m.commandPaletteNoResults()
+				: m.commandPaletteEmpty()}
+		</CommandPaletteStatusMessage>
+	);
+}
+
+function CommandPaletteStatusMessage({
+	children,
+}: {
+	children: ReactNode;
+}) {
+	return (
 		<Box
 			asChild
 			display="flex"
@@ -33,9 +54,7 @@ function CommandPaletteEmptyState() {
 		>
 			<Command.Empty>
 				<Text textAlign="center" color="fg.muted">
-					{search.length > 0
-						? m.commandPaletteNoResults()
-						: m.commandPaletteEmpty()}
+					{children}
 				</Text>
 			</Command.Empty>
 		</Box>
@@ -50,11 +69,17 @@ export default function CommandPalette({
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const deferredSearch = useDeferredValue(search.trim());
 	const openFile = useFileViewerTabsStore((state) => state.openFile);
-	const { data: results = [], isFetching } = useFileSearch(
+	const {
+		data: results = [],
+		error,
+		isError,
+		isFetching,
+	} = useFileSearch(
 		profileId,
 		deferredSearch,
 		isOpen,
 	);
+	const shouldShowErrorState = isError && results.length === 0;
 	const shouldShowEmptyState =
 		results.length === 0
 		&& (deferredSearch.length === 0 || !isFetching);
@@ -156,7 +181,13 @@ export default function CommandPalette({
 				p="1"
 			>
 				<Command.List label={m.commandPaletteTitle()}>
-					{shouldShowEmptyState ? <CommandPaletteEmptyState /> : null}
+					{shouldShowErrorState ? (
+						<CommandPaletteStatusMessage>
+							{getErrorMessage(error)}
+						</CommandPaletteStatusMessage>
+					) : shouldShowEmptyState ? (
+						<CommandPaletteEmptyState />
+					) : null}
 					{results.map((result) => (
 						<Box
 							key={result.path}

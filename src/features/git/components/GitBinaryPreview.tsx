@@ -66,14 +66,18 @@ function useBinaryPreviewUrl({
 }
 
 function BinaryPreviewPane({
+	error,
 	label,
 	path,
 	assetUrl,
+	isError,
 	isLoading,
 }: {
+	error: unknown;
 	label: string;
 	path: string;
 	assetUrl: string | null;
+	isError: boolean;
 	isLoading: boolean;
 }) {
 	return (
@@ -128,6 +132,10 @@ function BinaryPreviewPane({
 			>
 				{isLoading ? (
 					<Spinner size="sm" color="colorPalette.500" />
+				) : isError ? (
+					<Text fontSize="sm" color="fg.muted" textAlign="center">
+						{error instanceof Error ? error.message : String(error)}
+					</Text>
 				) : assetUrl ? (
 					<img
 						src={assetUrl}
@@ -208,6 +216,8 @@ export function BinaryImageDiffPreview({
 					label={m.gitDiffImagePreviewBefore()}
 					path={beforePath}
 					assetUrl={beforePreview.assetUrl}
+					error={beforePreview.error}
+					isError={beforePreview.isError}
 					isLoading={beforePreview.isLoading}
 				/>
 			) : null}
@@ -217,6 +227,8 @@ export function BinaryImageDiffPreview({
 					label={m.gitDiffImagePreviewAfter()}
 					path={afterPath}
 					assetUrl={afterPreview.assetUrl}
+					error={afterPreview.error}
+					isError={afterPreview.isError}
 					isLoading={afterPreview.isLoading}
 				/>
 			) : null}

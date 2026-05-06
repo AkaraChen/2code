@@ -13,13 +13,14 @@ import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg"
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, useMemo } from "react";
 import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
+import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
@@ -221,15 +222,18 @@ export default function TerminalTabs({
 			{/* File viewer — static content, safe to conditionally render */}
 			{fileTabActive && activeFilePath && (
 				<Box flex="1" minH="0" overflow="hidden">
-					<Suspense
+					<AsyncBoundary
 						fallback={(
 							<Flex align="center" justify="center" h="32">
 								<Spinner size="sm" />
 							</Flex>
 						)}
+						errorFallback={({ error, onRetry }) => (
+							<InlineError error={error} height="32" onRetry={onRetry} />
+						)}
 					>
 						<FileViewerPane filePath={activeFilePath} profileId={profileId} />
-					</Suspense>
+					</AsyncBoundary>
 				</Box>
 			)}
 

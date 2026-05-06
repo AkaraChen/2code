@@ -1,5 +1,5 @@
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { Box, Center, Spinner } from "@chakra-ui/react";
+import { Box, Center, Text } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import {
 	type CSSProperties,
@@ -21,6 +21,7 @@ import type {
 	GitStatusEntry,
 } from "@pierre/trees";
 import * as m from "@/paraglide/messages.js";
+import { getErrorMessage } from "@/shared/components/Fallbacks";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { toaster } from "@/shared/providers/Toaster";
@@ -389,7 +390,11 @@ export default function FileTreePanel({
 		onChange: setPanelWidth,
 	});
 
-	const { data: treePaths, isLoading } = useFileTreePaths(rootPath, isOpen);
+	const {
+		data: treePaths,
+		error: treePathsError,
+		isError: isTreePathsError,
+	} = useFileTreePaths(rootPath, isOpen);
 	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
@@ -629,13 +634,20 @@ export default function FileTreePanel({
 											)}
 											style={FILE_TREE_HOST_STYLE}
 										/>
-										{isLoading && (
+										{isTreePathsError && (
 											<Center
 												position="absolute"
 												inset="0"
 												pointerEvents="none"
 											>
-												<Spinner size="xs" />
+												<Text
+													color="fg.muted"
+													fontSize="xs"
+													px="3"
+													textAlign="center"
+												>
+													{getErrorMessage(treePathsError)}
+												</Text>
 											</Center>
 										)}
 									</Box>

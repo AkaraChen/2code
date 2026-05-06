@@ -3,8 +3,8 @@ import {
 	isPermissionGranted,
 	requestPermission,
 } from "@tauri-apps/plugin-notification";
-import { Suspense } from "react";
 import * as m from "@/paraglide/messages.js";
+import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import { SoundPicker } from "./SoundPicker";
 import { useNotificationStore } from "./stores/notificationStore";
 
@@ -41,9 +41,14 @@ export function NotificationSettings() {
 					</Switch.Label>
 				</Switch.Root>
 			</Field.Root>
-			<Suspense fallback={<Skeleton height="70px" />}>
+			<AsyncBoundary
+				fallback={<Skeleton height="70px" />}
+				errorFallback={({ error, onRetry }) => (
+					<InlineError error={error} height="70px" onRetry={onRetry} />
+				)}
+			>
 				<SoundPicker />
-			</Suspense>
+			</AsyncBoundary>
 		</Stack>
 	);
 }

@@ -1,9 +1,13 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Suspense, startTransition, use, useEffect } from "react";
+import { startTransition, use, useEffect } from "react";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { LoadingSpinner } from "@/shared/components/Fallbacks";
+import {
+	AsyncBoundary,
+	LoadingError,
+	LoadingSpinner,
+} from "@/shared/components/Fallbacks";
 import CommitList from "./CommitList";
 import GitDiffPane from "./GitDiffPane";
 import HistoryFileList from "./HistoryFileList";
@@ -128,12 +132,17 @@ export function HistorySidebar() {
 	if (selectedCommit) {
 		return (
 			<HistorySidebarPanel panelKey={`commit:${selectedCommit.full_hash}`}>
-				<Suspense fallback={<LoadingSpinner size="sm" />}>
+				<AsyncBoundary
+					fallback={<LoadingSpinner size="sm" />}
+					errorFallback={({ error, onRetry }) => (
+						<LoadingError error={error} onRetry={onRetry} size="sm" />
+					)}
+				>
 					<CommitFileSidebar
 						commit={selectedCommit}
 						selectedIndex={state.selectedCommitFileIndex}
 					/>
-				</Suspense>
+				</AsyncBoundary>
 			</HistorySidebarPanel>
 		);
 	}
@@ -188,12 +197,17 @@ export function HistoryDiffPane({ visible }: { visible: boolean }) {
 	return (
 		<VisibleBox visible={visible}>
 			<HistorySidebarPanel panelKey={`history:${selectedCommit.full_hash}`}>
-				<Suspense fallback={<LoadingSpinner />}>
+				<AsyncBoundary
+					fallback={<LoadingSpinner />}
+					errorFallback={({ error, onRetry }) => (
+						<LoadingError error={error} onRetry={onRetry} />
+					)}
+				>
 					<CommitDiffViewer
 						commit={selectedCommit}
 						selectedIndex={state.selectedCommitFileIndex}
 					/>
-				</Suspense>
+				</AsyncBoundary>
 			</HistorySidebarPanel>
 		</VisibleBox>
 	);

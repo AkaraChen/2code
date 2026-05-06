@@ -32,6 +32,12 @@ const fileResults: FileSearchResult[] = [
 
 type FileSearchQueryResult = ReturnType<typeof useFileSearch>;
 
+function createFileSearchResult(
+	result: Pick<FileSearchQueryResult, "data" | "error" | "isError" | "isFetching">,
+): FileSearchQueryResult {
+	return result as unknown as FileSearchQueryResult;
+}
+
 function renderPalette() {
 	return render(
 		<ChakraProvider value={appSystem}>
@@ -51,7 +57,7 @@ describe("commandPalette", () => {
 
 		vi.mocked(useFileSearch).mockImplementation(
 			(_profileId, query, enabled = true) =>
-				({
+				createFileSearchResult({
 					data:
 						enabled && query
 							? fileResults.filter(
@@ -60,8 +66,10 @@ describe("commandPalette", () => {
 										result.relative_path.includes(query),
 								)
 							: [],
+					error: null,
+					isError: false,
 					isFetching: false,
-				}) as FileSearchQueryResult,
+				}),
 		);
 	});
 
@@ -115,5 +123,26 @@ describe("commandPalette", () => {
 				name: m.commandPaletteTitle(),
 			}),
 		).not.toBeInTheDocument();
+	});
+
+	it("shows a search error in the empty state layout", async () => {
+		vi.mocked(useFileSearch).mockReturnValue(
+			createFileSearchResult({
+				data: [],
+				error: new Error("search failed"),
+				isError: true,
+				isFetching: false,
+			}),
+		);
+
+		renderPalette();
+
+		fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+		await screen.findByRole("combobox", {
+			name: m.commandPaletteTitle(),
+		});
+
+		expect(screen.getByText("search failed")).toBeInTheDocument();
 	});
 });

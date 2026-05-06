@@ -97,6 +97,7 @@ describe("fileViewerPane", () => {
 		vi.mocked(useFileContent).mockReturnValue({
 			data: fileContent,
 			isLoading: false,
+			isError: false,
 			error: null,
 		} as FileContentResult);
 		vi.mocked(useSaveFileContent).mockReturnValue({
@@ -120,6 +121,20 @@ describe("fileViewerPane", () => {
 		expect(editor).toHaveAttribute("data-path", filePath);
 		expect(editor).toHaveAttribute("data-theme", "vs-dark");
 		expect(screen.queryByRole("button")).not.toBeInTheDocument();
+	});
+
+	it("renders the file load error before content is available", () => {
+		vi.mocked(useFileContent).mockReturnValue({
+			data: undefined,
+			isLoading: false,
+			isError: true,
+			error: new Error("read failed"),
+		} as FileContentResult);
+
+		renderPane();
+
+		expect(screen.getByText("read failed")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
 	});
 
 	it("marks the file dirty and saves edited content with Cmd+S", async () => {

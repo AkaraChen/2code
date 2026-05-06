@@ -12,13 +12,14 @@ import {
 	Tabs,
 	Text,
 } from "@chakra-ui/react";
-import { Suspense, use, useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
 import * as m from "@/paraglide/messages.js";
 import type { Locale } from "@/paraglide/runtime.js";
+import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import { setAppLocale, useLocale } from "@/shared/lib/locale";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
@@ -191,9 +192,14 @@ export default function SettingsPage() {
 								<TerminalThemePicker
 									onPreview={setPreviewThemeId}
 								/>
-								<Suspense fallback={<Skeleton height="70px" />}>
+								<AsyncBoundary
+									fallback={<Skeleton height="70px" />}
+									errorFallback={({ error, onRetry }) => (
+										<InlineError error={error} height="70px" onRetry={onRetry} />
+									)}
+								>
 									<FontPicker />
-								</Suspense>
+								</AsyncBoundary>
 								<FontSizePicker />
 							</Stack>
 							<Box flex="1" minW="0">

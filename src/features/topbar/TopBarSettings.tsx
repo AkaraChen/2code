@@ -12,6 +12,7 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
+import { getErrorMessage } from "@/shared/components/Fallbacks";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
 import { useSupportedTopbarAppIds } from "./hooks";
@@ -27,6 +28,8 @@ export function TopBarSettings() {
 	const [activeId, setActiveId] = useState<ControlId | null>(null);
 	const {
 		data: supportedAppIds = [],
+		error,
+		isError,
 		isPending,
 		isSuccess,
 	} = useSupportedTopbarAppIds();
@@ -122,6 +125,14 @@ export function TopBarSettings() {
 		return (
 			<Text fontSize="sm" color="fg.muted">
 				{m.topbarDetectingApps()}
+			</Text>
+		);
+	}
+
+	if (isError) {
+		return (
+			<Text fontSize="sm" color="fg.muted">
+				{getErrorMessage(error)}
 			</Text>
 		);
 	}

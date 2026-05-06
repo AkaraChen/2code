@@ -2,7 +2,6 @@ import { Box, Flex, Tabs } from "@chakra-ui/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
-	Suspense,
 	startTransition,
 	useCallback,
 	useEffect,
@@ -12,7 +11,11 @@ import {
 } from "react";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import * as m from "@/paraglide/messages.js";
-import { LoadingSpinner } from "@/shared/components/Fallbacks";
+import {
+	AsyncBoundary,
+	LoadingError,
+	LoadingSpinner,
+} from "@/shared/components/Fallbacks";
 import { isInteractiveKeyboardTarget } from "@/shared/lib/dom";
 import { areSetsEqual } from "@/shared/lib/setUtils";
 import { toaster } from "@/shared/providers/Toaster";
@@ -368,7 +371,12 @@ export default function GitDiffContent({
 
 						<Box position="relative" flex="1" minH="0" overflow="hidden">
 							<Tabs.Content value="changes" {...SIDEBAR_TAB_CONTENT_PROPS}>
-								<Suspense fallback={<LoadingSpinner size="sm" />}>
+								<AsyncBoundary
+									fallback={<LoadingSpinner size="sm" />}
+									errorFallback={({ error, onRetry }) => (
+										<LoadingError error={error} onRetry={onRetry} size="sm" />
+									)}
+								>
 									<ChangesSidebar
 										includedFileNames={includedFileNames}
 										commitMessage={commitMessage}
@@ -419,13 +427,18 @@ export default function GitDiffContent({
 											}
 										}}
 									/>
-								</Suspense>
+								</AsyncBoundary>
 							</Tabs.Content>
 
 							<Tabs.Content value="history" {...SIDEBAR_TAB_CONTENT_PROPS}>
-								<Suspense fallback={<LoadingSpinner size="sm" />}>
+								<AsyncBoundary
+									fallback={<LoadingSpinner size="sm" />}
+									errorFallback={({ error, onRetry }) => (
+										<LoadingError error={error} onRetry={onRetry} size="sm" />
+									)}
+								>
 									<HistorySidebar />
-								</Suspense>
+								</AsyncBoundary>
 							</Tabs.Content>
 						</Box>
 					</Tabs.Root>

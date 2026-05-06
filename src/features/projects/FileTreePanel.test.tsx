@@ -131,9 +131,12 @@ type FileTreeGitStatusResult = ReturnType<typeof useFileTreeGitStatus>;
 function createFileTreePathsResult(
 	data: string[] | undefined,
 	isLoading: boolean,
+	error: Error | null = null,
 ): FileTreePathsResult {
 	return {
 		data,
+		error,
+		isError: error != null,
 		isLoading,
 	} as FileTreePathsResult;
 }
@@ -201,6 +204,16 @@ describe("fileTreePanel", () => {
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(treePaths);
 		});
+	});
+
+	it("shows the file tree load error in the loading overlay layout", () => {
+		vi.mocked(useFileTreePaths).mockReturnValue(
+			createFileTreePathsResult(undefined, false, new Error("tree failed")),
+		);
+
+		renderPanel();
+
+		expect(screen.getByText("tree failed")).toBeInTheDocument();
 	});
 
 	it("enables requested Pierre tree features", () => {

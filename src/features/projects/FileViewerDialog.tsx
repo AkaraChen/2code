@@ -95,7 +95,12 @@ export default function FileViewerDialog({
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const prismStyle = getPrismTheme(themeId);
 
-	const { data: content, isLoading, error } = useFileContent(
+	const {
+		data: content,
+		error,
+		isError,
+		isLoading,
+	} = useFileContent(
 		filePath ?? "",
 		!!filePath,
 	);
@@ -124,7 +129,7 @@ export default function FileViewerDialog({
 									<Spinner size="sm" />
 								</Flex>
 							)}
-							{error && (
+							{isError && (
 								<Flex align="center" justify="center" h="32" px="6">
 									<Text color="fg.muted" fontSize="sm" textAlign="center">
 										{error instanceof Error ? error.message : String(error)}
