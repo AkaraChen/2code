@@ -243,6 +243,10 @@ describe("getChangedLineCount", () => {
 });
 
 describe("isLargeGitDiffFile", () => {
+	it("uses 2000 changed lines as the default guardrail", () => {
+		expect(GIT_DIFF_LARGE_FILE_LINE_THRESHOLD).toBe(2000);
+	});
+
 	it("returns false below the guardrail", () => {
 		expect(
 			isLargeGitDiffFile(

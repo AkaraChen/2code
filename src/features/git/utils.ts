@@ -1,6 +1,6 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 
-export const GIT_DIFF_LARGE_FILE_LINE_THRESHOLD = 500;
+export const GIT_DIFF_LARGE_FILE_LINE_THRESHOLD = 2000;
 
 export const gitBinaryPreviewSources = {
 	workingTree: "working_tree",
