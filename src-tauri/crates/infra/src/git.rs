@@ -20,6 +20,12 @@ struct GhPullRequest {
 	url: String,
 	is_draft: bool,
 	head_ref_name: String,
+	head_repository_owner: Option<GhPullRequestOwner>,
+}
+
+#[derive(serde::Deserialize)]
+struct GhPullRequestOwner {
+	login: String,
 }
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
@@ -590,6 +596,13 @@ pub fn pull_request_status(
 		return Ok(None);
 	}
 
+	let remote_owner = remote_url(folder)?.and_then(|remote| {
+		parse_github_owner_and_repo(&remote).map(|(owner, _)| owner)
+	});
+	let Some(remote_owner) = remote_owner else {
+		return Ok(None);
+	};
+
 	let output = Command::new("gh")
 		.args([
 			"pr",
@@ -599,9 +612,9 @@ pub fn pull_request_status(
 			"--state",
 			"all",
 			"--json",
-			"number,title,state,url,isDraft,headRefName",
+			"number,title,state,url,isDraft,headRefName,headRepositoryOwner",
 			"--limit",
-			"1",
+			"100",
 		])
 		.current_dir(folder)
 		.output();
@@ -622,7 +635,7 @@ pub fn pull_request_status(
 		return Err(AppError::GitError(message));
 	}
 
-	let prs = parse_pull_request_list(&output.stdout)?;
+	let prs = parse_pull_request_list(&output.stdout, &remote_owner)?;
 	Ok(prs.into_iter().next())
 }
 
@@ -1076,6 +1089,7 @@ fn command_error(prefix: &str, output: &std::process::Output) -> String {
 
 fn parse_pull_request_list(
 	output: &[u8],
+	expected_head_owner: &str,
 ) -> Result<Vec<GitPullRequestStatus>, AppError> {
 	let prs: Vec<GhPullRequest> =
 		serde_json::from_slice(output).map_err(|error| {
@@ -1086,6 +1100,13 @@ fn parse_pull_request_list(
 
 	Ok(prs
 		.into_iter()
+		.filter(|pr| {
+			pr.head_repository_owner
+				.as_ref()
+				.is_some_and(|owner| {
+					owner.login.eq_ignore_ascii_case(expected_head_owner)
+				})
+		})
 		.map(|pr| GitPullRequestStatus {
 			number: pr.number,
 			title: pr.title,
@@ -1527,9 +1548,9 @@ mod tests {
 
 	#[test]
 	fn parse_pull_request_list_maps_gh_json() {
-		let output = br#"[{"number":42,"title":"Add PR chip","state":"OPEN","url":"https://github.com/acme/repo/pull/42","isDraft":true,"headRefName":"feature/pr-chip"}]"#;
+		let output = br#"[{"number":42,"title":"Add PR chip","state":"OPEN","url":"https://github.com/acme/repo/pull/42","isDraft":true,"headRefName":"feature/pr-chip","headRepositoryOwner":{"login":"acme"}}]"#;
 
-		let prs = parse_pull_request_list(output).unwrap();
+		let prs = parse_pull_request_list(output, "acme").unwrap();
 
 		assert_eq!(
 			prs,
@@ -1545,8 +1566,22 @@ mod tests {
 	}
 
 	#[test]
+	fn parse_pull_request_list_filters_by_head_owner() {
+		let output = br#"[
+			{"number":41,"title":"Wrong fork","state":"OPEN","url":"https://github.com/acme/repo/pull/41","isDraft":false,"headRefName":"feature/pr-chip","headRepositoryOwner":{"login":"other-user"}},
+			{"number":42,"title":"Correct owner","state":"OPEN","url":"https://github.com/acme/repo/pull/42","isDraft":false,"headRefName":"feature/pr-chip","headRepositoryOwner":{"login":"Acme"}}
+		]"#;
+
+		let prs = parse_pull_request_list(output, "acme").unwrap();
+
+		assert_eq!(prs.len(), 1);
+		assert_eq!(prs[0].number, 42);
+		assert_eq!(prs[0].title, "Correct owner");
+	}
+
+	#[test]
 	fn parse_pull_request_list_accepts_empty_list() {
-		let prs = parse_pull_request_list(br#"[]"#).unwrap();
+		let prs = parse_pull_request_list(br#"[]"#, "acme").unwrap();
 		assert!(prs.is_empty());
 	}
 
