@@ -83,6 +83,14 @@ vi.mock("@pierre/trees/react", () => ({
 			>
 				index.ts
 			</button>
+			<button
+				data-item-path="ignored.log"
+				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
+				onMouseDown={onMouseDown as MouseEventHandler<HTMLButtonElement>}
+				type="button"
+			>
+				ignored.log
+			</button>
 			{renderContextMenu?.(
 				contextMenuItemRef.current,
 				{ close: closeContextMenuMock },
@@ -245,12 +253,70 @@ describe("fileTreePanel", () => {
 		]);
 	});
 
+	it("normalizes git status for submodule directory paths", async () => {
+		vi.mocked(useFileTreePaths).mockReturnValue(
+			createFileTreePathsResult(
+				[
+					"claude-agent-sdk-python/",
+					"claude-agent-sdk-python/README.md",
+				],
+				false,
+			),
+		);
+		vi.mocked(useFileTreeGitStatus).mockReturnValue(
+			createFileTreeGitStatusResult(
+				[{ path: "claude-agent-sdk-python", status: "modified" }],
+				false,
+			),
+		);
+
+		renderPanel();
+
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith([
+				"claude-agent-sdk-python/",
+				"claude-agent-sdk-python/README.md",
+			]);
+		});
+		expect(setGitStatusMock).toHaveBeenCalledWith([
+			{ path: "claude-agent-sdk-python/", status: "modified" },
+		]);
+	});
+
 	it("opens file rows from tree click events", () => {
 		const { onOpenFile } = renderPanel();
 
 		fireEvent.click(screen.getByText("index.ts"));
 
 		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+	});
+
+	it("opens status-only ignored file rows from tree click events", () => {
+		vi.mocked(useFileTreeGitStatus).mockReturnValue(
+			createFileTreeGitStatusResult(
+				[{ path: "ignored.log", status: "ignored" }],
+				false,
+			),
+		);
+		const { onOpenFile } = renderPanel();
+
+		fireEvent.click(screen.getByText("ignored.log"));
+
+		expect(onOpenFile).toHaveBeenCalledWith("/root/ignored.log");
+	});
+
+	it("does not open status-only deleted file rows", () => {
+		vi.mocked(useFileTreeGitStatus).mockReturnValue(
+			createFileTreeGitStatusResult(
+				[{ path: "ignored.log", status: "deleted" }],
+				false,
+			),
+		);
+		const { onOpenFile } = renderPanel();
+
+		fireEvent.click(screen.getByText("ignored.log"));
+
+		expect(onOpenFile).not.toHaveBeenCalled();
 	});
 
 	it("opens selected files for keyboard selection", () => {

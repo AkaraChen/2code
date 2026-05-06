@@ -136,14 +136,37 @@ function isFileTreeGitStatus(status: string): status is GitStatusEntry["status"]
 	return FILE_TREE_GIT_STATUSES.has(status as GitStatusEntry["status"]);
 }
 
+function toPathCollisionKey(path: string) {
+	return path.replace(TRAILING_PATH_SEPARATOR_RE, "");
+}
+
+function toDirectoryPath(path: string) {
+	return `${toPathCollisionKey(path)}/`;
+}
+
+function normalizeGitStatusPath(
+	entry: { path: string; status: string },
+	treePathSet: ReadonlySet<string>,
+) {
+	if (entry.status === "deleted" || entry.path.endsWith("/")) return entry.path;
+
+	const directoryPath = toDirectoryPath(entry.path);
+	return treePathSet.has(directoryPath) ? directoryPath : entry.path;
+}
+
 function toFileTreeGitStatus(
 	entries: readonly { path: string; status: string }[] | undefined,
+	treePaths: readonly string[] | undefined,
 ): GitStatusEntry[] {
 	if (!entries) return [];
 
+	const treePathSet = new Set(treePaths ?? []);
 	return entries.flatMap((entry) => {
 		if (!entry.path || !isFileTreeGitStatus(entry.status)) return [];
-		return [{ path: entry.path, status: entry.status }];
+		return [{
+			path: normalizeGitStatusPath(entry, treePathSet),
+			status: entry.status,
+		}];
 	});
 }
 
@@ -153,9 +176,14 @@ function buildModelPaths(
 ) {
 	const paths = [...(treePaths ?? [])];
 	const seenPaths = new Set(paths);
+	const seenPathCollisionKeys = new Set(paths.map(toPathCollisionKey));
 	for (const entry of gitStatus) {
-		if (seenPaths.has(entry.path)) continue;
+		const collisionKey = toPathCollisionKey(entry.path);
+		if (seenPaths.has(entry.path) || seenPathCollisionKeys.has(collisionKey)) {
+			continue;
+		}
 		seenPaths.add(entry.path);
+		seenPathCollisionKeys.add(collisionKey);
 		paths.push(entry.path);
 	}
 	paths.sort((left, right) =>
@@ -174,6 +202,19 @@ function getContextMenuActionPaths(
 function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
 	const directoryPath = `${path.replace(TRAILING_PATH_SEPARATOR_RE, "")}/`;
 	return pathSet.has(path) || pathSet.has(directoryPath);
+}
+
+function buildExistingPathSet(
+	treePaths: readonly string[] | undefined,
+	gitStatus: readonly GitStatusEntry[],
+) {
+	const paths = new Set(treePaths ?? []);
+	for (const entry of gitStatus) {
+		if (entry.status !== "deleted") {
+			paths.add(entry.path);
+		}
+	}
+	return paths;
 }
 
 interface FileTreeContextMenuButtonProps {
@@ -354,27 +395,23 @@ export default function FileTreePanel({
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(rootPath, profileId);
 	const gitStatus = useMemo(
-		() => toFileTreeGitStatus(gitStatusEntries),
-		[gitStatusEntries],
+		() => toFileTreeGitStatus(gitStatusEntries, treePaths),
+		[gitStatusEntries, treePaths],
 	);
 	const modelPaths = useMemo(
 		() => buildModelPaths(treePaths, gitStatus),
 		[gitStatus, treePaths],
 	);
-	const filePathSet = useMemo(
-		() => new Set((treePaths ?? []).filter((path) => !path.endsWith("/"))),
-		[treePaths],
+	const existingPathSet = useMemo(
+		() => buildExistingPathSet(treePaths, gitStatus),
+		[gitStatus, treePaths],
 	);
-	const treePathSet = useMemo(() => new Set(treePaths ?? []), [treePaths]);
-	const deletablePathSet = useMemo(() => {
-		const paths = new Set(treePaths ?? []);
-		for (const entry of gitStatus) {
-			if (entry.status !== "deleted") {
-				paths.add(entry.path);
-			}
-		}
-		return paths;
-	}, [gitStatus, treePaths]);
+	const filePathSet = useMemo(
+		() => new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
+		[existingPathSet],
+	);
+	const treePathSet = existingPathSet;
+	const deletablePathSet = existingPathSet;
 
 	rootPathRef.current = rootPath;
 	onOpenFileRef.current = onOpenFile;

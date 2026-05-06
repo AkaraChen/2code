@@ -25,9 +25,12 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 	let mut paths = Vec::new();
 	let mut walker = WalkBuilder::new(root);
 	walker.hidden(true);
-	walker.git_ignore(true);
-	walker.git_global(true);
-	walker.git_exclude(true);
+	// The file tree is a filesystem browser. Git ignore rules should affect
+	// search results and git status, not whether a user can expand/open files.
+	walker.ignore(false);
+	walker.git_ignore(false);
+	walker.git_global(false);
+	walker.git_exclude(false);
 	walker.parents(true);
 	walker.follow_links(false);
 
@@ -549,6 +552,27 @@ mod tests {
 				"src/main.rs".to_string(),
 			]
 		);
+	}
+
+	#[test]
+	fn lists_file_tree_paths_including_gitignored_paths() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join(".gitignore"), "node_modules/\nignored.log\n")
+			.expect("write gitignore");
+		std::fs::create_dir_all(root.join("node_modules/pkg"))
+			.expect("create ignored dirs");
+		std::fs::write(root.join("node_modules/pkg/index.ts"), "ignored")
+			.expect("write ignored nested file");
+		std::fs::write(root.join("ignored.log"), "ignored")
+			.expect("write ignored file");
+
+		let paths = list_file_tree_paths(root).expect("list tree paths");
+
+		assert!(paths.contains(&"ignored.log".to_string()));
+		assert!(paths.contains(&"node_modules/".to_string()));
+		assert!(paths.contains(&"node_modules/pkg/".to_string()));
+		assert!(paths.contains(&"node_modules/pkg/index.ts".to_string()));
 	}
 
 	#[test]
