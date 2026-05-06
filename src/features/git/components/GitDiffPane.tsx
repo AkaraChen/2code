@@ -7,25 +7,13 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import type {
-	DiffLineAnnotation,
 	FileDiffMetadata,
 	FileDiffOptions,
-	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { copyTextToClipboard } from "@/shared/lib/clipboard";
-import { toaster } from "@/shared/providers/Toaster";
-import {
-	formatGitDiffCommentLocation,
-	formatGitDiffCommentPayload,
-	formatSelectedLineRange,
-	getGitDiffCommentAnchor,
-	getGitDiffCommentFileKey,
-	normalizeSelectedLineRange,
-} from "../commentUtils";
 import {
 	changeBadge,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
@@ -34,31 +22,17 @@ import {
 	isLargeGitDiffFile,
 } from "../utils";
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
-import GitDiffCommentDialog from "./GitDiffCommentDialog";
 
 export type { GitPreviewContext };
-
-interface GitDiffCommentAnnotation {
-	id: string;
-	comment: string;
-	location: string;
-	selection: SelectedLineRange;
-}
 
 function FileDiffHeader({
 	file,
 	additions,
 	deletions,
-	selectedRangeLabel,
-	canComment,
-	onCommentClick,
 }: {
 	file: FileDiffMetadata;
 	additions: number;
 	deletions: number;
-	selectedRangeLabel: string | null;
-	canComment: boolean;
-	onCommentClick: () => void;
 }) {
 	const badge = changeBadge[file.type] ?? changeBadge.change;
 	const displayName =
@@ -83,19 +57,8 @@ function FileDiffHeader({
 				{displayName}
 			</Text>
 			<HStack gap="2" fontSize="xs" fontFamily="mono">
-				{selectedRangeLabel && (
-					<Text color="fg.muted">{selectedRangeLabel}</Text>
-				)}
 				{additions > 0 && <Text color="green.solid">+{additions}</Text>}
 				{deletions > 0 && <Text color="red.solid">-{deletions}</Text>}
-				<Button
-					size="xs"
-					variant="subtle"
-					disabled={!canComment}
-					onClick={onCommentClick}
-				>
-					{m.gitDiffCommentButton()}
-				</Button>
 			</HStack>
 		</Flex>
 	);
@@ -142,79 +105,24 @@ function LargeDiffGuardrail({
 	);
 }
 
-function CommentAnnotation({
-	annotation,
-}: {
-	annotation: GitDiffCommentAnnotation;
-}) {
-	return (
-		<Box
-			px="3"
-			py="2.5"
-			bg="bg.subtle"
-			borderWidth="1px"
-			borderColor="border.subtle"
-			borderRadius="md"
-			mx="2"
-			my="1.5"
-		>
-			<Flex align="center" justify="space-between" gap="3">
-				<Text
-					fontSize="xs"
-					fontWeight="medium"
-					letterSpacing="widest"
-					textTransform="uppercase"
-					color="fg.muted"
-				>
-					{m.gitDiffCommentButton()}
-				</Text>
-				<Text fontSize="xs" color="fg.muted" fontFamily="mono">
-					{annotation.location}
-				</Text>
-			</Flex>
-			<Text mt="2" fontSize="sm" whiteSpace="pre-wrap">
-				{annotation.comment}
-			</Text>
-		</Box>
-	);
-}
-
 function ActiveGitDiffFilePane({
 	activeFile,
-	activeFileKey,
 	options,
 	previewContext,
-	selectedLines,
-	comments,
 	isLargeDiffExpanded,
-	onSelectionChange,
-	onCommentAdd,
 	onRevealLargeDiff,
 }: {
 	activeFile: FileDiffMetadata;
-	activeFileKey: string;
 	options: FileDiffOptions<unknown>;
 	previewContext?: GitPreviewContext;
-	selectedLines: SelectedLineRange | null;
-	comments: GitDiffCommentAnnotation[];
 	isLargeDiffExpanded: boolean;
-	onSelectionChange: (range: SelectedLineRange | null) => void;
-	onCommentAdd: (comment: GitDiffCommentAnnotation) => void;
 	onRevealLargeDiff: () => void;
 }) {
-	const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
-	const [commentDraft, setCommentDraft] = useState("");
 	const { additions, deletions } = useMemo(
 		() => getLineStats(activeFile),
 		[activeFile],
 	);
 	const changedLineCount = additions + deletions;
-	const selectedRangeLabel =
-		selectedLines == null ? null : formatSelectedLineRange(selectedLines);
-	const selectedLocation =
-		selectedLines == null
-			? ""
-			: formatGitDiffCommentLocation(activeFile, selectedLines);
 	const showBinaryPreview =
 		previewContext != null && isBinaryImageDiffPreviewable(activeFile);
 	const showLargeDiffGuardrail =
@@ -222,94 +130,12 @@ function ActiveGitDiffFilePane({
 		isLargeGitDiffFile(activeFile) &&
 		!isLargeDiffExpanded;
 
-	const lineAnnotations = useMemo<
-		DiffLineAnnotation<GitDiffCommentAnnotation>[]
-	>(
-		() =>
-			comments.map((comment) => {
-				const anchor = getGitDiffCommentAnchor(comment.selection);
-				return {
-					side: anchor.side,
-					lineNumber: anchor.lineNumber,
-					metadata: comment,
-				};
-			}),
-		[comments],
-	);
-
-	const diffOptions = useMemo(
-		() =>
-			({
-				...(options as FileDiffOptions<GitDiffCommentAnnotation>),
-				enableLineSelection: true,
-				lineHoverHighlight: "line",
-				onLineSelected: (range: SelectedLineRange | null) => {
-					if (range == null) {
-						setIsCommentDialogOpen(false);
-						setCommentDraft("");
-						onSelectionChange(null);
-						return;
-					}
-					onSelectionChange(normalizeSelectedLineRange(range));
-				},
-			}) satisfies FileDiffOptions<GitDiffCommentAnnotation>,
-		[onSelectionChange, options],
-	);
-
-	const handleCommentConfirm = async () => {
-		if (selectedLines == null) return;
-
-		const trimmedComment = commentDraft.trim();
-		if (trimmedComment.length === 0) return;
-
-		const nextComment: GitDiffCommentAnnotation = {
-			id:
-				globalThis.crypto?.randomUUID?.() ??
-				`${Date.now()}-${activeFileKey}`,
-			comment: trimmedComment,
-			location: selectedLocation,
-			selection: selectedLines,
-		};
-
-		onCommentAdd(nextComment);
-		onSelectionChange(null);
-		setIsCommentDialogOpen(false);
-		setCommentDraft("");
-
-		try {
-			await copyTextToClipboard(
-				formatGitDiffCommentPayload(activeFile, selectedLines, trimmedComment),
-			);
-			toaster.create({
-				title: m.gitDiffCommentCopiedTitle(),
-				description: m.gitDiffCommentCopiedDescription({
-					location: selectedLocation,
-				}),
-				type: "success",
-				closable: true,
-			});
-		} catch (error) {
-			toaster.create({
-				title: m.gitDiffCommentCopyFailedTitle(),
-				description: error instanceof Error ? error.message : String(error),
-				type: "error",
-				closable: true,
-			});
-		}
-	};
-
 	return (
 		<>
 			<FileDiffHeader
 				file={activeFile}
 				additions={additions}
 				deletions={deletions}
-				selectedRangeLabel={selectedRangeLabel}
-				canComment={!showLargeDiffGuardrail && selectedLines != null}
-				onCommentClick={() => {
-					setIsCommentDialogOpen(true);
-					setCommentDraft("");
-				}}
 			/>
 			{showBinaryPreview && previewContext ? (
 				<BinaryImageDiffPreview file={activeFile} previewContext={previewContext} />
@@ -321,29 +147,23 @@ function ActiveGitDiffFilePane({
 			) : (
 				<FileDiff
 					fileDiff={activeFile}
-					options={diffOptions}
-					selectedLines={selectedLines}
-					lineAnnotations={lineAnnotations}
-					renderAnnotation={(annotation) =>
-						annotation.metadata ? (
-							<CommentAnnotation annotation={annotation.metadata} />
-						) : null
-					}
+					options={options}
 				/>
 			)}
-			<GitDiffCommentDialog
-				isOpen={isCommentDialogOpen && selectedLines != null}
-				onClose={() => {
-					setIsCommentDialogOpen(false);
-					setCommentDraft("");
-				}}
-				location={selectedLocation}
-				comment={commentDraft}
-				onCommentChange={setCommentDraft}
-				onConfirm={handleCommentConfirm}
-			/>
 		</>
 	);
+}
+
+function getGitDiffPaneFileKey(
+	file: FileDiffMetadata,
+	contextKey: string,
+) {
+	return [
+		contextKey,
+		file.prevName ?? "",
+		file.name,
+		file.type,
+	].join("::");
 }
 
 interface GitDiffPaneProps {
@@ -363,23 +183,13 @@ export default function GitDiffPane({
 }: GitDiffPaneProps) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const [selectedLinesByFileKey, setSelectedLinesByFileKey] = useState<
-		Record<string, SelectedLineRange | null>
-	>({});
-	const [annotationsByFileKey, setAnnotationsByFileKey] = useState<
-		Record<string, GitDiffCommentAnnotation[]>
-	>({});
 	const [expandedLargeDiffFileKeys, setExpandedLargeDiffFileKeys] = useState<
 		Set<string>
 	>(() => new Set());
 
 	const activeFileKey = activeFile
-		? getGitDiffCommentFileKey(activeFile, contextKey)
+		? getGitDiffPaneFileKey(activeFile, contextKey)
 		: null;
-	const selectedLines =
-		activeFileKey == null ? null : selectedLinesByFileKey[activeFileKey] ?? null;
-	const comments =
-		activeFileKey == null ? [] : annotationsByFileKey[activeFileKey] ?? [];
 
 	return (
 		<Box
@@ -394,27 +204,9 @@ export default function GitDiffPane({
 				<ActiveGitDiffFilePane
 					key={activeFileKey}
 					activeFile={activeFile}
-					activeFileKey={activeFileKey}
 					options={options}
 					previewContext={previewContext}
-					selectedLines={selectedLines}
-					comments={comments}
 					isLargeDiffExpanded={expandedLargeDiffFileKeys.has(activeFileKey)}
-					onSelectionChange={(range) =>
-						setSelectedLinesByFileKey((prev) => ({
-							...prev,
-							[activeFileKey]: range,
-						}))
-					}
-					onCommentAdd={(comment) =>
-						setAnnotationsByFileKey((prev) => ({
-							...prev,
-							[activeFileKey]: [
-								...(prev[activeFileKey] ?? []),
-								comment,
-							],
-						}))
-					}
 					onRevealLargeDiff={() =>
 						setExpandedLargeDiffFileKeys((prev) => {
 							const next = new Set(prev);
