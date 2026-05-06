@@ -16,7 +16,10 @@ import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
-import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
+import {
+	useProfileHasNotification,
+	useTerminalStore,
+} from "@/features/terminal/store";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
@@ -58,6 +61,14 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const createProfileDialog = useDialogState();
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 	const expanded = userExpanded ?? true;
+	const showProjectNotification =
+		hasOnlyDefaultProfile && hasDefaultNotification;
+
+	function handleDefaultProfileClick() {
+		if (defaultProfile) {
+			markProfileRead(defaultProfile.id);
+		}
+	}
 
 	return (
 		<>
@@ -91,7 +102,10 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 							overflow="hidden"
 							data-sidebar-item
 						>
-							<NavLink to={defaultProfileUrl}>
+							<NavLink
+								to={defaultProfileUrl}
+								onClick={handleDefaultProfileClick}
+							>
 								<HStack
 									gap="2"
 									align="center"
@@ -106,6 +120,14 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 									<Text flex="1 1 auto" minW="0" truncate>
 										{project.name}
 									</Text>
+									{showProjectNotification && (
+										<Circle
+											aria-hidden="true"
+											size="2"
+											bg="green.500"
+											flexShrink={0}
+										/>
+									)}
 								</HStack>
 							</NavLink>
 						</Box>
