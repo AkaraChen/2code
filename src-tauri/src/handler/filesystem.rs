@@ -49,6 +49,17 @@ pub async fn move_file_tree_paths(
 }
 
 #[tauri::command]
+pub async fn delete_file_tree_paths(
+	root_path: String,
+	paths: Vec<String>,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::delete_file_tree_paths(Path::new(&root_path), &paths)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn read_file_content(path: String) -> Result<String, AppError> {
 	super::run_blocking(move || {
 		let file_path = Path::new(&path);

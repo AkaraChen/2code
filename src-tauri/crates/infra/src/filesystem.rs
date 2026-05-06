@@ -180,6 +180,48 @@ pub fn move_file_tree_paths(
 	Ok(())
 }
 
+pub fn delete_file_tree_paths(
+	root: &Path,
+	paths: &[String],
+) -> Result<(), AppError> {
+	ensure_root_directory(root)?;
+	if paths.is_empty() {
+		return Err(invalid_input("Select at least one path to delete"));
+	}
+
+	let mut seen_paths = HashSet::new();
+	let mut delete_paths = Vec::new();
+
+	for path in paths {
+		let path = validate_file_tree_relative_path(path, "File tree path")?;
+		if !seen_paths.insert(path.clone()) {
+			continue;
+		}
+
+		let absolute_path = root.join(&path);
+		if !absolute_path.exists() {
+			return Err(AppError::NotFound(format!("File tree path: {path}")));
+		}
+
+		delete_paths.push((path, absolute_path));
+	}
+
+	delete_paths.sort_by(|(left, _), (right, _)| {
+		right.matches('/').count().cmp(&left.matches('/').count())
+	});
+
+	for (_path, absolute_path) in delete_paths {
+		let metadata = std::fs::symlink_metadata(&absolute_path)?;
+		if metadata.file_type().is_dir() {
+			std::fs::remove_dir_all(absolute_path)?;
+		} else {
+			std::fs::remove_file(absolute_path)?;
+		}
+	}
+
+	Ok(())
+}
+
 pub fn search_files(
 	root: &Path,
 	query: &str,
@@ -573,5 +615,54 @@ mod tests {
 
 		assert!(result.is_err());
 		assert!(root.join("src/nested").exists());
+	}
+
+	#[test]
+	fn deletes_files_and_directories_inside_root() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src/nested")).expect("create dirs");
+		std::fs::write(root.join("README.md"), "readme").expect("write readme");
+		std::fs::write(root.join("src/nested/main.rs"), "fn main() {}")
+			.expect("write main");
+
+		delete_file_tree_paths(
+			root,
+			&["README.md".to_string(), "src/".to_string()],
+		)
+		.expect("delete paths");
+
+		assert!(!root.join("README.md").exists());
+		assert!(!root.join("src").exists());
+	}
+
+	#[test]
+	fn deletes_nested_selection_before_parent_directory() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src/nested")).expect("create dirs");
+		std::fs::write(root.join("src/nested/main.rs"), "fn main() {}")
+			.expect("write main");
+
+		delete_file_tree_paths(
+			root,
+			&["src/".to_string(), "src/nested/main.rs".to_string()],
+		)
+		.expect("delete paths");
+
+		assert!(!root.join("src").exists());
+	}
+
+	#[test]
+	fn rejects_deleting_file_tree_path_escape() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join("main.rs"), "fn main() {}")
+			.expect("write file");
+
+		let result = delete_file_tree_paths(root, &["../main.rs".to_string()]);
+
+		assert!(result.is_err());
+		assert!(root.join("main.rs").exists());
 	}
 }

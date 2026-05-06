@@ -95,6 +95,7 @@ pub fn run() {
 			handler::filesystem::list_file_tree_paths,
 			handler::filesystem::rename_file_tree_path,
 			handler::filesystem::move_file_tree_paths,
+			handler::filesystem::delete_file_tree_paths,
 			handler::filesystem::read_file_content,
 			handler::filesystem::write_file_content,
 			handler::filesystem::search_file,

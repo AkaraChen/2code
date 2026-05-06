@@ -7,6 +7,7 @@ import {
 import { useMemo } from "react";
 import {
 	createProjectFromFolder,
+	deleteFileTreePaths,
 	deleteProject,
 	getGitBranch,
 	getFileTreeGitStatus,
@@ -27,7 +28,7 @@ import {
 	getCachedProjectAvatar,
 	setCachedProjectAvatar,
 } from "@/features/projects/projectAvatarCache";
-import { queryKeys } from "@/shared/lib/queryKeys";
+import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 interface UseProjectAvatarOptions {
@@ -253,6 +254,39 @@ export function useMoveFileTreePaths(rootPath: string, profileId: string) {
 			await Promise.all([
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useDeleteFileTreePaths(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ paths }: { paths: string[] }) =>
+			deleteFileTreePaths({
+				rootPath,
+				paths,
+			}),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["fs-file"]],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["fs-search"], profileId],
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),

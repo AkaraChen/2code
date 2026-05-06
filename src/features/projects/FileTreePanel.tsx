@@ -23,6 +23,7 @@ import type {
 import * as m from "@/paraglide/messages.js";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
+import { toaster } from "@/shared/providers/Toaster";
 import FileViewerDialog from "./FileViewerDialog";
 import {
 	FILE_TREE_PANEL_MAX_WIDTH,
@@ -32,6 +33,7 @@ import {
 import {
 	useFileTreeGitStatus,
 	useFileTreePaths,
+	useDeleteFileTreePaths,
 	useMoveFileTreePaths,
 	useRenameFileTreePath,
 } from "./hooks";
@@ -176,12 +178,14 @@ function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
 
 interface FileTreeContextMenuButtonProps {
 	children: ReactNode;
+	danger?: boolean;
 	disabled?: boolean;
 	onClick: () => void;
 }
 
 function FileTreeContextMenuButton({
 	children,
+	danger = false,
 	disabled = false,
 	onClick,
 }: FileTreeContextMenuButtonProps) {
@@ -191,6 +195,9 @@ function FileTreeContextMenuButton({
 			role="menuitem"
 			style={{
 				...FILE_TREE_CONTEXT_MENU_BUTTON_STYLE,
+				color: danger && !disabled
+					? "var(--chakra-colors-fg-error)"
+					: "inherit",
 				opacity: disabled ? 0.45 : 1,
 			}}
 			type="button"
@@ -198,7 +205,9 @@ function FileTreeContextMenuButton({
 			onMouseEnter={(event) => {
 				if (!disabled) {
 					event.currentTarget.style.background =
-						"var(--chakra-colors-bg-subtle)";
+						danger
+							? "var(--chakra-colors-bg-error)"
+							: "var(--chakra-colors-bg-subtle)";
 				}
 			}}
 			onMouseLeave={(event) => {
@@ -212,29 +221,38 @@ function FileTreeContextMenuButton({
 
 interface FileTreeContextMenuProps {
 	context: FileTreeContextMenuOpenContext;
+	deletablePathSet: ReadonlySet<string>;
 	filePathSet: ReadonlySet<string>;
+	isDeleting: boolean;
 	item: FileTreeContextMenuItem;
-	renamablePathSet: ReadonlySet<string>;
 	rootPath: string;
 	selectedPaths: readonly string[];
+	treePathSet: ReadonlySet<string>;
+	onDeletePaths: (paths: readonly string[]) => void;
 	onOpenFile: (relativePath: string) => void;
 	onStartRename: (path: string) => void;
 }
 
 function FileTreeContextMenu({
 	context,
+	deletablePathSet,
 	filePathSet,
+	isDeleting,
 	item,
-	renamablePathSet,
 	rootPath,
 	selectedPaths,
+	treePathSet,
+	onDeletePaths,
 	onOpenFile,
 	onStartRename,
 }: FileTreeContextMenuProps) {
 	const actionPaths = getContextMenuActionPaths(item.path, selectedPaths);
 	const canOpen = item.kind === "file" && filePathSet.has(item.path);
 	const canRename =
-		actionPaths.length === 1 && hasTreePath(renamablePathSet, item.path);
+		actionPaths.length === 1 && hasTreePath(treePathSet, item.path);
+	const canDelete =
+		actionPaths.length > 0
+		&& actionPaths.every((path) => hasTreePath(deletablePathSet, path));
 
 	const handleOpen = () => {
 		if (canOpen) openAndCloseContextMenu(context, () => onOpenFile(item.path));
@@ -253,6 +271,11 @@ function FileTreeContextMenu({
 			actionPaths.map((path) => toAbsolutePath(rootPath, path)).join("\n"),
 		).catch(() => {});
 		context.close();
+	};
+	const handleDelete = () => {
+		if (!canDelete || isDeleting) return;
+		context.close({ restoreFocus: false });
+		onDeletePaths(actionPaths);
 	};
 
 	return (
@@ -275,6 +298,13 @@ function FileTreeContextMenu({
 			</FileTreeContextMenuButton>
 			<FileTreeContextMenuButton onClick={handleCopyAbsolutePath}>
 				{m.fileTreeContextMenuCopyAbsolutePath()}
+			</FileTreeContextMenuButton>
+			<FileTreeContextMenuButton
+				danger
+				disabled={!canDelete || isDeleting}
+				onClick={handleDelete}
+			>
+				{m.delete()}
 			</FileTreeContextMenuButton>
 		</div>
 	);
@@ -322,6 +352,7 @@ export default function FileTreePanel({
 	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
+	const deleteFileTreePaths = useDeleteFileTreePaths(rootPath, profileId);
 	const gitStatus = useMemo(
 		() => toFileTreeGitStatus(gitStatusEntries),
 		[gitStatusEntries],
@@ -335,6 +366,15 @@ export default function FileTreePanel({
 		[treePaths],
 	);
 	const treePathSet = useMemo(() => new Set(treePaths ?? []), [treePaths]);
+	const deletablePathSet = useMemo(() => {
+		const paths = new Set(treePaths ?? []);
+		for (const entry of gitStatus) {
+			if (entry.status !== "deleted") {
+				paths.add(entry.path);
+			}
+		}
+		return paths;
+	}, [gitStatus, treePaths]);
 
 	rootPathRef.current = rootPath;
 	onOpenFileRef.current = onOpenFile;
@@ -468,6 +508,21 @@ export default function FileTreePanel({
 		},
 		[model],
 	);
+	const handleDeletePaths = useCallback(
+		async (paths: readonly string[]) => {
+			try {
+				await deleteFileTreePaths.mutateAsync({ paths: [...paths] });
+			} catch (error) {
+				toaster.create({
+					title: m.fileTreeDeleteErrorTitle(),
+					description: error instanceof Error ? error.message : String(error),
+					type: "error",
+					closable: true,
+				});
+			}
+		},
+		[deleteFileTreePaths],
+	);
 
 	return (
 		<>
@@ -523,11 +578,14 @@ export default function FileTreePanel({
 											renderContextMenu={(item, context) => (
 												<FileTreeContextMenu
 													context={context}
+													deletablePathSet={deletablePathSet}
 													filePathSet={filePathSet}
+													isDeleting={deleteFileTreePaths.isPending}
 													item={item}
-													renamablePathSet={treePathSet}
 													rootPath={rootPath}
 													selectedPaths={selectedPaths}
+													treePathSet={treePathSet}
+													onDeletePaths={handleDeletePaths}
 													onOpenFile={openRelativeFile}
 													onStartRename={handleStartRename}
 												/>

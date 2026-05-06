@@ -220,5 +220,6 @@
 	"fileTreeEmptyDirectory": "空文件夹",
 	"fileTreeContextMenuOpen": "打开",
 	"fileTreeContextMenuCopyRelativePath": "复制相对路径",
-	"fileTreeContextMenuCopyAbsolutePath": "复制绝对路径"
+	"fileTreeContextMenuCopyAbsolutePath": "复制绝对路径",
+	"fileTreeDeleteErrorTitle": "删除失败"
 }

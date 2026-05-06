@@ -220,5 +220,6 @@
 	"fileTreeEmptyDirectory": "Empty",
 	"fileTreeContextMenuOpen": "Open",
 	"fileTreeContextMenuCopyRelativePath": "Copy Relative Path",
-	"fileTreeContextMenuCopyAbsolutePath": "Copy Absolute Path"
+	"fileTreeContextMenuCopyAbsolutePath": "Copy Absolute Path",
+	"fileTreeDeleteErrorTitle": "Delete failed"
 }

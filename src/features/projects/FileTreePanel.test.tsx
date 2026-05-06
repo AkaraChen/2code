@@ -7,11 +7,12 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import type { FileTreeOptions } from "@pierre/trees";
-import type { MouseEventHandler } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
 import FileTreePanel from "./FileTreePanel";
 import {
+	useDeleteFileTreePaths,
 	useFileTreeGitStatus,
 	useFileTreePaths,
 	useMoveFileTreePaths,
@@ -19,20 +20,36 @@ import {
 } from "./hooks";
 
 const {
+	closeContextMenuMock,
+	contextMenuItemRef,
+	deleteMutateAsyncMock,
 	moveMutateAsyncMock,
 	renameMutateAsyncMock,
 	resetPathsMock,
 	setGitStatusMock,
 	startRenamingMock,
+	toasterCreateMock,
 	useFileTreeOptionsRef,
 } = vi.hoisted(() => ({
+	closeContextMenuMock: vi.fn(),
+	contextMenuItemRef: {
+		current: { kind: "file" as const, path: "src/index.ts" },
+	},
+	deleteMutateAsyncMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
 	renameMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
 	startRenamingMock: vi.fn(),
+	toasterCreateMock: vi.fn(),
 	useFileTreeOptionsRef: {
 		current: null as null | FileTreeOptions,
+	},
+}));
+
+vi.mock("@/shared/providers/Toaster", () => ({
+	toaster: {
+		create: toasterCreateMock,
 	},
 }));
 
@@ -40,9 +57,14 @@ vi.mock("@pierre/trees/react", () => ({
 	FileTree: ({
 		onClick,
 		onMouseDown,
+		renderContextMenu,
 	}: {
 		onClick?: MouseEventHandler<HTMLElement>;
 		onMouseDown?: MouseEventHandler<HTMLElement>;
+		renderContextMenu?: (
+			item: { kind: "file"; path: string },
+			context: { close: (options?: unknown) => void },
+		) => ReactNode;
 	}) => (
 		<div data-testid="pierre-tree">
 			<button
@@ -61,6 +83,10 @@ vi.mock("@pierre/trees/react", () => ({
 			>
 				index.ts
 			</button>
+			{renderContextMenu?.(
+				contextMenuItemRef.current,
+				{ close: closeContextMenuMock },
+			)}
 		</div>
 	),
 	useFileTree: vi.fn((options: FileTreeOptions) => {
@@ -76,6 +102,7 @@ vi.mock("@pierre/trees/react", () => ({
 }));
 
 vi.mock("./hooks", () => ({
+	useDeleteFileTreePaths: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
 	useFileTreePaths: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
@@ -129,6 +156,10 @@ function renderPanel(onOpenFile = vi.fn()) {
 
 describe("fileTreePanel", () => {
 	beforeEach(() => {
+		closeContextMenuMock.mockReset();
+		contextMenuItemRef.current = { kind: "file", path: "src/index.ts" };
+		deleteMutateAsyncMock.mockReset();
+		deleteMutateAsyncMock.mockResolvedValue(undefined);
 		moveMutateAsyncMock.mockReset();
 		moveMutateAsyncMock.mockResolvedValue(undefined);
 		renameMutateAsyncMock.mockReset();
@@ -136,6 +167,7 @@ describe("fileTreePanel", () => {
 		resetPathsMock.mockReset();
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
+		toasterCreateMock.mockReset();
 		useFileTreeOptionsRef.current = null;
 		vi.mocked(useFileTreePaths).mockReturnValue(
 			createFileTreePathsResult(treePaths, false),
@@ -149,6 +181,10 @@ describe("fileTreePanel", () => {
 		vi.mocked(useMoveFileTreePaths).mockReturnValue({
 			mutateAsync: moveMutateAsyncMock,
 		} as unknown as ReturnType<typeof useMoveFileTreePaths>);
+		vi.mocked(useDeleteFileTreePaths).mockReturnValue({
+			isPending: false,
+			mutateAsync: deleteMutateAsyncMock,
+		} as unknown as ReturnType<typeof useDeleteFileTreePaths>);
 	});
 
 	it("resets the Pierre tree model with loaded paths", async () => {
@@ -301,6 +337,69 @@ describe("fileTreePanel", () => {
 		expect(moveMutateAsyncMock).toHaveBeenCalledWith({
 			sourcePaths: ["src/index.ts"],
 			targetDirPath: "src/",
+		});
+	});
+
+	it("deletes context menu paths directly", async () => {
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+		await waitFor(() => {
+			expect(deleteMutateAsyncMock).toHaveBeenCalledWith({
+				paths: ["src/index.ts"],
+			});
+		});
+		expect(closeContextMenuMock).toHaveBeenCalledWith({
+			restoreFocus: false,
+		});
+	});
+
+	it("allows deleting status-only hidden files", async () => {
+		contextMenuItemRef.current = { kind: "file", path: ".DS_Store" };
+		vi.mocked(useFileTreeGitStatus).mockReturnValue(
+			createFileTreeGitStatusResult(
+				[{ path: ".DS_Store", status: "untracked" }],
+				false,
+			),
+		);
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+		await waitFor(() => {
+			expect(deleteMutateAsyncMock).toHaveBeenCalledWith({
+				paths: [".DS_Store"],
+			});
+		});
+	});
+
+	it("does not allow deleting status-only deleted files", () => {
+		contextMenuItemRef.current = { kind: "file", path: "deleted.ts" };
+		vi.mocked(useFileTreeGitStatus).mockReturnValue(
+			createFileTreeGitStatusResult(
+				[{ path: "deleted.ts", status: "deleted" }],
+				false,
+			),
+		);
+		renderPanel();
+
+		expect(screen.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
+	});
+
+	it("shows a toast when deleting fails", async () => {
+		deleteMutateAsyncMock.mockRejectedValue(new Error("permission denied"));
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+		await waitFor(() => {
+			expect(toasterCreateMock).toHaveBeenCalledWith(
+				expect.objectContaining({
+					description: "permission denied",
+					type: "error",
+				}),
+			);
 		});
 	});
 });

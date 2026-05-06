@@ -6,10 +6,19 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileSearchResult, ProjectWithProfiles } from "@/generated";
-import { queryKeys } from "@/shared/lib/queryKeys";
-import { useDeleteProject, useFileSearch } from "./hooks";
+import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import {
+	useDeleteFileTreePaths,
+	useDeleteProject,
+	useFileSearch,
+} from "./hooks";
 
-const { deleteProjectMock, searchFileMock } = vi.hoisted(() => ({
+const {
+	deleteFileTreePathsMock,
+	deleteProjectMock,
+	searchFileMock,
+} = vi.hoisted(() => ({
+	deleteFileTreePathsMock: vi.fn(),
 	deleteProjectMock: vi.fn(),
 	searchFileMock: vi.fn(),
 }));
@@ -20,6 +29,7 @@ vi.mock("@/generated", async () => {
 	);
 	return {
 		...actual,
+		deleteFileTreePaths: deleteFileTreePathsMock,
 		deleteProject: deleteProjectMock,
 		searchFile: searchFileMock,
 	};
@@ -102,6 +112,51 @@ describe("useDeleteProject", () => {
 		expect(deleteProjectMock).toHaveBeenCalledWith({ id: "project-1" });
 		expect(onSuccess).toHaveBeenCalledWith("project-1", projects);
 		expect(events).toEqual(["success", "invalidate"]);
+		invalidateQueriesSpy.mockRestore();
+	});
+});
+
+describe("useDeleteFileTreePaths", () => {
+	beforeEach(() => {
+		deleteFileTreePathsMock.mockReset();
+	});
+
+	it("deletes paths and refreshes file tree, file, search, and git caches", async () => {
+		const queryClient = createQueryClient();
+		const invalidateQueriesSpy = vi.spyOn(queryClient, "invalidateQueries");
+		deleteFileTreePathsMock.mockResolvedValue(undefined);
+
+		const { result } = renderHook(
+			() => useDeleteFileTreePaths("/repo", "profile-1"),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.mutateAsync({ paths: ["src/index.ts"] });
+		});
+
+		expect(deleteFileTreePathsMock).toHaveBeenCalledWith({
+			rootPath: "/repo",
+			paths: ["src/index.ts"],
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.fs.tree("/repo"),
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: [queryNamespaces["fs-file"]],
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: [queryNamespaces["fs-search"], "profile-1"],
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.git.status("profile-1"),
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.git.diff("profile-1"),
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.git.diffStats("profile-1"),
+		});
 		invalidateQueriesSpy.mockRestore();
 	});
 });
