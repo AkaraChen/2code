@@ -1,13 +1,13 @@
 import { Dialog, Portal } from "@chakra-ui/react";
-import { Suspense } from "react";
 import type { FileDiffOptions } from "@pierre/diffs";
-import { useMemo, useReducer } from "react";
+import type { Dispatch } from "react";
+import { Suspense, useMemo } from "react";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import { LoadingSpinner } from "@/shared/components/Fallbacks";
 import GitDiffContent from "./components/GitDiffContent";
 import GitDiffHeader from "./components/GitDiffHeader";
-import { gitDiffReducer, initialState } from "./gitDiffReducer";
+import type { GitDiffAction, GitDiffState } from "./gitDiffReducer";
 
 const shikiThemeMap: Record<TerminalThemeId, string> = {
 	"github-dark": "github-dark",
@@ -44,6 +44,8 @@ interface GitDiffDialogProps {
 	profileId: string;
 	worktreePath: string;
 	branchName?: string;
+	state: GitDiffState;
+	dispatch: Dispatch<GitDiffAction>;
 }
 
 export default function GitDiffDialog({
@@ -52,9 +54,10 @@ export default function GitDiffDialog({
 	profileId,
 	worktreePath,
 	branchName,
+	state,
+	dispatch,
 }: GitDiffDialogProps) {
 	const termThemeId = useTerminalThemeId();
-	const [state, dispatch] = useReducer(gitDiffReducer, initialState);
 	const options: FileDiffOptions<unknown> = useMemo(
 		() => ({
 			theme: shikiThemeMap[termThemeId] ?? "github-dark",

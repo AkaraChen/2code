@@ -8,13 +8,20 @@ import {
 	Tooltip,
 } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
-import { Suspense, useEffect, useState } from "react";
+import type { Dispatch } from "react";
+import { Suspense, useCallback, useEffect, useReducer, useState } from "react";
 import {
 	PiGearSixFill,
 	PiGitBranchFill,
 	PiSidebarSimpleFill,
 } from "react-icons/pi";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
+import {
+	type GitDiffAction,
+	type GitDiffState,
+	gitDiffReducer,
+	initialState,
+} from "@/features/git/gitDiffReducer";
 import { useGitBranch } from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import { useSupportedTopbarAppIds } from "@/features/topbar/hooks";
@@ -51,6 +58,8 @@ function GitDiffDialogWithBranch({
 	onClose,
 	profileId,
 	worktreePath,
+	state,
+	dispatch,
 }: {
 	cwd: string;
 	isOpen: boolean;
@@ -58,6 +67,8 @@ function GitDiffDialogWithBranch({
 	onClose: () => void;
 	profileId: string;
 	worktreePath: string;
+	state: GitDiffState;
+	dispatch: Dispatch<GitDiffAction>;
 }) {
 	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
 	return (
@@ -67,6 +78,8 @@ function GitDiffDialogWithBranch({
 			profileId={profileId}
 			worktreePath={worktreePath}
 			branchName={branch ?? undefined}
+			state={state}
+			dispatch={dispatch}
 		/>
 	);
 }
@@ -92,15 +105,23 @@ export default function ProjectTopBar({
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
+	const [gitDiffState, dispatchGitDiff] = useReducer(
+		gitDiffReducer,
+		initialState,
+	);
 	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
 	const prefersReducedMotion = useReducedMotion() ?? false;
+	const openGitDiffDialog = useCallback(() => {
+		dispatchGitDiff({ type: "switchTab", tab: "changes" });
+		setGitDiffOpen(true);
+	}, []);
 
 	useEffect(() => {
 		if (!isActive) return;
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === "g") {
 				e.preventDefault();
-				setGitDiffOpen(true);
+				openGitDiffDialog();
 			}
 			if ((e.metaKey || e.ctrlKey) && e.key === "e") {
 				e.preventDefault();
@@ -109,7 +130,7 @@ export default function ProjectTopBar({
 		};
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [isActive, onToggleFileTree]);
+	}, [isActive, onToggleFileTree, openGitDiffDialog]);
 	const supportedControlIdSet = new Set(
 		getSupportedControlIds(supportedAppIds),
 	);
@@ -225,7 +246,7 @@ export default function ProjectTopBar({
 								options={{
 									...(controlOptions[controlId] ?? {}),
 									...(controlId === "git-diff"
-										? { onOpen: () => setGitDiffOpen(true) }
+										? { onOpen: openGitDiffDialog }
 										: {}),
 								}}
 							/>
@@ -268,6 +289,8 @@ export default function ProjectTopBar({
 						onClose={() => setGitDiffOpen(false)}
 						profileId={profile.id}
 						worktreePath={profile.worktree_path}
+						state={gitDiffState}
+						dispatch={dispatchGitDiff}
 					/>
 				</Suspense>
 			) : (
@@ -277,6 +300,8 @@ export default function ProjectTopBar({
 					profileId={profile.id}
 					worktreePath={profile.worktree_path}
 					branchName={profile.branch_name}
+					state={gitDiffState}
+					dispatch={dispatchGitDiff}
 				/>
 			)}
 		</>
