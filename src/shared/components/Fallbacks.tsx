@@ -1,4 +1,3 @@
-import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import {
 	Box,
 	Button,
@@ -10,13 +9,11 @@ import {
 	Text,
 	VStack,
 } from "@chakra-ui/react";
-import { Suspense, type ReactNode } from "react";
+import { QueryErrorResetBoundary } from "@tanstack/react-query";
+import { type ReactNode, Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import * as m from "@/paraglide/messages.js";
-
-function asError(error: unknown) {
-	return error instanceof Error ? error : new Error(String(error));
-}
+import { asError } from "@/shared/lib/errors";
 
 function ErrorStack({
 	error,
@@ -42,10 +39,6 @@ function ErrorStack({
 	);
 }
 
-export function getErrorMessage(error: unknown) {
-	return asError(error).message;
-}
-
 export function AsyncBoundary({
 	children,
 	errorFallback,
@@ -64,7 +57,8 @@ export function AsyncBoundary({
 						errorFallback({
 							error: asError(error),
 							onRetry: resetErrorBoundary,
-						})}
+						})
+					}
 				>
 					<Suspense fallback={fallback}>{children}</Suspense>
 				</ErrorBoundary>

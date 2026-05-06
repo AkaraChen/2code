@@ -18,7 +18,7 @@ import {
 } from "@/shared/components/Fallbacks";
 import { isInteractiveKeyboardTarget } from "@/shared/lib/dom";
 import { areSetsEqual } from "@/shared/lib/setUtils";
-import { toaster } from "@/shared/providers/Toaster";
+import { toaster } from "@/shared/providers/appToaster";
 import {
 	type GitDiffAction,
 	GitDiffContext,
@@ -69,10 +69,7 @@ interface GitDiffContentProps {
 	options: FileDiffOptions<unknown>;
 }
 
-function resolveWorktreeFilePath(
-	worktreePath: string,
-	relativePath: string,
-) {
+function resolveWorktreeFilePath(worktreePath: string, relativePath: string) {
 	const separator = worktreePath.includes("\\") ? "\\" : "/";
 	const normalizedRelativePath =
 		separator === "\\"
@@ -127,7 +124,8 @@ export default function GitDiffContent({
 		} catch (error) {
 			toaster.create({
 				title: m.gitPushErrorTitle(),
-				description: error instanceof Error ? error.message : String(error),
+				description:
+					error instanceof Error ? error.message : String(error),
 				type: "error",
 				closable: true,
 			});
@@ -136,7 +134,10 @@ export default function GitDiffContent({
 
 	const handleTabChange = (value: string) => {
 		startTransition(() => {
-			dispatch({ type: "switchTab", tab: value as "changes" | "history" });
+			dispatch({
+				type: "switchTab",
+				tab: value as "changes" | "history",
+			});
 		});
 	};
 
@@ -163,8 +164,8 @@ export default function GitDiffContent({
 	const handleDiscardFile = async (file: FileDiffMetadata) => {
 		const relativePaths = Array.from(
 			new Set(
-				[file.name, file.prevName].filter(
-					(path): path is string => Boolean(path),
+				[file.name, file.prevName].filter((path): path is string =>
+					Boolean(path),
 				),
 			),
 		);
@@ -232,13 +233,17 @@ export default function GitDiffContent({
 
 		if (e.key === " " && state.activeTab === "changes") {
 			const activeFile =
-				changesFiles.length > 0 && state.selectedFileIndex < changesFiles.length
+				changesFiles.length > 0 &&
+				state.selectedFileIndex < changesFiles.length
 					? changesFiles[state.selectedFileIndex]
 					: null;
 
 			if (activeFile) {
 				e.preventDefault();
-				setFileIncluded(activeFile.name, !includedFileNames.has(activeFile.name));
+				setFileIncluded(
+					activeFile.name,
+					!includedFileNames.has(activeFile.name),
+				);
 			}
 			return;
 		}
@@ -249,7 +254,10 @@ export default function GitDiffContent({
 			!state.selectedCommit
 		) {
 			e.preventDefault();
-			if (commits.length > 0 && state.selectedCommitIndex < commits.length) {
+			if (
+				commits.length > 0 &&
+				state.selectedCommitIndex < commits.length
+			) {
 				startTransition(() => {
 					dispatch({
 						type: "selectCommit",
@@ -283,7 +291,11 @@ export default function GitDiffContent({
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
 			if (!(e.metaKey || e.ctrlKey) || e.key !== "Enter") return;
-			if (changesFiles.length === 0 && aheadCount > 0 && !gitPush.isPending) {
+			if (
+				changesFiles.length === 0 &&
+				aheadCount > 0 &&
+				!gitPush.isPending
+			) {
 				e.preventDefault();
 				handlePush();
 			}
@@ -328,7 +340,10 @@ export default function GitDiffContent({
 			state.selectedFileIndex >= changesFiles.length
 		) {
 			startTransition(() => {
-				dispatch({ type: "selectFile", index: changesFiles.length - 1 });
+				dispatch({
+					type: "selectFile",
+					index: changesFiles.length - 1,
+				});
 			});
 		}
 	}, [changesFiles.length, dispatch, state.selectedFileIndex]);
@@ -365,23 +380,41 @@ export default function GitDiffContent({
 						flexDirection="column"
 					>
 						<Tabs.List mx="3" mt="2">
-							<Tabs.Trigger value="changes">{m.changes()}</Tabs.Trigger>
-							<Tabs.Trigger value="history">{m.history()}</Tabs.Trigger>
+							<Tabs.Trigger value="changes">
+								{m.changes()}
+							</Tabs.Trigger>
+							<Tabs.Trigger value="history">
+								{m.history()}
+							</Tabs.Trigger>
 						</Tabs.List>
 
-						<Box position="relative" flex="1" minH="0" overflow="hidden">
-							<Tabs.Content value="changes" {...SIDEBAR_TAB_CONTENT_PROPS}>
+						<Box
+							position="relative"
+							flex="1"
+							minH="0"
+							overflow="hidden"
+						>
+							<Tabs.Content
+								value="changes"
+								{...SIDEBAR_TAB_CONTENT_PROPS}
+							>
 								<AsyncBoundary
 									fallback={<LoadingSpinner size="sm" />}
 									errorFallback={({ error, onRetry }) => (
-										<LoadingError error={error} onRetry={onRetry} size="sm" />
+										<LoadingError
+											error={error}
+											onRetry={onRetry}
+											size="sm"
+										/>
 									)}
 								>
 									<ChangesSidebar
 										includedFileNames={includedFileNames}
 										commitMessage={commitMessage}
 										commitBody={commitBody}
-										isCommitting={commitGitChanges.isPending}
+										isCommitting={
+											commitGitChanges.isPending
+										}
 										aheadCount={aheadCount}
 										isPushing={gitPush.isPending}
 										onToggleIncluded={setFileIncluded}
@@ -389,28 +422,45 @@ export default function GitDiffContent({
 										onDiscardFile={handleDiscardFile}
 										onIncludeAll={() =>
 											setIncludedFileNames(
-												new Set(changesFiles.map((file) => file.name)),
+												new Set(
+													changesFiles.map(
+														(file) => file.name,
+													),
+												),
 											)
 										}
-										onIncludeNone={() => setIncludedFileNames(new Set())}
+										onIncludeNone={() =>
+											setIncludedFileNames(new Set())
+										}
 										onCommitMessageChange={setCommitMessage}
 										onCommitBodyChange={setCommitBody}
 										onPush={handlePush}
 										onCommit={async () => {
 											try {
 												const hash =
-													await commitGitChanges.mutateAsync({
-														files: orderedIncludedFileNames,
-														message: commitMessage.trim(),
-														body: commitBody.trim() || undefined,
-													});
+													await commitGitChanges.mutateAsync(
+														{
+															files: orderedIncludedFileNames,
+															message:
+																commitMessage.trim(),
+															body:
+																commitBody.trim() ||
+																undefined,
+														},
+													);
 												setCommitMessage("");
 												setCommitBody("");
 												toaster.create({
 													title: m.gitCommitSuccessTitle(),
-													description: m.gitCommitSuccessDescription({
-														hash: hash.slice(0, 7),
-													}),
+													description:
+														m.gitCommitSuccessDescription(
+															{
+																hash: hash.slice(
+																	0,
+																	7,
+																),
+															},
+														),
 													type: "success",
 													closable: true,
 												});
@@ -430,11 +480,18 @@ export default function GitDiffContent({
 								</AsyncBoundary>
 							</Tabs.Content>
 
-							<Tabs.Content value="history" {...SIDEBAR_TAB_CONTENT_PROPS}>
+							<Tabs.Content
+								value="history"
+								{...SIDEBAR_TAB_CONTENT_PROPS}
+							>
 								<AsyncBoundary
 									fallback={<LoadingSpinner size="sm" />}
 									errorFallback={({ error, onRetry }) => (
-										<LoadingError error={error} onRetry={onRetry} size="sm" />
+										<LoadingError
+											error={error}
+											onRetry={onRetry}
+											size="sm"
+										/>
 									)}
 								>
 									<HistorySidebar />

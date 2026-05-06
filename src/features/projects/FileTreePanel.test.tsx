@@ -1,4 +1,5 @@
 import { ChakraProvider } from "@chakra-ui/react";
+import type { FileTreeOptions } from "@pierre/trees";
 import {
 	act,
 	fireEvent,
@@ -6,7 +7,6 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import type { FileTreeOptions } from "@pierre/trees";
 import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
@@ -56,7 +56,7 @@ const {
 	},
 }));
 
-vi.mock("@/shared/providers/Toaster", () => ({
+vi.mock("@/shared/providers/appToaster", () => ({
 	toaster: {
 		create: toasterCreateMock,
 	},
@@ -88,7 +88,9 @@ vi.mock("@pierre/trees/react", () => ({
 					}
 					onClick?.(event);
 				}}
-				onMouseDown={onMouseDown as MouseEventHandler<HTMLButtonElement>}
+				onMouseDown={
+					onMouseDown as MouseEventHandler<HTMLButtonElement>
+				}
 				type="button"
 			>
 				src
@@ -96,7 +98,9 @@ vi.mock("@pierre/trees/react", () => ({
 			<button
 				data-item-path="src/index.ts"
 				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
-				onMouseDown={onMouseDown as MouseEventHandler<HTMLButtonElement>}
+				onMouseDown={
+					onMouseDown as MouseEventHandler<HTMLButtonElement>
+				}
 				type="button"
 			>
 				index.ts
@@ -104,15 +108,16 @@ vi.mock("@pierre/trees/react", () => ({
 			<button
 				data-item-path="ignored.log"
 				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
-				onMouseDown={onMouseDown as MouseEventHandler<HTMLButtonElement>}
+				onMouseDown={
+					onMouseDown as MouseEventHandler<HTMLButtonElement>
+				}
 				type="button"
 			>
 				ignored.log
 			</button>
-			{renderContextMenu?.(
-				contextMenuItemRef.current,
-				{ close: closeContextMenuMock },
-			)}
+			{renderContextMenu?.(contextMenuItemRef.current, {
+				close: closeContextMenuMock,
+			})}
 		</div>
 	),
 	useFileTree: vi.fn((options: FileTreeOptions) => {
@@ -125,7 +130,8 @@ vi.mock("@pierre/trees/react", () => ({
 						return {
 							getPath: () => path,
 							isDirectory: (): true => true,
-							isExpanded: () => expandedPathsRef.current.has(path),
+							isExpanded: () =>
+								expandedPathsRef.current.has(path),
 						};
 					}
 					return {
@@ -220,7 +226,9 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(treePaths, false),
 		);
-		vi.mocked(useLoadFileTreeChildPaths).mockReturnValue(loadChildPathsMock);
+		vi.mocked(useLoadFileTreeChildPaths).mockReturnValue(
+			loadChildPathsMock,
+		);
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
 			createFileTreeGitStatusResult([], false),
 		);
@@ -266,7 +274,11 @@ describe("fileTreePanel", () => {
 
 	it("shows the file tree load error in the loading overlay layout", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
-			createFileTreeChildPathsResult(undefined, false, new Error("tree failed")),
+			createFileTreeChildPathsResult(
+				undefined,
+				false,
+				new Error("tree failed"),
+			),
 		);
 
 		renderPanel();
@@ -394,7 +406,9 @@ describe("fileTreePanel", () => {
 		const { onOpenFile } = renderPanel();
 
 		act(() => {
-			useFileTreeOptionsRef.current?.onSelectionChange?.(["src/index.ts"]);
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
 		});
 
 		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
@@ -405,7 +419,9 @@ describe("fileTreePanel", () => {
 
 		fireEvent.mouseDown(screen.getByText("index.ts"), { metaKey: true });
 		act(() => {
-			useFileTreeOptionsRef.current?.onSelectionChange?.(["src/index.ts"]);
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
 		});
 		fireEvent.click(screen.getByText("index.ts"), { metaKey: true });
 
@@ -448,7 +464,9 @@ describe("fileTreePanel", () => {
 			throw new Error("expected renaming config");
 		}
 
-		expect(renaming.canRename?.({ isFolder: true, path: "src" })).toBe(true);
+		expect(renaming.canRename?.({ isFolder: true, path: "src" })).toBe(
+			true,
+		);
 	});
 
 	it("persists drag and drop events through the backend mutation", () => {

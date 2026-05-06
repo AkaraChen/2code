@@ -1,18 +1,18 @@
 import { Button, Stack, Text } from "@chakra-ui/react";
 import {
-	DndContext,
-	DragOverlay,
-	PointerSensor,
 	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	DragOverlay,
+	type DragStartEvent,
+	PointerSensor,
 	useSensor,
 	useSensors,
-	type DragEndEvent,
-	type DragStartEvent,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useEffect, useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
-import { getErrorMessage } from "@/shared/components/Fallbacks";
+import { getErrorMessage } from "@/shared/lib/errors";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
 import { useSupportedTopbarAppIds } from "./hooks";

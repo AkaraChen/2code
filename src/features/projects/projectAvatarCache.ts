@@ -30,7 +30,7 @@ function readCacheFromStorage(): ProjectAvatarCache {
 				}
 			}
 		}
-	} catch (_error) {
+	} catch {
 		inMemoryCache = {};
 	}
 
@@ -39,11 +39,8 @@ function readCacheFromStorage(): ProjectAvatarCache {
 
 function writeCacheToStorage(cache: ProjectAvatarCache): void {
 	try {
-		localStorage.setItem(
-			PROJECT_AVATAR_CACHE_KEY,
-			JSON.stringify(cache),
-		);
-	} catch (_error) {
+		localStorage.setItem(PROJECT_AVATAR_CACHE_KEY, JSON.stringify(cache));
+	} catch {
 		// ignore localStorage failures in restricted environments
 	}
 }

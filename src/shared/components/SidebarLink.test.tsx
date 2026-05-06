@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 import { appSystem } from "@/theme/system";
 import { SidebarLink } from "./SidebarLink";
 
-function renderLink(pathname: string, props?: Partial<React.ComponentProps<typeof SidebarLink>>) {
+function renderLink(
+	pathname: string,
+	props?: Partial<React.ComponentProps<typeof SidebarLink>>,
+) {
 	return render(
 		<ChakraProvider value={appSystem}>
 			<MemoryRouter initialEntries={[pathname]}>
@@ -21,7 +24,7 @@ function renderLink(pathname: string, props?: Partial<React.ComponentProps<typeo
 	);
 }
 
-describe("SidebarLink", () => {
+describe("sidebarLink", () => {
 	it("renders the active indicator when the current route matches the link", () => {
 		const { container } = renderLink("/settings");
 
@@ -33,17 +36,23 @@ describe("SidebarLink", () => {
 			"aria-current",
 			"page",
 		);
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(2);
+		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
+			2,
+		);
 	});
 
 	it("omits the active indicator when the route does not match", () => {
 		const { container } = renderLink("/projects");
 
-		expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
-		expect(screen.getByRole("link", { name: /settings/i })).not.toHaveAttribute(
-			"aria-current",
+		expect(
+			screen.getByRole("link", { name: /settings/i }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("link", { name: /settings/i }),
+		).not.toHaveAttribute("aria-current");
+		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
+			1,
 		);
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(1);
 	});
 
 	it("supports custom route patterns for nested sections", () => {
@@ -60,6 +69,8 @@ describe("SidebarLink", () => {
 			"aria-current",
 			"page",
 		);
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(2);
+		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
+			2,
+		);
 	});
 });

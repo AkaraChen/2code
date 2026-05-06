@@ -1117,11 +1117,9 @@ fn parse_pull_request_list(
 	Ok(prs
 		.into_iter()
 		.filter(|pr| {
-			pr.head_repository_owner
-				.as_ref()
-				.is_some_and(|owner| {
-					owner.login.eq_ignore_ascii_case(expected_head_owner)
-				})
+			pr.head_repository_owner.as_ref().is_some_and(|owner| {
+				owner.login.eq_ignore_ascii_case(expected_head_owner)
+			})
 		})
 		.map(|pr| GitPullRequestStatus {
 			number: pr.number,

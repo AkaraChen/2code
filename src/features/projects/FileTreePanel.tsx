@@ -1,5 +1,14 @@
-import { FileTree, useFileTree } from "@pierre/trees/react";
 import { Box, Center, Text } from "@chakra-ui/react";
+import type {
+	ContextMenuItem as FileTreeContextMenuItem,
+	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
+	FileTreeDropContext,
+	FileTreeDropResult,
+	FileTree as FileTreeModel,
+	FileTreeRenameEvent,
+	GitStatusEntry,
+} from "@pierre/trees";
+import { FileTree, useFileTree } from "@pierre/trees/react";
 import { motion, useReducedMotion } from "motion/react";
 import {
 	type CSSProperties,
@@ -12,20 +21,11 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type {
-	ContextMenuItem as FileTreeContextMenuItem,
-	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
-	FileTree as FileTreeModel,
-	FileTreeDropContext,
-	FileTreeDropResult,
-	FileTreeRenameEvent,
-	GitStatusEntry,
-} from "@pierre/trees";
 import * as m from "@/paraglide/messages.js";
-import { getErrorMessage } from "@/shared/components/Fallbacks";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
-import { toaster } from "@/shared/providers/Toaster";
+import { getErrorMessage } from "@/shared/lib/errors";
+import { toaster } from "@/shared/providers/appToaster";
 import FileViewerDialog from "./FileViewerDialog";
 import {
 	FILE_TREE_PANEL_MAX_WIDTH,
@@ -120,6 +120,11 @@ interface FileTreePanelProps {
 	onOpenFile?: (filePath: string) => void;
 }
 
+const EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY = new Map<
+	string,
+	readonly string[]
+>();
+
 function getTreeItemPath(event: MouseEvent<HTMLElement>) {
 	for (const target of event.nativeEvent.composedPath()) {
 		if (target instanceof HTMLElement) {
@@ -135,7 +140,9 @@ function toAbsolutePath(rootPath: string, relativePath: string) {
 	return `${normalizedRoot}/${relativePath}`;
 }
 
-function isFileTreeGitStatus(status: string): status is GitStatusEntry["status"] {
+function isFileTreeGitStatus(
+	status: string,
+): status is GitStatusEntry["status"] {
 	return FILE_TREE_GIT_STATUSES.has(status as GitStatusEntry["status"]);
 }
 
@@ -150,10 +157,12 @@ function toFileTreeGitStatus(
 
 	return entries.flatMap((entry) => {
 		if (!entry.path || !isFileTreeGitStatus(entry.status)) return [];
-		return [{
-			path: entry.path,
-			status: entry.status,
-		}];
+		return [
+			{
+				path: entry.path,
+				status: entry.status,
+			},
+		];
 	});
 }
 
@@ -166,7 +175,10 @@ function buildModelPaths(
 	const seenPathCollisionKeys = new Set(paths.map(toPathCollisionKey));
 	for (const entry of gitStatus) {
 		const collisionKey = toPathCollisionKey(entry.path);
-		if (seenPaths.has(entry.path) || seenPathCollisionKeys.has(collisionKey)) {
+		if (
+			seenPaths.has(entry.path) ||
+			seenPathCollisionKeys.has(collisionKey)
+		) {
 			continue;
 		}
 		seenPaths.add(entry.path);
@@ -223,19 +235,19 @@ function FileTreeContextMenuButton({
 			role="menuitem"
 			style={{
 				...FILE_TREE_CONTEXT_MENU_BUTTON_STYLE,
-				color: danger && !disabled
-					? "var(--chakra-colors-fg-error)"
-					: "inherit",
+				color:
+					danger && !disabled
+						? "var(--chakra-colors-fg-error)"
+						: "inherit",
 				opacity: disabled ? 0.45 : 1,
 			}}
 			type="button"
 			onClick={onClick}
 			onMouseEnter={(event) => {
 				if (!disabled) {
-					event.currentTarget.style.background =
-						danger
-							? "var(--chakra-colors-bg-error)"
-							: "var(--chakra-colors-bg-subtle)";
+					event.currentTarget.style.background = danger
+						? "var(--chakra-colors-bg-error)"
+						: "var(--chakra-colors-bg-subtle)";
 				}
 			}}
 			onMouseLeave={(event) => {
@@ -279,11 +291,12 @@ function FileTreeContextMenu({
 	const canRename =
 		actionPaths.length === 1 && hasTreePath(treePathSet, item.path);
 	const canDelete =
-		actionPaths.length > 0
-		&& actionPaths.every((path) => hasTreePath(deletablePathSet, path));
+		actionPaths.length > 0 &&
+		actionPaths.every((path) => hasTreePath(deletablePathSet, path));
 
 	const handleOpen = () => {
-		if (canOpen) openAndCloseContextMenu(context, () => onOpenFile(item.path));
+		if (canOpen)
+			openAndCloseContextMenu(context, () => onOpenFile(item.path));
 	};
 	const handleRename = () => {
 		if (!canRename) return;
@@ -296,7 +309,9 @@ function FileTreeContextMenu({
 	};
 	const handleCopyAbsolutePath = () => {
 		void copyTextToClipboard(
-			actionPaths.map((path) => toAbsolutePath(rootPath, path)).join("\n"),
+			actionPaths
+				.map((path) => toAbsolutePath(rootPath, path))
+				.join("\n"),
 		).catch(() => {});
 		context.close();
 	};
@@ -354,10 +369,13 @@ export default function FileTreePanel({
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
 	const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
-	const [
-		loadedChildPathsByDirectory,
-		setLoadedChildPathsByDirectory,
-	] = useState<ReadonlyMap<string | null, readonly string[]>>(() => new Map());
+	const [loadedChildPathsState, setLoadedChildPathsState] = useState<{
+		rootPath: string;
+		childPathsByDirectory: ReadonlyMap<string, readonly string[]>;
+	}>(() => ({
+		rootPath,
+		childPathsByDirectory: new Map(),
+	}));
 	const rootPathRef = useRef(rootPath);
 	const onOpenFileRef = useRef(onOpenFile);
 	const filePathSetRef = useRef<ReadonlySet<string>>(new Set());
@@ -395,6 +413,20 @@ export default function FileTreePanel({
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(rootPath, profileId);
+	const loadedDirectoryChildPaths =
+		loadedChildPathsState.rootPath === rootPath
+			? loadedChildPathsState.childPathsByDirectory
+			: EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY;
+	const loadedChildPathsByDirectory = useMemo(() => {
+		const next = new Map<string | null, readonly string[]>();
+		for (const [directoryPath, childPaths] of loadedDirectoryChildPaths) {
+			next.set(directoryPath, childPaths);
+		}
+		if (rootChildPaths) {
+			next.set(null, rootChildPaths);
+		}
+		return next;
+	}, [loadedDirectoryChildPaths, rootChildPaths]);
 	const treePaths = useMemo(
 		() => [...loadedChildPathsByDirectory.values()].flat(),
 		[loadedChildPathsByDirectory],
@@ -412,7 +444,8 @@ export default function FileTreePanel({
 		[gitStatus, treePaths],
 	);
 	const filePathSet = useMemo(
-		() => new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
+		() =>
+			new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
 		[existingPathSet],
 	);
 	const treePathSet = existingPathSet;
@@ -430,7 +463,6 @@ export default function FileTreePanel({
 		loadedDirectoryPathSetRef.current.clear();
 		loadingDirectoryPathSetRef.current.clear();
 		lastResetModelPathsSignatureRef.current = null;
-		setLoadedChildPathsByDirectory(new Map());
 	}, [rootPath]);
 
 	useEffect(() => {
@@ -438,7 +470,6 @@ export default function FileTreePanel({
 		expandedPathSetRef.current.clear();
 		loadedDirectoryPathSetRef.current = new Set([null]);
 		loadingDirectoryPathSetRef.current.clear();
-		setLoadedChildPathsByDirectory(new Map([[null, rootChildPaths]]));
 	}, [rootPath, rootChildPaths]);
 
 	const openRelativeFile = useCallback((relativePath: string) => {
@@ -453,8 +484,8 @@ export default function FileTreePanel({
 	const loadDirectoryChildren = useCallback(
 		(directoryPath: string) => {
 			if (
-				loadedDirectoryPathSetRef.current.has(directoryPath)
-				|| loadingDirectoryPathSetRef.current.has(directoryPath)
+				loadedDirectoryPathSetRef.current.has(directoryPath) ||
+				loadingDirectoryPathSetRef.current.has(directoryPath)
 			) {
 				return;
 			}
@@ -465,10 +496,17 @@ export default function FileTreePanel({
 				.then((childPaths) => {
 					if (rootPathRef.current !== requestRootPath) return;
 					loadedDirectoryPathSetRef.current.add(directoryPath);
-					setLoadedChildPathsByDirectory((current) => {
-						const next = new Map(current);
+					setLoadedChildPathsState((current) => {
+						const next = new Map(
+							current.rootPath === requestRootPath
+								? current.childPathsByDirectory
+								: undefined,
+						);
 						next.set(directoryPath, childPaths);
-						return next;
+						return {
+							rootPath: requestRootPath,
+							childPathsByDirectory: next,
+						};
 					});
 				})
 				.catch((error) => {
@@ -525,18 +563,18 @@ export default function FileTreePanel({
 	const { model } = useFileTree({
 		dragAndDrop: {
 			canDrag: (paths) =>
-				paths.length > 0
-				&& paths.every((path) => treePathSetRef.current.has(path)),
+				paths.length > 0 &&
+				paths.every((path) => treePathSetRef.current.has(path)),
 			canDrop: (event: FileTreeDropContext) => {
 				const targetPath = event.target.directoryPath;
 				return (
-					event.draggedPaths.length > 0
-					&& event.draggedPaths.every((path) =>
+					event.draggedPaths.length > 0 &&
+					event.draggedPaths.every((path) =>
 						treePathSetRef.current.has(path),
-					)
-					&& (event.target.kind === "root"
-						|| targetPath == null
-						|| treePathSetRef.current.has(targetPath))
+					) &&
+					(event.target.kind === "root" ||
+						targetPath == null ||
+						treePathSetRef.current.has(targetPath))
 				);
 			},
 			onDropComplete: (event) => {
@@ -580,15 +618,17 @@ export default function FileTreePanel({
 	useEffect(() => {
 		const modelPathsSignature = modelPaths.join("\0");
 		if (
-			lastResetModelRef.current === model
-			&& lastResetModelPathsSignatureRef.current === modelPathsSignature
+			lastResetModelRef.current === model &&
+			lastResetModelPathsSignatureRef.current === modelPathsSignature
 		) {
 			return;
 		}
 
 		const expandedPaths = [...expandedPathSetRef.current];
 		if (expandedPaths.length > 0) {
-			model.resetPaths(modelPaths, { initialExpandedPaths: expandedPaths });
+			model.resetPaths(modelPaths, {
+				initialExpandedPaths: expandedPaths,
+			});
 		} else {
 			model.resetPaths(modelPaths);
 		}
@@ -639,10 +679,13 @@ export default function FileTreePanel({
 		[loadDirectoryChildren, model],
 	);
 
-	const handleTreeMouseDown = useCallback((event: MouseEvent<HTMLElement>) => {
-		skipNextSelectionOpenRef.current =
-			event.metaKey || event.ctrlKey || event.shiftKey;
-	}, []);
+	const handleTreeMouseDown = useCallback(
+		(event: MouseEvent<HTMLElement>) => {
+			skipNextSelectionOpenRef.current =
+				event.metaKey || event.ctrlKey || event.shiftKey;
+		},
+		[],
+	);
 
 	const handleStartRename = useCallback(
 		(path: string) => {
@@ -657,7 +700,8 @@ export default function FileTreePanel({
 			} catch (error) {
 				toaster.create({
 					title: m.fileTreeDeleteErrorTitle(),
-					description: error instanceof Error ? error.message : String(error),
+					description:
+						error instanceof Error ? error.message : String(error),
 					type: "error",
 					closable: true,
 				});
@@ -712,25 +756,47 @@ export default function FileTreePanel({
 										minWidth: 0,
 									}}
 								>
-									<Box flex="1" minH="0" minW="0" position="relative" py="1" px="1.5">
+									<Box
+										flex="1"
+										minH="0"
+										minW="0"
+										position="relative"
+										py="1"
+										px="1.5"
+									>
 										<FileTree
 											model={model}
 											onClick={handleTreeClick}
 											onKeyUp={handleTreeKeyUp}
 											onMouseDown={handleTreeMouseDown}
-											renderContextMenu={(item, context) => (
+											renderContextMenu={(
+												item,
+												context,
+											) => (
 												<FileTreeContextMenu
 													context={context}
-													deletablePathSet={deletablePathSet}
+													deletablePathSet={
+														deletablePathSet
+													}
 													filePathSet={filePathSet}
-													isDeleting={deleteFileTreePaths.isPending}
+													isDeleting={
+														deleteFileTreePaths.isPending
+													}
 													item={item}
 													rootPath={rootPath}
-													selectedPaths={selectedPaths}
+													selectedPaths={
+														selectedPaths
+													}
 													treePathSet={treePathSet}
-													onDeletePaths={handleDeletePaths}
-													onOpenFile={openRelativeFile}
-													onStartRename={handleStartRename}
+													onDeletePaths={
+														handleDeletePaths
+													}
+													onOpenFile={
+														openRelativeFile
+													}
+													onStartRename={
+														handleStartRename
+													}
 												/>
 											)}
 											style={FILE_TREE_HOST_STYLE}
@@ -747,7 +813,9 @@ export default function FileTreePanel({
 													px="3"
 													textAlign="center"
 												>
-													{getErrorMessage(treePathsError)}
+													{getErrorMessage(
+														treePathsError,
+													)}
 												</Text>
 											</Center>
 										)}

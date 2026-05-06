@@ -11,7 +11,7 @@ import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore"
 import type { FileSearchResult } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
-import { getErrorMessage } from "@/shared/components/Fallbacks";
+import { getErrorMessage } from "@/shared/lib/errors";
 import { useFileSearch } from "./hooks";
 
 interface CommandPaletteProps {
@@ -38,11 +38,7 @@ function CommandPaletteEmptyState() {
 	);
 }
 
-function CommandPaletteStatusMessage({
-	children,
-}: {
-	children: ReactNode;
-}) {
+function CommandPaletteStatusMessage({ children }: { children: ReactNode }) {
 	return (
 		<Box
 			asChild
@@ -61,9 +57,7 @@ function CommandPaletteStatusMessage({
 	);
 }
 
-export default function CommandPalette({
-	profileId,
-}: CommandPaletteProps) {
+export default function CommandPalette({ profileId }: CommandPaletteProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const inputRef = useRef<HTMLInputElement | null>(null);
@@ -74,15 +68,10 @@ export default function CommandPalette({
 		error,
 		isError,
 		isFetching,
-	} = useFileSearch(
-		profileId,
-		deferredSearch,
-		isOpen,
-	);
+	} = useFileSearch(profileId, deferredSearch, isOpen);
 	const shouldShowErrorState = isError && results.length === 0;
 	const shouldShowEmptyState =
-		results.length === 0
-		&& (deferredSearch.length === 0 || !isFetching);
+		results.length === 0 && (deferredSearch.length === 0 || !isFetching);
 
 	useEffect(() => {
 		if (!profileId) return;
@@ -174,12 +163,7 @@ export default function CommandPalette({
 				</Box>
 			</Box>
 
-			<Box
-				asChild
-				maxH="60vh"
-				overflowY="auto"
-				p="1"
-			>
+			<Box asChild maxH="60vh" overflowY="auto" p="1">
 				<Command.List label={m.commandPaletteTitle()}>
 					{shouldShowErrorState ? (
 						<CommandPaletteStatusMessage>
@@ -202,7 +186,8 @@ export default function CommandPalette({
 							cursor="pointer"
 							css={{
 								"&[data-selected='true']": {
-									background: "var(--chakra-colors-bg-subtle)",
+									background:
+										"var(--chakra-colors-bg-subtle)",
 								},
 							}}
 						>
@@ -218,7 +203,11 @@ export default function CommandPalette({
 									<Text fontSize="sm" truncate>
 										{result.name}
 									</Text>
-									<Text fontSize="xs" color="fg.muted" truncate>
+									<Text
+										fontSize="xs"
+										color="fg.muted"
+										truncate
+									>
 										{getParentPathLabel(result)}
 									</Text>
 								</Box>
