@@ -3,6 +3,7 @@ import { Box, Center, Text } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import {
 	type CSSProperties,
+	type KeyboardEvent,
 	type MouseEvent,
 	type ReactNode,
 	useCallback,
@@ -32,9 +33,10 @@ import {
 	useFileTreeStore,
 } from "./fileTreeStore";
 import {
-	useFileTreeGitStatus,
-	useFileTreePaths,
 	useDeleteFileTreePaths,
+	useFileTreeChildPaths,
+	useFileTreeGitStatus,
+	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
 	useRenameFileTreePath,
 } from "./hooks";
@@ -141,31 +143,15 @@ function toPathCollisionKey(path: string) {
 	return path.replace(TRAILING_PATH_SEPARATOR_RE, "");
 }
 
-function toDirectoryPath(path: string) {
-	return `${toPathCollisionKey(path)}/`;
-}
-
-function normalizeGitStatusPath(
-	entry: { path: string; status: string },
-	treePathSet: ReadonlySet<string>,
-) {
-	if (entry.status === "deleted" || entry.path.endsWith("/")) return entry.path;
-
-	const directoryPath = toDirectoryPath(entry.path);
-	return treePathSet.has(directoryPath) ? directoryPath : entry.path;
-}
-
 function toFileTreeGitStatus(
 	entries: readonly { path: string; status: string }[] | undefined,
-	treePaths: readonly string[] | undefined,
 ): GitStatusEntry[] {
 	if (!entries) return [];
 
-	const treePathSet = new Set(treePaths ?? []);
 	return entries.flatMap((entry) => {
 		if (!entry.path || !isFileTreeGitStatus(entry.status)) return [];
 		return [{
-			path: normalizeGitStatusPath(entry, treePathSet),
+			path: entry.path,
 			status: entry.status,
 		}];
 	});
@@ -368,6 +354,10 @@ export default function FileTreePanel({
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
 	const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
+	const [
+		loadedChildPathsByDirectory,
+		setLoadedChildPathsByDirectory,
+	] = useState<ReadonlyMap<string | null, readonly string[]>>(() => new Map());
 	const rootPathRef = useRef(rootPath);
 	const onOpenFileRef = useRef(onOpenFile);
 	const filePathSetRef = useRef<ReadonlySet<string>>(new Set());
@@ -375,6 +365,11 @@ export default function FileTreePanel({
 	const modelPathsRef = useRef<readonly string[]>([]);
 	const gitStatusRef = useRef<readonly GitStatusEntry[]>([]);
 	const modelRef = useRef<FileTreeModel | null>(null);
+	const lastResetModelRef = useRef<FileTreeModel | null>(null);
+	const lastResetModelPathsSignatureRef = useRef<string | null>(null);
+	const expandedPathSetRef = useRef<Set<string>>(new Set());
+	const loadedDirectoryPathSetRef = useRef<Set<string | null>>(new Set());
+	const loadingDirectoryPathSetRef = useRef<Set<string>>(new Set());
 	const skipNextSelectionOpenRef = useRef(false);
 	const restoreModelRef = useRef(() => {});
 	const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
@@ -391,17 +386,22 @@ export default function FileTreePanel({
 	});
 
 	const {
-		data: treePaths,
+		data: rootChildPaths,
 		error: treePathsError,
 		isError: isTreePathsError,
-	} = useFileTreePaths(rootPath, isOpen);
+	} = useFileTreeChildPaths(rootPath, null, isOpen);
 	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
+	const loadFileTreeChildPaths = useLoadFileTreeChildPaths(rootPath);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(rootPath, profileId);
+	const treePaths = useMemo(
+		() => [...loadedChildPathsByDirectory.values()].flat(),
+		[loadedChildPathsByDirectory],
+	);
 	const gitStatus = useMemo(
-		() => toFileTreeGitStatus(gitStatusEntries, treePaths),
-		[gitStatusEntries, treePaths],
+		() => toFileTreeGitStatus(gitStatusEntries),
+		[gitStatusEntries],
 	);
 	const modelPaths = useMemo(
 		() => buildModelPaths(treePaths, gitStatus),
@@ -425,6 +425,22 @@ export default function FileTreePanel({
 	modelPathsRef.current = modelPaths;
 	gitStatusRef.current = gitStatus;
 
+	useEffect(() => {
+		expandedPathSetRef.current.clear();
+		loadedDirectoryPathSetRef.current.clear();
+		loadingDirectoryPathSetRef.current.clear();
+		lastResetModelPathsSignatureRef.current = null;
+		setLoadedChildPathsByDirectory(new Map());
+	}, [rootPath]);
+
+	useEffect(() => {
+		if (!rootChildPaths) return;
+		expandedPathSetRef.current.clear();
+		loadedDirectoryPathSetRef.current = new Set([null]);
+		loadingDirectoryPathSetRef.current.clear();
+		setLoadedChildPathsByDirectory(new Map([[null, rootChildPaths]]));
+	}, [rootPath, rootChildPaths]);
+
 	const openRelativeFile = useCallback((relativePath: string) => {
 		const filePath = toAbsolutePath(rootPathRef.current, relativePath);
 		if (onOpenFileRef.current) {
@@ -434,8 +450,52 @@ export default function FileTreePanel({
 		}
 	}, []);
 
+	const loadDirectoryChildren = useCallback(
+		(directoryPath: string) => {
+			if (
+				loadedDirectoryPathSetRef.current.has(directoryPath)
+				|| loadingDirectoryPathSetRef.current.has(directoryPath)
+			) {
+				return;
+			}
+
+			const requestRootPath = rootPathRef.current;
+			loadingDirectoryPathSetRef.current.add(directoryPath);
+			void loadFileTreeChildPaths(directoryPath)
+				.then((childPaths) => {
+					if (rootPathRef.current !== requestRootPath) return;
+					loadedDirectoryPathSetRef.current.add(directoryPath);
+					setLoadedChildPathsByDirectory((current) => {
+						const next = new Map(current);
+						next.set(directoryPath, childPaths);
+						return next;
+					});
+				})
+				.catch((error) => {
+					if (rootPathRef.current !== requestRootPath) return;
+					toaster.create({
+						title: m.somethingWentWrong(),
+						description: getErrorMessage(error),
+						type: "error",
+						closable: true,
+					});
+				})
+				.finally(() => {
+					loadingDirectoryPathSetRef.current.delete(directoryPath);
+				});
+		},
+		[loadFileTreeChildPaths],
+	);
+
 	restoreModelRef.current = () => {
-		modelRef.current?.resetPaths(modelPathsRef.current);
+		const expandedPaths = [...expandedPathSetRef.current];
+		if (expandedPaths.length > 0) {
+			modelRef.current?.resetPaths(modelPathsRef.current, {
+				initialExpandedPaths: expandedPaths,
+			});
+		} else {
+			modelRef.current?.resetPaths(modelPathsRef.current);
+		}
 		modelRef.current?.setGitStatus(gitStatusRef.current);
 	};
 	renameFileTreePathRef.current = (event) => {
@@ -518,7 +578,22 @@ export default function FileTreePanel({
 	modelRef.current = model;
 
 	useEffect(() => {
-		model.resetPaths(modelPaths);
+		const modelPathsSignature = modelPaths.join("\0");
+		if (
+			lastResetModelRef.current === model
+			&& lastResetModelPathsSignatureRef.current === modelPathsSignature
+		) {
+			return;
+		}
+
+		const expandedPaths = [...expandedPathSetRef.current];
+		if (expandedPaths.length > 0) {
+			model.resetPaths(modelPaths, { initialExpandedPaths: expandedPaths });
+		} else {
+			model.resetPaths(modelPaths);
+		}
+		lastResetModelRef.current = model;
+		lastResetModelPathsSignatureRef.current = modelPathsSignature;
 	}, [model, modelPaths]);
 
 	useEffect(() => {
@@ -534,9 +609,34 @@ export default function FileTreePanel({
 			const itemPath = getTreeItemPath(event);
 			if (itemPath && filePathSetRef.current.has(itemPath)) {
 				openRelativeFile(itemPath);
+				return;
+			}
+
+			const item = itemPath ? model.getItem(itemPath) : null;
+			if (item?.isDirectory() && "isExpanded" in item) {
+				if (item.isExpanded()) {
+					expandedPathSetRef.current.add(item.getPath());
+					loadDirectoryChildren(item.getPath());
+				} else {
+					expandedPathSetRef.current.delete(item.getPath());
+				}
 			}
 		},
-		[openRelativeFile],
+		[loadDirectoryChildren, model, openRelativeFile],
+	);
+
+	const handleTreeKeyUp = useCallback(
+		(_event: KeyboardEvent<HTMLElement>) => {
+			const item = model.getFocusedItem();
+			if (!item?.isDirectory() || !("isExpanded" in item)) return;
+			if (item.isExpanded()) {
+				expandedPathSetRef.current.add(item.getPath());
+				loadDirectoryChildren(item.getPath());
+			} else {
+				expandedPathSetRef.current.delete(item.getPath());
+			}
+		},
+		[loadDirectoryChildren, model],
 	);
 
 	const handleTreeMouseDown = useCallback((event: MouseEvent<HTMLElement>) => {
@@ -616,6 +716,7 @@ export default function FileTreePanel({
 										<FileTree
 											model={model}
 											onClick={handleTreeClick}
+											onKeyUp={handleTreeKeyUp}
 											onMouseDown={handleTreeMouseDown}
 											renderContextMenu={(item, context) => (
 												<FileTreeContextMenu

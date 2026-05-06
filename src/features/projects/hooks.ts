@@ -4,7 +4,7 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
 	createProjectFromFolder,
 	deleteFileTreePaths,
@@ -13,6 +13,7 @@ import {
 	getFileTreeGitStatus,
 	getProjectGithubAvatar,
 	getProjectConfig,
+	listFileTreeChildPaths,
 	listFileTreePaths,
 	listProjects,
 	moveFileTreePaths,
@@ -189,6 +190,32 @@ export function useFileTreePaths(path: string, enabled = true) {
 		enabled: !!path && enabled,
 		staleTime: 5000,
 	});
+}
+
+export function useFileTreeChildPaths(
+	rootPath: string,
+	parentPath: string | null,
+	enabled = true,
+) {
+	return useQuery({
+		queryKey: queryKeys.fs.treeChildren(rootPath, parentPath),
+		queryFn: () => listFileTreeChildPaths({ rootPath, parentPath }),
+		enabled: !!rootPath && enabled,
+		staleTime: 5000,
+	});
+}
+
+export function useLoadFileTreeChildPaths(rootPath: string) {
+	const queryClient = useQueryClient();
+	return useCallback(
+		(parentPath: string) =>
+			queryClient.fetchQuery({
+				queryKey: queryKeys.fs.treeChildren(rootPath, parentPath),
+				queryFn: () => listFileTreeChildPaths({ rootPath, parentPath }),
+				staleTime: 5000,
+			}),
+		[queryClient, rootPath],
+	);
 }
 
 export function useFileTreeGitStatus(profileId: string, enabled = true) {

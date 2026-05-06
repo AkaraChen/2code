@@ -155,6 +155,14 @@ describe("queryKeys", () => {
 			]);
 		});
 
+		it("treeChildren() includes the root and parent path", () => {
+			expect(queryKeys.fs.treeChildren("/tmp/worktree", "src/")).toEqual([
+				"fs-tree",
+				"/tmp/worktree",
+				"src/",
+			]);
+		});
+
 		it("file() includes the file path", () => {
 			expect(queryKeys.fs.file("/tmp/worktree/README.md")).toEqual([
 				"fs-file",

@@ -17,6 +17,20 @@ pub async fn list_file_tree_paths(
 }
 
 #[tauri::command]
+pub async fn list_file_tree_child_paths(
+	root_path: String,
+	parent_path: Option<String>,
+) -> Result<Vec<String>, AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::list_file_tree_child_paths(
+			Path::new(&root_path),
+			parent_path.as_deref(),
+		)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn rename_file_tree_path(
 	root_path: String,
 	source_path: String,

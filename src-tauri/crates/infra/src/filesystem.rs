@@ -72,6 +72,56 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 	Ok(paths)
 }
 
+pub fn list_file_tree_child_paths(
+	root: &Path,
+	parent_path: Option<&str>,
+) -> Result<Vec<String>, AppError> {
+	ensure_root_directory(root)?;
+
+	let parent_path = parent_path
+		.filter(|path| !path.trim().is_empty())
+		.map(|path| validate_file_tree_relative_path(path, "Parent path"))
+		.transpose()?;
+	let parent_dir = parent_path
+		.as_ref()
+		.map_or_else(|| root.to_path_buf(), |path| root.join(path));
+	if !parent_dir.is_dir() {
+		return Err(AppError::NotFound(format!(
+			"Directory: {}",
+			parent_dir.display()
+		)));
+	}
+
+	let mut paths = Vec::new();
+	for entry in std::fs::read_dir(&parent_dir)? {
+		let entry = entry?;
+		let file_name = entry.file_name();
+		if is_hidden_file_name(&file_name) {
+			continue;
+		}
+
+		let file_type = entry.file_type()?;
+		if !file_type.is_dir() && !file_type.is_file() {
+			continue;
+		}
+
+		let path = entry.path();
+		let relative_path = path.strip_prefix(root).unwrap_or(&path);
+		let mut relative_path = normalize_relative_path(relative_path);
+		if relative_path.is_empty() {
+			continue;
+		}
+		if file_type.is_dir() {
+			relative_path.push('/');
+		}
+		paths.push(relative_path);
+	}
+
+	paths.sort_by_key(|path| path.to_lowercase());
+
+	Ok(paths)
+}
+
 pub fn rename_file_tree_path(
 	root: &Path,
 	source_path: &str,
@@ -337,6 +387,10 @@ fn normalize_relative_path(path: &Path) -> String {
 	normalized
 }
 
+fn is_hidden_file_name(file_name: &std::ffi::OsStr) -> bool {
+	file_name.to_string_lossy().starts_with('.')
+}
+
 fn ensure_root_directory(root: &Path) -> Result<(), AppError> {
 	if !root.is_dir() {
 		return Err(AppError::NotFound(format!(
@@ -573,6 +627,33 @@ mod tests {
 		assert!(paths.contains(&"node_modules/".to_string()));
 		assert!(paths.contains(&"node_modules/pkg/".to_string()));
 		assert!(paths.contains(&"node_modules/pkg/index.ts".to_string()));
+	}
+
+	#[test]
+	fn lists_file_tree_child_paths_without_recursing_into_ignored_dirs() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::write(root.join(".gitignore"), "node_modules/\n")
+			.expect("write gitignore");
+		std::fs::create_dir_all(root.join("node_modules/pkg"))
+			.expect("create ignored dirs");
+		std::fs::write(root.join("node_modules/pkg/index.ts"), "ignored")
+			.expect("write ignored nested file");
+		std::fs::create_dir_all(root.join("src")).expect("create src");
+		std::fs::write(root.join("src/main.rs"), "fn main() {}")
+			.expect("write main");
+
+		let root_paths =
+			list_file_tree_child_paths(root, None).expect("list root children");
+		let node_module_paths =
+			list_file_tree_child_paths(root, Some("node_modules/"))
+				.expect("list ignored dir children");
+
+		assert_eq!(
+			root_paths,
+			vec!["node_modules/".to_string(), "src/".to_string()]
+		);
+		assert_eq!(node_module_paths, vec!["node_modules/pkg/".to_string()]);
 	}
 
 	#[test]

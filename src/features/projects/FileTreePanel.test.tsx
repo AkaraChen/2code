@@ -7,14 +7,15 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import type { FileTreeOptions } from "@pierre/trees";
-import type { MouseEventHandler, ReactNode } from "react";
+import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
 import FileTreePanel from "./FileTreePanel";
 import {
 	useDeleteFileTreePaths,
+	useFileTreeChildPaths,
 	useFileTreeGitStatus,
-	useFileTreePaths,
+	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
 	useRenameFileTreePath,
 } from "./hooks";
@@ -23,11 +24,14 @@ const {
 	closeContextMenuMock,
 	contextMenuItemRef,
 	deleteMutateAsyncMock,
+	expandedPathsRef,
+	getFocusedItemMock,
 	moveMutateAsyncMock,
 	renameMutateAsyncMock,
 	resetPathsMock,
 	setGitStatusMock,
 	startRenamingMock,
+	loadChildPathsMock,
 	toasterCreateMock,
 	useFileTreeOptionsRef,
 } = vi.hoisted(() => ({
@@ -36,11 +40,16 @@ const {
 		current: { kind: "file" as const, path: "src/index.ts" },
 	},
 	deleteMutateAsyncMock: vi.fn(),
+	expandedPathsRef: {
+		current: new Set<string>(),
+	},
+	getFocusedItemMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
 	renameMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
 	startRenamingMock: vi.fn(),
+	loadChildPathsMock: vi.fn(),
 	toasterCreateMock: vi.fn(),
 	useFileTreeOptionsRef: {
 		current: null as null | FileTreeOptions,
@@ -56,20 +65,29 @@ vi.mock("@/shared/providers/Toaster", () => ({
 vi.mock("@pierre/trees/react", () => ({
 	FileTree: ({
 		onClick,
+		onKeyUp,
 		onMouseDown,
 		renderContextMenu,
 	}: {
 		onClick?: MouseEventHandler<HTMLElement>;
+		onKeyUp?: KeyboardEventHandler<HTMLElement>;
 		onMouseDown?: MouseEventHandler<HTMLElement>;
 		renderContextMenu?: (
 			item: { kind: "file"; path: string },
 			context: { close: (options?: unknown) => void },
 		) => ReactNode;
 	}) => (
-		<div data-testid="pierre-tree">
+		<div data-testid="pierre-tree" onKeyUp={onKeyUp}>
 			<button
 				data-item-path="src/"
-				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
+				onClick={(event) => {
+					if (expandedPathsRef.current.has("src/")) {
+						expandedPathsRef.current.delete("src/");
+					} else {
+						expandedPathsRef.current.add("src/");
+					}
+					onClick?.(event);
+				}}
 				onMouseDown={onMouseDown as MouseEventHandler<HTMLButtonElement>}
 				type="button"
 			>
@@ -101,6 +119,20 @@ vi.mock("@pierre/trees/react", () => ({
 		useFileTreeOptionsRef.current = options;
 		return {
 			model: {
+				getFocusedItem: getFocusedItemMock,
+				getItem: (path: string) => {
+					if (path.endsWith("/")) {
+						return {
+							getPath: () => path,
+							isDirectory: (): true => true,
+							isExpanded: () => expandedPathsRef.current.has(path),
+						};
+					}
+					return {
+						getPath: () => path,
+						isDirectory: (): false => false,
+					};
+				},
 				resetPaths: resetPathsMock,
 				setGitStatus: setGitStatusMock,
 				startRenaming: startRenamingMock,
@@ -111,8 +143,9 @@ vi.mock("@pierre/trees/react", () => ({
 
 vi.mock("./hooks", () => ({
 	useDeleteFileTreePaths: vi.fn(),
+	useFileTreeChildPaths: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
-	useFileTreePaths: vi.fn(),
+	useLoadFileTreeChildPaths: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
 }));
@@ -125,20 +158,20 @@ const rootPath = "/root";
 const profileId = "profile-1";
 const treePaths = ["src/", "src/index.ts"];
 
-type FileTreePathsResult = ReturnType<typeof useFileTreePaths>;
+type FileTreeChildPathsResult = ReturnType<typeof useFileTreeChildPaths>;
 type FileTreeGitStatusResult = ReturnType<typeof useFileTreeGitStatus>;
 
-function createFileTreePathsResult(
+function createFileTreeChildPathsResult(
 	data: string[] | undefined,
 	isLoading: boolean,
 	error: Error | null = null,
-): FileTreePathsResult {
+): FileTreeChildPathsResult {
 	return {
 		data,
 		error,
 		isError: error != null,
 		isLoading,
-	} as FileTreePathsResult;
+	} as FileTreeChildPathsResult;
 }
 
 function createFileTreeGitStatusResult(
@@ -178,11 +211,16 @@ describe("fileTreePanel", () => {
 		resetPathsMock.mockReset();
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
+		loadChildPathsMock.mockReset();
+		loadChildPathsMock.mockResolvedValue([]);
+		getFocusedItemMock.mockReset();
+		expandedPathsRef.current.clear();
 		toasterCreateMock.mockReset();
 		useFileTreeOptionsRef.current = null;
-		vi.mocked(useFileTreePaths).mockReturnValue(
-			createFileTreePathsResult(treePaths, false),
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(treePaths, false),
 		);
+		vi.mocked(useLoadFileTreeChildPaths).mockReturnValue(loadChildPathsMock);
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
 			createFileTreeGitStatusResult([], false),
 		);
@@ -206,9 +244,29 @@ describe("fileTreePanel", () => {
 		});
 	});
 
+	it("loads direct children when a directory is expanded", async () => {
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(["src/"], false),
+		);
+		loadChildPathsMock.mockResolvedValue(["src/index.ts"]);
+
+		renderPanel();
+		fireEvent.click(screen.getByText("src"));
+
+		await waitFor(() => {
+			expect(loadChildPathsMock).toHaveBeenCalledWith("src/");
+		});
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith(
+				["src/", "src/index.ts"],
+				{ initialExpandedPaths: ["src/"] },
+			);
+		});
+	});
+
 	it("shows the file tree load error in the loading overlay layout", () => {
-		vi.mocked(useFileTreePaths).mockReturnValue(
-			createFileTreePathsResult(undefined, false, new Error("tree failed")),
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(undefined, false, new Error("tree failed")),
 		);
 
 		renderPanel();
@@ -266,9 +324,9 @@ describe("fileTreePanel", () => {
 		]);
 	});
 
-	it("normalizes git status for submodule directory paths", async () => {
-		vi.mocked(useFileTreePaths).mockReturnValue(
-			createFileTreePathsResult(
+	it("keeps backend-normalized git status for submodule directory paths", async () => {
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(
 				[
 					"claude-agent-sdk-python/",
 					"claude-agent-sdk-python/README.md",
@@ -278,7 +336,7 @@ describe("fileTreePanel", () => {
 		);
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
 			createFileTreeGitStatusResult(
-				[{ path: "claude-agent-sdk-python", status: "modified" }],
+				[{ path: "claude-agent-sdk-python/", status: "modified" }],
 				false,
 			),
 		);

@@ -141,7 +141,9 @@ pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 		return Err(AppError::GitError(stderr));
 	}
 
-	Ok(parse_porcelain_status_z(&output.stdout))
+	let mut entries = parse_porcelain_status_z(&output.stdout);
+	normalize_file_tree_git_status_paths(Path::new(folder), &mut entries);
+	Ok(entries)
 }
 
 /// Get the full diff (staged + unstaged) without affecting the real index.
@@ -994,6 +996,20 @@ fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 	entries
 }
 
+fn normalize_file_tree_git_status_paths(
+	root: &Path,
+	entries: &mut [FileTreeGitStatusEntry],
+) {
+	for entry in entries {
+		if entry.status == "deleted" || entry.path.ends_with('/') {
+			continue;
+		}
+		if root.join(&entry.path).is_dir() {
+			entry.path.push('/');
+		}
+	}
+}
+
 fn map_porcelain_status(status_code: &str) -> Option<&'static str> {
 	if status_code.contains('!') {
 		return Some("ignored");
@@ -1505,6 +1521,40 @@ mod tests {
 				},
 				FileTreeGitStatusEntry {
 					path: "gone.rs".to_string(),
+					status: "deleted".to_string(),
+				},
+			]
+		);
+	}
+
+	#[test]
+	fn normalizes_file_tree_status_paths_for_existing_directories() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("submodule"))
+			.expect("create submodule dir");
+		let mut entries = vec![
+			FileTreeGitStatusEntry {
+				path: "submodule".to_string(),
+				status: "modified".to_string(),
+			},
+			FileTreeGitStatusEntry {
+				path: "deleted-dir".to_string(),
+				status: "deleted".to_string(),
+			},
+		];
+
+		normalize_file_tree_git_status_paths(root, &mut entries);
+
+		assert_eq!(
+			entries,
+			vec![
+				FileTreeGitStatusEntry {
+					path: "submodule/".to_string(),
+					status: "modified".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "deleted-dir".to_string(),
 					status: "deleted".to_string(),
 				},
 			]
