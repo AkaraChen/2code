@@ -4,7 +4,6 @@ import {
 	Button,
 	Field,
 	HStack,
-	Progress,
 	Separator,
 	Stack,
 	Switch,
@@ -12,9 +11,8 @@ import {
 } from "@chakra-ui/react";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-shell";
-import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiExternalLink, FiRefreshCw } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiDownload, FiRefreshCw } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { toaster } from "@/shared/providers/appToaster";
 import {
@@ -23,11 +21,40 @@ import {
 	useUpdaterStore,
 } from "@/features/updater/store";
 import { useUpdaterSettingsStore } from "@/features/updater/settingsStore";
+import { useLocale } from "@/shared/lib/locale";
 
-const REPOSITORY_URL = "https://github.com/AkaraChen/2code";
-const WEBSITE_URL = "https://2code.akr.moe/";
+function getRelativeTimeValue(date: Date) {
+	const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+	const absSeconds = Math.abs(diffSeconds);
 
-function formatReleaseDate(date: string | null | undefined) {
+	if (absSeconds < 60) {
+		return { value: diffSeconds, unit: "second" as const };
+	}
+	if (absSeconds < 60 * 60) {
+		return { value: Math.round(diffSeconds / 60), unit: "minute" as const };
+	}
+	if (absSeconds < 60 * 60 * 24) {
+		return { value: Math.round(diffSeconds / (60 * 60)), unit: "hour" as const };
+	}
+	if (absSeconds < 60 * 60 * 24 * 30) {
+		return {
+			value: Math.round(diffSeconds / (60 * 60 * 24)),
+			unit: "day" as const,
+		};
+	}
+	if (absSeconds < 60 * 60 * 24 * 365) {
+		return {
+			value: Math.round(diffSeconds / (60 * 60 * 24 * 30)),
+			unit: "month" as const,
+		};
+	}
+	return {
+		value: Math.round(diffSeconds / (60 * 60 * 24 * 365)),
+		unit: "year" as const,
+	};
+}
+
+function formatReleaseDate(date: string | null | undefined, locale: string) {
 	if (!date) {
 		return null;
 	}
@@ -37,12 +64,22 @@ function formatReleaseDate(date: string | null | undefined) {
 		return date;
 	}
 
-	return parsed.toLocaleDateString();
+	const absoluteDate = new Intl.DateTimeFormat(locale, {
+		dateStyle: "medium",
+	}).format(parsed);
+	const relativeTimeValue = getRelativeTimeValue(parsed);
+	const relativeTime = new Intl.RelativeTimeFormat(locale, {
+		numeric: "auto",
+		style: "long",
+	}).format(relativeTimeValue.value, relativeTimeValue.unit);
+
+	return `${absoluteDate} (${relativeTime})`;
 }
 
 export function AboutSettings() {
-	const { status, update, error, downloaded, contentLength } = useUpdaterStore();
+	const { status, update, error } = useUpdaterStore();
 	const { acceptBetaUpdates, setAcceptBetaUpdates } = useUpdaterSettingsStore();
+	const locale = useLocale();
 	const [appVersion, setAppVersion] = useState<string | null>(() =>
 		isTauri() ? null : "dev",
 	);
@@ -56,13 +93,6 @@ export function AboutSettings() {
 			.then(setAppVersion)
 			.catch(() => setAppVersion(null));
 	}, []);
-
-	const progressValue = useMemo(() => {
-		if (!contentLength) {
-			return null;
-		}
-		return Math.min(100, Math.round((downloaded / contentLength) * 100));
-	}, [contentLength, downloaded]);
 
 	const checkUpdate = async () => {
 		try {
@@ -112,18 +142,11 @@ export function AboutSettings() {
 		}
 	};
 
-	const openExternalUrl = async (url: string) => {
-		if (isTauri()) {
-			await open(url);
-			return;
-		}
-		window.open(url, "_blank", "noopener,noreferrer");
-	};
-
-	const releaseDate = formatReleaseDate(update?.date);
+	const releaseDate = formatReleaseDate(update?.date, locale);
 	const isChecking = status === "checking";
 	const isDownloading = status === "downloading";
 	const canInstall = status === "available" || status === "error";
+	const showInstallUpdate = !!update && (canInstall || isDownloading);
 
 	return (
 		<Stack gap="6" maxW="2xl">
@@ -174,11 +197,6 @@ export function AboutSettings() {
 									{m.updateReleasedAt({ date: releaseDate })}
 								</Text>
 							)}
-							{update.body && (
-								<Text fontSize="sm" color="fg.muted" whiteSpace="pre-wrap">
-									{update.body}
-								</Text>
-							)}
 						</Stack>
 					) : (
 						<Text fontSize="sm" color="fg.muted">
@@ -194,14 +212,6 @@ export function AboutSettings() {
 					)}
 				</Box>
 
-				{isDownloading && (
-					<Progress.Root value={progressValue ?? undefined} size="sm">
-						<Progress.Track>
-							<Progress.Range />
-						</Progress.Track>
-					</Progress.Root>
-				)}
-
 				<HStack gap="3" wrap="wrap">
 					<Button
 						size="sm"
@@ -213,49 +223,17 @@ export function AboutSettings() {
 						<FiRefreshCw />
 						{m.checkForUpdates()}
 					</Button>
-					<Button
-						size="sm"
-						disabled={!canInstall || !update}
-						loading={isDownloading}
-						onClick={installUpdate}
-					>
-						<FiDownload />
-						{update
-							? m.installUpdate({ version: update.version })
-							: m.installUpdateUnavailable()}
-					</Button>
-				</HStack>
-			</Stack>
-
-			<Separator />
-
-			<Stack gap="3">
-				<Text fontWeight="medium">{m.contributors()}</Text>
-				<Stack gap="1">
-					<Text fontSize="sm" fontWeight="medium">
-						AkaraChen
-					</Text>
-					<Text fontSize="sm" color="fg.muted">
-						{m.primaryContributorDescription()}
-					</Text>
-				</Stack>
-				<HStack gap="3" wrap="wrap">
-					<Button
-						size="sm"
-						variant="outline"
-						onClick={() => void openExternalUrl(REPOSITORY_URL)}
-					>
-						<FiExternalLink />
-						{m.repository()}
-					</Button>
-					<Button
-						size="sm"
-						variant="outline"
-						onClick={() => void openExternalUrl(WEBSITE_URL)}
-					>
-						<FiExternalLink />
-						{m.website()}
-					</Button>
+					{showInstallUpdate && (
+						<Button
+							size="sm"
+							disabled={!canInstall}
+							loading={isDownloading}
+							onClick={installUpdate}
+						>
+							<FiDownload />
+							{m.installUpdate({ version: update.version })}
+						</Button>
+					)}
 				</HStack>
 			</Stack>
 		</Stack>

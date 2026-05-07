@@ -45,7 +45,6 @@ const settingsTabs = [
 	"template",
 	"notification",
 	"topbar",
-	"profile",
 	"about",
 ] as const;
 
@@ -109,9 +108,6 @@ export default function SettingsPage() {
 							{m.notification()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
-						<Tabs.Trigger value="profile">
-							{m.profile()}
-						</Tabs.Trigger>
 						<Tabs.Trigger value="about">{m.about()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
@@ -251,7 +247,6 @@ export default function SettingsPage() {
 					<Tabs.Content value="topbar">
 						<TopBarSettings />
 					</Tabs.Content>
-					<Tabs.Content value="profile" />
 					<Tabs.Content value="about">
 						<AboutSettings />
 					</Tabs.Content>
