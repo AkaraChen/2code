@@ -13,7 +13,7 @@ on:
 
 jobs:
   publish:
-    name: Publish (${{ matrix.platform }})
+    name: Publish (${{ matrix.name }})
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write
@@ -21,13 +21,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - name: macOS arm64
+            platform: macos-15
+            rustTargets: aarch64-apple-darwin
             args: "--target aarch64-apple-darwin"
-          - platform: macos-latest
+          - name: macOS x64
+            platform: macos-15-intel
+            rustTargets: x86_64-apple-darwin
             args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-24.04
+          - name: Linux x64
+            platform: ubuntu-24.04
+            rustTargets: ""
             args: ""
-          - platform: windows-latest
+          - name: Windows x64
+            platform: windows-latest
+            rustTargets: ""
             args: ""
 
     steps:
@@ -64,7 +72,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rustTargets }}
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
