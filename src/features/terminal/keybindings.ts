@@ -36,6 +36,10 @@ export function getTerminalShortcutAction(
 ): TerminalShortcutAction | null {
 	if (event.type !== "keydown") return null;
 
+	if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && event.key === "Enter") {
+		return { type: "write-sequence", sequence: "\n" };
+	}
+
 	if (isPlainMetaShortcut(event, platform) && !event.shiftKey) {
 		if (event.key === "ArrowLeft") {
 			return { type: "write-sequence", sequence: "\x1B[H" };

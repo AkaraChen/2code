@@ -75,6 +75,18 @@ describe("getTerminalShortcutSequence", () => {
 });
 
 describe("getTerminalShortcutAction", () => {
+	it("maps Shift+Enter to newline for multiline input", () => {
+		expect(
+			getTerminalShortcutAction(makeEvent({ shiftKey: true, key: "Enter" })),
+		).toEqual({ type: "write-sequence", sequence: "\n" });
+	});
+
+	it("does not map plain Enter", () => {
+		expect(
+			getTerminalShortcutAction(makeEvent({ key: "Enter" })),
+		).toBeNull();
+	});
+
 	it("maps Cmd+= to increase font size on macOS", () => {
 		expect(
 			getTerminalShortcutAction(
