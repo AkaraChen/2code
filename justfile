@@ -31,7 +31,7 @@ build-helper:
         CARGO_TARGET_ARGS=(--target "${TARGET_TRIPLE}")
         TARGET_DIR="target/${TARGET_TRIPLE}/release"
     fi
-    cd src-tauri && cargo build --release -p twocode-helper "${CARGO_TARGET_ARGS[@]}"
+    cd src-tauri && cargo build --release -p twocode-helper ${CARGO_TARGET_ARGS[@]+"${CARGO_TARGET_ARGS[@]}"}
     mkdir -p binaries
     cp -f "${TARGET_DIR}/2code-helper${BIN_SUFFIX}" "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
@@ -51,7 +51,7 @@ build-helper-dev:
         CARGO_TARGET_ARGS=(--target "${TARGET_TRIPLE}")
         TARGET_DIR="target/${TARGET_TRIPLE}/debug"
     fi
-    cd src-tauri && cargo build -p twocode-helper "${CARGO_TARGET_ARGS[@]}"
+    cd src-tauri && cargo build -p twocode-helper ${CARGO_TARGET_ARGS[@]+"${CARGO_TARGET_ARGS[@]}"}
     mkdir -p binaries
     cp -f "${TARGET_DIR}/2code-helper${BIN_SUFFIX}" "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
     chmod +x "binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
