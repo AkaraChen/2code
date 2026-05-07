@@ -21,21 +21,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Build macOS packages on native CPU runners so app and sidecar architectures stay aligned.
           - name: macOS arm64
             platform: macos-15
             rustTargets: aarch64-apple-darwin
+            helperTarget: aarch64-apple-darwin
             args: "--target aarch64-apple-darwin"
           - name: macOS x64
             platform: macos-15-intel
             rustTargets: x86_64-apple-darwin
+            helperTarget: x86_64-apple-darwin
             args: "--target x86_64-apple-darwin"
           - name: Linux x64
             platform: ubuntu-24.04
             rustTargets: ""
+            helperTarget: ""
             args: ""
           - name: Windows x64
             platform: windows-latest
             rustTargets: ""
+            helperTarget: ""
             args: "--bundles nsis"
 
     steps:
@@ -89,6 +94,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TWOCODE_HELPER_TARGET: ${{ matrix.helperTarget }}
         with:
           tauriScript: bun tauri
           tagName: v__VERSION__
