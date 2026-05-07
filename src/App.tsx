@@ -7,6 +7,7 @@ import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
+import StartupUpdateCheck from "./features/updater/StartupUpdateCheck";
 import AppSidebar from "./layout/AppSidebar";
 import {
 	AsyncBoundary,
@@ -28,6 +29,7 @@ export default function App() {
 
 	return (
 		<Flex direction="column" h="full">
+			<StartupUpdateCheck />
 			<Flex flex="1" minH="0">
 				<AsyncBoundary
 					fallback={<SidebarSkeleton />}

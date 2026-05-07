@@ -29,6 +29,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "externalBin": [
       "binaries/2code-helper"
     ],
@@ -54,8 +55,14 @@
       "validationLibrary": "none",
       "verbose": false,
       "visualizeDeps": false
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/AkaraChen/2code/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEMEQxQzM3OTAwNjM5NDEKUldSQk9RYVFOeHdOWGM5ZVBkbm9yYXBENmFsVFR2UFJLdjJHenRQZEJjblpYUzduVUtuUk41Y0cK"
     }
   },
   "productName": "two-code",
-  "version": "1.4.2"
+  "version": "2.0.0-beta1"
 }

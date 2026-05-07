@@ -32,6 +32,8 @@ pub fn run() {
 	let shutdown_for_exit = shutdown_flag.clone();
 
 	let app = tauri::Builder::default()
+		.plugin(tauri_plugin_process::init())
+		.plugin(tauri_plugin_updater::Builder::new().build())
 		.plugin(tauri_plugin_opener::init())
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_notification::init())
@@ -42,6 +44,7 @@ pub fn run() {
 		.manage(flush_senders)
 		.manage(shutdown_flag)
 		.manage(layer_handle)
+		.manage(handler::updater::PendingUpdate::default())
 		.setup(|app| {
 			use tauri::Manager;
 			let app_data_dir = app
@@ -110,6 +113,8 @@ pub fn run() {
 			handler::profile::delete_profile,
 			handler::profile::get_profile_delete_check,
 			handler::watcher::watch_projects,
+			handler::updater::check_update,
+			handler::updater::install_update,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
 		])

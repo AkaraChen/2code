@@ -15,8 +15,10 @@
 		"core:window:allow-set-focus",
 		"dialog:allow-open",
 		"notification:default",
+		"process:default",
 		"store:default",
 		"shell:allow-open",
+		"updater:default",
 		{
 			"identifier": "shell:allow-execute",
 			"allow": [

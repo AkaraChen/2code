@@ -13,6 +13,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { use, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
@@ -22,6 +23,7 @@ import type { Locale } from "@/paraglide/runtime.js";
 import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import { setAppLocale, useLocale } from "@/shared/lib/locale";
 import { ThemeContext } from "@/shared/providers/themeContext";
+import { AboutSettings } from "./AboutSettings";
 import { BorderRadiusPicker } from "./BorderRadiusPicker";
 import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
@@ -37,11 +39,31 @@ const localeCollection = createListCollection({
 	],
 });
 
+const settingsTabs = [
+	"general",
+	"terminal",
+	"template",
+	"notification",
+	"topbar",
+	"profile",
+	"about",
+] as const;
+
+type SettingsTab = (typeof settingsTabs)[number];
+
+function readSettingsTab(value: string | null): SettingsTab {
+	return settingsTabs.includes(value as SettingsTab)
+		? (value as SettingsTab)
+		: "general";
+}
+
 export default function SettingsPage() {
 	const { preference, setPreference } = use(ThemeContext);
 	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
 		useDebugStore();
 	const locale = useLocale();
+	const [searchParams, setSearchParams] = useSearchParams();
+	const activeTab = readSettingsTab(searchParams.get("tab"));
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
@@ -62,7 +84,17 @@ export default function SettingsPage() {
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
 				</Heading>
-				<Tabs.Root defaultValue="general" variant="plain">
+				<Tabs.Root
+					value={activeTab}
+					onValueChange={(e) => {
+						const nextTab = readSettingsTab(e.value);
+						setSearchParams(
+							nextTab === "general" ? {} : { tab: nextTab },
+							{ replace: true },
+						);
+					}}
+					variant="plain"
+				>
 					<Tabs.List bg="bg.muted" rounded="l3" p="1">
 						<Tabs.Trigger value="general">
 							{m.general()}
@@ -80,6 +112,7 @@ export default function SettingsPage() {
 						<Tabs.Trigger value="profile">
 							{m.profile()}
 						</Tabs.Trigger>
+						<Tabs.Trigger value="about">{m.about()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">
@@ -219,6 +252,9 @@ export default function SettingsPage() {
 						<TopBarSettings />
 					</Tabs.Content>
 					<Tabs.Content value="profile" />
+					<Tabs.Content value="about">
+						<AboutSettings />
+					</Tabs.Content>
 				</Tabs.Root>
 			</Stack>
 		</Box>

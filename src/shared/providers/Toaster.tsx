@@ -28,6 +28,11 @@ export function Toaster() {
 								</Toast.Description>
 							)}
 						</Stack>
+						{toast.action && (
+							<Toast.ActionTrigger>
+								{toast.action.label}
+							</Toast.ActionTrigger>
+						)}
 						{toast.closable && <Toast.CloseTrigger />}
 					</Toast.Root>
 				)}
