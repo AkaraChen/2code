@@ -36,7 +36,7 @@ jobs:
           - name: Windows x64
             platform: windows-latest
             rustTargets: ""
-            args: ""
+            args: "--bundles nsis"
 
     steps:
       - name: Checkout
