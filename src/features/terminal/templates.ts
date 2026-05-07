@@ -1,6 +1,14 @@
 import { join } from "@tauri-apps/api/path";
 
-export const DEFAULT_TERMINAL_SHELL = "/bin/zsh";
+function isWindowsPlatform() {
+	return /win/i.test(`${navigator.platform} ${navigator.userAgent}`);
+}
+
+export function getDefaultTerminalShell() {
+	return isWindowsPlatform() ? "powershell.exe -NoLogo -NoProfile" : "/bin/zsh";
+}
+
+export const DEFAULT_TERMINAL_SHELL = getDefaultTerminalShell();
 
 export interface GlobalTerminalTemplate {
 	id: string;

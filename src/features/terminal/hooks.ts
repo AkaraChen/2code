@@ -102,3 +102,5 @@ export function useTerminalTheme(): ITheme {
 	const id = useTerminalThemeId();
 	return terminalThemes[id] ?? terminalThemes["github-dark"];
 }
+
+export { DEFAULT_TERMINAL_SHELL } from "./templates";

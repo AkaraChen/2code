@@ -14,6 +14,7 @@ import {
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import {
+	DEFAULT_TERMINAL_SHELL,
 	useCloseTerminalTab,
 	useCreateTerminalTab,
 	useTerminalTheme,
@@ -100,7 +101,7 @@ describe("terminal hooks", () => {
 				title: "Terminal 2",
 			},
 			config: {
-				shell: "/bin/zsh",
+				shell: DEFAULT_TERMINAL_SHELL,
 				cwd: "/repo",
 				rows: 24,
 				cols: 80,

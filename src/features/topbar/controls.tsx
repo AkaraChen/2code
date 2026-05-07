@@ -283,11 +283,11 @@ export function GitPullRequestStatusControl({
 
 export function RevealInFinderControl({ profile }: ControlProps) {
 	const handleReveal = async () => {
-		const isMac = navigator.platform.toUpperCase().includes("MAC");
-		const cmd = isMac ? "open" : "explorer";
-		const args = isMac
-			? ["-R", profile.worktree_path]
-			: [profile.worktree_path];
+		const platform = navigator.platform.toUpperCase();
+		const isMac = platform.includes("MAC");
+		const isWindows = platform.includes("WIN");
+		const cmd = isMac ? "open" : isWindows ? "explorer" : "xdg-open";
+		const args = isMac ? ["-R", profile.worktree_path] : [profile.worktree_path];
 		await Command.create(cmd, args).execute();
 	};
 

@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -8,63 +9,84 @@ use model::topbar::TopbarApp;
 struct TopbarAppSpec {
 	id: &'static str,
 	app_name: &'static str,
+	#[cfg(target_os = "macos")]
 	bundle_name: &'static str,
+	windows_commands: &'static [&'static str],
 }
 
 const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 	TopbarAppSpec {
 		id: "github-desktop",
 		app_name: "GitHub Desktop",
+		#[cfg(target_os = "macos")]
 		bundle_name: "GitHub Desktop.app",
+		windows_commands: &["GitHubDesktop.exe", "github"],
 	},
 	TopbarAppSpec {
 		id: "vscode",
 		app_name: "Visual Studio Code",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Visual Studio Code.app",
+		windows_commands: &["code.cmd", "code.exe", "code"],
 	},
 	TopbarAppSpec {
 		id: "windsurf",
 		app_name: "Windsurf",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Windsurf.app",
+		windows_commands: &["windsurf.cmd", "windsurf.exe", "windsurf"],
 	},
 	TopbarAppSpec {
 		id: "cursor",
 		app_name: "Cursor",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Cursor.app",
+		windows_commands: &["cursor.cmd", "cursor.exe", "cursor"],
 	},
 	TopbarAppSpec {
 		id: "zed",
 		app_name: "Zed",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Zed.app",
+		windows_commands: &["zed.cmd", "zed.exe", "zed"],
 	},
 	TopbarAppSpec {
 		id: "sublime-text",
 		app_name: "Sublime Text",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Sublime Text.app",
+		windows_commands: &["subl.exe", "sublime_text.exe", "subl"],
 	},
 	TopbarAppSpec {
 		id: "ghostty",
 		app_name: "Ghostty",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Ghostty.app",
+		windows_commands: &["ghostty.exe", "ghostty"],
 	},
 	TopbarAppSpec {
 		id: "iterm2",
 		app_name: "iTerm",
+		#[cfg(target_os = "macos")]
 		bundle_name: "iTerm.app",
+		windows_commands: &[],
 	},
 	TopbarAppSpec {
 		id: "kitty",
 		app_name: "kitty",
+		#[cfg(target_os = "macos")]
 		bundle_name: "kitty.app",
+		windows_commands: &["kitty.exe", "kitty"],
 	},
 	TopbarAppSpec {
 		id: "warp",
 		app_name: "Warp",
+		#[cfg(target_os = "macos")]
 		bundle_name: "Warp.app",
+		windows_commands: &["warp.exe", "warp"],
 	},
 ];
 
-#[cfg(target_os = "macos")]
 fn known_app_spec(app_id: &str) -> Option<&'static TopbarAppSpec> {
 	KNOWN_TOPBAR_APPS.iter().find(|spec| spec.id == app_id)
 }
@@ -129,6 +151,64 @@ fn open_topbar_app_macos(app_id: &str, path: &str) -> Result<(), AppError> {
 	))))
 }
 
+#[cfg(target_os = "windows")]
+fn windows_command_exists(command: &str) -> bool {
+	let Some(path) = std::env::var_os("PATH") else {
+		return false;
+	};
+
+	std::env::split_paths(&path).any(|dir| dir.join(command).exists())
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_command(spec: &TopbarAppSpec) -> Option<&'static str> {
+	spec.windows_commands
+		.iter()
+		.copied()
+		.find(|command| windows_command_exists(command))
+}
+
+#[cfg(target_os = "windows")]
+fn list_supported_topbar_apps_windows() -> Vec<TopbarApp> {
+	KNOWN_TOPBAR_APPS
+		.iter()
+		.filter(|spec| resolve_windows_command(spec).is_some())
+		.map(|spec| TopbarApp {
+			id: spec.id.to_string(),
+		})
+		.collect()
+}
+
+#[cfg(target_os = "windows")]
+fn open_topbar_app_windows(app_id: &str, path: &str) -> Result<(), AppError> {
+	let spec = known_app_spec(app_id).ok_or_else(|| {
+		AppError::NotFound(format!("Unknown top bar app: {app_id}"))
+	})?;
+	let command = resolve_windows_command(spec).ok_or_else(|| {
+		AppError::NotFound(format!("Top bar app not found: {app_id}"))
+	})?;
+
+	let status = Command::new("powershell.exe")
+		.args([
+			"-NoProfile",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-Command",
+			"& { param($exe, $target) Start-Process -FilePath $exe -ArgumentList @($target) }",
+		])
+		.arg(command)
+		.arg(path)
+		.status()?;
+	if status.success() {
+		return Ok(());
+	}
+
+	Err(AppError::IoError(std::io::Error::other(format!(
+		"Failed to open {} ({}) for {}: {status}",
+		spec.id, spec.app_name, path,
+	))))
+}
+
 #[tauri::command]
 pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 	#[cfg(target_os = "macos")]
@@ -140,7 +220,16 @@ pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 		return apps.unwrap_or_default();
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(target_os = "windows")]
+	{
+		let apps = tauri::async_runtime::spawn_blocking(
+			list_supported_topbar_apps_windows,
+		)
+		.await;
+		return apps.unwrap_or_default();
+	}
+
+	#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 	{
 		Vec::new()
 	}
@@ -159,11 +248,19 @@ pub async fn open_topbar_app(
 		.await;
 	}
 
-	#[cfg(not(target_os = "macos"))]
+	#[cfg(target_os = "windows")]
+	{
+		return super::run_blocking(move || {
+			open_topbar_app_windows(&app_id, &path)
+		})
+		.await;
+	}
+
+	#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 	{
 		let _ = (app_id, path);
 		Err(AppError::NotFound(
-			"Top bar app launching is only supported on macOS".into(),
+			"Top bar app launching is only supported on macOS and Windows".into(),
 		))
 	}
 }

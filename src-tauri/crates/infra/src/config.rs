@@ -45,8 +45,8 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 	}
 
 	for script in scripts {
-		let result = Command::new("sh")
-			.arg("-c")
+		let mut command = script_command();
+		let result = command
 			.arg(script)
 			.current_dir(cwd)
 			.output();
@@ -63,6 +63,18 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 			}
 			_ => {}
 		}
+	}
+}
+
+fn script_command() -> Command {
+	if cfg!(windows) {
+		let mut command = Command::new("powershell.exe");
+		command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]);
+		command
+	} else {
+		let mut command = Command::new("sh");
+		command.arg("-c");
+		command
 	}
 }
 
