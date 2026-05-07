@@ -5,7 +5,6 @@ import {
 	SiGithub,
 	SiIterm2,
 	SiSublimetext,
-	SiVscodium,
 	SiWarp,
 	SiWindsurf,
 	SiZedindustries,
@@ -18,6 +17,7 @@ import {
 	PiGitPullRequestFill,
 	PiTerminalWindowFill,
 } from "react-icons/pi";
+import { VscVscode } from "react-icons/vsc";
 import {
 	useGitDiffStats,
 	useGitPullRequestStatus,
@@ -83,7 +83,7 @@ export function VscodeControl(props: ControlProps) {
 			{...props}
 			label={m.topbarVscode()}
 			appId="vscode"
-			icon={SiVscodium}
+			icon={VscVscode}
 		/>
 	);
 }
