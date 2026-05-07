@@ -364,6 +364,8 @@ export default function GitDiffContent({
 					direction="column"
 					w="360px"
 					flexShrink={0}
+					borderRightWidth="1px"
+					borderColor="border.subtle"
 					overflow="hidden"
 					tabIndex={0}
 					onKeyDown={activeListKeyDown}
