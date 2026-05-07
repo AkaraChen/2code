@@ -89,6 +89,6 @@ jobs:
           releaseDraft: false
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, '-') }}
           generateReleaseNotes: true
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           retryAttempts: 2
           args: ${{ matrix.args }}
