@@ -179,6 +179,8 @@
 	"gitDiffLargeGuardrailTitle": "Large diff hidden by default",
 	"gitDiffLargeGuardrailDescription": "This file changes {count} lines. Diffs with {threshold} or more changed lines are hidden by default to keep the dialog responsive.",
 	"gitDiffLargeGuardrailReveal": "Load diff anyway",
+	"gitDiffRenamePreviousPath": "Previous path",
+	"gitDiffRenameCurrentPath": "Current path",
 	"gitDiffImagePreviewBefore": "Before",
 	"gitDiffImagePreviewAfter": "After",
 	"gitDiffImagePreviewUnavailable": "Preview unavailable",
