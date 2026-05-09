@@ -136,7 +136,9 @@ export function ProjectMenuItem({
 									<Text
 										flex="1 1 auto"
 										minW="0"
-										lineHeight="5"
+										lineHeight="1.25rem"
+										position="relative"
+										top="2px"
 										truncate
 									>
 										{project.name}

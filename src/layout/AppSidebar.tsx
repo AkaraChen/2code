@@ -95,41 +95,53 @@ export default function AppSidebar() {
 				aria-label={m.sideNavLabel()}
 				w="var(--sidebar-width)"
 				h="full"
+				minH="0"
 				flexShrink={0}
 				position="relative"
 				bg="bg.subtle"
 				onKeyDown={handleKeyDown}
 			>
-				<Box h="full" overflowY="auto" overflowX="hidden">
-					<LayoutGroup id="app-sidebar">
+				<LayoutGroup id="app-sidebar">
+					<Flex direction="column" h="full" minH="0" w="full">
 						<Flex
-							direction="column"
-							h="full"
-							w="full"
-							minW="0"
-							pb="3"
+							data-tauri-drag-region
+							h="80px"
+							flexShrink={0}
+							align="center"
+							justify="start"
+							paddingInline="4"
+							pt="8"
+						>
+							<Text
+								fontFamily="'Bricolage Grotesque Variable', sans-serif"
+								fontWeight="700"
+								color="fg.muted"
+								letterSpacing="tight"
+								userSelect="none"
+								pointerEvents="none"
+								whiteSpace="nowrap"
+							>
+								2Code
+							</Text>
+						</Flex>
+						<Box
+							flex="1"
+							minH="0"
+							overflowY="scroll"
+							overflowX="hidden"
+							css={{ scrollbarGutter: "stable" }}
 						>
 							<Flex
-								data-tauri-drag-region
-								h="80px"
-								flexShrink={0}
-								align="center"
-								justify="start"
-								paddingInline="4"
-								pt="8"
+								direction="column"
+								minH="full"
+								w="full"
+								minW="0"
+								css={{
+									"& > *": {
+										flexShrink: 0,
+									},
+								}}
 							>
-								<Text
-									fontFamily="'Bricolage Grotesque Variable', sans-serif"
-									fontWeight="700"
-									color="fg.muted"
-									letterSpacing="tight"
-									userSelect="none"
-									pointerEvents="none"
-									whiteSpace="nowrap"
-								>
-									2Code
-								</Text>
-							</Flex>
 							{projects.length === 0 && (
 								<SidebarLink
 									to="/"
@@ -210,15 +222,15 @@ export default function AppSidebar() {
 									/>
 								),
 							)}
-
-							<Box flex="1" />
-
+							</Flex>
+						</Box>
+						<Box flexShrink={0} pb="3">
 							<SidebarLink to="/settings" icon={<FiSettings />}>
 								{m.settings()}
 							</SidebarLink>
-						</Flex>
-					</LayoutGroup>
-				</Box>
+						</Box>
+					</Flex>
+				</LayoutGroup>
 				<Box
 					role="separator"
 					aria-label="Resize sidebar"
