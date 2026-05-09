@@ -11,7 +11,7 @@
         "height": 900,
         "hiddenTitle": true,
         "maximizable": true,
-        "title": "code",
+        "title": "2code",
         "titleBarStyle": "Overlay",
         "trafficLightPosition": {
           "x": 16,
@@ -40,6 +40,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "bundleName": "2code"
+    },
     "targets": "all"
   },
   "identifier": "com.akrc.code",
