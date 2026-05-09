@@ -133,7 +133,12 @@ export function ProjectMenuItem({
 										projectId={project.id}
 										projectName={project.name}
 									/>
-									<Text flex="1 1 auto" minW="0" truncate>
+									<Text
+										flex="1 1 auto"
+										minW="0"
+										lineHeight="5"
+										truncate
+									>
 										{project.name}
 									</Text>
 									{showProjectNotification && (
