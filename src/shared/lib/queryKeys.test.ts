@@ -5,6 +5,7 @@ describe("queryNamespaces", () => {
 	it("contains all expected namespace strings", () => {
 		expect(queryNamespaces).toEqual({
 			project: "project",
+			"project-groups": "project-groups",
 			"project-avatar": "project-avatar",
 			"project-config": "project-config",
 			"git-branch": "git-branch",
@@ -33,6 +34,12 @@ describe("queryKeys", () => {
 
 		it("returns the same reference each time", () => {
 			expect(queryKeys.projects.all).toBe(queryKeys.projects.all);
+		});
+	});
+
+	describe("projectGroups", () => {
+		it("returns static key for all project groups", () => {
+			expect(queryKeys.projectGroups.all).toEqual(["project-groups"]);
 		});
 	});
 
@@ -131,11 +138,9 @@ describe("queryKeys", () => {
 		});
 
 		it("pullRequestStatus() includes profileId in key", () => {
-			expect(queryKeys.git.pullRequestStatus("profile-1", "main")).toEqual([
-				"git-pull-request-status",
-				"profile-1",
-				"main",
-			]);
+			expect(
+				queryKeys.git.pullRequestStatus("profile-1", "main"),
+			).toEqual(["git-pull-request-status", "profile-1", "main"]);
 		});
 
 		it("returns different references for different args", () => {

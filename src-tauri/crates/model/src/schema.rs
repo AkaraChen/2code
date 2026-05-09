@@ -12,11 +12,20 @@ diesel::table! {
 }
 
 diesel::table! {
+	project_groups (id) {
+		id -> Text,
+		name -> Text,
+		created_at -> Timestamp,
+	}
+}
+
+diesel::table! {
 	projects (id) {
 		id -> Text,
 		name -> Text,
 		folder -> Text,
 		created_at -> Timestamp,
+		group_id -> Nullable<Text>,
 	}
 }
 
@@ -42,11 +51,13 @@ diesel::table! {
 }
 
 diesel::joinable!(profiles -> projects (project_id));
+diesel::joinable!(projects -> project_groups (group_id));
 diesel::joinable!(pty_session_output -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	profiles,
+	project_groups,
 	projects,
 	pty_session_output,
 	pty_sessions,

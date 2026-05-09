@@ -8,6 +8,7 @@ use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
 	ProjectWithProfiles,
 };
+use model::project_group::ProjectGroup;
 
 pub fn create_from_folder(
 	conn: &mut SqliteConnection,
@@ -52,6 +53,48 @@ pub fn update(
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	repo::project::delete(conn, id)
+}
+
+pub fn create_group(
+	conn: &mut SqliteConnection,
+	name: &str,
+) -> Result<ProjectGroup, AppError> {
+	let name = name.trim();
+	if name.is_empty() {
+		return Err(AppError::DbError(
+			"Project group name cannot be empty".into(),
+		));
+	}
+
+	let id = Uuid::new_v4().to_string();
+	repo::project_group::insert(conn, &id, name)
+}
+
+pub fn list_groups(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<ProjectGroup>, AppError> {
+	repo::project_group::list_all(conn)
+}
+
+pub fn assign_to_group(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+	group_id: Option<String>,
+) -> Result<Project, AppError> {
+	let group_id = group_id.and_then(|id| {
+		let trimmed = id.trim().to_string();
+		if trimmed.is_empty() {
+			None
+		} else {
+			Some(trimmed)
+		}
+	});
+
+	if let Some(group_id) = group_id.as_deref() {
+		repo::project_group::find_by_id(conn, group_id)?;
+	}
+
+	repo::project::set_group(conn, project_id, group_id.as_deref())
 }
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {

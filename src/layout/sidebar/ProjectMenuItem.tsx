@@ -10,7 +10,12 @@ import {
 	Tooltip,
 } from "@chakra-ui/react";
 import { useMemo, useState } from "react";
-import { FiChevronDown, FiChevronRight, FiPlus, FiTerminal } from "react-icons/fi";
+import {
+	FiChevronDown,
+	FiChevronRight,
+	FiPlus,
+	FiTerminal,
+} from "react-icons/fi";
 import { NavLink, useMatch } from "react-router";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
@@ -20,15 +25,22 @@ import {
 	useProfileHasNotification,
 	useTerminalStore,
 } from "@/features/terminal/store";
-import type { ProjectWithProfiles } from "@/generated";
+import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
-import { ProjectAvatar } from "./ProjectAvatar";
 import { ProfileList } from "./ProfileList";
+import { ProjectAvatar } from "./ProjectAvatar";
+import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
-export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
+export function ProjectMenuItem({
+	project,
+	projectGroups,
+}: {
+	project: ProjectWithProfiles;
+	projectGroups: ProjectGroup[];
+}) {
 	const defaultProfile = useMemo(
 		() => project.profiles.find((p) => p.is_default),
 		[project.profiles],
@@ -59,6 +71,7 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 	const deleteDialog = useDialogState();
 	const settingsDialog = useDialogState();
 	const createProfileDialog = useDialogState();
+	const [menuOpen, setMenuOpen] = useState(false);
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 	const expanded = userExpanded ?? true;
 	const showProjectNotification =
@@ -72,7 +85,10 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 
 	return (
 		<>
-			<Menu.Root>
+			<Menu.Root
+				open={menuOpen}
+				onOpenChange={(e) => setMenuOpen(e.open)}
+			>
 				<Menu.ContextTrigger asChild>
 					<HStack
 						className="group"
@@ -133,7 +149,10 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 						</Box>
 
 						{hasOnlyDefaultProfile ? (
-							<Tooltip.Root openDelay={400} positioning={{ placement: "right" }}>
+							<Tooltip.Root
+								openDelay={400}
+								positioning={{ placement: "right" }}
+							>
 								<Tooltip.Trigger asChild>
 									<IconButton
 										as="span"
@@ -185,6 +204,11 @@ export function ProjectMenuItem({ project }: { project: ProjectWithProfiles }) {
 				<Portal>
 					<Menu.Positioner>
 						<Menu.Content>
+							<ProjectGroupMenu
+								project={project}
+								projectGroups={projectGroups}
+								onCloseMenu={() => setMenuOpen(false)}
+							/>
 							<Menu.Item
 								value="settings"
 								onClick={settingsDialog.onOpen}

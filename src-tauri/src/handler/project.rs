@@ -6,6 +6,7 @@ use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
 	ProjectConfig, ProjectWithProfiles,
 };
+use model::project_group::ProjectGroup;
 
 #[tauri::command]
 pub async fn create_project_from_folder(
@@ -216,6 +217,45 @@ pub async fn delete_project(
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		service::project::delete(conn, &id)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn create_project_group(
+	name: String,
+	state: State<'_, DbPool>,
+) -> Result<ProjectGroup, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::create_group(conn, &name)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn list_project_groups(
+	state: State<'_, DbPool>,
+) -> Result<Vec<ProjectGroup>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::list_groups(conn)
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn assign_project_to_group(
+	project_id: String,
+	group_id: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<Project, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::assign_to_group(conn, &project_id, group_id)
 	})
 	.await
 }
