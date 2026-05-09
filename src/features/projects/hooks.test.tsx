@@ -70,7 +70,7 @@ describe("useDeleteProject", () => {
 		deleteProjectMock.mockReset();
 	});
 
-	it("runs success callback before invalidating projects cache", async () => {
+	it("runs success callback before invalidating dependent caches", async () => {
 		const queryClient = createQueryClient();
 		const projects: ProjectWithProfiles[] = [
 			{
@@ -111,7 +111,13 @@ describe("useDeleteProject", () => {
 
 		expect(deleteProjectMock).toHaveBeenCalledWith({ id: "project-1" });
 		expect(onSuccess).toHaveBeenCalledWith("project-1", projects);
-		expect(events).toEqual(["success", "invalidate"]);
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.projects.all,
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.projectGroups.all,
+		});
+		expect(events).toEqual(["success", "invalidate", "invalidate"]);
 		invalidateQueriesSpy.mockRestore();
 	});
 });
