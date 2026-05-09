@@ -6,21 +6,6 @@ Desktop software for vibe coding.
 
 > 2code is still early and under active construction. macOS is the primary supported platform; Windows and Linux builds are still experimental.
 
-## Why 2code
-
-AI-assisted development creates more parallel state than a normal coding session: long-running commands, multiple agents, branch experiments, diffs to review, and half-finished ideas that should not be lost when attention shifts.
-
-2code treats that state as the primary interface. Terminals are persistent work surfaces, Git state stays close to the task, and each feature can live in its own isolated profile with its own worktree and terminal context.
-
-## Features
-
-- **Persistent terminals**: keep shell sessions, scrollback, and terminal layout close to where you left them.
-- **Git visibility**: review diffs, staged changes, history, and shipping state without leaving the workstation.
-- **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
-- **Project management**: organize local code projects and launch focused workspaces quickly.
-- **PTY notifications**: receive terminal-side notifications through the bundled helper pipeline.
-- **Localized UI**: i18n message sources live in `messages/` and are generated into the frontend.
-
 ## Install 2code
 
 ### macOS
@@ -36,6 +21,21 @@ sudo xattr -dr com.apple.quarantine /Applications/2code.app
 ```
 
 Windows and Linux support is still experimental.
+
+## Why 2code
+
+AI-assisted development creates more parallel state than a normal coding session: long-running commands, multiple agents, branch experiments, diffs to review, and half-finished ideas that should not be lost when attention shifts.
+
+2code treats that state as the primary interface. Terminals are persistent work surfaces, Git state stays close to the task, and each feature can live in its own isolated profile with its own worktree and terminal context.
+
+## Features
+
+- **Persistent terminals**: keep shell sessions, scrollback, and terminal layout close to where you left them.
+- **Git visibility**: review diffs, staged changes, history, and shipping state without leaving the workstation.
+- **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
+- **Project management**: organize local code projects and launch focused workspaces quickly.
+- **PTY notifications**: receive terminal-side notifications through the bundled helper pipeline.
+- **Localized UI**: i18n message sources live in `messages/` and are generated into the frontend.
 
 ## Tech Stack
 
