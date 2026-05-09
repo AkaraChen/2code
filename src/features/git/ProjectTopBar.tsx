@@ -44,7 +44,7 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
 	if (!branch) return null;
 	return (
-		<HStack gap="1">
+		<HStack gap="1" userSelect="none">
 			<PiGitBranchFill />
 			<Text as="span">{branch}</Text>
 		</HStack>
@@ -201,6 +201,7 @@ export default function ProjectTopBar({
 							<Text
 								as="span"
 								fontWeight="semibold"
+								userSelect="none"
 								cursor="default"
 							>
 								{projectName}
@@ -222,7 +223,7 @@ export default function ProjectTopBar({
 								<GitBranchLabel cwd={profile.worktree_path} />
 							) : null
 						) : (
-							<HStack gap="1">
+							<HStack gap="1" userSelect="none">
 								<PiGitBranchFill />
 								<Text as="span">{profile.branch_name}</Text>
 							</HStack>

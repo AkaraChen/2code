@@ -176,6 +176,7 @@ export default function CommandPalette({ profileId }: CommandPaletteProps) {
 						<Box
 							key={result.path}
 							asChild
+							userSelect="none"
 							display="flex"
 							alignItems="center"
 							gap="2"

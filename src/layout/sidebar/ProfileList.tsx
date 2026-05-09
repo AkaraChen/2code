@@ -29,6 +29,7 @@ export function ProfileList({
 			))}
 			<HStack
 				as="button"
+				userSelect="none"
 				gap="2"
 				w="full"
 				minW="0"

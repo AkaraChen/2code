@@ -92,6 +92,7 @@ export function ProjectMenuItem({
 				<Menu.ContextTrigger asChild>
 					<HStack
 						className="group"
+						userSelect="none"
 						gap="1"
 						w="full"
 						minW="0"
@@ -113,6 +114,7 @@ export function ProjectMenuItem({
 						)}
 						<Box
 							asChild
+							userSelect="none"
 							flex="1 1 auto"
 							minW="0"
 							overflow="hidden"

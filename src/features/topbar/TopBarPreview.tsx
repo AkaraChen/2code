@@ -36,13 +36,18 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 					bg="bg.subtle"
 				>
 					<HStack gap="2">
-						<Text as="span" fontWeight="semibold" fontSize="sm">
-							My Project
-						</Text>
-						<HStack gap="1" color="fg.muted" fontSize="sm">
-							<PiGitBranchFill />
-							<Text as="span">main</Text>
-						</HStack>
+					<Text
+						as="span"
+						fontWeight="semibold"
+						fontSize="sm"
+						userSelect="none"
+					>
+						My Project
+					</Text>
+					<HStack gap="1" color="fg.muted" fontSize="sm" userSelect="none">
+						<PiGitBranchFill />
+						<Text as="span">main</Text>
+					</HStack>
 					</HStack>
 					<SortableContext
 						items={activeControls}
