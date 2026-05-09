@@ -52,7 +52,10 @@ pub fn update(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	repo::project::delete(conn, id)
+	let project = repo::project::find_by_id(conn, id)?;
+	repo::project::delete(conn, id)?;
+	cleanup_empty_group(conn, project.group_id)?;
+	Ok(())
 }
 
 pub fn create_group(
@@ -76,11 +79,18 @@ pub fn list_groups(
 	repo::project_group::list_all(conn)
 }
 
+pub fn cleanup_empty_groups(
+	conn: &mut SqliteConnection,
+) -> Result<usize, AppError> {
+	repo::project_group::delete_empty(conn)
+}
+
 pub fn assign_to_group(
 	conn: &mut SqliteConnection,
 	project_id: &str,
 	group_id: Option<String>,
 ) -> Result<Project, AppError> {
+	let project = repo::project::find_by_id(conn, project_id)?;
 	let group_id = group_id.and_then(|id| {
 		let trimmed = id.trim().to_string();
 		if trimmed.is_empty() {
@@ -94,7 +104,24 @@ pub fn assign_to_group(
 		repo::project_group::find_by_id(conn, group_id)?;
 	}
 
-	repo::project::set_group(conn, project_id, group_id.as_deref())
+	let updated =
+		repo::project::set_group(conn, project_id, group_id.as_deref())?;
+	if project.group_id != updated.group_id {
+		cleanup_empty_group(conn, project.group_id)?;
+	}
+
+	Ok(updated)
+}
+
+fn cleanup_empty_group(
+	conn: &mut SqliteConnection,
+	group_id: Option<String>,
+) -> Result<(), AppError> {
+	if let Some(group_id) = group_id {
+		repo::project_group::delete_if_empty(conn, &group_id)?;
+	}
+
+	Ok(())
 }
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {

@@ -181,7 +181,7 @@ export function useAssignProjectToGroup() {
 			projectId: string;
 			groupId: string | null;
 		}) => assignProjectToGroup({ projectId, groupId }),
-		onSuccess: (project) => {
+		onSuccess: async (project) => {
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) =>
@@ -191,7 +191,14 @@ export function useAssignProjectToGroup() {
 							: item,
 					),
 			);
-			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projects.all,
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projectGroups.all,
+				}),
+			]);
 		},
 	});
 }
@@ -247,9 +254,14 @@ export function useDeleteProject(options?: {
 				(projects) => projects?.filter((project) => project.id !== id),
 			);
 			await options?.onSuccess?.(id, projectsBeforeDelete);
-			await queryClient.invalidateQueries({
-				queryKey: queryKeys.projects.all,
-			});
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projects.all,
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projectGroups.all,
+				}),
+			]);
 		},
 	});
 }
