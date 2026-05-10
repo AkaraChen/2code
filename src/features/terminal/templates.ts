@@ -4,8 +4,18 @@ function isWindowsPlatform() {
 	return /win/i.test(`${navigator.platform} ${navigator.userAgent}`);
 }
 
+function isLinuxPlatform() {
+	return /linux/i.test(`${navigator.platform} ${navigator.userAgent}`);
+}
+
 export function getDefaultTerminalShell() {
-	return isWindowsPlatform() ? "powershell.exe -NoLogo -NoProfile" : "/bin/zsh";
+	if (isWindowsPlatform()) {
+		return "powershell.exe -NoLogo -NoProfile";
+	}
+	if (isLinuxPlatform()) {
+		return "/bin/bash";
+	}
+	return "/bin/zsh";
 }
 
 export const DEFAULT_TERMINAL_SHELL = getDefaultTerminalShell();
