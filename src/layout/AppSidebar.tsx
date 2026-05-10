@@ -16,6 +16,10 @@ import {
 	useAppSidebarStore,
 } from "./sidebarStore";
 
+function isMacPlatform() {
+	return /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
+}
+
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const createDialog = useDialogState();
@@ -75,12 +79,12 @@ export default function AppSidebar() {
 						<Flex direction="column" h="full" w="full" minW="0" pb="3">
 							<Flex
 								data-tauri-drag-region
-								h="80px"
+								h={isMacPlatform() ? "80px" : "52px"}
 								flexShrink={0}
 								align="center"
 								justify="start"
 								paddingInline="4"
-								pt="8"
+								pt={isMacPlatform() ? "8" : "2"}
 							>
 								<Text
 									fontFamily="'Bricolage Grotesque Variable', sans-serif"
