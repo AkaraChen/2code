@@ -24,7 +24,7 @@
   "build": {
     "beforeBuildCommand": "bun run tauri:before-build",
     "beforeDevCommand": "bun run tauri:before-dev",
-    "devUrl": "https://2code.localhost/",
+    "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "bundle": {
