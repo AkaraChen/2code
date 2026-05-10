@@ -121,15 +121,13 @@ pub fn create_session(
 }
 
 fn command_builder(shell: &str) -> CommandBuilder {
-	if cfg!(windows) {
-		let mut parts = shell.split_whitespace();
-		if let Some(program) = parts.next() {
-			let mut command = CommandBuilder::new(program);
-			for arg in parts {
-				command.arg(arg);
-			}
-			return command;
+	let mut parts = shell.split_whitespace();
+	if let Some(program) = parts.next() {
+		let mut command = CommandBuilder::new(program);
+		for arg in parts {
+			command.arg(arg);
 		}
+		return command;
 	}
 
 	CommandBuilder::new(shell)

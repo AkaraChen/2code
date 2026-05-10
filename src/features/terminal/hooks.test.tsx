@@ -59,6 +59,7 @@ function resetStores() {
 	useTerminalSettingsStore.setState({
 		fontFamily: "JetBrains Mono",
 		fontSize: 13,
+		defaultShell: DEFAULT_TERMINAL_SHELL,
 		showAllFonts: false,
 		darkTerminalTheme: "one-dark",
 		lightTerminalTheme: "github-light",

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { DEFAULT_TERMINAL_SHELL } from "@/features/terminal/templates";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 
 export const DEFAULT_TERMINAL_FONT_SIZE = 13;
@@ -9,12 +10,14 @@ export const MAX_TERMINAL_FONT_SIZE = 20;
 interface TerminalSettingsStore {
 	fontFamily: string;
 	fontSize: number;
+	defaultShell: string;
 	showAllFonts: boolean;
 	darkTerminalTheme: TerminalThemeId;
 	lightTerminalTheme: TerminalThemeId;
 	syncTerminalTheme: boolean;
 	setFontFamily: (family: string) => void;
 	setFontSize: (size: number) => void;
+	setDefaultShell: (shell: string) => void;
 	increaseFontSize: () => void;
 	decreaseFontSize: () => void;
 	setShowAllFonts: (show: boolean) => void;
@@ -36,6 +39,7 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 		(set) => ({
 			fontFamily: "JetBrains Mono",
 			fontSize: DEFAULT_TERMINAL_FONT_SIZE,
+			defaultShell: DEFAULT_TERMINAL_SHELL,
 			showAllFonts: false,
 			darkTerminalTheme: "github-dark",
 			lightTerminalTheme: "github-light",
@@ -43,6 +47,7 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 			setFontFamily: (family) => set({ fontFamily: family }),
 			setFontSize: (size) =>
 				set({ fontSize: clampTerminalFontSize(size) }),
+			setDefaultShell: (shell) => set({ defaultShell: shell }),
 			increaseFontSize: () =>
 				set((state) => ({
 					fontSize: clampTerminalFontSize(state.fontSize + 1),

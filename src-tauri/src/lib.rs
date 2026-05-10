@@ -105,6 +105,7 @@ pub fn run() {
 			handler::filesystem::search_file,
 			handler::filesystem::get_file_tree_git_status,
 			handler::font::list_system_fonts,
+			handler::shell::list_available_shells,
 			handler::sound::list_system_sounds,
 			handler::sound::play_system_sound,
 			handler::topbar::list_supported_topbar_apps,

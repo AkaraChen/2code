@@ -20,7 +20,7 @@ export function useCreateTerminalTab() {
 			profileId,
 			cwd,
 			title,
-			shell = DEFAULT_TERMINAL_SHELL,
+			shell,
 			startupCommands = [],
 		}: {
 			profileId: string;
@@ -29,13 +29,17 @@ export function useCreateTerminalTab() {
 			shell?: string;
 			startupCommands?: string[];
 		}) => {
+			const terminalSettings = useTerminalSettingsStore.getState();
 			const counter =
 				useTerminalStore.getState().profiles[profileId]?.counter ?? 0;
 			const nextTitle = title ?? `Terminal ${counter + 1}`;
 			const sessionId = await createPtySession({
 				meta: { profileId, title: nextTitle },
 				config: {
-					shell,
+					shell:
+						shell ||
+						terminalSettings.defaultShell ||
+						DEFAULT_TERMINAL_SHELL,
 					cwd,
 					rows: 24,
 					cols: 80,

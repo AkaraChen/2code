@@ -30,6 +30,7 @@ import { FontSizePicker } from "./FontSizePicker";
 import { GlobalTerminalTemplatesSettings } from "./GlobalTerminalTemplatesSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
+import { ShellPicker } from "./ShellPicker";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 
 const localeCollection = createListCollection({
@@ -221,6 +222,14 @@ export default function SettingsPage() {
 								<TerminalThemePicker
 									onPreview={setPreviewThemeId}
 								/>
+								<AsyncBoundary
+									fallback={<Skeleton height="70px" />}
+									errorFallback={({ error, onRetry }) => (
+										<InlineError error={error} height="70px" onRetry={onRetry} />
+									)}
+								>
+									<ShellPicker />
+								</AsyncBoundary>
 								<AsyncBoundary
 									fallback={<Skeleton height="70px" />}
 									errorFallback={({ error, onRetry }) => (
