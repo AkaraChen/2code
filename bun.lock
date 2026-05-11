@@ -31,7 +31,7 @@
         "@xterm/addon-image": "^0.10.0-beta.197",
         "@xterm/addon-ligatures": "^0.11.0-beta.197",
         "@xterm/addon-progress": "^0.3.0-beta.197",
-        "@xterm/addon-web-links": "^0.13.0-beta.197",
+        "@xterm/addon-web-links": "^0.13.0-beta.218",
         "@xterm/xterm": "^6.1.0-beta.197",
         "cmdk": "^1.1.1",
         "consola": "^3.4.2",
@@ -682,7 +682,7 @@
 
     "@xterm/addon-progress": ["@xterm/addon-progress@0.3.0-beta.197", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.197" } }, "sha512-ZvWE78sIBu0rAjpvycuKZqBVWLcm5ePO/oH4tBIwJLIY3g2FpRKKorBGPN9raBHw3Bfxzg7tZAFqv6iuDZxEIw=="],
 
-    "@xterm/addon-web-links": ["@xterm/addon-web-links@0.13.0-beta.197", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.197" } }, "sha512-8MgssTKGYJIgZpemu34KBIsmB0qh/XsQxugOhaYym8qSjn8KAMn9FN0j15W6XwEFQDAu1vtBh1jiKjQfyvHoqQ=="],
+    "@xterm/addon-web-links": ["@xterm/addon-web-links@0.13.0-beta.218", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.218" } }, "sha512-lIL4GZcBuhxy/AP0tXYGh9q8zd3y0/u5Rt5jG/ybBibdX7nnokOEt1gw3OZninVD1NWN6WwCDb8fXXrBi+cMEA=="],
 
     "@xterm/xterm": ["@xterm/xterm@6.1.0-beta.197", "", {}, "sha512-vzoc8sBcsvFpziSgeVGKZQDT1T/9MmEUKfUDpVqc3slDv7o0SiQCjvPeOF8y1++5vx2xmUn8lfcLnbfdtigtSQ=="],
 
