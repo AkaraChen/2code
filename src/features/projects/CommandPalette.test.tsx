@@ -1,10 +1,5 @@
 import { ChakraProvider } from "@chakra-ui/react";
-import {
-	fireEvent,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileSearchResult } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -41,7 +36,19 @@ function createFileSearchResult(
 function renderPalette() {
 	return render(
 		<ChakraProvider value={appSystem}>
-			<CommandPalette profileId="profile-1" />
+			<CommandPalette profileId="profile-1" isActive />
+		</ChakraProvider>,
+	);
+}
+
+function renderPaletteWithKeydownSink() {
+	return render(
+		<ChakraProvider value={appSystem}>
+			<CommandPalette profileId="profile-1" isActive />
+			<textarea
+				aria-label="editor"
+				onKeyDown={(event) => event.stopPropagation()}
+			/>
 		</ChakraProvider>,
 	);
 }
@@ -84,6 +91,19 @@ describe("commandPalette", () => {
 		await waitFor(() => expect(input).toHaveFocus());
 		expect(document.querySelector("[cmdk-root]")).toBeInTheDocument();
 		expect(screen.getByText(m.commandPaletteEmpty())).toBeInTheDocument();
+	});
+
+	it("opens before focused editors can stop keyboard event propagation", async () => {
+		renderPaletteWithKeydownSink();
+		const editor = screen.getByRole("textbox", { name: "editor" });
+		editor.focus();
+
+		fireEvent.keyDown(editor, { key: "k", metaKey: true });
+
+		const input = await screen.findByRole("combobox", {
+			name: m.commandPaletteTitle(),
+		});
+		expect(input).toHaveFocus();
 	});
 
 	it("opens the current file selection with Enter", async () => {
