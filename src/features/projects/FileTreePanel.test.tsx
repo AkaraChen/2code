@@ -272,6 +272,37 @@ describe("fileTreePanel", () => {
 		});
 	});
 
+	it("loads through single-child directory chains when a flattened directory is expanded", async () => {
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(["src/"], false),
+		);
+		loadChildPathsMock.mockImplementation((path: string) => {
+			if (path === "src/") {
+				return Promise.resolve(["src/components/"]);
+			}
+			if (path === "src/components/") {
+				return Promise.resolve(["src/components/Button.tsx"]);
+			}
+			return Promise.resolve([]);
+		});
+
+		renderPanel();
+		fireEvent.click(screen.getByText("src"));
+
+		await waitFor(() => {
+			expect(loadChildPathsMock).toHaveBeenCalledWith("src/");
+		});
+		await waitFor(() => {
+			expect(loadChildPathsMock).toHaveBeenCalledWith("src/components/");
+		});
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith(
+				["src/", "src/components/", "src/components/Button.tsx"],
+				{ initialExpandedPaths: ["src/", "src/components/"] },
+			);
+		});
+	});
+
 	it("shows the file tree load error in the loading overlay layout", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(
