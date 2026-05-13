@@ -1,5 +1,4 @@
 import {
-	Box,
 	Circle,
 	HStack,
 	Icon,
@@ -91,7 +90,9 @@ export function ProjectMenuItem({
 			>
 				<Menu.ContextTrigger asChild>
 					<HStack
+						asChild
 						className="group"
+						data-sidebar-item
 						userSelect="none"
 						gap="1"
 						w="full"
@@ -109,105 +110,97 @@ export function ProjectMenuItem({
 						}
 						_hover={{ bg: "bg.subtle" }}
 					>
-						{hasOnlyDefaultProfile && isDefaultActive && (
-							<SidebarActiveIndicator insetInlineStart="0" />
-						)}
-						<Box
-							asChild
-							userSelect="none"
-							flex="1 1 auto"
-							minW="0"
-							overflow="hidden"
-							data-sidebar-item
+						<NavLink
+							to={defaultProfileUrl}
+							onClick={handleDefaultProfileClick}
 						>
-							<NavLink
-								to={defaultProfileUrl}
-								onClick={handleDefaultProfileClick}
+							{hasOnlyDefaultProfile && isDefaultActive && (
+								<SidebarActiveIndicator insetInlineStart="0" />
+							)}
+							<HStack
+								gap="2"
+								align="center"
+								userSelect="none"
+								flex="1 1 auto"
+								minW="0"
+								overflow="hidden"
 							>
-								<HStack
-									gap="2"
-									align="center"
-									w="full"
+								<ProjectAvatar
+									projectId={project.id}
+									projectName={project.name}
+								/>
+								<Text
+									flex="1 1 auto"
 									minW="0"
-									overflow="hidden"
+									lineHeight="1.25rem"
+									position="relative"
+									top="2px"
+									truncate
 								>
-									<ProjectAvatar
-										projectId={project.id}
-										projectName={project.name}
-									/>
-									<Text
-										flex="1 1 auto"
-										minW="0"
-										lineHeight="1.25rem"
-										position="relative"
-										top="2px"
-										truncate
-									>
-										{project.name}
-									</Text>
-									{showProjectNotification && (
-										<Circle
-											aria-hidden="true"
-											size="2"
-											bg="green.500"
-											flexShrink={0}
-										/>
-									)}
-								</HStack>
-							</NavLink>
-						</Box>
-
-						{hasOnlyDefaultProfile ? (
-							<Tooltip.Root
-								openDelay={400}
-								positioning={{ placement: "right" }}
-							>
-								<Tooltip.Trigger asChild>
-									<IconButton
-										as="span"
-										variant="ghost"
-										size="2xs"
+									{project.name}
+								</Text>
+								{showProjectNotification && (
+									<Circle
+										aria-hidden="true"
+										size="2"
+										bg="green.500"
 										flexShrink={0}
-										opacity="0"
-										_groupHover={{ opacity: 1 }}
-										onClick={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											createProfileDialog.onOpen();
-										}}
-									>
-										<FiPlus />
-									</IconButton>
-								</Tooltip.Trigger>
-								<Portal>
-									<Tooltip.Positioner>
-										<Tooltip.Content>
-											创建 git worktree
-										</Tooltip.Content>
-									</Tooltip.Positioner>
-								</Portal>
-							</Tooltip.Root>
-						) : (
-							<IconButton
-								as="span"
-								variant="ghost"
-								size="2xs"
-								flexShrink={0}
-								onClick={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									setUserExpanded((prev) =>
-										prev === null ? !expanded : !prev,
-									);
-								}}
-							>
-								{expanded ? (
-									<FiChevronDown />
-								) : (
-									<FiChevronRight />
+									/>
 								)}
-							</IconButton>
-						)}
+							</HStack>
+
+							{hasOnlyDefaultProfile ? (
+								<Tooltip.Root
+									openDelay={400}
+									positioning={{ placement: "right" }}
+								>
+									<Tooltip.Trigger asChild>
+										<IconButton
+											as="span"
+											variant="ghost"
+											size="2xs"
+											flexShrink={0}
+											opacity="0"
+											_groupHover={{ opacity: 1 }}
+											onClick={(e) => {
+												e.preventDefault();
+												e.stopPropagation();
+												createProfileDialog.onOpen();
+											}}
+										>
+											<FiPlus />
+										</IconButton>
+									</Tooltip.Trigger>
+									<Portal>
+										<Tooltip.Positioner>
+											<Tooltip.Content>
+												创建 git worktree
+											</Tooltip.Content>
+										</Tooltip.Positioner>
+									</Portal>
+								</Tooltip.Root>
+							) : (
+								<IconButton
+									as="span"
+									variant="ghost"
+									size="2xs"
+									flexShrink={0}
+									onClick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										setUserExpanded((prev) =>
+											prev === null ? !expanded : !prev,
+										);
+									}}
+								>
+									{expanded ? (
+										<FiChevronDown />
+									) : (
+										<FiChevronRight />
+									)}
+								</IconButton>
+							)}
+						</NavLink>
 					</HStack>
 				</Menu.ContextTrigger>
 				<Portal>
