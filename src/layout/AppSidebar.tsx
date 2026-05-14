@@ -1,14 +1,15 @@
 import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
 import { LayoutGroup } from "motion/react";
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { FiFolder, FiHome, FiPlus, FiSettings } from "react-icons/fi";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
-import { useProjects } from "@/features/projects/hooks";
+import { useProjectGroups, useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
+import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 import {
 	APP_SIDEBAR_MAX_WIDTH,
@@ -22,6 +23,7 @@ function isMacPlatform() {
 
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
+	const { data: projectGroups } = useProjectGroups();
 	const createDialog = useDialogState();
 	const navRef = useRef<HTMLElement>(null);
 	const sidebarWidth = useAppSidebarStore((s) => s.width);
@@ -32,6 +34,32 @@ export default function AppSidebar() {
 		max: APP_SIDEBAR_MAX_WIDTH,
 		onChange: setSidebarWidth,
 	});
+	const groupedProjects = useMemo(() => {
+		const knownGroupIds = new Set(projectGroups.map((group) => group.id));
+		const projectsByGroup = new Map(
+			projectGroups.map((group) => [group.id, [] as typeof projects]),
+		);
+		const ungroupedProjects: typeof projects = [];
+
+		for (const project of projects) {
+			const groupId = project.group_id ?? null;
+			if (groupId && knownGroupIds.has(groupId)) {
+				projectsByGroup.get(groupId)?.push(project);
+			} else {
+				ungroupedProjects.push(project);
+			}
+		}
+
+		return {
+			groups: projectGroups
+				.map((group) => ({
+					group,
+					projects: projectsByGroup.get(group.id) ?? [],
+				}))
+				.filter((group) => group.projects.length > 0),
+			ungroupedProjects,
+		};
+	}, [projectGroups, projects]);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
 		if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -44,7 +72,9 @@ export default function AppSidebar() {
 		);
 		if (items.length === 0) return;
 
-		const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+		const currentIndex = items.indexOf(
+			document.activeElement as HTMLElement,
+		);
 
 		let nextIndex: number;
 		if (e.key === "ArrowDown") {
@@ -69,35 +99,53 @@ export default function AppSidebar() {
 				aria-label={m.sideNavLabel()}
 				w="var(--sidebar-width)"
 				h="full"
+				minH="0"
 				flexShrink={0}
 				position="relative"
 				bg="bg.subtle"
 				onKeyDown={handleKeyDown}
 			>
-				<Box h="full" overflowY="auto" overflowX="hidden">
-					<LayoutGroup id="app-sidebar">
-						<Flex direction="column" h="full" w="full" minW="0" pb="3">
-							<Flex
-								data-tauri-drag-region
-								h={isMacPlatform() ? "80px" : "52px"}
-								flexShrink={0}
-								align="center"
-								justify="start"
-								paddingInline="4"
-								pt={isMacPlatform() ? "8" : "2"}
+				<LayoutGroup id="app-sidebar">
+					<Flex direction="column" h="full" minH="0" w="full">
+						<Flex
+							data-tauri-drag-region
+							h={isMacPlatform() ? "80px" : "52px"}
+							flexShrink={0}
+							align="center"
+							justify="start"
+							paddingInline="4"
+							pt={isMacPlatform() ? "8" : "2"}
+						>
+							<Text
+								fontFamily="'Bricolage Grotesque Variable', sans-serif"
+								fontWeight="700"
+								color="fg.muted"
+								letterSpacing="tight"
+								userSelect="none"
+								pointerEvents="none"
+								whiteSpace="nowrap"
 							>
-								<Text
-									fontFamily="'Bricolage Grotesque Variable', sans-serif"
-									fontWeight="700"
-									color="fg.muted"
-									letterSpacing="tight"
-									userSelect="none"
-									pointerEvents="none"
-									whiteSpace="nowrap"
-								>
-									2Code
-								</Text>
-							</Flex>
+								2Code
+							</Text>
+						</Flex>
+						<Box
+							flex="1"
+							minH="0"
+							overflowY="scroll"
+							overflowX="hidden"
+							css={{ scrollbarGutter: "stable" }}
+						>
+							<Flex
+								direction="column"
+								minH="full"
+								w="full"
+								minW="0"
+								css={{
+									"& > *": {
+										flexShrink: 0,
+									},
+								}}
+							>
 							{projects.length === 0 && (
 								<SidebarLink
 									to="/"
@@ -112,14 +160,29 @@ export default function AppSidebar() {
 								px="4"
 								pt="2"
 								pb="2"
-								justify="space-between"
+								gap="1"
 								w="full"
 								minW="0"
+								userSelect="none"
 							>
 								<HStack gap="2" flex="1 1 auto" minW="0">
-									<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
-										<FiFolder />
-									</Icon>
+									<Box
+										w="5"
+										h="5"
+										ml="-0.5"
+										display="grid"
+										placeItems="center"
+										flexShrink={0}
+										aria-hidden="true"
+									>
+										<Icon
+											fontSize="sm"
+											color="fg.muted"
+											flexShrink={0}
+										>
+											<FiFolder />
+										</Icon>
+									</Box>
 									<Text
 										fontSize="xs"
 										fontWeight="semibold"
@@ -143,18 +206,35 @@ export default function AppSidebar() {
 								</IconButton>
 							</HStack>
 
-							{projects.map((project) => (
-								<ProjectMenuItem key={project.id} project={project} />
-							))}
+							{groupedProjects.groups.map(
+								({ group, projects }) => (
+									<ProjectGroupSection
+										key={group.id}
+										group={group}
+										projectGroups={projectGroups}
+										projects={projects}
+									/>
+								),
+							)}
 
-							<Box flex="1" />
-
+							{groupedProjects.ungroupedProjects.map(
+								(project) => (
+									<ProjectMenuItem
+										key={project.id}
+										project={project}
+										projectGroups={projectGroups}
+									/>
+								),
+							)}
+							</Flex>
+						</Box>
+						<Box flexShrink={0} pb="3">
 							<SidebarLink to="/settings" icon={<FiSettings />}>
 								{m.settings()}
 							</SidebarLink>
-						</Flex>
-					</LayoutGroup>
-				</Box>
+						</Box>
+					</Flex>
+				</LayoutGroup>
 				<Box
 					role="separator"
 					aria-label="Resize sidebar"
@@ -173,7 +253,7 @@ export default function AppSidebar() {
 					onPointerDown={resize.handlePointerDown}
 					onKeyDown={resize.handleKeyDown}
 					_before={{
-						content: "\"\"",
+						content: '""',
 						position: "absolute",
 						top: 0,
 						bottom: 0,

@@ -16,6 +16,7 @@ import { useFileSearch } from "./hooks";
 
 interface CommandPaletteProps {
 	profileId: string;
+	isActive: boolean;
 }
 
 function getParentPathLabel(result: FileSearchResult) {
@@ -57,24 +58,28 @@ function CommandPaletteStatusMessage({ children }: { children: ReactNode }) {
 	);
 }
 
-export default function CommandPalette({ profileId }: CommandPaletteProps) {
+export default function CommandPalette({
+	profileId,
+	isActive,
+}: CommandPaletteProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const deferredSearch = useDeferredValue(search.trim());
+	const isPaletteOpen = isActive && isOpen;
 	const openFile = useFileViewerTabsStore((state) => state.openFile);
 	const {
 		data: results = [],
 		error,
 		isError,
 		isFetching,
-	} = useFileSearch(profileId, deferredSearch, isOpen);
+	} = useFileSearch(profileId, deferredSearch, isPaletteOpen);
 	const shouldShowErrorState = isError && results.length === 0;
 	const shouldShowEmptyState =
 		results.length === 0 && (deferredSearch.length === 0 || !isFetching);
 
 	useEffect(() => {
-		if (!profileId) return;
+		if (!profileId || !isActive) return;
 
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.repeat || event.altKey || event.shiftKey) return;
@@ -82,15 +87,16 @@ export default function CommandPalette({ profileId }: CommandPaletteProps) {
 			if (event.key.toLowerCase() !== "k") return;
 
 			event.preventDefault();
+			event.stopPropagation();
 			setIsOpen(true);
 		};
 
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, [profileId]);
+		window.addEventListener("keydown", handleKeyDown, true);
+		return () => window.removeEventListener("keydown", handleKeyDown, true);
+	}, [isActive, profileId]);
 
 	useEffect(() => {
-		if (!isOpen) return;
+		if (!isPaletteOpen) return;
 
 		const frameId = window.requestAnimationFrame(() => {
 			inputRef.current?.focus();
@@ -98,7 +104,7 @@ export default function CommandPalette({ profileId }: CommandPaletteProps) {
 		});
 
 		return () => window.cancelAnimationFrame(frameId);
-	}, [isOpen]);
+	}, [isPaletteOpen]);
 
 	function closePalette() {
 		setIsOpen(false);
@@ -112,7 +118,7 @@ export default function CommandPalette({ profileId }: CommandPaletteProps) {
 
 	return (
 		<Command.Dialog
-			open={isOpen}
+			open={isPaletteOpen}
 			onOpenChange={(open) => {
 				if (!open) closePalette();
 			}}
@@ -176,6 +182,7 @@ export default function CommandPalette({ profileId }: CommandPaletteProps) {
 						<Box
 							key={result.path}
 							asChild
+							userSelect="none"
 							display="flex"
 							alignItems="center"
 							gap="2"

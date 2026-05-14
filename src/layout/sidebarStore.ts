@@ -14,19 +14,37 @@ export function clampAppSidebarWidth(width: number) {
 
 interface AppSidebarStore {
 	width: number;
+	collapsedProjectGroupIds: string[];
 	setWidth: (width: number) => void;
+	toggleProjectGroup: (groupId: string) => void;
 }
 
 export const useAppSidebarStore = create<AppSidebarStore>()(
 	persist(
 		(set) => ({
 			width: APP_SIDEBAR_DEFAULT_WIDTH,
+			collapsedProjectGroupIds: [],
 			setWidth: (width) => set({ width: clampAppSidebarWidth(width) }),
+			toggleProjectGroup: (groupId) =>
+				set((state) => {
+					const collapsed =
+						state.collapsedProjectGroupIds.includes(groupId);
+					return {
+						collapsedProjectGroupIds: collapsed
+							? state.collapsedProjectGroupIds.filter(
+									(id) => id !== groupId,
+								)
+							: [...state.collapsedProjectGroupIds, groupId],
+					};
+				}),
 		}),
 		{
 			name: "app-sidebar-width",
 			version: 1,
-			partialize: (state) => ({ width: state.width }),
+			partialize: (state) => ({
+				width: state.width,
+				collapsedProjectGroupIds: state.collapsedProjectGroupIds,
+			}),
 		},
 	),
 );

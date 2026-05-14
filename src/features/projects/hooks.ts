@@ -6,15 +6,27 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import {
+	getCachedProjectAvatar,
+	setCachedProjectAvatar,
+} from "@/features/projects/projectAvatarCache";
+import type {
+	ProjectConfig,
+	ProjectGroup,
+	ProjectWithProfiles,
+} from "@/generated";
+import {
+	assignProjectToGroup,
 	createProjectFromFolder,
+	createProjectGroup,
 	deleteFileTreePaths,
 	deleteProject,
-	getGitBranch,
 	getFileTreeGitStatus,
-	getProjectGithubAvatar,
+	getGitBranch,
 	getProjectConfig,
+	getProjectGithubAvatar,
 	listFileTreeChildPaths,
 	listFileTreePaths,
+	listProjectGroups,
 	listProjects,
 	moveFileTreePaths,
 	readFileContent,
@@ -24,11 +36,6 @@ import {
 	updateProject,
 	writeFileContent,
 } from "@/generated";
-import type { ProjectConfig, ProjectWithProfiles } from "@/generated";
-import {
-	getCachedProjectAvatar,
-	setCachedProjectAvatar,
-} from "@/features/projects/projectAvatarCache";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
@@ -40,6 +47,13 @@ export function useProjects() {
 	return useSuspenseQuery({
 		queryKey: queryKeys.projects.all,
 		queryFn: listProjects,
+	});
+}
+
+export function useProjectGroups() {
+	return useSuspenseQuery({
+		queryKey: queryKeys.projectGroups.all,
+		queryFn: listProjectGroups,
 	});
 }
 
@@ -78,9 +92,10 @@ export function useProjectAvatar(
 		},
 		enabled,
 		initialData: shouldCacheFallback ? cachedAvatar : undefined,
-		staleTime: shouldCacheFallback && cachedAvatar !== null
-			? Number.POSITIVE_INFINITY
-			: 0,
+		staleTime:
+			shouldCacheFallback && cachedAvatar !== null
+				? Number.POSITIVE_INFINITY
+				: 0,
 		gcTime: Number.POSITIVE_INFINITY,
 		refetchOnWindowFocus: false,
 	});
@@ -105,11 +120,15 @@ export function useCreateProject(options?: {
 				folder: opts.folder,
 			}),
 		onSuccess: async (project) => {
-			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+			await queryClient.invalidateQueries({
+				queryKey: queryKeys.projects.all,
+			});
 			const projects = queryClient.getQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 			);
-			const createdProject = projects?.find((item) => item.id === project.id);
+			const createdProject = projects?.find(
+				(item) => item.id === project.id,
+			);
 			if (createdProject) {
 				options?.onSuccess?.(createdProject);
 			}
@@ -124,6 +143,62 @@ export function useRenameProject() {
 			updateProject({ id, name }),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+		},
+	});
+}
+
+export function useCreateProjectGroup() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (name: string) => createProjectGroup({ name }),
+		onSuccess: (group) => {
+			queryClient.setQueryData<ProjectGroup[]>(
+				queryKeys.projectGroups.all,
+				(groups) => {
+					if (!groups) return [group];
+					if (groups.some((item) => item.id === group.id)) {
+						return groups.map((item) =>
+							item.id === group.id ? group : item,
+						);
+					}
+					return [...groups, group];
+				},
+			);
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.projectGroups.all,
+			});
+		},
+	});
+}
+
+export function useAssignProjectToGroup() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			projectId,
+			groupId,
+		}: {
+			projectId: string;
+			groupId: string | null;
+		}) => assignProjectToGroup({ projectId, groupId }),
+		onSuccess: async (project) => {
+			queryClient.setQueryData<ProjectWithProfiles[]>(
+				queryKeys.projects.all,
+				(projects) =>
+					projects?.map((item) =>
+						item.id === project.id
+							? { ...item, group_id: project.group_id ?? null }
+							: item,
+					),
+			);
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projects.all,
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projectGroups.all,
+				}),
+			]);
 		},
 	});
 }
@@ -171,14 +246,22 @@ export function useDeleteProject(options?: {
 		mutationFn: (id: string) => deleteProject({ id }),
 		onSuccess: async (_result, id) => {
 			const projectsBeforeDelete =
-				queryClient.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all)
-				?? [];
+				queryClient.getQueryData<ProjectWithProfiles[]>(
+					queryKeys.projects.all,
+				) ?? [];
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) => projects?.filter((project) => project.id !== id),
 			);
 			await options?.onSuccess?.(id, projectsBeforeDelete);
-			await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projects.all,
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projectGroups.all,
+				}),
+			]);
 		},
 	});
 }
@@ -346,7 +429,9 @@ export function useSaveFileContent(profileId: string) {
 		onSuccess: async (_result, { path, content }) => {
 			queryClient.setQueryData(queryKeys.fs.file(path), content);
 			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: queryKeys.fs.file(path) }),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.file(path),
+				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),
 				}),

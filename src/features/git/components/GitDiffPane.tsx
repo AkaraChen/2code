@@ -105,6 +105,60 @@ function LargeDiffGuardrail({
 	);
 }
 
+function RenamePathRow({
+	label,
+	path,
+}: {
+	label: string;
+	path: string;
+}) {
+	return (
+		<Flex
+			gap="4"
+			align="baseline"
+			py="2"
+			borderBottomWidth="1px"
+			borderColor="border.subtle"
+			_last={{ borderBottomWidth: "0" }}
+		>
+			<Text
+				flexShrink={0}
+				w="7rem"
+				fontSize="xs"
+				color="fg.muted"
+				textTransform="uppercase"
+			>
+				{label}
+			</Text>
+			<Text
+				minW="0"
+				fontSize="sm"
+				fontFamily="mono"
+				overflowWrap="anywhere"
+			>
+				{path}
+			</Text>
+		</Flex>
+	);
+}
+
+function RenameOnlyDiff({ file }: { file: FileDiffMetadata }) {
+	const previousPath = file.prevName ?? file.name;
+
+	return (
+		<Box data-testid="git-rename-only-diff" p="4">
+			<RenamePathRow
+				label={m.gitDiffRenamePreviousPath()}
+				path={previousPath}
+			/>
+			<RenamePathRow
+				label={m.gitDiffRenameCurrentPath()}
+				path={file.name}
+			/>
+		</Box>
+	);
+}
+
 function ActiveGitDiffFilePane({
 	activeFile,
 	options,
@@ -129,6 +183,7 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		isLargeGitDiffFile(activeFile) &&
 		!isLargeDiffExpanded;
+	const showRenameOnlyDiff = activeFile.type === "rename-pure";
 
 	return (
 		<>
@@ -139,6 +194,8 @@ function ActiveGitDiffFilePane({
 			/>
 			{showBinaryPreview && previewContext ? (
 				<BinaryImageDiffPreview file={activeFile} previewContext={previewContext} />
+			) : showRenameOnlyDiff ? (
+				<RenameOnlyDiff file={activeFile} />
 			) : showLargeDiffGuardrail ? (
 				<LargeDiffGuardrail
 					changedLineCount={changedLineCount}

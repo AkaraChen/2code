@@ -4,7 +4,23 @@ Desktop software for vibe coding.
 
 2code is a desktop workstation where terminals, AI coding agents, Git, and worktree-based project lanes live together. It is built for developers who want to stay inside one calm coding workspace instead of spreading a session across terminal windows, Git tools, editors, and agent panes.
 
-> 2code is still early and under active construction. The current focus is macOS-first polish; Windows and Linux support are planned after the core workstation experience is solid.
+> 2code is still early and under active construction. macOS is the primary supported platform; Windows and Linux builds are still experimental.
+
+## Install 2code
+
+### macOS
+
+```bash
+brew install --cask akarachen/tap/2code
+```
+
+If you install from the DMG and macOS blocks opening the app, move `2code.app` to Applications and remove the quarantine attribute:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/2code.app
+```
+
+Windows and Linux support is still experimental.
 
 ## Why 2code
 
@@ -42,7 +58,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - Tauri 2 development prerequisites
 - `just` for helper commands
 
-### Install
+### Install dependencies
 
 ```bash
 bun install

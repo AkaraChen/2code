@@ -32,6 +32,7 @@ pub struct Project {
 	pub name: String,
 	pub folder: String,
 	pub created_at: String,
+	pub group_id: Option<String>,
 }
 
 #[derive(Insertable)]
@@ -40,6 +41,7 @@ pub struct NewProject<'a> {
 	pub id: &'a str,
 	pub name: &'a str,
 	pub folder: &'a str,
+	pub group_id: Option<&'a str>,
 }
 
 #[derive(AsChangeset)]
@@ -55,6 +57,7 @@ pub struct ProjectWithProfiles {
 	pub name: String,
 	pub folder: String,
 	pub created_at: String,
+	pub group_id: Option<String>,
 	pub profiles: Vec<Profile>,
 }
 

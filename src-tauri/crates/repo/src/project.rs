@@ -14,7 +14,12 @@ pub fn insert(
 	folder: &str,
 ) -> Result<Project, AppError> {
 	diesel::insert_into(projects::table)
-		.values(&NewProject { id, name, folder })
+		.values(&NewProject {
+			id,
+			name,
+			folder,
+			group_id: None,
+		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 	projects::table
@@ -72,6 +77,7 @@ pub fn list_all_with_profiles(
 				name: project.name,
 				folder: project.folder,
 				created_at: project.created_at,
+				group_id: project.group_id,
 				profiles,
 			}
 		})
@@ -121,13 +127,34 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+pub fn set_group(
+	conn: &mut SqliteConnection,
+	id: &str,
+	group_id: Option<&str>,
+) -> Result<Project, AppError> {
+	let target = projects::table.find(id);
+	let rows = diesel::update(target)
+		.set(projects::group_id.eq(group_id))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if rows == 0 {
+		return Err(AppError::NotFound(format!("Project: {id}")));
+	}
+
+	target
+		.select(Project::as_select())
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::test_utils::setup_db;
 	use model::profile::NewProfile;
 	use model::pty::NewPtySessionRecord;
-	use model::schema::{profiles, pty_sessions};
+	use model::schema::{profiles, project_groups, pty_sessions};
 
 	#[test]
 	fn insert_and_fetch() {
@@ -137,6 +164,7 @@ mod tests {
 		assert_eq!(project.id, "p1");
 		assert_eq!(project.name, "Test");
 		assert_eq!(project.folder, "/tmp/test");
+		assert_eq!(project.group_id, None);
 	}
 
 	#[test]
@@ -218,6 +246,46 @@ mod tests {
 		let mut conn = setup_db();
 		let result = delete(&mut conn, "nope");
 		assert!(result.is_err());
+	}
+
+	#[test]
+	fn set_group_assigns_and_clears_project_group() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Project", "/p").unwrap();
+		diesel::insert_into(project_groups::table)
+			.values((
+				project_groups::id.eq("g1"),
+				project_groups::name.eq("Work"),
+			))
+			.execute(&mut conn)
+			.unwrap();
+
+		let assigned = set_group(&mut conn, "p1", Some("g1")).unwrap();
+		assert_eq!(assigned.group_id.as_deref(), Some("g1"));
+
+		let cleared = set_group(&mut conn, "p1", None).unwrap();
+		assert_eq!(cleared.group_id, None);
+	}
+
+	#[test]
+	fn deleting_group_clears_project_group_id() {
+		let mut conn = setup_db();
+		insert(&mut conn, "p1", "Project", "/p").unwrap();
+		diesel::insert_into(project_groups::table)
+			.values((
+				project_groups::id.eq("g1"),
+				project_groups::name.eq("Work"),
+			))
+			.execute(&mut conn)
+			.unwrap();
+
+		set_group(&mut conn, "p1", Some("g1")).unwrap();
+		diesel::delete(project_groups::table.find("g1"))
+			.execute(&mut conn)
+			.unwrap();
+
+		let project = find_by_id(&mut conn, "p1").unwrap();
+		assert_eq!(project.group_id, None);
 	}
 
 	#[test]

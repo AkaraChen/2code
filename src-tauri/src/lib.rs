@@ -58,6 +58,22 @@ pub fn run() {
 			service::pty::mark_all_closed(&pool);
 			tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
 
+			match pool.lock() {
+				Ok(mut conn) => {
+					match service::project::cleanup_empty_groups(&mut conn) {
+						Ok(count) => {
+							tracing::info!(target: "project", count, "startup: deleted empty project groups");
+						}
+						Err(err) => {
+							tracing::warn!(target: "project", %err, "startup: failed to delete empty project groups");
+						}
+					}
+				}
+				Err(_) => {
+					tracing::warn!(target: "project", "startup: failed to acquire database lock for empty project group cleanup");
+				}
+			}
+
 			app.manage(pool);
 
 			// Start helper HTTP server (for CLI sidecar communication)
@@ -81,6 +97,9 @@ pub fn run() {
 			handler::project::list_projects,
 			handler::project::update_project,
 			handler::project::delete_project,
+			handler::project::create_project_group,
+			handler::project::list_project_groups,
+			handler::project::assign_project_to_group,
 			handler::project::get_git_branch,
 			handler::project::get_git_diff,
 			handler::project::get_git_diff_stats,

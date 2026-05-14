@@ -29,6 +29,7 @@ export function ProfileItem({
 					<HStack
 						asChild
 						data-sidebar-item
+						userSelect="none"
 						gap="2"
 						w="full"
 						minW="0"

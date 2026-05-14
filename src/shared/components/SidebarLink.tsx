@@ -21,6 +21,7 @@ export function SidebarLink({
 		<HStack
 			asChild
 			data-sidebar-item
+			userSelect="none"
 			gap="3"
 			w="full"
 			minW="max-content"

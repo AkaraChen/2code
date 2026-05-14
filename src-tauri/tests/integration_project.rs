@@ -300,6 +300,141 @@ fn delete_nonexistent_returns_error() {
 }
 
 // ============================================================
+// Project Groups (automatic cleanup)
+// ============================================================
+
+#[test]
+fn moving_last_project_out_of_group_deletes_group() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let group = service::project::create_group(&mut conn, "Work").unwrap();
+
+	service::project::assign_to_group(
+		&mut conn,
+		&project.id,
+		Some(group.id.clone()),
+	)
+	.unwrap();
+	assert_eq!(service::project::list_groups(&mut conn).unwrap().len(), 1);
+
+	let updated =
+		service::project::assign_to_group(&mut conn, &project.id, None)
+			.unwrap();
+	assert_eq!(updated.group_id, None);
+	assert!(service::project::list_groups(&mut conn).unwrap().is_empty());
+
+	cleanup(&dir);
+}
+
+#[test]
+fn moving_project_between_groups_deletes_empty_previous_group() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let work = service::project::create_group(&mut conn, "Work").unwrap();
+	let personal =
+		service::project::create_group(&mut conn, "Personal").unwrap();
+
+	service::project::assign_to_group(
+		&mut conn,
+		&project.id,
+		Some(work.id.clone()),
+	)
+	.unwrap();
+	let updated = service::project::assign_to_group(
+		&mut conn,
+		&project.id,
+		Some(personal.id.clone()),
+	)
+	.unwrap();
+
+	assert_eq!(updated.group_id.as_deref(), Some(personal.id.as_str()));
+	let groups = service::project::list_groups(&mut conn).unwrap();
+	assert_eq!(groups.len(), 1);
+	assert_eq!(groups[0].id, personal.id);
+
+	cleanup(&dir);
+}
+
+#[test]
+fn deleting_last_project_in_group_deletes_group() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let group = service::project::create_group(&mut conn, "Work").unwrap();
+
+	service::project::assign_to_group(
+		&mut conn,
+		&project.id,
+		Some(group.id.clone()),
+	)
+	.unwrap();
+	service::project::delete(&mut conn, &project.id).unwrap();
+
+	assert!(service::project::list_groups(&mut conn).unwrap().is_empty());
+
+	cleanup(&dir);
+}
+
+#[test]
+fn moving_project_out_keeps_group_when_other_projects_remain() {
+	let mut conn = setup_db();
+	let (first, _first_default_profile, first_dir) =
+		create_project_with_git_repo(&mut conn);
+	let (second, _second_default_profile, second_dir) =
+		create_project_with_git_repo(&mut conn);
+	let group = service::project::create_group(&mut conn, "Work").unwrap();
+
+	service::project::assign_to_group(
+		&mut conn,
+		&first.id,
+		Some(group.id.clone()),
+	)
+	.unwrap();
+	service::project::assign_to_group(
+		&mut conn,
+		&second.id,
+		Some(group.id.clone()),
+	)
+	.unwrap();
+	service::project::assign_to_group(&mut conn, &first.id, None).unwrap();
+
+	let groups = service::project::list_groups(&mut conn).unwrap();
+	assert_eq!(groups.len(), 1);
+	assert_eq!(groups[0].id, group.id);
+
+	cleanup(&first_dir);
+	cleanup(&second_dir);
+}
+
+#[test]
+fn startup_cleanup_deletes_existing_empty_groups() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let empty = service::project::create_group(&mut conn, "Empty").unwrap();
+	let used = service::project::create_group(&mut conn, "Used").unwrap();
+
+	service::project::assign_to_group(
+		&mut conn,
+		&project.id,
+		Some(used.id.clone()),
+	)
+	.unwrap();
+	let deleted_count = service::project::cleanup_empty_groups(&mut conn)
+		.expect("cleanup empty groups");
+
+	assert_eq!(deleted_count, 1);
+	let groups = service::project::list_groups(&mut conn).unwrap();
+	assert_eq!(groups.len(), 1);
+	assert_ne!(groups[0].id, empty.id);
+	assert_eq!(groups[0].id, used.id);
+
+	cleanup(&dir);
+}
+
+// ============================================================
 // Profile Creation (basic)
 // ============================================================
 

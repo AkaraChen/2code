@@ -1,6 +1,7 @@
 import { Box, Flex } from "@chakra-ui/react";
 import type { ReactNode } from "react";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
+import CommandPalette from "@/features/projects/CommandPalette";
 import FileTreePanel from "@/features/projects/FileTreePanel";
 import { useFileTreeStore } from "@/features/projects/fileTreeStore";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
@@ -27,6 +28,7 @@ export default function ProfileLayout({
 
 	return (
 		<Flex direction="column" h="full">
+			<CommandPalette profileId={profile.id} isActive={isActive} />
 			<Box borderBottomWidth="1px" borderColor="border">
 				<ProjectTopBar
 					projectId={projectId}

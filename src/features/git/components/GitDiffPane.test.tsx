@@ -23,6 +23,8 @@ vi.mock("@/paraglide/messages.js", async () => {
 		}) =>
 			`This file changes ${count} lines. Diffs with ${threshold} or more changed lines are hidden by default to keep the dialog responsive.`,
 		gitDiffLargeGuardrailReveal: () => "Load diff anyway",
+		gitDiffRenamePreviousPath: () => "Previous path",
+		gitDiffRenameCurrentPath: () => "Current path",
 	};
 });
 
@@ -59,6 +61,15 @@ function renderPane(activeFile: FileDiffMetadata) {
 			<GitDiffPane activeFile={activeFile} options={{}} emptyMessage="empty" />
 		</ChakraProvider>,
 	);
+}
+
+function makeRenameOnlyFile(): FileDiffMetadata {
+	return {
+		name: "src/new-name.ts",
+		prevName: "src/old-name.ts",
+		type: "rename-pure",
+		hunks: [],
+	} as unknown as FileDiffMetadata;
 }
 
 describe("gitDiffPane large diff guardrail", () => {
@@ -106,5 +117,18 @@ describe("gitDiffPane large diff guardrail", () => {
 		expect(screen.getByTestId("mock-file-diff")).toHaveTextContent(
 			"src/small.ts",
 		);
+	});
+});
+
+describe("gitDiffPane rename display", () => {
+	it("shows only previous and current paths for pure renames", () => {
+		renderPane(makeRenameOnlyFile());
+
+		expect(screen.getByTestId("git-rename-only-diff")).toBeInTheDocument();
+		expect(screen.getByText("Previous path")).toBeInTheDocument();
+		expect(screen.getByText("src/old-name.ts")).toBeInTheDocument();
+		expect(screen.getByText("Current path")).toBeInTheDocument();
+		expect(screen.getByText("src/new-name.ts")).toBeInTheDocument();
+		expect(screen.queryByTestId("mock-file-diff")).not.toBeInTheDocument();
 	});
 });

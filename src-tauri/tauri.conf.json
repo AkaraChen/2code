@@ -11,7 +11,7 @@
         "height": 900,
         "hiddenTitle": true,
         "maximizable": true,
-        "title": "code",
+        "title": "2code",
         "titleBarStyle": "Overlay",
         "trafficLightPosition": {
           "x": 16,
@@ -40,6 +40,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "macOS": {
+      "bundleName": "2code"
+    },
     "targets": "all"
   },
   "identifier": "com.akrc.code",
@@ -63,6 +66,6 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEMEQxQzM3OTAwNjM5NDEKUldSQk9RYVFOeHdOWGM5ZVBkbm9yYXBENmFsVFR2UFJLdjJHenRQZEJjblpYUzduVUtuUk41Y0cK"
     }
   },
-  "productName": "two-code",
-  "version": "2.0.0-beta1"
+  "productName": "2code",
+  "version": "2.0.0"
 }

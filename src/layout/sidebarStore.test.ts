@@ -7,7 +7,10 @@ import {
 } from "./sidebarStore";
 
 function resetStore() {
-	useAppSidebarStore.setState({ width: APP_SIDEBAR_DEFAULT_WIDTH });
+	useAppSidebarStore.setState({
+		width: APP_SIDEBAR_DEFAULT_WIDTH,
+		collapsedProjectGroupIds: [],
+	});
 	localStorage.clear();
 }
 
@@ -37,5 +40,13 @@ describe("useAppSidebarStore", () => {
 		expect(
 			document.documentElement.style.getPropertyValue("--sidebar-width"),
 		).toBe("320px");
+	});
+
+	it("toggles collapsed project groups", () => {
+		getState().toggleProjectGroup("group-1");
+		expect(getState().collapsedProjectGroupIds).toEqual(["group-1"]);
+
+		getState().toggleProjectGroup("group-1");
+		expect(getState().collapsedProjectGroupIds).toEqual([]);
 	});
 });

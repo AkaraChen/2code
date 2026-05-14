@@ -13,7 +13,6 @@ import {
 import { useMemo } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
-import CommandPalette from "@/features/projects/CommandPalette";
 import ProfileLayout from "@/features/projects/ProfileLayout";
 import {
 	useProject,
@@ -103,7 +102,6 @@ export default function ProjectDetailPage() {
 
 	return (
 		<>
-			<CommandPalette profileId={profile.id} />
 			{shouldRenderEmptyState ? (
 				<ProfileLayout
 					projectId={project.id}

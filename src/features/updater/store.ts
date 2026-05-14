@@ -27,8 +27,6 @@ interface UpdaterStore {
 	status: UpdaterStatus;
 	update: AvailableUpdateInfo | null;
 	error: string | null;
-	downloaded: number;
-	contentLength: number | null;
 }
 
 let hasPendingUpdate = false;
@@ -39,8 +37,6 @@ export const useUpdaterStore = create<UpdaterStore>()(() => ({
 	status: "idle",
 	update: null,
 	error: null,
-	downloaded: 0,
-	contentLength: null,
 }));
 
 function getErrorMessage(error: unknown) {
@@ -51,29 +47,6 @@ function resolveChannel(acceptBeta?: boolean): UpdateChannel {
 	return acceptBeta ?? useUpdaterSettingsStore.getState().acceptBetaUpdates
 		? "beta"
 		: "stable";
-}
-
-function setDownloadProgress(
-	event: UpdateDownloadEvent,
-	state: { downloaded: number },
-) {
-	switch (event.event) {
-		case "Started":
-			useUpdaterStore.setState({
-				contentLength: event.content_length ?? null,
-				downloaded: 0,
-			});
-			break;
-		case "Progress":
-			state.downloaded += event.chunk_length;
-			useUpdaterStore.setState({ downloaded: state.downloaded });
-			break;
-		case "Finished":
-			useUpdaterStore.setState((current) => ({
-				downloaded: current.contentLength ?? current.downloaded,
-			}));
-			break;
-	}
 }
 
 export async function checkForUpdate(options: {
@@ -103,8 +76,6 @@ export async function checkForUpdate(options: {
 	useUpdaterStore.setState({
 		status: "checking",
 		error: null,
-		downloaded: 0,
-		contentLength: null,
 	});
 
 	const promise = checkUpdateCommand({ acceptBeta: channel === "beta" })
@@ -177,17 +148,11 @@ export async function downloadAndInstallUpdate() {
 		throw new Error(error);
 	}
 
-	const progressState = { downloaded: 0 };
 	const channel = new Channel<UpdateDownloadEvent>();
-	channel.onmessage = (event) => {
-		setDownloadProgress(event, progressState);
-	};
 
 	useUpdaterStore.setState({
 		status: "downloading",
 		error: null,
-		downloaded: 0,
-		contentLength: null,
 	});
 
 	try {

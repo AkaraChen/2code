@@ -127,6 +127,7 @@ mod tests {
 				id,
 				name: "Test Project",
 				folder,
+				group_id: None,
 			})
 			.execute(conn)
 			.expect("insert project");
