@@ -30,6 +30,7 @@ export function ProfileItem({
 						asChild
 						data-sidebar-item
 						userSelect="none"
+						align="center"
 						gap="2"
 						w="full"
 						minW="0"
@@ -58,6 +59,8 @@ export function ProfileItem({
 								displayValue={profile.branch_name}
 								tooltipValue={profile.branch_name}
 								fontSize="sm"
+								lineHeight="1.25rem"
+								visualOffsetY="1px"
 								flex="1 1 auto"
 								minW="0"
 							/>
@@ -65,6 +68,7 @@ export function ProfileItem({
 								<Circle
 									size="2"
 									bg="green.500"
+									alignSelf="center"
 									flexShrink={0}
 								/>
 							)}

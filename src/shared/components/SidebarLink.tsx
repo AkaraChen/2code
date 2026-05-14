@@ -22,6 +22,7 @@ export function SidebarLink({
 			asChild
 			data-sidebar-item
 			userSelect="none"
+			align="center"
 			gap="3"
 			w="full"
 			minW="max-content"
@@ -38,7 +39,13 @@ export function SidebarLink({
 				<Icon fontSize="md" flexShrink={0}>
 					{icon}
 				</Icon>
-				<Box as="span" whiteSpace="nowrap" flexShrink={0}>
+				<Box
+					as="span"
+					whiteSpace="nowrap"
+					lineHeight="1.25rem"
+					transform="translateY(1px)"
+					flexShrink={0}
+				>
 					{children}
 				</Box>
 			</NavLink>
