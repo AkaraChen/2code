@@ -64,7 +64,7 @@ pub fn create_session(
 		})
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
-	let mut cmd = CommandBuilder::new(shell);
+	let mut cmd = command_builder(shell);
 	cmd.env("TERM", "xterm-256color");
 
 	// Inject helper env vars for CLI sidecar communication
@@ -118,6 +118,19 @@ pub fn create_session(
 	drop(pair.slave);
 
 	Ok(reader)
+}
+
+fn command_builder(shell: &str) -> CommandBuilder {
+	let mut parts = shell.split_whitespace();
+	if let Some(program) = parts.next() {
+		let mut command = CommandBuilder::new(program);
+		for arg in parts {
+			command.arg(arg);
+		}
+		return command;
+	}
+
+	CommandBuilder::new(shell)
 }
 
 pub fn write_to_pty(

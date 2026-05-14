@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_TERMINAL_SHELL } from "@/features/terminal/templates";
 import {
 	MAX_TERMINAL_FONT_SIZE,
 	MIN_TERMINAL_FONT_SIZE,
@@ -9,6 +10,7 @@ function resetStore() {
 	useTerminalSettingsStore.setState({
 		fontFamily: "JetBrains Mono",
 		fontSize: 13,
+		defaultShell: DEFAULT_TERMINAL_SHELL,
 		showAllFonts: false,
 		darkTerminalTheme: "github-dark",
 		lightTerminalTheme: "github-light",
@@ -35,6 +37,10 @@ describe("useTerminalSettingsStore", () => {
 
 		it("showAllFonts defaults to false", () => {
 			expect(getState().showAllFonts).toBe(false);
+		});
+
+		it("defaultShell defaults to the platform default", () => {
+			expect(getState().defaultShell).toBe(DEFAULT_TERMINAL_SHELL);
 		});
 
 		it("darkTerminalTheme defaults to 'github-dark'", () => {
@@ -118,6 +124,13 @@ describe("useTerminalSettingsStore", () => {
 		it("updates showAllFonts", () => {
 			getState().setShowAllFonts(true);
 			expect(getState().showAllFonts).toBe(true);
+		});
+	});
+
+	describe("setDefaultShell", () => {
+		it("updates defaultShell", () => {
+			getState().setDefaultShell("/usr/bin/fish");
+			expect(getState().defaultShell).toBe("/usr/bin/fish");
 		});
 	});
 

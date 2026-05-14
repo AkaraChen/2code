@@ -18,6 +18,22 @@ impl service::PtyEventEmitter for TestPtyEmitter {
 	fn emit_exit(&self, _session_id: &str) {}
 }
 
+fn test_shell() -> String {
+	if cfg!(windows) {
+		"powershell.exe -NoLogo -NoProfile -NonInteractive".to_string()
+	} else {
+		"/bin/sh".to_string()
+	}
+}
+
+fn startup_commands() -> Vec<String> {
+	if cfg!(windows) {
+		vec!["Write-Output tmpl-ok".to_string(), "exit".to_string()]
+	} else {
+		vec!["printf 'tmpl-ok\\n'".to_string(), "exit".to_string()]
+	}
+}
+
 /// Helper: insert a session record for a given profile.
 fn insert_session(
 	conn: &mut diesel::SqliteConnection,
@@ -444,27 +460,29 @@ fn create_session_executes_startup_commands() {
 			title: "Dev Server".to_string(),
 		},
 		&PtyConfig {
-			shell: "/bin/sh".to_string(),
+			shell: test_shell(),
 			cwd: default_profile.worktree_path.clone(),
 			rows: 24,
 			cols: 80,
-			startup_commands: vec![
-				"printf 'tmpl-ok\\n'".to_string(),
-				"exit".to_string(),
-			],
+			startup_commands: startup_commands(),
 		},
 	)
 	.unwrap();
 
+	std::thread::sleep(std::time::Duration::from_secs(2));
+	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 
 	let history = {
 		let mut db_conn = db.lock().unwrap();
 		service::pty::get_history(&mut db_conn, &session_id).unwrap()
 	};
-	assert!(String::from_utf8_lossy(&history).contains("tmpl-ok"));
+	let history_text = String::from_utf8_lossy(&history);
+	assert!(
+		history_text.contains("tmpl-ok"),
+		"history did not contain startup output: {history_text:?}",
+	);
 
-	infra::pty::close_all_sessions(&sessions);
 	cleanup(&dir);
 }
 

@@ -1,7 +1,17 @@
 use std::collections::VecDeque;
-use std::io::Read;
+use std::io::{Read, Write};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+
+fn default_test_shell() -> String {
+	std::env::var("SHELL").unwrap_or_else(|_| {
+		if cfg!(windows) {
+			"powershell.exe".to_string()
+		} else {
+			"/bin/sh".to_string()
+		}
+	})
+}
 
 #[test]
 fn create_session_with_defaults() {
@@ -15,8 +25,7 @@ fn create_session_with_defaults() {
 		})
 		.expect("Failed to open PTY");
 
-	let shell =
-		std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+	let shell = default_test_shell();
 	let cmd = CommandBuilder::new(&shell);
 	let mut child = pair
 		.slave
@@ -49,8 +58,7 @@ fn create_list_get_resize_delete_lifecycle() {
 			})
 			.expect("Failed to open PTY");
 
-		let shell =
-			std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+		let shell = default_test_shell();
 		let cmd = CommandBuilder::new(&shell);
 		let child = pair.slave.spawn_command(cmd).expect("Failed to spawn");
 		let id = uuid::Uuid::new_v4().to_string();
@@ -115,8 +123,23 @@ fn pty_read_write_roundtrip() {
 		})
 		.expect("Failed to open PTY");
 
-	let cmd = CommandBuilder::new("echo");
+	let mut cmd = if cfg!(windows) {
+		CommandBuilder::new("powershell.exe")
+	} else {
+		CommandBuilder::new("echo")
+	};
+	if cfg!(windows) {
+		cmd.arg("-NoProfile");
+		cmd.arg("-NonInteractive");
+		cmd.arg("-Command");
+		cmd.arg("Write-Output ''");
+	}
 	let mut child = pair.slave.spawn_command(cmd).expect("Failed to spawn");
+	if cfg!(windows) {
+		let mut writer = pair.master.take_writer().expect("take writer");
+		writer.write_all(b"\x1b[1;1R").expect("write CPR response");
+		writer.flush().expect("flush CPR response");
+	}
 
 	// Read some output
 	let mut reader = pair.master.try_clone_reader().expect("clone reader");

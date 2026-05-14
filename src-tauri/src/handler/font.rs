@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct SystemFont {
@@ -6,12 +7,18 @@ pub struct SystemFont {
 	pub is_mono: bool,
 }
 
+fn fonts_from_family_map(families: BTreeMap<String, bool>) -> Vec<SystemFont> {
+	families
+		.into_iter()
+		.map(|(family, is_mono)| SystemFont { family, is_mono })
+		.collect()
+}
+
 #[cfg(target_os = "macos")]
 fn load_system_fonts() -> Vec<SystemFont> {
 	use core_text::font::*;
 	use core_text::font_collection::create_for_all_families;
 	use core_text::font_descriptor::kCTFontMonoSpaceTrait;
-	use std::collections::BTreeMap;
 
 	let collection = create_for_all_families();
 	let descriptors = collection.get_descriptors();
@@ -37,13 +44,33 @@ fn load_system_fonts() -> Vec<SystemFont> {
 		}
 	}
 
-	families
-		.into_iter()
-		.map(|(family, is_mono)| SystemFont { family, is_mono })
-		.collect()
+	fonts_from_family_map(families)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+fn load_system_fonts() -> Vec<SystemFont> {
+	let mut db = fontdb::Database::new();
+	db.load_system_fonts();
+
+	let mut families = BTreeMap::new();
+	for face in db.faces() {
+		for (family, _) in &face.families {
+			let family = family.trim();
+			if family.is_empty() {
+				continue;
+			}
+
+			families
+				.entry(family.to_string())
+				.and_modify(|mono| *mono = *mono || face.monospaced)
+				.or_insert(face.monospaced);
+		}
+	}
+
+	fonts_from_family_map(families)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn load_system_fonts() -> Vec<SystemFont> {
 	Vec::new()
 }

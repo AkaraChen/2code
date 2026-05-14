@@ -8,6 +8,7 @@ import {
 	commandsToText,
 	createEmptyGlobalTerminalTemplateDraft,
 	createEmptyProjectTerminalTemplateDraft,
+	getDefaultTerminalShell,
 	normalizeGlobalTerminalTemplates,
 	normalizeProjectTerminalTemplates,
 	resolveGlobalTerminalTemplate,
@@ -30,6 +31,31 @@ describe("terminal templates", () => {
 		joinMock.mockClear();
 		vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
 			"00000000-0000-4000-8000-000000000000",
+		);
+	});
+
+	function mockNavigatorPlatform(platform: string, userAgent = "") {
+		vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+		vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+	}
+
+	it("uses bash as the default shell on Linux", () => {
+		mockNavigatorPlatform("Linux x86_64", "Mozilla/5.0 X11; Linux x86_64");
+
+		expect(getDefaultTerminalShell()).toBe("/bin/bash");
+	});
+
+	it("keeps zsh as the default shell on macOS", () => {
+		mockNavigatorPlatform("MacIntel", "Mozilla/5.0 Macintosh");
+
+		expect(getDefaultTerminalShell()).toBe("/bin/zsh");
+	});
+
+	it("keeps PowerShell as the default shell on Windows", () => {
+		mockNavigatorPlatform("Win32", "Mozilla/5.0 Windows NT 10.0");
+
+		expect(getDefaultTerminalShell()).toBe(
+			"powershell.exe -NoLogo -NoProfile",
 		);
 	});
 

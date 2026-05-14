@@ -315,8 +315,13 @@ pub fn create_session(
 	}
 
 	if !config.startup_commands.is_empty() {
-		let mut startup_commands = config.startup_commands.join("\n");
-		startup_commands.push('\n');
+		let line_ending = if cfg!(windows) { "\r" } else { "\n" };
+		let mut startup_commands = config.startup_commands.join(line_ending);
+		startup_commands.push_str(line_ending);
+		if cfg!(windows) {
+			startup_commands = format!("\x1b[1;1R{startup_commands}");
+			std::thread::sleep(Duration::from_secs(1));
+		}
 
 		if let Err(err) = session::write_to_pty(
 			&ctx.sessions,

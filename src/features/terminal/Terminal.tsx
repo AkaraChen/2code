@@ -14,6 +14,7 @@ import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSet
 import {
 	clearPtyOutput,
 	flushPtyOutput,
+	getPtySessionHistory,
 	resizePty,
 	writeToPty,
 } from "@/generated";
@@ -29,6 +30,16 @@ interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
+}
+
+function getSuffixPrefixOverlapLength(text: string, prefixSource: string) {
+	const maxLength = Math.min(text.length, prefixSource.length);
+	for (let length = maxLength; length > 0; length -= 1) {
+		if (text.endsWith(prefixSource.slice(0, length))) {
+			return length;
+		}
+	}
+	return 0;
 }
 
 export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
@@ -78,11 +89,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 					nextDimensions.rows !== term.rows)
 			) {
 				fitAddon.fit();
-				return;
-			}
-
-			if (term.rows > 0) {
-				term.refresh(0, term.rows - 1);
 			}
 		};
 
@@ -188,6 +194,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
 			consola.info(`[pty-terminal] mount sessionId=${sessionId}`);
 			let disposed = false;
+			isStreamReadyRef.current = false;
+			pendingEventsRef.current = [];
 
 			// 1. Create xterm (sync)
 			const term = new XTerm({
@@ -252,8 +260,39 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			// Resize PTY to match xterm dimensions
 			resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
-			// 2. Register listeners (before history write, but buffer events)
-			async function setupListeners() {
+			function flushPendingEventsAfterHistory(historyText: string) {
+				const pendingText = pendingEventsRef.current.join("");
+				const overlap = getSuffixPrefixOverlapLength(historyText, pendingText);
+				const remainingPendingText = pendingText.slice(overlap);
+
+				pendingEventsRef.current = [];
+				isStreamReadyRef.current = true;
+
+				if (remainingPendingText.length > 0) {
+					term.write(remainingPendingText);
+				}
+			}
+
+			function replayInitialHistory(history: Uint8Array) {
+				if (disposed) return;
+
+				if (history.length === 0) {
+					flushPendingEventsAfterHistory("");
+					return;
+				}
+
+				consola.info(
+					`[pty-terminal] replaying ${history.length} bytes of history for session ${sessionId}`,
+				);
+				const historyText = new TextDecoder().decode(history);
+				term.write(history, () => {
+					flushPendingEventsAfterHistory(historyText);
+				});
+			}
+
+			// 2. Register listeners before replaying history; live output is buffered
+			// until the initial DB snapshot has been written into xterm.
+			async function setupListenersAndReplayHistory() {
 				const unlistenOutput = await listen<string>(
 					`pty-output-${sessionId}`,
 					(event) => {
@@ -279,31 +318,28 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				consola.info(
 					`[pty-terminal] live listeners registered for session ${sessionId}`,
 				);
-			}
-			void setupListeners();
 
-			// 3. Write history from module-level Map
-			const history = sessionHistory.get(sessionId);
-			if (history && history.length > 0) {
-				consola.info(
-					`[pty-restore] writing ${history.length} bytes of history for session ${sessionId}`,
-				);
-				const renderDisposable = term.onRender(() => {
-					renderDisposable.dispose();
-					term.write(history, () => {
-						sessionHistory.delete(sessionId);
-						isStreamReadyRef.current = true;
-						for (const payload of pendingEventsRef.current) {
-							term.write(payload);
-						}
-						pendingEventsRef.current = [];
-					});
-				});
-			} else {
-				isStreamReadyRef.current = true;
-			}
+				const restoredHistory = sessionHistory.get(sessionId);
+				if (restoredHistory) {
+					sessionHistory.delete(sessionId);
+					replayInitialHistory(restoredHistory);
+					return;
+				}
 
-			// 4. Sync handlers
+				try {
+					const history = await getPtySessionHistory({ sessionId });
+					replayInitialHistory(new Uint8Array(history));
+				} catch (error) {
+					consola.warn(
+						`[pty-terminal] failed to load initial history for session ${sessionId}`,
+						error,
+					);
+					flushPendingEventsAfterHistory("");
+				}
+			}
+			void setupListenersAndReplayHistory();
+
+			// 3. Sync handlers
 			term.onData((data) => {
 				writeToPty({ sessionId, data });
 			});
@@ -331,7 +367,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			resizeObserver.observe(container);
 			unlisteners.push(() => resizeObserver.disconnect());
 
-			// 5. React 19 ref cleanup
+			// 4. React 19 ref cleanup
 			return () => {
 				consola.info(`[pty-terminal] unmount sessionId=${sessionId}`);
 				disposed = true;

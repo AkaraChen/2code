@@ -34,6 +34,8 @@ export default defineConfig(async () => ({
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     host: host || false,
+    port: 1420,
+    strictPort: true,
     hmr: host
       ? {
           protocol: "ws",

@@ -169,7 +169,14 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 
 	// Diff the temporary index (everything staged) against HEAD
 	let diff_output = Command::new("git")
-		.args(["diff", "--cached", "HEAD"])
+		.args([
+			"diff",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--cached",
+			"HEAD",
+		])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", &tmp_index)
 		.output()?;
@@ -211,7 +218,15 @@ pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	}
 
 	let diff_output = Command::new("git")
-		.args(["diff", "--cached", "--shortstat", "HEAD"])
+		.args([
+			"diff",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--cached",
+			"--shortstat",
+			"HEAD",
+		])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", &tmp_index)
 		.output()?;
@@ -323,7 +338,14 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	validate_commit_hash(commit_hash)?;
 
 	let output = Command::new("git")
-		.args(["show", "--format=", commit_hash])
+		.args([
+			"show",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--format=",
+			commit_hash,
+		])
 		.current_dir(folder)
 		.output()?;
 
@@ -561,7 +583,14 @@ pub fn commit_diff_stats(
 	}
 
 	let output = Command::new("git")
-		.args(["show", "--format=", "--shortstat"])
+		.args([
+			"show",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--format=",
+			"--shortstat",
+		])
 		.args(commits)
 		.current_dir(folder)
 		.output()?;
@@ -1870,6 +1899,22 @@ mod tests {
 			.unwrap();
 	}
 
+	fn force_color_output(dir: &std::path::Path) {
+		Command::new("git")
+			.args(["config", "color.ui", "always"])
+			.current_dir(dir)
+			.output()
+			.unwrap();
+	}
+
+	fn force_mnemonic_prefixes(dir: &std::path::Path) {
+		Command::new("git")
+			.args(["config", "diff.mnemonicPrefix", "true"])
+			.current_dir(dir)
+			.output()
+			.unwrap();
+	}
+
 	#[test]
 	fn branch_in_git_repo() {
 		let dir = create_temp_git_repo();
@@ -1962,6 +2007,54 @@ mod tests {
 	}
 
 	#[test]
+	fn show_returns_plain_patch_when_git_color_is_forced() {
+		let dir = create_temp_git_repo();
+		force_color_output(&dir);
+		add_commit(&dir, "hello.txt", "hello world", "Add hello");
+
+		let log_output = Command::new("git")
+			.args(["log", "-1", "--format=%H"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		let hash = String::from_utf8_lossy(&log_output.stdout)
+			.trim()
+			.to_string();
+
+		let patch = show(&dir.to_string_lossy(), &hash).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(patch.starts_with("diff --git"));
+		assert!(!patch.contains("\x1b["));
+		assert!(patch.contains("+hello world"));
+	}
+
+	#[test]
+	fn show_returns_standard_patch_prefixes_when_mnemonic_prefixes_are_forced()
+	{
+		let dir = create_temp_git_repo();
+		force_mnemonic_prefixes(&dir);
+		add_commit(&dir, "hello.txt", "hello world", "Add hello");
+
+		let log_output = Command::new("git")
+			.args(["log", "-1", "--format=%H"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		let hash = String::from_utf8_lossy(&log_output.stdout)
+			.trim()
+			.to_string();
+
+		let patch = show(&dir.to_string_lossy(), &hash).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(patch.starts_with("diff --git a/hello.txt b/hello.txt"));
+		assert!(patch.contains("--- /dev/null"));
+		assert!(patch.contains("+++ b/hello.txt"));
+		assert!(!patch.contains("diff --git c/hello.txt i/hello.txt"));
+	}
+
+	#[test]
 	fn show_nonexistent_hash() {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "a.txt", "a", "Init");
@@ -2011,6 +2104,43 @@ mod tests {
 		assert!(result.is_ok());
 		let diff_output = result.unwrap();
 		assert!(diff_output.contains("a.txt"));
+		assert!(diff_output.contains("-hello"));
+		assert!(diff_output.contains("+hello world"));
+	}
+
+	#[test]
+	fn diff_returns_plain_patch_when_git_color_is_forced() {
+		let dir = create_temp_git_repo();
+		force_color_output(&dir);
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
+
+		let diff_output = diff(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(diff_output.starts_with("diff --git"));
+		assert!(!diff_output.contains("\x1b["));
+		assert!(diff_output.contains("-hello"));
+		assert!(diff_output.contains("+hello world"));
+	}
+
+	#[test]
+	fn diff_returns_standard_patch_prefixes_when_mnemonic_prefixes_are_forced()
+	{
+		let dir = create_temp_git_repo();
+		force_mnemonic_prefixes(&dir);
+		add_commit(&dir, "a.txt", "hello", "Init");
+
+		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
+
+		let diff_output = diff(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(diff_output.starts_with("diff --git a/a.txt b/a.txt"));
+		assert!(diff_output.contains("--- a/a.txt"));
+		assert!(diff_output.contains("+++ b/a.txt"));
+		assert!(!diff_output.contains("diff --git c/a.txt w/a.txt"));
 		assert!(diff_output.contains("-hello"));
 		assert!(diff_output.contains("+hello world"));
 	}

@@ -22,9 +22,9 @@
     ]
   },
   "build": {
-    "beforeBuildCommand": "just build-helper \u0026\u0026 bun run build",
-    "beforeDevCommand": "just build-helper-dev \u0026\u0026 bun run dev",
-    "devUrl": "https://2code.localhost/",
+    "beforeBuildCommand": "bun run tauri:before-build",
+    "beforeDevCommand": "bun run tauri:before-dev",
+    "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
   "bundle": {

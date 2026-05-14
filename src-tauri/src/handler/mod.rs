@@ -6,6 +6,7 @@ pub mod font;
 pub mod profile;
 pub mod project;
 pub mod pty;
+pub mod shell;
 pub mod sound;
 pub mod topbar;
 pub mod updater;
