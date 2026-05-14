@@ -16,6 +16,8 @@ export interface OverflowTooltipTextProps {
 	w?: string;
 	fontSize: "xs" | "sm";
 	fontWeight?: "normal" | "medium";
+	lineHeight?: string;
+	visualOffsetY?: string;
 	color?: string;
 }
 
@@ -35,6 +37,8 @@ export default function OverflowTooltipText({
 	w,
 	fontSize,
 	fontWeight,
+	lineHeight,
+	visualOffsetY,
 	color,
 }: OverflowTooltipTextProps) {
 	const observerRef = useRef<ResizeObserver | null>(null);
@@ -95,6 +99,12 @@ export default function OverflowTooltipText({
 					ref={textRef}
 					fontSize={fontSize}
 					fontWeight={fontWeight}
+					lineHeight={lineHeight}
+					transform={
+						visualOffsetY
+							? `translateY(${visualOffsetY})`
+							: undefined
+					}
 					color={color}
 					minW={minW}
 					maxW={maxW ?? "full"}

@@ -30,6 +30,7 @@ export function ProfileList({
 			<HStack
 				as="button"
 				userSelect="none"
+				align="center"
 				gap="2"
 				w="full"
 				minW="0"
@@ -47,7 +48,13 @@ export function ProfileList({
 				<Icon fontSize="xs" flexShrink={0}>
 					<FiPlus />
 				</Icon>
-				<Text flex="0 1 auto" minW="0" truncate>
+				<Text
+					flex="0 1 auto"
+					minW="0"
+					lineHeight="1.25rem"
+					transform="translateY(1px)"
+					truncate
+				>
 					{m.createProfile()}
 				</Text>
 			</HStack>

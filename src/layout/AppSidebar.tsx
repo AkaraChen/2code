@@ -160,6 +160,7 @@ export default function AppSidebar() {
 								px="4"
 								pt="2"
 								pb="2"
+								align="center"
 								gap="1"
 								w="full"
 								minW="0"
@@ -186,6 +187,8 @@ export default function AppSidebar() {
 									<Text
 										fontSize="xs"
 										fontWeight="semibold"
+										lineHeight="1rem"
+										transform="translateY(1px)"
 										color="fg.muted"
 										textTransform="uppercase"
 										letterSpacing="wider"

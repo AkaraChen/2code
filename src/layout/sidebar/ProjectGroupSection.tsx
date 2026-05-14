@@ -43,6 +43,7 @@ export function ProjectGroupSection({
 				aria-expanded={!collapsed}
 				aria-label={m.toggleProjectGroup({ name: group.name })}
 				gap="1"
+				align="center"
 				w="full"
 				minW="0"
 				px="4"
@@ -61,7 +62,7 @@ export function ProjectGroupSection({
 					handleToggle();
 				}}
 			>
-				<HStack gap="2" flex="1 1 auto" minW="0">
+				<HStack gap="2" align="center" flex="1 1 auto" minW="0">
 					<Box
 						w="5"
 						h="5"
@@ -75,7 +76,13 @@ export function ProjectGroupSection({
 							{collapsed ? <FiChevronRight /> : <FiChevronDown />}
 						</Icon>
 					</Box>
-					<Text flex="1 1 auto" minW="0" truncate>
+					<Text
+						flex="1 1 auto"
+						minW="0"
+						lineHeight="1rem"
+						transform="translateY(1px)"
+						truncate
+					>
 						{group.name}
 					</Text>
 				</HStack>

@@ -94,6 +94,7 @@ export function ProjectMenuItem({
 						className="group"
 						data-sidebar-item
 						userSelect="none"
+						align="center"
 						gap="1"
 						w="full"
 						minW="0"
@@ -133,8 +134,7 @@ export function ProjectMenuItem({
 									flex="1 1 auto"
 									minW="0"
 									lineHeight="1.25rem"
-									position="relative"
-									top="2px"
+									transform="translateY(1px)"
 									truncate
 								>
 									{project.name}
@@ -144,6 +144,7 @@ export function ProjectMenuItem({
 										aria-hidden="true"
 										size="2"
 										bg="green.500"
+										alignSelf="center"
 										flexShrink={0}
 									/>
 								)}
@@ -244,6 +245,7 @@ export function ProjectMenuItem({
 						asChild
 						data-sidebar-item
 						gap="2"
+						align="center"
 						w="full"
 						minW="0"
 						maxW="var(--sidebar-width)"
@@ -275,6 +277,8 @@ export function ProjectMenuItem({
 								displayValue={defaultProfileLabel}
 								tooltipValue={defaultProfileLabel}
 								fontSize="sm"
+								lineHeight="1.25rem"
+								visualOffsetY="1px"
 								flex="1 1 auto"
 								minW="0"
 							/>
@@ -282,6 +286,7 @@ export function ProjectMenuItem({
 								<Circle
 									size="2"
 									bg="green.500"
+									alignSelf="center"
 									flexShrink={0}
 								/>
 							)}
