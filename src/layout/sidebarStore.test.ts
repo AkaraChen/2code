@@ -3,6 +3,7 @@ import {
 	APP_SIDEBAR_DEFAULT_WIDTH,
 	APP_SIDEBAR_MAX_WIDTH,
 	APP_SIDEBAR_MIN_WIDTH,
+	toggleCollapsedProjectGroupId,
 	useAppSidebarStore,
 } from "./sidebarStore";
 
@@ -48,5 +49,17 @@ describe("useAppSidebarStore", () => {
 
 		getState().toggleProjectGroup("group-1");
 		expect(getState().collapsedProjectGroupIds).toEqual([]);
+	});
+
+	it("toggles collapsed project group ids without changing order", () => {
+		expect(toggleCollapsedProjectGroupId(["a", "b", "c"], "b")).toEqual([
+			"a",
+			"c",
+		]);
+		expect(toggleCollapsedProjectGroupId(["a", "c"], "b")).toEqual([
+			"a",
+			"c",
+			"b",
+		]);
 	});
 });

@@ -12,6 +12,20 @@ export function clampAppSidebarWidth(width: number) {
 	);
 }
 
+export function toggleCollapsedProjectGroupId(
+	collapsedProjectGroupIds: readonly string[],
+	groupId: string,
+) {
+	const index = collapsedProjectGroupIds.indexOf(groupId);
+	if (index === -1) {
+		return [...collapsedProjectGroupIds, groupId];
+	}
+
+	const nextIds = [...collapsedProjectGroupIds];
+	nextIds.splice(index, 1);
+	return nextIds;
+}
+
 interface AppSidebarStore {
 	width: number;
 	collapsedProjectGroupIds: string[];
@@ -26,17 +40,12 @@ export const useAppSidebarStore = create<AppSidebarStore>()(
 			collapsedProjectGroupIds: [],
 			setWidth: (width) => set({ width: clampAppSidebarWidth(width) }),
 			toggleProjectGroup: (groupId) =>
-				set((state) => {
-					const collapsed =
-						state.collapsedProjectGroupIds.includes(groupId);
-					return {
-						collapsedProjectGroupIds: collapsed
-							? state.collapsedProjectGroupIds.filter(
-									(id) => id !== groupId,
-								)
-							: [...state.collapsedProjectGroupIds, groupId],
-					};
-				}),
+				set((state) => ({
+					collapsedProjectGroupIds: toggleCollapsedProjectGroupId(
+						state.collapsedProjectGroupIds,
+						groupId,
+					),
+				})),
 		}),
 		{
 			name: "app-sidebar-width",
