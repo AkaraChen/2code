@@ -9,6 +9,7 @@ import {
 	getCachedProjectAvatar,
 	setCachedProjectAvatar,
 } from "@/features/projects/projectAvatarCache";
+import { getPathBasename } from "@/shared/lib/path";
 import type {
 	ProjectConfig,
 	ProjectGroup,
@@ -116,7 +117,7 @@ export function useCreateProject(options?: {
 	return useMutation({
 		mutationFn: (opts: { name?: string; folder: string }) =>
 			createProjectFromFolder({
-				name: opts.name || opts.folder.split("/").pop() || "Untitled",
+				name: opts.name || getPathBasename(opts.folder) || "Untitled",
 				folder: opts.folder,
 			}),
 		onSuccess: async (project) => {

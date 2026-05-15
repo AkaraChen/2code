@@ -17,6 +17,7 @@ import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import { detectMonacoLanguage } from "@/shared/lib/languageDetection";
+import { getPathBasename } from "@/shared/lib/path";
 import { useFileContent, useSaveFileContent } from "./hooks";
 
 interface FileViewerPaneProps {
@@ -54,7 +55,7 @@ export default function FileViewerPane({
 		mutate: saveFileContent,
 	} = useSaveFileContent(profileId);
 
-	const filename = filePath.split("/").pop() ?? "";
+	const filename = getPathBasename(filePath);
 	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
 	const draftValue = draftsByPath[filePath];
