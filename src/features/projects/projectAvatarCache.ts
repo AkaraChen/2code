@@ -4,6 +4,26 @@ const PROJECT_AVATAR_CACHE_KEY = "2code.project-avatar-cache";
 
 let inMemoryCache: ProjectAvatarCache | null = null;
 
+export function parseProjectAvatarCache(parsed: unknown): ProjectAvatarCache {
+	const cache: ProjectAvatarCache = {};
+	if (
+		typeof parsed !== "object" ||
+		parsed === null ||
+		Array.isArray(parsed)
+	) {
+		return cache;
+	}
+
+	for (const key in parsed) {
+		const value = parsed[key as keyof typeof parsed];
+		if (typeof value === "string" || value === null) {
+			cache[key] = value;
+		}
+	}
+
+	return cache;
+}
+
 function readCacheFromStorage(): ProjectAvatarCache {
 	if (inMemoryCache !== null) {
 		return inMemoryCache;
@@ -18,18 +38,7 @@ function readCacheFromStorage(): ProjectAvatarCache {
 		}
 
 		const parsed: unknown = JSON.parse(raw);
-		if (
-			typeof parsed === "object" &&
-			parsed !== null &&
-			!Array.isArray(parsed)
-		) {
-			const entries = Object.entries(parsed);
-			for (const [key, value] of entries) {
-				if (typeof value === "string" || value === null) {
-					inMemoryCache[key] = value;
-				}
-			}
-		}
+		inMemoryCache = parseProjectAvatarCache(parsed);
 	} catch {
 		inMemoryCache = {};
 	}
