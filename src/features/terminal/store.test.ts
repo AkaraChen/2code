@@ -142,6 +142,19 @@ describe("useTerminalStore", () => {
 			expect(() => getState().closeTab("nonexistent", "s1")).not.toThrow();
 		});
 
+		it("no-ops when tab does not exist", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+
+			getState().closeTab("p1", "missing");
+
+			expect(getState().profiles.p1.tabs).toEqual([
+				{ id: "s1", title: "T1" },
+				{ id: "s2", title: "T2" },
+			]);
+			expect(getState().profiles.p1.activeTabId).toBe("s2");
+		});
+
 		it("handles closing second tab when active is second of two", () => {
 			// [s1, s2], active=s2, close s2
 			// tabs [s1], Math.min(1, 0)=0, active=s1

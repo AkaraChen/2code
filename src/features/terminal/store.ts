@@ -6,12 +6,12 @@ import { useShallow } from "zustand/react/shallow";
 
 enableMapSet();
 
-interface TerminalTab {
+export interface TerminalTab {
 	id: string;
 	title: string;
 }
 
-interface ProjectTerminalState {
+export interface ProjectTerminalState {
 	tabs: TerminalTab[];
 	activeTabId: string | null;
 	counter: number;
@@ -46,6 +46,21 @@ function clearProfileActiveTabNotification(
 	const activeTabId = state.profiles[profileId]?.activeTabId;
 	if (activeTabId) {
 		state.notifiedTabs.delete(activeTabId);
+	}
+}
+
+export function closeTerminalTab(
+	profile: ProjectTerminalState,
+	tabId: string,
+) {
+	const wasActiveTab = tabId === profile.activeTabId;
+	const idx = profile.tabs.findIndex((t) => t.id === tabId);
+	if (idx === -1) return;
+
+	profile.tabs.splice(idx, 1);
+	if (wasActiveTab && profile.tabs.length > 0) {
+		const newIdx = Math.min(idx, profile.tabs.length - 1);
+		profile.activeTabId = profile.tabs[newIdx].id;
 	}
 }
 
@@ -95,9 +110,7 @@ export const useTerminalStore = create<TerminalStore>()(
 				const wasActiveTab = tabId === profile.activeTabId;
 
 				state.notifiedTabs.delete(tabId);
-
-				const idx = profile.tabs.findIndex((t) => t.id === tabId);
-				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
+				closeTerminalTab(profile, tabId);
 
 				if (profile.tabs.length === 0) {
 					delete state.profiles[profileId];
@@ -105,8 +118,6 @@ export const useTerminalStore = create<TerminalStore>()(
 				}
 
 				if (wasActiveTab) {
-					const newIdx = Math.min(idx, profile.tabs.length - 1);
-					profile.activeTabId = profile.tabs[newIdx].id;
 					if (getFocusedProfileId() === profileId) {
 						clearProfileActiveTabNotification(state, profileId);
 					}
