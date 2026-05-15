@@ -8,7 +8,7 @@ use model::filesystem::FileSearchResult;
 
 const MAX_SEARCH_RESULTS: usize = 60;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct ScoredFileMatch {
 	result: FileSearchResult,
 	score: u32,
@@ -345,22 +345,28 @@ pub fn search_files(
 		});
 	}
 
-	results.sort_by(|left, right| {
-		left.score
-			.cmp(&right.score)
-			.then_with(|| {
-				left.result
-					.relative_path
-					.len()
-					.cmp(&right.result.relative_path.len())
-			})
-			.then_with(|| {
-				left.result.relative_path.cmp(&right.result.relative_path)
-			})
-	});
-	results.truncate(MAX_SEARCH_RESULTS);
+	if results.len() > MAX_SEARCH_RESULTS {
+		results.select_nth_unstable_by(MAX_SEARCH_RESULTS, compare_file_matches);
+		results.truncate(MAX_SEARCH_RESULTS);
+	}
+	results.sort_by(compare_file_matches);
 
 	Ok(results.into_iter().map(|entry| entry.result).collect())
+}
+
+fn compare_file_matches(
+	left: &ScoredFileMatch,
+	right: &ScoredFileMatch,
+) -> std::cmp::Ordering {
+	left.score
+		.cmp(&right.score)
+		.then_with(|| {
+			left.result
+				.relative_path
+				.len()
+				.cmp(&right.result.relative_path.len())
+		})
+		.then_with(|| left.result.relative_path.cmp(&right.result.relative_path))
 }
 
 fn normalize_relative_path(path: &Path) -> String {
@@ -556,6 +562,37 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 mod tests {
 	use super::*;
 
+	fn make_scored_file_match(index: usize) -> ScoredFileMatch {
+		ScoredFileMatch {
+			result: FileSearchResult {
+				name: format!("target-{index:05}.ts"),
+				path: format!("/repo/src/deep/path/target-{index:05}.ts"),
+				relative_path: format!("src/deep/path/target-{index:05}.ts"),
+			},
+			score: 20 + (index % 400) as u32,
+		}
+	}
+
+	fn full_sort_limit(mut results: Vec<ScoredFileMatch>) -> Vec<ScoredFileMatch> {
+		results.sort_by(compare_file_matches);
+		results.truncate(MAX_SEARCH_RESULTS);
+		results
+	}
+
+	fn select_limit_sort(
+		mut results: Vec<ScoredFileMatch>,
+	) -> Vec<ScoredFileMatch> {
+		if results.len() > MAX_SEARCH_RESULTS {
+			results.select_nth_unstable_by(
+				MAX_SEARCH_RESULTS,
+				compare_file_matches,
+			);
+			results.truncate(MAX_SEARCH_RESULTS);
+		}
+		results.sort_by(compare_file_matches);
+		results
+	}
+
 	#[test]
 	fn scores_exact_name_first() {
 		assert_eq!(
@@ -577,6 +614,51 @@ mod tests {
 	#[test]
 	fn rejects_non_matching_candidates() {
 		assert_eq!(score_file_match("palette", "main.rs", "src/main.rs"), None);
+	}
+
+	#[test]
+	fn search_files_limits_results_after_preserving_best_matches() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src")).expect("create src");
+		std::fs::write(root.join("target"), "best").expect("write exact");
+		for index in 0..80 {
+			std::fs::write(
+				root.join("src").join(format!("target-{index:02}.ts")),
+				"match",
+			)
+			.expect("write match");
+		}
+
+		let results = search_files(root, "target").expect("search files");
+
+		assert_eq!(results.len(), MAX_SEARCH_RESULTS);
+		assert_eq!(results[0].relative_path, "target");
+		assert!(results
+			.iter()
+			.all(|result| result.relative_path.contains("target")));
+	}
+
+	#[test]
+	fn select_limit_sort_matches_full_sort_top_results() {
+		let results = (0..250)
+			.rev()
+			.map(make_scored_file_match)
+			.collect::<Vec<_>>();
+
+		let full_sort_results = full_sort_limit(results.clone());
+		let select_results = select_limit_sort(results);
+
+		let full_paths = full_sort_results
+			.iter()
+			.map(|entry| &entry.result.relative_path)
+			.collect::<Vec<_>>();
+		let select_paths = select_results
+			.iter()
+			.map(|entry| &entry.result.relative_path)
+			.collect::<Vec<_>>();
+
+		assert_eq!(select_paths, full_paths);
 	}
 
 	#[test]
