@@ -16,6 +16,10 @@ import {
 } from "@/features/terminal/templates";
 import { TerminalTemplateDraftDialog } from "@/features/terminal/TerminalTemplateDraftDialog";
 import * as m from "@/paraglide/messages.js";
+import {
+	removeProjectTemplateDraft,
+	replaceProjectTemplateDraft,
+} from "./projectTemplateDraftList";
 
 interface ProjectTemplatesEditorProps {
 	templateDrafts: ProjectTerminalTemplateDraft[];
@@ -52,7 +56,7 @@ export function ProjectTemplatesEditor({
 	function handleCommit() {
 		if (!draft) return;
 		if (editingId) {
-			onChange(templateDrafts.map((t) => (t.id === editingId ? draft : t)));
+			onChange(replaceProjectTemplateDraft(templateDrafts, editingId, draft));
 		} else {
 			onChange([...templateDrafts, draft]);
 		}
@@ -61,7 +65,7 @@ export function ProjectTemplatesEditor({
 
 	function handleDelete() {
 		if (!editingId) return;
-		onChange(templateDrafts.filter((t) => t.id !== editingId));
+		onChange(removeProjectTemplateDraft(templateDrafts, editingId));
 		closeDialog();
 	}
 
@@ -148,7 +152,7 @@ export function ProjectTemplatesEditor({
 										colorPalette="red"
 										aria-label={m.deleteTerminalTemplate()}
 										onClick={() =>
-											onChange(templateDrafts.filter((x) => x.id !== t.id))
+											onChange(removeProjectTemplateDraft(templateDrafts, t.id))
 										}
 									>
 										<FiTrash2 />
