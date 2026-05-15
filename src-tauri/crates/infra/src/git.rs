@@ -364,11 +364,16 @@ pub fn read_worktree_file(
 	let path = validate_repo_relative_path(path, "Preview file path")?;
 	let file_path = Path::new(folder).join(&path);
 
-	if !file_path.exists() || file_path.is_dir() {
+	let metadata = match std::fs::metadata(&file_path) {
+		Ok(metadata) => metadata,
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+			return Ok(None);
+		}
+		Err(error) => return Err(AppError::IoError(error)),
+	};
+	if metadata.is_dir() {
 		return Ok(None);
 	}
-
-	let metadata = std::fs::metadata(&file_path)?;
 	if metadata.len() > MAX_BINARY_PREVIEW_BYTES as u64 {
 		return Err(AppError::GitError(format!(
 			"Preview file is too large: {path}"
