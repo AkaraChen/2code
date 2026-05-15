@@ -291,6 +291,7 @@ pub fn search_files(
 	}
 
 	let normalized_query = query.to_lowercase();
+	let query_chars = normalized_query.chars().collect::<Vec<_>>();
 	let mut results = Vec::new();
 	let mut walker = WalkBuilder::new(root);
 	walker.hidden(false);
@@ -329,8 +330,12 @@ pub fn search_files(
 			.map(|value| value.to_string_lossy().into_owned())
 			.unwrap_or_else(|| relative_path.clone());
 
-		let Some(score) =
-			score_file_match(&normalized_query, &name, &relative_path)
+		let Some(score) = score_file_match(
+			&normalized_query,
+			&query_chars,
+			&name,
+			&relative_path,
+		)
 		else {
 			continue;
 		};
@@ -501,6 +506,7 @@ fn invalid_input(message: impl Into<String>) -> AppError {
 
 fn score_file_match(
 	query: &str,
+	query_chars: &[char],
 	name: &str,
 	relative_path: &str,
 ) -> Option<u32> {
@@ -516,29 +522,28 @@ fn score_file_match(
 	if let Some(index) = normalized_name.find(query) {
 		return Some(20 + index as u32 * 4 + normalized_name.len() as u32);
 	}
-	if let Some(score) = subsequence_score(query, &normalized_name) {
+	if let Some(score) = subsequence_score(query_chars, &normalized_name) {
 		return Some(120 + score);
 	}
 	if let Some(index) = normalized_path.find(query) {
 		return Some(260 + index as u32 * 2 + normalized_path.len() as u32);
 	}
 
-	subsequence_score(query, &normalized_path).map(|score| 520 + score)
+	subsequence_score(query_chars, &normalized_path).map(|score| 520 + score)
 }
 
-fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
-	let query_chars: Vec<char> = query.chars().collect();
+fn subsequence_score(query_chars: &[char], candidate: &str) -> Option<u32> {
 	if query_chars.is_empty() {
 		return Some(0);
 	}
 
-	let candidate_chars: Vec<char> = candidate.chars().collect();
+	let candidate_len = candidate.chars().count();
 	let mut next_query_index = 0usize;
 	let mut score = 0usize;
 	let mut last_match: Option<usize> = None;
 
-	for (index, ch) in candidate_chars.iter().enumerate() {
-		if *ch != query_chars[next_query_index] {
+	for (index, ch) in candidate.chars().enumerate() {
+		if ch != query_chars[next_query_index] {
 			continue;
 		}
 
@@ -550,7 +555,7 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 		next_query_index += 1;
 
 		if next_query_index == query_chars.len() {
-			score += candidate_chars.len().saturating_sub(index + 1);
+			score += candidate_len.saturating_sub(index + 1);
 			return Some(score as u32);
 		}
 	}
@@ -593,10 +598,19 @@ mod tests {
 		results
 	}
 
+	fn test_score_file_match(
+		query: &str,
+		name: &str,
+		relative_path: &str,
+	) -> Option<u32> {
+		let query_chars = query.chars().collect::<Vec<_>>();
+		score_file_match(query, &query_chars, name, relative_path)
+	}
+
 	#[test]
 	fn scores_exact_name_first() {
 		assert_eq!(
-			score_file_match("main.rs", "main.rs", "src/main.rs"),
+			test_score_file_match("main.rs", "main.rs", "src/main.rs"),
 			Some(0)
 		);
 	}
@@ -604,16 +618,27 @@ mod tests {
 	#[test]
 	fn prefers_name_match_over_path_match() {
 		let name_score =
-			score_file_match("main", "main.rs", "src/main.rs").unwrap();
+			test_score_file_match("main", "main.rs", "src/main.rs").unwrap();
 		let path_score =
-			score_file_match("main", "app.rs", "src/main.rs").unwrap();
+			test_score_file_match("main", "app.rs", "src/main.rs").unwrap();
 
 		assert!(name_score < path_score);
 	}
 
 	#[test]
 	fn rejects_non_matching_candidates() {
-		assert_eq!(score_file_match("palette", "main.rs", "src/main.rs"), None);
+		assert_eq!(
+			test_score_file_match("palette", "main.rs", "src/main.rs"),
+			None,
+		);
+	}
+
+	#[test]
+	fn scores_unicode_subsequence_by_character_positions() {
+		assert_eq!(
+			test_score_file_match("功能", "新功x能登录.ts", "src/新功x能登录.ts"),
+			Some(127)
+		);
 	}
 
 	#[test]
