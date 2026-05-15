@@ -19,6 +19,7 @@ import {
 	gitPush,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { collectPatchFiles } from "./patchFiles";
 import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
@@ -173,13 +174,13 @@ export function useDiscardGitFileChanges(profileId: string) {
 
 export function useGitDiffFiles(profileId: string) {
 	const { data: diff } = useGitDiff(profileId);
-	return useMemo(() => parsePatchFiles(diff).flatMap((p) => p.files), [diff]);
+	return useMemo(() => collectPatchFiles(parsePatchFiles(diff)), [diff]);
 }
 
 export function useCommitDiffFiles(profileId: string, commitHash: string) {
 	const { data: commitDiff } = useCommitDiff(profileId, commitHash);
 	return useMemo(
-		() => parsePatchFiles(commitDiff).flatMap((p) => p.files),
+		() => collectPatchFiles(parsePatchFiles(commitDiff)),
 		[commitDiff],
 	);
 }
