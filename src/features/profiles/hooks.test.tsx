@@ -5,7 +5,7 @@ import {
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfileDeleteCheck } from "./hooks";
+import { removeProfileFromProjectCache, useProfileDeleteCheck } from "./hooks";
 
 const {
 	createProfileMock,
@@ -28,6 +28,24 @@ vi.mock("@/generated", async () => {
 		getProfileDeleteCheck: getProfileDeleteCheckMock,
 	};
 });
+
+function project(id: string, profileIds: string[]) {
+	return {
+		id,
+		name: id,
+		folder: `/tmp/${id}`,
+		created_at: "2026-01-01T00:00:00Z",
+		group_id: null,
+		profiles: profileIds.map((profileId, index) => ({
+			id: profileId,
+			project_id: id,
+			branch_name: index === 0 ? "main" : `branch-${index}`,
+			worktree_path: `/tmp/${id}/${profileId}`,
+			created_at: "2026-01-01T00:00:00Z",
+			is_default: index === 0,
+		})),
+	};
+}
 
 function createWrapper() {
 	const queryClient = new QueryClient({
@@ -111,5 +129,38 @@ describe("useProfileDeleteCheck", () => {
 		});
 
 		expect(getProfileDeleteCheckMock).not.toHaveBeenCalled();
+	});
+});
+
+describe("removeProfileFromProjectCache", () => {
+	it("only clones the project that owns the removed profile", () => {
+		const projects = [
+			project("project-1", ["profile-1", "profile-2"]),
+			project("project-2", ["profile-3", "profile-4"]),
+		];
+
+		const next = removeProfileFromProjectCache(
+			projects,
+			"project-2",
+			"profile-4",
+		);
+
+		expect(next).not.toBe(projects);
+		expect(next?.[0]).toBe(projects[0]);
+		expect(next?.[1]).not.toBe(projects[1]);
+		expect(next?.[1].profiles.map((profile) => profile.id)).toEqual([
+			"profile-3",
+		]);
+	});
+
+	it("returns the original cache when the project or profile is missing", () => {
+		const projects = [project("project-1", ["profile-1"])];
+
+		expect(
+			removeProfileFromProjectCache(projects, "missing", "profile-1"),
+		).toBe(projects);
+		expect(
+			removeProfileFromProjectCache(projects, "project-1", "missing"),
+		).toBe(projects);
 	});
 });

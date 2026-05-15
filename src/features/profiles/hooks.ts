@@ -17,6 +17,28 @@ function hasDiffStats(stats: GitDiffStats | null) {
 	);
 }
 
+export function removeProfileFromProjectCache(
+	projects: ProjectWithProfiles[] | undefined,
+	projectId: string,
+	profileId: string,
+) {
+	if (!projects) return projects;
+
+	const projectIndex = projects.findIndex((project) => project.id === projectId);
+	if (projectIndex === -1) return projects;
+
+	const project = projects[projectIndex];
+	const profiles = project.profiles.filter((profile) => profile.id !== profileId);
+	if (profiles.length === project.profiles.length) return projects;
+
+	const nextProjects = projects.slice();
+	nextProjects[projectIndex] = {
+		...project,
+		profiles,
+	};
+	return nextProjects;
+}
+
 export function useCreateProfile() {
 	const queryClient = useQueryClient();
 	return useMutation({
@@ -56,15 +78,12 @@ export function useDeleteProfile() {
 	return useMutation({
 		mutationFn: ({ id }: { id: string; projectId: string }) =>
 			deleteProfile({ id }),
-		onSuccess: (_data, { id }) => {
+		onSuccess: (_data, { id, projectId }) => {
 			useTerminalStore.getState().removeProfile(id);
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) =>
-					projects?.map((project) => ({
-						...project,
-						profiles: project.profiles.filter((profile) => profile.id !== id),
-					})),
+					removeProfileFromProjectCache(projects, projectId, id),
 			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
