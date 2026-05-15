@@ -2,7 +2,7 @@ use diesel::prelude::*;
 
 use model::error::AppError;
 use model::project_group::{NewProjectGroup, ProjectGroup};
-use model::schema::{project_groups, projects};
+use model::schema::project_groups;
 
 pub fn insert(
 	conn: &mut SqliteConnection,
@@ -46,34 +46,28 @@ pub fn delete_if_empty(
 	conn: &mut SqliteConnection,
 	id: &str,
 ) -> Result<bool, AppError> {
-	let project_count = projects::table
-		.filter(projects::group_id.eq(id))
-		.count()
-		.get_result::<i64>(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	if project_count > 0 {
-		return Ok(false);
-	}
-
-	let deleted = diesel::delete(project_groups::table.find(id))
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+	let deleted = diesel::sql_query(
+		"DELETE FROM project_groups \
+		 WHERE id = ? \
+		 AND NOT EXISTS (SELECT 1 FROM projects WHERE group_id = ?)",
+	)
+	.bind::<diesel::sql_types::Text, _>(id)
+	.bind::<diesel::sql_types::Text, _>(id)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))?;
 
 	Ok(deleted > 0)
 }
 
 pub fn delete_empty(conn: &mut SqliteConnection) -> Result<usize, AppError> {
-	let groups = list_all(conn)?;
-	let mut deleted_count = 0;
-
-	for group in groups {
-		if delete_if_empty(conn, &group.id)? {
-			deleted_count += 1;
-		}
-	}
-
-	Ok(deleted_count)
+	diesel::sql_query(
+		"DELETE FROM project_groups \
+		 WHERE NOT EXISTS (
+		   SELECT 1 FROM projects WHERE projects.group_id = project_groups.id
+		 )",
+	)
+	.execute(conn)
+	.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 #[cfg(test)]
@@ -124,6 +118,16 @@ mod tests {
 
 		assert!(!delete_if_empty(&mut conn, "g1").expect("keep group"));
 		assert_eq!(find_by_id(&mut conn, "g1").unwrap().name, "Work");
+	}
+
+	#[test]
+	fn delete_if_empty_returns_false_for_missing_group() {
+		let mut conn = setup_db();
+
+		assert!(
+			!delete_if_empty(&mut conn, "missing")
+				.expect("missing group is not deleted")
+		);
 	}
 
 	#[test]
