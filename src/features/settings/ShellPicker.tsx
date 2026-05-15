@@ -1,5 +1,4 @@
 import {
-	createListCollection,
 	Field,
 	Input,
 	Portal,
@@ -7,14 +6,14 @@ import {
 	Stack,
 	Text,
 } from "@chakra-ui/react";
-import { use } from "react";
+import { use, useMemo } from "react";
 import type { AvailableShell } from "@/generated";
 import { listAvailableShells } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
+import { useLocale } from "@/shared/lib/locale";
+import { createShellCollection, CUSTOM_SHELL_VALUE } from "./shellCollection";
 import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
-
-const CUSTOM_SHELL_VALUE = "__custom__";
 
 const getShellsPromise = createCachedPromise<AvailableShell[]>(() =>
 	listAvailableShells(),
@@ -23,18 +22,19 @@ const getShellsPromise = createCachedPromise<AvailableShell[]>(() =>
 export function ShellPicker() {
 	const shells = use(getShellsPromise());
 	const { defaultShell, setDefaultShell } = useTerminalSettingsStore();
+	const locale = useLocale();
 
-	const shellCollection = createListCollection({
-		items: [
-			...shells.map((shell) => ({
-				value: shell.command,
-				label: shell.is_default
-					? `${shell.label} (${m.defaultOption()})`
-					: shell.label,
-			})),
-			{ value: CUSTOM_SHELL_VALUE, label: m.customShell() },
-		],
-	});
+	const shellCollection = useMemo(
+		() => {
+			void locale;
+			return createShellCollection(
+				shells,
+				m.defaultOption(),
+				m.customShell(),
+			);
+		},
+		[locale, shells],
+	);
 
 	const isKnownShell = shells.some((shell) => shell.command === defaultShell);
 	const selectValue = isKnownShell ? defaultShell : CUSTOM_SHELL_VALUE;
