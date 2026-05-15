@@ -67,7 +67,11 @@ const NAME_MAP: Record<string, string> = {
 };
 
 export function detectLanguage(filename: string): string {
-	const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+	const extensionStart = filename.lastIndexOf(".");
+	const ext =
+		extensionStart >= 0 && extensionStart < filename.length - 1
+			? filename.slice(extensionStart + 1).toLowerCase()
+			: "";
 	const baseName = filename.toLowerCase();
 	return NAME_MAP[baseName] ?? EXT_MAP[ext] ?? "text";
 }
