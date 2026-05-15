@@ -60,6 +60,9 @@ const FILE_TREE_GIT_STATUSES = new Set<GitStatusEntry["status"]>([
 	"renamed",
 	"untracked",
 ]);
+const FILE_TREE_PATH_COLLATOR = new Intl.Collator(undefined, {
+	sensitivity: "base",
+});
 
 const FILE_TREE_HOST_STYLE = {
 	height: "100%",
@@ -185,9 +188,7 @@ function buildModelPaths(
 		seenPathCollisionKeys.add(collisionKey);
 		paths.push(entry.path);
 	}
-	paths.sort((left, right) =>
-		left.localeCompare(right, undefined, { sensitivity: "base" }),
-	);
+	paths.sort(FILE_TREE_PATH_COLLATOR.compare);
 	return paths;
 }
 
