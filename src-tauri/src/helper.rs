@@ -1,17 +1,20 @@
 use std::net::TcpListener;
 use std::path::PathBuf;
 
-use std::collections::HashMap;
-
+use axum::Json;
 use axum::extract::{Query, State};
 use axum::routing::get;
-use axum::Json;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_store::StoreExt;
 
 pub struct HelperState {
 	pub port: u16,
 	pub sidecar_path: PathBuf,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct NotifyQuery {
+	session_id: Option<String>,
 }
 
 fn sidecar_binary_name(target: &str) -> String {
@@ -50,11 +53,11 @@ fn resolve_sidecar_path() -> PathBuf {
 
 async fn notify_handler(
 	State(app): State<AppHandle>,
-	Query(params): Query<HashMap<String, String>>,
+	Query(params): Query<NotifyQuery>,
 ) -> Json<model::notification::NotifyResponse> {
 	let played = try_play_notification(&app);
-	if let Some(session_id) = params.get("session_id") {
-		let _ = app.emit("pty-notify", session_id.as_str());
+	if let Some(session_id) = params.session_id.as_deref() {
+		let _ = app.emit("pty-notify", session_id);
 	}
 	Json(model::notification::NotifyResponse { played })
 }
