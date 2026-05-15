@@ -20,8 +20,7 @@
       "name": "Run",
       "cwd": "",
       "commands": [
-        "just build-helper",
-        "nr start"
+        "./start.sh"
       ]
     }
   ]
