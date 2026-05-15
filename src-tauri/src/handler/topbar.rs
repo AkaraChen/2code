@@ -108,17 +108,27 @@ fn app_search_roots() -> Vec<PathBuf> {
 
 #[cfg(target_os = "macos")]
 fn resolve_app_path(spec: &TopbarAppSpec) -> Option<PathBuf> {
-	app_search_roots()
-		.into_iter()
+	let roots = app_search_roots();
+	resolve_app_path_in_roots(spec, &roots)
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_app_path_in_roots(
+	spec: &TopbarAppSpec,
+	roots: &[PathBuf],
+) -> Option<PathBuf> {
+	roots
+		.iter()
 		.map(|root| root.join(spec.bundle_name))
 		.find(|path| path.exists())
 }
 
 #[cfg(target_os = "macos")]
 fn list_supported_topbar_apps_macos() -> Vec<TopbarApp> {
+	let roots = app_search_roots();
 	KNOWN_TOPBAR_APPS
 		.iter()
-		.filter(|spec| resolve_app_path(spec).is_some())
+		.filter(|spec| resolve_app_path_in_roots(spec, &roots).is_some())
 		.map(|spec| TopbarApp {
 			id: spec.id.to_string(),
 		})
@@ -268,6 +278,8 @@ pub async fn open_topbar_app(
 #[cfg(test)]
 mod tests {
 	use std::collections::HashSet;
+	#[cfg(target_os = "macos")]
+	use std::time::Instant;
 
 	use super::*;
 
@@ -284,5 +296,42 @@ mod tests {
 		let roots = app_search_roots();
 		assert!(roots.contains(&PathBuf::from("/Applications")));
 		assert!(roots.contains(&PathBuf::from("/Applications/Setapp")));
+	}
+
+	#[cfg(target_os = "macos")]
+	#[test]
+	#[ignore]
+	fn bench_list_supported_topbar_apps_reusing_roots() {
+		let iterations = 20_000;
+
+		let started = Instant::now();
+		let mut repeated_roots_count = 0;
+		for _ in 0..iterations {
+			repeated_roots_count += KNOWN_TOPBAR_APPS
+				.iter()
+				.filter(|spec| {
+					let roots = app_search_roots();
+					resolve_app_path_in_roots(spec, &roots).is_some()
+				})
+				.count();
+		}
+		let repeated_roots = started.elapsed();
+
+		let started = Instant::now();
+		let mut reused_roots_count = 0;
+		for _ in 0..iterations {
+			let roots = app_search_roots();
+			reused_roots_count += KNOWN_TOPBAR_APPS
+				.iter()
+				.filter(|spec| resolve_app_path_in_roots(spec, &roots).is_some())
+				.count();
+		}
+		let reused_roots = started.elapsed();
+
+		assert_eq!(repeated_roots_count, reused_roots_count);
+		println!(
+			"repeated_roots={repeated_roots:?} reused_roots={reused_roots:?} speedup={:.2}x",
+			repeated_roots.as_secs_f64() / reused_roots.as_secs_f64()
+		);
 	}
 }
