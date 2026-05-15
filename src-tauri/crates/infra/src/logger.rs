@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Write};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -76,16 +76,15 @@ impl MessageVisitor {
 		if self.fields.is_empty() {
 			return self.message;
 		}
-		let field_str: Vec<String> = self
-			.fields
-			.into_iter()
-			.map(|(k, v)| format!("{k}={v}"))
-			.collect();
-		if self.message.is_empty() {
-			field_str.join(" ")
-		} else {
-			format!("{} {}", self.message, field_str.join(" "))
+
+		let mut message = self.message;
+		for (key, value) in self.fields {
+			if !message.is_empty() {
+				message.push(' ');
+			}
+			let _ = write!(message, "{key}={value}");
 		}
+		message
 	}
 }
 
@@ -153,10 +152,12 @@ impl<S: tracing::Subscriber> Layer<S> for ChannelLayer {
 mod tests {
 	use std::sync::mpsc;
 	use std::time::Duration;
+	use std::time::Instant;
 
 	use tracing_subscriber::prelude::*;
 
 	use super::ChannelLayer;
+	use super::MessageVisitor;
 
 	#[test]
 	fn forwards_info_events_with_target_and_fields() {
@@ -179,6 +180,19 @@ mod tests {
 		assert_eq!(entry.source, "logger-test");
 		assert!(entry.message.contains("hello"));
 		assert!(entry.message.contains("answer=42"));
+	}
+
+	#[test]
+	fn message_visitor_formats_message_and_fields() {
+		let visitor = MessageVisitor {
+			message: "hello".to_string(),
+			fields: vec![
+				("answer".to_string(), "42".to_string()),
+				("ok".to_string(), "true".to_string()),
+			],
+		};
+
+		assert_eq!(visitor.into_message(), "hello answer=42 ok=true");
 	}
 
 	#[test]
@@ -214,5 +228,64 @@ mod tests {
 		});
 
 		assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+	}
+
+	fn format_with_collect_join(
+		message: &str,
+		fields: &[(String, String)],
+	) -> String {
+		let field_str: Vec<String> = fields
+			.iter()
+			.map(|(key, value)| format!("{key}={value}"))
+			.collect();
+		if message.is_empty() {
+			field_str.join(" ")
+		} else {
+			format!("{} {}", message, field_str.join(" "))
+		}
+	}
+
+	fn format_with_direct_write(
+		message: &str,
+		fields: &[(String, String)],
+	) -> String {
+		let visitor = MessageVisitor {
+			message: message.to_string(),
+			fields: fields.to_vec(),
+		};
+		visitor.into_message()
+	}
+
+	#[test]
+	#[ignore]
+	fn benchmark_message_visitor_formatting() {
+		let fields: Vec<(String, String)> = (0..16)
+			.map(|index| {
+				(format!("field_{index}"), format!("value_{}", index * 17))
+			})
+			.collect();
+		let iterations = 200_000;
+
+		let start = Instant::now();
+		let mut collect_join_len = 0;
+		for _ in 0..iterations {
+			collect_join_len +=
+				format_with_collect_join("log message", &fields).len();
+		}
+		let collect_join = start.elapsed();
+
+		let start = Instant::now();
+		let mut direct_write_len = 0;
+		for _ in 0..iterations {
+			direct_write_len +=
+				format_with_direct_write("log message", &fields).len();
+		}
+		let direct_write = start.elapsed();
+
+		assert_eq!(collect_join_len, direct_write_len);
+		println!(
+			"collect_join={collect_join:?} direct_write={direct_write:?} speedup={:.2}x",
+			collect_join.as_secs_f64() / direct_write.as_secs_f64()
+		);
 	}
 }
