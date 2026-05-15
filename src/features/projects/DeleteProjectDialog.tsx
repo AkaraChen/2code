@@ -10,12 +10,21 @@ interface DeleteProjectDialogProps {
 	project: { id: string; name: string };
 }
 
-function getReplacementProject(
+export function getReplacementProject(
 	projects: ProjectWithProfiles[],
 	deletedProjectId: string,
 ) {
-	const deletedIndex = projects.findIndex((item) => item.id === deletedProjectId);
-	const remainingProjects = projects.filter((item) => item.id !== deletedProjectId);
+	let deletedIndex = -1;
+	const remainingProjects: ProjectWithProfiles[] = [];
+
+	for (const project of projects) {
+		if (project.id === deletedProjectId) {
+			deletedIndex = remainingProjects.length;
+		} else {
+			remainingProjects.push(project);
+		}
+	}
+
 	if (remainingProjects.length === 0) return null;
 
 	const replacementIndex = deletedIndex >= 0
