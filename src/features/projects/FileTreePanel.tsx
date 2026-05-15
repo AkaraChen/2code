@@ -27,6 +27,7 @@ import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { toaster } from "@/shared/providers/appToaster";
 import FileViewerDialog from "./FileViewerDialog";
+import { toFileTreeGitStatus } from "./fileTreeGitStatus";
 import { compareFileTreePaths } from "./fileTreeSort";
 import {
 	FILE_TREE_PANEL_MAX_WIDTH,
@@ -53,15 +54,6 @@ const FILE_TREE_CONTENT_TRANSITION = {
 	ease: [0.22, 1, 0.36, 1],
 } as const;
 const TRAILING_PATH_SEPARATOR_RE = /[\\/]+$/;
-const FILE_TREE_GIT_STATUSES = new Set<GitStatusEntry["status"]>([
-	"added",
-	"deleted",
-	"ignored",
-	"modified",
-	"renamed",
-	"untracked",
-]);
-
 const FILE_TREE_HOST_STYLE = {
 	height: "100%",
 	minWidth: 0,
@@ -141,30 +133,8 @@ function toAbsolutePath(rootPath: string, relativePath: string) {
 	return `${normalizedRoot}/${relativePath}`;
 }
 
-function isFileTreeGitStatus(
-	status: string,
-): status is GitStatusEntry["status"] {
-	return FILE_TREE_GIT_STATUSES.has(status as GitStatusEntry["status"]);
-}
-
 function toPathCollisionKey(path: string) {
 	return path.replace(TRAILING_PATH_SEPARATOR_RE, "");
-}
-
-function toFileTreeGitStatus(
-	entries: readonly { path: string; status: string }[] | undefined,
-): GitStatusEntry[] {
-	if (!entries) return [];
-
-	return entries.flatMap((entry) => {
-		if (!entry.path || !isFileTreeGitStatus(entry.status)) return [];
-		return [
-			{
-				path: entry.path,
-				status: entry.status,
-			},
-		];
-	});
 }
 
 function buildModelPaths(
