@@ -22,6 +22,7 @@ import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
 import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
+import { getSuffixPrefixOverlapLength } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
@@ -30,16 +31,6 @@ interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
-}
-
-function getSuffixPrefixOverlapLength(text: string, prefixSource: string) {
-	const maxLength = Math.min(text.length, prefixSource.length);
-	for (let length = maxLength; length > 0; length -= 1) {
-		if (text.endsWith(prefixSource.slice(0, length))) {
-			return length;
-		}
-	}
-	return 0;
 }
 
 export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
