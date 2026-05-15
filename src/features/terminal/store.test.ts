@@ -8,7 +8,11 @@ import {
 } from "./store";
 
 function resetStore() {
-	useTerminalStore.setState({ profiles: {}, notifiedTabs: new Set() });
+	useTerminalStore.setState({
+		profiles: {},
+		notifiedTabs: new Set(),
+		sessionProfileIds: {},
+	});
 	window.history.pushState({}, "", "/");
 }
 

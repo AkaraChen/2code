@@ -37,6 +37,18 @@ function findProfileIdBySessionId(
 	return null;
 }
 
+function refreshSessionProfileId(
+	state: Pick<TerminalStore, "profiles" | "sessionProfileIds">,
+	sessionId: string,
+) {
+	const profileId = findProfileIdBySessionId(state.profiles, sessionId);
+	if (profileId) {
+		state.sessionProfileIds[sessionId] = profileId;
+	} else {
+		delete state.sessionProfileIds[sessionId];
+	}
+}
+
 function clearProfileActiveTabNotification(
 	state: Pick<TerminalStore, "profiles" | "notifiedTabs">,
 	profileId: string | null,
@@ -52,6 +64,7 @@ function clearProfileActiveTabNotification(
 interface TerminalStore {
 	profiles: Record<string, ProjectTerminalState>;
 	notifiedTabs: Set<string>;
+	sessionProfileIds: Record<string, string>;
 	addTab: (profileId: string, sessionId: string, title: string) => void;
 	closeTab: (profileId: string, tabId: string) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
@@ -67,6 +80,7 @@ export const useTerminalStore = create<TerminalStore>()(
 	immer((set) => ({
 		profiles: {},
 		notifiedTabs: new Set<string>(),
+		sessionProfileIds: {},
 
 		addTab(profileId, sessionId, title) {
 			set((state) => {
@@ -81,6 +95,7 @@ export const useTerminalStore = create<TerminalStore>()(
 					activeTabId: tab.id,
 					counter: existing.counter + 1,
 				};
+				state.sessionProfileIds[sessionId] ??= profileId;
 
 				if (getFocusedProfileId() === profileId) {
 					clearProfileActiveTabNotification(state, profileId);
@@ -98,6 +113,7 @@ export const useTerminalStore = create<TerminalStore>()(
 
 				const idx = profile.tabs.findIndex((t) => t.id === tabId);
 				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
+				refreshSessionProfileId(state, tabId);
 
 				if (profile.tabs.length === 0) {
 					delete state.profiles[profileId];
@@ -128,6 +144,9 @@ export const useTerminalStore = create<TerminalStore>()(
 				const profile = state.profiles[profileId];
 				profile?.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
 				delete state.profiles[profileId];
+				profile?.tabs.forEach((tab) =>
+					refreshSessionProfileId(state, tab.id),
+				);
 			});
 		},
 
@@ -147,7 +166,13 @@ export const useTerminalStore = create<TerminalStore>()(
 						state.profiles[id].tabs.forEach((tab) =>
 							state.notifiedTabs.delete(tab.id),
 						);
+						const removedSessionIds = state.profiles[id].tabs.map(
+							(tab) => tab.id,
+						);
 						delete state.profiles[id];
+						removedSessionIds.forEach((sessionId) =>
+							refreshSessionProfileId(state, sessionId),
+						);
 					}
 				}
 			});
@@ -155,10 +180,7 @@ export const useTerminalStore = create<TerminalStore>()(
 
 		markNotified(sessionId) {
 			set((state) => {
-				const profileId = findProfileIdBySessionId(
-					state.profiles,
-					sessionId,
-				);
+				const profileId = state.sessionProfileIds[sessionId] ?? null;
 				if (
 					profileId &&
 					profileId === getFocusedProfileId() &&
