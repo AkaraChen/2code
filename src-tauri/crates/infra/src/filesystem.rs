@@ -67,7 +67,7 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 		paths.push(relative_path);
 	}
 
-	paths.sort_by_key(|path| path.to_lowercase());
+	sort_file_tree_paths(&mut paths);
 
 	Ok(paths)
 }
@@ -117,7 +117,7 @@ pub fn list_file_tree_child_paths(
 		paths.push(relative_path);
 	}
 
-	paths.sort_by_key(|path| path.to_lowercase());
+	sort_file_tree_paths(&mut paths);
 
 	Ok(paths)
 }
@@ -414,6 +414,10 @@ fn normalize_relative_path(path: &Path) -> String {
 	normalized
 }
 
+fn sort_file_tree_paths(paths: &mut [String]) {
+	paths.sort_by_cached_key(|path| path.to_lowercase());
+}
+
 fn is_hidden_file_name(file_name: &std::ffi::OsStr) -> bool {
 	file_name.to_string_lossy().starts_with('.')
 }
@@ -621,6 +625,28 @@ mod tests {
 	) -> Option<u32> {
 		let query_chars = query.chars().collect::<Vec<_>>();
 		score_file_match(query, &query_chars, name, relative_path)
+	}
+
+	fn sort_file_tree_paths_without_cached_key(paths: &mut [String]) {
+		paths.sort_by_key(|path| path.to_lowercase());
+	}
+
+	#[test]
+	fn cached_file_tree_sort_matches_uncached_lowercase_sort() {
+		let paths = vec![
+			"src/Feature10/".to_string(),
+			"src/feature2/readme.md".to_string(),
+			"Tests/Alpha.test.ts".to_string(),
+			"src/FEATURE1/component.tsx".to_string(),
+			"src/feature10/README.md".to_string(),
+		];
+		let mut cached = paths.clone();
+		let mut uncached = paths;
+
+		sort_file_tree_paths(&mut cached);
+		sort_file_tree_paths_without_cached_key(&mut uncached);
+
+		assert_eq!(cached, uncached);
 	}
 
 	#[test]
