@@ -428,7 +428,7 @@ fn validate_file_tree_relative_path(
 		)));
 	}
 
-	let mut segments = Vec::new();
+	let mut normalized = String::new();
 	for component in parsed.components() {
 		match component {
 			Component::CurDir => {}
@@ -439,7 +439,10 @@ fn validate_file_tree_relative_path(
 						"{label} cannot target .git metadata"
 					)));
 				}
-				segments.push(segment.into_owned());
+				if !normalized.is_empty() {
+					normalized.push('/');
+				}
+				normalized.push_str(&segment);
 			}
 			Component::ParentDir
 			| Component::RootDir
@@ -451,11 +454,11 @@ fn validate_file_tree_relative_path(
 		}
 	}
 
-	if segments.is_empty() {
+	if normalized.is_empty() {
 		return Err(invalid_input(format!("{label} cannot be empty")));
 	}
 
-	Ok(segments.join("/"))
+	Ok(normalized)
 }
 
 fn destination_for_move(
@@ -555,6 +558,8 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::path::Component;
+	use std::time::Instant;
 
 	#[test]
 	fn scores_exact_name_first() {
@@ -584,6 +589,72 @@ mod tests {
 		let normalized =
 			normalize_relative_path(Path::new("src/features/main.rs"));
 		assert_eq!(normalized, "src/features/main.rs");
+	}
+
+	fn validate_path_with_segment_vec(path: &str) -> Result<String, AppError> {
+		let trimmed = path.trim();
+		let without_trailing_separator =
+			trimmed.trim_end_matches(['/', '\\']).to_string();
+		let parsed = Path::new(&without_trailing_separator);
+		let mut segments = Vec::new();
+		for component in parsed.components() {
+			match component {
+				Component::CurDir => {}
+				Component::Normal(value) => {
+					let segment = value.to_string_lossy();
+					if segment == ".git" {
+						return Err(invalid_input("git"));
+					}
+					segments.push(segment.into_owned());
+				}
+				Component::ParentDir
+				| Component::RootDir
+				| Component::Prefix(_) => return Err(invalid_input("escape")),
+			}
+		}
+		Ok(segments.join("/"))
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_validate_file_tree_relative_path_direct_string() {
+		let paths: Vec<String> = (0..1_000)
+			.map(|index| format!(" src/module-{index}/nested/file-{index}.ts/ "))
+			.collect();
+		let iterations = 1_000;
+
+		let started = Instant::now();
+		let mut segment_vec_len = 0;
+		for _ in 0..iterations {
+			for path in &paths {
+				segment_vec_len += validate_path_with_segment_vec(
+					std::hint::black_box(path),
+				)
+				.unwrap()
+				.len();
+			}
+		}
+		let segment_vec = started.elapsed();
+
+		let started = Instant::now();
+		let mut direct_string_len = 0;
+		for _ in 0..iterations {
+			for path in &paths {
+				direct_string_len += validate_file_tree_relative_path(
+					std::hint::black_box(path),
+					"Path",
+				)
+				.unwrap()
+				.len();
+			}
+		}
+		let direct_string = started.elapsed();
+
+		assert_eq!(segment_vec_len, direct_string_len);
+		println!(
+			"segment_vec={segment_vec:?} direct_string={direct_string:?} speedup={:.2}x",
+			segment_vec.as_secs_f64() / direct_string.as_secs_f64()
+		);
 	}
 
 	#[test]
