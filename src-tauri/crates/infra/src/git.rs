@@ -941,14 +941,13 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 		}
 
 		// Try to parse as a commit format line (contains \x1f separators)
-		let parts: Vec<&str> = line.split('\x1f').collect();
-		if parts.len() == 6 {
-			let full_hash = parts[0].to_string();
-			let hash = parts[1].to_string();
-			let author_name = parts[2].to_string();
-			let author_email = parts[3].to_string();
-			let date = parts[4].to_string();
-			let message = parts[5].to_string();
+		if let Some(parts) = parse_git_log_commit_line(line) {
+			let full_hash = parts.full_hash.to_string();
+			let hash = parts.hash.to_string();
+			let author_name = parts.author_name.to_string();
+			let author_email = parts.author_email.to_string();
+			let date = parts.date.to_string();
+			let message = parts.message.to_string();
 
 			// Check if the next non-empty line is a shortstat
 			let mut files_changed = 0;
@@ -989,6 +988,31 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	}
 
 	commits
+}
+
+struct GitLogCommitLine<'a> {
+	full_hash: &'a str,
+	hash: &'a str,
+	author_name: &'a str,
+	author_email: &'a str,
+	date: &'a str,
+	message: &'a str,
+}
+
+fn parse_git_log_commit_line(line: &str) -> Option<GitLogCommitLine<'_>> {
+	let mut parts = line.split('\x1f');
+	let commit = GitLogCommitLine {
+		full_hash: parts.next()?,
+		hash: parts.next()?,
+		author_name: parts.next()?,
+		author_email: parts.next()?,
+		date: parts.next()?,
+		message: parts.next()?,
+	};
+	if parts.next().is_some() {
+		return None;
+	}
+	Some(commit)
 }
 
 fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
@@ -1712,6 +1736,14 @@ mod tests {
 		assert_eq!(commits[0].files_changed, 0);
 		assert_eq!(commits[0].insertions, 0);
 		assert_eq!(commits[0].deletions, 0);
+	}
+
+	#[test]
+	fn parse_log_commit_line_rejects_extra_fields() {
+		assert!(
+			parse_git_log_commit_line("a\x1fb\x1fc\x1fd\x1fe\x1ff\x1fg")
+				.is_none()
+		);
 	}
 
 	// --- extract_conflicting_ref ---
