@@ -1,10 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
-import { enableMapSet } from "immer";
+import { create as createMutative, type Draft } from "mutative";
 import { create } from "zustand";
-import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
-
-enableMapSet();
 
 interface TerminalTab {
 	id: string;
@@ -76,14 +73,18 @@ interface TerminalStore {
 	markProfileRead: (profileId: string) => void;
 }
 
-export const useTerminalStore = create<TerminalStore>()(
-	immer((set) => ({
+export const useTerminalStore = create<TerminalStore>()((set) => {
+	const mutate = (recipe: (state: Draft<TerminalStore>) => void) => {
+		set((state) => createMutative(state, recipe));
+	};
+
+	return {
 		profiles: {},
 		notifiedTabs: new Set<string>(),
 		sessionProfileIds: {},
 
 		addTab(profileId, sessionId, title) {
-			set((state) => {
+			mutate((state) => {
 				const existing = state.profiles[profileId] ?? {
 					tabs: [],
 					activeTabId: null,
@@ -104,7 +105,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		closeTab(profileId, tabId) {
-			set((state) => {
+			mutate((state) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				const wasActiveTab = tabId === profile.activeTabId;
@@ -131,7 +132,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		setActiveTab(profileId, tabId) {
-			set((state) => {
+			mutate((state) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				profile.activeTabId = tabId;
@@ -140,7 +141,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		removeProfile(profileId) {
-			set((state) => {
+			mutate((state) => {
 				const profile = state.profiles[profileId];
 				profile?.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
 				delete state.profiles[profileId];
@@ -151,7 +152,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		updateTabTitle(profileId, tabId, title) {
-			set((state) => {
+			mutate((state) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				const tab = profile.tabs.find((t) => t.id === tabId);
@@ -160,7 +161,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		removeStaleProfiles(validIds) {
-			set((state) => {
+			mutate((state) => {
 				for (const id of Object.keys(state.profiles)) {
 					if (!validIds.has(id)) {
 						state.profiles[id].tabs.forEach((tab) =>
@@ -179,7 +180,7 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		markNotified(sessionId) {
-			set((state) => {
+			mutate((state) => {
 				const profileId = state.sessionProfileIds[sessionId] ?? null;
 				if (
 					profileId &&
@@ -195,20 +196,20 @@ export const useTerminalStore = create<TerminalStore>()(
 		},
 
 		markRead(sessionId) {
-			set((state) => {
+			mutate((state) => {
 				state.notifiedTabs.delete(sessionId);
 			});
 		},
 
 		markProfileRead(profileId) {
-			set((state) => {
+			mutate((state) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				profile.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
 			});
 		},
-	})),
-);
+	};
+});
 
 /** IDs of profiles that currently have terminal tabs open. */
 export function useTerminalProfileIds() {
