@@ -568,10 +568,7 @@ pub fn branch_unique_commits(
 
 	Ok(String::from_utf8_lossy(&output.stdout)
 		.lines()
-		.map(str::trim)
-		.filter(|line| !line.is_empty())
-		.map(ToOwned::to_owned)
-		.collect())
+		.collect_non_empty_trimmed_lines())
 }
 
 pub fn commit_diff_stats(
@@ -781,13 +778,32 @@ fn refs_except_branch(
 
 	Ok(String::from_utf8_lossy(&output.stdout)
 		.lines()
-		.map(str::trim)
-		.filter(|line| !line.is_empty() && *line != branch_ref)
-		.map(ToOwned::to_owned)
-		.collect())
+		.collect_filtered_trimmed_lines(|line| line != branch_ref))
 }
 
 // --- Private helpers ---
+
+trait TrimmedLineCollector<'a>: Iterator<Item = &'a str> + Sized {
+	fn collect_non_empty_trimmed_lines(self) -> Vec<String> {
+		self.collect_filtered_trimmed_lines(|_| true)
+	}
+
+	fn collect_filtered_trimmed_lines(
+		self,
+		mut keep: impl FnMut(&str) -> bool,
+	) -> Vec<String> {
+		let mut lines = Vec::new();
+		for line in self {
+			let line = line.trim();
+			if !line.is_empty() && keep(line) {
+				lines.push(line.to_owned());
+			}
+		}
+		lines
+	}
+}
+
+impl<'a, I> TrimmedLineCollector<'a> for I where I: Iterator<Item = &'a str> {}
 
 pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	if hash.len() < 4 || hash.len() > 40 {
@@ -1386,6 +1402,7 @@ fn normalize_host(host: &str) -> String {
 mod tests {
 	use super::*;
 	use std::process::Command;
+	use std::time::Instant;
 
 	#[test]
 	fn parse_github_owner_and_repo_with_https_url() {
@@ -2345,5 +2362,47 @@ mod tests {
 			.output()
 			.unwrap();
 		assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_collect_trimmed_git_output_lines() {
+		let mut output = String::new();
+		for i in 0..10_000 {
+			output.push_str("  ");
+			output.push_str(&format!("{i:040x}"));
+			output.push_str("  \n");
+		}
+
+		let iterations = 1_000;
+
+		let started = Instant::now();
+		let mut iterator_chain_len = 0;
+		for _ in 0..iterations {
+			let lines: Vec<String> = std::hint::black_box(&output)
+				.lines()
+				.map(str::trim)
+				.filter(|line| !line.is_empty())
+				.map(ToOwned::to_owned)
+				.collect();
+			iterator_chain_len += std::hint::black_box(lines.len());
+		}
+		let iterator_chain = started.elapsed();
+
+		let started = Instant::now();
+		let mut direct_collector_len = 0;
+		for _ in 0..iterations {
+			let lines = std::hint::black_box(&output)
+				.lines()
+				.collect_non_empty_trimmed_lines();
+			direct_collector_len += std::hint::black_box(lines.len());
+		}
+		let direct_collector = started.elapsed();
+
+		assert_eq!(iterator_chain_len, direct_collector_len);
+		println!(
+			"iterator_chain={iterator_chain:?} direct_collector={direct_collector:?} speedup={:.2}x",
+			iterator_chain.as_secs_f64() / direct_collector.as_secs_f64()
+		);
 	}
 }
