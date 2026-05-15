@@ -13,11 +13,24 @@ pub fn prepare_init_dir(
 	let dir = std::env::temp_dir().join(format!("2code-init-{session_id}"));
 	std::fs::create_dir_all(&dir)?;
 
-	let project_init = project_init_scripts.join("\n");
+	let project_init = build_project_init(project_init_scripts);
 	let zshenv = build_zshenv(DEFAULT_INIT, &project_init);
 	std::fs::write(dir.join(".zshenv"), zshenv)?;
 
 	Ok(dir)
+}
+
+fn build_project_init(project_init_scripts: &[String]) -> String {
+	let scripts_len: usize = project_init_scripts.iter().map(String::len).sum();
+	let separators_len = project_init_scripts.len().saturating_sub(1);
+	let mut project_init = String::with_capacity(scripts_len + separators_len);
+	for (index, script) in project_init_scripts.iter().enumerate() {
+		if index > 0 {
+			project_init.push('\n');
+		}
+		project_init.push_str(script);
+	}
+	project_init
 }
 
 fn build_zshenv(default_init: &str, project_init: &str) -> String {
@@ -60,6 +73,8 @@ add-zsh-hook precmd _2code_init
 
 #[cfg(test)]
 mod tests {
+	use std::time::Instant;
+
 	use super::*;
 
 	#[test]
@@ -94,6 +109,45 @@ mod tests {
 		assert!(content.contains("export FOO=bar"));
 
 		std::fs::remove_dir_all(&dir).ok();
+	}
+
+	#[test]
+	fn project_init_matches_join_output() {
+		let scripts = vec![
+			"echo HELLO".to_string(),
+			"export FOO=bar".to_string(),
+			"bun run setup".to_string(),
+		];
+		assert_eq!(build_project_init(&scripts), scripts.join("\n"));
+	}
+
+	#[test]
+	#[ignore]
+	fn benchmark_project_init_building() {
+		let scripts: Vec<String> = (0..32)
+			.map(|index| format!("echo preparing shell init step {index}"))
+			.collect();
+		let iterations = 300_000;
+
+		let start = Instant::now();
+		let mut join_len = 0;
+		for _ in 0..iterations {
+			join_len += scripts.join("\n").len();
+		}
+		let join_build = start.elapsed();
+
+		let start = Instant::now();
+		let mut direct_len = 0;
+		for _ in 0..iterations {
+			direct_len += build_project_init(&scripts).len();
+		}
+		let direct_build = start.elapsed();
+
+		assert_eq!(join_len, direct_len);
+		println!(
+			"join_build={join_build:?} direct_build={direct_build:?} speedup={:.2}x",
+			join_build.as_secs_f64() / direct_build.as_secs_f64()
+		);
 	}
 
 	#[test]
