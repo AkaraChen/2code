@@ -150,11 +150,14 @@ export function getSupportedControlIds(
 	supportedAppIds: readonly LaunchAppControlId[],
 ) {
 	const supportedAppIdSet = new Set(supportedAppIds);
-	return definitions
-		.filter(
-			(def) =>
-				def.kind === "static" ||
-				supportedAppIdSet.has(def.id as LaunchAppControlId),
-		)
-		.map((def) => def.id);
+	const supportedControlIds: ControlId[] = [];
+	for (const def of definitions) {
+		if (
+			def.kind === "static" ||
+			supportedAppIdSet.has(def.id as LaunchAppControlId)
+		) {
+			supportedControlIds.push(def.id);
+		}
+	}
+	return supportedControlIds;
 }
