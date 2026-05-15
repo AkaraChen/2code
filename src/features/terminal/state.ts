@@ -8,6 +8,7 @@ import {
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { collectProjectSessions } from "./restorationCollections";
 import { useTerminalStore } from "./store";
 
 /**
@@ -70,7 +71,7 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 		})),
 	);
 
-	const allSessions = projectSessions.flatMap(({ sessions }) => sessions);
+	const allSessions = collectProjectSessions(projectSessions);
 	consola.info(`[pty-restore] found ${allSessions.length} sessions`);
 	if (allSessions.length === 0) return;
 
