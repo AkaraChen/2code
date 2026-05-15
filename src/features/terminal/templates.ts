@@ -116,26 +116,36 @@ function normalizeTemplateName(name: string) {
 export function normalizeGlobalTerminalTemplates(
 	drafts: GlobalTerminalTemplateDraft[],
 ): GlobalTerminalTemplate[] {
-	return drafts
-		.map((draft) => ({
+	const templates: GlobalTerminalTemplate[] = [];
+	for (const draft of drafts) {
+		const template = {
 			id: draft.id || createTemplateId(),
 			name: normalizeTemplateName(draft.name),
 			commands: textToCommands(draft.commandsText),
-		}))
-		.filter((template) => template.name && template.commands.length > 0);
+		};
+		if (template.name && template.commands.length > 0) {
+			templates.push(template);
+		}
+	}
+	return templates;
 }
 
 export function normalizeProjectTerminalTemplates(
 	drafts: ProjectTerminalTemplateDraft[],
 ): ProjectTerminalTemplate[] {
-	return drafts
-		.map((draft) => ({
+	const templates: ProjectTerminalTemplate[] = [];
+	for (const draft of drafts) {
+		const template = {
 			id: draft.id || createTemplateId(),
 			name: normalizeTemplateName(draft.name),
 			cwd: draft.cwd.trim(),
 			commands: textToCommands(draft.commandsText),
-		}))
-		.filter((template) => template.name && template.commands.length > 0);
+		};
+		if (template.name && template.commands.length > 0) {
+			templates.push(template);
+		}
+	}
+	return templates;
 }
 
 export async function resolveProjectTerminalTemplate(
