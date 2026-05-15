@@ -1107,11 +1107,31 @@ fn partition_paths_by_tracking(
 	folder: &str,
 	paths: &[String],
 ) -> Result<(Vec<String>, Vec<String>), AppError> {
+	let output = Command::new("git")
+		.args(["ls-files", "-z", "--"])
+		.args(paths)
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		return Err(AppError::GitError(command_error(
+			"git ls-files failed",
+			&output,
+		)));
+	}
+
+	let tracked_files: HashSet<String> = output
+		.stdout
+		.split(|byte| *byte == 0)
+		.filter(|path| !path.is_empty())
+		.map(|path| String::from_utf8_lossy(path).into_owned())
+		.collect();
+
 	let mut tracked_paths = Vec::new();
 	let mut untracked_paths = Vec::new();
 
 	for path in paths {
-		if is_path_tracked(folder, path)? {
+		if is_tracked_request(path, &tracked_files) {
 			tracked_paths.push(path.clone());
 		} else {
 			untracked_paths.push(path.clone());
@@ -1121,25 +1141,15 @@ fn partition_paths_by_tracking(
 	Ok((tracked_paths, untracked_paths))
 }
 
-fn is_path_tracked(folder: &str, path: &str) -> Result<bool, AppError> {
-	let output = Command::new("git")
-		.args(["ls-files", "--error-unmatch", "--", path])
-		.current_dir(folder)
-		.output()?;
-
-	if output.status.success() {
-		return Ok(true);
+fn is_tracked_request(path: &str, tracked_files: &HashSet<String>) -> bool {
+	let path = path.trim_end_matches('/');
+	if tracked_files.contains(path) {
+		return true;
 	}
-
-	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-	if stderr.contains("did not match any file(s) known to git") {
-		return Ok(false);
-	}
-
-	Err(AppError::GitError(command_error(
-		"git ls-files failed",
-		&output,
-	)))
+	let prefix = format!("{path}/");
+	tracked_files
+		.iter()
+		.any(|tracked| tracked.starts_with(&prefix))
 }
 
 fn command_error(prefix: &str, output: &std::process::Output) -> String {
@@ -1522,6 +1532,17 @@ mod tests {
 	fn validate_discard_paths_rejects_empty_list() {
 		let paths: Vec<String> = Vec::new();
 		assert!(validate_discard_paths(&paths).is_err());
+	}
+
+	#[test]
+	fn tracked_request_matches_files_inside_directory() {
+		let tracked_files =
+			HashSet::from(["src/main.rs".to_string(), "README.md".to_string()]);
+
+		assert!(is_tracked_request("src/", &tracked_files));
+		assert!(is_tracked_request("README.md", &tracked_files));
+		assert!(!is_tracked_request("target/", &tracked_files));
+		assert!(!is_tracked_request("scratch.txt", &tracked_files));
 	}
 
 	#[test]
@@ -2378,4 +2399,5 @@ mod tests {
 			.unwrap();
 		assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
 	}
+
 }
