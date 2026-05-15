@@ -35,6 +35,7 @@ import {
 import { reconcileIncludedFiles } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
+import { buildDiscardFilePaths } from "./discardFilePaths";
 
 const SIDEBAR_TAB_CONTENT_PROPS = {
 	position: "absolute",
@@ -162,21 +163,16 @@ export default function GitDiffContent({
 	};
 
 	const handleDiscardFile = async (file: FileDiffMetadata) => {
-		const relativePaths = Array.from(
-			new Set(
-				[file.name, file.prevName].filter((path): path is string =>
-					Boolean(path),
-				),
-			),
-		);
-		const absolutePaths = relativePaths.map((path) =>
-			resolveWorktreeFilePath(worktreePath, path),
+		const { relativePaths, filePathsToRefresh } = buildDiscardFilePaths(
+			file,
+			worktreePath,
+			resolveWorktreeFilePath,
 		);
 
 		try {
 			await discardGitFileChanges.mutateAsync({
 				paths: relativePaths,
-				filePathsToRefresh: absolutePaths,
+				filePathsToRefresh,
 			});
 			toaster.create({
 				title: m.gitDiscardFileSuccessTitle(),
