@@ -22,59 +22,7 @@ import {
 } from "@/features/updater/store";
 import { useUpdaterSettingsStore } from "@/features/updater/settingsStore";
 import { useLocale } from "@/shared/lib/locale";
-
-function getRelativeTimeValue(date: Date) {
-	const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000);
-	const absSeconds = Math.abs(diffSeconds);
-
-	if (absSeconds < 60) {
-		return { value: diffSeconds, unit: "second" as const };
-	}
-	if (absSeconds < 60 * 60) {
-		return { value: Math.round(diffSeconds / 60), unit: "minute" as const };
-	}
-	if (absSeconds < 60 * 60 * 24) {
-		return { value: Math.round(diffSeconds / (60 * 60)), unit: "hour" as const };
-	}
-	if (absSeconds < 60 * 60 * 24 * 30) {
-		return {
-			value: Math.round(diffSeconds / (60 * 60 * 24)),
-			unit: "day" as const,
-		};
-	}
-	if (absSeconds < 60 * 60 * 24 * 365) {
-		return {
-			value: Math.round(diffSeconds / (60 * 60 * 24 * 30)),
-			unit: "month" as const,
-		};
-	}
-	return {
-		value: Math.round(diffSeconds / (60 * 60 * 24 * 365)),
-		unit: "year" as const,
-	};
-}
-
-function formatReleaseDate(date: string | null | undefined, locale: string) {
-	if (!date) {
-		return null;
-	}
-
-	const parsed = new Date(date);
-	if (Number.isNaN(parsed.getTime())) {
-		return date;
-	}
-
-	const absoluteDate = new Intl.DateTimeFormat(locale, {
-		dateStyle: "medium",
-	}).format(parsed);
-	const relativeTimeValue = getRelativeTimeValue(parsed);
-	const relativeTime = new Intl.RelativeTimeFormat(locale, {
-		numeric: "auto",
-		style: "long",
-	}).format(relativeTimeValue.value, relativeTimeValue.unit);
-
-	return `${absoluteDate} (${relativeTime})`;
-}
+import { formatReleaseDate } from "./releaseDate";
 
 export function AboutSettings() {
 	const { status, update, error } = useUpdaterStore();
