@@ -24,8 +24,10 @@ export type LaunchAppControlId = (typeof launchAppControlIds)[number];
 export type StaticControlId = (typeof staticControlIds)[number];
 export type ControlId = LaunchAppControlId | StaticControlId;
 
+const launchAppControlIdSet = new Set<string>(launchAppControlIds);
+
 export function isLaunchAppControlId(id: string): id is LaunchAppControlId {
-	return launchAppControlIds.includes(id as LaunchAppControlId);
+	return launchAppControlIdSet.has(id);
 }
 
 export interface ControlOptionField {
