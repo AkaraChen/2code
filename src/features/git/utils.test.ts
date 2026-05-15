@@ -340,6 +340,7 @@ describe("getPreviewableImageMimeType", () => {
 	it("returns null for unsupported formats", () => {
 		expect(getPreviewableImageMimeType("document.pdf")).toBeNull();
 		expect(getPreviewableImageMimeType("README")).toBeNull();
+		expect(getPreviewableImageMimeType("image.")).toBeNull();
 	});
 });
 
