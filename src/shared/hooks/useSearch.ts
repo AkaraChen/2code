@@ -31,12 +31,12 @@ export function isSearchShortcut(event: SearchShortcutEvent) {
 export function findSearchMatches(content: string, query: string): SearchMatch[] {
 	if (!query) return [];
 
-	const normalizedQuery = query.toLocaleLowerCase();
+	const normalizedQuery = query.toLowerCase();
 	const lines = content.split(LINE_BREAK_PATTERN);
 	const matches: SearchMatch[] = [];
 
 	for (const [index, line] of lines.entries()) {
-		const normalizedLine = line.toLocaleLowerCase();
+		const normalizedLine = line.toLowerCase();
 		let searchFrom = 0;
 
 		while (searchFrom <= normalizedLine.length) {
