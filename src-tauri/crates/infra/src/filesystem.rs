@@ -252,27 +252,48 @@ pub fn delete_file_tree_paths(
 		}
 
 		let absolute_path = root.join(&path);
-		if !absolute_path.exists() {
+		let metadata =
+			std::fs::symlink_metadata(&absolute_path).map_err(|error| {
+				if error.kind() == std::io::ErrorKind::NotFound {
+					AppError::NotFound(format!("File tree path: {path}"))
+				} else {
+					AppError::IoError(error)
+				}
+			})?;
+		if metadata.file_type().is_symlink() && !absolute_path.exists() {
 			return Err(AppError::NotFound(format!("File tree path: {path}")));
 		}
 
-		delete_paths.push((path, absolute_path));
+		delete_paths.push(DeletePath {
+			path,
+			absolute_path,
+			metadata,
+		});
 	}
 
-	delete_paths.sort_by(|(left, _), (right, _)| {
-		right.matches('/').count().cmp(&left.matches('/').count())
+	delete_paths.sort_by(|left, right| {
+		right
+			.path
+			.matches('/')
+			.count()
+			.cmp(&left.path.matches('/').count())
 	});
 
-	for (_path, absolute_path) in delete_paths {
-		let metadata = std::fs::symlink_metadata(&absolute_path)?;
-		if metadata.file_type().is_dir() {
-			std::fs::remove_dir_all(absolute_path)?;
+	for delete_path in delete_paths {
+		if delete_path.metadata.file_type().is_dir() {
+			std::fs::remove_dir_all(delete_path.absolute_path)?;
 		} else {
-			std::fs::remove_file(absolute_path)?;
+			std::fs::remove_file(delete_path.absolute_path)?;
 		}
 	}
 
 	Ok(())
+}
+
+struct DeletePath {
+	path: String,
+	absolute_path: PathBuf,
+	metadata: std::fs::Metadata,
 }
 
 pub fn search_files(
