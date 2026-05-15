@@ -204,9 +204,10 @@ function getContextMenuActionPaths(
 	return selectedPaths.includes(itemPath) ? selectedPaths : [itemPath];
 }
 
-function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
+export function hasTreePath(pathSet: ReadonlySet<string>, path: string) {
+	if (pathSet.has(path)) return true;
 	const directoryPath = `${path.replace(TRAILING_PATH_SEPARATOR_RE, "")}/`;
-	return pathSet.has(path) || pathSet.has(directoryPath);
+	return pathSet.has(directoryPath);
 }
 
 function buildExistingPathSet(
