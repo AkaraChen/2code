@@ -32,6 +32,7 @@ import {
 	FILE_TREE_PANEL_MIN_WIDTH,
 	useFileTreeStore,
 } from "./fileTreeStore";
+import { buildFilePathSet } from "./fileTreePathSets";
 import {
 	useDeleteFileTreePaths,
 	useFileTreeChildPaths,
@@ -458,8 +459,7 @@ export default function FileTreePanel({
 		[gitStatus, treePaths],
 	);
 	const filePathSet = useMemo(
-		() =>
-			new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
+		() => buildFilePathSet(existingPathSet),
 		[existingPathSet],
 	);
 	const treePathSet = existingPathSet;
