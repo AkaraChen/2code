@@ -223,6 +223,16 @@ function buildExistingPathSet(
 	return paths;
 }
 
+function buildFilePathSet(paths: ReadonlySet<string>) {
+	const filePaths = new Set<string>();
+	for (const path of paths) {
+		if (!path.endsWith("/")) {
+			filePaths.add(path);
+		}
+	}
+	return filePaths;
+}
+
 interface FileTreeContextMenuButtonProps {
 	children: ReactNode;
 	danger?: boolean;
@@ -459,8 +469,7 @@ export default function FileTreePanel({
 		[gitStatus, treePaths],
 	);
 	const filePathSet = useMemo(
-		() =>
-			new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
+		() => buildFilePathSet(existingPathSet),
 		[existingPathSet],
 	);
 	const treePathSet = existingPathSet;
