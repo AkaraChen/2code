@@ -2,6 +2,7 @@ import { bench, describe } from "vitest";
 import {
 	closeFileViewerTab,
 	type ProfileFileViewerState,
+	updateDirtyFileList,
 } from "./fileViewerTabsStore";
 
 const tabs = Array.from({ length: 5_000 }, (_, index) => ({
@@ -9,6 +10,11 @@ const tabs = Array.from({ length: 5_000 }, (_, index) => ({
 	title: `file-${index}.ts`,
 }));
 const targetPath = tabs[3_750].filePath;
+const dirtyFiles = Array.from(
+	{ length: 5_000 },
+	(_, index) => `/repo/src/file-${index}.ts`,
+);
+const dirtyTargetPath = dirtyFiles[3_750];
 let sink = 0;
 
 function makeProfile(): ProfileFileViewerState {
@@ -36,6 +42,22 @@ function closeFileViewerTabWithFilter(
 	}
 }
 
+function updateDirtyFileListWithFilter(
+	dirtyFiles: string[],
+	filePath: string,
+	isDirty: boolean,
+) {
+	const alreadyDirty = dirtyFiles.includes(filePath);
+
+	if (isDirty) {
+		return alreadyDirty ? dirtyFiles : [...dirtyFiles, filePath];
+	}
+
+	if (!alreadyDirty) return dirtyFiles;
+	const nextDirtyFiles = dirtyFiles.filter((path) => path !== filePath);
+	return nextDirtyFiles.length > 0 ? nextDirtyFiles : null;
+}
+
 describe("file viewer tab closing", () => {
 	bench("findIndex plus filter close", () => {
 		const profile = makeProfile();
@@ -48,6 +70,28 @@ describe("file viewer tab closing", () => {
 		const profile = makeProfile();
 		closeFileViewerTab(profile, targetPath);
 		sink = profile.tabs.length;
+		if (sink === Number.NEGATIVE_INFINITY) throw new Error("unreachable");
+	});
+});
+
+describe("file viewer dirty list updates", () => {
+	bench("includes plus filter dirty removal", () => {
+		const nextDirtyFiles = updateDirtyFileListWithFilter(
+			dirtyFiles,
+			dirtyTargetPath,
+			false,
+		);
+		sink = nextDirtyFiles?.length ?? 0;
+		if (sink === Number.NEGATIVE_INFINITY) throw new Error("unreachable");
+	});
+
+	bench("indexOf plus splice dirty removal", () => {
+		const nextDirtyFiles = updateDirtyFileList(
+			dirtyFiles,
+			dirtyTargetPath,
+			false,
+		);
+		sink = nextDirtyFiles?.length ?? 0;
 		if (sink === Number.NEGATIVE_INFINITY) throw new Error("unreachable");
 	});
 });

@@ -33,6 +33,25 @@ interface FileViewerDirtyStore {
 	) => void;
 }
 
+export function updateDirtyFileList(
+	dirtyFiles: string[],
+	filePath: string,
+	isDirty: boolean,
+) {
+	const index = dirtyFiles.indexOf(filePath);
+
+	if (isDirty) {
+		return index === -1 ? [...dirtyFiles, filePath] : dirtyFiles;
+	}
+
+	if (index === -1) return dirtyFiles;
+	if (dirtyFiles.length === 1) return null;
+
+	const nextDirtyFiles = [...dirtyFiles];
+	nextDirtyFiles.splice(index, 1);
+	return nextDirtyFiles;
+}
+
 export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 	immer((set) => ({
 		profiles: {},
@@ -40,18 +59,13 @@ export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 		setFileDirty(profileId, filePath, isDirty) {
 			set((state) => {
 				const dirtyFiles = state.profiles[profileId] ?? [];
-				const alreadyDirty = dirtyFiles.includes(filePath);
-
-				if (isDirty) {
-					if (!alreadyDirty) {
-						state.profiles[profileId] = [...dirtyFiles, filePath];
-					}
-					return;
-				}
-
-				if (!alreadyDirty) return;
-				const nextDirtyFiles = dirtyFiles.filter((path) => path !== filePath);
-				if (nextDirtyFiles.length > 0) {
+				const nextDirtyFiles = updateDirtyFileList(
+					dirtyFiles,
+					filePath,
+					isDirty,
+				);
+				if (nextDirtyFiles === dirtyFiles) return;
+				if (nextDirtyFiles) {
 					state.profiles[profileId] = nextDirtyFiles;
 				} else {
 					delete state.profiles[profileId];

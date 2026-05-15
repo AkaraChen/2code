@@ -112,6 +112,20 @@ describe("fileViewerTabsStore", () => {
 		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toBeUndefined();
 	});
 
+	it("ignores clearing a file that is not dirty", () => {
+		useFileViewerDirtyStore
+			.getState()
+			.setFileDirty("profile-1", "/repo/src/a.ts", true);
+
+		useFileViewerDirtyStore
+			.getState()
+			.setFileDirty("profile-1", "/repo/src/missing.ts", false);
+
+		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toEqual([
+			"/repo/src/a.ts",
+		]);
+	});
+
 	it("switches between file and terminal focus for a profile", () => {
 		useFileViewerTabsStore
 			.getState()
