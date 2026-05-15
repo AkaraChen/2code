@@ -10,7 +10,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useMatch, useNavigate } from "react-router";
-import type { GitDiffStats } from "@/generated";
+import type { GitDiffStats, Profile } from "@/generated";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { useDeleteProfile, useProfileDeleteCheck } from "./hooks";
@@ -29,6 +29,23 @@ function hasDiffStats(stats: GitDiffStats | null) {
 	);
 }
 
+export function getFallbackProfile(
+	profiles: readonly Profile[] | undefined,
+	deletedProfileId: string,
+) {
+	let firstFallback: Profile | undefined;
+	for (const profile of profiles ?? []) {
+		if (profile.id === deletedProfileId) {
+			continue;
+		}
+		if (profile.is_default) {
+			return profile;
+		}
+		firstFallback ??= profile;
+	}
+	return firstFallback;
+}
+
 export default function DeleteProfileDialog({
 	isOpen,
 	onClose,
@@ -44,10 +61,10 @@ export default function DeleteProfileDialog({
 		const isDeletingActiveProfile =
 			profileMatch?.params.profileId === profile.id;
 		const project = projects.find((item) => item.id === profile.project_id);
-		const fallbackProfile =
-			project?.profiles.find(
-				(item) => item.id !== profile.id && item.is_default,
-			) ?? project?.profiles.find((item) => item.id !== profile.id);
+		const fallbackProfile = getFallbackProfile(
+			project?.profiles,
+			profile.id,
+		);
 
 		await deleteProfile.mutateAsync({
 			id: profile.id,
