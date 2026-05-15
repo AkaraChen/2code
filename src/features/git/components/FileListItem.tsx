@@ -2,7 +2,7 @@ import { Badge, Checkbox, HStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { MouseEventHandler } from "react";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
-import { changeBadge } from "../utils";
+import { changeBadge, getFileDisplayParts } from "../utils";
 
 export interface FileListItemProps {
 	file: FileDiffMetadata;
@@ -24,11 +24,8 @@ export function FileListItem({
 	onToggleIncluded,
 }: FileListItemProps) {
 	const badge = changeBadge[file.type] ?? changeBadge.change;
-	const basename = file.name.split("/").pop() ?? file.name;
+	const { basename, parentPath } = getFileDisplayParts(file.name);
 	const effectiveIncluded = isIncluded ?? true;
-	const parentPath = file.name.includes("/")
-		? file.name.split("/").slice(0, -1).join("/")
-		: null;
 
 	return (
 		<HStack
