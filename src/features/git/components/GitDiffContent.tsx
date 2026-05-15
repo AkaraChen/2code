@@ -35,6 +35,7 @@ import {
 import { reconcileIncludedFiles } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
+import { collectChangeFileNames } from "./changeFileNames";
 
 const SIDEBAR_TAB_CONTENT_PROPS = {
 	position: "absolute",
@@ -320,9 +321,9 @@ export default function GitDiffContent({
 	}, [state.selectedCommit]);
 
 	useEffect(() => {
-		const nextFileNames = changesFiles.map((file) => file.name);
+		const nextFileNames = collectChangeFileNames(changesFiles);
 		const nextIncluded = reconcileIncludedFiles(
-			nextFileNames,
+			nextFileNames.names,
 			includedFileNames,
 			previousChangeFileNamesRef.current,
 		);
@@ -331,7 +332,7 @@ export default function GitDiffContent({
 			setIncludedFileNames(nextIncluded);
 		}
 
-		previousChangeFileNamesRef.current = new Set(nextFileNames);
+		previousChangeFileNamesRef.current = nextFileNames.nameSet;
 	}, [changesFiles, includedFileNames]);
 
 	useEffect(() => {
