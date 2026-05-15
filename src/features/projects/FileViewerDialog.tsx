@@ -12,6 +12,7 @@ import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSet
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
+import { pathBasename } from "@/shared/lib/path";
 
 // Map file extension to Prism language identifier
 function detectLanguage(filename: string): string {
@@ -105,7 +106,7 @@ export default function FileViewerDialog({
 		!!filePath,
 	);
 
-	const filename = filePath?.split("/").pop() ?? "";
+	const filename = filePath ? pathBasename(filePath) : "";
 	const language = detectLanguage(filename);
 
 	return (

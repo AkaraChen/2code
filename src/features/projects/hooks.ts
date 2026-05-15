@@ -37,6 +37,7 @@ import {
 	writeFileContent,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { pathBasename } from "@/shared/lib/path";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 interface UseProjectAvatarOptions {
@@ -116,7 +117,7 @@ export function useCreateProject(options?: {
 	return useMutation({
 		mutationFn: (opts: { name?: string; folder: string }) =>
 			createProjectFromFolder({
-				name: opts.name || opts.folder.split("/").pop() || "Untitled",
+				name: opts.name || pathBasename(opts.folder) || "Untitled",
 				folder: opts.folder,
 			}),
 		onSuccess: async (project) => {

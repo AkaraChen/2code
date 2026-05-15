@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { pathBasename } from "@/shared/lib/path";
 import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalStore } from "@/features/terminal/store";
@@ -68,7 +69,7 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 
 			openFile(profileId, filePath) {
 				set((state) => {
-					const title = filePath.split("/").pop() ?? filePath;
+					const title = pathBasename(filePath) || filePath;
 					const existing = state.profiles[profileId] ?? {
 						tabs: [],
 						activeFilePath: null,
