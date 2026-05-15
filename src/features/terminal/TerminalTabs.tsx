@@ -126,6 +126,14 @@ export default function TerminalTabs({
 		() => new Set(dirtyFilePaths),
 		[dirtyFilePaths],
 	);
+	const terminalTabIdSet = useMemo(
+		() => new Set(tabs.map((tab) => tab.id)),
+		[tabs],
+	);
+	const fileTabPathSet = useMemo(
+		() => new Set(fileTabs.map((tab) => tab.filePath)),
+		[fileTabs],
+	);
 
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
@@ -137,14 +145,12 @@ export default function TerminalTabs({
 	const tabMotionProps = prefersReducedMotion ? {} : FULL_TAB_MOTION_PROPS;
 
 	function handleTabChange(value: string) {
-		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
-		if (isFileTab) {
+		if (fileTabPathSet.has(value)) {
 			setFileActive(profileId, value);
 			return;
 		}
 
-		const isTerminalTab = tabs.some((tab) => tab.id === value);
-		if (!isTerminalTab) return;
+		if (!terminalTabIdSet.has(value)) return;
 
 		setActiveTab(profileId, value);
 		setTerminalActive(profileId);
