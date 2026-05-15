@@ -8,6 +8,19 @@ use model::project::{
 };
 use model::project_group::ProjectGroup;
 
+fn profile_worktree_path(
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
+}
+
+fn project_folder(db: &DbPool, project_id: &str) -> Result<String, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	Ok(repo::project::find_by_id(conn, project_id)?.folder)
+}
+
 #[tauri::command]
 pub async fn create_project_from_folder(
 	name: String,
@@ -61,8 +74,8 @@ pub async fn get_git_diff(
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_diff(conn, &profile_id)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::diff(&worktree_path)
 	})
 	.await
 }
@@ -74,8 +87,8 @@ pub async fn get_git_diff_stats(
 ) -> Result<GitDiffStats, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_diff_stats(conn, &profile_id)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::diff_stats(&worktree_path)
 	})
 	.await
 }
@@ -88,8 +101,8 @@ pub async fn get_git_log(
 ) -> Result<Vec<GitCommit>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_log(conn, &profile_id, limit.unwrap_or(50))
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::log(&worktree_path, limit.unwrap_or(50))
 	})
 	.await
 }
@@ -102,8 +115,8 @@ pub async fn get_commit_diff(
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_commit_diff(conn, &profile_id, &commit_hash)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::show(&worktree_path, &commit_hash)
 	})
 	.await
 }
@@ -118,14 +131,45 @@ pub async fn get_git_binary_preview(
 ) -> Result<Option<GitBinaryPreview>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_binary_preview(
-			conn,
-			&profile_id,
-			&path,
-			&source,
-			commit_hash.as_deref(),
-		)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let file_path = match source.as_str() {
+			"working_tree" => {
+				infra::git::read_worktree_file(&worktree_path, &path)?
+			}
+			"head" => infra::git::read_head_file(&worktree_path, &path)?,
+			"commit" => {
+				let commit_hash = commit_hash.as_deref().ok_or_else(|| {
+					AppError::GitError(
+						"commit_hash is required for commit previews".into(),
+					)
+				})?;
+				infra::git::read_commit_file(
+					&worktree_path,
+					commit_hash,
+					&path,
+				)?
+			}
+			"parent_commit" => {
+				let commit_hash = commit_hash.as_deref().ok_or_else(|| {
+					AppError::GitError(
+						"commit_hash is required for parent commit previews"
+							.into(),
+					)
+				})?;
+				infra::git::read_parent_commit_file(
+					&worktree_path,
+					commit_hash,
+					&path,
+				)?
+			}
+			other => {
+				return Err(AppError::GitError(format!(
+					"Unsupported preview source: {other}"
+				)));
+			}
+		};
+
+		Ok(file_path.map(|file_path| GitBinaryPreview { file_path }))
 	})
 	.await
 }
@@ -140,14 +184,8 @@ pub async fn commit_git_changes(
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::commit_changes(
-			conn,
-			&profile_id,
-			&files,
-			&message,
-			body.as_deref(),
-		)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::commit(&worktree_path, &files, &message, body.as_deref())
 	})
 	.await
 }
@@ -160,8 +198,8 @@ pub async fn discard_git_file_changes(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::discard_file_changes(conn, &profile_id, &paths)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::discard_changes(&worktree_path, &paths)
 	})
 	.await
 }
@@ -173,8 +211,8 @@ pub async fn get_git_ahead_count(
 ) -> Result<u32, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_ahead_count(conn, &profile_id)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		Ok(infra::git::ahead_count(&worktree_path))
 	})
 	.await
 }
@@ -186,8 +224,8 @@ pub async fn git_push(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::push(conn, &profile_id)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::push(&worktree_path)
 	})
 	.await
 }
@@ -199,10 +237,7 @@ pub async fn get_git_pull_request_status(
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = {
-			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-			repo::profile::find_by_id(conn, &profile_id)?.worktree_path
-		};
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
 		service::project::get_pull_request_status_for_folder(&worktree_path)
 	})
 	.await
@@ -267,9 +302,8 @@ pub async fn get_project_config(
 ) -> Result<ProjectConfig, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project = repo::project::find_by_id(conn, &project_id)?;
-		infra::config::load_project_config(&project.folder)
+		let folder = project_folder(&db, &project_id)?;
+		infra::config::load_project_config(&folder)
 	})
 	.await
 }
@@ -282,9 +316,8 @@ pub async fn save_project_config(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project = repo::project::find_by_id(conn, &project_id)?;
-		infra::config::write_project_config(&project.folder, &config)
+		let folder = project_folder(&db, &project_id)?;
+		infra::config::write_project_config(&folder, &config)
 	})
 	.await
 }
@@ -296,8 +329,86 @@ pub async fn get_project_github_avatar(
 ) -> Result<Option<String>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::get_github_avatar(conn, &project_id)
+		let folder = project_folder(&db, &project_id)?;
+		Ok(infra::git::github_avatar_url(&folder))
 	})
 	.await
+}
+
+#[cfg(test)]
+mod tests {
+	use std::sync::{Arc, Mutex};
+
+	use diesel::prelude::*;
+	use diesel_migrations::MigrationHarness;
+	use model::profile::NewProfile;
+	use model::project::NewProject;
+
+	use super::*;
+
+	fn setup_db() -> DbPool {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		conn.run_pending_migrations(infra::db::MIGRATIONS)
+			.expect("run migrations");
+
+		diesel::insert_into(model::schema::projects::table)
+			.values(&NewProject {
+				id: "proj-1",
+				name: "Project",
+				folder: "/repo",
+				group_id: None,
+			})
+			.execute(&mut conn)
+			.expect("insert project");
+
+		diesel::insert_into(model::schema::profiles::table)
+			.values(&NewProfile {
+				id: "profile-1",
+				project_id: "proj-1",
+				branch_name: "main",
+				worktree_path: "/repo/worktree",
+				is_default: true,
+			})
+			.execute(&mut conn)
+			.expect("insert profile");
+
+		Arc::new(Mutex::new(conn))
+	}
+
+	#[test]
+	fn profile_worktree_path_reads_only_the_needed_field() {
+		let db = setup_db();
+
+		let worktree = profile_worktree_path(&db, "profile-1").unwrap();
+
+		assert_eq!(worktree, "/repo/worktree");
+	}
+
+	#[test]
+	fn project_folder_reads_only_the_needed_field() {
+		let db = setup_db();
+
+		let folder = project_folder(&db, "proj-1").unwrap();
+
+		assert_eq!(folder, "/repo");
+	}
+
+	#[test]
+	fn profile_worktree_path_returns_not_found_for_missing_profile() {
+		let db = setup_db();
+
+		let result = profile_worktree_path(&db, "missing-profile");
+
+		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
+
+	#[test]
+	fn project_folder_returns_not_found_for_missing_project() {
+		let db = setup_db();
+
+		let result = project_folder(&db, "missing-project");
+
+		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
 }
