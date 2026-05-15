@@ -1034,10 +1034,10 @@ fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 			continue;
 		}
 
-		let status_code = String::from_utf8_lossy(&record[..2]).to_string();
+		let status_code = &record[..2];
 		let path = String::from_utf8_lossy(&record[3..]).to_string();
-		let status = map_porcelain_status(&status_code);
-		if status_code.contains('R') || status_code.contains('C') {
+		let status = map_porcelain_status(status_code);
+		if status_code.contains(&b'R') || status_code.contains(&b'C') {
 			index += 1;
 		}
 
@@ -1068,25 +1068,25 @@ fn normalize_file_tree_git_status_paths(
 	}
 }
 
-fn map_porcelain_status(status_code: &str) -> Option<&'static str> {
-	if status_code.contains('!') {
+fn map_porcelain_status(status_code: &[u8]) -> Option<&'static str> {
+	if status_code.contains(&b'!') {
 		return Some("ignored");
 	}
-	if status_code.contains('?') {
+	if status_code.contains(&b'?') {
 		return Some("untracked");
 	}
-	if status_code.contains('R') {
+	if status_code.contains(&b'R') {
 		return Some("renamed");
 	}
-	if status_code.contains('A') {
+	if status_code.contains(&b'A') {
 		return Some("added");
 	}
-	if status_code.contains('D') {
+	if status_code.contains(&b'D') {
 		return Some("deleted");
 	}
 	if status_code
-		.chars()
-		.any(|value| matches!(value, 'M' | 'T' | 'U' | 'C'))
+		.iter()
+		.any(|value| matches!(value, b'M' | b'T' | b'U' | b'C'))
 	{
 		return Some("modified");
 	}
@@ -1573,7 +1573,7 @@ mod tests {
 
 	#[test]
 	fn parses_porcelain_status_for_file_tree() {
-		let output = b" M src/main.rs\0?? scratch.txt\0!! target/\0R  src/new.rs\0src/old.rs\0D  gone.rs\0";
+		let output = b" M src/main.rs\0?? scratch.txt\0!! target/\0R  src/new.rs\0src/old.rs\0C  src/copied.rs\0src/original.rs\0D  gone.rs\0";
 
 		let entries = parse_porcelain_status_z(output);
 
@@ -1595,6 +1595,10 @@ mod tests {
 				FileTreeGitStatusEntry {
 					path: "src/new.rs".to_string(),
 					status: "renamed".to_string(),
+				},
+				FileTreeGitStatusEntry {
+					path: "src/copied.rs".to_string(),
+					status: "modified".to_string(),
 				},
 				FileTreeGitStatusEntry {
 					path: "gone.rs".to_string(),
