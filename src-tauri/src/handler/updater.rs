@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::borrow::Cow;
 use std::sync::Mutex;
 
 use model::error::AppError;
@@ -48,8 +49,12 @@ fn updater_error(error: impl std::fmt::Display) -> AppError {
 	AppError::PtyError(format!("Updater error: {error}"))
 }
 
-fn encode_release_tag(tag: &str) -> String {
-	tag.replace('/', "%2F")
+fn encode_release_tag(tag: &str) -> Cow<'_, str> {
+	if tag.contains('/') {
+		Cow::Owned(tag.replace('/', "%2F"))
+	} else {
+		Cow::Borrowed(tag)
+	}
 }
 
 fn update_metadata(update: &Update) -> UpdateMetadata {
@@ -189,4 +194,56 @@ pub async fn install_update(
 		.map_err(updater_error)?;
 
 	app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::borrow::Cow;
+	use std::time::Instant;
+
+	#[test]
+	fn encode_release_tag_borrows_plain_tags_and_encodes_slashes() {
+		assert!(matches!(encode_release_tag("v1.0.0"), Cow::Borrowed("v1.0.0")));
+		assert_eq!(encode_release_tag("beta/v1.0.0"), "beta%2Fv1.0.0");
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_encode_release_tags_without_replacing_plain_tags() {
+		let tags: Vec<String> = (0..10_000)
+			.map(|index| {
+				if index % 20 == 0 {
+					format!("channel/beta-{index}")
+				} else {
+					format!("v1.{index}.0")
+				}
+			})
+			.collect();
+		let iterations = 1_000;
+
+		let started = Instant::now();
+		let mut replace_len = 0;
+		for _ in 0..iterations {
+			for tag in &tags {
+				replace_len += std::hint::black_box(tag).replace('/', "%2F").len();
+			}
+		}
+		let replace = started.elapsed();
+
+		let started = Instant::now();
+		let mut cow_len = 0;
+		for _ in 0..iterations {
+			for tag in &tags {
+				cow_len += encode_release_tag(std::hint::black_box(tag)).len();
+			}
+		}
+		let cow = started.elapsed();
+
+		assert_eq!(replace_len, cow_len);
+		println!(
+			"replace={replace:?} cow={cow:?} speedup={:.2}x",
+			replace.as_secs_f64() / cow.as_secs_f64()
+		);
+	}
 }
