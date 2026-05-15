@@ -4,17 +4,8 @@ import {
 	Flex,
 	Spinner,
 } from "@chakra-ui/react";
-import claudeIconUrl from "@lobehub/icons-static-svg/icons/claude-color.svg";
-import clineIconUrl from "@lobehub/icons-static-svg/icons/cline.svg";
-import codexIconUrl from "@lobehub/icons-static-svg/icons/codex-color.svg";
-import geminiIconUrl from "@lobehub/icons-static-svg/icons/gemini-color.svg";
-import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
-import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
-import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
-import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
 import { lazy, useMemo } from "react";
-import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
 	useFileViewerDirtyStore,
@@ -26,6 +17,7 @@ import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import { TabStrip, type TabStripGroup } from "./TabStrip";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
+import { getTerminalTabIcon } from "./terminalTabIcon";
 import { Terminal } from "./Terminal";
 
 const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
@@ -43,41 +35,12 @@ const TAB_EXIT_ANIMATION = {
 	duration: 0.14,
 	ease: [0.4, 0, 1, 1],
 } as const;
-const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
-	{ keyword: "claude", iconUrl: claudeIconUrl },
-	{ keyword: "codex", iconUrl: codexIconUrl },
-	{ keyword: "gemini", iconUrl: geminiIconUrl },
-	{ keyword: "kimi", iconUrl: kimiIconUrl },
-	{ keyword: "cline", iconUrl: clineIconUrl },
-	{ keyword: "openclaw", iconUrl: openClawIconUrl },
-	{ keyword: "opencode", iconUrl: opencodeIconUrl },
-	{ keyword: "qoder", iconUrl: qoderIconUrl },
-];
 const FULL_TAB_MOTION_PROPS = {
 	initial: { opacity: 0, scale: 0.92, y: 6 },
 	animate: { opacity: 1, scale: 1, y: 0 },
 	exit: { opacity: 0, scale: 0.88, y: -6, width: 0 },
 	transition: { default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
 } as const;
-
-function getTerminalTabIcon(title: string) {
-	const lowerTitle = title.toLowerCase();
-	const match = AGENT_TAB_ICONS.find(({ keyword }) =>
-		lowerTitle.includes(keyword),
-	);
-
-	if (!match) return <FiTerminal size={14} />;
-
-	return (
-		<img
-			alt=""
-			aria-hidden="true"
-			draggable={false}
-			src={match.iconUrl}
-			style={{ width: 14, height: 14, flexShrink: 0 }}
-		/>
-	);
-}
 
 interface TerminalTabsProps {
 	projectId: string;
