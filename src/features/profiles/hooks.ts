@@ -8,6 +8,7 @@ import {
 } from "@/generated";
 import type { ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { removeProjectProfile, upsertProjectProfile } from "./profileCache";
 
 function hasDiffStats(stats: GitDiffStats | null) {
 	return (
@@ -30,21 +31,7 @@ export function useCreateProfile() {
 		onSuccess: (profile) => {
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
-				(projects) =>
-					projects?.map((project) => {
-						if (project.id !== profile.project_id) return project;
-						const hasProfile = project.profiles.some(
-							(item) => item.id === profile.id,
-						);
-						return {
-							...project,
-							profiles: hasProfile
-								? project.profiles.map((item) =>
-										item.id === profile.id ? profile : item,
-									)
-								: [...project.profiles, profile],
-						};
-					}),
+				(projects) => upsertProjectProfile(projects, profile),
 			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
@@ -56,15 +43,11 @@ export function useDeleteProfile() {
 	return useMutation({
 		mutationFn: ({ id }: { id: string; projectId: string }) =>
 			deleteProfile({ id }),
-		onSuccess: (_data, { id }) => {
+		onSuccess: (_data, { id, projectId }) => {
 			useTerminalStore.getState().removeProfile(id);
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
-				(projects) =>
-					projects?.map((project) => ({
-						...project,
-						profiles: project.profiles.filter((profile) => profile.id !== id),
-					})),
+				(projects) => removeProjectProfile(projects, projectId, id),
 			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
