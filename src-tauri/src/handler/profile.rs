@@ -12,8 +12,7 @@ pub async fn create_profile(
 ) -> Result<Profile, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::profile::create(conn, &project_id, &branch_name)
+		service::profile::create_with_db(&db, &project_id, &branch_name)
 	})
 	.await
 }
