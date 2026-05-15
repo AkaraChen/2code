@@ -264,20 +264,15 @@ pub fn delete_file_tree_paths(
 			return Err(AppError::NotFound(format!("File tree path: {path}")));
 		}
 
+		let depth = path.matches('/').count();
 		delete_paths.push(DeletePath {
-			path,
+			depth,
 			absolute_path,
 			metadata,
 		});
 	}
 
-	delete_paths.sort_by(|left, right| {
-		right
-			.path
-			.matches('/')
-			.count()
-			.cmp(&left.path.matches('/').count())
-	});
+	delete_paths.sort_by(|left, right| right.depth.cmp(&left.depth));
 
 	for delete_path in delete_paths {
 		if delete_path.metadata.file_type().is_dir() {
@@ -291,7 +286,7 @@ pub fn delete_file_tree_paths(
 }
 
 struct DeletePath {
-	path: String,
+	depth: usize,
 	absolute_path: PathBuf,
 	metadata: std::fs::Metadata,
 }
