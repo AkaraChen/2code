@@ -140,3 +140,21 @@ export function reconcileIncludedFiles(
 
 	return nextIncluded;
 }
+
+export function toggleIncludedFileName(
+	prevIncluded: Set<string>,
+	fileName: string,
+	included: boolean,
+) {
+	if (prevIncluded.has(fileName) === included) {
+		return prevIncluded;
+	}
+
+	const nextIncluded = new Set(prevIncluded);
+	if (included) {
+		nextIncluded.add(fileName);
+	} else {
+		nextIncluded.delete(fileName);
+	}
+	return nextIncluded;
+}

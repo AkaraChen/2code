@@ -32,7 +32,7 @@ import {
 	useGitLog,
 	useGitPush,
 } from "../hooks";
-import { reconcileIncludedFiles } from "../utils";
+import { reconcileIncludedFiles, toggleIncludedFileName } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
 
@@ -142,15 +142,9 @@ export default function GitDiffContent({
 	};
 
 	const setFileIncluded = (fileName: string, included: boolean) => {
-		setIncludedFileNames((prev) => {
-			const next = new Set(prev);
-			if (included) {
-				next.add(fileName);
-			} else {
-				next.delete(fileName);
-			}
-			return next;
-		});
+		setIncludedFileNames((prev) =>
+			toggleIncludedFileName(prev, fileName, included),
+		);
 	};
 
 	const handleOpenFile = (file: FileDiffMetadata) => {
@@ -321,18 +315,21 @@ export default function GitDiffContent({
 
 	useEffect(() => {
 		const nextFileNames = changesFiles.map((file) => file.name);
-		const nextIncluded = reconcileIncludedFiles(
-			nextFileNames,
-			includedFileNames,
-			previousChangeFileNamesRef.current,
-		);
+		const prevFileNames = previousChangeFileNamesRef.current;
 
-		if (!areSetsEqual(includedFileNames, nextIncluded)) {
-			setIncludedFileNames(nextIncluded);
-		}
+		setIncludedFileNames((prevIncluded) => {
+			const nextIncluded = reconcileIncludedFiles(
+				nextFileNames,
+				prevIncluded,
+				prevFileNames,
+			);
+			return areSetsEqual(prevIncluded, nextIncluded)
+				? prevIncluded
+				: nextIncluded;
+		});
 
 		previousChangeFileNamesRef.current = new Set(nextFileNames);
-	}, [changesFiles, includedFileNames]);
+	}, [changesFiles]);
 
 	useEffect(() => {
 		if (
