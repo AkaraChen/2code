@@ -19,6 +19,10 @@ import {
 } from "@/features/terminal/templates";
 import { TerminalTemplateDraftDialog } from "@/features/terminal/TerminalTemplateDraftDialog";
 import * as m from "@/paraglide/messages.js";
+import {
+	removeGlobalTerminalTemplate,
+	replaceGlobalTerminalTemplate,
+} from "./globalTerminalTemplateList";
 import { useTerminalTemplatesStore } from "./stores/terminalTemplatesStore";
 
 export function GlobalTerminalTemplatesSettings() {
@@ -60,8 +64,10 @@ export function GlobalTerminalTemplatesSettings() {
 
 		if (editingTemplateId) {
 			await replaceTemplates.mutateAsync(
-				templates.map((template) =>
-					template.id === editingTemplateId ? normalizedTemplate : template,
+				replaceGlobalTerminalTemplate(
+					templates,
+					editingTemplateId,
+					normalizedTemplate,
 				),
 			);
 		} else {
@@ -74,7 +80,7 @@ export function GlobalTerminalTemplatesSettings() {
 	async function handleDelete() {
 		if (!editingTemplateId) return;
 		await replaceTemplates.mutateAsync(
-			templates.filter((template) => template.id !== editingTemplateId),
+			removeGlobalTerminalTemplate(templates, editingTemplateId),
 		);
 		closeDialog();
 	}
