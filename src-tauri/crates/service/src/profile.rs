@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use diesel::SqliteConnection;
+use infra::db::DbPool;
 use uuid::Uuid;
 
 use model::error::AppError;
@@ -84,13 +85,9 @@ fn build_auto_branch_name(existing_branches: &[String], seed: &Uuid) -> String {
 	format!("{AUTO_BRANCH_PREFIX}{city}-{short_id}")
 }
 
-fn generate_auto_branch_name(
-	conn: &mut SqliteConnection,
-	project_id: &str,
+fn generate_auto_branch_name_from(
+	existing_branches: &[String],
 ) -> Result<String, AppError> {
-	let existing_branches =
-		repo::profile::list_branch_names_by_project(conn, project_id)?;
-
 	for _ in 0..5 {
 		let seed = Uuid::new_v4();
 		let branch_name = build_auto_branch_name(&existing_branches, &seed);
@@ -117,16 +114,21 @@ fn resolve_worktree_base() -> Result<PathBuf, AppError> {
 	Ok(home.join(".2code").join("workspace"))
 }
 
-pub fn create(
-	conn: &mut SqliteConnection,
-	project_id: &str,
-	branch_name: &str,
-) -> Result<Profile, AppError> {
-	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
+struct CreatedWorktree {
+	id: String,
+	branch_name: String,
+	worktree_path: PathBuf,
+	worktree_str: String,
+}
 
-	let auto_generated = branch_name.trim().is_empty();
+fn create_worktree(
+	project_folder: &str,
+	branch_name: &str,
+	auto_generated: bool,
+	existing_branches: &mut Vec<String>,
+) -> Result<CreatedWorktree, AppError> {
 	let branch_name = if auto_generated {
-		generate_auto_branch_name(conn, project_id)?
+		generate_auto_branch_name_from(existing_branches)?
 	} else {
 		let sanitized = sanitize_branch_name(branch_name);
 		if sanitized.is_empty() {
@@ -146,7 +148,7 @@ pub fn create(
 		let mut created = false;
 		for _ in 0..5 {
 			match infra::git::worktree_add(
-				&project_folder,
+				project_folder,
 				&candidate,
 				&worktree_str,
 			) {
@@ -157,7 +159,9 @@ pub fn create(
 				Err(AppError::GitError(message))
 					if message.contains("already exists") =>
 				{
-					candidate = generate_auto_branch_name(conn, project_id)?;
+					existing_branches.push(candidate);
+					candidate =
+						generate_auto_branch_name_from(existing_branches)?;
 				}
 				Err(err) => return Err(err),
 			}
@@ -169,20 +173,96 @@ pub fn create(
 		}
 		candidate
 	} else {
-		infra::git::worktree_add(&project_folder, &branch_name, &worktree_str)?;
+		infra::git::worktree_add(project_folder, &branch_name, &worktree_str)?;
 		branch_name
 	};
 
+	Ok(CreatedWorktree {
+		id,
+		branch_name,
+		worktree_path,
+		worktree_str,
+	})
+}
+
+pub fn create_with_db(
+	db: &DbPool,
+	project_id: &str,
+	branch_name: &str,
+) -> Result<Profile, AppError> {
+	let auto_generated = branch_name.trim().is_empty();
+	let (project_folder, mut existing_branches) = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let project_folder =
+			repo::profile::get_project_folder(conn, project_id)?;
+		let existing_branches = if auto_generated {
+			repo::profile::list_branch_names_by_project(conn, project_id)?
+		} else {
+			Vec::new()
+		};
+		(project_folder, existing_branches)
+	};
+
+	let created = create_worktree(
+		&project_folder,
+		branch_name,
+		auto_generated,
+		&mut existing_branches,
+	)?;
+
+	let profile = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::profile::insert(
+			conn,
+			&created.id,
+			project_id,
+			&created.branch_name,
+			&created.worktree_str,
+		)?
+	};
+
+	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
+		infra::config::execute_scripts(
+			&cfg.setup_script,
+			&created.worktree_path,
+		);
+	}
+
+	Ok(profile)
+}
+
+pub fn create(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+	branch_name: &str,
+) -> Result<Profile, AppError> {
+	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
+	let auto_generated = branch_name.trim().is_empty();
+	let mut existing_branches = if auto_generated {
+		repo::profile::list_branch_names_by_project(conn, project_id)?
+	} else {
+		Vec::new()
+	};
+	let created = create_worktree(
+		&project_folder,
+		branch_name,
+		auto_generated,
+		&mut existing_branches,
+	)?;
+
 	let profile = repo::profile::insert(
 		conn,
-		&id,
+		&created.id,
 		project_id,
-		&branch_name,
-		&worktree_str,
+		&created.branch_name,
+		&created.worktree_str,
 	)?;
 
 	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(&cfg.setup_script, &worktree_path);
+		infra::config::execute_scripts(
+			&cfg.setup_script,
+			&created.worktree_path,
+		);
 	}
 
 	Ok(profile)
@@ -316,5 +396,22 @@ mod tests {
 		assert!(!branch_name.starts_with("pr/tokyo-"));
 		assert!(!branch_name.starts_with("pr/osaka-"));
 		assert!(branch_name.ends_with("-00000000"));
+	}
+
+	#[test]
+	fn create_worktree_rejects_blank_manual_branch_before_git_work() {
+		let mut existing_branches = Vec::new();
+
+		let result = create_worktree(
+			"/missing/project",
+			" /// ",
+			false,
+			&mut existing_branches,
+		);
+
+		assert!(
+			matches!(result, Err(AppError::GitError(message)) if message == "Invalid branch name")
+		);
+		assert!(existing_branches.is_empty());
 	}
 }
