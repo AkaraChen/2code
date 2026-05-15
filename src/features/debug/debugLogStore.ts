@@ -15,10 +15,10 @@ export const useDebugLogStore = create<DebugLogStore>()(
 		logs: [],
 		addLog: (entry) =>
 			set((state) => {
-				state.logs.push(entry);
-				if (state.logs.length > MAX_LOGS) {
-					state.logs.splice(0, state.logs.length - MAX_LOGS);
+				if (state.logs.length >= MAX_LOGS) {
+					state.logs.splice(0, state.logs.length - MAX_LOGS + 1);
 				}
+				state.logs.push(entry);
 			}),
 		clear: () => set({ logs: [] }),
 	})),
