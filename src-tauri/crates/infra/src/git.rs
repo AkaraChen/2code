@@ -926,6 +926,31 @@ fn sum_shortstat_lines(output: &str) -> GitDiffStats {
 	stats
 }
 
+struct GitLogHeader<'a> {
+	full_hash: &'a str,
+	hash: &'a str,
+	author_name: &'a str,
+	author_email: &'a str,
+	date: &'a str,
+	message: &'a str,
+}
+
+fn parse_git_log_header(line: &str) -> Option<GitLogHeader<'_>> {
+	let mut parts = line.split('\x1f');
+	let header = GitLogHeader {
+		full_hash: parts.next()?,
+		hash: parts.next()?,
+		author_name: parts.next()?,
+		author_email: parts.next()?,
+		date: parts.next()?,
+		message: parts.next()?,
+	};
+	if parts.next().is_some() {
+		return None;
+	}
+	Some(header)
+}
+
 pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	if output.trim().is_empty() {
 		return Vec::new();
@@ -940,16 +965,7 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 			continue;
 		}
 
-		// Try to parse as a commit format line (contains \x1f separators)
-		let parts: Vec<&str> = line.split('\x1f').collect();
-		if parts.len() == 6 {
-			let full_hash = parts[0].to_string();
-			let hash = parts[1].to_string();
-			let author_name = parts[2].to_string();
-			let author_email = parts[3].to_string();
-			let date = parts[4].to_string();
-			let message = parts[5].to_string();
-
+		if let Some(header) = parse_git_log_header(line) {
 			// Check if the next non-empty line is a shortstat
 			let mut files_changed = 0;
 			let mut insertions = 0;
@@ -973,14 +989,14 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 			}
 
 			commits.push(GitCommit {
-				hash,
-				full_hash,
+				hash: header.hash.to_string(),
+				full_hash: header.full_hash.to_string(),
 				author: GitAuthor {
-					name: author_name,
-					email: author_email,
+					name: header.author_name.to_string(),
+					email: header.author_email.to_string(),
 				},
-				date,
-				message,
+				date: header.date.to_string(),
+				message: header.message.to_string(),
 				files_changed,
 				insertions,
 				deletions,
@@ -1660,6 +1676,122 @@ mod tests {
 	fn parse_pull_request_list_accepts_empty_list() {
 		let prs = parse_pull_request_list(br#"[]"#, "acme").unwrap();
 		assert!(prs.is_empty());
+	}
+
+	fn parse_git_log_with_collected_parts(output: &str) -> Vec<GitCommit> {
+		if output.trim().is_empty() {
+			return Vec::new();
+		}
+
+		let mut commits = Vec::new();
+		let mut lines = output.lines().peekable();
+
+		while let Some(line) = lines.next() {
+			let line = line.trim();
+			if line.is_empty() {
+				continue;
+			}
+
+			let parts: Vec<&str> = line.split('\x1f').collect();
+			if parts.len() == 6 {
+				let full_hash = parts[0].to_string();
+				let hash = parts[1].to_string();
+				let author_name = parts[2].to_string();
+				let author_email = parts[3].to_string();
+				let date = parts[4].to_string();
+				let message = parts[5].to_string();
+
+				let mut files_changed = 0;
+				let mut insertions = 0;
+				let mut deletions = 0;
+
+				while let Some(next) = lines.peek() {
+					let next = next.trim();
+					if next.is_empty() {
+						lines.next();
+						continue;
+					}
+					if next.contains("file") && next.contains("changed") {
+						let (f, i, d) = parse_shortstat(next);
+						files_changed = f;
+						insertions = i;
+						deletions = d;
+						lines.next();
+					}
+					break;
+				}
+
+				commits.push(GitCommit {
+					hash,
+					full_hash,
+					author: GitAuthor {
+						name: author_name,
+						email: author_email,
+					},
+					date,
+					message,
+					files_changed,
+					insertions,
+					deletions,
+				});
+			}
+		}
+
+		commits
+	}
+
+	#[test]
+	#[ignore = "benchmark: run with --release -- --ignored --nocapture"]
+	fn parse_git_log_header_benchmark() {
+		let mut output = String::new();
+		for index in 0..2_000 {
+			output.push_str(&format!(
+				"{index:040x}\x1f{index:07x}\x1fAuthor {index}\x1fauthor-{index}@example.com\x1f2026-05-15\x1fCommit message {index}\n"
+			));
+			if index % 2 == 0 {
+				output.push_str(
+					" 3 files changed, 10 insertions(+), 5 deletions(-)\n",
+				);
+			}
+			output.push('\n');
+		}
+
+		let collected_start = std::time::Instant::now();
+		let mut collected_commits = Vec::new();
+		for _ in 0..250 {
+			collected_commits = parse_git_log_with_collected_parts(&output);
+		}
+		let collected_duration = collected_start.elapsed();
+
+		let streaming_start = std::time::Instant::now();
+		let mut streaming_commits = Vec::new();
+		for _ in 0..250 {
+			streaming_commits = parse_git_log(&output);
+		}
+		let streaming_duration = streaming_start.elapsed();
+
+		assert_eq!(collected_commits.len(), streaming_commits.len());
+		for (left, right) in collected_commits
+			.iter()
+			.zip(streaming_commits.iter())
+			.step_by(199)
+		{
+			assert_eq!(left.hash, right.hash);
+			assert_eq!(left.full_hash, right.full_hash);
+			assert_eq!(left.author.name, right.author.name);
+			assert_eq!(left.author.email, right.author.email);
+			assert_eq!(left.date, right.date);
+			assert_eq!(left.message, right.message);
+			assert_eq!(left.files_changed, right.files_changed);
+			assert_eq!(left.insertions, right.insertions);
+			assert_eq!(left.deletions, right.deletions);
+		}
+		println!(
+			"parse git log header benchmark: collect_parts={:?} streaming_parts={:?} speedup={:.2}x",
+			collected_duration,
+			streaming_duration,
+			collected_duration.as_secs_f64() / streaming_duration.as_secs_f64()
+		);
 	}
 
 	#[test]
