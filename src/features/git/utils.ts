@@ -41,6 +41,18 @@ export const changeBadge: Record<
 	"rename-changed": { label: "R", colorPalette: "yellow" },
 };
 
+export function getFileDisplayParts(fileName: string) {
+	// Git reports diff paths with "/" separators on every platform, so this
+	// should stay a simple Git-path split rather than use OS path helpers.
+	const slashIndex = fileName.lastIndexOf("/");
+	return slashIndex === -1
+		? { basename: fileName, parentPath: null }
+		: {
+				basename: fileName.slice(slashIndex + 1),
+				parentPath: fileName.slice(0, slashIndex),
+			};
+}
+
 export function getLineStats(file: FileDiffMetadata) {
 	let additions = 0;
 	let deletions = 0;
