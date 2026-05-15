@@ -477,7 +477,9 @@ fn reject_descendant_move(
 		return Ok(());
 	};
 	if target_dir_path == source_path
-		|| target_dir_path.starts_with(&format!("{source_path}/"))
+		|| target_dir_path
+			.strip_prefix(source_path)
+			.is_some_and(|suffix| suffix.starts_with('/'))
 	{
 		return Err(invalid_input(
 			"Cannot move a directory into itself or one of its descendants",
@@ -555,6 +557,7 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::time::Instant;
 
 	#[test]
 	fn scores_exact_name_first() {
@@ -720,6 +723,51 @@ mod tests {
 
 		assert!(result.is_err());
 		assert!(root.join("src/nested").exists());
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_reject_descendant_move_without_format() {
+		let sources: Vec<String> = (0..10_000)
+			.map(|index| format!("src/module-{index}"))
+			.collect();
+		let targets: Vec<String> = sources
+			.iter()
+			.map(|source| format!("{source}/nested"))
+			.collect();
+		let iterations = 200;
+
+		let started = Instant::now();
+		let mut format_count = 0;
+		for _ in 0..iterations {
+			for (source, target) in sources.iter().zip(&targets) {
+				if target == source || target.starts_with(&format!("{source}/")) {
+					format_count += 1;
+				}
+			}
+		}
+		let format_prefix = started.elapsed();
+
+		let started = Instant::now();
+		let mut strip_prefix_count = 0;
+		for _ in 0..iterations {
+			for (source, target) in sources.iter().zip(&targets) {
+				if target == source
+					|| target
+						.strip_prefix(source)
+						.is_some_and(|suffix| suffix.starts_with('/'))
+				{
+					strip_prefix_count += 1;
+				}
+			}
+		}
+		let strip_prefix = started.elapsed();
+
+		assert_eq!(format_count, strip_prefix_count);
+		println!(
+			"format_prefix={format_prefix:?} strip_prefix={strip_prefix:?} speedup={:.2}x",
+			format_prefix.as_secs_f64() / strip_prefix.as_secs_f64()
+		);
 	}
 
 	#[test]
