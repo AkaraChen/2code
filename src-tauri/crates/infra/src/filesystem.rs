@@ -67,7 +67,7 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 		paths.push(relative_path);
 	}
 
-	paths.sort_by_key(|path| path.to_lowercase());
+	paths.sort_by_cached_key(|path| path.to_lowercase());
 
 	Ok(paths)
 }
@@ -117,7 +117,7 @@ pub fn list_file_tree_child_paths(
 		paths.push(relative_path);
 	}
 
-	paths.sort_by_key(|path| path.to_lowercase());
+	paths.sort_by_cached_key(|path| path.to_lowercase());
 
 	Ok(paths)
 }
@@ -555,6 +555,24 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::time::Instant;
+
+	fn make_sort_paths() -> Vec<String> {
+		(0..25_000)
+			.rev()
+			.map(|index| format!("src/Deep/Path/Module{index:05}/Target.rs"))
+			.collect()
+	}
+
+	fn sort_by_lowercase_key(mut paths: Vec<String>) -> Vec<String> {
+		paths.sort_by_key(|path| path.to_lowercase());
+		paths
+	}
+
+	fn sort_by_cached_lowercase_key(mut paths: Vec<String>) -> Vec<String> {
+		paths.sort_by_cached_key(|path| path.to_lowercase());
+		paths
+	}
 
 	#[test]
 	fn scores_exact_name_first() {
@@ -577,6 +595,28 @@ mod tests {
 	#[test]
 	fn rejects_non_matching_candidates() {
 		assert_eq!(score_file_match("palette", "main.rs", "src/main.rs"), None);
+	}
+
+	#[test]
+	#[ignore = "benchmark; run with cargo test -p infra filesystem_sort_key_benchmark --release -- --ignored --nocapture"]
+	fn filesystem_sort_key_benchmark() {
+		let paths = make_sort_paths();
+
+		let start = Instant::now();
+		let uncached = sort_by_lowercase_key(paths.clone());
+		let uncached_duration = start.elapsed();
+
+		let start = Instant::now();
+		let cached = sort_by_cached_lowercase_key(paths);
+		let cached_duration = start.elapsed();
+
+		assert_eq!(cached, uncached);
+		eprintln!(
+			"filesystem sort key benchmark: sort_by_key={:?} sort_by_cached_key={:?} speedup={:.2}x",
+			uncached_duration,
+			cached_duration,
+			uncached_duration.as_secs_f64() / cached_duration.as_secs_f64(),
+		);
 	}
 
 	#[test]
