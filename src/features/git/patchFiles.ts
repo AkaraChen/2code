@@ -10,7 +10,9 @@ export function collectPatchFiles(patches: readonly PatchWithFiles[]) {
 		fileCount += patch.files.length;
 	}
 
-	const files = new Array<FileDiffMetadata>(fileCount);
+	const files = Array.from<FileDiffMetadata>({
+		length: fileCount,
+	} as ArrayLike<FileDiffMetadata>);
 	let index = 0;
 	for (const patch of patches) {
 		for (const file of patch.files) {
