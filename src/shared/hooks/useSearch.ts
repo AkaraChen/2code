@@ -57,6 +57,14 @@ export function findSearchMatches(content: string, query: string): SearchMatch[]
 	return matches;
 }
 
+export function getMatchedLineNumbers(matches: readonly SearchMatch[]) {
+	const lineNumbers = new Set<number>();
+	for (const match of matches) {
+		lineNumbers.add(match.lineNumber);
+	}
+	return lineNumbers;
+}
+
 export function useSearch(content: string) {
 	const [isSearchOpen, setIsSearchOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -69,7 +77,7 @@ export function useSearch(content: string) {
 		[content, deferredSearchQuery],
 	);
 	const matchedLineNumbers = useMemo(
-		() => new Set(matches.map((match) => match.lineNumber)),
+		() => getMatchedLineNumbers(matches),
 		[matches],
 	);
 	const effectiveCurrentMatchIndex =

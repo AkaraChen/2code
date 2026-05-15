@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { findSearchMatches, isSearchShortcut } from "./useSearch";
+import {
+	findSearchMatches,
+	getMatchedLineNumbers,
+	isSearchShortcut,
+} from "./useSearch";
 
 describe("useSearch utilities", () => {
 	it("finds case-insensitive matches with line and column positions", () => {
@@ -39,5 +43,15 @@ describe("useSearch utilities", () => {
 				shiftKey: true,
 			}),
 		).toBe(false);
+	});
+
+	it("builds matched line number sets without duplicate lines", () => {
+		expect([
+			...getMatchedLineNumbers([
+				{ columnIndex: 0, lineNumber: 1 },
+				{ columnIndex: 5, lineNumber: 1 },
+				{ columnIndex: 0, lineNumber: 3 },
+			]),
+		]).toEqual([1, 3]);
 	});
 });
