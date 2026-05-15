@@ -108,4 +108,19 @@ describe("useProjectAvatar", () => {
 		expect(result.current.data).toBeUndefined();
 		expect(getProjectGithubAvatarMock).not.toHaveBeenCalled();
 	});
+
+	it("skips localStorage writes when the cached avatar is unchanged", () => {
+		const setItemSpy = vi.spyOn(localStorage, "setItem");
+
+		setCachedProjectAvatar("project-5", "https://avatars.githubusercontent.com/user-a?v=4");
+		setItemSpy.mockClear();
+
+		setCachedProjectAvatar("project-5", "https://avatars.githubusercontent.com/user-a?v=4");
+		expect(setItemSpy).not.toHaveBeenCalled();
+
+		setCachedProjectAvatar("project-5", "https://avatars.githubusercontent.com/user-b?v=4");
+		expect(setItemSpy).toHaveBeenCalledTimes(1);
+
+		setItemSpy.mockRestore();
+	});
 });

@@ -56,6 +56,9 @@ export function setCachedProjectAvatar(
 	avatarUrl: string | null,
 ): void {
 	const cache = readCacheFromStorage();
+	if (cache[projectId] === avatarUrl) {
+		return;
+	}
 	cache[projectId] = avatarUrl;
 	writeCacheToStorage(cache);
 }
