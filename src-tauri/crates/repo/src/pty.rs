@@ -1,4 +1,5 @@
 use diesel::prelude::*;
+use std::fmt;
 
 use model::error::AppError;
 use model::pty::{NewPtySessionOutput, NewPtySessionRecord, PtySessionRecord};
@@ -44,10 +45,22 @@ pub fn list_by_project(
 		target: "pty",
 		%project_id,
 		count = sessions.len(),
-		session_ids = ?sessions.iter().map(|s| &s.id).collect::<Vec<_>>(),
+		session_ids = ?SessionIds(&sessions),
 		"repo: list_by_project"
 	);
 	Ok(sessions)
+}
+
+struct SessionIds<'a>(&'a [PtySessionRecord]);
+
+impl fmt::Debug for SessionIds<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let mut list = f.debug_list();
+		for session in self.0 {
+			list.entry(&session.id);
+		}
+		list.finish()
+	}
 }
 
 pub fn update_dimensions(
@@ -159,6 +172,7 @@ mod tests {
 	use crate::profile;
 	use crate::project;
 	use crate::test_utils::setup_db;
+	use std::time::Instant;
 
 	fn setup_profile(conn: &mut SqliteConnection) -> String {
 		project::insert(conn, "proj-1", "Project", "/tmp/project")
@@ -187,6 +201,57 @@ mod tests {
 			cols: 80,
 			rows: 24,
 		}
+	}
+
+	fn pty_session_record(id: String) -> PtySessionRecord {
+		PtySessionRecord {
+			id,
+			profile_id: "profile-1".to_string(),
+			title: "Shell".to_string(),
+			shell: "/bin/zsh".to_string(),
+			cwd: "/tmp/project".to_string(),
+			created_at: "now".to_string(),
+			closed_at: None,
+			cols: 80,
+			rows: 24,
+		}
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_format_session_ids_without_vec() {
+		let sessions: Vec<_> = (0..2_000)
+			.map(|index| pty_session_record(format!("session-{index}")))
+			.collect();
+		let iterations = 1_000;
+
+		let started = Instant::now();
+		let mut vec_debug_len = 0;
+		for _ in 0..iterations {
+			vec_debug_len += format!(
+				"{:?}",
+				std::hint::black_box(&sessions)
+					.iter()
+					.map(|session| &session.id)
+					.collect::<Vec<_>>()
+			)
+			.len();
+		}
+		let vec_debug = started.elapsed();
+
+		let started = Instant::now();
+		let mut wrapper_debug_len = 0;
+		for _ in 0..iterations {
+			wrapper_debug_len +=
+				format!("{:?}", SessionIds(std::hint::black_box(&sessions))).len();
+		}
+		let wrapper_debug = started.elapsed();
+
+		assert_eq!(vec_debug_len, wrapper_debug_len);
+		println!(
+			"vec_debug={vec_debug:?} wrapper_debug={wrapper_debug:?} speedup={:.2}x",
+			vec_debug.as_secs_f64() / wrapper_debug.as_secs_f64()
+		);
 	}
 
 	#[test]
