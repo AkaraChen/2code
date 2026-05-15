@@ -61,14 +61,14 @@ impl ChannelLayerHandle {
 /// Visitor that collects event fields into a message string.
 struct MessageVisitor {
 	message: String,
-	fields: Vec<(String, String)>,
+	fields: String,
 }
 
 impl MessageVisitor {
 	fn new() -> Self {
 		Self {
 			message: String::new(),
-			fields: Vec::new(),
+			fields: String::new(),
 		}
 	}
 
@@ -76,16 +76,19 @@ impl MessageVisitor {
 		if self.fields.is_empty() {
 			return self.message;
 		}
-		let field_str: Vec<String> = self
-			.fields
-			.into_iter()
-			.map(|(k, v)| format!("{k}={v}"))
-			.collect();
 		if self.message.is_empty() {
-			field_str.join(" ")
+			self.fields
 		} else {
-			format!("{} {}", self.message, field_str.join(" "))
+			format!("{} {}", self.message, self.fields)
 		}
+	}
+
+	fn push_field(&mut self, name: &str, value: impl fmt::Display) {
+		if !self.fields.is_empty() {
+			self.fields.push(' ');
+		}
+		use std::fmt::Write as _;
+		let _ = write!(&mut self.fields, "{name}={value}");
 	}
 }
 
@@ -94,8 +97,7 @@ impl Visit for MessageVisitor {
 		if field.name() == "message" {
 			self.message = format!("{value:?}");
 		} else {
-			self.fields
-				.push((field.name().to_string(), format!("{value:?}")));
+			self.push_field(field.name(), format_args!("{value:?}"));
 		}
 	}
 
@@ -103,8 +105,7 @@ impl Visit for MessageVisitor {
 		if field.name() == "message" {
 			self.message = value.to_string();
 		} else {
-			self.fields
-				.push((field.name().to_string(), value.to_string()));
+			self.push_field(field.name(), value);
 		}
 	}
 }
@@ -153,10 +154,46 @@ impl<S: tracing::Subscriber> Layer<S> for ChannelLayer {
 mod tests {
 	use std::sync::mpsc;
 	use std::time::Duration;
+	use std::time::Instant;
 
 	use tracing_subscriber::prelude::*;
 
 	use super::ChannelLayer;
+	use super::MessageVisitor;
+
+	struct OldMessageVisitor {
+		message: String,
+		fields: Vec<(String, String)>,
+	}
+
+	impl OldMessageVisitor {
+		fn new() -> Self {
+			Self {
+				message: String::new(),
+				fields: Vec::new(),
+			}
+		}
+
+		fn record_field(&mut self, name: &str, value: &str) {
+			self.fields.push((name.to_string(), value.to_string()));
+		}
+
+		fn into_message(self) -> String {
+			if self.fields.is_empty() {
+				return self.message;
+			}
+			let field_str: Vec<String> = self
+				.fields
+				.into_iter()
+				.map(|(k, v)| format!("{k}={v}"))
+				.collect();
+			if self.message.is_empty() {
+				field_str.join(" ")
+			} else {
+				format!("{} {}", self.message, field_str.join(" "))
+			}
+		}
+	}
 
 	#[test]
 	fn forwards_info_events_with_target_and_fields() {
@@ -214,5 +251,45 @@ mod tests {
 		});
 
 		assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_logger_message_fields_without_vec_join() {
+		let fields = [
+			("session_id", "\"s-123\""),
+			("profile_id", "\"p-123\""),
+			("bytes", "4096"),
+			("target", "\"pty\""),
+			("elapsed_ms", "17"),
+		];
+		let iterations = 200_000;
+
+		let old_start = Instant::now();
+		for _ in 0..iterations {
+			let mut visitor = OldMessageVisitor::new();
+			visitor.message = "persist: appended".to_string();
+			for (name, value) in fields {
+				visitor.record_field(name, value);
+			}
+			assert!(visitor.into_message().contains("session_id"));
+		}
+		let old_duration = old_start.elapsed();
+
+		let new_start = Instant::now();
+		for _ in 0..iterations {
+			let mut visitor = MessageVisitor::new();
+			visitor.message = "persist: appended".to_string();
+			for (name, value) in fields {
+				visitor.push_field(name, value);
+			}
+			assert!(visitor.into_message().contains("session_id"));
+		}
+		let new_duration = new_start.elapsed();
+
+		println!(
+			"vec_join_fields={old_duration:?} direct_fields={new_duration:?} speedup={:.2}x",
+			old_duration.as_secs_f64() / new_duration.as_secs_f64()
+		);
 	}
 }
