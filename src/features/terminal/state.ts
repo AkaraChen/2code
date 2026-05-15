@@ -39,9 +39,7 @@ function createRestorationPipeline(): Promise<void> {
 			if (!result.data) return;
 
 			// Stale profile cleanup
-			const validIds = new Set(
-				result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
-			);
+			const validIds = buildValidProfileIds(result.data);
 			useTerminalStore.getState().removeStaleProfiles(validIds);
 			consola.info("[pty-restore] cleaned up stale profiles", {
 				validCount: validIds.size,
@@ -58,6 +56,16 @@ function createRestorationPipeline(): Promise<void> {
 			}
 		});
 	});
+}
+
+export function buildValidProfileIds(projects: ProjectWithProfiles[]) {
+	const validIds = new Set<string>();
+	for (const project of projects) {
+		for (const profile of project.profiles) {
+			validIds.add(profile.id);
+		}
+	}
+	return validIds;
 }
 
 async function restoreTerminals(projects: ProjectWithProfiles[]) {

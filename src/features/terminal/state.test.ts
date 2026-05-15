@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { mapWithLimit } from "./state";
+import { buildValidProfileIds, mapWithLimit } from "./state";
+
+describe("buildValidProfileIds", () => {
+	it("collects profile ids without intermediate arrays", () => {
+		expect(
+			buildValidProfileIds([
+				{
+					id: "project-1",
+					name: "Project 1",
+					folder: "/repo/1",
+					created_at: "now",
+					group_id: null,
+					profiles: [
+						{
+							id: "profile-1",
+							project_id: "project-1",
+							branch_name: "main",
+							worktree_path: "/repo/1",
+							created_at: "now",
+							is_default: true,
+						},
+					],
+				},
+			]),
+		).toEqual(new Set(["profile-1"]));
+	});
+});
 
 describe("mapWithLimit", () => {
 	it("processes all items", async () => {
