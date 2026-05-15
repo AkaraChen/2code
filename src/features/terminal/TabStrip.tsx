@@ -1,6 +1,7 @@
 import { Box, CloseButton, HStack } from "@chakra-ui/react";
 import { AnimatePresence, motion } from "motion/react";
 import type { KeyboardEvent, ReactNode } from "react";
+import { collectVisibleTabItems } from "./tabStripItems";
 
 const TAB_MIN_WIDTH = "140px";
 
@@ -161,7 +162,7 @@ export function TabStrip({
 	onSelect: (value: string) => void;
 	trailingControls?: ReactNode;
 }) {
-	const visibleGroups = groups.filter((group) => group.items.length > 0);
+	const visibleItems = collectVisibleTabItems(groups);
 
 	return (
 		<Box
@@ -172,16 +173,14 @@ export function TabStrip({
 			minW="max-content"
 		>
 			<AnimatePresence initial={false}>
-				{visibleGroups.flatMap((group) =>
-					group.items.map((item) => (
-						<TabMotionItem
-							key={item.key}
-							item={item}
-							motionProps={motionProps}
-							onSelect={onSelect}
-						/>
-					)),
-				)}
+				{visibleItems.map((item) => (
+					<TabMotionItem
+						key={item.key}
+						item={item}
+						motionProps={motionProps}
+						onSelect={onSelect}
+					/>
+				))}
 			</AnimatePresence>
 			{trailingControls}
 		</Box>
