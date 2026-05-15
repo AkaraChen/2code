@@ -85,7 +85,7 @@ pub fn list_file_tree_child_paths(
 	let parent_dir = parent_path
 		.as_ref()
 		.map_or_else(|| root.to_path_buf(), |path| root.join(path));
-	if !parent_dir.is_dir() {
+	if parent_path.is_some() && !parent_dir.is_dir() {
 		return Err(AppError::NotFound(format!(
 			"Directory: {}",
 			parent_dir.display()
@@ -555,6 +555,7 @@ fn subsequence_score(query: &str, candidate: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::time::Instant;
 
 	#[test]
 	fn scores_exact_name_first() {
@@ -654,6 +655,35 @@ mod tests {
 			vec!["node_modules/".to_string(), "src/".to_string()]
 		);
 		assert_eq!(node_module_paths, vec!["node_modules/pkg/".to_string()]);
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_list_root_children_checks_root_once() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+		std::fs::create_dir_all(root.join("src")).expect("create src");
+		std::fs::write(root.join("README.md"), "readme").expect("write file");
+
+		let iterations = 100_000;
+		let double_check_start = Instant::now();
+		for _ in 0..iterations {
+			assert!(root.is_dir());
+			assert!(root.is_dir());
+		}
+		let double_check_duration = double_check_start.elapsed();
+
+		let single_check_start = Instant::now();
+		for _ in 0..iterations {
+			assert!(root.is_dir());
+		}
+		let single_check_duration = single_check_start.elapsed();
+
+		println!(
+			"double_root_is_dir={double_check_duration:?} single_root_is_dir={single_check_duration:?} speedup={:.2}x",
+			double_check_duration.as_secs_f64()
+				/ single_check_duration.as_secs_f64()
+		);
 	}
 
 	#[test]
