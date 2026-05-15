@@ -36,6 +36,23 @@ fn command_exists(command: &str) -> bool {
 	Path::new(command).is_file()
 }
 
+#[cfg(unix)]
+fn push_existing_shell(
+	shells: &mut Vec<AvailableShell>,
+	seen: &mut HashSet<String>,
+	command: &str,
+	default_command: &str,
+) {
+	let command = command.trim();
+	if command.is_empty() || command.starts_with('#') || seen.contains(command)
+	{
+		return;
+	}
+	if command_exists(command) {
+		push_shell(shells, seen, command, default_command);
+	}
+}
+
 #[cfg(windows)]
 fn command_exists(_command: &str) -> bool {
 	true
@@ -76,13 +93,7 @@ fn load_unix_shells(default_command: &str) -> Vec<AvailableShell> {
 
 	if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
 		for line in contents.lines() {
-			let command = line.trim();
-			if command.is_empty() || command.starts_with('#') {
-				continue;
-			}
-			if command_exists(command) {
-				push_shell(&mut shells, &mut seen, command, default_command);
-			}
+			push_existing_shell(&mut shells, &mut seen, line, default_command);
 		}
 	}
 
@@ -96,9 +107,7 @@ fn load_unix_shells(default_command: &str) -> Vec<AvailableShell> {
 		"/bin/sh",
 		"/usr/bin/sh",
 	] {
-		if command_exists(command) {
-			push_shell(&mut shells, &mut seen, command, default_command);
-		}
+		push_existing_shell(&mut shells, &mut seen, command, default_command);
 	}
 
 	shells
