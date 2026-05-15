@@ -6,6 +6,14 @@ use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
 
+fn profile_worktree_path(
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
+}
+
 #[tauri::command]
 pub async fn list_file_tree_paths(
 	path: String,
@@ -144,8 +152,8 @@ pub async fn search_file(
 ) -> Result<Vec<FileSearchResult>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::search_file(conn, &profile_id, &query)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::filesystem::search_files(Path::new(&worktree_path), &query)
 	})
 	.await
 }
@@ -157,8 +165,68 @@ pub async fn get_file_tree_git_status(
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::get_file_tree_git_status(conn, &profile_id)
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::status(&worktree_path)
 	})
 	.await
+}
+
+#[cfg(test)]
+mod tests {
+	use std::sync::{Arc, Mutex};
+
+	use diesel::prelude::*;
+	use diesel_migrations::MigrationHarness;
+	use model::profile::NewProfile;
+	use model::project::NewProject;
+
+	use super::*;
+
+	fn setup_db() -> DbPool {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		conn.run_pending_migrations(infra::db::MIGRATIONS)
+			.expect("run migrations");
+
+		diesel::insert_into(model::schema::projects::table)
+			.values(&NewProject {
+				id: "proj-1",
+				name: "Project",
+				folder: "/repo",
+				group_id: None,
+			})
+			.execute(&mut conn)
+			.expect("insert project");
+
+		diesel::insert_into(model::schema::profiles::table)
+			.values(&NewProfile {
+				id: "profile-1",
+				project_id: "proj-1",
+				branch_name: "main",
+				worktree_path: "/repo/worktree",
+				is_default: true,
+			})
+			.execute(&mut conn)
+			.expect("insert profile");
+
+		Arc::new(Mutex::new(conn))
+	}
+
+	#[test]
+	fn profile_worktree_path_reads_only_the_needed_field() {
+		let db = setup_db();
+
+		let worktree = profile_worktree_path(&db, "profile-1").unwrap();
+
+		assert_eq!(worktree, "/repo/worktree");
+	}
+
+	#[test]
+	fn profile_worktree_path_returns_not_found_for_missing_profile() {
+		let db = setup_db();
+
+		let result = profile_worktree_path(&db, "missing-profile");
+
+		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
 }
