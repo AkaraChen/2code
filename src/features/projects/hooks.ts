@@ -37,6 +37,7 @@ import {
 	writeFileContent,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { removeProjectById } from "./projectCache";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 interface UseProjectAvatarOptions {
@@ -251,7 +252,7 @@ export function useDeleteProject(options?: {
 				) ?? [];
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
-				(projects) => projects?.filter((project) => project.id !== id),
+				(projects) => removeProjectById(projects, id),
 			);
 			await options?.onSuccess?.(id, projectsBeforeDelete);
 			await Promise.all([
