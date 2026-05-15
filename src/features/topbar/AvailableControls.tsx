@@ -14,13 +14,19 @@ interface AvailableControlsProps {
 	supportedControls: ControlId[];
 }
 
+export function getAvailableControlIds(
+	activeControls: readonly ControlId[],
+	supportedControls: readonly ControlId[],
+) {
+	const activeControlSet = new Set(activeControls);
+	return supportedControls.filter((id) => !activeControlSet.has(id));
+}
+
 export function AvailableControls({
 	activeControls,
 	supportedControls,
 }: AvailableControlsProps) {
-	const available = supportedControls.filter(
-		(id) => !activeControls.includes(id),
-	);
+	const available = getAvailableControlIds(activeControls, supportedControls);
 	const { setNodeRef } = useDroppable({ id: "available-area" });
 
 	return (
