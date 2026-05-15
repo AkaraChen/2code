@@ -33,6 +33,23 @@ import { ProfileList } from "./ProfileList";
 import { ProjectAvatar } from "./ProjectAvatar";
 import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
+export function splitDefaultProfile<
+	TProfile extends { is_default: boolean },
+>(profiles: readonly TProfile[]) {
+	let defaultProfile: TProfile | undefined;
+	const nonDefaultProfiles: TProfile[] = [];
+
+	for (const profile of profiles) {
+		if (profile.is_default && !defaultProfile) {
+			defaultProfile = profile;
+		} else {
+			nonDefaultProfiles.push(profile);
+		}
+	}
+
+	return { defaultProfile, nonDefaultProfiles };
+}
+
 export function ProjectMenuItem({
 	project,
 	projectGroups,
@@ -40,12 +57,8 @@ export function ProjectMenuItem({
 	project: ProjectWithProfiles;
 	projectGroups: ProjectGroup[];
 }) {
-	const defaultProfile = useMemo(
-		() => project.profiles.find((p) => p.is_default),
-		[project.profiles],
-	);
-	const nonDefaultProfiles = useMemo(
-		() => project.profiles.filter((p) => !p.is_default),
+	const { defaultProfile, nonDefaultProfiles } = useMemo(
+		() => splitDefaultProfile(project.profiles),
 		[project.profiles],
 	);
 
