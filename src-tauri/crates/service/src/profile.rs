@@ -46,12 +46,18 @@ const AUTO_BRANCH_CITIES: &[&str] = &[
 /// Splits on `/` to preserve namespace separators (e.g. "feature/auth"),
 /// slugifies each segment (handling CJK via pinyin), then rejoins.
 fn sanitize_branch_name(input: &str) -> String {
-	input
-		.split('/')
-		.map(infra::slug::slugify_cjk)
-		.filter(|s| !s.is_empty())
-		.collect::<Vec<_>>()
-		.join("/")
+	let mut output = String::new();
+	for segment in input.split('/') {
+		let slug = infra::slug::slugify_cjk(segment);
+		if slug.is_empty() {
+			continue;
+		}
+		if !output.is_empty() {
+			output.push('/');
+		}
+		output.push_str(&slug);
+	}
+	output
 }
 
 fn extract_auto_branch_city(branch_name: &str) -> Option<&str> {
@@ -286,6 +292,54 @@ mod tests {
 	#[test]
 	fn sanitize_empty_input() {
 		assert_eq!(sanitize_branch_name(""), "");
+	}
+
+	fn sanitize_branch_name_collect_join(input: &str) -> String {
+		input
+			.split('/')
+			.map(infra::slug::slugify_cjk)
+			.filter(|s| !s.is_empty())
+			.collect::<Vec<_>>()
+			.join("/")
+	}
+
+	#[test]
+	#[ignore = "benchmark: run with --release -- --ignored --nocapture"]
+	fn sanitize_branch_name_benchmark() {
+		let input = (0..500)
+			.map(|index| {
+				if index % 5 == 0 {
+					""
+				} else if index % 3 == 0 {
+					"用户认证"
+				} else {
+					"feature branch with spaces"
+				}
+			})
+			.collect::<Vec<_>>()
+			.join("/");
+
+		let collect_start = std::time::Instant::now();
+		let mut collect_output = String::new();
+		for _ in 0..2_000 {
+			collect_output = sanitize_branch_name_collect_join(&input);
+		}
+		let collect_duration = collect_start.elapsed();
+
+		let push_start = std::time::Instant::now();
+		let mut push_output = String::new();
+		for _ in 0..2_000 {
+			push_output = sanitize_branch_name(&input);
+		}
+		let push_duration = push_start.elapsed();
+
+		assert_eq!(collect_output, push_output);
+		println!(
+			"sanitize branch name benchmark: collect_join={:?} push_join={:?} speedup={:.2}x",
+			collect_duration,
+			push_duration,
+			collect_duration.as_secs_f64() / push_duration.as_secs_f64()
+		);
 	}
 
 	#[test]
