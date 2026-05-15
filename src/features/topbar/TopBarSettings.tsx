@@ -21,6 +21,47 @@ import { useTopBarStore } from "./store";
 import { TopBarPreview } from "./TopBarPreview";
 import type { ControlId } from "./types";
 
+export function getNextTopbarControlsAfterDrag(
+	visibleActiveControls: ControlId[],
+	activeControlId: ControlId,
+	overControlId: string,
+) {
+	const activeIndex = visibleActiveControls.indexOf(activeControlId);
+	const overIndex =
+		overControlId === "preview-area" || overControlId === "available-area"
+			? -1
+			: visibleActiveControls.indexOf(overControlId as ControlId);
+	const isActiveInPreview = activeIndex !== -1;
+	const isOverPreviewArea =
+		overControlId === "preview-area" || overIndex !== -1;
+	const isOverAvailableArea =
+		overControlId === "available-area" ||
+		(overIndex === -1 && overControlId !== "preview-area");
+
+	if (isActiveInPreview && isOverPreviewArea) {
+		if (activeControlId === overControlId || overIndex === -1) {
+			return null;
+		}
+		return arrayMove(visibleActiveControls, activeIndex, overIndex);
+	}
+
+	if (isActiveInPreview && isOverAvailableArea) {
+		return visibleActiveControls.filter((id) => id !== activeControlId);
+	}
+
+	if (!isActiveInPreview && isOverPreviewArea) {
+		if (overControlId === "preview-area") {
+			return [...visibleActiveControls, activeControlId];
+		}
+
+		const nextControls = [...visibleActiveControls];
+		nextControls.splice(overIndex, 0, activeControlId);
+		return nextControls;
+	}
+
+	return null;
+}
+
 export function TopBarSettings() {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const setActiveControls = useTopBarStore((s) => s.setActiveControls);
@@ -77,46 +118,12 @@ export function TopBarSettings() {
 
 		const activeControlId = active.id as ControlId;
 		const overControlId = over.id as string;
-		const isActiveInPreview =
-			visibleActiveControls.includes(activeControlId);
-		const isOverPreviewArea =
-			overControlId === "preview-area" ||
-			visibleActiveControls.includes(overControlId as ControlId);
-		const isOverAvailableArea =
-			overControlId === "available-area" ||
-			(!visibleActiveControls.includes(overControlId as ControlId) &&
-				overControlId !== "preview-area");
-
-		if (isActiveInPreview && isOverPreviewArea) {
-			// Reorder within preview
-			if (activeControlId === overControlId) return;
-			const oldIndex = visibleActiveControls.indexOf(activeControlId);
-			const newIndex = visibleActiveControls.indexOf(
-				overControlId as ControlId,
-			);
-			if (newIndex !== -1) {
-				setActiveControls(
-					arrayMove(visibleActiveControls, oldIndex, newIndex),
-				);
-			}
-		} else if (isActiveInPreview && isOverAvailableArea) {
-			// Remove from preview
-			setActiveControls(
-				visibleActiveControls.filter((id) => id !== activeControlId),
-			);
-		} else if (!isActiveInPreview && isOverPreviewArea) {
-			// Add to preview
-			if (overControlId === "preview-area") {
-				setActiveControls([...visibleActiveControls, activeControlId]);
-			} else {
-				const overIndex = visibleActiveControls.indexOf(
-					overControlId as ControlId,
-				);
-				const newList = [...visibleActiveControls];
-				newList.splice(overIndex, 0, activeControlId);
-				setActiveControls(newList);
-			}
-		}
+		const nextControls = getNextTopbarControlsAfterDrag(
+			visibleActiveControls,
+			activeControlId,
+			overControlId,
+		);
+		if (nextControls) setActiveControls(nextControls);
 	}
 
 	const activeDef = activeId ? controlRegistry.get(activeId) : null;
