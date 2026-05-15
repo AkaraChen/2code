@@ -9,6 +9,7 @@ import {
 	getCachedProjectAvatar,
 	setCachedProjectAvatar,
 } from "@/features/projects/projectAvatarCache";
+import { upsertProjectGroup } from "@/features/projects/projectGroupCache";
 import type {
 	ProjectConfig,
 	ProjectGroup,
@@ -154,15 +155,7 @@ export function useCreateProjectGroup() {
 		onSuccess: (group) => {
 			queryClient.setQueryData<ProjectGroup[]>(
 				queryKeys.projectGroups.all,
-				(groups) => {
-					if (!groups) return [group];
-					if (groups.some((item) => item.id === group.id)) {
-						return groups.map((item) =>
-							item.id === group.id ? group : item,
-						);
-					}
-					return [...groups, group];
-				},
+				(groups) => upsertProjectGroup(groups, group),
 			);
 			queryClient.invalidateQueries({
 				queryKey: queryKeys.projectGroups.all,
