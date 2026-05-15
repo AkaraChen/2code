@@ -894,23 +894,39 @@ pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	let mut deletions = 0u32;
 
 	for part in line.split(',') {
-		let part = part.trim();
-		if let Some(n) = part
-			.split_whitespace()
-			.next()
-			.and_then(|s| s.parse::<u32>().ok())
-		{
-			if part.contains("file") {
-				files = n;
-			} else if part.contains("insertion") {
-				insertions = n;
-			} else if part.contains("deletion") {
-				deletions = n;
-			}
+		let Some((n, label)) = parse_shortstat_part(part) else {
+			continue;
+		};
+		if label.starts_with("file") {
+			files = n;
+		} else if label.starts_with("insertion") {
+			insertions = n;
+		} else if label.starts_with("deletion") {
+			deletions = n;
 		}
 	}
 
 	(files, insertions, deletions)
+}
+
+fn parse_shortstat_part(part: &str) -> Option<(u32, &str)> {
+	let part = part.trim_start();
+	let mut number = 0u32;
+	let mut digit_end = 0usize;
+	for (index, byte) in part.bytes().enumerate() {
+		if !byte.is_ascii_digit() {
+			break;
+		}
+		number = number
+			.saturating_mul(10)
+			.saturating_add(u32::from(byte - b'0'));
+		digit_end = index + 1;
+	}
+	if digit_end == 0 {
+		return None;
+	}
+
+	Some((number, part[digit_end..].trim_start()))
 }
 
 fn sum_shortstat_lines(output: &str) -> GitDiffStats {
@@ -1386,6 +1402,32 @@ fn normalize_host(host: &str) -> String {
 mod tests {
 	use super::*;
 	use std::process::Command;
+	use std::time::Instant;
+
+	fn old_parse_shortstat(line: &str) -> (u32, u32, u32) {
+		let mut files = 0u32;
+		let mut insertions = 0u32;
+		let mut deletions = 0u32;
+
+		for part in line.split(',') {
+			let part = part.trim();
+			if let Some(n) = part
+				.split_whitespace()
+				.next()
+				.and_then(|s| s.parse::<u32>().ok())
+			{
+				if part.contains("file") {
+					files = n;
+				} else if part.contains("insertion") {
+					insertions = n;
+				} else if part.contains("deletion") {
+					deletions = n;
+				}
+			}
+		}
+
+		(files, insertions, deletions)
+	}
 
 	#[test]
 	fn parse_github_owner_and_repo_with_https_url() {
@@ -1621,6 +1663,55 @@ mod tests {
 		let (f, i, d) =
 			parse_shortstat(" 1 file changed, 1 insertion(+), 1 deletion(-)");
 		assert_eq!((f, i, d), (1, 1, 1));
+	}
+
+	#[test]
+	#[ignore = "benchmark; run with cargo test -p infra parse_shortstat_benchmark --release -- --ignored --nocapture"]
+	fn parse_shortstat_benchmark() {
+		let lines = (0..100_000)
+			.map(|index| {
+				format!(
+					" {} files changed, {} insertions(+), {} deletions(-)",
+					(index % 9) + 1,
+					(index % 400) + 1,
+					(index % 250) + 1,
+				)
+			})
+			.collect::<Vec<_>>();
+
+		let start = Instant::now();
+		let old_total = lines
+			.iter()
+			.map(|line| old_parse_shortstat(line))
+			.fold((0u64, 0u64, 0u64), |acc, item| {
+				(
+					acc.0 + u64::from(item.0),
+					acc.1 + u64::from(item.1),
+					acc.2 + u64::from(item.2),
+				)
+			});
+		let old_duration = start.elapsed();
+
+		let start = Instant::now();
+		let new_total = lines
+			.iter()
+			.map(|line| parse_shortstat(line))
+			.fold((0u64, 0u64, 0u64), |acc, item| {
+				(
+					acc.0 + u64::from(item.0),
+					acc.1 + u64::from(item.1),
+					acc.2 + u64::from(item.2),
+				)
+			});
+		let new_duration = start.elapsed();
+
+		assert_eq!(new_total, old_total);
+		eprintln!(
+			"parse shortstat benchmark: split_contains={:?} leading_number={:?} speedup={:.2}x",
+			old_duration,
+			new_duration,
+			old_duration.as_secs_f64() / new_duration.as_secs_f64(),
+		);
 	}
 
 	#[test]
