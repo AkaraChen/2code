@@ -94,11 +94,11 @@ fn reconcile_watchers(
 		Err(_) => return,
 	};
 
-	let current_ids: std::collections::HashSet<String> =
-		projects.iter().map(|p| p.id.clone()).collect();
+	let current_ids: std::collections::HashSet<&str> =
+		projects.iter().map(|p| p.id.as_str()).collect();
 
 	// Remove watchers for deleted projects
-	watchers.retain(|id, _| current_ids.contains(id));
+	watchers.retain(|id, _| current_ids.contains(id.as_str()));
 
 	// Add watchers for new projects
 	for project in projects {
@@ -155,5 +155,88 @@ fn reconcile_watchers(
 				);
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::collections::{HashMap, HashSet};
+	use std::time::Instant;
+
+	use model::project::Project;
+
+	fn make_projects(count: usize) -> Vec<Project> {
+		(0..count)
+			.map(|index| Project {
+				id: format!("project-{index:05}"),
+				name: format!("Project {index}"),
+				folder: format!("/tmp/project-{index:05}"),
+				created_at: "2026-05-15T00:00:00Z".to_string(),
+				group_id: None,
+			})
+			.collect()
+	}
+
+	fn make_watcher_ids(count: usize) -> HashMap<String, ()> {
+		(0..count)
+			.map(|index| {
+				let id = if index % 5 == 0 {
+					format!("deleted-project-{index:05}")
+				} else {
+					format!("project-{index:05}")
+				};
+				(id, ())
+			})
+			.collect()
+	}
+
+	fn retain_with_cloned_ids(
+		projects: &[Project],
+		watchers: &mut HashMap<String, ()>,
+	) {
+		let current_ids: HashSet<String> =
+			projects.iter().map(|p| p.id.clone()).collect();
+		watchers.retain(|id, _| current_ids.contains(id));
+	}
+
+	fn retain_with_borrowed_ids(
+		projects: &[Project],
+		watchers: &mut HashMap<String, ()>,
+	) {
+		let current_ids: HashSet<&str> =
+			projects.iter().map(|p| p.id.as_str()).collect();
+		watchers.retain(|id, _| current_ids.contains(id.as_str()));
+	}
+
+	#[test]
+	#[ignore = "benchmark: run with --release -- --ignored --nocapture"]
+	fn watcher_reconcile_ids_benchmark() {
+		let projects = make_projects(10_000);
+		let baseline_watchers = make_watcher_ids(12_000);
+
+		let mut cloned_watchers = baseline_watchers.clone();
+		let cloned_start = Instant::now();
+		for _ in 0..250 {
+			cloned_watchers = baseline_watchers.clone();
+			retain_with_cloned_ids(&projects, &mut cloned_watchers);
+		}
+		let cloned_duration = cloned_start.elapsed();
+
+		let mut borrowed_watchers = baseline_watchers.clone();
+		let borrowed_start = Instant::now();
+		for _ in 0..250 {
+			borrowed_watchers = baseline_watchers.clone();
+			retain_with_borrowed_ids(&projects, &mut borrowed_watchers);
+		}
+		let borrowed_duration = borrowed_start.elapsed();
+
+		assert_eq!(cloned_watchers, borrowed_watchers);
+
+		println!(
+			"watcher reconcile ids benchmark: cloned_ids={:?} borrowed_ids={:?} speedup={:.2}x",
+			cloned_duration,
+			borrowed_duration,
+			cloned_duration.as_secs_f64() / borrowed_duration.as_secs_f64()
+		);
 	}
 }
