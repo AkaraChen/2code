@@ -20,13 +20,25 @@ const DEFAULT_SYMBOL: FileTreeIconSymbol = {
 };
 
 const symbolCache = new Map<string, FileTreeIconSymbol>();
+const fileIconCache = new Map<
+	string,
+	ReturnType<typeof FILE_TREE_ICON_RESOLVER.resolveIcon>
+>();
 
 function escapeRegExp(value: string) {
 	return value.replace(REGEXP_SPECIAL_CHARS_RE, "\\$&");
 }
 
 export function resolveFileTreeFileIcon(fileName: string) {
-	return FILE_TREE_ICON_RESOLVER.resolveIcon(FILE_TREE_ICON_NAME, fileName);
+	const cachedIcon = fileIconCache.get(fileName);
+	if (cachedIcon) return cachedIcon;
+
+	const icon = FILE_TREE_ICON_RESOLVER.resolveIcon(
+		FILE_TREE_ICON_NAME,
+		fileName,
+	);
+	fileIconCache.set(fileName, icon);
+	return icon;
 }
 
 export function getFileTreeIconSymbol(iconName: string): FileTreeIconSymbol {
