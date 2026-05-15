@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { findSearchMatches, isSearchShortcut } from "./useSearch";
+import {
+	findSearchMatches,
+	getMatchedLineNumbers,
+	isSearchShortcut,
+} from "./useSearch";
 
 describe("findSearchMatches", () => {
 	it("finds case-insensitive matches across lines", () => {
@@ -11,6 +15,18 @@ describe("findSearchMatches", () => {
 
 	it("returns no matches for an empty query", () => {
 		expect(findSearchMatches("content", "")).toEqual([]);
+	});
+});
+
+describe("getMatchedLineNumbers", () => {
+	it("deduplicates matched line numbers", () => {
+		expect(
+			getMatchedLineNumbers([
+				{ columnIndex: 0, lineNumber: 1 },
+				{ columnIndex: 4, lineNumber: 1 },
+				{ columnIndex: 0, lineNumber: 2 },
+			]),
+		).toEqual(new Set([1, 2]));
 	});
 });
 
