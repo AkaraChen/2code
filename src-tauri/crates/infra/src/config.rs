@@ -39,6 +39,10 @@ pub fn write_project_config(
 }
 
 pub fn execute_scripts(scripts: &[String], cwd: &Path) {
+	if scripts.is_empty() {
+		return;
+	}
+
 	if !cwd.exists() {
 		tracing::warn!("Script cwd does not exist: {}", cwd.display());
 		return;
@@ -46,10 +50,7 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 
 	for script in scripts {
 		let mut command = script_command();
-		let result = command
-			.arg(script)
-			.current_dir(cwd)
-			.output();
+		let result = command.arg(script).current_dir(cwd).output();
 
 		match result {
 			Ok(output) if !output.status.success() => {
