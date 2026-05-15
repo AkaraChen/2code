@@ -27,6 +27,7 @@ import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { toaster } from "@/shared/providers/appToaster";
 import FileViewerDialog from "./FileViewerDialog";
+import { compareFileTreePaths } from "./fileTreeSort";
 import {
 	FILE_TREE_PANEL_MAX_WIDTH,
 	FILE_TREE_PANEL_MIN_WIDTH,
@@ -185,9 +186,7 @@ function buildModelPaths(
 		seenPathCollisionKeys.add(collisionKey);
 		paths.push(entry.path);
 	}
-	paths.sort((left, right) =>
-		left.localeCompare(right, undefined, { sensitivity: "base" }),
-	);
+	paths.sort(compareFileTreePaths);
 	return paths;
 }
 
