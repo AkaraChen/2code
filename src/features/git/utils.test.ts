@@ -11,6 +11,7 @@ import {
 	isLargeGitDiffFile,
 	isBinaryImageDiffPreviewable,
 	reconcileIncludedFiles,
+	toggleIncludedFileName,
 } from "./utils";
 
 describe("changeBadge", () => {
@@ -323,6 +324,25 @@ describe("reconcileIncludedFiles", () => {
 				new Set(["a.ts", "b.ts"]),
 			),
 		).toEqual(new Set(["b.ts"]));
+	});
+});
+
+describe("toggleIncludedFileName", () => {
+	it("adds and removes file names without mutating the previous set", () => {
+		const previous = new Set(["a.ts"]);
+		const added = toggleIncludedFileName(previous, "b.ts", true);
+		const removed = toggleIncludedFileName(added, "a.ts", false);
+
+		expect(previous).toEqual(new Set(["a.ts"]));
+		expect(added).toEqual(new Set(["a.ts", "b.ts"]));
+		expect(removed).toEqual(new Set(["b.ts"]));
+	});
+
+	it("returns the previous set when the requested state is unchanged", () => {
+		const previous = new Set(["a.ts"]);
+
+		expect(toggleIncludedFileName(previous, "a.ts", true)).toBe(previous);
+		expect(toggleIncludedFileName(previous, "b.ts", false)).toBe(previous);
 	});
 });
 
