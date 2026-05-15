@@ -19,7 +19,6 @@ import {
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
 	getLineStats,
 	isBinaryImageDiffPreviewable,
-	isLargeGitDiffFile,
 } from "../utils";
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
 
@@ -181,7 +180,7 @@ function ActiveGitDiffFilePane({
 		previewContext != null && isBinaryImageDiffPreviewable(activeFile);
 	const showLargeDiffGuardrail =
 		!showBinaryPreview &&
-		isLargeGitDiffFile(activeFile) &&
+		changedLineCount >= GIT_DIFF_LARGE_FILE_LINE_THRESHOLD &&
 		!isLargeDiffExpanded;
 	const showRenameOnlyDiff = activeFile.type === "rename-pure";
 
