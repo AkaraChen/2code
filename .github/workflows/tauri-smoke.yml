@@ -41,6 +41,7 @@ jobs:
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
+          cache-bin: false
           workspaces: |
             src-tauri -> target
 
