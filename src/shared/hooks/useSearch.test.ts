@@ -1,22 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { findSearchMatches, isSearchShortcut } from "./useSearch";
 
-describe("useSearch utilities", () => {
-	it("finds case-insensitive matches with line and column positions", () => {
-		expect(
-			findSearchMatches("Alpha beta\nalpha gamma\nnone", "alpha"),
-		).toEqual([
+describe("findSearchMatches", () => {
+	it("finds case-insensitive matches across lines", () => {
+		expect(findSearchMatches("Alpha\nbeta ALPHA", "alpha")).toEqual([
 			{ columnIndex: 0, lineNumber: 1 },
-			{ columnIndex: 0, lineNumber: 2 },
+			{ columnIndex: 5, lineNumber: 2 },
 		]);
 	});
 
-	it("detects browser-like search shortcuts", () => {
+	it("returns no matches for an empty query", () => {
+		expect(findSearchMatches("content", "")).toEqual([]);
+	});
+});
+
+describe("isSearchShortcut", () => {
+	it("accepts command/control f without alternate modifiers", () => {
 		expect(
 			isSearchShortcut({
 				altKey: false,
 				ctrlKey: true,
-				key: "f",
+				key: "F",
 				metaKey: false,
 				shiftKey: false,
 			}),
@@ -25,11 +29,14 @@ describe("useSearch utilities", () => {
 			isSearchShortcut({
 				altKey: false,
 				ctrlKey: false,
-				key: "F",
+				key: "f",
 				metaKey: true,
 				shiftKey: false,
 			}),
 		).toBe(true);
+	});
+
+	it("rejects search shortcuts with alternate modifiers", () => {
 		expect(
 			isSearchShortcut({
 				altKey: false,
@@ -37,6 +44,15 @@ describe("useSearch utilities", () => {
 				key: "f",
 				metaKey: false,
 				shiftKey: true,
+			}),
+		).toBe(false);
+		expect(
+			isSearchShortcut({
+				altKey: true,
+				ctrlKey: false,
+				key: "f",
+				metaKey: true,
+				shiftKey: false,
 			}),
 		).toBe(false);
 	});
