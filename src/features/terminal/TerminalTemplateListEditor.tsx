@@ -10,6 +10,10 @@ import {
 	Textarea,
 } from "@chakra-ui/react";
 import * as m from "@/paraglide/messages.js";
+import {
+	removeTemplateDraft,
+	updateTemplateDraft,
+} from "./templateDraftList";
 
 interface BaseTemplateDraft {
 	id: string;
@@ -36,17 +40,11 @@ export function TerminalTemplateListEditor<T extends BaseTemplateDraft>({
 	showCwd = false,
 }: TerminalTemplateListEditorProps<T>) {
 	function updateTemplate(index: number, patch: Partial<T>) {
-		onChange(
-			templates.map((template, templateIndex) =>
-				templateIndex === index
-					? { ...template, ...patch }
-					: template,
-			),
-		);
+		onChange(updateTemplateDraft(templates, index, patch));
 	}
 
 	function removeTemplate(index: number) {
-		onChange(templates.filter((_, templateIndex) => templateIndex !== index));
+		onChange(removeTemplateDraft(templates, index));
 	}
 
 	return (
