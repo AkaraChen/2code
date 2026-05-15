@@ -3,13 +3,17 @@ import { useState } from "react";
 import { useProjectAvatar } from "@/features/projects/hooks";
 import { useSidebarSettingsStore } from "@/features/settings/stores/sidebarSettingsStore";
 
-function getProjectAvatarFallback(name: string) {
+export function getProjectAvatarFallback(name: string) {
 	const trimmed = name.trim();
 	if (!trimmed) {
 		return "?";
 	}
 
-	return Array.from(trimmed)[0]?.toUpperCase() ?? "?";
+	for (const character of trimmed) {
+		return character.toUpperCase();
+	}
+
+	return "?";
 }
 
 export function ProjectAvatar({
