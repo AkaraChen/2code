@@ -35,6 +35,7 @@ import {
 import { reconcileIncludedFiles, toggleIncludedFileName } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
+import { collectOrderedIncludedFileNames } from "./includedFileNames";
 
 const SIDEBAR_TAB_CONTENT_PROPS = {
 	position: "absolute",
@@ -106,10 +107,7 @@ export default function GitDiffContent({
 	const aheadCount = useGitAheadCount(profileId);
 	const gitPush = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
-		() =>
-			changesFiles.flatMap((file) =>
-				includedFileNames.has(file.name) ? [file.name] : [],
-			),
+		() => collectOrderedIncludedFileNames(changesFiles, includedFileNames),
 		[changesFiles, includedFileNames],
 	);
 
