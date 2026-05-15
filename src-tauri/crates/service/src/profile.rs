@@ -68,17 +68,22 @@ fn build_auto_branch_name(existing_branches: &[String], seed: &Uuid) -> String {
 		.iter()
 		.filter_map(|branch| extract_auto_branch_city(branch))
 		.collect();
-	let available_cities: Vec<&str> = AUTO_BRANCH_CITIES
+	let available_count = AUTO_BRANCH_CITIES
 		.iter()
-		.copied()
-		.filter(|city| !used_cities.contains(city))
-		.collect();
-	let city_pool = if available_cities.is_empty() {
+		.filter(|city| !used_cities.contains(*city))
+		.count();
+	let city = if available_count == 0 {
 		AUTO_BRANCH_CITIES
+			[usize::from(seed.as_bytes()[0]) % AUTO_BRANCH_CITIES.len()]
 	} else {
-		available_cities.as_slice()
+		let target_index = usize::from(seed.as_bytes()[0]) % available_count;
+		AUTO_BRANCH_CITIES
+			.iter()
+			.filter(|city| !used_cities.contains(*city))
+			.nth(target_index)
+			.copied()
+			.unwrap_or(AUTO_BRANCH_CITIES[0])
 	};
-	let city = city_pool[usize::from(seed.as_bytes()[0]) % city_pool.len()];
 	let simple = seed.simple().to_string();
 	let short_id = &simple[..8];
 	format!("{AUTO_BRANCH_PREFIX}{city}-{short_id}")
@@ -235,6 +240,8 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 
 #[cfg(test)]
 mod tests {
+	use std::time::Instant;
+
 	use super::*;
 
 	// --- worktree base resolution ---
@@ -316,5 +323,63 @@ mod tests {
 		assert!(!branch_name.starts_with("pr/tokyo-"));
 		assert!(!branch_name.starts_with("pr/osaka-"));
 		assert!(branch_name.ends_with("-00000000"));
+	}
+
+	fn build_auto_branch_name_with_vec(
+		existing_branches: &[String],
+		seed: &Uuid,
+	) -> String {
+		let used_cities: HashSet<&str> = existing_branches
+			.iter()
+			.filter_map(|branch| extract_auto_branch_city(branch))
+			.collect();
+		let available_cities: Vec<&str> = AUTO_BRANCH_CITIES
+			.iter()
+			.copied()
+			.filter(|city| !used_cities.contains(city))
+			.collect();
+		let city_pool = if available_cities.is_empty() {
+			AUTO_BRANCH_CITIES
+		} else {
+			available_cities.as_slice()
+		};
+		let city = city_pool[usize::from(seed.as_bytes()[0]) % city_pool.len()];
+		let simple = seed.simple().to_string();
+		let short_id = &simple[..8];
+		format!("{AUTO_BRANCH_PREFIX}{city}-{short_id}")
+	}
+
+	#[test]
+	#[ignore]
+	fn benchmark_auto_branch_city_selection() {
+		let existing: Vec<String> = AUTO_BRANCH_CITIES
+			.iter()
+			.take(24)
+			.enumerate()
+			.map(|(index, city)| format!("pr/{city}-{index:08}"))
+			.collect();
+		let seed =
+			Uuid::parse_str("d3000000-0000-4000-8000-000000000000").unwrap();
+		let iterations = 200_000;
+
+		let start = Instant::now();
+		let mut vec_len = 0;
+		for _ in 0..iterations {
+			vec_len += build_auto_branch_name_with_vec(&existing, &seed).len();
+		}
+		let vec_selection = start.elapsed();
+
+		let start = Instant::now();
+		let mut scan_len = 0;
+		for _ in 0..iterations {
+			scan_len += build_auto_branch_name(&existing, &seed).len();
+		}
+		let scan_selection = start.elapsed();
+
+		assert_eq!(vec_len, scan_len);
+		println!(
+			"vec_selection={vec_selection:?} scan_selection={scan_selection:?} speedup={:.2}x",
+			vec_selection.as_secs_f64() / scan_selection.as_secs_f64()
+		);
 	}
 }
