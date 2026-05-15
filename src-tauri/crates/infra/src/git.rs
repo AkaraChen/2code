@@ -101,21 +101,21 @@ pub fn init(dir: &Path) -> Result<(), AppError> {
 }
 
 pub fn branch(folder: &str) -> Result<String, AppError> {
+	let sym_output = Command::new("git")
+		.args(["symbolic-ref", "--short", "HEAD"])
+		.current_dir(folder)
+		.output()?;
+	if sym_output.status.success() {
+		return Ok(String::from_utf8_lossy(&sym_output.stdout)
+			.trim()
+			.to_string());
+	}
+
 	let output = Command::new("git")
 		.args(["rev-parse", "--abbrev-ref", "HEAD"])
 		.current_dir(folder)
 		.output()?;
 	if !output.status.success() {
-		// Empty repo (no commits) — try symbolic-ref which works without commits
-		let sym_output = Command::new("git")
-			.args(["symbolic-ref", "--short", "HEAD"])
-			.current_dir(folder)
-			.output()?;
-		if sym_output.status.success() {
-			return Ok(String::from_utf8_lossy(&sym_output.stdout)
-				.trim()
-				.to_string());
-		}
 		return Ok("main".to_string());
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
