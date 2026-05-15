@@ -7,6 +7,7 @@ import {
 	getGitBinaryPreviewPath,
 	getGitBinaryPreviewRevision,
 	getLineStats,
+	getOrderedIncludedFileNames,
 	getPreviewableImageMimeType,
 	isLargeGitDiffFile,
 	isBinaryImageDiffPreviewable,
@@ -323,6 +324,20 @@ describe("reconcileIncludedFiles", () => {
 				new Set(["a.ts", "b.ts"]),
 			),
 		).toEqual(new Set(["b.ts"]));
+	});
+});
+
+describe("getOrderedIncludedFileNames", () => {
+	it("returns included files in diff order", () => {
+		const files = [
+			{ name: "a.ts" },
+			{ name: "b.ts" },
+			{ name: "c.ts" },
+		] as FileDiffMetadata[];
+
+		expect(
+			getOrderedIncludedFileNames(files, new Set(["c.ts", "a.ts"])),
+		).toEqual(["a.ts", "c.ts"]);
 	});
 });
 

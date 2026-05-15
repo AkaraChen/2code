@@ -32,7 +32,7 @@ import {
 	useGitLog,
 	useGitPush,
 } from "../hooks";
-import { reconcileIncludedFiles } from "../utils";
+import { getOrderedIncludedFileNames, reconcileIncludedFiles } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
 
@@ -106,10 +106,7 @@ export default function GitDiffContent({
 	const aheadCount = useGitAheadCount(profileId);
 	const gitPush = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
-		() =>
-			changesFiles.flatMap((file) =>
-				includedFileNames.has(file.name) ? [file.name] : [],
-			),
+		() => getOrderedIncludedFileNames(changesFiles, includedFileNames),
 		[changesFiles, includedFileNames],
 	);
 

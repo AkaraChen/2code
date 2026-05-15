@@ -140,3 +140,16 @@ export function reconcileIncludedFiles(
 
 	return nextIncluded;
 }
+
+export function getOrderedIncludedFileNames(
+	files: readonly FileDiffMetadata[],
+	includedFileNames: ReadonlySet<string>,
+) {
+	const orderedFileNames: string[] = [];
+	for (const file of files) {
+		if (includedFileNames.has(file.name)) {
+			orderedFileNames.push(file.name);
+		}
+	}
+	return orderedFileNames;
+}
