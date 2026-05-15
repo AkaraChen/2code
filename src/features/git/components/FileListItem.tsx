@@ -14,6 +14,18 @@ export interface FileListItemProps {
 	onToggleIncluded?: (included: boolean) => void;
 }
 
+export function getFileNameParts(fileName: string) {
+	const separatorIndex = fileName.lastIndexOf("/");
+	if (separatorIndex === -1) {
+		return { basename: fileName, parentPath: null };
+	}
+
+	return {
+		basename: fileName.slice(separatorIndex + 1),
+		parentPath: fileName.slice(0, separatorIndex),
+	};
+}
+
 export function FileListItem({
 	file,
 	isActive,
@@ -24,11 +36,8 @@ export function FileListItem({
 	onToggleIncluded,
 }: FileListItemProps) {
 	const badge = changeBadge[file.type] ?? changeBadge.change;
-	const basename = file.name.split("/").pop() ?? file.name;
+	const { basename, parentPath } = getFileNameParts(file.name);
 	const effectiveIncluded = isIncluded ?? true;
-	const parentPath = file.name.includes("/")
-		? file.name.split("/").slice(0, -1).join("/")
-		: null;
 
 	return (
 		<HStack
