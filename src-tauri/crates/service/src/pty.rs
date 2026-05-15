@@ -29,6 +29,15 @@ pub fn create_flush_senders() -> PtyFlushSenders {
 	Arc::new(Mutex::new(HashMap::new()))
 }
 
+fn project_folder_for_profile(
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	repo::profile::get_project_folder(conn, &profile.project_id)
+}
+
 /// All dependencies needed to create a PTY session, fully decoupled from Tauri.
 pub struct PtyContext {
 	pub db: DbPool,
@@ -250,15 +259,11 @@ pub fn create_session(
 	config: &PtyConfig,
 ) -> Result<String, AppError> {
 	// 1. Resolve project folder and load init_script from 2code.json
-	let project_init_scripts = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		let profile = repo::profile::find_by_id(conn, &meta.profile_id)?;
-		let folder =
-			repo::profile::get_project_folder(conn, &profile.project_id)?;
-		infra::config::load_project_config(&folder)
+	let project_folder = project_folder_for_profile(&ctx.db, &meta.profile_id)?;
+	let project_init_scripts =
+		infra::config::load_project_config(&project_folder)
 			.map(|c| c.init_script)
-			.unwrap_or_default()
-	};
+			.unwrap_or_default();
 
 	// 2. Generate session ID (needed for init dir name)
 	let session_id = uuid::Uuid::new_v4().to_string();
@@ -1196,5 +1201,24 @@ mod tests {
 			repo::pty::get_session_history(&mut conn, "s-persist-flush")
 				.unwrap();
 		assert_eq!(history, b"data before flush");
+	}
+
+	#[test]
+	fn project_folder_for_profile_reads_profile_project_folder() {
+		let db = setup_test_db();
+		insert_test_project_and_session(&db, "s-profile-folder");
+
+		let folder = project_folder_for_profile(&db, "pr1").unwrap();
+
+		assert_eq!(folder, "/tmp");
+	}
+
+	#[test]
+	fn project_folder_for_profile_returns_not_found_for_missing_profile() {
+		let db = setup_test_db();
+
+		let result = project_folder_for_profile(&db, "missing-profile");
+
+		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}
 }
