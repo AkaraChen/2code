@@ -52,6 +52,13 @@ fn encode_release_tag(tag: &str) -> String {
 	tag.replace('/', "%2F")
 }
 
+fn contains_beta_ascii_case_insensitive(value: &str) -> bool {
+	value
+		.as_bytes()
+		.windows(4)
+		.any(|window| window.eq_ignore_ascii_case(b"beta"))
+}
+
 fn update_metadata(update: &Update) -> UpdateMetadata {
 	UpdateMetadata {
 		current_version: update.current_version.clone(),
@@ -107,7 +114,7 @@ async fn latest_beta_endpoint(
 		.find(|release| {
 			!release.draft
 				&& release.prerelease
-				&& release.tag_name.to_ascii_lowercase().contains("beta")
+				&& contains_beta_ascii_case_insensitive(&release.tag_name)
 		})
 		.ok_or_else(|| AppError::NotFound("beta release".into()))?;
 
@@ -189,4 +196,63 @@ pub async fn install_update(
 		.map_err(updater_error)?;
 
 	app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::time::Instant;
+
+	#[test]
+	fn detects_beta_tags_case_insensitively() {
+		assert!(contains_beta_ascii_case_insensitive("v1.0.0-beta.1"));
+		assert!(contains_beta_ascii_case_insensitive("v1.0.0-BETA.1"));
+		assert!(!contains_beta_ascii_case_insensitive("v1.0.0"));
+	}
+
+	#[test]
+	#[ignore]
+	fn bench_contains_beta_without_lowercase_allocation() {
+		let tags: Vec<String> = (0..10_000)
+			.map(|index| {
+				if index % 4 == 0 {
+					format!("v1.{index}.0-BETA.{index}")
+				} else {
+					format!("v1.{index}.0-release")
+				}
+			})
+			.collect();
+		let iterations = 500;
+
+		let started = Instant::now();
+		let mut lowercase_count = 0;
+		for _ in 0..iterations {
+			for tag in &tags {
+				if std::hint::black_box(tag)
+					.to_ascii_lowercase()
+					.contains("beta")
+				{
+					lowercase_count += 1;
+				}
+			}
+		}
+		let lowercase = started.elapsed();
+
+		let started = Instant::now();
+		let mut window_count = 0;
+		for _ in 0..iterations {
+			for tag in &tags {
+				if contains_beta_ascii_case_insensitive(std::hint::black_box(tag)) {
+					window_count += 1;
+				}
+			}
+		}
+		let window = started.elapsed();
+
+		assert_eq!(lowercase_count, window_count);
+		println!(
+			"lowercase={lowercase:?} window={window:?} speedup={:.2}x",
+			lowercase.as_secs_f64() / window.as_secs_f64()
+		);
+	}
 }
