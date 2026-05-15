@@ -78,6 +78,25 @@ describe("fileViewerTabsStore", () => {
 		expect(useFileViewerTabsStore.getState().profiles["profile-1"]).toBeUndefined();
 	});
 
+	it("ignores closing a missing tab", () => {
+		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
+
+		useFileViewerTabsStore
+			.getState()
+			.closeTab("profile-1", "/repo/src/missing.ts");
+
+		expect(useFileViewerTabsStore.getState().profiles["profile-1"]).toEqual({
+			tabs: [
+				{
+					filePath: "/repo/src/a.ts",
+					title: "a.ts",
+				},
+			],
+			activeFilePath: "/repo/src/a.ts",
+			fileTabActive: true,
+		});
+	});
+
 	it("tracks dirty file tabs and clears dirty state when a tab closes", () => {
 		useFileViewerTabsStore.getState().openFile("profile-1", "/repo/src/a.ts");
 		useFileViewerDirtyStore

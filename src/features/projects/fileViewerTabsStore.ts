@@ -10,7 +10,7 @@ export interface FileViewerTab {
 	title: string;
 }
 
-interface ProfileFileViewerState {
+export interface ProfileFileViewerState {
 	tabs: FileViewerTab[];
 	activeFilePath: string | null;
 	fileTabActive: boolean;
@@ -61,6 +61,25 @@ export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 	})),
 );
 
+export function closeFileViewerTab(
+	profile: ProfileFileViewerState,
+	filePath: string,
+) {
+	const idx = profile.tabs.findIndex((t) => t.filePath === filePath);
+	if (idx === -1) return;
+
+	profile.tabs.splice(idx, 1);
+	if (profile.activeFilePath === filePath) {
+		if (profile.tabs.length > 0) {
+			const newIdx = Math.min(idx, profile.tabs.length - 1);
+			profile.activeFilePath = profile.tabs[newIdx].filePath;
+		} else {
+			profile.activeFilePath = null;
+			profile.fileTabActive = false;
+		}
+	}
+}
+
 export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 	persist(
 		immer((set) => ({
@@ -91,21 +110,7 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 				set((state) => {
 					const profile = state.profiles[profileId];
 					if (!profile) return;
-					const idx = profile.tabs.findIndex(
-						(t) => t.filePath === filePath,
-					);
-					profile.tabs = profile.tabs.filter(
-						(t) => t.filePath !== filePath,
-					);
-					if (profile.activeFilePath === filePath) {
-						if (profile.tabs.length > 0) {
-							const newIdx = Math.min(idx, profile.tabs.length - 1);
-							profile.activeFilePath = profile.tabs[newIdx].filePath;
-						} else {
-							profile.activeFilePath = null;
-							profile.fileTabActive = false;
-						}
-					}
+					closeFileViewerTab(profile, filePath);
 					if (profile.tabs.length === 0) {
 						delete state.profiles[profileId];
 					}
