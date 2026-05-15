@@ -12,6 +12,7 @@ import { listSystemSounds, playSystemSound } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
 import { useLocale } from "@/shared/lib/locale";
+import { buildSoundSelectItems } from "./soundOptions";
 import { useNotificationStore } from "./stores/notificationStore";
 
 const getSoundsPromise = createCachedPromise<string[]>(() =>
@@ -27,10 +28,10 @@ export function SoundPicker() {
 		() => {
 			void locale;
 			return createListCollection({
-				items: [
-					{ value: "", label: m.notificationSoundNone() },
-					...sounds.map((s) => ({ value: s, label: s })),
-				],
+				items: buildSoundSelectItems(
+					sounds,
+					m.notificationSoundNone(),
+				),
 			});
 		},
 		[locale, sounds],
