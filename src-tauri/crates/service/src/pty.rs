@@ -315,13 +315,11 @@ pub fn create_session(
 	}
 
 	if !config.startup_commands.is_empty() {
-		let line_ending = if cfg!(windows) { "\r" } else { "\n" };
-		let mut startup_commands = config.startup_commands.join(line_ending);
-		startup_commands.push_str(line_ending);
 		if cfg!(windows) {
-			startup_commands = format!("\x1b[1;1R{startup_commands}");
 			std::thread::sleep(Duration::from_secs(1));
 		}
+		let startup_commands =
+			build_startup_commands(&config.startup_commands, cfg!(windows));
 
 		if let Err(err) = session::write_to_pty(
 			&ctx.sessions,
@@ -337,6 +335,22 @@ pub fn create_session(
 	}
 
 	Ok(session_id)
+}
+
+fn build_startup_commands(commands: &[String], windows: bool) -> String {
+	let line_ending = if windows { "\r" } else { "\n" };
+	let line_ending_len = line_ending.len();
+	let prefix = if windows { "\x1b[1;1R" } else { "" };
+	let commands_len: usize = commands.iter().map(String::len).sum();
+	let mut startup_commands = String::with_capacity(
+		prefix.len() + commands_len + commands.len() * line_ending_len,
+	);
+	startup_commands.push_str(prefix);
+	for command in commands {
+		startup_commands.push_str(command);
+		startup_commands.push_str(line_ending);
+	}
+	startup_commands
 }
 
 pub fn close_session(
@@ -655,6 +669,8 @@ fn persist_pty_output(
 
 #[cfg(test)]
 mod tests {
+	use std::time::Instant;
+
 	use super::*;
 
 	// --- Empty / pure-ASCII ---
@@ -662,6 +678,67 @@ mod tests {
 	#[test]
 	fn boundary_empty() {
 		assert_eq!(find_utf8_boundary(&[]), 0);
+	}
+
+	#[test]
+	fn builds_startup_commands_for_unix() {
+		assert_eq!(
+			build_startup_commands(
+				&["bun dev".to_string(), "echo ok".to_string()],
+				false
+			),
+			"bun dev\necho ok\n"
+		);
+	}
+
+	#[test]
+	fn builds_startup_commands_for_windows() {
+		assert_eq!(
+			build_startup_commands(&["npm start".to_string()], true),
+			"\x1b[1;1Rnpm start\r"
+		);
+	}
+
+	fn build_startup_commands_with_join(
+		commands: &[String],
+		windows: bool,
+	) -> String {
+		let line_ending = if windows { "\r" } else { "\n" };
+		let mut startup_commands = commands.join(line_ending);
+		startup_commands.push_str(line_ending);
+		if windows {
+			startup_commands = format!("\x1b[1;1R{startup_commands}");
+		}
+		startup_commands
+	}
+
+	#[test]
+	#[ignore]
+	fn benchmark_startup_command_building() {
+		let commands: Vec<String> = (0..32)
+			.map(|index| format!("echo preparing workspace step {index}"))
+			.collect();
+		let iterations = 300_000;
+
+		let start = Instant::now();
+		let mut join_len = 0;
+		for _ in 0..iterations {
+			join_len += build_startup_commands_with_join(&commands, true).len();
+		}
+		let join_build = start.elapsed();
+
+		let start = Instant::now();
+		let mut direct_len = 0;
+		for _ in 0..iterations {
+			direct_len += build_startup_commands(&commands, true).len();
+		}
+		let direct_build = start.elapsed();
+
+		assert_eq!(join_len, direct_len);
+		println!(
+			"join_build={join_build:?} direct_build={direct_build:?} speedup={:.2}x",
+			join_build.as_secs_f64() / direct_build.as_secs_f64()
+		);
 	}
 
 	#[test]
