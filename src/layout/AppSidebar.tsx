@@ -4,6 +4,7 @@ import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef } from "react";
 import { FiFolder, FiHome, FiPlus, FiSettings } from "react-icons/fi";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
+import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import { useProjectGroups, useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
@@ -21,6 +22,45 @@ function isMacPlatform() {
 	return /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
 }
 
+export function groupSidebarProjects(
+	projectGroups: ProjectGroup[],
+	projects: ProjectWithProfiles[],
+) {
+	const projectsByGroup = new Map<string, ProjectWithProfiles[]>();
+	for (const group of projectGroups) {
+		projectsByGroup.set(group.id, []);
+	}
+
+	const ungroupedProjects: ProjectWithProfiles[] = [];
+	for (const project of projects) {
+		const groupId = project.group_id ?? null;
+		if (!groupId) {
+			ungroupedProjects.push(project);
+			continue;
+		}
+
+		const groupProjects = projectsByGroup.get(groupId);
+		if (groupProjects) {
+			groupProjects.push(project);
+		} else {
+			ungroupedProjects.push(project);
+		}
+	}
+
+	const groups: Array<{
+		group: ProjectGroup;
+		projects: ProjectWithProfiles[];
+	}> = [];
+	for (const group of projectGroups) {
+		const groupProjects = projectsByGroup.get(group.id);
+		if (groupProjects && groupProjects.length > 0) {
+			groups.push({ group, projects: groupProjects });
+		}
+	}
+
+	return { groups, ungroupedProjects };
+}
+
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const { data: projectGroups } = useProjectGroups();
@@ -34,32 +74,10 @@ export default function AppSidebar() {
 		max: APP_SIDEBAR_MAX_WIDTH,
 		onChange: setSidebarWidth,
 	});
-	const groupedProjects = useMemo(() => {
-		const knownGroupIds = new Set(projectGroups.map((group) => group.id));
-		const projectsByGroup = new Map(
-			projectGroups.map((group) => [group.id, [] as typeof projects]),
-		);
-		const ungroupedProjects: typeof projects = [];
-
-		for (const project of projects) {
-			const groupId = project.group_id ?? null;
-			if (groupId && knownGroupIds.has(groupId)) {
-				projectsByGroup.get(groupId)?.push(project);
-			} else {
-				ungroupedProjects.push(project);
-			}
-		}
-
-		return {
-			groups: projectGroups
-				.map((group) => ({
-					group,
-					projects: projectsByGroup.get(group.id) ?? [],
-				}))
-				.filter((group) => group.projects.length > 0),
-			ungroupedProjects,
-		};
-	}, [projectGroups, projects]);
+	const groupedProjects = useMemo(
+		() => groupSidebarProjects(projectGroups, projects),
+		[projectGroups, projects],
+	);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
 		if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
