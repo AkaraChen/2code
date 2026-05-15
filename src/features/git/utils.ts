@@ -68,11 +68,12 @@ export function isLargeGitDiffFile(
 }
 
 export function getPreviewableImageMimeType(fileName: string) {
-	const extension = fileName.split(".").pop()?.toLowerCase();
-	if (!extension) {
+	const extensionStart = fileName.lastIndexOf(".");
+	if (extensionStart < 0 || extensionStart === fileName.length - 1) {
 		return null;
 	}
 
+	const extension = fileName.slice(extensionStart + 1).toLowerCase();
 	return previewableImageMimeTypes[extension] ?? null;
 }
 
