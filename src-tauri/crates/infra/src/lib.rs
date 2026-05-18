@@ -3,6 +3,7 @@ pub mod db;
 pub mod filesystem;
 pub mod git;
 pub mod logger;
+pub mod no_window;
 pub mod pty;
 pub mod shell_init;
 pub mod slug;
