@@ -203,6 +203,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				const action = getTerminalShortcutAction(event);
 				if (!action) return true;
 
+				// Ctrl+C with no selection: pass through so xterm sends ^C (SIGINT).
+				if (
+					action.type === "copy-selection-or-interrupt"
+					&& !term.hasSelection()
+				) {
+					return true;
+				}
+
 				event.preventDefault();
 				event.stopPropagation();
 
@@ -223,6 +231,26 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 						.finally(() => {
 							void writeToPty({ sessionId, data: "\x0C" });
 						});
+					return false;
+				}
+
+				if (action.type === "copy-selection-or-interrupt") {
+					const selection = term.getSelection();
+					if (selection) {
+						void navigator.clipboard.writeText(selection).catch(() => {});
+					}
+					return false;
+				}
+
+				if (action.type === "paste-clipboard") {
+					void navigator.clipboard
+						.readText()
+						.then((text) => {
+							if (text) {
+								void writeToPty({ sessionId, data: text });
+							}
+						})
+						.catch(() => {});
 					return false;
 				}
 
