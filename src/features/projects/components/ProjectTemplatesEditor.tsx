@@ -27,14 +27,17 @@ export function ProjectTemplatesEditor({
 	onChange,
 }: ProjectTemplatesEditorProps) {
 	const [editingId, setEditingId] = useState<string | null>(null);
-	const [draft, setDraft] = useState<ProjectTerminalTemplateDraft | null>(null);
+	const [draft, setDraft] = useState<ProjectTerminalTemplateDraft>(
+		createEmptyProjectTerminalTemplateDraft,
+	);
+	const [isOpen, setIsOpen] = useState(false);
 
-	const isOpen = draft !== null;
 	const isEditing = editingId !== null;
 
 	function openCreate() {
 		setEditingId(null);
 		setDraft(createEmptyProjectTerminalTemplateDraft());
+		setIsOpen(true);
 	}
 
 	function openEdit(id: string) {
@@ -42,15 +45,15 @@ export function ProjectTemplatesEditor({
 		if (!t) return;
 		setEditingId(id);
 		setDraft({ ...t });
+		setIsOpen(true);
 	}
 
 	function closeDialog() {
+		setIsOpen(false);
 		setEditingId(null);
-		setDraft(null);
 	}
 
 	function handleCommit() {
-		if (!draft) return;
 		if (editingId) {
 			onChange(templateDrafts.map((t) => (t.id === editingId ? draft : t)));
 		} else {
@@ -160,18 +163,16 @@ export function ProjectTemplatesEditor({
 				)}
 			</Stack>
 
-			{draft ? (
-				<TerminalTemplateDraftDialog
-					draft={draft}
-					isOpen={isOpen}
-					isEditing={isEditing}
-					showCwd
-					onChange={setDraft}
-					onClose={closeDialog}
-					onDelete={handleDelete}
-					onSave={handleCommit}
-				/>
-			) : null}
+			<TerminalTemplateDraftDialog
+				draft={draft}
+				isOpen={isOpen}
+				isEditing={isEditing}
+				showCwd
+				onChange={setDraft}
+				onClose={closeDialog}
+				onDelete={handleDelete}
+				onSave={handleCommit}
+			/>
 		</>
 	);
 }
