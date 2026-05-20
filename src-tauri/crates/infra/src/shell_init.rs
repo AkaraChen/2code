@@ -5,9 +5,14 @@ use model::error::AppError;
 // 2code's own init scripts.
 // `common` is POSIX-sh compatible — works in bash and zsh (notify hook, claude wrapper, PATH).
 // `zsh` is zsh-only (zle keybindings, unsetopt).
+// `fish` and `pwsh` only set env vars and PATH; file creation is done by setup_2code_home().
 const DEFAULT_INIT_COMMON: &str =
 	include_str!("../scripts/default_init_common.sh");
 const DEFAULT_INIT_ZSH: &str = include_str!("../scripts/default_init_zsh.sh");
+const DEFAULT_INIT_FISH: &str =
+	include_str!("../scripts/default_init_fish.fish");
+const DEFAULT_INIT_PWSH: &str =
+	include_str!("../scripts/default_init_pwsh.ps1");
 
 // VS Code shell integration scripts (MIT licensed, from microsoft/vscode)
 const VSC_BASH: &str = include_str!("../scripts/shellIntegration-bash.sh");
@@ -112,6 +117,92 @@ pub enum ShellInjection {
 	None,
 }
 
+/// Write the 2code home directory files (notify hook, claude wrapper, settings JSON)
+/// so that fish and pwsh sessions have them available without running a bash script.
+/// Skipped silently if HOME is unset or any I/O fails.
+fn setup_2code_home() {
+	let home = match std::env::var("HOME") {
+		Ok(h) if !h.is_empty() => PathBuf::from(h),
+		_ => return,
+	};
+	let hooks = home.join(".2code/hooks");
+	let bin = home.join(".2code/bin");
+	if std::fs::create_dir_all(&hooks).is_err()
+		|| std::fs::create_dir_all(&bin).is_err()
+	{
+		return;
+	}
+
+	let notify = hooks.join("notify.sh");
+	if !notify.exists() {
+		let _ = std::fs::write(
+			&notify,
+			"#!/bin/bash\n[[ -z \"$_2CODE_HELPER\" ]] && exit 0\n\"$_2CODE_HELPER\" notify &>/dev/null &\n",
+		);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			if let Ok(meta) = std::fs::metadata(&notify) {
+				let mut perms = meta.permissions();
+				perms.set_mode(0o755);
+				let _ = std::fs::set_permissions(&notify, perms);
+			}
+		}
+	}
+
+	let settings = hooks.join("claude-settings.json");
+	if !settings.exists() {
+		let notify_str = notify.to_string_lossy();
+		let json = format!(
+			r#"{{"hooks":{{"Stop":[{{"hooks":[{{"type":"command","command":"{n}"}}]}}],"PermissionRequest":[{{"matcher":"*","hooks":[{{"type":"command","command":"{n}"}}]}}]}}}}"#,
+			n = notify_str
+		);
+		let _ = std::fs::write(&settings, json);
+	}
+
+	let wrapper = bin.join("claude");
+	if !wrapper.exists() {
+		let settings_str = settings.to_string_lossy();
+		let script = format!(
+			concat!(
+				"#!/bin/bash\n",
+				"_SETTINGS=\"{s}\"\n",
+				"_find_real() {{\n",
+				"  local IFS=:\n",
+				"  for dir in $PATH; do\n",
+				"    [ -z \"$dir\" ] && continue\n",
+				"    case \"${{dir%/}}\" in\n",
+				"      \"$HOME/.2code/bin\") continue ;;\n",
+				"    esac\n",
+				"    if [ -x \"$dir/claude\" ] && [ ! -d \"$dir/claude\" ]; then\n",
+				"      printf '%s\\n' \"$dir/claude\"\n",
+				"      return 0\n",
+				"    fi\n",
+				"  done\n",
+				"  return 1\n",
+				"}}\n",
+				"_REAL=\"$(_find_real)\"\n",
+				"if [ -z \"$_REAL\" ]; then\n",
+				"  echo \"2code: claude not found in PATH\" >&2\n",
+				"  exit 127\n",
+				"fi\n",
+				"exec \"$_REAL\" --settings \"$_SETTINGS\" \"$@\"\n",
+			),
+			s = settings_str
+		);
+		let _ = std::fs::write(&wrapper, script);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			if let Ok(meta) = std::fs::metadata(&wrapper) {
+				let mut perms = meta.permissions();
+				perms.set_mode(0o755);
+				let _ = std::fs::set_permissions(&wrapper, perms);
+			}
+		}
+	}
+}
+
 /// Prepare shell integration injection for the given shell type.
 /// This writes the necessary scripts to a temp directory and returns
 /// an injection descriptor telling the PTY layer what to do.
@@ -193,11 +284,13 @@ fn prepare_fish(
 	dir: &Path,
 	project_init_scripts: &[String],
 ) -> Result<ShellInjection, AppError> {
+	setup_2code_home();
 	let init_script = dir.join("shellIntegration.fish");
 	let project_init = project_init_scripts.join("\n");
 	let script = format!(
-		"{vsc}\n\n# === 2code project init ===\n{project_init}\n",
+		"{vsc}\n\n# === 2code common init ===\n{common}\n\n# === 2code project init ===\n{project_init}\n",
 		vsc = VSC_FISH,
+		common = DEFAULT_INIT_FISH.trim_end(),
 		project_init = project_init.trim_end(),
 	);
 	std::fs::write(&init_script, script)?;
@@ -209,11 +302,13 @@ fn prepare_pwsh(
 	dir: &Path,
 	project_init_scripts: &[String],
 ) -> Result<ShellInjection, AppError> {
+	setup_2code_home();
 	let init_script = dir.join("shellIntegration.ps1");
 	let project_init = project_init_scripts.join("\n");
 	let script = format!(
-		"{vsc}\n\n# === 2code project init ===\n{project_init}\n",
+		"{vsc}\n\n# === 2code common init ===\n{common}\n\n# === 2code project init ===\n{project_init}\n",
 		vsc = VSC_PWSH,
+		common = DEFAULT_INIT_PWSH.trim_end(),
 		project_init = project_init.trim_end(),
 	);
 	std::fs::write(&init_script, script)?;
@@ -305,15 +400,53 @@ mod tests {
 	}
 
 	#[test]
-	fn prepare_fish_creates_script() {
-		let inj = prepare_shell_injection("test-fish-1", ShellType::Fish, &[])
-			.unwrap();
+	fn prepare_fish_includes_common_init() {
+		let inj = prepare_shell_injection(
+			"test-fish-2",
+			ShellType::Fish,
+			&["echo HELLO".to_string()],
+		)
+		.unwrap();
 		match inj {
 			ShellInjection::Fish { init_script } => {
 				assert!(init_script.exists());
+				let content = std::fs::read_to_string(&init_script).unwrap();
+				// VSCode integration must be present
+				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
+				// 2code common init must be present
+				assert!(content.contains("2code common init"));
+				assert!(content.contains("fish_add_path"));
+				assert!(content.contains("_2CODE_HOME"));
+				// Project init must be present
+				assert!(content.contains("echo HELLO"));
 				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
 			}
 			_ => panic!("Expected Fish injection"),
+		}
+	}
+
+	#[test]
+	fn prepare_pwsh_includes_common_init() {
+		let inj = prepare_shell_injection(
+			"test-pwsh-1",
+			ShellType::Pwsh,
+			&["Write-Host HELLO".to_string()],
+		)
+		.unwrap();
+		match inj {
+			ShellInjection::Pwsh { init_script } => {
+				assert!(init_script.exists());
+				let content = std::fs::read_to_string(&init_script).unwrap();
+				// VSCode integration must be present
+				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
+				// 2code common init must be present
+				assert!(content.contains("2code common init"));
+				assert!(content.contains("_2CODE_HOME"));
+				// Project init must be present
+				assert!(content.contains("Write-Host HELLO"));
+				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
+			}
+			_ => panic!("Expected Pwsh injection"),
 		}
 	}
 }
