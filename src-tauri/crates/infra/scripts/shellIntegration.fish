@@ -54,7 +54,7 @@ function __vsc_apply_env_vars
 	if test $__vsc_applied_env_vars -eq 1;
 		return
 	end
-	set -l __vsc_applied_env_vars 1
+	set -g __vsc_applied_env_vars 1
 	# Apply EnvironmentVariableCollections if needed
 	if test -n "$VSCODE_ENV_REPLACE"
 		set ITEMS (string split : $VSCODE_ENV_REPLACE)

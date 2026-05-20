@@ -30,6 +30,7 @@ if [[ "$VSCODE_INJECTION" == "1" ]]; then
 		# A user's custom HISTFILE location might be set when their .zshrc file is sourced below
 		. $USER_ZDOTDIR/.zshrc
 	fi
+	builtin unset VSCODE_INJECTION
 fi
 
 __vsc_use_aa=0

@@ -1,3 +1,4 @@
+use infra::no_window::silent_command;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -66,10 +67,7 @@ fn find_pwsh_path() -> Option<String> {
 		}
 	}
 	// Fallback: check PATH via `where`
-	let output = std::process::Command::new("where")
-		.arg("pwsh")
-		.output()
-		.ok()?;
+	let output = silent_command("where").arg("pwsh").output().ok()?;
 	if output.status.success() {
 		let first = String::from_utf8_lossy(&output.stdout)
 			.lines()

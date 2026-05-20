@@ -28,11 +28,29 @@ pub enum ShellType {
 
 /// Detect shell type from the shell command string.
 pub fn detect_shell_type(shell_cmd: &str) -> ShellType {
-    // Take the basename of the first token (the executable)
-    let exe = shell_cmd
-        .split_whitespace()
-        .next()
-        .unwrap_or(shell_cmd);
+    // Extract the executable token, handling quoted paths and Windows paths with spaces.
+    // E.g. "C:\Program Files\PowerShell\7\pwsh.exe -NoLogo" → "C:\Program Files\PowerShell\7\pwsh.exe"
+    let exe = if shell_cmd.starts_with('"') {
+        // Quoted path: take content up to closing quote
+        shell_cmd
+            .get(1..)
+            .and_then(|s| s.split('"').next())
+            .unwrap_or(shell_cmd)
+    } else {
+        // Check for known executable extensions to handle spaces in unquoted paths
+        let lower = shell_cmd.to_lowercase();
+        let ext_markers = [".exe", ".com", ".bat", ".cmd", ".sh"];
+        let end = ext_markers
+            .iter()
+            .filter_map(|ext| lower.find(ext).map(|pos| pos + ext.len()))
+            .min();
+        if let Some(end) = end {
+            &shell_cmd[..end]
+        } else {
+            shell_cmd.split_whitespace().next().unwrap_or(shell_cmd)
+        }
+    };
+
     let basename = Path::new(exe)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -41,7 +59,8 @@ pub fn detect_shell_type(shell_cmd: &str) -> ShellType {
 
     match basename.as_str() {
         "zsh" => ShellType::Zsh,
-        "bash" | "sh" => ShellType::Bash,
+        "bash" => ShellType::Bash,
+        "sh" => ShellType::Unknown,
         "fish" => ShellType::Fish,
         "pwsh" | "powershell" => ShellType::Pwsh,
         _ => ShellType::Unknown,
