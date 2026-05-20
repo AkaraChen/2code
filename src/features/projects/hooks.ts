@@ -62,7 +62,7 @@ export function useGitBranch(folder: string, enabled = true) {
 		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
 		enabled,
-		staleTime: 0,
+		staleTime: 5_000,
 		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
 	});
 }
@@ -306,7 +306,7 @@ export function useFileTreeGitStatus(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.status(profileId),
 		queryFn: () => getFileTreeGitStatus({ profileId }),
 		enabled: !!profileId && enabled,
-		staleTime: 0,
+		staleTime: 5_000,
 		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
 	});
 }

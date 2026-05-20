@@ -40,8 +40,8 @@ const FILE_TREE_TOGGLE_ICON_TRANSITION = {
 	mass: 0.55,
 } as const;
 
-function GitBranchLabel({ cwd }: { cwd: string }) {
-	const { data: branch } = useGitBranch(cwd);
+function GitBranchLabel({ cwd, isActive }: { cwd: string; isActive: boolean }) {
+	const { data: branch } = useGitBranch(cwd, isActive);
 	if (!branch) return null;
 	return (
 		<HStack gap="1" userSelect="none">
@@ -220,7 +220,7 @@ export default function ProjectTopBar({
 					<Box color="fg.muted">
 						{profile.is_default ? (
 							isActive ? (
-								<GitBranchLabel cwd={profile.worktree_path} />
+								<GitBranchLabel cwd={profile.worktree_path} isActive={isActive} />
 							) : null
 						) : (
 							<HStack gap="1" userSelect="none">
