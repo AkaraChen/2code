@@ -268,12 +268,20 @@ pub fn create_session(
 	// 2. Generate session ID (needed for init dir name)
 	let session_id = uuid::Uuid::new_v4().to_string();
 
-	// 3. Prepare shell init directory (graceful degradation on failure)
-	let init_dir =
-		infra::shell_init::prepare_init_dir(&session_id, &project_init_scripts);
-	if let Err(ref e) = init_dir {
-		tracing::warn!(target: "pty", "Failed to prepare init dir: {e}");
-	}
+	// 3. Detect shell type and prepare injection
+	let shell_type = infra::shell_init::detect_shell_type(&config.shell);
+	let injection = infra::shell_init::prepare_shell_injection(
+		&session_id,
+		shell_type,
+		&project_init_scripts,
+	);
+	let injection = match injection {
+		Ok(inj) => inj,
+		Err(e) => {
+			tracing::warn!(target: "pty", "Failed to prepare shell injection: {e}");
+			infra::shell_init::ShellInjection::None
+		}
+	};
 
 	// 4. Create PTY session
 	let reader = session::create_session(
@@ -283,7 +291,7 @@ pub fn create_session(
 		&config.cwd,
 		config.rows,
 		config.cols,
-		init_dir.as_deref().ok(),
+		&injection,
 		ctx.helper_url.as_deref(),
 		ctx.helper_bin.as_deref(),
 	)?;

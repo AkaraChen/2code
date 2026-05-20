@@ -8,3 +8,6 @@
 
 # Built sidecar binaries
 /binaries/
+
+# Local dev config override (separate identifier so it doesn't clash with installed app)
+tauri.conf.dev.json

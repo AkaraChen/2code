@@ -8,6 +8,8 @@ use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
 use model::error::AppError;
 
+use crate::shell_init::ShellInjection;
+
 pub struct PtySession {
 	pub master: Box<dyn MasterPty + Send>,
 	pub writer: Box<dyn Write + Send>,
@@ -49,7 +51,7 @@ pub fn create_session(
 	cwd: &str,
 	rows: u16,
 	cols: u16,
-	init_dir: Option<&Path>,
+	injection: &ShellInjection,
 	helper_url: Option<&str>,
 	helper_bin: Option<&str>,
 ) -> Result<Box<dyn std::io::Read + Send>, AppError> {
@@ -64,8 +66,13 @@ pub fn create_session(
 		})
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
-	let mut cmd = command_builder(shell);
+	// Build the command with shell-specific args based on injection type
+	let mut cmd = build_injected_command(shell, injection);
+
+	// Common env vars for all shells
 	cmd.env("TERM", "xterm-256color");
+	cmd.env("TERM_PROGRAM", "vscode"); // Makes VS Code's shell integration scripts work
+	cmd.env("VSCODE_INJECTION", "1");  // Tells scripts they were injected (not manually installed)
 
 	// Inject helper env vars for CLI sidecar communication
 	if let Some(url) = helper_url {
@@ -76,12 +83,13 @@ pub fn create_session(
 	}
 	cmd.env("_2CODE_SESSION_ID", session_id);
 
-	// Inject shell init via ZDOTDIR
-	if let Some(dir) = init_dir {
-		if let Ok(original) = std::env::var("ZDOTDIR") {
-			cmd.env("_2CODE_ORIG_ZDOTDIR", &original);
+	// Apply shell-specific env vars
+	match injection {
+		ShellInjection::Zsh { zdotdir, user_zdotdir } => {
+			cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
+			cmd.env("USER_ZDOTDIR", user_zdotdir.as_str());
 		}
-		cmd.env("ZDOTDIR", dir.to_string_lossy().as_ref());
+		_ => {}
 	}
 
 	if !cwd.is_empty() {
@@ -120,17 +128,111 @@ pub fn create_session(
 	Ok(reader)
 }
 
-fn command_builder(shell: &str) -> CommandBuilder {
-	let mut parts = shell.split_whitespace();
-	if let Some(program) = parts.next() {
-		let mut command = CommandBuilder::new(program);
-		for arg in parts {
-			command.arg(arg);
-		}
-		return command;
+/// Parse a shell command string into (program, args), handling paths with spaces.
+/// e.g. `"C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe -NoLogo -NoProfile"`
+/// → `("C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe", ["-NoLogo", "-NoProfile"])`
+fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
+	let shell = shell.trim();
+	let parts: Vec<&str> = shell.split_whitespace().collect();
+	if parts.is_empty() {
+		return (shell.to_string(), vec![]);
+	}
+	let first = parts[0];
+	let looks_like_path =
+		first.len() >= 2 && first.as_bytes()[1] == b':' // C: D: etc
+		|| first.contains('/') || first.contains('\\');
+
+	if !looks_like_path || parts.len() == 1 {
+		return (first.to_string(), parts[1..].iter().map(|s| s.to_string()).collect());
 	}
 
-	CommandBuilder::new(shell)
+	// Reconstruct the path by joining tokens until we hit one ending with a
+	// known extension or the first arg starting with '-'.
+	let mut end_idx = 1;
+	while end_idx < parts.len() {
+		let candidate = parts[..=end_idx].join(" ");
+		if candidate.to_lowercase().ends_with(".exe")
+			|| candidate.to_lowercase().ends_with(".bat")
+			|| candidate.to_lowercase().ends_with(".cmd")
+			|| candidate.to_lowercase().ends_with(".ps1")
+			|| candidate.to_lowercase().ends_with(".sh")
+			|| Path::new(&candidate).exists()
+		{
+			end_idx += 1;
+			break;
+		}
+		end_idx += 1;
+		if end_idx > 6 { break; }
+	}
+	if end_idx > parts.len() {
+		end_idx = parts.iter().position(|p| p.starts_with('-')).unwrap_or(parts.len());
+		if end_idx == 0 { end_idx = 1; }
+	}
+	let program = parts[..end_idx].join(" ");
+	let args = parts[end_idx..].iter().map(|s| s.to_string()).collect();
+	(program, args)
+}
+
+/// Build a CommandBuilder with the right executable and args for the given injection type.
+fn build_injected_command(shell: &str, injection: &ShellInjection) -> CommandBuilder {
+	// Parse the shell command, handling paths with spaces like
+	// "C:\Program Files\PowerShell\7-preview\pwsh.exe -NoLogo -NoProfile"
+	let (program, existing_args) = parse_shell_command(shell);
+
+	match injection {
+		ShellInjection::Bash { init_file } => {
+			// bash --init-file /path/to/shellIntegration-bash.sh
+			let mut cmd = CommandBuilder::new(program);
+			cmd.arg("--init-file");
+			cmd.arg(init_file.to_string_lossy().as_ref());
+			cmd
+		}
+		ShellInjection::Zsh { .. } => {
+			// zsh -i  (ZDOTDIR is set via env var, scripts are in the dir)
+			let mut cmd = CommandBuilder::new(program);
+			cmd.arg("-i");
+			cmd
+		}
+		ShellInjection::Fish { init_script } => {
+			// fish --init-command 'source "/path/to/shellIntegration.fish"'
+			let mut cmd = CommandBuilder::new(program);
+			for arg in &existing_args {
+				cmd.arg(arg.as_str());
+			}
+			cmd.arg("--init-command");
+			cmd.arg(format!(
+				"source \"{}\"",
+				init_script.to_string_lossy()
+			));
+			cmd
+		}
+		ShellInjection::Pwsh { init_script } => {
+			// pwsh -noexit -command '. "/path/to/shellIntegration.ps1"'
+			let mut cmd = CommandBuilder::new(program);
+			// Keep existing args like -NoLogo but filter out conflicting ones
+			for arg in &existing_args {
+				let lower = arg.to_lowercase();
+				if lower != "-noexit" && lower != "-command" && lower != "-c" {
+					cmd.arg(arg.as_str());
+				}
+			}
+			cmd.arg("-noexit");
+			cmd.arg("-command");
+			cmd.arg(format!(
+				". \"{}\"",
+				init_script.to_string_lossy()
+			));
+			cmd
+		}
+		ShellInjection::None => {
+			// Unknown shell — just run as-is with original args
+			let mut cmd = CommandBuilder::new(program);
+			for arg in &existing_args {
+				cmd.arg(arg.as_str());
+			}
+			cmd
+		}
+	}
 }
 
 pub fn write_to_pty(
@@ -266,5 +368,35 @@ mod tests {
 	fn join_all_read_threads_empty() {
 		let tracker = create_thread_tracker();
 		join_all_read_threads(&tracker); // should not panic
+	}
+
+	#[test]
+	fn parse_shell_simple() {
+		let (prog, args) = parse_shell_command("bash");
+		assert_eq!(prog, "bash");
+		assert!(args.is_empty());
+	}
+
+	#[test]
+	fn parse_shell_with_args() {
+		let (prog, args) = parse_shell_command("powershell.exe -NoLogo -NoProfile");
+		assert_eq!(prog, "powershell.exe");
+		assert_eq!(args, vec!["-NoLogo".to_string(), "-NoProfile".to_string()]);
+	}
+
+	#[test]
+	fn parse_shell_path_with_spaces() {
+		let (prog, args) = parse_shell_command(
+			r"C:\Program Files\PowerShell\7-preview\pwsh.exe -NoLogo -NoProfile",
+		);
+		assert_eq!(prog, r"C:\Program Files\PowerShell\7-preview\pwsh.exe");
+		assert_eq!(args, vec!["-NoLogo".to_string(), "-NoProfile".to_string()]);
+	}
+
+	#[test]
+	fn parse_shell_git_bash() {
+		let (prog, args) = parse_shell_command(r"C:\Program Files\Git\bin\bash.exe");
+		assert_eq!(prog, r"C:\Program Files\Git\bin\bash.exe");
+		assert!(args.is_empty());
 	}
 }

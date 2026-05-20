@@ -54,8 +54,34 @@ fn push_existing_shell(
 }
 
 #[cfg(windows)]
-fn command_exists(_command: &str) -> bool {
-	true
+fn find_pwsh_path() -> Option<String> {
+	let candidates = [
+		r"C:\Program Files\PowerShell\7\pwsh.exe",
+		r"C:\Program Files\PowerShell\7-preview\pwsh.exe",
+		r"C:\Program Files (x86)\PowerShell\7\pwsh.exe",
+	];
+	for path in &candidates {
+		if Path::new(path).exists() {
+			return Some(path.to_string());
+		}
+	}
+	// Fallback: check PATH via `where`
+	let output = std::process::Command::new("where")
+		.arg("pwsh")
+		.output()
+		.ok()?;
+	if output.status.success() {
+		let first = String::from_utf8_lossy(&output.stdout)
+			.lines()
+			.next()
+			.unwrap_or("")
+			.trim()
+			.to_string();
+		if !first.is_empty() {
+			return Some(first);
+		}
+	}
+	None
 }
 
 #[cfg(target_os = "linux")]
@@ -73,7 +99,11 @@ fn default_shell_command() -> String {
 
 #[cfg(windows)]
 fn default_shell_command() -> String {
-	"powershell.exe -NoLogo -NoProfile".to_string()
+	if let Some(path) = find_pwsh_path() {
+		format!("{} -NoLogo -NoProfile", path)
+	} else {
+		"powershell.exe -NoLogo -NoProfile".to_string()
+	}
 }
 
 #[cfg(all(not(target_os = "linux"), not(target_os = "macos"), not(windows)))]
@@ -117,13 +147,33 @@ fn load_unix_shells(default_command: &str) -> Vec<AvailableShell> {
 fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 	let mut shells = Vec::new();
 	let mut seen = HashSet::new();
+	// PowerShell 7 (pwsh) — preferred over 5.1
+	if let Some(pwsh_path) = find_pwsh_path() {
+		push_shell(&mut shells, &mut seen, format!("{} -NoLogo -NoProfile", pwsh_path), default_command);
+	}
+	// Windows PowerShell 5.1
 	push_shell(
 		&mut shells,
 		&mut seen,
 		"powershell.exe -NoLogo -NoProfile",
 		default_command,
 	);
+	// cmd
 	push_shell(&mut shells, &mut seen, "cmd.exe", default_command);
+	// Git Bash
+	for path in &[
+		r"C:\Program Files\Git\bin\bash.exe",
+		r"C:\Program Files (x86)\Git\bin\bash.exe",
+	] {
+		if Path::new(path).exists() {
+			push_shell(&mut shells, &mut seen, *path, default_command);
+		}
+	}
+	// WSL
+	let wsl = r"C:\Windows\System32\wsl.exe";
+	if Path::new(wsl).exists() {
+		push_shell(&mut shells, &mut seen, wsl, default_command);
+	}
 	shells
 }
 
