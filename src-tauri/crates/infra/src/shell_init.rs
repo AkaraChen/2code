@@ -50,6 +50,7 @@ pub(crate) fn extract_exe(cmd: &str) -> String {
 		return first.to_string();
 	}
 	let mut end_idx = 1;
+	let mut found = false;
 	while end_idx < parts.len() {
 		let candidate = parts[..=end_idx].join(" ");
 		let lower = candidate.to_lowercase();
@@ -61,6 +62,7 @@ pub(crate) fn extract_exe(cmd: &str) -> String {
 			|| Path::new(&candidate).exists()
 		{
 			end_idx += 1;
+			found = true;
 			break;
 		}
 		end_idx += 1;
@@ -68,7 +70,7 @@ pub(crate) fn extract_exe(cmd: &str) -> String {
 			break;
 		}
 	}
-	if end_idx > parts.len() {
+	if !found {
 		end_idx = parts
 			.iter()
 			.position(|p| p.starts_with('-'))
@@ -318,6 +320,47 @@ fn prepare_pwsh(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn extract_exe_simple_basename() {
+		assert_eq!(extract_exe("bash"), "bash");
+		assert_eq!(extract_exe("pwsh -NoLogo"), "pwsh");
+	}
+
+	#[test]
+	fn extract_exe_unix_path_with_args() {
+		assert_eq!(extract_exe("/usr/bin/zsh -l"), "/usr/bin/zsh");
+		assert_eq!(extract_exe("/bin/bash --login"), "/bin/bash");
+	}
+
+	#[test]
+	fn extract_exe_windows_path_with_spaces() {
+		assert_eq!(
+			extract_exe(
+				"C:\\Program Files\\PowerShell\\7\\pwsh.exe -NoLogo -NoProfile"
+			),
+			"C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+		);
+	}
+
+	#[test]
+	fn extract_exe_path_with_spaces_no_extension_with_flag() {
+		// Path containing spaces, no .exe/.sh suffix, followed by a flag.
+		// The fallback must split at the first flag-looking token, not swallow it.
+		assert_eq!(
+			extract_exe("C:\\Program Files\\nu\\nu --login"),
+			"C:\\Program Files\\nu\\nu"
+		);
+	}
+
+	#[test]
+	fn extract_exe_path_with_spaces_no_extension_no_flag() {
+		// Path containing spaces, no extension, no following flag — keep the whole thing.
+		assert_eq!(
+			extract_exe("C:\\Program Files\\nu\\nu"),
+			"C:\\Program Files\\nu\\nu"
+		);
+	}
 
 	#[test]
 	fn detect_zsh() {
