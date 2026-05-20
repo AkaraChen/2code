@@ -76,6 +76,7 @@
 	"defaultOption": "默认",
 	"customShell": "自定义",
 	"customShellPlaceholder": "例如 /usr/bin/fish",
+	"shellNoIntegration": "不支持 Shell 集成",
 	"terminalOpenLink": "打开链接",
 	"terminalOpenLinkConfirmDescription": "要在 2code 外部打开这个链接吗？下次按住 Ctrl 再点击可直接打开。",
 	"terminalOpenLinkUrlLabel": "链接",

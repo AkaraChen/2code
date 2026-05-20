@@ -202,7 +202,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
-- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`
+- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store`, `tauri-plugin-clipboard-manager` — all registered in `lib.rs`
 - **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
 - **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
 - **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too

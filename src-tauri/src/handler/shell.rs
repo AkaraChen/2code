@@ -8,6 +8,7 @@ pub struct AvailableShell {
 	pub label: String,
 	pub command: String,
 	pub is_default: bool,
+	pub supports_integration: bool,
 }
 
 fn shell_label(command: &str) -> String {
@@ -28,6 +29,25 @@ fn push_shell(
 	shells.push(AvailableShell {
 		label: shell_label(&command),
 		is_default: command == default_command,
+		supports_integration: true,
+		command,
+	});
+}
+
+fn push_unsupported_shell(
+	shells: &mut Vec<AvailableShell>,
+	seen: &mut HashSet<String>,
+	command: impl Into<String>,
+	default_command: &str,
+) {
+	let command = command.into();
+	if command.trim().is_empty() || !seen.insert(command.clone()) {
+		return;
+	}
+	shells.push(AvailableShell {
+		label: shell_label(&command),
+		is_default: command == default_command,
+		supports_integration: false,
 		command,
 	});
 }
@@ -147,7 +167,12 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 	let mut seen = HashSet::new();
 	// PowerShell 7 (pwsh) — preferred over 5.1
 	if let Some(pwsh_path) = find_pwsh_path() {
-		push_shell(&mut shells, &mut seen, format!("{} -NoLogo -NoProfile", pwsh_path), default_command);
+		push_shell(
+			&mut shells,
+			&mut seen,
+			format!("{} -NoLogo -NoProfile", pwsh_path),
+			default_command,
+		);
 	}
 	// Windows PowerShell 5.1
 	push_shell(
@@ -156,8 +181,8 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 		"powershell.exe -NoLogo -NoProfile",
 		default_command,
 	);
-	// cmd
-	push_shell(&mut shells, &mut seen, "cmd.exe", default_command);
+	// cmd — no shell integration support
+	push_unsupported_shell(&mut shells, &mut seen, "cmd.exe", default_command);
 	// Git Bash
 	for path in &[
 		r"C:\Program Files\Git\bin\bash.exe",
@@ -167,10 +192,10 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 			push_shell(&mut shells, &mut seen, *path, default_command);
 		}
 	}
-	// WSL
+	// WSL — no shell integration support
 	let wsl = r"C:\Windows\System32\wsl.exe";
 	if Path::new(wsl).exists() {
-		push_shell(&mut shells, &mut seen, wsl, default_command);
+		push_unsupported_shell(&mut shells, &mut seen, wsl, default_command);
 	}
 	shells
 }

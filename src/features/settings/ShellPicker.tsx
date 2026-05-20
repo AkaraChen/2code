@@ -30,7 +30,9 @@ export function ShellPicker() {
 				value: shell.command,
 				label: shell.is_default
 					? `${shell.label} (${m.defaultOption()})`
-					: shell.label,
+					: !shell.supports_integration
+						? `${shell.label} (${m.shellNoIntegration()})`
+						: shell.label,
 			})),
 			{ value: CUSTOM_SHELL_VALUE, label: m.customShell() },
 		],

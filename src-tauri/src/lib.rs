@@ -157,6 +157,20 @@ pub fn run() {
 				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 					service::pty::mark_all_closed(&db);
 				}
+
+				// Clean up shell integration temp dirs created during this session.
+				let tmp = std::env::temp_dir();
+				if let Ok(entries) = std::fs::read_dir(&tmp) {
+					for entry in entries.flatten() {
+						if entry
+							.file_name()
+							.to_string_lossy()
+							.starts_with("2code-init-")
+						{
+							let _ = std::fs::remove_dir_all(entry.path());
+						}
+					}
+				}
 			}
 
 			_ => {}
