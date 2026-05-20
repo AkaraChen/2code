@@ -11,9 +11,11 @@ const GITHUB_RELEASES_API: &str =
 const GITHUB_RELEASE_DOWNLOAD_BASE: &str =
 	"https://github.com/AkaraChen/2code/releases/download";
 
+/// Holds a pending update between `check_update` and `install_update` calls.
 #[derive(Default)]
 pub struct PendingUpdate(Mutex<Option<Update>>);
 
+/// Deserialized release entry from the GitHub Releases API.
 #[derive(Debug, Deserialize)]
 struct GithubRelease {
 	tag_name: String,
@@ -21,6 +23,7 @@ struct GithubRelease {
 	prerelease: bool,
 }
 
+/// Metadata describing an available update (version, date, release notes).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMetadata {
@@ -30,6 +33,7 @@ pub struct UpdateMetadata {
 	body: Option<String>,
 }
 
+/// Progress events emitted during update download.
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", content = "data")]
 pub enum UpdateDownloadEvent {
@@ -44,14 +48,17 @@ pub enum UpdateDownloadEvent {
 	Finished,
 }
 
+/// Wrap an updater error into `AppError::PtyError`.
 fn updater_error(error: impl std::fmt::Display) -> AppError {
 	AppError::PtyError(format!("Updater error: {error}"))
 }
 
+/// Encode a release tag for use in a URL path (escape `/`).
 fn encode_release_tag(tag: &str) -> String {
 	tag.replace('/', "%2F")
 }
 
+/// Convert a `tauri_plugin_updater::Update` into API-facing `UpdateMetadata`.
 fn update_metadata(update: &Update) -> UpdateMetadata {
 	UpdateMetadata {
 		current_version: update.current_version.clone(),
@@ -61,6 +68,7 @@ fn update_metadata(update: &Update) -> UpdateMetadata {
 	}
 }
 
+/// Get the GitHub auth token from the `gh` CLI, if available.
 fn gh_auth_token() -> Option<String> {
 	let output = silent_command("gh")
 		.args(["auth", "token"])
@@ -80,6 +88,7 @@ fn gh_auth_token() -> Option<String> {
 	}
 }
 
+/// Fetch the latest beta release endpoint URL from the GitHub Releases API.
 async fn latest_beta_endpoint(
 	auth_token: Option<&str>,
 ) -> Result<String, AppError> {
@@ -118,6 +127,7 @@ async fn latest_beta_endpoint(
 	))
 }
 
+/// Check for application updates, optionally including beta releases.
 #[tauri::command]
 pub async fn check_update(
 	app: AppHandle,
@@ -156,6 +166,7 @@ pub async fn check_update(
 	Ok(metadata)
 }
 
+/// Download and install a pending update, streaming progress events via channel.
 #[tauri::command]
 pub async fn install_update(
 	app: AppHandle,

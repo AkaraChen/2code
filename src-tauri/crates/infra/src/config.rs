@@ -6,6 +6,8 @@ pub use model::project::ProjectConfig;
 
 use crate::no_window::silent_command;
 
+/// Load `ProjectConfig` from the `2code.json` file in the project folder.
+/// Returns the default config if the file does not exist.
 pub fn load_project_config(
 	project_folder: &str,
 ) -> Result<ProjectConfig, AppError> {
@@ -25,6 +27,7 @@ pub fn load_project_config(
 	})
 }
 
+/// Serialize `ProjectConfig` to `2code.json` in the project folder.
 pub fn write_project_config(
 	project_folder: &str,
 	config: &ProjectConfig,
@@ -40,6 +43,8 @@ pub fn write_project_config(
 	Ok(())
 }
 
+/// Execute a list of shell scripts sequentially in the given working directory.
+/// Stops at the first failure or missing cwd.
 pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 	if scripts.is_empty() {
 		return;
@@ -69,6 +74,7 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 	}
 }
 
+/// Create a shell command appropriate for the current platform (PowerShell on Windows, sh on Unix).
 fn script_command() -> Command {
 	if cfg!(windows) {
 		let mut command = silent_command("powershell.exe");

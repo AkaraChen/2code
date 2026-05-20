@@ -31,12 +31,14 @@ import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
 
+/** Props for the persistent Terminal component. */
 interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
 }
 
+/** Persistent terminal component backed by a PTY session with xterm.js rendering. */
 export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);

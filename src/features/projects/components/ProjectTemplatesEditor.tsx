@@ -17,11 +17,13 @@ import {
 import { TerminalTemplateDraftDialog } from "@/features/terminal/TerminalTemplateDraftDialog";
 import * as m from "@/paraglide/messages.js";
 
+/** Props for the project-level terminal templates editor. */
 interface ProjectTemplatesEditorProps {
 	templateDrafts: ProjectTerminalTemplateDraft[];
 	onChange: (drafts: ProjectTerminalTemplateDraft[]) => void;
 }
 
+/** Editor for per-project terminal template drafts (create / edit / delete). */
 export function ProjectTemplatesEditor({
 	templateDrafts,
 	onChange,

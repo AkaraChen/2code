@@ -1,3 +1,4 @@
+/** Keyboard event fields relevant to terminal shortcut detection. */
 export interface TerminalShortcutKeyEvent {
 	type: string;
 	key: string;
@@ -8,6 +9,7 @@ export interface TerminalShortcutKeyEvent {
 	shiftKey: boolean;
 }
 
+/** Discriminated union of actions a terminal shortcut can trigger. */
 export type TerminalShortcutAction =
 	| { type: "write-sequence"; sequence: string }
 	| { type: "increase-font-size" }
@@ -32,6 +34,7 @@ function isPlainMetaShortcut(
 	);
 }
 
+/** Map a keyboard event to a terminal shortcut action (clipboard, font size, etc.) or `null` to pass through. */
 export function getTerminalShortcutAction(
 	event: TerminalShortcutKeyEvent,
 	platform = globalThis.navigator?.platform ?? "",
@@ -107,6 +110,7 @@ export function getTerminalShortcutAction(
 	return null;
 }
 
+/** Resolve a keyboard event to its terminal escape sequence, or `null` if not a sequence shortcut. */
 export function getTerminalShortcutSequence(
 	event: TerminalShortcutKeyEvent,
 	platform = globalThis.navigator?.platform ?? "",

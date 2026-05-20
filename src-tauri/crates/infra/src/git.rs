@@ -12,6 +12,7 @@ use model::project::{
 	GitAuthor, GitCommit, GitDiffStats, GitPullRequestStatus,
 };
 
+/// Deserialized response from `gh pr list --json`.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GhPullRequest {
@@ -24,6 +25,7 @@ struct GhPullRequest {
 	head_repository_owner: Option<GhPullRequestOwner>,
 }
 
+/// Owner login from a GitHub pull request's head repository.
 #[derive(serde::Deserialize)]
 struct GhPullRequestOwner {
 	login: String,
@@ -31,6 +33,8 @@ struct GhPullRequestOwner {
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
+/// Resolve the GitHub avatar URL for the repository owner, falling back to the
+/// GitHub avatars CDN if the `gh` CLI is unavailable.
 pub fn github_avatar_url(folder: &str) -> Option<String> {
 	let remote_url = remote_url(folder).ok().flatten()?;
 	let (owner, _) = parse_github_owner_and_repo(&remote_url)?;
@@ -40,6 +44,7 @@ pub fn github_avatar_url(folder: &str) -> Option<String> {
 	Some(format!("https://avatars.githubusercontent.com/{owner}?v=4"))
 }
 
+/// Fetch the avatar URL for a GitHub user via the `gh` CLI.
 fn github_avatar_url_from_api(owner: &str) -> Option<String> {
 	let output = silent_command("gh")
 		.args(["api", &format!("users/{owner}"), "--jq", ".avatar_url"])
@@ -58,6 +63,7 @@ fn github_avatar_url_from_api(owner: &str) -> Option<String> {
 	Some(avatar)
 }
 
+/// Get the `origin` remote URL for the repository, or `None` if there is no remote.
 pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
 	let output = silent_command("git")
 		.args(["remote", "get-url", "origin"])
@@ -91,6 +97,7 @@ pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
 	Ok(Some(remote))
 }
 
+/// Initialize a new git repository in the given directory.
 pub fn init(dir: &Path) -> Result<(), AppError> {
 	let output = silent_command("git").arg("init").current_dir(dir).output()?;
 
@@ -101,6 +108,7 @@ pub fn init(dir: &Path) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Get the current branch name, falling back to `"main"` for detached or non-git directories.
 pub fn branch(folder: &str) -> Result<String, AppError> {
 	let sym_output = silent_command("git")
 		.args(["symbolic-ref", "--short", "HEAD"])
@@ -122,6 +130,7 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Get the porcelain status of all files (tracked, untracked, ignored) in the repository.
 pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let output = silent_command("git")
 		.args([
@@ -201,6 +210,7 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
 }
 
+/// Get aggregate diff stats (files changed, insertions, deletions) for the working tree vs HEAD.
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
@@ -262,6 +272,7 @@ pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	})
 }
 
+/// Create a temporary directory and copy the repo's git index into it.
 fn create_temp_index_from_repo(
 	folder: &str,
 ) -> Result<(tempfile::TempDir, std::path::PathBuf), AppError> {
@@ -284,6 +295,7 @@ fn create_temp_index_from_repo(
 	Ok((tmp_dir, tmp_index))
 }
 
+/// Resolve the absolute path to the git index file for the given folder.
 fn resolve_git_index_path(
 	folder: &str,
 ) -> Result<Option<std::path::PathBuf>, AppError> {
@@ -311,6 +323,7 @@ fn resolve_git_index_path(
 	Ok(Some(resolved))
 }
 
+/// Get the last `limit` commits from the repository log.
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 	let output = silent_command("git")
 		.args([
@@ -335,6 +348,7 @@ pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 	Ok(parse_git_log(&stdout))
 }
 
+/// Get the diff patch for a single commit by hash.
 pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	validate_commit_hash(commit_hash)?;
 
@@ -358,6 +372,8 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Read a file from the working tree, returning its absolute path.
+/// Returns `None` if the file does not exist.
 pub fn read_worktree_file(
 	folder: &str,
 	path: &str,
@@ -384,6 +400,7 @@ pub fn read_worktree_file(
 	Ok(Some(file_path.to_string_lossy().to_string()))
 }
 
+/// Read a file at HEAD revision, caching the blob to a temp file.
 pub fn read_head_file(
 	folder: &str,
 	path: &str,
@@ -393,6 +410,7 @@ pub fn read_head_file(
 	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path)
 }
 
+/// Read a file at a specific commit revision, caching the blob to a temp file.
 pub fn read_commit_file(
 	folder: &str,
 	commit_hash: &str,
@@ -409,6 +427,7 @@ pub fn read_commit_file(
 	)
 }
 
+/// Read a file at the parent of a specific commit, caching the blob to a temp file.
 pub fn read_parent_commit_file(
 	folder: &str,
 	commit_hash: &str,
@@ -425,6 +444,7 @@ pub fn read_parent_commit_file(
 	)
 }
 
+/// Stage the given files and create a commit, returning the new HEAD hash.
 pub fn commit(
 	folder: &str,
 	files: &[String],
@@ -496,6 +516,7 @@ pub fn commit(
 		.to_string())
 }
 
+/// Discard changes for the given paths — restore tracked files to HEAD and remove untracked files.
 pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	let paths = validate_discard_paths(paths)?;
 	let (tracked_paths, untracked_paths) =
@@ -534,6 +555,7 @@ pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Count how many commits HEAD is ahead of its upstream branch.
 pub fn ahead_count(folder: &str) -> u32 {
 	let output = silent_command("git")
 		.args(["rev-list", "--count", "@{u}..HEAD"])
@@ -549,6 +571,7 @@ pub fn ahead_count(folder: &str) -> u32 {
 	}
 }
 
+/// List commit hashes that are unique to the given branch (not reachable from other refs).
 pub fn branch_unique_commits(
 	folder: &str,
 	branch_name: &str,
@@ -580,6 +603,7 @@ pub fn branch_unique_commits(
 		.collect())
 }
 
+/// Get aggregate diff stats for a list of commits.
 pub fn commit_diff_stats(
 	folder: &str,
 	commits: &[String],
@@ -612,6 +636,7 @@ pub fn commit_diff_stats(
 	Ok(sum_shortstat_lines(&stdout))
 }
 
+/// Push the current branch to its upstream remote.
 pub fn push(folder: &str) -> Result<(), AppError> {
 	let output = silent_command("git")
 		.args(["push"])
@@ -625,6 +650,7 @@ pub fn push(folder: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Check if the current branch has an associated GitHub pull request.
 pub fn pull_request_status(
 	folder: &str,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
@@ -732,6 +758,7 @@ pub fn worktree_add(
 	)))
 }
 
+/// Force-remove a git worktree, logging warnings on failure.
 pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
 	let output = silent_command("git")
 		.args(["worktree", "remove", worktree_path, "--force"])
@@ -750,6 +777,7 @@ pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
 	}
 }
 
+/// Force-delete a branch, logging warnings on failure.
 pub fn branch_delete(project_folder: &str, branch_name: &str) {
 	let output = silent_command("git")
 		.args(["branch", "-D", branch_name])
@@ -768,6 +796,7 @@ pub fn branch_delete(project_folder: &str, branch_name: &str) {
 	}
 }
 
+/// List all refs in the repo except the given branch ref.
 fn refs_except_branch(
 	folder: &str,
 	branch_ref: &str,
@@ -795,6 +824,7 @@ fn refs_except_branch(
 
 // --- Private helpers ---
 
+/// Validate that a commit hash is 4–40 hex characters.
 pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	if hash.len() < 4 || hash.len() > 40 {
 		return Err(AppError::GitError(format!(
@@ -810,6 +840,7 @@ pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Validate and trim a commit message, rejecting empty messages.
 pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
 	let trimmed = message.trim();
 	if trimmed.is_empty() {
@@ -820,6 +851,7 @@ pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
 	Ok(trimmed.to_string())
 }
 
+/// Validate that commit file paths are non-empty, relative, and deduplicated.
 pub fn validate_commit_files(
 	files: &[String],
 ) -> Result<Vec<String>, AppError> {
@@ -830,6 +862,7 @@ pub fn validate_commit_files(
 	)
 }
 
+/// Validate discard paths are non-empty, relative, and deduplicated.
 fn validate_discard_paths(paths: &[String]) -> Result<Vec<String>, AppError> {
 	validate_repo_relative_paths(
 		paths,
@@ -838,6 +871,7 @@ fn validate_discard_paths(paths: &[String]) -> Result<Vec<String>, AppError> {
 	)
 }
 
+/// Validate a list of repo-relative paths, deduplicating and rejecting absolute/escape paths.
 fn validate_repo_relative_paths(
 	paths: &[String],
 	label: &str,
@@ -860,6 +894,7 @@ fn validate_repo_relative_paths(
 	Ok(validated)
 }
 
+/// Validate a single repo-relative path: non-empty, no NUL bytes, no absolute or parent-dir escapes.
 fn validate_repo_relative_path(
 	path: &str,
 	label: &str,
@@ -894,6 +929,7 @@ fn validate_repo_relative_path(
 	Ok(trimmed.to_string())
 }
 
+/// Parse a git shortstat line into `(files_changed, insertions, deletions)`.
 pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	let mut files = 0u32;
 	let mut insertions = 0u32;
@@ -919,6 +955,7 @@ pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	(files, insertions, deletions)
 }
 
+/// Sum multiple shortstat lines into a single `GitDiffStats`.
 fn sum_shortstat_lines(output: &str) -> GitDiffStats {
 	let mut stats = GitDiffStats::default();
 
@@ -932,6 +969,7 @@ fn sum_shortstat_lines(output: &str) -> GitDiffStats {
 	stats
 }
 
+/// Parse the combined `git log` + `--shortstat` output into structured commit entries.
 pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	if output.trim().is_empty() {
 		return Vec::new();
@@ -996,6 +1034,7 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	commits
 }
 
+/// Borrowed fields from a single `\x1f`-delimited commit line.
 struct GitLogCommitLine<'a> {
 	full_hash: &'a str,
 	hash: &'a str,
@@ -1005,6 +1044,7 @@ struct GitLogCommitLine<'a> {
 	message: &'a str,
 }
 
+/// Parse a single `\x1f`-delimited commit header line from `git log` output.
 fn parse_git_log_commit_line(line: &str) -> Option<GitLogCommitLine<'_>> {
 	let mut parts = line.split('\x1f');
 	let commit = GitLogCommitLine {
@@ -1021,6 +1061,7 @@ fn parse_git_log_commit_line(line: &str) -> Option<GitLogCommitLine<'_>> {
 	Some(commit)
 }
 
+/// Parse `git status --porcelain=v1 -z` NUL-delimited output into status entries.
 fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 	let records: Vec<&[u8]> = output
 		.split(|byte| *byte == 0)
@@ -1055,6 +1096,7 @@ fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 	entries
 }
 
+/// Append `/` to status paths that point to existing directories.
 fn normalize_file_tree_git_status_paths(
 	root: &Path,
 	entries: &mut [FileTreeGitStatusEntry],
@@ -1069,6 +1111,7 @@ fn normalize_file_tree_git_status_paths(
 	}
 }
 
+/// Map a two-byte porcelain status code to a human-readable status string.
 fn map_porcelain_status(status_code: &[u8]) -> Option<&'static str> {
 	if status_code.contains(&b'!') {
 		return Some("ignored");
@@ -1109,6 +1152,7 @@ fn extract_conflicting_ref(stderr: &str) -> Option<String> {
 	Some(name.to_string())
 }
 
+/// Partition paths into tracked (in git index) and untracked lists.
 fn partition_paths_by_tracking(
 	folder: &str,
 	paths: &[String],
@@ -1147,6 +1191,7 @@ fn partition_paths_by_tracking(
 	Ok((tracked_paths, untracked_paths))
 }
 
+/// Check if a path (or files beneath it) is tracked in the git index.
 fn is_tracked_request(path: &str, tracked_files: &HashSet<String>) -> bool {
 	let path = path.trim_end_matches('/');
 	if tracked_files.contains(path) {
@@ -1158,6 +1203,7 @@ fn is_tracked_request(path: &str, tracked_files: &HashSet<String>) -> bool {
 		.any(|tracked| tracked.starts_with(&prefix))
 }
 
+/// Build an error message from a command's stderr or stdout.
 fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 	if !stderr.is_empty() {
@@ -1172,6 +1218,7 @@ fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	prefix.to_string()
 }
 
+/// Parse `gh pr list --json` output and filter by expected head repository owner.
 fn parse_pull_request_list(
 	output: &[u8],
 	expected_head_owner: &str,
@@ -1201,6 +1248,7 @@ fn parse_pull_request_list(
 		.collect())
 }
 
+/// Check if an error message indicates a non-fatal non-GitHub remote lookup failure.
 fn is_non_github_pr_lookup_error(message: &str) -> bool {
 	let lower = message.to_ascii_lowercase();
 	[
@@ -1213,6 +1261,7 @@ fn is_non_github_pr_lookup_error(message: &str) -> bool {
 	.any(|pattern| lower.contains(pattern))
 }
 
+/// Read a git blob to a temp cache file, returning the cached file path.
 fn read_git_blob_to_cache(
 	folder: &str,
 	spec: &str,
@@ -1258,6 +1307,7 @@ fn read_git_blob_to_cache(
 	Err(AppError::GitError(stderr))
 }
 
+/// Get the byte size of a git blob, or `None` if it does not exist.
 fn get_git_blob_size(
 	folder: &str,
 	spec: &str,
@@ -1285,6 +1335,7 @@ fn get_git_blob_size(
 	Err(AppError::GitError(stderr))
 }
 
+/// Check if a git error message indicates a missing blob.
 fn is_missing_blob_error(stderr: &str) -> bool {
 	[
 		"does not exist in",
@@ -1297,6 +1348,7 @@ fn is_missing_blob_error(stderr: &str) -> bool {
 	.any(|pattern| stderr.contains(pattern))
 }
 
+/// Build a deterministic cache path for a git preview blob.
 fn preview_cache_path(
 	folder: &str,
 	source: &str,
@@ -1320,6 +1372,7 @@ fn preview_cache_path(
 	cache_path.join(relative_path)
 }
 
+/// Atomically write preview bytes to a cache file using a named temp file.
 fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent)?;
@@ -1342,6 +1395,7 @@ fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 	)))
 }
 
+/// Parse a GitHub remote URL into `(owner, repo)` — supports HTTPS, SCP, and SSH formats.
 fn parse_github_owner_and_repo(remote_url: &str) -> Option<(String, String)> {
 	let normalized_url = remote_url.trim().trim_end_matches(".git");
 	let normalized_url = normalized_url
@@ -1381,6 +1435,7 @@ fn parse_github_owner_and_repo(remote_url: &str) -> Option<(String, String)> {
 	Some((owner, repo))
 }
 
+/// Split a remote URL into `(host, path)` components.
 fn split_remote_host_and_path(remote_url: &str) -> Option<(String, String)> {
 	if let Some(scheme_pos) = remote_url.find("://") {
 		let without_scheme = &remote_url[scheme_pos + 3..];
@@ -1409,6 +1464,7 @@ fn split_remote_host_and_path(remote_url: &str) -> Option<(String, String)> {
 	Some((normalize_host(host), path.to_string()))
 }
 
+/// Check if the given host is a GitHub domain.
 fn is_github_host(host: &str) -> bool {
 	matches!(
 		normalize_host(host).as_str(),
@@ -1416,6 +1472,7 @@ fn is_github_host(host: &str) -> bool {
 	)
 }
 
+/// Strip user info and port from a host string, returning a lowercase hostname.
 fn normalize_host(host: &str) -> String {
 	let host = host.split('@').next_back().unwrap_or(host);
 	let host = host.split(':').next().unwrap_or(host);

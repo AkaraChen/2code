@@ -5,6 +5,7 @@ use infra::no_window::silent_command;
 use model::error::AppError;
 use model::topbar::TopbarApp;
 
+/// Specification of a known top bar application with platform-specific launch info.
 #[derive(Clone, Copy, Debug)]
 struct TopbarAppSpec {
 	id: &'static str,
@@ -87,10 +88,12 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 	},
 ];
 
+/// Look up a `TopbarAppSpec` by its id.
 fn known_app_spec(app_id: &str) -> Option<&'static TopbarAppSpec> {
 	KNOWN_TOPBAR_APPS.iter().find(|spec| spec.id == app_id)
 }
 
+/// Standard macOS application search directories.
 #[cfg(target_os = "macos")]
 fn app_search_roots() -> Vec<PathBuf> {
 	let mut roots = vec![
@@ -106,6 +109,7 @@ fn app_search_roots() -> Vec<PathBuf> {
 	roots
 }
 
+/// Resolve the `.app` bundle path for a top bar app on macOS.
 #[cfg(target_os = "macos")]
 fn resolve_app_path(spec: &TopbarAppSpec) -> Option<PathBuf> {
 	app_search_roots()
@@ -114,6 +118,7 @@ fn resolve_app_path(spec: &TopbarAppSpec) -> Option<PathBuf> {
 		.find(|path| path.exists())
 }
 
+/// List top bar apps whose `.app` bundle exists on macOS.
 #[cfg(target_os = "macos")]
 fn list_supported_topbar_apps_macos() -> Vec<TopbarApp> {
 	KNOWN_TOPBAR_APPS
@@ -125,6 +130,7 @@ fn list_supported_topbar_apps_macos() -> Vec<TopbarApp> {
 		.collect()
 }
 
+/// Open a top bar app on macOS via `open -a`.
 #[cfg(target_os = "macos")]
 fn open_topbar_app_macos(app_id: &str, path: &str) -> Result<(), AppError> {
 	let spec = known_app_spec(app_id).ok_or_else(|| {
@@ -151,6 +157,7 @@ fn open_topbar_app_macos(app_id: &str, path: &str) -> Result<(), AppError> {
 	))))
 }
 
+/// Check if a command exists on the Windows PATH.
 #[cfg(target_os = "windows")]
 fn windows_command_exists(command: &str) -> bool {
 	let Some(path) = std::env::var_os("PATH") else {
@@ -160,6 +167,7 @@ fn windows_command_exists(command: &str) -> bool {
 	std::env::split_paths(&path).any(|dir| dir.join(command).exists())
 }
 
+/// Resolve the first available Windows command for a top bar app spec.
 #[cfg(target_os = "windows")]
 fn resolve_windows_command(spec: &TopbarAppSpec) -> Option<&'static str> {
 	spec.windows_commands
@@ -168,6 +176,7 @@ fn resolve_windows_command(spec: &TopbarAppSpec) -> Option<&'static str> {
 		.find(|command| windows_command_exists(command))
 }
 
+/// List top bar apps whose command is available on the Windows PATH.
 #[cfg(target_os = "windows")]
 fn list_supported_topbar_apps_windows() -> Vec<TopbarApp> {
 	KNOWN_TOPBAR_APPS
@@ -179,6 +188,7 @@ fn list_supported_topbar_apps_windows() -> Vec<TopbarApp> {
 		.collect()
 }
 
+/// Open a top bar app on Windows via PowerShell `Start-Process`.
 #[cfg(target_os = "windows")]
 fn open_topbar_app_windows(app_id: &str, path: &str) -> Result<(), AppError> {
 	let spec = known_app_spec(app_id).ok_or_else(|| {
@@ -209,6 +219,7 @@ fn open_topbar_app_windows(app_id: &str, path: &str) -> Result<(), AppError> {
 	))))
 }
 
+/// List top bar apps available on the current platform (macOS / Windows).
 #[tauri::command]
 pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 	#[cfg(target_os = "macos")]
@@ -235,6 +246,7 @@ pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 	}
 }
 
+/// Open a supported top bar app with the given path as argument.
 #[tauri::command]
 pub async fn open_topbar_app(
 	app_id: String,

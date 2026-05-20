@@ -21,6 +21,7 @@ import { TerminalTemplateDraftDialog } from "@/features/terminal/TerminalTemplat
 import * as m from "@/paraglide/messages.js";
 import { useTerminalTemplatesStore } from "./stores/terminalTemplatesStore";
 
+/** Settings panel for managing global terminal templates (shared across all projects). */
 export function GlobalTerminalTemplatesSettings() {
 	const templates = useTerminalTemplatesStore((s) => s.templates);
 	const setTemplates = useTerminalTemplatesStore((s) => s.setTemplates);
