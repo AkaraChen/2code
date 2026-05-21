@@ -40,7 +40,12 @@ const FILE_TREE_TOGGLE_ICON_TRANSITION = {
 	mass: 0.55,
 } as const;
 
-function GitBranchLabel({ cwd, isActive }: { cwd: string; isActive: boolean }) {
+interface GitBranchLabelProps {
+	cwd: string;
+	isActive: boolean;
+}
+
+function GitBranchLabel({ cwd, isActive }: GitBranchLabelProps) {
 	const { data: branch } = useGitBranch(cwd, isActive);
 	if (!branch) return null;
 	return (

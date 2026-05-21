@@ -225,7 +225,9 @@ unset VSCODE_STABLE
 
 # Report continuation prompt
 if [ "$__vsc_stable" = "0" ]; then
-	builtin printf "\e]633;P;ContinuationPrompt=$(echo "$PS2" | sed 's/\x1b/\\\\x1b/g')\a"
+	__vsc_continuation_prompt="$(echo "$PS2" | sed 's/\x1b/\\\\x1b/g')"
+	builtin printf '\e]633;P;ContinuationPrompt=%s\a' "$__vsc_continuation_prompt"
+	builtin unset __vsc_continuation_prompt
 fi
 
 if [ -n "$STARSHIP_SESSION_KEY" ]; then

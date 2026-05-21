@@ -112,7 +112,10 @@ fn default_shell_command() -> String {
 
 #[cfg(target_os = "macos")]
 fn default_shell_command() -> String {
-	"/bin/zsh".to_string()
+	std::env::var("SHELL")
+		.ok()
+		.filter(|shell| command_exists(shell))
+		.unwrap_or_else(|| "/bin/zsh".to_string())
 }
 
 #[cfg(windows)]
