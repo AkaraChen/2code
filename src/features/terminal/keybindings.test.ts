@@ -133,4 +133,37 @@ describe("getTerminalShortcutAction", () => {
 			getTerminalShortcutAction(makeEvent({ ctrlKey: true, key: "l" })),
 		).toEqual({ type: "clear-screen" });
 	});
+
+	it("maps Ctrl+C to copy-or-interrupt on Windows", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, key: "c" }),
+				"Win32",
+			),
+		).toEqual({ type: "copy-selection-or-interrupt" });
+	});
+
+	it("maps Ctrl+V to paste on Windows", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, key: "v" }),
+				"Win32",
+			),
+		).toEqual({ type: "paste-clipboard" });
+	});
+
+	it("does not map Ctrl+C/V on macOS (Cmd+C/V is system-handled)", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, key: "c" }),
+				"MacIntel",
+			),
+		).toBeNull();
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, key: "v" }),
+				"MacIntel",
+			),
+		).toBeNull();
+	});
 });

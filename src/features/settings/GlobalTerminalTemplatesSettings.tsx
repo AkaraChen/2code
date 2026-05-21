@@ -31,14 +31,17 @@ export function GlobalTerminalTemplatesSettings() {
 		},
 	});
 	const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-	const [draft, setDraft] = useState<GlobalTerminalTemplateDraft | null>(null);
+	const [draft, setDraft] = useState<GlobalTerminalTemplateDraft>(
+		createEmptyGlobalTerminalTemplateDraft,
+	);
+	const [isOpen, setIsOpen] = useState(false);
 
-	const isOpen = draft !== null;
 	const isEditing = editingTemplateId !== null;
 
 	function openCreateDialog() {
 		setEditingTemplateId(null);
 		setDraft(createEmptyGlobalTerminalTemplateDraft());
+		setIsOpen(true);
 	}
 
 	function openEditDialog(templateId: string) {
@@ -46,15 +49,15 @@ export function GlobalTerminalTemplatesSettings() {
 		if (!template) return;
 		setEditingTemplateId(template.id);
 		setDraft(toGlobalTerminalTemplateDraft(template));
+		setIsOpen(true);
 	}
 
 	function closeDialog() {
+		setIsOpen(false);
 		setEditingTemplateId(null);
-		setDraft(null);
 	}
 
 	async function handleSave() {
-		if (!draft) return;
 		const [normalizedTemplate] = normalizeGlobalTerminalTemplates([draft]);
 		if (!normalizedTemplate) return;
 
@@ -77,6 +80,12 @@ export function GlobalTerminalTemplatesSettings() {
 			templates.filter((template) => template.id !== editingTemplateId),
 		);
 		closeDialog();
+	}
+
+	async function removeTemplate(templateId: string) {
+		await replaceTemplates.mutateAsync(
+			templates.filter((template) => template.id !== templateId),
+		);
 	}
 
 	return (
@@ -147,7 +156,7 @@ export function GlobalTerminalTemplatesSettings() {
 										size="sm"
 										colorPalette="red"
 										aria-label={m.deleteTerminalTemplate()}
-										onClick={() => openEditDialog(template.id)}
+										onClick={() => void removeTemplate(template.id)}
 										disabled={replaceTemplates.isPending}
 									>
 										<FiTrash2 />
@@ -159,18 +168,16 @@ export function GlobalTerminalTemplatesSettings() {
 				)}
 			</Stack>
 
-			{draft ? (
-				<TerminalTemplateDraftDialog
-					draft={draft}
-					isOpen={isOpen}
-					isEditing={isEditing}
-					isPending={replaceTemplates.isPending}
-					onChange={setDraft}
-					onClose={closeDialog}
-					onDelete={handleDelete}
-					onSave={handleSave}
-				/>
-			) : null}
+			<TerminalTemplateDraftDialog
+				draft={draft}
+				isOpen={isOpen}
+				isEditing={isEditing}
+				isPending={replaceTemplates.isPending}
+				onChange={setDraft}
+				onClose={closeDialog}
+				onDelete={handleDelete}
+				onSave={handleSave}
+			/>
 		</>
 	);
 }

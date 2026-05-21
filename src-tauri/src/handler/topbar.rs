@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
-use std::process::Command;
 
+use infra::no_window::silent_command;
 use model::error::AppError;
 use model::topbar::TopbarApp;
 
@@ -135,7 +135,7 @@ fn open_topbar_app_macos(app_id: &str, path: &str) -> Result<(), AppError> {
 		AppError::NotFound(format!("Top bar app not found: {app_id}"))
 	})?;
 
-	let status = Command::new("open")
+	let status = silent_command("open")
 		.arg("-a")
 		.arg(&app_path)
 		.arg(path)
@@ -188,7 +188,7 @@ fn open_topbar_app_windows(app_id: &str, path: &str) -> Result<(), AppError> {
 		AppError::NotFound(format!("Top bar app not found: {app_id}"))
 	})?;
 
-	let status = Command::new("powershell.exe")
+	let status = silent_command("powershell.exe")
 		.args([
 			"-NoProfile",
 			"-ExecutionPolicy",

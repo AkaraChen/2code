@@ -1,5 +1,9 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
+import {
+	readText as readClipboardText,
+	writeText as writeClipboardText,
+} from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-shell";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
@@ -203,6 +207,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				const action = getTerminalShortcutAction(event);
 				if (!action) return true;
 
+				// Ctrl+C with no selection: pass through so xterm sends ^C (SIGINT).
+				if (
+					action.type === "copy-selection-or-interrupt"
+					&& !term.hasSelection()
+				) {
+					return true;
+				}
+
 				event.preventDefault();
 				event.stopPropagation();
 
@@ -223,6 +235,25 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 						.finally(() => {
 							void writeToPty({ sessionId, data: "\x0C" });
 						});
+					return false;
+				}
+
+				if (action.type === "copy-selection-or-interrupt") {
+					const selection = term.getSelection();
+					if (selection) {
+						void writeClipboardText(selection).catch(() => {});
+					}
+					return false;
+				}
+
+				if (action.type === "paste-clipboard") {
+					void readClipboardText()
+						.then((text) => {
+							if (text) {
+								void writeToPty({ sessionId, data: text });
+							}
+						})
+						.catch(() => {});
 					return false;
 				}
 

@@ -1,6 +1,6 @@
-use std::process::Command;
 use std::sync::Mutex;
 
+use infra::no_window::silent_command;
 use model::error::AppError;
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::Channel, AppHandle, State};
@@ -62,7 +62,7 @@ fn update_metadata(update: &Update) -> UpdateMetadata {
 }
 
 fn gh_auth_token() -> Option<String> {
-	let output = Command::new("gh")
+	let output = silent_command("gh")
 		.args(["auth", "token"])
 		.env("GH_PROMPT_DISABLED", "1")
 		.output()

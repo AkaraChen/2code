@@ -12,7 +12,9 @@ export type TerminalShortcutAction =
 	| { type: "write-sequence"; sequence: string }
 	| { type: "increase-font-size" }
 	| { type: "decrease-font-size" }
-	| { type: "clear-screen" };
+	| { type: "clear-screen" }
+	| { type: "copy-selection-or-interrupt" }
+	| { type: "paste-clipboard" };
 
 function isMacPlatform(platform: string) {
 	return platform.toUpperCase().includes("MAC");
@@ -83,6 +85,23 @@ export function getTerminalShortcutAction(
 		&& event.key.toLowerCase() === "l"
 	) {
 		return { type: "clear-screen" };
+	}
+
+	// Windows/Linux clipboard shortcuts. Ctrl+C copies only when a selection
+	// exists — without a selection it must pass through as SIGINT (^C).
+	if (
+		!isMacPlatform(platform)
+		&& event.ctrlKey
+		&& !event.metaKey
+		&& !event.altKey
+		&& !event.shiftKey
+	) {
+		if (event.key.toLowerCase() === "c") {
+			return { type: "copy-selection-or-interrupt" };
+		}
+		if (event.key.toLowerCase() === "v") {
+			return { type: "paste-clipboard" };
+		}
 	}
 
 	return null;

@@ -19,6 +19,8 @@
 		"store:default",
 		"shell:allow-open",
 		"updater:default",
+		"clipboard-manager:allow-read-text",
+		"clipboard-manager:allow-write-text",
 		{
 			"identifier": "shell:allow-execute",
 			"allow": [
