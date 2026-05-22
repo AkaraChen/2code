@@ -1,11 +1,11 @@
 use std::path::PathBuf;
-use std::process::Command;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
 use infra::db::MIGRATIONS;
+use infra::no_window::command_without_windows_console;
 use model::profile::Profile;
 use model::project::Project;
 
@@ -27,17 +27,17 @@ pub fn create_temp_git_repo() -> PathBuf {
 	let dir = std::env::temp_dir()
 		.join(format!("2code-integ-{}", uuid::Uuid::new_v4()));
 	std::fs::create_dir_all(&dir).unwrap();
-	Command::new("git")
+	command_without_windows_console("git")
 		.args(["init"])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
-	Command::new("git")
+	command_without_windows_console("git")
 		.args(["config", "user.email", "test@test.com"])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
-	Command::new("git")
+	command_without_windows_console("git")
 		.args(["config", "user.name", "Test User"])
 		.current_dir(&dir)
 		.output()
@@ -53,12 +53,12 @@ pub fn add_commit(
 	msg: &str,
 ) {
 	std::fs::write(dir.join(filename), content).unwrap();
-	Command::new("git")
+	command_without_windows_console("git")
 		.args(["add", filename])
 		.current_dir(dir)
 		.output()
 		.unwrap();
-	Command::new("git")
+	command_without_windows_console("git")
 		.args(["commit", "-m", msg])
 		.current_dir(dir)
 		.output()

@@ -4,6 +4,7 @@ use common::{
 	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
 	setup_db,
 };
+use infra::no_window::command_without_windows_console;
 
 // ============================================================
 // Git Diff (basic)
@@ -34,7 +35,7 @@ fn diff_captures_staged_and_unstaged() {
 
 	// Staged change
 	std::fs::write(dir.join("staged.txt"), "staged content").unwrap();
-	std::process::Command::new("git")
+	command_without_windows_console("git")
 		.args(["add", "staged.txt"])
 		.current_dir(&dir)
 		.output()
@@ -271,12 +272,12 @@ fn log_multiple_files_in_commit() {
 	std::fs::write(dir.join("x.txt"), "x").unwrap();
 	std::fs::write(dir.join("y.txt"), "y").unwrap();
 	std::fs::write(dir.join("z.txt"), "z").unwrap();
-	std::process::Command::new("git")
+	command_without_windows_console("git")
 		.args(["add", "."])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
-	std::process::Command::new("git")
+	command_without_windows_console("git")
 		.args(["commit", "-m", "Add three files"])
 		.current_dir(&dir)
 		.output()
@@ -384,14 +385,14 @@ fn commit_changes_commits_only_selected_files() {
 	)
 	.unwrap();
 
-	let head = std::process::Command::new("git")
+	let head = command_without_windows_console("git")
 		.args(["rev-parse", "HEAD"])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
 	assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), commit_hash);
 
-	let latest_message = std::process::Command::new("git")
+	let latest_message = command_without_windows_console("git")
 		.args(["log", "-1", "--format=%s"])
 		.current_dir(&dir)
 		.output()
@@ -432,7 +433,7 @@ fn commit_changes_supports_body_and_untracked_files() {
 	)
 	.unwrap();
 
-	let full_message = std::process::Command::new("git")
+	let full_message = command_without_windows_console("git")
 		.args(["log", "-1", "--format=%B"])
 		.current_dir(&dir)
 		.output()

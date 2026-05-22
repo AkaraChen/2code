@@ -4,7 +4,7 @@ use std::process::Command;
 use model::error::AppError;
 pub use model::project::ProjectConfig;
 
-use crate::no_window::silent_command;
+use crate::no_window::command_without_windows_console;
 
 pub fn load_project_config(
 	project_folder: &str,
@@ -71,11 +71,11 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 
 fn script_command() -> Command {
 	if cfg!(windows) {
-		let mut command = silent_command("powershell.exe");
+		let mut command = command_without_windows_console("powershell.exe");
 		command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]);
 		command
 	} else {
-		let mut command = silent_command("sh");
+		let mut command = command_without_windows_console("sh");
 		command.arg("-c");
 		command
 	}

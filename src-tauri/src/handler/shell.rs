@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use infra::no_window::command_without_windows_console;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -66,7 +68,7 @@ fn find_pwsh_path() -> Option<String> {
 		}
 	}
 	// Fallback: check PATH via `where`
-	let output = std::process::Command::new("where")
+	let output = command_without_windows_console("where")
 		.arg("pwsh")
 		.output()
 		.ok()?;
@@ -149,7 +151,12 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 	let mut seen = HashSet::new();
 	// PowerShell 7 (pwsh) — preferred over 5.1
 	if let Some(pwsh_path) = find_pwsh_path() {
-		push_shell(&mut shells, &mut seen, format!("{} -NoLogo -NoProfile", pwsh_path), default_command);
+		push_shell(
+			&mut shells,
+			&mut seen,
+			format!("{} -NoLogo -NoProfile", pwsh_path),
+			default_command,
+		);
 	}
 	// Windows PowerShell 5.1
 	push_shell(
