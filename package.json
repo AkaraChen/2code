@@ -16,6 +16,7 @@
     "tauri": "tauri",
     "start": "tauri dev",
     "lint": "eslint --fix",
+    "lint:check": "eslint . --max-warnings=0",
     "test": "bun run paraglide:compile && vitest run",
     "test:watch": "bun run paraglide:compile && vitest",
     "test:rust": "just test-rust",
@@ -73,7 +74,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^8.1.1",
+    "@antfu/eslint-config": "^9.0.0",
     "@eslint-react/eslint-plugin": "^5.0.0",
     "@inlang/paraglide-js": "^2.15.3",
     "@tauri-apps/cli": "^2.11.0",

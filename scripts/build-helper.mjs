@@ -1,9 +1,10 @@
 import { copyFileSync, chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { argv, env } from "node:process";
 import { fileURLToPath } from "node:url";
 
-const mode = process.argv[2] === "release" ? "release" : "debug";
+const mode = argv[2] === "release" ? "release" : "debug";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const srcTauri = join(root, "src-tauri");
 
@@ -18,7 +19,7 @@ function hostTriple() {
 	return host;
 }
 
-const targetTriple = process.env.TWOCODE_HELPER_TARGET || hostTriple();
+const targetTriple = env.TWOCODE_HELPER_TARGET || hostTriple();
 const host = hostTriple();
 const isWindows = targetTriple.includes("windows");
 const binSuffix = isWindows ? ".exe" : "";
