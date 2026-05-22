@@ -119,31 +119,13 @@ pub enum ShellInjection {
 	None,
 }
 
-/// Resolve the user's home directory. Prefers `HOME` on every platform so
-/// existing Unix behaviour is preserved; on Windows, falls back to
-/// `USERPROFILE` (which native PowerShell/Cmd actually set).
-fn home_dir() -> Option<PathBuf> {
-	if let Some(h) = std::env::var("HOME").ok().filter(|s| !s.is_empty()) {
-		return Some(PathBuf::from(h));
-	}
-	#[cfg(windows)]
-	{
-		if let Some(h) =
-			std::env::var("USERPROFILE").ok().filter(|s| !s.is_empty())
-		{
-			return Some(PathBuf::from(h));
-		}
-	}
-	None
-}
-
 /// Write the 2code home directory files (notify hook, claude wrapper, settings JSON)
 /// so that fish and pwsh sessions have them available without running a bash script.
-/// Skipped silently if the home directory is unset or any I/O fails.
+/// Skipped silently if HOME is unset or any I/O fails.
 fn setup_2code_home() {
-	let home = match home_dir() {
-		Some(h) => h,
-		None => return,
+	let home = match std::env::var("HOME") {
+		Ok(h) if !h.is_empty() => PathBuf::from(h),
+		_ => return,
 	};
 	let hooks = home.join(".2code/hooks");
 	let bin = home.join(".2code/bin");
@@ -180,39 +162,39 @@ fn setup_2code_home() {
 		let _ = std::fs::write(&settings, json);
 	}
 
-	#[cfg(unix)]
-	{
-		let wrapper = bin.join("claude");
-		if !wrapper.exists() {
-			let settings_str = settings.to_string_lossy();
-			let script = format!(
-				concat!(
-					"#!/bin/bash\n",
-					"_SETTINGS=\"{s}\"\n",
-					"_find_real() {{\n",
-					"  local IFS=:\n",
-					"  for dir in $PATH; do\n",
-					"    [ -z \"$dir\" ] && continue\n",
-					"    case \"${{dir%/}}\" in\n",
-					"      \"$HOME/.2code/bin\") continue ;;\n",
-					"    esac\n",
-					"    if [ -x \"$dir/claude\" ] && [ ! -d \"$dir/claude\" ]; then\n",
-					"      printf '%s\\n' \"$dir/claude\"\n",
-					"      return 0\n",
-					"    fi\n",
-					"  done\n",
-					"  return 1\n",
-					"}}\n",
-					"_REAL=\"$(_find_real)\"\n",
-					"if [ -z \"$_REAL\" ]; then\n",
-					"  echo \"2code: claude not found in PATH\" >&2\n",
-					"  exit 127\n",
-					"fi\n",
-					"exec \"$_REAL\" --settings \"$_SETTINGS\" \"$@\"\n",
-				),
-				s = settings_str
-			);
-			let _ = std::fs::write(&wrapper, script);
+	let wrapper = bin.join("claude");
+	if !wrapper.exists() {
+		let settings_str = settings.to_string_lossy();
+		let script = format!(
+			concat!(
+				"#!/bin/bash\n",
+				"_SETTINGS=\"{s}\"\n",
+				"_find_real() {{\n",
+				"  local IFS=:\n",
+				"  for dir in $PATH; do\n",
+				"    [ -z \"$dir\" ] && continue\n",
+				"    case \"${{dir%/}}\" in\n",
+				"      \"$HOME/.2code/bin\") continue ;;\n",
+				"    esac\n",
+				"    if [ -x \"$dir/claude\" ] && [ ! -d \"$dir/claude\" ]; then\n",
+				"      printf '%s\\n' \"$dir/claude\"\n",
+				"      return 0\n",
+				"    fi\n",
+				"  done\n",
+				"  return 1\n",
+				"}}\n",
+				"_REAL=\"$(_find_real)\"\n",
+				"if [ -z \"$_REAL\" ]; then\n",
+				"  echo \"2code: claude not found in PATH\" >&2\n",
+				"  exit 127\n",
+				"fi\n",
+				"exec \"$_REAL\" --settings \"$_SETTINGS\" \"$@\"\n",
+			),
+			s = settings_str
+		);
+		let _ = std::fs::write(&wrapper, script);
+		#[cfg(unix)]
+		{
 			use std::os::unix::fs::PermissionsExt;
 			if let Ok(meta) = std::fs::metadata(&wrapper) {
 				let mut perms = meta.permissions();
@@ -222,41 +204,30 @@ fn setup_2code_home() {
 		}
 	}
 
+	// Windows: PowerShell/CMD cannot execute extensionless files from PATH.
+	// Create a claude.cmd batch wrapper alongside the bash script.
 	#[cfg(windows)]
 	{
-		// PowerShell on Windows cannot resolve an extensionless wrapper from PATH,
-		// so emit a `.cmd` shim that locates the real `claude` executable in PATH
-		// (skipping our own bin dir) and forwards the injected `--settings` flag.
 		let cmd_wrapper = bin.join("claude.cmd");
 		if !cmd_wrapper.exists() {
-			let settings_str =
-				settings.to_string_lossy().replace('/', "\\");
-			let bin_str = bin.to_string_lossy().to_string().replace('/', "\\");
-			let script = format!(
+			let settings_str = settings.to_string_lossy();
+			let cmd_script = format!(
 				concat!(
 					"@echo off\r\n",
-					"setlocal enabledelayedexpansion\r\n",
+					"setlocal\r\n",
 					"set \"_SETTINGS={s}\"\r\n",
-					"set \"_2CODE_BIN={b}\"\r\n",
-					"set \"_REAL=\"\r\n",
-					"for /f \"delims=\" %%I in ('where claude.cmd claude.bat claude.exe claude.ps1 2^>nul') do (\r\n",
-					"  if not defined _REAL (\r\n",
-					"    set \"_DIR=%%~dpI\"\r\n",
-					"    set \"_DIR=!_DIR:~0,-1!\"\r\n",
-					"    if /I not \"!_DIR!\"==\"%_2CODE_BIN%\" set \"_REAL=%%I\"\r\n",
-					"  )\r\n",
+					"for /f \"delims=\" %%d in ('where claude 2^>nul') do (\r\n",
+					"    if /i not \"%%~dpd\"==\"%~dp0\" (\r\n",
+					"        \"%%d\" --settings \"%_SETTINGS%\" %*\r\n",
+					"        exit /b %ERRORLEVEL%\r\n",
+					"    )\r\n",
 					")\r\n",
-					"if not defined _REAL (\r\n",
-					"  >&2 echo 2code: claude not found in PATH\r\n",
-					"  exit /b 127\r\n",
-					")\r\n",
-					"\"%_REAL%\" --settings \"%_SETTINGS%\" %*\r\n",
-					"exit /b %ERRORLEVEL%\r\n",
+					"echo 2code: claude not found in PATH >&2\r\n",
+					"exit /b 127\r\n",
 				),
-				s = settings_str,
-				b = bin_str,
+				s = settings_str
 			);
-			let _ = std::fs::write(&cmd_wrapper, script);
+			let _ = std::fs::write(&cmd_wrapper, cmd_script);
 		}
 	}
 }
@@ -264,27 +235,20 @@ fn setup_2code_home() {
 /// Prepare shell integration injection for the given shell type.
 /// This writes the necessary scripts to a temp directory and returns
 /// an injection descriptor telling the PTY layer what to do.
-/// Prefix used for all shell-injection temp directories created by this
-/// process. Includes the process ID so concurrent app instances don't step on
-/// each other's directories at exit cleanup.
-pub fn session_temp_dir_prefix() -> String {
-	format!("2code-init-{}-", std::process::id())
-}
-
 pub fn prepare_shell_injection(
 	session_id: &str,
 	shell_type: ShellType,
 	project_init_scripts: &[String],
 ) -> Result<ShellInjection, AppError> {
 	let dir = std::env::temp_dir()
-		.join(format!("{}{session_id}", session_temp_dir_prefix()));
+		.join(format!("2code-init-{}-{session_id}", std::process::id()));
 	std::fs::create_dir_all(&dir)?;
 
 	match shell_type {
 		ShellType::Zsh => prepare_zsh(&dir, project_init_scripts),
 		ShellType::Bash => prepare_bash(&dir, project_init_scripts),
-		ShellType::Fish => prepare_fish(&dir, project_init_scripts),
-		ShellType::Pwsh => prepare_pwsh(&dir, project_init_scripts),
+		ShellType::Fish => prepare_fish(&dir),
+		ShellType::Pwsh => prepare_pwsh(&dir),
 		ShellType::Unknown => Ok(ShellInjection::None),
 	}
 }
@@ -346,15 +310,9 @@ fn prepare_bash(
 }
 
 /// Fish: VS Code's approach — use `--init-command 'source "<path>"'`.
-///
-/// `project_init_scripts` is intentionally NOT spliced in here. The config is
-/// POSIX-shell flavoured (`export`, `source`, `&&`, `$()`) and pasting it raw
-/// into fish breaks terminal startup. Fish users can configure shell-specific
-/// init via fish's own `conf.d` mechanism.
-fn prepare_fish(
-	dir: &Path,
-	_project_init_scripts: &[String],
-) -> Result<ShellInjection, AppError> {
+/// Project init scripts are skipped because they are POSIX shell syntax,
+/// incompatible with Fish.
+fn prepare_fish(dir: &Path) -> Result<ShellInjection, AppError> {
 	setup_2code_home();
 	let init_script = dir.join("shellIntegration.fish");
 	let script = format!(
@@ -367,14 +325,9 @@ fn prepare_fish(
 }
 
 /// Pwsh: VS Code's approach — use `-noexit -command '. "<path>"'`.
-///
-/// `project_init_scripts` is intentionally NOT spliced in here for the same
-/// reason as fish above — POSIX shell syntax is not valid PowerShell. PowerShell
-/// users can rely on their own profile scripts for additional setup.
-fn prepare_pwsh(
-	dir: &Path,
-	_project_init_scripts: &[String],
-) -> Result<ShellInjection, AppError> {
+/// Project init scripts are skipped because they are POSIX shell syntax,
+/// incompatible with PowerShell.
+fn prepare_pwsh(dir: &Path) -> Result<ShellInjection, AppError> {
 	setup_2code_home();
 	let init_script = dir.join("shellIntegration.ps1");
 	let script = format!(
@@ -513,14 +466,8 @@ mod tests {
 
 	#[test]
 	fn prepare_fish_includes_common_init() {
-		// POSIX-style project init must be skipped for fish to avoid breaking
-		// the shell on `export`/`$()`/etc.
-		let inj = prepare_shell_injection(
-			"test-fish-2",
-			ShellType::Fish,
-			&["export FOO=bar".to_string()],
-		)
-		.unwrap();
+		let inj = prepare_shell_injection("test-fish-2", ShellType::Fish, &[])
+			.unwrap();
 		match inj {
 			ShellInjection::Fish { init_script } => {
 				assert!(init_script.exists());
@@ -531,8 +478,8 @@ mod tests {
 				assert!(content.contains("2code common init"));
 				assert!(content.contains("fish_add_path"));
 				assert!(content.contains("_2CODE_HOME"));
-				// POSIX-flavoured project init must NOT leak into fish
-				assert!(!content.contains("export FOO=bar"));
+				// Project init must NOT be present (POSIX syntax, incompatible)
+				assert!(!content.contains("2code project init"));
 				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
 			}
 			_ => panic!("Expected Fish injection"),
@@ -541,25 +488,19 @@ mod tests {
 
 	#[test]
 	fn prepare_pwsh_includes_common_init() {
-		// POSIX-style project init must be skipped for PowerShell too.
-		let inj = prepare_shell_injection(
-			"test-pwsh-1",
-			ShellType::Pwsh,
-			&["export FOO=bar".to_string()],
-		)
-		.unwrap();
+		let inj = prepare_shell_injection("test-pwsh-1", ShellType::Pwsh, &[])
+			.unwrap();
 		match inj {
 			ShellInjection::Pwsh { init_script } => {
 				assert!(init_script.exists());
 				let content = std::fs::read_to_string(&init_script).unwrap();
-				// VSCode integration must be present (pwsh script uses
-				// `__VSCodeState`, not the bash-style env-var marker).
-				assert!(content.contains("__VSCodeState"));
+				// VSCode integration must be present
+				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
 				// 2code common init must be present
 				assert!(content.contains("2code common init"));
 				assert!(content.contains("_2CODE_HOME"));
-				// POSIX-flavoured project init must NOT leak into pwsh
-				assert!(!content.contains("export FOO=bar"));
+				// Project init must NOT be present (POSIX syntax, incompatible)
+				assert!(!content.contains("2code project init"));
 				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
 			}
 			_ => panic!("Expected Pwsh injection"),

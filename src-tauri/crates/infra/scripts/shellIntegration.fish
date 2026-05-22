@@ -124,21 +124,27 @@ end
 
 
 # Escape a value for use in the 'P' ("Property") or 'E' ("Command Line") sequences.
-# Backslashes are doubled, semicolons hex-encoded, and ASCII control bytes
-# (0x01..0x1F) hex-encoded as `\xHH` so multi-line commands and other control
-# bytes don't break the OSC 633 payload (matches Bash/Zsh behaviour).
+# Backslashes are doubled and non-alphanumeric characters are hex encoded.
 function __vsc_escape_value
-	set -l value "$argv"
-	set value (string replace --all '\\' '\\\\' -- $value)
-	set value (string replace --all ';' '\\x3b' -- $value)
-	# Hex-escape ASCII control bytes 0x01..0x1F so they survive the OSC payload.
-	# NUL (0x00) cannot appear in fish strings and is skipped.
-	for n in (seq 1 31)
-		set -l hex (printf '%02x' $n)
-		set -l byte (printf "\x$hex")
-		set value (string replace --all -- "$byte" "\\x$hex" $value)
+	# Escape backslashes, semi-colons, and control characters (bytes < 0x20).
+	set -l str $argv
+	set -l out ""
+	set -l len (string length -- $str)
+	for i in (seq $len)
+		set -l char (string sub -s $i -l 1 -- $str)
+		set -l val (printf "%d" "'$char")
+		if test $val -lt 32
+			set -l hex (printf "%02x" "'$char")
+			set out "$out\\x$hex"
+		else if test $val -eq 92
+			set out "$out\\\\"
+		else if test $val -eq 59
+			set out "$out\\x3b"
+		else
+			set out "$out$char"
+		end
 	end
-	echo $value
+	echo $out
 end
 
 # Sent right after an interactive command has finished executing.

@@ -272,7 +272,8 @@ pub async fn open_topbar_app(
 	{
 		let _ = (app_id, path);
 		Err(AppError::NotFound(
-			"Top bar app launching is only supported on macOS and Windows".into(),
+			"Top bar app launching is only supported on macOS and Windows"
+				.into(),
 		))
 	}
 }

@@ -44,12 +44,9 @@ if ($__vscode_shell_env_reporting) {
 Remove-Variable -Name __vscode_shell_env_reporting -ErrorAction SilentlyContinue
 
 $osVersion = [System.Environment]::OSVersion.Version
-# Windows PowerShell 5.1 does not define $IsWindows; treat that environment
-# as Windows so the Win10 nonce-suppression logic still activates.
-$isWindowsPlatform = if ($PSVersionTable.PSVersion.Major -lt 6) { $true } else { $IsWindows }
+$isWindowsPlatform = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
 $Global:__VSCodeState.IsWindows10 = $isWindowsPlatform -and $osVersion.Major -eq 10 -and $osVersion.Minor -eq 0 -and $osVersion.Build -lt 22000
-Remove-Variable -Name osVersion -ErrorAction SilentlyContinue
-Remove-Variable -Name isWindowsPlatform -ErrorAction SilentlyContinue
+Remove-Variable -Name osVersion, isWindowsPlatform -ErrorAction SilentlyContinue
 
 if ($env:VSCODE_ENV_REPLACE) {
 	$Split = $env:VSCODE_ENV_REPLACE.Split(":")

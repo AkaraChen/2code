@@ -26,16 +26,18 @@ export function ShellPicker() {
 
 	const shellCollection = createListCollection({
 		items: [
-			...shells.map((shell) => {
-				const suffixes: string[] = [];
-				if (shell.is_default) suffixes.push(m.defaultOption());
-				if (!shell.supports_integration)
-					suffixes.push(m.shellNoIntegration());
-				const label = suffixes.length
-					? `${shell.label} (${suffixes.join(", ")})`
-					: shell.label;
-				return { value: shell.command, label };
-			}),
+			...shells.map((shell) => ({
+				value: shell.command,
+				label: (() => {
+					const suffixes = [
+						shell.is_default ? m.defaultOption() : null,
+						!shell.supports_integration ? m.shellNoIntegration() : null,
+					].filter(Boolean);
+					return suffixes.length
+						? `${shell.label} (${suffixes.join(", ")})`
+						: shell.label;
+				})(),
+			})),
 			{ value: CUSTOM_SHELL_VALUE, label: m.customShell() },
 		],
 	});

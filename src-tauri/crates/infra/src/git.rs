@@ -99,7 +99,10 @@ pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
 
 /// Initialize a new git repository in the given directory.
 pub fn init(dir: &Path) -> Result<(), AppError> {
-	let output = silent_command("git").arg("init").current_dir(dir).output()?;
+	let output = silent_command("git")
+		.arg("init")
+		.current_dir(dir)
+		.output()?;
 
 	if !output.status.success() {
 		let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1827,10 +1830,8 @@ mod tests {
 
 	#[test]
 	fn parse_log_commit_line_rejects_extra_fields() {
-		assert!(
-			parse_git_log_commit_line("a\x1fb\x1fc\x1fd\x1fe\x1ff\x1fg")
-				.is_none()
-		);
+		assert!(parse_git_log_commit_line("a\x1fb\x1fc\x1fd\x1fe\x1ff\x1fg")
+			.is_none());
 	}
 
 	// --- extract_conflicting_ref ---
@@ -2465,5 +2466,4 @@ mod tests {
 			.unwrap();
 		assert!(String::from_utf8_lossy(&status.stdout).trim().is_empty());
 	}
-
 }

@@ -158,17 +158,16 @@ pub fn run() {
 					service::pty::mark_all_closed(&db);
 				}
 
-				// Clean up shell integration temp dirs created by THIS process
-				// only (scoped via PID). Avoids deleting another running
-				// instance's active integration files on first-instance exit.
+				// Clean up only this process's shell integration temp dirs.
+				let pid = std::process::id();
+				let pid_prefix = format!("2code-init-{pid}-");
 				let tmp = std::env::temp_dir();
-				let prefix = infra::shell_init::session_temp_dir_prefix();
 				if let Ok(entries) = std::fs::read_dir(&tmp) {
 					for entry in entries.flatten() {
 						if entry
 							.file_name()
 							.to_string_lossy()
-							.starts_with(&prefix)
+							.starts_with(&pid_prefix)
 						{
 							let _ = std::fs::remove_dir_all(entry.path());
 						}

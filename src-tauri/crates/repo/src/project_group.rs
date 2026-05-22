@@ -124,10 +124,8 @@ mod tests {
 	fn delete_if_empty_returns_false_for_missing_group() {
 		let mut conn = setup_db();
 
-		assert!(
-			!delete_if_empty(&mut conn, "missing")
-				.expect("missing group is not deleted")
-		);
+		assert!(!delete_if_empty(&mut conn, "missing")
+			.expect("missing group is not deleted"));
 	}
 
 	#[test]
