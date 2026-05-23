@@ -79,6 +79,8 @@
 	"terminalOpenLink": "打开链接",
 	"terminalOpenLinkConfirmDescription": "要在 2code 外部打开这个链接吗？下次按住 Ctrl 再点击可直接打开。",
 	"terminalOpenLinkUrlLabel": "链接",
+	"terminalFilePathTooltip": "在编辑器中打开文件（按住 Ctrl 点击可跳过确认）",
+	"terminalFilePathOutsideWorkspace": "此文件位于当前工作区之外，无法打开。",
 	"showAllFonts": "显示所有字体",
 	"fontSize": "字体大小",
 	"appearance": "外观",

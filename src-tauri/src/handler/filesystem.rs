@@ -171,6 +171,53 @@ pub async fn get_file_tree_git_status(
 	.await
 }
 
+/// Resolves a (possibly relative) file path against the profile's worktree.
+/// Returns the canonical absolute path if the file exists within the worktree,
+/// or an error if the path is outside the workspace or doesn't exist.
+#[tauri::command]
+pub async fn resolve_terminal_file_path(
+	profile_id: String,
+	file_path: String,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = Path::new(&worktree);
+
+		let resolved = if Path::new(&file_path).is_absolute() {
+			Path::new(&file_path).to_path_buf()
+		} else {
+			// Strip leading ./ if present
+			let clean = file_path.strip_prefix("./").unwrap_or(&file_path);
+			worktree_path.join(clean)
+		};
+
+		// Check that the resolved path exists
+		if !resolved.exists() {
+			return Err(AppError::NotFound(format!("File: {}", file_path)));
+		}
+
+		// Canonicalize both paths to compare
+		let canonical_resolved = resolved.canonicalize().map_err(|e| {
+			AppError::IoError(e)
+		})?;
+		let canonical_worktree = worktree_path.canonicalize().map_err(|e| {
+			AppError::IoError(e)
+		})?;
+
+		// Security: ensure the resolved path is within the worktree
+		if !canonical_resolved.starts_with(&canonical_worktree) {
+			return Err(AppError::IoError(std::io::Error::other(
+				"Path is outside the workspace",
+			)));
+		}
+
+		Ok(canonical_resolved.to_string_lossy().into_owned())
+	})
+	.await
+}
+
 #[cfg(test)]
 mod tests {
 	use std::sync::{Arc, Mutex};
