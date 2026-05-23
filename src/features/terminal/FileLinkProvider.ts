@@ -5,6 +5,7 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { IBufferRange, ILink, ILinkProvider, Terminal } from "@xterm/xterm";
+import consola from "consola";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { FILE_LINK_REGEX, parseFileLink } from "./fileLinks";
 
@@ -75,8 +76,11 @@ export class FileLinkProvider implements ILinkProvider {
 								.getState()
 								.openFile(profileId, resolvedPath);
 						})
-						.catch(() => {
-							// File not found or outside workspace — silently ignore
+						.catch((error) => {
+							consola.warn(
+								`[file-link] Could not open "${location.filePath}":`,
+								error,
+							);
 						});
 				},
 			});
