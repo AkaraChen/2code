@@ -8,6 +8,7 @@ diesel::table! {
 		worktree_path -> Text,
 		created_at -> Timestamp,
 		is_default -> Bool,
+		notes -> Text,
 	}
 }
 

@@ -133,6 +133,7 @@ pub fn run() {
 			handler::profile::create_profile,
 			handler::profile::delete_profile,
 			handler::profile::get_profile_delete_check,
+			handler::profile::update_profile_notes,
 			handler::watcher::watch_projects,
 			handler::updater::check_update,
 			handler::updater::install_update,

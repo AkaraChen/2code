@@ -258,5 +258,7 @@
 	"updateIdleDescription": "Check GitHub Releases for a newer version.",
 	"updateReleasedAt": "Released {date}",
 	"updateCheckFailedTitle": "Update check failed",
-	"updateInstallFailedTitle": "Update failed"
+	"updateInstallFailedTitle": "Update failed",
+	"notes": "Notes",
+	"notesPlaceholder": "Write notes for this profile…"
 }

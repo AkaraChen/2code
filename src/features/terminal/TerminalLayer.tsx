@@ -101,6 +101,7 @@ export default function TerminalLayer() {
 								projectId={project?.id ?? profile.project_id}
 								profileId={profileId}
 								cwd={profile.worktree_path}
+								profile={profile}
 							/>
 						</ProfileLayout>
 					</div>

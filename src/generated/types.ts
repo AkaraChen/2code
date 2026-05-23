@@ -118,6 +118,7 @@ export interface Profile {
   worktree_path: string;
   created_at: string;
   is_default: boolean;
+  notes: string;
 }
 
 export interface FileTreeGitStatusEntry {
@@ -493,5 +494,12 @@ export interface DeleteProfileParams {
 
 export interface GetProfileDeleteCheckParams {
   id: string;
+  [key: string]: unknown;
+}
+
+
+export interface UpdateProfileNotesParams {
+  id: string;
+  notes: string;
   [key: string]: unknown;
 }
