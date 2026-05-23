@@ -81,6 +81,8 @@
 	"terminalOpenLinkUrlLabel": "Link",
 	"terminalFilePathTooltip": "Open file in editor (Ctrl+Click to skip confirmation)",
 	"terminalFilePathOutsideWorkspace": "This file is outside the current workspace and cannot be opened.",
+	"terminalChooseFilePath": "Choose File",
+	"terminalChooseFilePathDescription": "The exact file path was not found. Select one of the matching files to open.",
 	"showAllFonts": "Show all fonts",
 	"fontSize": "Font Size",
 	"appearance": "Appearance",

@@ -3,26 +3,16 @@
  *
  * Detects file-path:line:col patterns and opens them in the 2code file viewer.
  */
-import { invoke } from "@tauri-apps/api/core";
 import type { IBufferRange, ILink, ILinkProvider, Terminal } from "@xterm/xterm";
 import consola from "consola";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
+import { resolveTerminalFilePath } from "@/generated";
 import { FILE_LINK_REGEX, parseFileLink } from "./fileLinks";
 import { useFileLinkPickerStore } from "./fileLinkPickerStore";
 
 interface FileLinkProviderOptions {
 	profileId: string;
 }
-
-interface FileSearchResult {
-	name: string;
-	path: string;
-	relative_path: string;
-}
-
-type ResolvedFilePath =
-	| { type: "exact"; path: string }
-	| { type: "fuzzy"; candidates: FileSearchResult[] };
 
 export class FileLinkProvider implements ILinkProvider {
 	private readonly profileId: string;
@@ -78,7 +68,7 @@ export class FileLinkProvider implements ILinkProvider {
 					const location = parseFileLink(linkText);
 					if (!location) return;
 
-					void invoke<ResolvedFilePath>("resolve_terminal_file_path", {
+					void resolveTerminalFilePath({
 						profileId,
 						filePath: location.filePath,
 					})

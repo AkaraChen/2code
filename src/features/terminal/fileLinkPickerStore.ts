@@ -1,16 +1,11 @@
 import { create } from "zustand";
-
-interface FileCandidate {
-	name: string;
-	path: string;
-	relative_path: string;
-}
+import type { FileSearchResult } from "@/generated";
 
 interface FileLinkPickerState {
 	isOpen: boolean;
 	profileId: string | null;
-	candidates: FileCandidate[];
-	show: (profileId: string, candidates: FileCandidate[]) => void;
+	candidates: FileSearchResult[];
+	show: (profileId: string, candidates: FileSearchResult[]) => void;
 	close: () => void;
 }
 
