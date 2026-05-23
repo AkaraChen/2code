@@ -146,6 +146,7 @@ export default function TerminalTabs({
 		browserAreaActive ? "browser" : fileTabActive ? "file" : "terminal";
 
 	// Unified active tab value
+	const activeBrowserTab = browserTabs.find((tab) => tab.id === activeBrowserTabId) ?? null;
 	const activeValue = activeArea === "browser"
 		? (activeBrowserTabId ?? "")
 		: activeArea === "file"
@@ -277,26 +278,22 @@ export default function TerminalTabs({
 			)}
 
 			{/* Browser pane — rendered when browser tab is active */}
-			{activeArea === "browser" && activeBrowserTabId && (() => {
-				const activeTab = browserTabs.find((tab) => tab.id === activeBrowserTabId);
-				if (!activeTab) return null;
-				return (
-					<Box flex="1" minH="0" overflow="hidden">
-						<AsyncBoundary
-							fallback={(
-								<Flex align="center" justify="center" h="32">
-									<Spinner size="sm" />
-								</Flex>
-							)}
-							errorFallback={({ error, onRetry }) => (
-								<InlineError error={error} height="32" onRetry={onRetry} />
-							)}
-						>
-							<BrowserPane key={activeTab.id} url={activeTab.url} tabId={activeTab.id} />
-						</AsyncBoundary>
-					</Box>
-				);
-			})()}
+			{activeArea === "browser" && activeBrowserTab && (
+				<Box flex="1" minH="0" overflow="hidden">
+					<AsyncBoundary
+						fallback={(
+							<Flex align="center" justify="center" h="32">
+								<Spinner size="sm" />
+							</Flex>
+						)}
+						errorFallback={({ error, onRetry }) => (
+							<InlineError error={error} height="32" onRetry={onRetry} />
+						)}
+					>
+						<BrowserPane key={activeBrowserTab.id} url={activeBrowserTab.url} tabId={activeBrowserTab.id} />
+					</AsyncBoundary>
+				</Box>
+			)}
 
 			{/* Terminal area — NEVER unmounted, hidden via CSS when file/browser tab is active */}
 			<Box

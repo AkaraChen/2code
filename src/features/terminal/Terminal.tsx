@@ -183,9 +183,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		if (!uri) return;
 
 		setPendingLink(null);
-		void import("@/generated").then(({ openUrlInBrowser }) => {
-			void openUrlInBrowser(browserId, uri);
-		});
+		void import("@/generated").then(({ openUrlInBrowser }) =>
+			openUrlInBrowser(browserId, uri),
+		).catch(console.error);
 	}, [pendingLink]);
 
 	const handleTerminalLinkOpen = useCallback(
