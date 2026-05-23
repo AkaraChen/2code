@@ -495,3 +495,16 @@ export interface GetProfileDeleteCheckParams {
   id: string;
   [key: string]: unknown;
 }
+
+
+export interface InstalledBrowser {
+  id: string;
+  name: string;
+}
+
+
+export interface OpenUrlInBrowserParams {
+  browserId: string;
+  url: string;
+  [key: string]: unknown;
+}

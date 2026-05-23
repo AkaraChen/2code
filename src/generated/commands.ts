@@ -285,3 +285,13 @@ export async function getProfileDeleteCheck(params: types.GetProfileDeleteCheckP
 export async function listAvailableShells(): Promise<types.AvailableShell[]> {
   return invoke('list_available_shells');
 }
+
+
+export async function listInstalledBrowsers(): Promise<types.InstalledBrowser[]> {
+  return invoke('list_installed_browsers');
+}
+
+
+export async function openUrlInBrowser(params: types.OpenUrlInBrowserParams): Promise<void> {
+  return invoke('open_url_in_browser', params);
+}
