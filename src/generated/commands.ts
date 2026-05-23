@@ -281,6 +281,11 @@ export async function getProfileDeleteCheck(params: types.GetProfileDeleteCheckP
 }
 
 
+export async function updateProfileNotes(params: types.UpdateProfileNotesParams): Promise<types.Profile> {
+  return invoke('update_profile_notes', params);
+}
+
+
 
 export async function listAvailableShells(): Promise<types.AvailableShell[]> {
   return invoke('list_available_shells');

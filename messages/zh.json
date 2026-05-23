@@ -258,5 +258,7 @@
 	"updateIdleDescription": "检查 GitHub Releases 是否有新版本。",
 	"updateReleasedAt": "发布时间：{date}",
 	"updateCheckFailedTitle": "检查更新失败",
-	"updateInstallFailedTitle": "升级失败"
+	"updateInstallFailedTitle": "升级失败",
+	"notes": "笔记",
+	"notesPlaceholder": "为此配置文件编写笔记…"
 }
