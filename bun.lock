@@ -36,7 +36,7 @@
         "@xterm/addon-ligatures": "^0.11.0-beta.197",
         "@xterm/addon-progress": "^0.3.0-beta.197",
         "@xterm/addon-web-links": "^0.13.0-beta.218",
-        "@xterm/xterm": "^6.1.0-beta.197",
+        "@xterm/xterm": "^6.1.0-beta.220",
         "cmdk": "^1.1.1",
         "consola": "^3.4.2",
         "driver.js": "^1.4.0",
@@ -82,9 +82,6 @@
         "vitest": "^4.1.4",
       },
     },
-  },
-  "patchedDependencies": {
-    "@xterm/xterm@6.1.0-beta.197": "patches/@xterm%2Fxterm@6.1.0-beta.197.patch",
   },
   "packages": {
     "@adobe/css-tools": ["@adobe/css-tools@4.4.4", "", {}, "sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg=="],
@@ -855,7 +852,7 @@
 
     "@xterm/addon-web-links": ["@xterm/addon-web-links@0.13.0-beta.218", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.218" } }, "sha512-lIL4GZcBuhxy/AP0tXYGh9q8zd3y0/u5Rt5jG/ybBibdX7nnokOEt1gw3OZninVD1NWN6WwCDb8fXXrBi+cMEA=="],
 
-    "@xterm/xterm": ["@xterm/xterm@6.1.0-beta.197", "", {}, "sha512-vzoc8sBcsvFpziSgeVGKZQDT1T/9MmEUKfUDpVqc3slDv7o0SiQCjvPeOF8y1++5vx2xmUn8lfcLnbfdtigtSQ=="],
+    "@xterm/xterm": ["@xterm/xterm@6.1.0-beta.220", "", {}, "sha512-rwEKE75wfwfNWeGnjl0iQRA1W50HigKoGcGMeF3o5CqDSdI9IjmwzpV9xHXqLH6CYj6s9N1g6bbKFVDou9dJ/A=="],
 
     "@zag-js/accordion": ["@zag-js/accordion@1.39.1", "", { "dependencies": { "@zag-js/anatomy": "1.39.1", "@zag-js/core": "1.39.1", "@zag-js/dom-query": "1.39.1", "@zag-js/types": "1.39.1", "@zag-js/utils": "1.39.1" } }, "sha512-GA3m7gRTm3weSe1eMlHIsTNztcjZ6joIaRgxxKil7q/UX0xIVVGDy0aCr6oo7FAuoMiOOBVurYXILpFZ30nOXA=="],
 
