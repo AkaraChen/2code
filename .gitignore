@@ -29,3 +29,4 @@ public/file-icons/
 src-tauri/coverage/
 /coverage
 e2e-tests/artifacts/
+package-lock.json
