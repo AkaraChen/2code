@@ -22,6 +22,7 @@ const replacements = [
 				"import { listen, type UnlistenFn } from '@tauri-apps/api/event';",
 			],
 			["import * as types from './types';\n", ""],
+			["types.session_id", "unknown"],
 		],
 	},
 ];
@@ -29,7 +30,7 @@ const replacements = [
 for (const { path, pairs } of replacements) {
 	let content = await readFile(path, "utf8");
 	for (const [from, to] of pairs) {
-		content = content.replace(from, to);
+		content = content.replaceAll(from, to);
 	}
 	content = `${content.trimEnd()}\n`;
 	await writeFile(path, content);

@@ -124,6 +124,7 @@ pub fn run() {
 			handler::filesystem::write_file_content,
 			handler::filesystem::search_file,
 			handler::filesystem::get_file_tree_git_status,
+			handler::filesystem::resolve_terminal_file_path,
 			handler::font::list_system_fonts,
 			handler::shell::list_available_shells,
 			handler::sound::list_system_sounds,
