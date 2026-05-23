@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod debug;
 pub mod error;
 pub mod filesystem;

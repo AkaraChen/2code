@@ -14,6 +14,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBrowserTabsStore } from "@/features/browser/store";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	clearPtyOutput,
@@ -167,6 +168,24 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
 		setPendingLink(null);
 		void open(uri);
+	}, [pendingLink]);
+
+	const openPendingLinkInApp = useCallback(() => {
+		const uri = pendingLink;
+		if (!uri) return;
+
+		setPendingLink(null);
+		useBrowserTabsStore.getState().openUrl(profileId, uri);
+	}, [pendingLink, profileId]);
+
+	const openPendingLinkInBrowser = useCallback((browserId: string) => {
+		const uri = pendingLink;
+		if (!uri) return;
+
+		setPendingLink(null);
+		void import("@/generated").then(({ openUrlInBrowser }) => {
+			void openUrlInBrowser(browserId, uri);
+		});
 	}, [pendingLink]);
 
 	const handleTerminalLinkOpen = useCallback(
@@ -432,6 +451,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				link={pendingLink}
 				onClose={closePendingLinkDialog}
 				onOpen={openPendingLink}
+				onOpenInApp={openPendingLinkInApp}
+				onOpenInBrowser={openPendingLinkInBrowser}
 			/>
 		</>
 	);

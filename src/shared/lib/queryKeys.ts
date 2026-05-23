@@ -13,6 +13,7 @@ export const queryNamespaces = {
 	"git-ahead-count": "git-ahead-count",
 	"git-pull-request-status": "git-pull-request-status",
 	"profile-delete-check": "profile-delete-check",
+	"browsers-installed": "browsers-installed",
 	"topbar-apps": "topbar-apps",
 	"fs-file": "fs-file",
 	"fs-search": "fs-search",
@@ -65,6 +66,12 @@ export const queryKeys = {
 	profile: {
 		deleteCheck: (profileId: string) =>
 			["profile-delete-check", profileId] as const,
+	},
+	browsers: {
+		installed: { queryKey: ["browsers-installed"] as const, queryFn: async () => {
+			const { listInstalledBrowsers } = await import("@/generated");
+			return listInstalledBrowsers();
+		}},
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,

@@ -13,13 +13,14 @@ import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg"
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
-import { lazy, useMemo } from "react";
-import { FiTerminal } from "react-icons/fi";
+import { lazy, useMemo, useState } from "react";
+import { FiGlobe, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
+import { useBrowserTabs, useBrowserTabsStore } from "@/features/browser/store";
 import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import { useCloseTerminalTab } from "./hooks";
@@ -29,6 +30,7 @@ import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
 const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
+const BrowserPane = lazy(() => import("@/features/browser/BrowserPane").then(mod => ({ default: mod.BrowserPane })));
 
 // Stable fallbacks — module-level constants prevent new object refs each render,
 // which would break useShallow's equality check and cause infinite re-renders.
@@ -119,9 +121,15 @@ export default function TerminalTabs({
 	const setFileActive = useFileViewerTabsStore((state) => state.setFileActive);
 	const setTerminalActive = useFileViewerTabsStore((state) => state.setTerminalActive);
 
+	const browserState = useBrowserTabs(profileId);
+	const closeBrowserTab = useBrowserTabsStore((state) => state.closeTab);
+	const setBrowserActive = useBrowserTabsStore((state) => state.setActiveTab);
+
 	const fileTabs = fileViewerState.tabs;
 	const activeFilePath = fileViewerState.activeFilePath;
 	const fileTabActive = fileViewerState.fileTabActive;
+	const browserTabs = browserState.tabs;
+	const activeBrowserTabId = browserState.activeTabId;
 	const dirtyFilePathSet = useMemo(
 		() => new Set(dirtyFilePaths),
 		[dirtyFilePaths],
@@ -130,16 +138,30 @@ export default function TerminalTabs({
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
 
-	// Unified active tab value: file path when a file tab is active, session ID otherwise
-	const activeValue = fileTabActive
-		? (activeFilePath ?? "")
-		: (activeTabId ?? "");
+	// Track which "area" is active: file, browser, or terminal
+	const [activeBrowserArea, setActiveBrowserArea] = useState(false);
+
+	// Unified active tab value
+	const activeValue = activeBrowserArea
+		? (activeBrowserTabId ?? "")
+		: fileTabActive
+			? (activeFilePath ?? "")
+			: (activeTabId ?? "");
 	const tabMotionProps = prefersReducedMotion ? {} : FULL_TAB_MOTION_PROPS;
 
 	function handleTabChange(value: string) {
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
 			setFileActive(profileId, value);
+			setActiveBrowserArea(false);
+			return;
+		}
+
+		const isBrowserTab = browserTabs.some((tab) => tab.id === value);
+		if (isBrowserTab) {
+			setBrowserActive(profileId, value);
+			setActiveBrowserArea(true);
+			setTerminalActive(profileId);
 			return;
 		}
 
@@ -148,9 +170,10 @@ export default function TerminalTabs({
 
 		setActiveTab(profileId, value);
 		setTerminalActive(profileId);
+		setActiveBrowserArea(false);
 	}
 
-	if (tabs.length === 0 && fileTabs.length === 0) return null;
+	if (tabs.length === 0 && fileTabs.length === 0 && browserTabs.length === 0) return null;
 
 	const tabGroups: TabStripGroup[] = [
 		{
@@ -186,11 +209,23 @@ export default function TerminalTabs({
 				),
 				title: tab.title,
 				maxTitleLength: 14,
-				isSelected: fileTabActive && tab.filePath === activeValue,
+				isSelected: !activeBrowserArea && fileTabActive && tab.filePath === activeValue,
 				badge: dirtyFilePathSet.has(tab.filePath) ? (
 					<Circle size="2" bg="fg.muted" />
 				) : undefined,
 				onClose: () => closeFileTab(profileId, tab.filePath),
+			})),
+		},
+		{
+			id: "browser",
+			items: browserTabs.map((tab) => ({
+				key: tab.id,
+				value: tab.id,
+				icon: <FiGlobe size={14} />,
+				title: tab.title,
+				maxTitleLength: 16,
+				isSelected: activeBrowserArea && tab.id === activeBrowserTabId,
+				onClose: () => closeBrowserTab(profileId, tab.id),
 			})),
 		},
 	];
@@ -220,7 +255,7 @@ export default function TerminalTabs({
 			</Box>
 
 			{/* File viewer — static content, safe to conditionally render */}
-			{fileTabActive && activeFilePath && (
+			{!activeBrowserArea && fileTabActive && activeFilePath && (
 				<Box flex="1" minH="0" overflow="hidden">
 					<AsyncBoundary
 						fallback={(
@@ -237,12 +272,34 @@ export default function TerminalTabs({
 				</Box>
 			)}
 
-			{/* Terminal area — NEVER unmounted, hidden via CSS when file tab is active */}
+			{/* Browser pane — rendered when browser tab is active */}
+			{activeBrowserArea && activeBrowserTabId && (
+				<Box flex="1" minH="0" overflow="hidden">
+					<AsyncBoundary
+						fallback={(
+							<Flex align="center" justify="center" h="32">
+								<Spinner size="sm" />
+							</Flex>
+						)}
+						errorFallback={({ error, onRetry }) => (
+							<InlineError error={error} height="32" onRetry={onRetry} />
+						)}
+					>
+						{browserTabs
+							.filter((tab) => tab.id === activeBrowserTabId)
+							.map((tab) => (
+								<BrowserPane key={tab.id} url={tab.url} tabId={tab.id} />
+							))}
+					</AsyncBoundary>
+				</Box>
+			)}
+
+			{/* Terminal area — NEVER unmounted, hidden via CSS when file/browser tab is active */}
 			<Box
 				flex="1"
 				minH="0"
 				position="relative"
-				display={fileTabActive ? "none" : "block"}
+				display={fileTabActive || activeBrowserArea ? "none" : "block"}
 			>
 				{tabs.map((tab) => (
 					<Box

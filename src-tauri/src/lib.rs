@@ -138,6 +138,8 @@ pub fn run() {
 			handler::updater::install_update,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
+			handler::browser::list_installed_browsers,
+			handler::browser::open_url_in_browser,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

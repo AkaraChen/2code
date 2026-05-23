@@ -18,6 +18,7 @@ describe("queryNamespaces", () => {
 			"git-ahead-count": "git-ahead-count",
 			"git-pull-request-status": "git-pull-request-status",
 			"profile-delete-check": "profile-delete-check",
+			"browsers-installed": "browsers-installed",
 			"topbar-apps": "topbar-apps",
 			"fs-file": "fs-file",
 			"fs-search": "fs-search",
