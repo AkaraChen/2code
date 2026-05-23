@@ -126,8 +126,8 @@ fn open_url_in_browser_macos(browser_id: &str, url: &str) -> Result<(), AppError
 	}
 
 	Err(AppError::IoError(std::io::Error::other(format!(
-		"Failed to open {} for URL {}: {status}",
-		spec.app_name, url,
+		"Failed to open {} for URL {}: exit code {:?}",
+		spec.app_name, url, status.code(),
 	))))
 }
 

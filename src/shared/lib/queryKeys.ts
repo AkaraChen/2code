@@ -68,10 +68,7 @@ export const queryKeys = {
 			["profile-delete-check", profileId] as const,
 	},
 	browsers: {
-		installed: { queryKey: ["browsers-installed"] as const, queryFn: async () => {
-			const { listInstalledBrowsers } = await import("@/generated");
-			return listInstalledBrowsers();
-		}},
+		installed: ["browsers-installed"] as const,
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,

@@ -1,7 +1,6 @@
 import { Button, CloseButton, Dialog, Flex, Portal, Text } from "@chakra-ui/react";
-import { useQuery } from "@tanstack/react-query";
 import * as m from "@/paraglide/messages.js";
-import { queryKeys } from "@/shared/lib/queryKeys";
+import { useInstalledBrowsers } from "@/features/browser/hooks";
 
 interface TerminalLinkConfirmDialogProps {
 	link: string | null;
@@ -18,10 +17,7 @@ export function TerminalLinkConfirmDialog({
 	onOpenInApp,
 	onOpenInBrowser,
 }: TerminalLinkConfirmDialogProps) {
-	const { data: browsers } = useQuery({
-		...queryKeys.browsers.installed,
-		enabled: !!link,
-	});
+	const { data: browsers } = useInstalledBrowsers(!!link);
 
 	return (
 		<Dialog.Root

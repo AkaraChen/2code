@@ -51,7 +51,7 @@ export function BrowserPane({ url, tabId }: BrowserPaneProps) {
 					key={tabId}
 					src={url}
 					title={url}
-					sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+					sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
 					style={{
 						width: "100%",
 						height: "100%",

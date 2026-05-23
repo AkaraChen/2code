@@ -138,13 +138,17 @@ export default function TerminalTabs({
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
 
-	// Track which "area" is active: file, browser, or terminal
-	const [activeBrowserArea, setActiveBrowserArea] = useState(false);
+	// Track if browser area is locally active (not tracked in any store)
+	const [browserAreaActive, setBrowserAreaActive] = useState(false);
+
+	// Derive active area from store states + local browser override
+	const activeArea: "terminal" | "file" | "browser" =
+		browserAreaActive ? "browser" : fileTabActive ? "file" : "terminal";
 
 	// Unified active tab value
-	const activeValue = activeBrowserArea
+	const activeValue = activeArea === "browser"
 		? (activeBrowserTabId ?? "")
-		: fileTabActive
+		: activeArea === "file"
 			? (activeFilePath ?? "")
 			: (activeTabId ?? "");
 	const tabMotionProps = prefersReducedMotion ? {} : FULL_TAB_MOTION_PROPS;
@@ -153,14 +157,14 @@ export default function TerminalTabs({
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
 			setFileActive(profileId, value);
-			setActiveBrowserArea(false);
+			setBrowserAreaActive(false);
 			return;
 		}
 
 		const isBrowserTab = browserTabs.some((tab) => tab.id === value);
 		if (isBrowserTab) {
 			setBrowserActive(profileId, value);
-			setActiveBrowserArea(true);
+			setBrowserAreaActive(true);
 			setTerminalActive(profileId);
 			return;
 		}
@@ -170,7 +174,7 @@ export default function TerminalTabs({
 
 		setActiveTab(profileId, value);
 		setTerminalActive(profileId);
-		setActiveBrowserArea(false);
+		setBrowserAreaActive(false);
 	}
 
 	if (tabs.length === 0 && fileTabs.length === 0 && browserTabs.length === 0) return null;
@@ -184,7 +188,7 @@ export default function TerminalTabs({
 				icon: getTerminalTabIcon(tab.title),
 				title: tab.title,
 				maxTitleLength: 10,
-				isSelected: !fileTabActive && tab.id === activeValue,
+				isSelected: activeArea === "terminal" && tab.id === activeValue,
 				badge:
 					notifiedTabSet.has(tab.id) && tab.id !== activeTabId ? (
 						<Circle size="2" bg="green.500" />
@@ -209,7 +213,7 @@ export default function TerminalTabs({
 				),
 				title: tab.title,
 				maxTitleLength: 14,
-				isSelected: !activeBrowserArea && fileTabActive && tab.filePath === activeValue,
+				isSelected: activeArea === "file" && tab.filePath === activeValue,
 				badge: dirtyFilePathSet.has(tab.filePath) ? (
 					<Circle size="2" bg="fg.muted" />
 				) : undefined,
@@ -224,7 +228,7 @@ export default function TerminalTabs({
 				icon: <FiGlobe size={14} />,
 				title: tab.title,
 				maxTitleLength: 16,
-				isSelected: activeBrowserArea && tab.id === activeBrowserTabId,
+				isSelected: activeArea === "browser" && tab.id === activeBrowserTabId,
 				onClose: () => closeBrowserTab(profileId, tab.id),
 			})),
 		},
@@ -255,7 +259,7 @@ export default function TerminalTabs({
 			</Box>
 
 			{/* File viewer — static content, safe to conditionally render */}
-			{!activeBrowserArea && fileTabActive && activeFilePath && (
+			{activeArea === "file" && activeFilePath && (
 				<Box flex="1" minH="0" overflow="hidden">
 					<AsyncBoundary
 						fallback={(
@@ -273,33 +277,33 @@ export default function TerminalTabs({
 			)}
 
 			{/* Browser pane — rendered when browser tab is active */}
-			{activeBrowserArea && activeBrowserTabId && (
-				<Box flex="1" minH="0" overflow="hidden">
-					<AsyncBoundary
-						fallback={(
-							<Flex align="center" justify="center" h="32">
-								<Spinner size="sm" />
-							</Flex>
-						)}
-						errorFallback={({ error, onRetry }) => (
-							<InlineError error={error} height="32" onRetry={onRetry} />
-						)}
-					>
-						{browserTabs
-							.filter((tab) => tab.id === activeBrowserTabId)
-							.map((tab) => (
-								<BrowserPane key={tab.id} url={tab.url} tabId={tab.id} />
-							))}
-					</AsyncBoundary>
-				</Box>
-			)}
+			{activeArea === "browser" && activeBrowserTabId && (() => {
+				const activeTab = browserTabs.find((tab) => tab.id === activeBrowserTabId);
+				if (!activeTab) return null;
+				return (
+					<Box flex="1" minH="0" overflow="hidden">
+						<AsyncBoundary
+							fallback={(
+								<Flex align="center" justify="center" h="32">
+									<Spinner size="sm" />
+								</Flex>
+							)}
+							errorFallback={({ error, onRetry }) => (
+								<InlineError error={error} height="32" onRetry={onRetry} />
+							)}
+						>
+							<BrowserPane key={activeTab.id} url={activeTab.url} tabId={activeTab.id} />
+						</AsyncBoundary>
+					</Box>
+				);
+			})()}
 
 			{/* Terminal area — NEVER unmounted, hidden via CSS when file/browser tab is active */}
 			<Box
 				flex="1"
 				minH="0"
 				position="relative"
-				display={fileTabActive || activeBrowserArea ? "none" : "block"}
+				display={activeArea === "terminal" ? "block" : "none"}
 			>
 				{tabs.map((tab) => (
 					<Box
@@ -313,7 +317,7 @@ export default function TerminalTabs({
 						<Terminal
 							profileId={profileId}
 							sessionId={tab.id}
-							isActive={tab.id === activeTabId && !fileTabActive}
+							isActive={tab.id === activeTabId && activeArea === "terminal"}
 						/>
 					</Box>
 				))}
