@@ -135,6 +135,8 @@ export default function TerminalTabs({
 
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
+	// Local state is fine for notes tab — unlike xterm.js terminals, the Milkdown editor
+	// doesn't lose internal state on remount since content is persisted in the DB.
 	const [notesTabActive, setNotesTabActive] = useState(false);
 
 	// Unified active tab value: file path when a file tab is active, notes tab value, or session ID

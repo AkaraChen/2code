@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Box } from "@chakra-ui/react";
 import {
 	Milkdown,
@@ -22,6 +22,13 @@ function MilkdownEditor({ profile }: ProfileNotesEditorProps) {
 	const updateNotes = useUpdateProfileNotes();
 	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+	// Clear pending save timer on unmount
+	useEffect(() => {
+		return () => {
+			if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+		};
+	}, []);
+
 	const handleChange = useCallback(
 		(markdown: string) => {
 			if (saveTimerRef.current) {
@@ -34,6 +41,8 @@ function MilkdownEditor({ profile }: ProfileNotesEditorProps) {
 		[profile.id, updateNotes],
 	);
 
+	// Only re-create the editor when the profile ID changes (not on every keystroke).
+	// profile.notes is read once as the initial value; subsequent edits are handled by the listener.
 	useEditor(
 		(root) => {
 			return Editor.make()
