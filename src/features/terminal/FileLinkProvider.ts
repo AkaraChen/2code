@@ -8,10 +8,21 @@ import type { IBufferRange, ILink, ILinkProvider, Terminal } from "@xterm/xterm"
 import consola from "consola";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { FILE_LINK_REGEX, parseFileLink } from "./fileLinks";
+import { useFileLinkPickerStore } from "./fileLinkPickerStore";
 
 interface FileLinkProviderOptions {
 	profileId: string;
 }
+
+interface FileSearchResult {
+	name: string;
+	path: string;
+	relative_path: string;
+}
+
+type ResolvedFilePath =
+	| { type: "exact"; path: string }
+	| { type: "fuzzy"; candidates: FileSearchResult[] };
 
 export class FileLinkProvider implements ILinkProvider {
 	private readonly profileId: string;
@@ -67,14 +78,24 @@ export class FileLinkProvider implements ILinkProvider {
 					const location = parseFileLink(linkText);
 					if (!location) return;
 
-					void invoke<string>("resolve_terminal_file_path", {
+					void invoke<ResolvedFilePath>("resolve_terminal_file_path", {
 						profileId,
 						filePath: location.filePath,
 					})
-						.then((resolvedPath) => {
-							useFileViewerTabsStore
-								.getState()
-								.openFile(profileId, resolvedPath);
+						.then((result) => {
+							if (result.type === "exact") {
+								useFileViewerTabsStore
+									.getState()
+									.openFile(profileId, result.path);
+							} else if (
+								result.type === "fuzzy" &&
+								result.candidates.length > 0
+							) {
+								useFileLinkPickerStore.getState().show(
+									profileId,
+									result.candidates,
+								);
+							}
 						})
 						.catch((error) => {
 							consola.warn(

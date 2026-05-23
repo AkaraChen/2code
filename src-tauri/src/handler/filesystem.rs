@@ -4,7 +4,9 @@ use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
+use model::filesystem::{
+	FileSearchResult, FileTreeGitStatusEntry, ResolvedFilePath,
+};
 
 fn profile_worktree_path(
 	db: &DbPool,
@@ -172,14 +174,15 @@ pub async fn get_file_tree_git_status(
 }
 
 /// Resolves a (possibly relative) file path against the profile's worktree.
-/// Returns the canonical absolute path if the file exists within the worktree,
-/// or an error if the path is outside the workspace or doesn't exist.
+/// Returns either an exact match (canonical absolute path) if the file exists
+/// within the worktree, or a list of fuzzy-matched candidates based on the
+/// filename when the exact path doesn't exist.
 #[tauri::command]
 pub async fn resolve_terminal_file_path(
 	profile_id: String,
 	file_path: String,
 	state: State<'_, DbPool>,
-) -> Result<String, AppError> {
+) -> Result<ResolvedFilePath, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
 		let worktree = profile_worktree_path(&db, &profile_id)?;
@@ -193,27 +196,36 @@ pub async fn resolve_terminal_file_path(
 			worktree_path.join(clean)
 		};
 
-		// Check that the resolved path exists
-		if !resolved.exists() {
-			return Err(AppError::NotFound(format!("File: {}", file_path)));
+		// Try exact match first
+		if resolved.exists() {
+			// Canonicalize both paths to compare
+			let canonical_resolved =
+				resolved.canonicalize().map_err(AppError::IoError)?;
+			let canonical_worktree =
+				worktree_path.canonicalize().map_err(AppError::IoError)?;
+
+			// Security: ensure the resolved path is within the worktree
+			if !canonical_resolved.starts_with(&canonical_worktree) {
+				return Err(AppError::IoError(std::io::Error::other(
+					"Path is outside the workspace",
+				)));
+			}
+
+			return Ok(ResolvedFilePath::Exact {
+				path: canonical_resolved.to_string_lossy().into_owned(),
+			});
 		}
 
-		// Canonicalize both paths to compare
-		let canonical_resolved = resolved.canonicalize().map_err(|e| {
-			AppError::IoError(e)
-		})?;
-		let canonical_worktree = worktree_path.canonicalize().map_err(|e| {
-			AppError::IoError(e)
-		})?;
+		// Exact path not found — fall back to fuzzy search by filename
+		let filename = Path::new(&file_path)
+			.file_name()
+			.map(|f| f.to_string_lossy().into_owned())
+			.unwrap_or_else(|| file_path.clone());
 
-		// Security: ensure the resolved path is within the worktree
-		if !canonical_resolved.starts_with(&canonical_worktree) {
-			return Err(AppError::IoError(std::io::Error::other(
-				"Path is outside the workspace",
-			)));
-		}
+		let candidates =
+			infra::filesystem::search_files(worktree_path, &filename)?;
 
-		Ok(canonical_resolved.to_string_lossy().into_owned())
+		Ok(ResolvedFilePath::Fuzzy { candidates })
 	})
 	.await
 }
