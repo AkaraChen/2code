@@ -13,7 +13,7 @@
         "@emotion/react": "^11.14.0",
         "@fontsource-variable/bricolage-grotesque": "^5.2.10",
         "@icons-pack/react-simple-icons": "^13.13.0",
-        "@lobehub/icons-static-svg": "^1.88.0",
+        "@lobehub/icons-static-svg": "^1.90.0",
         "@milkdown/kit": "^7.21.1",
         "@milkdown/react": "^7.21.1",
         "@milkdown/theme-nord": "^7.21.1",
@@ -389,7 +389,7 @@
 
     "@lix-js/server-protocol-schema": ["@lix-js/server-protocol-schema@0.1.1", "", {}, "sha512-jBeALB6prAbtr5q4vTuxnRZZv1M2rKe8iNqRQhFJ4Tv7150unEa0vKyz0hs8Gl3fUGsWaNJBh3J8++fpbrpRBQ=="],
 
-    "@lobehub/icons-static-svg": ["@lobehub/icons-static-svg@1.88.0", "", {}, "sha512-46rnH5oNDr7OiBJ5s/T/1z8gs59E8hPpMhzSV3gi0KxziN8sJq+VIz7TA0BVduMGgv6p9BGk519Ig5vJXgK6hA=="],
+    "@lobehub/icons-static-svg": ["@lobehub/icons-static-svg@1.90.0", "", {}, "sha512-iy/OBllvvj1YOCN7NqCYJJKdLS0l02+PSSYAwXKUWpGb6i+7J5rIpLh8RaetrYcqoqSmxE2jE6w5zhhaTmPw7Q=="],
 
     "@marijn/find-cluster-break": ["@marijn/find-cluster-break@1.0.2", "", {}, "sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g=="],
 
