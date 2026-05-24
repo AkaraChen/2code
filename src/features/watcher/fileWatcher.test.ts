@@ -19,7 +19,9 @@ vi.mock("@/shared/lib/queryClient", () => ({
 async function loadWatcher() {
 	await import("./fileWatcher");
 	const [{ onEvent }] = watchProjectsMock.mock.calls.map((args) => args[0]);
-	return onEvent as { onmessage: (() => void) | null };
+	return onEvent as {
+		onmessage: ((event: { project_id: string }) => void) | null;
+	};
 }
 
 describe("fileWatcher", () => {
