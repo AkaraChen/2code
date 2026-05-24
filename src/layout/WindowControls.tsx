@@ -37,16 +37,18 @@ function TrafficLight({
 			onClick={onClick}
 			w={DOT_SIZE}
 			h={DOT_SIZE}
-			borderRadius="full"
 			bg={base}
-			border="1px solid"
-			borderColor="blackAlpha.300"
 			display="grid"
 			placeItems="center"
 			cursor="default"
 			transition="opacity 0.12s ease"
 			_focusVisible={{ outline: "none", opacity: 0.85 }}
-			css={{ WebkitAppRegion: "no-drag" }}
+			css={{
+				WebkitAppRegion: "no-drag",
+				borderRadius: "50%",
+				border: "1px solid rgba(0, 0, 0, 0.2)",
+				padding: 0,
+			}}
 		>
 			{showSymbol && (
 				<Box
