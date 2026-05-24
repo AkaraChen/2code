@@ -25,7 +25,15 @@ export default function HomePage() {
 	}, [projects, navigate]);
 
 	return (
-		<Box p="8" pt="16" h="full">
+		<Box p="8" pt="16" h="full" position="relative">
+			<Box
+				data-tauri-drag-region
+				position="absolute"
+				top="0"
+				left="0"
+				right="0"
+				h="32px"
+			/>
 			<Heading size="2xl" fontWeight="bold">
 				{m.home()}
 			</Heading>

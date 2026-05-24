@@ -79,7 +79,15 @@ export default function SettingsPage() {
 	}, [locale]);
 
 	return (
-		<Box p="8" pt="16">
+		<Box p="8" pt="16" position="relative">
+			<Box
+				data-tauri-drag-region
+				position="absolute"
+				top="0"
+				left="0"
+				right="0"
+				h="32px"
+			/>
 			<Stack gap="6">
 				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
