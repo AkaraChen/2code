@@ -1,9 +1,16 @@
 import { Box, HStack } from "@chakra-ui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
+import {
+	VscChromeClose,
+	VscChromeMaximize,
+	VscChromeMinimize,
+	VscChromeRestore,
+} from "react-icons/vsc";
 
 const BUTTON_WIDTH = "36px";
 const BUTTON_HEIGHT = "28px";
+const ICON_SIZE = 12;
 
 type ControlKind = "minimize" | "maximize" | "close";
 
@@ -22,76 +29,16 @@ function ControlIcon({
 	isMaximized: boolean;
 }) {
 	if (kind === "minimize") {
-		return (
-			<svg
-				aria-hidden="true"
-				width="9"
-				height="9"
-				viewBox="0 0 10 10"
-				fill="none"
-			>
-				<title>minimize</title>
-				<path d="M0 5h10" stroke="currentColor" strokeWidth="1" />
-			</svg>
-		);
+		return <VscChromeMinimize size={ICON_SIZE} />;
 	}
 	if (kind === "maximize") {
-		if (isMaximized) {
-			return (
-				<svg
-					aria-hidden="true"
-					width="10"
-					height="10"
-					viewBox="0 0 10 10"
-					fill="none"
-				>
-					<title>restore</title>
-					<path
-						d="M2 0h8v8H8M0 2h8v8H0V2z"
-						stroke="currentColor"
-						strokeWidth="1"
-						fill="none"
-					/>
-				</svg>
-			);
-		}
-		return (
-			<svg
-				aria-hidden="true"
-				width="9"
-				height="9"
-				viewBox="0 0 10 10"
-				fill="none"
-			>
-				<title>maximize</title>
-				<rect
-					x="0.5"
-					y="0.5"
-					width="9"
-					height="9"
-					stroke="currentColor"
-					strokeWidth="1"
-					fill="none"
-				/>
-			</svg>
+		return isMaximized ? (
+			<VscChromeRestore size={ICON_SIZE} />
+		) : (
+			<VscChromeMaximize size={ICON_SIZE} />
 		);
 	}
-	return (
-		<svg
-			aria-hidden="true"
-			width="10"
-			height="10"
-			viewBox="0 0 10 10"
-			fill="none"
-		>
-			<title>close</title>
-			<path
-				d="M0 0l10 10M10 0L0 10"
-				stroke="currentColor"
-				strokeWidth="1"
-			/>
-		</svg>
-	);
+	return <VscChromeClose size={ICON_SIZE} />;
 }
 
 function ControlButton({
