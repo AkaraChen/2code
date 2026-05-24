@@ -9,6 +9,7 @@ import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import StartupUpdateCheck from "./features/updater/StartupUpdateCheck";
 import AppSidebar from "./layout/AppSidebar";
+import WindowControls from "./layout/WindowControls";
 import {
 	AsyncBoundary,
 	PageError,
@@ -16,6 +17,7 @@ import {
 	SidebarError,
 	SidebarSkeleton,
 } from "./shared/components/Fallbacks";
+import { isWindowsPlatform } from "./shared/lib/platform";
 import "./app.css";
 
 export default function App() {
@@ -80,6 +82,7 @@ export default function App() {
 				</Box>
 			</Flex>
 			<DebugFloat />
+			{isWindowsPlatform() && <WindowControls />}
 		</Flex>
 	);
 }

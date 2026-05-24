@@ -37,6 +37,7 @@ import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
+import { isMacPlatform } from "@/shared/lib/platform";
 import { toaster } from "@/shared/providers/appToaster";
 import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectAvatar } from "./sidebar/ProjectAvatar";
@@ -62,10 +63,6 @@ import {
 	APP_SIDEBAR_MIN_WIDTH,
 	useAppSidebarStore,
 } from "./sidebarStore";
-
-function isMacPlatform() {
-	return /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
-}
 
 function insertAt<T>(items: T[], item: T, index: number) {
 	const next = [...items];
@@ -319,8 +316,8 @@ function SortableGroupRow({
 			</Text>
 			<Text color="fg.subtle">{entry.projects.length}</Text>
 		</HStack>
-	);
-}
+		);
+	}
 
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
