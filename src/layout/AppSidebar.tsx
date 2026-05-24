@@ -9,7 +9,7 @@ import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
-import { isMacPlatform } from "@/shared/lib/platform";
+import { isMacPlatform, isWindowsPlatform } from "@/shared/lib/platform";
 import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 import {
@@ -106,12 +106,12 @@ export default function AppSidebar() {
 					<Flex direction="column" h="full" minH="0" w="full">
 						<Flex
 							data-tauri-drag-region
-							h={isMacPlatform() ? "80px" : "52px"}
+							h={isMacPlatform() || isWindowsPlatform() ? "80px" : "52px"}
 							flexShrink={0}
 							align="center"
 							justify="start"
 							paddingInline="4"
-							pt={isMacPlatform() ? "8" : "2"}
+							pt={isMacPlatform() || isWindowsPlatform() ? "8" : "2"}
 						>
 							<Text
 								fontFamily="'Bricolage Grotesque Variable', sans-serif"

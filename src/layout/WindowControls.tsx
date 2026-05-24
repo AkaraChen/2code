@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 
 const DOT_SIZE = "12px";
 const DOT_GAP = "8px";
-const PADDING_X = "12px";
 
 type ControlKind = "close" | "minimize" | "maximize";
 
@@ -104,11 +103,9 @@ export default function WindowControls() {
 		<HStack
 			gap={DOT_GAP}
 			position="fixed"
-			top="0"
-			right="0"
+			top="18px"
+			left="16px"
 			zIndex="banner"
-			h="28px"
-			px={PADDING_X}
 			align="center"
 			onMouseEnter={() => setHovering(true)}
 			onMouseLeave={() => setHovering(false)}
@@ -136,6 +133,3 @@ export default function WindowControls() {
 		</HStack>
 	);
 }
-
-export const WINDOW_CONTROLS_WIDTH = 12 * 3 + 8 * 2 + 12 * 2;
-export const WINDOW_CONTROLS_HEIGHT = 28;

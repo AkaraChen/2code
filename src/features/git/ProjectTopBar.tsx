@@ -32,7 +32,6 @@ import {
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { isWindowsPlatform } from "@/shared/lib/platform";
 
 const FILE_TREE_TOGGLE_ICON_TRANSITION = {
 	type: "spring",
@@ -143,7 +142,6 @@ export default function ProjectTopBar({
 	const visibleActiveControls = activeControls.filter((id) =>
 		supportedControlIdSet.has(id),
 	);
-	const isWindows = isWindowsPlatform();
 
 	const titleContent = (
 		<HStack gap="2">
@@ -273,42 +271,18 @@ export default function ProjectTopBar({
 
 	return (
 		<>
-			{isWindows ? (
-				<>
-					<Flex
-						data-tauri-drag-region
-						align="center"
-						pl="4"
-						pr="80px"
-						pt="2"
-						pb="1"
-					>
-						{titleContent}
-					</Flex>
-					<Flex
-						justify="flex-end"
-						pl="4"
-						pr="5"
-						pb="1.5"
-						pt="0"
-					>
-						{controlsContent}
-					</Flex>
-				</>
-			) : (
-				<Flex
-					data-tauri-drag-region
-					align="flex-end"
-					justify="space-between"
-					pl="4"
-					pr="5"
-					pb="1.5"
-					pt="3"
-				>
-					{titleContent}
-					{controlsContent}
-				</Flex>
-			)}
+			<Flex
+				data-tauri-drag-region
+				align="flex-end"
+				justify="space-between"
+				pl="4"
+				pr="5"
+				pb="1.5"
+				pt="3"
+			>
+				{titleContent}
+				{controlsContent}
+			</Flex>
 
 			<ProjectSettingsDialog
 				isOpen={settingsOpen}
