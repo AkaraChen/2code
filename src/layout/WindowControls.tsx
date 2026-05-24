@@ -1,83 +1,75 @@
 import { Box, HStack } from "@chakra-ui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
-import {
-	VscChromeClose,
-	VscChromeMaximize,
-	VscChromeMinimize,
-	VscChromeRestore,
-} from "react-icons/vsc";
 
-const BUTTON_WIDTH = "36px";
-const BUTTON_HEIGHT = "28px";
-const ICON_SIZE = 12;
+const DOT_SIZE = "12px";
+const DOT_GAP = "8px";
+const PADDING_X = "12px";
 
-type ControlKind = "minimize" | "maximize" | "close";
+type ControlKind = "close" | "minimize" | "maximize";
 
-interface ControlButtonProps {
+const COLORS: Record<ControlKind, { base: string; symbol: string }> = {
+	close: { base: "#FF5F57", symbol: "#4D0000" },
+	minimize: { base: "#FEBC2E", symbol: "#995700" },
+	maximize: { base: "#28C840", symbol: "#006500" },
+};
+
+interface TrafficLightProps {
 	kind: ControlKind;
 	label: string;
 	onClick: () => void;
+	showSymbol: boolean;
 	isMaximized?: boolean;
 }
 
-function ControlIcon({
-	kind,
-	isMaximized,
-}: {
-	kind: ControlKind;
-	isMaximized: boolean;
-}) {
-	if (kind === "minimize") {
-		return <VscChromeMinimize size={ICON_SIZE} />;
-	}
-	if (kind === "maximize") {
-		return isMaximized ? (
-			<VscChromeRestore size={ICON_SIZE} />
-		) : (
-			<VscChromeMaximize size={ICON_SIZE} />
-		);
-	}
-	return <VscChromeClose size={ICON_SIZE} />;
-}
-
-function ControlButton({
+function TrafficLight({
 	kind,
 	label,
 	onClick,
+	showSymbol,
 	isMaximized = false,
-}: ControlButtonProps) {
-	const hoverBg =
-		kind === "close" ? "#c42b1c" : "rgba(127, 127, 127, 0.18)";
-	const hoverColor = kind === "close" ? "white" : undefined;
-	const activeBg =
-		kind === "close" ? "#b32717" : "rgba(127, 127, 127, 0.28)";
+}: TrafficLightProps) {
+	const { base, symbol } = COLORS[kind];
 
 	return (
 		<Box
 			as="button"
 			aria-label={label}
 			onClick={onClick}
-			w={BUTTON_WIDTH}
-			h={BUTTON_HEIGHT}
+			w={DOT_SIZE}
+			h={DOT_SIZE}
+			borderRadius="full"
+			bg={base}
+			border="1px solid"
+			borderColor="blackAlpha.300"
 			display="grid"
 			placeItems="center"
-			bg="transparent"
-			color="fg.muted"
-			borderRadius="0"
-			transition="background-color 0.08s ease, color 0.08s ease"
-			_hover={{ bg: hoverBg, color: hoverColor }}
-			_active={{ bg: activeBg }}
-			_focusVisible={{ outline: "none", bg: hoverBg, color: hoverColor }}
+			cursor="default"
+			transition="opacity 0.12s ease"
+			_focusVisible={{ outline: "none", opacity: 0.85 }}
 			css={{ WebkitAppRegion: "no-drag" }}
 		>
-			<ControlIcon kind={kind} isMaximized={isMaximized} />
+			{showSymbol && (
+				<Box
+					as="span"
+					color={symbol}
+					fontSize="9px"
+					fontWeight="bold"
+					lineHeight="1"
+					userSelect="none"
+				>
+					{kind === "close" && "×"}
+					{kind === "minimize" && "−"}
+					{kind === "maximize" && (isMaximized ? "⤡" : "+")}
+				</Box>
+			)}
 		</Box>
 	);
 }
 
 export default function WindowControls() {
 	const [isMaximized, setIsMaximized] = useState(false);
+	const [hovering, setHovering] = useState(false);
 
 	useEffect(() => {
 		const window = getCurrentWindow();
@@ -98,41 +90,52 @@ export default function WindowControls() {
 		};
 	}, []);
 
+	const handleClose = () => {
+		getCurrentWindow().close();
+	};
 	const handleMinimize = () => {
 		getCurrentWindow().minimize();
 	};
 	const handleToggleMaximize = () => {
 		getCurrentWindow().toggleMaximize();
 	};
-	const handleClose = () => {
-		getCurrentWindow().close();
-	};
 
 	return (
 		<HStack
-			gap="0"
+			gap={DOT_GAP}
 			position="fixed"
 			top="0"
 			right="0"
 			zIndex="banner"
-			h={BUTTON_HEIGHT}
+			h="28px"
+			px={PADDING_X}
+			align="center"
+			onMouseEnter={() => setHovering(true)}
+			onMouseLeave={() => setHovering(false)}
 			data-window-controls
 		>
-			<ControlButton
+			<TrafficLight
+				kind="close"
+				label="Close"
+				onClick={handleClose}
+				showSymbol={hovering}
+			/>
+			<TrafficLight
 				kind="minimize"
 				label="Minimize"
 				onClick={handleMinimize}
+				showSymbol={hovering}
 			/>
-			<ControlButton
+			<TrafficLight
 				kind="maximize"
 				label={isMaximized ? "Restore" : "Maximize"}
 				onClick={handleToggleMaximize}
+				showSymbol={hovering}
 				isMaximized={isMaximized}
 			/>
-			<ControlButton kind="close" label="Close" onClick={handleClose} />
 		</HStack>
 	);
 }
 
-export const WINDOW_CONTROLS_WIDTH = 36 * 3;
+export const WINDOW_CONTROLS_WIDTH = 12 * 3 + 8 * 2 + 12 * 2;
 export const WINDOW_CONTROLS_HEIGHT = 28;

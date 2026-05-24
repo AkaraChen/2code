@@ -279,7 +279,7 @@ export default function ProjectTopBar({
 						data-tauri-drag-region
 						align="center"
 						pl="4"
-						pr="118px"
+						pr="80px"
 						pt="2"
 						pb="1"
 					>
