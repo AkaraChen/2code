@@ -10,6 +10,7 @@ import { queryKeys } from "@/shared/lib/queryKeys";
 import { restorationPromise } from "./state";
 import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
+import { TerminalFileLinkPickerDialog } from "./TerminalFileLinkPickerDialog";
 import TerminalTabs from "./TerminalTabs";
 
 export default function TerminalLayer() {
@@ -101,11 +102,13 @@ export default function TerminalLayer() {
 								projectId={project?.id ?? profile.project_id}
 								profileId={profileId}
 								cwd={profile.worktree_path}
+								profile={profile}
 							/>
 						</ProfileLayout>
 					</div>
 				);
 			})}
+			<TerminalFileLinkPickerDialog />
 		</>
 	);
 }

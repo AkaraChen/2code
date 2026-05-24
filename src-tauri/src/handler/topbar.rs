@@ -12,6 +12,7 @@ struct TopbarAppSpec {
 	app_name: &'static str,
 	#[cfg(target_os = "macos")]
 	bundle_name: &'static str,
+	#[cfg(target_os = "windows")]
 	windows_commands: &'static [&'static str],
 }
 
@@ -21,6 +22,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "GitHub Desktop",
 		#[cfg(target_os = "macos")]
 		bundle_name: "GitHub Desktop.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["GitHubDesktop.exe", "github"],
 	},
 	TopbarAppSpec {
@@ -28,6 +30,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Visual Studio Code",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Visual Studio Code.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["code.cmd", "code.exe", "code"],
 	},
 	TopbarAppSpec {
@@ -35,6 +38,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Windsurf",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Windsurf.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["windsurf.cmd", "windsurf.exe", "windsurf"],
 	},
 	TopbarAppSpec {
@@ -42,6 +46,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Cursor",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Cursor.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["cursor.cmd", "cursor.exe", "cursor"],
 	},
 	TopbarAppSpec {
@@ -49,6 +54,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Zed",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Zed.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["zed.cmd", "zed.exe", "zed"],
 	},
 	TopbarAppSpec {
@@ -56,6 +62,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Sublime Text",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Sublime Text.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["subl.exe", "sublime_text.exe", "subl"],
 	},
 	TopbarAppSpec {
@@ -63,6 +70,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Ghostty",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Ghostty.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["ghostty.exe", "ghostty"],
 	},
 	TopbarAppSpec {
@@ -70,6 +78,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "iTerm",
 		#[cfg(target_os = "macos")]
 		bundle_name: "iTerm.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &[],
 	},
 	TopbarAppSpec {
@@ -77,6 +86,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "kitty",
 		#[cfg(target_os = "macos")]
 		bundle_name: "kitty.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["kitty.exe", "kitty"],
 	},
 	TopbarAppSpec {
@@ -84,6 +94,7 @@ const KNOWN_TOPBAR_APPS: [TopbarAppSpec; 10] = [
 		app_name: "Warp",
 		#[cfg(target_os = "macos")]
 		bundle_name: "Warp.app",
+		#[cfg(target_os = "windows")]
 		windows_commands: &["warp.exe", "warp"],
 	},
 ];

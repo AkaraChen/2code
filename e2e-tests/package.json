@@ -8,6 +8,6 @@
   "dependencies": {
     "chai": "^6.0.0",
     "mocha": "^11.7.1",
-    "selenium-webdriver": "^4.34.0"
+    "selenium-webdriver": "^4.44.0"
   }
 }

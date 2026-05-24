@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
+import { argv, env } from "node:process";
 
-const mode = process.argv[2];
-const bun = process.env.BUN || "bun";
+const mode = argv[2];
+const bun = env.BUN || "bun";
 
 if (mode === "dev") {
 	execFileSync(bun, ["./scripts/build-helper.mjs", "debug"], {

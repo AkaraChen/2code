@@ -161,12 +161,6 @@ function buildModelPaths(
 	return paths;
 }
 
-function getOnlyDirectoryChildPath(childPaths: readonly string[]) {
-	return childPaths.length === 1 && childPaths[0]?.endsWith("/")
-		? childPaths[0]
-		: null;
-}
-
 function getContextMenuActionPaths(
 	itemPath: string,
 	selectedPaths: readonly string[],
@@ -533,30 +527,9 @@ export default function FileTreePanel({
 		},
 		[loadFileTreeChildPaths],
 	);
-	const loadExpandedDirectoryBranch = useCallback(
+	const loadExpandedDirectoryChildren = useCallback(
 		(directoryPath: string) => {
-			void loadDirectoryChildren(directoryPath).then(
-				async (initialChildPaths) => {
-					if (!expandedPathSetRef.current.has(directoryPath)) return;
-					const visitedDirectoryPaths = new Set([directoryPath]);
-					let nextDirectoryPath =
-						getOnlyDirectoryChildPath(initialChildPaths);
-
-					while (
-						nextDirectoryPath &&
-						!visitedDirectoryPaths.has(nextDirectoryPath)
-					) {
-						if (!expandedPathSetRef.current.has(directoryPath)) return;
-						visitedDirectoryPaths.add(nextDirectoryPath);
-						expandedPathSetRef.current.add(nextDirectoryPath);
-						const childPaths =
-							await loadDirectoryChildren(nextDirectoryPath);
-						if (!expandedPathSetRef.current.has(directoryPath)) return;
-						nextDirectoryPath =
-							getOnlyDirectoryChildPath(childPaths);
-					}
-				},
-			);
+			void loadDirectoryChildren(directoryPath);
 		},
 		[loadDirectoryChildren],
 	);
@@ -621,7 +594,7 @@ export default function FileTreePanel({
 			},
 		},
 		density: "compact",
-		flattenEmptyDirectories: true,
+		flattenEmptyDirectories: false,
 		gitStatus: [],
 		icons: "complete",
 		initialExpansion: "closed",
@@ -692,13 +665,13 @@ export default function FileTreePanel({
 			if (item?.isDirectory() && "isExpanded" in item) {
 				if (item.isExpanded()) {
 					expandedPathSetRef.current.add(item.getPath());
-					loadExpandedDirectoryBranch(item.getPath());
+					loadExpandedDirectoryChildren(item.getPath());
 				} else {
 					expandedPathSetRef.current.delete(item.getPath());
 				}
 			}
 		},
-		[loadExpandedDirectoryBranch, model, openRelativeFile],
+		[loadExpandedDirectoryChildren, model, openRelativeFile],
 	);
 
 	const handleTreeKeyUp = useCallback(
@@ -707,12 +680,12 @@ export default function FileTreePanel({
 			if (!item?.isDirectory() || !("isExpanded" in item)) return;
 			if (item.isExpanded()) {
 				expandedPathSetRef.current.add(item.getPath());
-				loadExpandedDirectoryBranch(item.getPath());
+				loadExpandedDirectoryChildren(item.getPath());
 			} else {
 				expandedPathSetRef.current.delete(item.getPath());
 			}
 		},
-		[loadExpandedDirectoryBranch, model],
+		[loadExpandedDirectoryChildren, model],
 	);
 
 	const handleTreeMouseDown = useCallback(

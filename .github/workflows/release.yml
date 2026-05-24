@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: "Publish as a prerelease"
+        description: Publish as a prerelease
         type: boolean
         default: false
   push:
@@ -26,12 +26,12 @@ jobs:
             platform: macos-15
             rustTargets: aarch64-apple-darwin
             helperTarget: aarch64-apple-darwin
-            args: "--target aarch64-apple-darwin"
+            args: --target aarch64-apple-darwin
           - name: macOS x64
             platform: macos-15-intel
             rustTargets: x86_64-apple-darwin
             helperTarget: x86_64-apple-darwin
-            args: "--target x86_64-apple-darwin"
+            args: --target x86_64-apple-darwin
           - name: Linux x64
             platform: ubuntu-24.04
             rustTargets: ""
@@ -41,7 +41,7 @@ jobs:
             platform: windows-latest
             rustTargets: ""
             helperTarget: ""
-            args: "--bundles nsis"
+            args: --bundles nsis
 
     steps:
       - name: Checkout
@@ -89,12 +89,38 @@ jobs:
       - name: Install app dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install Apple Developer ID G2 certificate
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$HOME/Library/Keychains/login.keychain-db"
+          security find-identity -v -p codesigning
+
+      - name: Prepare Apple notarization key
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/appstoreconnect/private_keys"
+          key_path="$RUNNER_TEMP/appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
           TWOCODE_HELPER_TARGET: ${{ matrix.helperTarget }}
         with:
           tauriScript: bun tauri

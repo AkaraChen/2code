@@ -272,7 +272,7 @@ describe("fileTreePanel", () => {
 		});
 	});
 
-	it("loads through single-child directory chains when a flattened directory is expanded", async () => {
+	it("loads only direct children when a directory is expanded", async () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(["src/"], false),
 		);
@@ -292,13 +292,13 @@ describe("fileTreePanel", () => {
 		await waitFor(() => {
 			expect(loadChildPathsMock).toHaveBeenCalledWith("src/");
 		});
-		await waitFor(() => {
-			expect(loadChildPathsMock).toHaveBeenCalledWith("src/components/");
-		});
+		expect(loadChildPathsMock).not.toHaveBeenCalledWith(
+			"src/components/",
+		);
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(
-				["src/", "src/components/", "src/components/Button.tsx"],
-				{ initialExpandedPaths: ["src/", "src/components/"] },
+				["src/", "src/components/"],
+				{ initialExpandedPaths: ["src/"] },
 			);
 		});
 	});
@@ -321,7 +321,7 @@ describe("fileTreePanel", () => {
 		renderPanel();
 
 		expect(useFileTreeOptionsRef.current).toMatchObject({
-			flattenEmptyDirectories: true,
+			flattenEmptyDirectories: false,
 			stickyFolders: true,
 			density: "compact",
 			icons: "complete",

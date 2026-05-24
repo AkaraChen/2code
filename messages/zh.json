@@ -80,6 +80,10 @@
 	"terminalOpenLink": "打开链接",
 	"terminalOpenLinkConfirmDescription": "要在 2code 外部打开这个链接吗？下次按住 Ctrl 再点击可直接打开。",
 	"terminalOpenLinkUrlLabel": "链接",
+	"terminalFilePathTooltip": "在编辑器中打开文件（按住 Ctrl 点击可跳过确认）",
+	"terminalFilePathOutsideWorkspace": "此文件位于当前工作区之外，无法打开。",
+	"terminalChooseFilePath": "选择文件",
+	"terminalChooseFilePathDescription": "没有找到完全匹配的文件路径。请选择一个匹配的文件打开。",
 	"showAllFonts": "显示所有字体",
 	"fontSize": "字体大小",
 	"appearance": "外观",
@@ -259,5 +263,7 @@
 	"updateIdleDescription": "检查 GitHub Releases 是否有新版本。",
 	"updateReleasedAt": "发布时间：{date}",
 	"updateCheckFailedTitle": "检查更新失败",
-	"updateInstallFailedTitle": "升级失败"
+	"updateInstallFailedTitle": "升级失败",
+	"notes": "笔记",
+	"notesPlaceholder": "为此配置文件编写笔记…"
 }
