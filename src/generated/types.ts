@@ -228,6 +228,12 @@ export interface ReadFileContentParams {
 }
 
 
+export interface ReadImageFileAsDataUrlParams {
+  path: string;
+  [key: string]: unknown;
+}
+
+
 export interface WriteFileContentParams {
   path: string;
   content: string;

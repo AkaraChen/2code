@@ -40,6 +40,11 @@ export async function readFileContent(params: types.ReadFileContentParams): Prom
 }
 
 
+export async function readImageFileAsDataUrl(params: types.ReadImageFileAsDataUrlParams): Promise<string> {
+  return invoke('read_image_file_as_data_url', params);
+}
+
+
 export async function writeFileContent(params: types.WriteFileContentParams): Promise<void> {
   return invoke('write_file_content', params);
 }

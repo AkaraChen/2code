@@ -16,6 +16,7 @@ export const queryNamespaces = {
 	"profile-notes": "profile-notes",
 	"topbar-apps": "topbar-apps",
 	"fs-file": "fs-file",
+	"fs-image": "fs-image",
 	"fs-search": "fs-search",
 	"fs-tree": "fs-tree",
 };
@@ -71,6 +72,7 @@ export const queryKeys = {
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,
+		image: (path: string) => ["fs-image", path] as const,
 		search: (profileId: string, query: string) =>
 			["fs-search", profileId, query] as const,
 		tree: (path: string) => ["fs-tree", path] as const,

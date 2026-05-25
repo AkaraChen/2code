@@ -16,8 +16,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
+import { getPreviewableImageMimeType } from "@/features/git/utils";
 import { detectMonacoLanguage } from "@/shared/lib/languageDetection";
-import { useFileContent, useSaveFileContent } from "./hooks";
+import { useFileContent, useImageFileDataUrl, useSaveFileContent } from "./hooks";
 
 interface FileViewerPaneProps {
 	filePath: string;
@@ -43,18 +44,26 @@ export default function FileViewerPane({
 	const saveHandlerRef = useRef<() => void>(() => {});
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
+	const filename = filePath.split("/").pop() ?? "";
+	const isImage = getPreviewableImageMimeType(filename) != null;
+
 	const {
 		data: content,
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath, true);
+	} = useFileContent(filePath, !isImage);
+	const {
+		data: imageDataUrl,
+		error: imageError,
+		isError: isImageError,
+		isLoading: isImageLoading,
+	} = useImageFileDataUrl(filePath, isImage);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
 	} = useSaveFileContent(profileId);
 
-	const filename = filePath.split("/").pop() ?? "";
 	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
 	const draftValue = draftsByPath[filePath];
@@ -168,6 +177,52 @@ export default function FileViewerPane({
 			() => saveHandlerRef.current(),
 		);
 	}, []);
+
+	if (isImage) {
+		if (isImageLoading && !imageDataUrl) {
+			return (
+				<Flex align="center" justify="center" h="32">
+					<Spinner size="sm" />
+				</Flex>
+			);
+		}
+
+		if (isImageError && !imageDataUrl) {
+			return (
+				<Flex align="center" justify="center" h="32" px="6">
+					<Text color="fg.muted" fontSize="sm" textAlign="center">
+						{imageError instanceof Error
+							? imageError.message
+							: String(imageError)}
+					</Text>
+				</Flex>
+			);
+		}
+
+		if (!imageDataUrl) return null;
+
+		return (
+			<Flex
+				ref={paneRef}
+				align="center"
+				justify="center"
+				h="full"
+				minH="0"
+				p="4"
+				overflow="auto"
+			>
+				<img
+					src={imageDataUrl}
+					alt={filename}
+					style={{
+						maxWidth: "100%",
+						maxHeight: "100%",
+						objectFit: "contain",
+					}}
+				/>
+			</Flex>
+		);
+	}
 
 	if (isLoading && !hasLoadedFile) {
 		return (

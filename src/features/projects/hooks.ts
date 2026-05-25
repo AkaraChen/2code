@@ -30,6 +30,7 @@ import {
 	listProjects,
 	moveFileTreePaths,
 	readFileContent,
+	readImageFileAsDataUrl,
 	renameFileTreePath,
 	saveProjectConfig,
 	searchFile,
@@ -416,6 +417,15 @@ export function useFileContent(path: string, enabled = true) {
 	return useQuery({
 		queryKey: queryKeys.fs.file(path),
 		queryFn: () => readFileContent({ path }),
+		enabled: !!path && enabled,
+		staleTime: 10000,
+	});
+}
+
+export function useImageFileDataUrl(path: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.fs.image(path),
+		queryFn: () => readImageFileAsDataUrl({ path }),
 		enabled: !!path && enabled,
 		staleTime: 10000,
 	});

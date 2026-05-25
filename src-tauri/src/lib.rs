@@ -121,6 +121,7 @@ pub fn run() {
 			handler::filesystem::move_file_tree_paths,
 			handler::filesystem::delete_file_tree_paths,
 			handler::filesystem::read_file_content,
+			handler::filesystem::read_image_file_as_data_url,
 			handler::filesystem::write_file_content,
 			handler::filesystem::search_file,
 			handler::filesystem::get_file_tree_git_status,

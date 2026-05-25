@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use base64::Engine;
 use tauri::State;
 
 use infra::db::DbPool;
@@ -7,6 +8,24 @@ use model::error::AppError;
 use model::filesystem::{
 	FileSearchResult, FileTreeGitStatusEntry, ResolvedFilePath,
 };
+
+const MAX_IMAGE_BYTES: u64 = 10_000_000;
+
+fn image_mime_from_extension(path: &Path) -> Option<&'static str> {
+	let extension = path.extension()?.to_str()?.to_ascii_lowercase();
+	match extension.as_str() {
+		"apng" => Some("image/apng"),
+		"avif" => Some("image/avif"),
+		"bmp" => Some("image/bmp"),
+		"cur" | "ico" => Some("image/x-icon"),
+		"gif" => Some("image/gif"),
+		"jfif" | "jpe" | "jpeg" | "jpg" | "pjp" | "pjpeg" => Some("image/jpeg"),
+		"png" => Some("image/png"),
+		"svg" => Some("image/svg+xml"),
+		"webp" => Some("image/webp"),
+		_ => None,
+	}
+}
 
 fn profile_worktree_path(
 	db: &DbPool,
@@ -115,6 +134,42 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 		String::from_utf8(bytes).map_err(|_| {
 			AppError::IoError(std::io::Error::other("Invalid UTF-8"))
 		})
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn read_image_file_as_data_url(
+	path: String,
+) -> Result<String, AppError> {
+	super::run_blocking(move || {
+		let file_path = Path::new(&path);
+		if !file_path.exists() {
+			return Err(AppError::NotFound(format!("File: {path}")));
+		}
+		if file_path.is_dir() {
+			return Err(AppError::IoError(std::io::Error::other(
+				"Path is a directory",
+			)));
+		}
+
+		let mime = image_mime_from_extension(file_path).ok_or_else(|| {
+			AppError::IoError(std::io::Error::other(
+				"Not a previewable image",
+			))
+		})?;
+
+		let metadata = std::fs::metadata(&path)?;
+		if metadata.len() > MAX_IMAGE_BYTES {
+			return Err(AppError::IoError(std::io::Error::other(
+				"Image too large (> 10MB)",
+			)));
+		}
+
+		let bytes = std::fs::read(&path)?;
+		let encoded =
+			base64::engine::general_purpose::STANDARD.encode(&bytes);
+		Ok(format!("data:{mime};base64,{encoded}"))
 	})
 	.await
 }

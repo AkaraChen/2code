@@ -12,7 +12,11 @@ import FileViewerPane from "./FileViewerPane";
 import {
 	useFileViewerDirtyStore,
 } from "./fileViewerTabsStore";
-import { useFileContent, useSaveFileContent } from "./hooks";
+import {
+	useFileContent,
+	useImageFileDataUrl,
+	useSaveFileContent,
+} from "./hooks";
 
 const { saveMutateMock } = vi.hoisted(() => ({
 	saveMutateMock: vi.fn(),
@@ -47,6 +51,7 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("./hooks", () => ({
 	useFileContent: vi.fn(),
+	useImageFileDataUrl: vi.fn(),
 	useSaveFileContent: vi.fn(),
 }));
 
@@ -96,6 +101,12 @@ describe("fileViewerPane", () => {
 			.mockReturnValue(createVisibleRectList());
 		vi.mocked(useFileContent).mockReturnValue({
 			data: fileContent,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FileContentResult);
+		vi.mocked(useImageFileDataUrl).mockReturnValue({
+			data: undefined,
 			isLoading: false,
 			isError: false,
 			error: null,

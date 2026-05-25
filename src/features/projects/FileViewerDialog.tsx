@@ -10,9 +10,10 @@ import {
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
+import { getPreviewableImageMimeType } from "@/features/git/utils";
 import { detectLanguage } from "@/shared/lib/languageDetection";
 import { getPrismTheme } from "./prismThemes";
-import { useFileContent } from "./hooks";
+import { useFileContent, useImageFileDataUrl } from "./hooks";
 
 interface FileViewerDialogProps {
 	filePath: string | null;
@@ -28,17 +29,22 @@ export default function FileViewerDialog({
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const prismStyle = getPrismTheme(themeId);
 
+	const filename = filePath?.split("/").pop() ?? "";
+	const isImage = getPreviewableImageMimeType(filename) != null;
+
 	const {
 		data: content,
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(
-		filePath ?? "",
-		!!filePath,
-	);
+	} = useFileContent(filePath ?? "", !!filePath && !isImage);
+	const {
+		data: imageDataUrl,
+		error: imageError,
+		isError: isImageError,
+		isLoading: isImageLoading,
+	} = useImageFileDataUrl(filePath ?? "", !!filePath && isImage);
 
-	const filename = filePath?.split("/").pop() ?? "";
 	const language = detectLanguage(filename);
 
 	return (
@@ -57,44 +63,83 @@ export default function FileViewerDialog({
 							</Dialog.Title>
 						</Dialog.Header>
 						<Dialog.Body p="0" overflow="auto" flex="1">
-							{isLoading && (
-								<Flex align="center" justify="center" h="32">
-									<Spinner size="sm" />
-								</Flex>
-							)}
-							{isError && (
-								<Flex align="center" justify="center" h="32" px="6">
-									<Text color="fg.muted" fontSize="sm" textAlign="center">
-										{error instanceof Error ? error.message : String(error)}
-									</Text>
-								</Flex>
-							)}
-							{content != null && (
-								<Box
-									css={{
-										"& pre": {
-											margin: "0 !important",
-											borderRadius: "0 !important",
-											fontSize: `${fontSize}px !important`,
-											fontFamily: `"${fontFamily}", monospace !important`,
-										},
-									}}
-								>
-									<SyntaxHighlighter
-										language={language}
-										style={prismStyle}
-										showLineNumbers
-										wrapLongLines={false}
-										customStyle={{
-											margin: 0,
-											borderRadius: 0,
-											fontSize: `${fontSize}px`,
-											fontFamily: `"${fontFamily}", monospace`,
-										}}
-									>
-										{content}
-									</SyntaxHighlighter>
-								</Box>
+							{isImage ? (
+								<>
+									{isImageLoading && (
+										<Flex align="center" justify="center" h="32">
+											<Spinner size="sm" />
+										</Flex>
+									)}
+									{isImageError && (
+										<Flex align="center" justify="center" h="32" px="6">
+											<Text color="fg.muted" fontSize="sm" textAlign="center">
+												{imageError instanceof Error
+													? imageError.message
+													: String(imageError)}
+											</Text>
+										</Flex>
+									)}
+									{imageDataUrl != null && (
+										<Flex
+											align="center"
+											justify="center"
+											h="full"
+											p="4"
+										>
+											<img
+												src={imageDataUrl}
+												alt={filename}
+												style={{
+													maxWidth: "100%",
+													maxHeight: "100%",
+													objectFit: "contain",
+												}}
+											/>
+										</Flex>
+									)}
+								</>
+							) : (
+								<>
+									{isLoading && (
+										<Flex align="center" justify="center" h="32">
+											<Spinner size="sm" />
+										</Flex>
+									)}
+									{isError && (
+										<Flex align="center" justify="center" h="32" px="6">
+											<Text color="fg.muted" fontSize="sm" textAlign="center">
+												{error instanceof Error ? error.message : String(error)}
+											</Text>
+										</Flex>
+									)}
+									{content != null && (
+										<Box
+											css={{
+												"& pre": {
+													margin: "0 !important",
+													borderRadius: "0 !important",
+													fontSize: `${fontSize}px !important`,
+													fontFamily: `"${fontFamily}", monospace !important`,
+												},
+											}}
+										>
+											<SyntaxHighlighter
+												language={language}
+												style={prismStyle}
+												showLineNumbers
+												wrapLongLines={false}
+												customStyle={{
+													margin: 0,
+													borderRadius: 0,
+													fontSize: `${fontSize}px`,
+													fontFamily: `"${fontFamily}", monospace`,
+												}}
+											>
+												{content}
+											</SyntaxHighlighter>
+										</Box>
+									)}
+								</>
 							)}
 						</Dialog.Body>
 						<Dialog.CloseTrigger asChild>
