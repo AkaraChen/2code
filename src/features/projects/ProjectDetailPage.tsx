@@ -23,6 +23,7 @@ import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore"
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
+import TerminalTabs from "@/features/terminal/TerminalTabs";
 import {
 	resolveGlobalTerminalTemplate,
 	resolveProjectTerminalTemplate,
@@ -48,6 +49,9 @@ export default function ProjectDetailPage() {
 	);
 	const hasFileTabs = useFileViewerTabsStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
+	);
+	const notesActive = useFileViewerTabsStore(
+		(s) => s.profiles[profileId ?? ""]?.notesActive ?? false,
 	);
 	const createTab = useCreateTerminalTab();
 	const projectConfig = useProjectConfigQuery(project?.id ?? "");
@@ -98,7 +102,138 @@ export default function ProjectDetailPage() {
 		return <Navigate to="/" replace />;
 	}
 
-	const shouldRenderEmptyState = !hasTabs && !hasFileTabs;
+	const shouldRenderEmptyState = !hasTabs && !hasFileTabs && !notesActive;
+	const emptyTerminalState = (
+		<Center h="full">
+			<EmptyState.Root size="sm">
+				<EmptyState.Content>
+					<EmptyState.Indicator>
+						<FiTerminal />
+					</EmptyState.Indicator>
+					<VStack textAlign="center">
+						<EmptyState.Title>
+							{m.noTerminalsOpen()}
+						</EmptyState.Title>
+						<EmptyState.Description>
+							{m.noTerminalsOpenDescription()}
+						</EmptyState.Description>
+					</VStack>
+					<HStack gap="0">
+						<Button
+							disabled={createTab.isPending}
+							borderEndRadius={hasTemplates ? "0" : undefined}
+							onClick={() =>
+								createTab.mutate({
+									profileId: profile.id,
+									cwd: profile.worktree_path,
+								})
+							}
+						>
+							<FiPlus />
+							{m.newTerminal()}
+						</Button>
+						{hasTemplates && (
+							<Menu.Root>
+								<Menu.Trigger asChild>
+									<Button
+										disabled={createTab.isPending}
+										borderStartRadius="0"
+										borderStartWidth="1px"
+										px="2"
+										aria-label="Choose template"
+									>
+										<FiChevronDown />
+									</Button>
+								</Menu.Trigger>
+								<Portal>
+									<Menu.Positioner>
+										<Menu.Content minW="56">
+											{projectTemplates.length > 0 && (
+												<>
+													<Box
+														px="3"
+														pt="2"
+														pb="1"
+														fontSize="xs"
+														fontWeight="semibold"
+														color="fg.muted"
+														textTransform="uppercase"
+													>
+														{m.projectTerminalTemplates()}
+													</Box>
+													{projectTemplates.map((template) => (
+														<Menu.Item
+															key={template.id}
+															value={template.id}
+															onClick={() => {
+																void handleTemplateClick(
+																	template,
+																	"project",
+																);
+															}}
+														>
+															<Stack gap="0.5" align="start">
+																<Text fontSize="sm">
+																	{template.name}
+																</Text>
+																{template.cwd.trim() && (
+																	<Text
+																		fontSize="xs"
+																		color="fg.muted"
+																	>
+																		{template.cwd.trim()}
+																	</Text>
+																)}
+															</Stack>
+														</Menu.Item>
+													))}
+												</>
+											)}
+											{projectTemplates.length > 0 &&
+												globalTemplates.length > 0 && (
+													<Menu.Separator />
+												)}
+											{globalTemplates.length > 0 && (
+												<>
+													<Box
+														px="3"
+														pt="2"
+														pb="1"
+														fontSize="xs"
+														fontWeight="semibold"
+														color="fg.muted"
+														textTransform="uppercase"
+													>
+														{m.globalTerminalTemplates()}
+													</Box>
+													{globalTemplates.map((template) => (
+														<Menu.Item
+															key={template.id}
+															value={template.id}
+															onClick={() => {
+																void handleTemplateClick(
+																	template,
+																	"global",
+																);
+															}}
+														>
+															<Text fontSize="sm">
+																{template.name}
+															</Text>
+														</Menu.Item>
+													))}
+												</>
+											)}
+										</Menu.Content>
+									</Menu.Positioner>
+								</Portal>
+							</Menu.Root>
+						)}
+					</HStack>
+				</EmptyState.Content>
+			</EmptyState.Root>
+		</Center>
+	);
 
 	return (
 		<>
@@ -109,135 +244,13 @@ export default function ProjectDetailPage() {
 					profile={profile}
 					isActive
 				>
-					<Center h="full">
-						<EmptyState.Root size="sm">
-							<EmptyState.Content>
-								<EmptyState.Indicator>
-									<FiTerminal />
-								</EmptyState.Indicator>
-								<VStack textAlign="center">
-									<EmptyState.Title>
-										{m.noTerminalsOpen()}
-									</EmptyState.Title>
-									<EmptyState.Description>
-										{m.noTerminalsOpenDescription()}
-									</EmptyState.Description>
-								</VStack>
-								<HStack gap="0">
-									<Button
-										disabled={createTab.isPending}
-										borderEndRadius={hasTemplates ? "0" : undefined}
-										onClick={() =>
-											createTab.mutate({
-												profileId: profile.id,
-												cwd: profile.worktree_path,
-											})
-										}
-									>
-										<FiPlus />
-										{m.newTerminal()}
-									</Button>
-									{hasTemplates && (
-										<Menu.Root>
-											<Menu.Trigger asChild>
-												<Button
-													disabled={createTab.isPending}
-													borderStartRadius="0"
-													borderStartWidth="1px"
-													px="2"
-													aria-label="Choose template"
-												>
-													<FiChevronDown />
-												</Button>
-											</Menu.Trigger>
-											<Portal>
-												<Menu.Positioner>
-													<Menu.Content minW="56">
-														{projectTemplates.length > 0 && (
-															<>
-																<Box
-																	px="3"
-																	pt="2"
-																	pb="1"
-																	fontSize="xs"
-																	fontWeight="semibold"
-																	color="fg.muted"
-																	textTransform="uppercase"
-																>
-																	{m.projectTerminalTemplates()}
-																</Box>
-																{projectTemplates.map((template) => (
-																	<Menu.Item
-																		key={template.id}
-																		value={template.id}
-																		onClick={() => {
-																			void handleTemplateClick(
-																				template,
-																			"project",
-																			);
-																		}}
-																	>
-																		<Stack gap="0.5" align="start">
-																			<Text fontSize="sm">
-																				{template.name}
-																			</Text>
-																			{template.cwd.trim() && (
-																				<Text
-																					fontSize="xs"
-																					color="fg.muted"
-																				>
-																					{template.cwd.trim()}
-																				</Text>
-																			)}
-																		</Stack>
-																	</Menu.Item>
-																))}
-															</>
-														)}
-														{projectTemplates.length > 0 &&
-															globalTemplates.length > 0 && (
-																<Menu.Separator />
-															)}
-														{globalTemplates.length > 0 && (
-															<>
-																<Box
-																	px="3"
-																	pt="2"
-																	pb="1"
-																	fontSize="xs"
-																	fontWeight="semibold"
-																	color="fg.muted"
-																	textTransform="uppercase"
-																>
-																	{m.globalTerminalTemplates()}
-																</Box>
-																{globalTemplates.map((template) => (
-																	<Menu.Item
-																		key={template.id}
-																		value={template.id}
-																		onClick={() => {
-																			void handleTemplateClick(
-																				template,
-																				"global",
-																			);
-																		}}
-																	>
-																		<Text fontSize="sm">
-																			{template.name}
-																		</Text>
-																	</Menu.Item>
-																))}
-															</>
-														)}
-													</Menu.Content>
-												</Menu.Positioner>
-											</Portal>
-										</Menu.Root>
-									)}
-								</HStack>
-							</EmptyState.Content>
-						</EmptyState.Root>
-					</Center>
+					<TerminalTabs
+						projectId={project.id}
+						profileId={profile.id}
+						cwd={profile.worktree_path}
+						profile={profile}
+						emptyFallback={emptyTerminalState}
+					/>
 				</ProfileLayout>
 			) : null}
 		</>

@@ -151,11 +151,13 @@ function TabMotionItem({
 }
 
 export function TabStrip({
+	leadingControl,
 	groups,
 	motionProps,
 	onSelect,
 	trailingControls,
 }: {
+	leadingControl?: ReactNode;
 	groups: TabStripGroup[];
 	motionProps: Record<string, unknown>;
 	onSelect: (value: string) => void;
@@ -171,6 +173,7 @@ export function TabStrip({
 			w="full"
 			minW="max-content"
 		>
+			{leadingControl}
 			<AnimatePresence initial={false}>
 				{visibleGroups.flatMap((group) =>
 					group.items.map((item) => (

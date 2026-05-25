@@ -143,6 +143,18 @@ a,
 	padding: 0;
 }
 
+.milkdown-wrapper .profile-notes-placeholder {
+	position: relative;
+}
+
+.milkdown-wrapper .profile-notes-placeholder::before {
+	content: attr(data-placeholder);
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--chakra-colors-fg-muted);
+	pointer-events: none;
+}
+
 .milkdown-wrapper .ProseMirror > * + * {
 	margin-top: 0.5em;
 }
@@ -168,6 +180,64 @@ a,
 .milkdown-wrapper .ProseMirror ul,
 .milkdown-wrapper .ProseMirror ol {
 	padding-left: 1.5em;
+	color: var(--chakra-colors-fg);
+}
+
+.milkdown-wrapper .ProseMirror ul {
+	list-style: disc;
+}
+
+.milkdown-wrapper .ProseMirror ol {
+	list-style: decimal;
+}
+
+.milkdown-wrapper .ProseMirror li {
+	color: var(--chakra-colors-fg);
+}
+
+.milkdown-wrapper .ProseMirror li::marker {
+	color: var(--chakra-colors-fg) !important;
+	-webkit-text-fill-color: var(--chakra-colors-fg);
+}
+
+.milkdown-wrapper .ProseMirror input[type="checkbox"] {
+	accent-color: var(--chakra-colors-fg-muted);
+}
+
+.profile-notes-slash-menu {
+	position: absolute;
+	z-index: 20;
+	display: none;
+	min-width: 180px;
+	max-height: 280px;
+	overflow-y: auto;
+	padding: 4px;
+	border: 1px solid var(--chakra-colors-border);
+	border-radius: 8px;
+	background: var(--chakra-colors-bg-panel);
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.profile-notes-slash-menu[data-show="true"] {
+	display: grid;
+	gap: 2px;
+}
+
+.profile-notes-slash-menu__item {
+	width: 100%;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--chakra-colors-fg);
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.4;
+	text-align: start;
+	padding: 6px 8px;
+}
+
+.profile-notes-slash-menu__item:hover {
+	background: var(--chakra-colors-bg-muted);
 }
 
 .milkdown-wrapper .ProseMirror code {
