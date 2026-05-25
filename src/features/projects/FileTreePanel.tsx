@@ -848,7 +848,11 @@ export default function FileTreePanel({
 								zIndex={1}
 								onPointerDown={resize.handlePointerDown}
 								onKeyDown={resize.handleKeyDown}
-								_focusVisible={{ outline: "none" }}
+								_focusVisible={{
+									outline: "2px solid",
+									outlineColor: "var(--app-focus-ring)",
+									outlineOffset: "-2px",
+								}}
 							/>
 						)}
 					</motion.div>

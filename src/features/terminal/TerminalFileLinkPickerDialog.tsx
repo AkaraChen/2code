@@ -66,7 +66,7 @@ export function TerminalFileLinkPickerDialog() {
 										_hover={{ bg: "bg.subtle" }}
 										_focusVisible={{
 											outline: "2px solid",
-											outlineColor: "colorPalette.focusRing",
+											outlineColor: "var(--app-focus-ring)",
 											outlineOffset: "-2px",
 										}}
 										onClick={() => handleOpen(candidate.path)}

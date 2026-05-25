@@ -110,7 +110,7 @@ export default function ProjectDetailPage() {
 					isActive
 				>
 					<Center h="full">
-						<EmptyState.Root>
+						<EmptyState.Root size="sm">
 							<EmptyState.Content>
 								<EmptyState.Indicator>
 									<FiTerminal />

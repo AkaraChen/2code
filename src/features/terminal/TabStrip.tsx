@@ -84,7 +84,7 @@ function TabButton({
 			_active={{ bg: "bg.muted", color: "fg" }}
 			_focusVisible={{
 				outline: "2px solid",
-				outlineColor: "colorPalette.focusRing",
+				outlineColor: "var(--app-focus-ring)",
 				outlineOffset: "-2px",
 			}}
 			draggable={false}
