@@ -20,6 +20,29 @@ const { saveMutateMock } = vi.hoisted(() => ({
 
 vi.mock("@/shared/lib/monaco", () => ({}));
 
+vi.mock("@/features/markdown/MarkdownEditor", () => ({
+	default: ({
+		initialMarkdown,
+		onMarkdownChange,
+		onRequestSave,
+	}: {
+		initialMarkdown: string;
+		onMarkdownChange: (markdown: string) => void;
+		onRequestSave?: (markdown: string) => void;
+	}) => (
+		<textarea
+			aria-label="Markdown Editor"
+			value={initialMarkdown}
+			onChange={(event) => onMarkdownChange(event.currentTarget.value)}
+			onKeyDown={(event) => {
+				if (event.key.toLowerCase() !== "s" || !event.metaKey) return;
+				event.preventDefault();
+				onRequestSave?.(event.currentTarget.value);
+			}}
+		/>
+	),
+}));
+
 vi.mock("@monaco-editor/react", () => ({
 	default: ({
 		language,
@@ -77,10 +100,10 @@ function createVisibleRectList(): DOMRectList {
 	} as unknown as DOMRectList;
 }
 
-function renderPane() {
+function renderPane(path = filePath) {
 	return render(
 		<ChakraProvider value={appSystem}>
-			<FileViewerPane filePath={filePath} profileId={profileId} />
+			<FileViewerPane filePath={path} profileId={profileId} />
 		</ChakraProvider>,
 	);
 }
@@ -159,6 +182,45 @@ describe("fileViewerPane", () => {
 
 		expect(saveMutateMock).toHaveBeenCalledWith(
 			{ path: filePath, content: nextContent },
+			expect.objectContaining({ onSuccess: expect.any(Function) }),
+		);
+		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
+	});
+
+	it("renders markdown files with the markdown editor and saves edited content", async () => {
+		const markdownPath = "/repo/README.md";
+		const markdownContent = "# Readme";
+		const nextContent = `${markdownContent}\n\nUpdated.`;
+		vi.mocked(useFileContent).mockReturnValue({
+			data: markdownContent,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FileContentResult);
+		saveMutateMock.mockImplementation((_variables, options) => {
+			options?.onSuccess?.(undefined, _variables);
+		});
+
+		renderPane(markdownPath);
+
+		const editor = await screen.findByLabelText("Markdown Editor");
+		expect(editor).toHaveValue(markdownContent);
+		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
+
+		fireEvent.change(editor, { target: { value: nextContent } });
+
+		await waitFor(() => {
+			expect(useFileViewerDirtyStore.getState().profiles[profileId]).toContain(
+				markdownPath,
+			);
+		});
+
+		act(() => {
+			fireEvent.keyDown(editor, { key: "s", metaKey: true });
+		});
+
+		expect(saveMutateMock).toHaveBeenCalledWith(
+			{ path: markdownPath, content: nextContent },
 			expect.objectContaining({ onSuccess: expect.any(Function) }),
 		);
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();

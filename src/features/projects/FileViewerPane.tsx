@@ -13,6 +13,7 @@ import type {
 	OnMount,
 } from "@monaco-editor/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import MarkdownEditor from "@/features/markdown/MarkdownEditor";
 import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
@@ -26,6 +27,10 @@ interface FileViewerPaneProps {
 
 function getMonacoTheme(themeId: string) {
 	return themeId.includes("light") ? "light" : "vs-dark";
+}
+
+function isMarkdownFile(filePath: string) {
+	return /\.(?:md|mdx)$/i.test(filePath);
 }
 
 export default function FileViewerPane({
@@ -55,6 +60,7 @@ export default function FileViewerPane({
 	} = useSaveFileContent(profileId);
 
 	const filename = filePath.split("/").pop() ?? "";
+	const markdownFile = isMarkdownFile(filePath);
 	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
 	const draftValue = draftsByPath[filePath];
@@ -103,21 +109,29 @@ export default function FileViewerPane({
 		);
 	}, []);
 
-	const handleEditorChange = useCallback<OnChange>(
-		(nextValue) => {
+	const handleFileChange = useCallback(
+		(nextValue: string) => {
 			setDraftsByPath((prev) => ({
 				...prev,
-				[filePath]: nextValue ?? "",
+				[filePath]: nextValue,
 			}));
 		},
 		[filePath],
 	);
 
-	const handleSave = useCallback(() => {
-		if (!hasLoadedFile || !hasUnsavedChanges || isSaving) return;
+	const handleEditorChange = useCallback<OnChange>(
+		(nextValue) => {
+			handleFileChange(nextValue ?? "");
+		},
+		[handleFileChange],
+	);
+
+	const handleSave = useCallback((contentOverride?: string) => {
+		const contentToSave = contentOverride ?? editorValue;
+		if (!hasLoadedFile || contentToSave === lastSavedValue || isSaving) return;
 
 		saveFileContent(
-			{ path: filePath, content: editorValue },
+			{ path: filePath, content: contentToSave },
 			{
 				onSuccess: (_result, variables) => {
 					setDraftsByPath((prev) => ({
@@ -136,8 +150,8 @@ export default function FileViewerPane({
 		editorValue,
 		filePath,
 		hasLoadedFile,
-		hasUnsavedChanges,
 		isSaving,
+		lastSavedValue,
 		profileId,
 		saveFileContent,
 		setFileDirty,
@@ -188,6 +202,20 @@ export default function FileViewerPane({
 	}
 
 	if (!hasLoadedFile) return null;
+
+	if (markdownFile) {
+		return (
+			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+				<MarkdownEditor
+					editorKey={filePath}
+					initialMarkdown={editorValue}
+					onMarkdownChange={handleFileChange}
+					onRequestSave={handleSave}
+					saveStatus={isSaving ? "saving" : "idle"}
+				/>
+			</Box>
+		);
+	}
 
 	return (
 		<Box ref={paneRef} h="full" minH="0" overflow="hidden">
