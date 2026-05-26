@@ -162,7 +162,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		setPendingLink(null);
 	}, []);
 
-	const openPendingLink = useCallback(() => {
+	const openPendingLinkExternally = useCallback(() => {
 		const uri = pendingLink;
 		if (!uri) return;
 
@@ -438,7 +438,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			<TerminalLinkConfirmDialog
 				link={pendingLink}
 				onClose={closePendingLinkDialog}
-				onOpen={openPendingLink}
+				onOpenDefault={openPendingLinkExternally}
 			/>
 		</>
 	);

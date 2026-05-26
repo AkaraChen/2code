@@ -139,6 +139,8 @@ pub fn run() {
 			handler::watcher::watch_projects,
 			handler::updater::check_update,
 			handler::updater::install_update,
+			handler::browser::list_installed_browsers,
+			handler::browser::open_url_in_browser,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
 		])
