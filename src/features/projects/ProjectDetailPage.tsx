@@ -1,35 +1,22 @@
 import {
-	Box,
 	Button,
 	Center,
 	EmptyState,
 	HStack,
 	Menu,
 	Portal,
-	Stack,
-	Text,
 	VStack,
 } from "@chakra-ui/react";
 import { useMemo } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
 import ProfileLayout from "@/features/projects/ProfileLayout";
-import {
-	useProject,
-	useProjectConfigQuery,
-	useProjectProfiles,
-} from "@/features/projects/hooks";
+import { useProject, useProjectProfiles } from "@/features/projects/hooks";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
-import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
-import { useCreateTerminalTab } from "@/features/terminal/hooks";
 import { useTerminalStore } from "@/features/terminal/store";
+import { TerminalTemplateDropdownContent } from "@/features/terminal/TerminalTemplateMenu";
+import { useTerminalTemplateActions } from "@/features/terminal/terminalTemplateActions";
 import TerminalTabs from "@/features/terminal/TerminalTabs";
-import {
-	resolveGlobalTerminalTemplate,
-	resolveProjectTerminalTemplate,
-	type GlobalTerminalTemplate,
-	type ProjectTerminalTemplate,
-} from "@/features/terminal/templates";
 import * as m from "@/paraglide/messages.js";
 
 export default function ProjectDetailPage() {
@@ -53,34 +40,12 @@ export default function ProjectDetailPage() {
 	const notesActive = useFileViewerTabsStore(
 		(s) => s.profiles[profileId ?? ""]?.notesActive ?? false,
 	);
-	const createTab = useCreateTerminalTab();
-	const projectConfig = useProjectConfigQuery(project?.id ?? "");
-	const globalTemplates = useTerminalTemplatesStore((s) => s.templates);
-	const projectTemplates = projectConfig.data?.terminal_templates ?? [];
-	const hasTemplates = projectTemplates.length > 0 || globalTemplates.length > 0;
-
-	async function handleTemplateClick(
-		template: GlobalTerminalTemplate | ProjectTerminalTemplate,
-		scope: "global" | "project",
-	) {
-		if (!profile) return;
-		const resolvedTemplate =
-			scope === "project"
-				? await resolveProjectTerminalTemplate(
-						template as ProjectTerminalTemplate,
-						profile.worktree_path,
-					)
-				: resolveGlobalTerminalTemplate(
-						template as GlobalTerminalTemplate,
-						profile.worktree_path,
-					);
-		await createTab.mutateAsync({
-			profileId: profile.id,
-			cwd: resolvedTemplate.cwd,
-			title: resolvedTemplate.name,
-			startupCommands: resolvedTemplate.commands,
-		});
-	}
+	const terminalTemplateActions = useTerminalTemplateActions({
+		profileId: profile?.id ?? "",
+		cwd: profile?.worktree_path ?? "",
+		projectId: project?.id ?? "",
+	});
+	const { createTab, hasTemplates } = terminalTemplateActions;
 
 	if (!project) {
 		return <Navigate to="/" replace />;
@@ -122,12 +87,7 @@ export default function ProjectDetailPage() {
 						<Button
 							disabled={createTab.isPending}
 							borderEndRadius={hasTemplates ? "0" : undefined}
-							onClick={() =>
-								createTab.mutate({
-									profileId: profile.id,
-									cwd: profile.worktree_path,
-								})
-							}
+							onClick={terminalTemplateActions.createDefaultTerminal}
 						>
 							<FiPlus />
 							{m.newTerminal()}
@@ -147,83 +107,23 @@ export default function ProjectDetailPage() {
 								</Menu.Trigger>
 								<Portal>
 									<Menu.Positioner>
-										<Menu.Content minW="56">
-											{projectTemplates.length > 0 && (
-												<>
-													<Box
-														px="3"
-														pt="2"
-														pb="1"
-														fontSize="xs"
-														fontWeight="semibold"
-														color="fg.muted"
-														textTransform="uppercase"
-													>
-														{m.projectTerminalTemplates()}
-													</Box>
-													{projectTemplates.map((template) => (
-														<Menu.Item
-															key={template.id}
-															value={template.id}
-															onClick={() => {
-																void handleTemplateClick(
-																	template,
-																	"project",
-																);
-															}}
-														>
-															<Stack gap="0.5" align="start">
-																<Text fontSize="sm">
-																	{template.name}
-																</Text>
-																{template.cwd.trim() && (
-																	<Text
-																		fontSize="xs"
-																		color="fg.muted"
-																	>
-																		{template.cwd.trim()}
-																	</Text>
-																)}
-															</Stack>
-														</Menu.Item>
-													))}
-												</>
-											)}
-											{projectTemplates.length > 0 &&
-												globalTemplates.length > 0 && (
-													<Menu.Separator />
-												)}
-											{globalTemplates.length > 0 && (
-												<>
-													<Box
-														px="3"
-														pt="2"
-														pb="1"
-														fontSize="xs"
-														fontWeight="semibold"
-														color="fg.muted"
-														textTransform="uppercase"
-													>
-														{m.globalTerminalTemplates()}
-													</Box>
-													{globalTemplates.map((template) => (
-														<Menu.Item
-															key={template.id}
-															value={template.id}
-															onClick={() => {
-																void handleTemplateClick(
-																	template,
-																	"global",
-																);
-															}}
-														>
-															<Text fontSize="sm">
-																{template.name}
-															</Text>
-														</Menu.Item>
-													))}
-												</>
-											)}
+										<Menu.Content minW="56" p="1">
+											<TerminalTemplateDropdownContent
+												projectTemplates={
+													terminalTemplateActions.projectTemplates
+												}
+												globalTemplates={
+													terminalTemplateActions.globalTemplates
+												}
+												isPending={
+													terminalTemplateActions.createTab.isPending
+												}
+												showEmptyState={false}
+												onTemplateClick={(template, scope) => {
+													void terminalTemplateActions
+														.createTemplateTerminal(template, scope);
+												}}
+											/>
 										</Menu.Content>
 									</Menu.Positioner>
 								</Portal>
