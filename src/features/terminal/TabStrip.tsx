@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 const TAB_MIN_WIDTH = "140px";
+export const TAB_STRIP_HEIGHT = "32px";
 
 export interface TabStripItem {
 	key: string;
@@ -56,6 +57,7 @@ function TabButton({
 			tabIndex={isSelected ? 0 : -1}
 			flexShrink={0}
 			minW={TAB_MIN_WIDTH}
+			h="full"
 			display="flex"
 			alignItems="center"
 			gap="2"
@@ -129,12 +131,13 @@ function TabMotionItem({
 			style={{
 				display: "flex",
 				flexShrink: 0,
+				height: "100%",
 				overflow: "hidden",
 				transformOrigin: "left center",
 			}}
 			{...motionProps}
 		>
-			<Box display="flex" flexShrink={0} minW="0">
+			<Box display="flex" flexShrink={0} minW="0" h="full">
 				<TabButton
 					value={item.value}
 					icon={item.icon}
@@ -171,7 +174,9 @@ export function TabStrip({
 			aria-orientation="horizontal"
 			display="flex"
 			w="full"
+			h={TAB_STRIP_HEIGHT}
 			minW="max-content"
+			alignItems="stretch"
 		>
 			{leadingControl}
 			<AnimatePresence initial={false}>

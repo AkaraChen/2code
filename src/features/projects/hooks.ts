@@ -20,6 +20,7 @@ import {
 	createProjectGroup,
 	deleteFileTreePaths,
 	deleteProject,
+	getFilePreview,
 	getFileTreeGitStatus,
 	getGitBranch,
 	getProjectConfig,
@@ -418,6 +419,15 @@ export function useFileContent(path: string, enabled = true) {
 		queryFn: () => readFileContent({ path }),
 		enabled: !!path && enabled,
 		staleTime: 10000,
+	});
+}
+
+export function useFilePreview(path: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.fs.filePreview(path),
+		queryFn: () => getFilePreview({ path }),
+		enabled: !!path && enabled,
+		staleTime: 60000,
 	});
 }
 

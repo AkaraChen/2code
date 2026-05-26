@@ -27,7 +27,7 @@ import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import * as m from "@/paraglide/messages.js";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
-import { TabStrip, type TabStripGroup } from "./TabStrip";
+import { TAB_STRIP_HEIGHT, TabStrip, type TabStripGroup } from "./TabStrip";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
@@ -219,10 +219,12 @@ export default function TerminalTabs({
 					aria-selected={notesActive}
 					tabIndex={notesActive ? 0 : -1}
 					flexShrink={0}
+					alignSelf="stretch"
+					h={TAB_STRIP_HEIGHT}
 					display="flex"
 					alignItems="center"
+					justifyContent="center"
 					gap="2"
-					py="1"
 					px="3"
 					borderEndWidth="1px"
 					borderEndColor="border"

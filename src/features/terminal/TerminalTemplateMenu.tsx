@@ -13,6 +13,7 @@ import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTe
 import * as m from "@/paraglide/messages.js";
 import { useCreateTerminalTab } from "./hooks";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
+import { TAB_STRIP_HEIGHT } from "./TabStrip";
 import {
 	resolveGlobalTerminalTemplate,
 	resolveProjectTerminalTemplate,
@@ -108,14 +109,16 @@ export default function TerminalTemplateMenu({
 	return (
 		<>
 			<motion.div
-				style={{ display: "flex", flexShrink: 0 }}
+				style={{ display: "flex", flexShrink: 0, height: "100%" }}
 				{...buttonMotionProps}
 			>
 				<Box
 					ref={buttonRef}
 					display="inline-flex"
 					flexShrink={0}
-					alignSelf="center"
+					alignItems="center"
+					alignSelf="stretch"
+					h={TAB_STRIP_HEIGHT}
 					ms="2"
 					onMouseEnter={open}
 					onMouseLeave={scheduleClose}

@@ -18,8 +18,10 @@ describe("queryNamespaces", () => {
 			"git-ahead-count": "git-ahead-count",
 			"git-pull-request-status": "git-pull-request-status",
 			"profile-delete-check": "profile-delete-check",
+			"profile-notes": "profile-notes",
 			"topbar-apps": "topbar-apps",
 			"fs-file": "fs-file",
+			"fs-file-preview": "fs-file-preview",
 			"fs-search": "fs-search",
 			"fs-tree": "fs-tree",
 		});
@@ -172,6 +174,13 @@ describe("queryKeys", () => {
 			expect(queryKeys.fs.file("/tmp/worktree/README.md")).toEqual([
 				"fs-file",
 				"/tmp/worktree/README.md",
+			]);
+		});
+
+		it("filePreview() includes the file path", () => {
+			expect(queryKeys.fs.filePreview("/tmp/worktree/spec.docx")).toEqual([
+				"fs-file-preview",
+				"/tmp/worktree/spec.docx",
 			]);
 		});
 

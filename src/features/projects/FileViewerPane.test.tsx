@@ -12,13 +12,34 @@ import FileViewerPane from "./FileViewerPane";
 import {
 	useFileViewerDirtyStore,
 } from "./fileViewerTabsStore";
-import { useFileContent, useSaveFileContent } from "./hooks";
+import { useFileContent, useFilePreview, useSaveFileContent } from "./hooks";
 
 const { saveMutateMock } = vi.hoisted(() => ({
 	saveMutateMock: vi.fn(),
 }));
 
 vi.mock("@/shared/lib/monaco", () => ({}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+	convertFileSrc: (path: string) => `asset://${path}`,
+}));
+
+vi.mock("@/features/projects/ArchivePreviewTree", () => ({
+	default: ({
+		entries,
+		fileName,
+	}: {
+		entries: readonly { path: string }[];
+		fileName: string;
+	}) => (
+		<div data-testid="archive-preview">
+			<span>{fileName}</span>
+			{entries.map((entry) => (
+				<span key={entry.path}>{entry.path}</span>
+			))}
+		</div>
+	),
+}));
 
 vi.mock("@/features/markdown/MarkdownEditor", () => ({
 	default: ({
@@ -70,6 +91,7 @@ vi.mock("@monaco-editor/react", () => ({
 
 vi.mock("./hooks", () => ({
 	useFileContent: vi.fn(),
+	useFilePreview: vi.fn(),
 	useSaveFileContent: vi.fn(),
 }));
 
@@ -86,6 +108,7 @@ const fileContent = [
 ].join("\n");
 
 type FileContentResult = ReturnType<typeof useFileContent>;
+type FilePreviewResult = ReturnType<typeof useFilePreview>;
 type SaveFileContentResult = ReturnType<typeof useSaveFileContent>;
 
 function createVisibleRectList(): DOMRectList {
@@ -123,6 +146,12 @@ describe("fileViewerPane", () => {
 			isError: false,
 			error: null,
 		} as FileContentResult);
+		vi.mocked(useFilePreview).mockReturnValue({
+			data: undefined,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FilePreviewResult);
 		vi.mocked(useSaveFileContent).mockReturnValue({
 			error: null,
 			isPending: false,
@@ -224,5 +253,78 @@ describe("fileViewerPane", () => {
 			expect.objectContaining({ onSuccess: expect.any(Function) }),
 		);
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
+	});
+
+	it("renders image files with the binary preview instead of Monaco", async () => {
+		const imagePath = "/repo/assets/logo.png";
+		vi.mocked(useFilePreview).mockReturnValue({
+			data: {
+				kind: "image",
+				file_path: imagePath,
+				mime_type: "image/png",
+				source_path: null,
+			},
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FilePreviewResult);
+
+		renderPane(imagePath);
+
+		const image = await screen.findByRole("img", { name: "logo.png" });
+		expect(image).toHaveAttribute("src", expect.stringContaining(imagePath));
+		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
+		expect(useFileContent).toHaveBeenCalledWith(imagePath, false);
+		expect(useFilePreview).toHaveBeenCalledWith(imagePath, true);
+	});
+
+	it("renders Office previews as converted PDFs", async () => {
+		const officePath = "/repo/docs/spec.docx";
+		const pdfPath = "/cache/spec.pdf";
+		vi.mocked(useFilePreview).mockReturnValue({
+			data: {
+				kind: "office-pdf",
+				file_path: pdfPath,
+				mime_type: "application/pdf",
+				source_path: officePath,
+			},
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FilePreviewResult);
+
+		renderPane(officePath);
+
+		const frame = await screen.findByTitle("spec.docx");
+		expect(frame).toHaveAttribute("src", expect.stringContaining(pdfPath));
+		expect(screen.getByText("Office Preview")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
+	});
+
+	it("renders archives with the archive tree preview", async () => {
+		const archivePath = "/repo/archive.zip";
+		vi.mocked(useFilePreview).mockReturnValue({
+			data: {
+				kind: "archive",
+				file_path: archivePath,
+				mime_type: "application/x-archive",
+				source_path: null,
+				archive_entries: [
+					{ path: "src/", kind: "directory", size: null },
+					{ path: "src/index.ts", kind: "file", size: 42 },
+				],
+			},
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FilePreviewResult);
+
+		renderPane(archivePath);
+
+		expect(await screen.findByTestId("archive-preview")).toBeInTheDocument();
+		expect(screen.getByText("archive.zip")).toBeInTheDocument();
+		expect(screen.getByText("src/index.ts")).toBeInTheDocument();
+		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
+		expect(useFileContent).toHaveBeenCalledWith(archivePath, false);
 	});
 });

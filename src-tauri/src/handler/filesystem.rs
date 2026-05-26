@@ -1,12 +1,397 @@
-use std::path::Path;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::fs::File;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use tauri::State;
+use flate2::read::GzDecoder;
+use serde::Serialize;
+use tauri::{AppHandle, Manager, State};
+use zip::ZipArchive;
 
 use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{
 	FileSearchResult, FileTreeGitStatusEntry, ResolvedFilePath,
 };
+
+#[derive(Serialize)]
+pub struct FilePreview {
+	kind: String,
+	file_path: String,
+	mime_type: String,
+	source_path: Option<String>,
+	archive_entries: Option<Vec<ArchivePreviewEntry>>,
+}
+
+#[derive(Serialize)]
+pub struct ArchivePreviewEntry {
+	path: String,
+	kind: String,
+	size: Option<u64>,
+}
+
+const OFFICE_PREVIEW_MAX_BYTES: u64 = 50 * 1024 * 1024;
+const ARCHIVE_PREVIEW_MAX_BYTES: u64 = 200 * 1024 * 1024;
+const ARCHIVE_PREVIEW_MAX_ENTRIES: usize = 10_000;
+
+fn previewable_image_mime_type(path: &Path) -> Option<&'static str> {
+	let extension = path.extension()?.to_string_lossy().to_lowercase();
+	match extension.as_str() {
+		"apng" => Some("image/apng"),
+		"avif" => Some("image/avif"),
+		"bmp" => Some("image/bmp"),
+		"cur" | "ico" => Some("image/x-icon"),
+		"gif" => Some("image/gif"),
+		"jfif" | "jpe" | "jpeg" | "jpg" | "pjp" | "pjpeg" => Some("image/jpeg"),
+		"png" => Some("image/png"),
+		"svg" => Some("image/svg+xml"),
+		"webp" => Some("image/webp"),
+		_ => None,
+	}
+}
+
+fn is_pdf_file(path: &Path) -> bool {
+	path.extension()
+		.map(|value| value.to_string_lossy().eq_ignore_ascii_case("pdf"))
+		.unwrap_or(false)
+}
+
+fn is_office_file(path: &Path) -> bool {
+	let Some(extension) = path.extension() else {
+		return false;
+	};
+
+	matches!(
+		extension.to_string_lossy().to_lowercase().as_str(),
+		"doc"
+			| "docx" | "xls"
+			| "xlsx" | "ppt"
+			| "pptx" | "odt"
+			| "ods" | "odp"
+	)
+}
+
+fn is_archive_file(path: &Path) -> bool {
+	let filename = path
+		.file_name()
+		.map(|value| value.to_string_lossy().to_lowercase())
+		.unwrap_or_default();
+	let extension = path
+		.extension()
+		.map(|value| value.to_string_lossy().to_lowercase())
+		.unwrap_or_default();
+
+	matches!(extension.as_str(), "zip" | "tar" | "gz" | "tgz")
+		|| filename.ends_with(".tar.gz")
+}
+
+fn ensure_previewable_file(path: &Path) -> Result<std::fs::Metadata, AppError> {
+	if !path.exists() {
+		return Err(AppError::NotFound(format!(
+			"File: {}",
+			path.to_string_lossy()
+		)));
+	}
+	if path.is_dir() {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Path is a directory",
+		)));
+	}
+
+	std::fs::metadata(path).map_err(AppError::IoError)
+}
+
+fn normalize_archive_entry_path(path: &str, is_dir: bool) -> Option<String> {
+	let normalized = path
+		.replace('\\', "/")
+		.trim_start_matches('/')
+		.split('/')
+		.filter(|part| !part.is_empty() && *part != "." && *part != "..")
+		.collect::<Vec<_>>()
+		.join("/");
+
+	if normalized.is_empty() {
+		return None;
+	}
+
+	if is_dir {
+		Some(format!("{}/", normalized.trim_end_matches('/')))
+	} else {
+		Some(normalized)
+	}
+}
+
+fn add_archive_entry(
+	entries: &mut HashMap<String, ArchivePreviewEntry>,
+	path: String,
+	kind: &str,
+	size: Option<u64>,
+) {
+	let mut current = String::new();
+	for part in path.trim_end_matches('/').split('/') {
+		if !current.is_empty() {
+			current.push('/');
+		}
+		current.push_str(part);
+		let directory_path = format!("{current}/");
+		if directory_path != path {
+			entries.entry(directory_path.clone()).or_insert(
+				ArchivePreviewEntry {
+					path: directory_path,
+					kind: "directory".to_string(),
+					size: None,
+				},
+			);
+		}
+	}
+
+	entries.entry(path.clone()).or_insert(ArchivePreviewEntry {
+		path,
+		kind: kind.to_string(),
+		size,
+	});
+}
+
+fn sorted_archive_entries(
+	entries: HashMap<String, ArchivePreviewEntry>,
+) -> Vec<ArchivePreviewEntry> {
+	let mut entries = entries.into_values().collect::<Vec<_>>();
+	entries.sort_by(|left, right| {
+		left.path
+			.to_lowercase()
+			.cmp(&right.path.to_lowercase())
+			.then_with(|| {
+				right.path.ends_with('/').cmp(&left.path.ends_with('/'))
+			})
+	});
+	entries
+}
+
+fn ensure_archive_preview_size(
+	metadata: &std::fs::Metadata,
+) -> Result<(), AppError> {
+	if metadata.len() > ARCHIVE_PREVIEW_MAX_BYTES {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Archive file too large for preview (> 200MB)",
+		)));
+	}
+	Ok(())
+}
+
+fn limit_archive_entry_count(count: usize) -> Result<(), AppError> {
+	if count >= ARCHIVE_PREVIEW_MAX_ENTRIES {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Archive contains too many entries to preview",
+		)));
+	}
+	Ok(())
+}
+
+fn list_zip_archive_entries(
+	path: &Path,
+) -> Result<Vec<ArchivePreviewEntry>, AppError> {
+	let file = File::open(path)?;
+	let mut archive = ZipArchive::new(file)
+		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?;
+	let mut entries = HashMap::new();
+
+	for index in 0..archive.len() {
+		limit_archive_entry_count(entries.len())?;
+		let file = archive
+			.by_index(index)
+			.map_err(|err| AppError::IoError(std::io::Error::other(err)))?;
+		let is_dir = file.is_dir();
+		let Some(path) = normalize_archive_entry_path(file.name(), is_dir)
+		else {
+			continue;
+		};
+		add_archive_entry(
+			&mut entries,
+			path,
+			if is_dir { "directory" } else { "file" },
+			if is_dir { None } else { Some(file.size()) },
+		);
+	}
+
+	Ok(sorted_archive_entries(entries))
+}
+
+fn list_tar_entries<R: std::io::Read>(
+	reader: R,
+) -> Result<Vec<ArchivePreviewEntry>, AppError> {
+	let mut archive = tar::Archive::new(reader);
+	let mut entries = HashMap::new();
+
+	for entry in archive.entries()? {
+		limit_archive_entry_count(entries.len())?;
+		let entry = entry?;
+		let header = entry.header();
+		let is_dir = header.entry_type().is_dir();
+		let size = header.size().ok();
+		let path = entry.path().map_err(AppError::IoError)?;
+		let Some(path) =
+			normalize_archive_entry_path(&path.to_string_lossy(), is_dir)
+		else {
+			continue;
+		};
+		add_archive_entry(
+			&mut entries,
+			path,
+			if is_dir { "directory" } else { "file" },
+			if is_dir { None } else { size },
+		);
+	}
+
+	Ok(sorted_archive_entries(entries))
+}
+
+fn list_gzip_archive_entries(
+	path: &Path,
+) -> Result<Vec<ArchivePreviewEntry>, AppError> {
+	let filename = path
+		.file_name()
+		.map(|value| value.to_string_lossy().to_string())
+		.unwrap_or_else(|| "archive.gz".to_string());
+	let lower_filename = filename.to_lowercase();
+	let file = File::open(path)?;
+
+	if lower_filename.ends_with(".tar.gz") || lower_filename.ends_with(".tgz") {
+		return list_tar_entries(GzDecoder::new(file));
+	}
+
+	let display_name = filename
+		.strip_suffix(".gz")
+		.or_else(|| filename.strip_suffix(".GZ"))
+		.unwrap_or("decompressed");
+	let mut entries = HashMap::new();
+	add_archive_entry(&mut entries, display_name.to_string(), "file", None);
+	Ok(sorted_archive_entries(entries))
+}
+
+fn list_archive_entries(
+	path: &Path,
+	metadata: &std::fs::Metadata,
+) -> Result<Vec<ArchivePreviewEntry>, AppError> {
+	ensure_archive_preview_size(metadata)?;
+	let filename = path
+		.file_name()
+		.map(|value| value.to_string_lossy().to_lowercase())
+		.unwrap_or_default();
+	let extension = path
+		.extension()
+		.map(|value| value.to_string_lossy().to_lowercase())
+		.unwrap_or_default();
+
+	match extension.as_str() {
+		"zip" => list_zip_archive_entries(path),
+		"tar" => list_tar_entries(File::open(path)?),
+		"gz" | "tgz" => list_gzip_archive_entries(path),
+		_ if filename.ends_with(".tar.gz") => list_gzip_archive_entries(path),
+		_ => Err(AppError::IoError(std::io::Error::other(
+			"Archive format is not supported",
+		))),
+	}
+}
+
+fn office_preview_cache_dir(
+	cache_root: &Path,
+	path: &Path,
+	metadata: &std::fs::Metadata,
+) -> Result<PathBuf, AppError> {
+	let mut hasher = DefaultHasher::new();
+	path.to_string_lossy().hash(&mut hasher);
+	metadata.len().hash(&mut hasher);
+	if let Ok(modified) = metadata.modified() {
+		modified.hash(&mut hasher);
+	}
+
+	Ok(cache_root.join(format!("{:016x}", hasher.finish())))
+}
+
+fn find_soffice_command() -> Option<PathBuf> {
+	let candidates: &[&str] = if cfg!(target_os = "macos") {
+		&[
+			"soffice",
+			"libreoffice",
+			"/Applications/LibreOffice.app/Contents/MacOS/soffice",
+		]
+	} else {
+		&["soffice", "libreoffice"]
+	};
+
+	for candidate in candidates {
+		let output = Command::new(candidate).arg("--version").output();
+		if matches!(output, Ok(result) if result.status.success()) {
+			return Some(PathBuf::from(candidate));
+		}
+	}
+
+	None
+}
+
+fn convert_office_file_to_pdf(
+	path: &Path,
+	cache_root: &Path,
+	metadata: &std::fs::Metadata,
+) -> Result<PathBuf, AppError> {
+	if metadata.len() > OFFICE_PREVIEW_MAX_BYTES {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Office file too large for preview (> 50MB)",
+		)));
+	}
+
+	let output_dir = office_preview_cache_dir(cache_root, path, metadata)?;
+	std::fs::create_dir_all(&output_dir)?;
+
+	let stem = path
+		.file_stem()
+		.map(|value| value.to_string_lossy().into_owned())
+		.unwrap_or_else(|| "preview".to_string());
+	let output_path = output_dir.join(format!("{stem}.pdf"));
+	if output_path.is_file() {
+		return Ok(output_path);
+	}
+
+	let soffice = find_soffice_command().ok_or_else(|| {
+		AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::NotFound,
+			"LibreOffice is required to preview Office documents. Install LibreOffice or open this file in the default app.",
+		))
+	})?;
+
+	let output = Command::new(soffice)
+		.args(["--headless", "--convert-to", "pdf", "--outdir"])
+		.arg(&output_dir)
+		.arg(path)
+		.output()?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		let stdout = String::from_utf8_lossy(&output.stdout);
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Office preview conversion failed: {}{}",
+			stderr.trim(),
+			stdout.trim()
+		))));
+	}
+
+	if output_path.is_file() {
+		return Ok(output_path);
+	}
+
+	let converted_pdf = std::fs::read_dir(&output_dir)?
+		.filter_map(Result::ok)
+		.map(|entry| entry.path())
+		.find(|candidate| is_pdf_file(candidate));
+
+	converted_pdf.ok_or_else(|| {
+		AppError::IoError(std::io::Error::other(
+			"Office preview conversion did not produce a PDF",
+		))
+	})
+}
 
 fn profile_worktree_path(
 	db: &DbPool,
@@ -142,6 +527,79 @@ pub async fn write_file_content(
 
 		std::fs::write(&path, content)?;
 		Ok(())
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn get_file_preview(
+	path: String,
+	app: AppHandle,
+) -> Result<FilePreview, AppError> {
+	let cache_root = app
+		.path()
+		.app_cache_dir()
+		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?
+		.join("office-preview");
+
+	super::run_blocking(move || {
+		let file_path = PathBuf::from(&path);
+		let metadata = ensure_previewable_file(&file_path)?;
+		let canonical_path =
+			file_path.canonicalize().map_err(AppError::IoError)?;
+
+		if let Some(mime_type) = previewable_image_mime_type(&canonical_path) {
+			return Ok(FilePreview {
+				kind: "image".to_string(),
+				file_path: canonical_path.to_string_lossy().into_owned(),
+				mime_type: mime_type.to_string(),
+				source_path: None,
+				archive_entries: None,
+			});
+		}
+
+		if is_pdf_file(&canonical_path) {
+			return Ok(FilePreview {
+				kind: "pdf".to_string(),
+				file_path: canonical_path.to_string_lossy().into_owned(),
+				mime_type: "application/pdf".to_string(),
+				source_path: None,
+				archive_entries: None,
+			});
+		}
+
+		if is_archive_file(&canonical_path) {
+			let archive_entries =
+				list_archive_entries(&canonical_path, &metadata)?;
+			return Ok(FilePreview {
+				kind: "archive".to_string(),
+				file_path: canonical_path.to_string_lossy().into_owned(),
+				mime_type: "application/x-archive".to_string(),
+				source_path: None,
+				archive_entries: Some(archive_entries),
+			});
+		}
+
+		if is_office_file(&canonical_path) {
+			let pdf_path = convert_office_file_to_pdf(
+				&canonical_path,
+				&cache_root,
+				&metadata,
+			)?;
+			return Ok(FilePreview {
+				kind: "office-pdf".to_string(),
+				file_path: pdf_path.to_string_lossy().into_owned(),
+				mime_type: "application/pdf".to_string(),
+				source_path: Some(
+					canonical_path.to_string_lossy().into_owned(),
+				),
+				archive_entries: None,
+			});
+		}
+
+		Err(AppError::IoError(std::io::Error::other(
+			"File type is not previewable",
+		)))
 	})
 	.await
 }
