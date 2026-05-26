@@ -1,7 +1,8 @@
-import { Box, Center, Text } from "@chakra-ui/react";
+import { Box, Center, Menu, Portal, Text } from "@chakra-ui/react";
 import type {
 	ContextMenuItem as FileTreeContextMenuItem,
 	ContextMenuOpenContext as FileTreeContextMenuOpenContext,
+	FileTreeDirectoryHandle,
 	FileTreeDropContext,
 	FileTreeDropResult,
 	FileTree as FileTreeModel,
@@ -14,7 +15,6 @@ import {
 	type CSSProperties,
 	type KeyboardEvent,
 	type MouseEvent,
-	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -35,12 +35,15 @@ import {
 	useFileTreeStore,
 } from "./fileTreeStore";
 import {
+	useCreateFileTreePath,
 	useDeleteFileTreePaths,
 	useFileTreeChildPaths,
 	useFileTreeGitStatus,
 	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
+	useOpenPathInDefaultApp,
 	useRenameFileTreePath,
+	useRevealPathInFileManager,
 } from "./hooks";
 
 const FILE_TREE_PANEL_TRANSITION = {
@@ -54,6 +57,10 @@ const FILE_TREE_CONTENT_TRANSITION = {
 	ease: [0.22, 1, 0.36, 1],
 } as const;
 const TRAILING_PATH_SEPARATOR_RE = /[\\/]+$/;
+const FILE_TREE_CREATE_NAMES = {
+	directory: "New Folder",
+	file: "New File",
+} as const;
 const FILE_TREE_HOST_STYLE = {
 	height: "100%",
 	minWidth: 0,
@@ -71,39 +78,6 @@ const FILE_TREE_HOST_STYLE = {
 	"--trees-padding-inline-override": "4px",
 	"--trees-selected-bg-override": "var(--chakra-colors-bg-subtle)",
 	"--trees-selected-fg-override": "var(--chakra-colors-fg)",
-} as CSSProperties;
-
-const FILE_TREE_CONTEXT_MENU_STYLE = {
-	position: "absolute",
-	top: 0,
-	right: 0,
-	zIndex: 10,
-	display: "grid",
-	minWidth: "172px",
-	padding: "4px",
-	border: "1px solid var(--chakra-colors-border)",
-	borderRadius: "6px",
-	background: "var(--chakra-colors-bg-panel)",
-	boxShadow: "var(--chakra-shadows-md)",
-	color: "var(--chakra-colors-fg)",
-	fontSize: "13px",
-} as CSSProperties;
-
-const FILE_TREE_CONTEXT_MENU_BUTTON_STYLE = {
-	appearance: "none",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "flex-start",
-	width: "100%",
-	minHeight: "28px",
-	padding: "0 8px",
-	border: 0,
-	borderRadius: "4px",
-	background: "transparent",
-	color: "inherit",
-	cursor: "default",
-	font: "inherit",
-	textAlign: "left",
 } as CSSProperties;
 
 interface FileTreePanelProps {
@@ -135,6 +109,39 @@ function toAbsolutePath(rootPath: string, relativePath: string) {
 
 function toPathCollisionKey(path: string) {
 	return path.replace(TRAILING_PATH_SEPARATOR_RE, "");
+}
+
+function getParentDirectoryPath(path: string) {
+	const normalizedPath = path.replace(TRAILING_PATH_SEPARATOR_RE, "");
+	const index = normalizedPath.lastIndexOf("/");
+	if (index < 0) return null;
+	return `${normalizedPath.slice(0, index)}/`;
+}
+
+function getCreateTargetDirectoryPath(item: FileTreeContextMenuItem | null) {
+	if (!item) return null;
+	if (item.kind === "directory") return item.path;
+	return getParentDirectoryPath(item.path);
+}
+
+function joinFileTreePath(parentPath: string | null, name: string) {
+	return parentPath ? `${parentPath}${name}` : name;
+}
+
+function uniqueCreatePath(
+	parentPath: string | null,
+	kind: "directory" | "file",
+	treePathSet: ReadonlySet<string>,
+) {
+	const baseName = FILE_TREE_CREATE_NAMES[kind];
+	const extension = kind === "directory" ? "/" : "";
+	let index = 0;
+	while (true) {
+		const name = index === 0 ? baseName : `${baseName} ${index}`;
+		const path = `${joinFileTreePath(parentPath, name)}${extension}`;
+		if (!hasTreePath(treePathSet, path)) return path;
+		index += 1;
+	}
 }
 
 function buildModelPaths(
@@ -185,46 +192,116 @@ function buildExistingPathSet(
 	return paths;
 }
 
-interface FileTreeContextMenuButtonProps {
-	children: ReactNode;
-	danger?: boolean;
-	disabled?: boolean;
-	onClick: () => void;
+interface RootContextMenuState {
+	x: number;
+	y: number;
 }
 
-function FileTreeContextMenuButton({
-	children,
-	danger = false,
-	disabled = false,
-	onClick,
-}: FileTreeContextMenuButtonProps) {
+function getMenuPositioning(anchor: RootContextMenuState) {
+	return {
+		fitViewport: true,
+		flip: true,
+		getAnchorRect: () => ({
+			height: 0,
+			width: 0,
+			x: anchor.x,
+			y: anchor.y,
+		}),
+		gutter: 2,
+		overflowPadding: 6,
+		placement: "bottom-start" as const,
+		slide: true,
+		strategy: "fixed" as const,
+	};
+}
+
+interface FileTreeRootContextMenuProps {
+	position: RootContextMenuState;
+	rootPath: string;
+	onClose: () => void;
+	onCreatePath: (
+		parentPath: string | null,
+		kind: "directory" | "file",
+	) => void;
+	onRevealRoot: () => void;
+}
+
+function FileTreeRootContextMenu({
+	position,
+	rootPath,
+	onClose,
+	onCreatePath,
+	onRevealRoot,
+}: FileTreeRootContextMenuProps) {
+	const handleCreateFile = () => {
+		onClose();
+		onCreatePath(null, "file");
+	};
+	const handleCreateDirectory = () => {
+		onClose();
+		onCreatePath(null, "directory");
+	};
+	const handleRevealRoot = () => {
+		onClose();
+		onRevealRoot();
+	};
+	const handleCopyRelativePath = () => {
+		void copyTextToClipboard(".").catch(() => {});
+		onClose();
+	};
+	const handleCopyAbsolutePath = () => {
+		void copyTextToClipboard(rootPath).catch(() => {});
+		onClose();
+	};
+
 	return (
-		<button
-			disabled={disabled}
-			role="menuitem"
-			style={{
-				...FILE_TREE_CONTEXT_MENU_BUTTON_STYLE,
-				color:
-					danger && !disabled
-						? "var(--chakra-colors-fg-error)"
-						: "inherit",
-				opacity: disabled ? 0.45 : 1,
-			}}
-			type="button"
-			onClick={onClick}
-			onMouseEnter={(event) => {
-				if (!disabled) {
-					event.currentTarget.style.background = danger
-						? "var(--chakra-colors-bg-error)"
-						: "var(--chakra-colors-bg-subtle)";
-				}
-			}}
-			onMouseLeave={(event) => {
-				event.currentTarget.style.background = "transparent";
+		<Menu.Root
+			open
+			size="sm"
+			positioning={getMenuPositioning(position)}
+			onOpenChange={(event) => {
+				if (!event.open) onClose();
 			}}
 		>
-			{children}
-		</button>
+			<Portal>
+				<Menu.Positioner>
+					<Menu.Content
+						data-file-tree-context-menu-root="true"
+						minW="40"
+					>
+						<Menu.Item value="new-file" onClick={handleCreateFile}>
+							{m.fileTreeContextMenuNewFile()}
+						</Menu.Item>
+						<Menu.Item
+							value="new-folder"
+							onClick={handleCreateDirectory}
+						>
+							{m.fileTreeContextMenuNewFolder()}
+						</Menu.Item>
+						<Menu.Separator />
+						<Menu.Item
+							value="reveal"
+							onClick={handleRevealRoot}
+						>
+							{m.fileTreeContextMenuRevealInFileManager()}
+						</Menu.Item>
+						<Menu.Separator />
+						<Menu.Item
+							value="copy-relative-path"
+							onClick={handleCopyRelativePath}
+						>
+							{m.fileTreeContextMenuCopyRelativePath()}
+						</Menu.Item>
+						<Menu.Item
+							value="copy-absolute-path"
+							onClick={handleCopyAbsolutePath}
+						>
+							{m.fileTreeContextMenuCopyAbsolutePath()}
+						</Menu.Item>
+					</Menu.Content>
+				</Menu.Positioner>
+			</Portal>
+		</Menu.Root>
 	);
 }
 
@@ -238,7 +315,13 @@ interface FileTreeContextMenuProps {
 	selectedPaths: readonly string[];
 	treePathSet: ReadonlySet<string>;
 	onDeletePaths: (paths: readonly string[]) => void;
+	onCreatePath: (
+		parentPath: string | null,
+		kind: "directory" | "file",
+	) => void;
 	onOpenFile: (relativePath: string) => void;
+	onOpenPathInDefaultApp: (relativePath: string) => void;
+	onRevealPath: (relativePath: string) => void;
 	onStartRename: (path: string) => void;
 }
 
@@ -252,20 +335,37 @@ function FileTreeContextMenu({
 	selectedPaths,
 	treePathSet,
 	onDeletePaths,
+	onCreatePath,
 	onOpenFile,
+	onOpenPathInDefaultApp,
+	onRevealPath,
 	onStartRename,
 }: FileTreeContextMenuProps) {
 	const actionPaths = getContextMenuActionPaths(item.path, selectedPaths);
 	const canOpen = item.kind === "file" && filePathSet.has(item.path);
+	const canOpenInDefaultApp = hasTreePath(deletablePathSet, item.path);
+	const canReveal = canOpenInDefaultApp;
 	const canRename =
 		actionPaths.length === 1 && hasTreePath(treePathSet, item.path);
 	const canDelete =
 		actionPaths.length > 0 &&
 		actionPaths.every((path) => hasTreePath(deletablePathSet, path));
+	const createTargetDirectoryPath = getCreateTargetDirectoryPath(item);
 
 	const handleOpen = () => {
 		if (canOpen)
 			openAndCloseContextMenu(context, () => onOpenFile(item.path));
+	};
+	const handleRevealPath = () => {
+		if (canReveal)
+			openAndCloseContextMenu(context, () => onRevealPath(item.path));
+	};
+	const handleOpenInDefaultApp = () => {
+		if (canOpenInDefaultApp) {
+			openAndCloseContextMenu(context, () =>
+				onOpenPathInDefaultApp(item.path),
+			);
+		}
 	};
 	const handleRename = () => {
 		if (!canRename) return;
@@ -289,36 +389,101 @@ function FileTreeContextMenu({
 		context.close({ restoreFocus: false });
 		onDeletePaths(actionPaths);
 	};
+	const handleCreateFile = () => {
+		context.close({ restoreFocus: false });
+		onCreatePath(createTargetDirectoryPath, "file");
+	};
+	const handleCreateDirectory = () => {
+		context.close({ restoreFocus: false });
+		onCreatePath(createTargetDirectoryPath, "directory");
+	};
 
 	return (
-		<div
-			data-file-tree-context-menu-root="true"
-			role="menu"
-			style={FILE_TREE_CONTEXT_MENU_STYLE}
+		<Menu.Root
+			open
+			size="sm"
+			positioning={getMenuPositioning({
+				x: context.anchorRect.x,
+				y: context.anchorRect.y,
+			})}
+			onOpenChange={(event) => {
+				if (!event.open) context.close();
+			}}
 		>
-			<FileTreeContextMenuButton disabled={!canOpen} onClick={handleOpen}>
-				{m.fileTreeContextMenuOpen()}
-			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton
-				disabled={!canRename}
-				onClick={handleRename}
-			>
-				{m.rename()}
-			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton onClick={handleCopyRelativePath}>
-				{m.fileTreeContextMenuCopyRelativePath()}
-			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton onClick={handleCopyAbsolutePath}>
-				{m.fileTreeContextMenuCopyAbsolutePath()}
-			</FileTreeContextMenuButton>
-			<FileTreeContextMenuButton
-				danger
-				disabled={!canDelete || isDeleting}
-				onClick={handleDelete}
-			>
-				{m.delete()}
-			</FileTreeContextMenuButton>
-		</div>
+			<Portal>
+				<Menu.Positioner>
+					<Menu.Content
+						data-file-tree-context-menu-root="true"
+						minW="40"
+					>
+						<Menu.Item
+							value="open"
+							disabled={!canOpen}
+							onClick={handleOpen}
+						>
+							{m.fileTreeContextMenuOpen()}
+						</Menu.Item>
+						<Menu.Item
+							value="open-default-app"
+							disabled={!canOpenInDefaultApp}
+							onClick={handleOpenInDefaultApp}
+						>
+							{m.fileTreeContextMenuOpenInDefaultApp()}
+						</Menu.Item>
+						<Menu.Item
+							value="reveal"
+							disabled={!canReveal}
+							onClick={handleRevealPath}
+						>
+							{m.fileTreeContextMenuRevealInFileManager()}
+						</Menu.Item>
+						<Menu.Separator />
+						<Menu.Item
+							value="new-file"
+							onClick={handleCreateFile}
+						>
+							{m.fileTreeContextMenuNewFile()}
+						</Menu.Item>
+						<Menu.Item
+							value="new-folder"
+							onClick={handleCreateDirectory}
+						>
+							{m.fileTreeContextMenuNewFolder()}
+						</Menu.Item>
+						<Menu.Item
+							value="rename"
+							disabled={!canRename}
+							onClick={handleRename}
+						>
+							{m.rename()}
+						</Menu.Item>
+						<Menu.Separator />
+						<Menu.Item
+							value="copy-relative-path"
+							onClick={handleCopyRelativePath}
+						>
+							{m.fileTreeContextMenuCopyRelativePath()}
+						</Menu.Item>
+						<Menu.Item
+							value="copy-absolute-path"
+							onClick={handleCopyAbsolutePath}
+						>
+							{m.fileTreeContextMenuCopyAbsolutePath()}
+						</Menu.Item>
+						<Menu.Separator />
+						<Menu.Item
+							value="delete"
+							color="fg.error"
+							disabled={!canDelete || isDeleting}
+							_hover={{ bg: "bg.error", color: "fg.error" }}
+							onClick={handleDelete}
+						>
+							{m.delete()}
+						</Menu.Item>
+					</Menu.Content>
+				</Menu.Positioner>
+			</Portal>
+		</Menu.Root>
 	);
 }
 
@@ -337,6 +502,8 @@ export default function FileTreePanel({
 	onOpenFile,
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+	const [rootContextMenu, setRootContextMenu] =
+		useState<RootContextMenuState | null>(null);
 	const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
 	const [loadedChildPathsState, setLoadedChildPathsState] = useState<{
 		rootPath: string;
@@ -355,6 +522,9 @@ export default function FileTreePanel({
 	const modelPathsRef = useRef<readonly string[]>([]);
 	const gitStatusRef = useRef<readonly GitStatusEntry[]>([]);
 	const modelRef = useRef<FileTreeModel | null>(null);
+	const pendingCreatePathRef = useRef<
+		Map<string, { kind: "directory" | "file" }>
+	>(new Map());
 	const lastResetModelRef = useRef<FileTreeModel | null>(null);
 	const lastResetModelPathsSignatureRef = useRef<string | null>(null);
 	const expandedPathSetRef = useRef<Set<string>>(new Set());
@@ -386,9 +556,12 @@ export default function FileTreePanel({
 	} = useFileTreeChildPaths(rootPath, null, isOpen);
 	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
 	const loadFileTreeChildPaths = useLoadFileTreeChildPaths(rootPath);
+	const createFileTreePath = useCreateFileTreePath(rootPath, profileId);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(rootPath, profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(rootPath, profileId);
+	const openPathInDefaultApp = useOpenPathInDefaultApp();
+	const revealPathInFileManager = useRevealPathInFileManager();
 	const loadedDirectoryChildPaths =
 		loadedChildPathsState.rootPath === rootPath &&
 		loadedChildPathsState.rootChildPaths === rootChildPaths
@@ -440,6 +613,7 @@ export default function FileTreePanel({
 		expandedPathSetRef.current.clear();
 		loadedDirectoryChildPathsRef.current.clear();
 		loadingDirectoryPromisesRef.current.clear();
+		pendingCreatePathRef.current.clear();
 		lastResetModelPathsSignatureRef.current = null;
 	}, [rootPath]);
 
@@ -544,6 +718,27 @@ export default function FileTreePanel({
 		modelRef.current?.setGitStatus(gitStatusRef.current);
 	};
 	renameFileTreePathRef.current = (event) => {
+		const pendingCreate = pendingCreatePathRef.current.get(
+			event.sourcePath,
+		);
+		if (pendingCreate) {
+			pendingCreatePathRef.current.delete(event.sourcePath);
+			void createFileTreePath
+				.mutateAsync({
+					kind: pendingCreate.kind,
+					path: event.destinationPath,
+				})
+				.catch((error) => {
+					toaster.create({
+						title: m.fileTreeCreateErrorTitle(),
+						description: getErrorMessage(error),
+						type: "error",
+						closable: true,
+					});
+					restoreModelRef.current();
+				});
+			return;
+		}
 		void renameFileTreePath
 			.mutateAsync({
 				sourcePath: event.sourcePath,
@@ -610,7 +805,9 @@ export default function FileTreePanel({
 		},
 		paths: [],
 		renaming: {
-			canRename: (item) => hasTreePath(treePathSetRef.current, item.path),
+			canRename: (item) =>
+				pendingCreatePathRef.current.has(item.path) ||
+				hasTreePath(treePathSetRef.current, item.path),
 			onError: () => {
 				restoreModelRef.current();
 			},
@@ -649,6 +846,7 @@ export default function FileTreePanel({
 
 	const handleTreeClick = useCallback(
 		(event: MouseEvent<HTMLElement>) => {
+			setRootContextMenu(null);
 			if (event.metaKey || event.ctrlKey || event.shiftKey) {
 				skipNextSelectionOpenRef.current = false;
 				return;
@@ -700,6 +898,51 @@ export default function FileTreePanel({
 		},
 		[model],
 	);
+	const handleCreatePath = useCallback(
+		(parentPath: string | null, kind: "directory" | "file") => {
+			const createPath = uniqueCreatePath(
+				parentPath,
+				kind,
+				treePathSetRef.current,
+			);
+			pendingCreatePathRef.current.set(createPath, { kind });
+			model.add(createPath);
+			if (parentPath) {
+				expandedPathSetRef.current.add(parentPath);
+				const parentItem = model.getItem(parentPath);
+				if (parentItem?.isDirectory()) {
+					(parentItem as FileTreeDirectoryHandle).expand();
+				}
+			}
+			model.startRenaming(createPath, { removeIfCanceled: true });
+		},
+		[model],
+	);
+	const handleTreeContextMenu = useCallback(
+		(event: MouseEvent<HTMLElement>) => {
+			const target = event.target;
+			if (
+				target instanceof HTMLElement &&
+				target.closest("[data-file-tree-context-menu-root]")
+			) {
+				return;
+			}
+			if (getTreeItemPath(event)) {
+				setRootContextMenu(null);
+				return;
+			}
+
+			event.preventDefault();
+			setRootContextMenu({
+				x: event.clientX,
+				y: event.clientY,
+			});
+		},
+		[],
+	);
+	const closeRootContextMenu = useCallback(() => {
+		setRootContextMenu(null);
+	}, []);
 	const handleDeletePaths = useCallback(
 		async (paths: readonly string[]) => {
 			try {
@@ -715,6 +958,54 @@ export default function FileTreePanel({
 			}
 		},
 		[deleteFileTreePaths],
+	);
+	const handleRevealPath = useCallback(
+		async (relativePath: string) => {
+			try {
+				await revealPathInFileManager.mutateAsync({
+					path: toAbsolutePath(rootPathRef.current, relativePath),
+				});
+			} catch (error) {
+				toaster.create({
+					title: m.somethingWentWrong(),
+					description: getErrorMessage(error),
+					type: "error",
+					closable: true,
+				});
+			}
+		},
+		[revealPathInFileManager],
+	);
+	const handleRevealRoot = useCallback(async () => {
+		try {
+			await revealPathInFileManager.mutateAsync({
+				path: rootPathRef.current,
+			});
+		} catch (error) {
+			toaster.create({
+				title: m.somethingWentWrong(),
+				description: getErrorMessage(error),
+				type: "error",
+				closable: true,
+			});
+		}
+	}, [revealPathInFileManager]);
+	const handleOpenPathInDefaultApp = useCallback(
+		async (relativePath: string) => {
+			try {
+				await openPathInDefaultApp.mutateAsync({
+					path: toAbsolutePath(rootPathRef.current, relativePath),
+				});
+			} catch (error) {
+				toaster.create({
+					title: m.somethingWentWrong(),
+					description: getErrorMessage(error),
+					type: "error",
+					closable: true,
+				});
+			}
+		},
+		[openPathInDefaultApp],
 	);
 
 	return (
@@ -770,6 +1061,7 @@ export default function FileTreePanel({
 										position="relative"
 										py="1"
 										px="1.5"
+										onContextMenu={handleTreeContextMenu}
 									>
 										<FileTree
 											model={model}
@@ -798,8 +1090,17 @@ export default function FileTreePanel({
 													onDeletePaths={
 														handleDeletePaths
 													}
+													onCreatePath={
+														handleCreatePath
+													}
 													onOpenFile={
 														openRelativeFile
+													}
+													onOpenPathInDefaultApp={
+														handleOpenPathInDefaultApp
+													}
+													onRevealPath={
+														handleRevealPath
 													}
 													onStartRename={
 														handleStartRename
@@ -808,6 +1109,21 @@ export default function FileTreePanel({
 											)}
 											style={FILE_TREE_HOST_STYLE}
 										/>
+										{rootContextMenu && (
+											<FileTreeRootContextMenu
+												position={rootContextMenu}
+												rootPath={rootPath}
+												onClose={
+													closeRootContextMenu
+												}
+												onCreatePath={
+													handleCreatePath
+												}
+												onRevealRoot={
+													handleRevealRoot
+												}
+											/>
+										)}
 										{isTreePathsError && (
 											<Center
 												position="absolute"

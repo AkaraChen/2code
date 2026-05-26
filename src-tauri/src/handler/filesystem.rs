@@ -469,6 +469,146 @@ pub async fn delete_file_tree_paths(
 }
 
 #[tauri::command]
+pub async fn create_file_tree_path(
+	root_path: String,
+	path: String,
+	kind: String,
+) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		infra::filesystem::create_file_tree_path(
+			Path::new(&root_path),
+			&path,
+			&kind,
+		)
+	})
+	.await
+}
+
+fn reveal_path_in_file_manager_impl(path: &Path) -> Result<(), AppError> {
+	if !path.exists() {
+		return Err(AppError::NotFound(format!("Path: {}", path.display())));
+	}
+
+	#[cfg(target_os = "macos")]
+	{
+		let status = infra::no_window::command_without_windows_console("open")
+			.arg("-R")
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in Finder: {status}"
+		))));
+	}
+
+	#[cfg(target_os = "windows")]
+	{
+		let status =
+			infra::no_window::command_without_windows_console("explorer")
+				.arg(format!("/select,{}", path.display()))
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in File Explorer: {status}"
+		))));
+	}
+
+	#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+	{
+		let target = if path.is_dir() {
+			path.to_path_buf()
+		} else {
+			path.parent()
+				.map(Path::to_path_buf)
+				.unwrap_or_else(|| path.to_path_buf())
+		};
+		let status =
+			infra::no_window::command_without_windows_console("xdg-open")
+				.arg(&target)
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in file manager: {status}"
+		))))
+	}
+}
+
+fn open_path_in_default_app_impl(path: &Path) -> Result<(), AppError> {
+	if !path.exists() {
+		return Err(AppError::NotFound(format!("Path: {}", path.display())));
+	}
+
+	#[cfg(target_os = "macos")]
+	{
+		let status = infra::no_window::command_without_windows_console("open")
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))));
+	}
+
+	#[cfg(target_os = "windows")]
+	{
+		let status = infra::no_window::command_without_windows_console("cmd")
+			.args(["/C", "start", ""])
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))));
+	}
+
+	#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+	{
+		let status =
+			infra::no_window::command_without_windows_console("xdg-open")
+				.arg(path)
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))))
+	}
+}
+
+#[tauri::command]
+pub async fn reveal_path_in_file_manager(path: String) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		reveal_path_in_file_manager_impl(Path::new(&path))
+	})
+	.await
+}
+
+#[tauri::command]
+pub async fn open_path_in_default_app(path: String) -> Result<(), AppError> {
+	super::run_blocking(move || {
+		open_path_in_default_app_impl(Path::new(&path))
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn read_file_content(path: String) -> Result<String, AppError> {
 	super::run_blocking(move || {
 		let file_path = Path::new(&path);
