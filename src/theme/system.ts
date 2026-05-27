@@ -1,4 +1,9 @@
-import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import {
+  createSystem,
+  defaultConfig,
+  defineConfig,
+} from "@chakra-ui/react";
+import { numberInputAnatomy } from "@chakra-ui/react/anatomy";
 
 export const appThemeConfig = defineConfig({
   theme: {
@@ -102,6 +107,68 @@ export const appThemeConfig = defineConfig({
         l1: { value: "4px" },
         l2: { value: "5px" },
         l3: { value: "6px" },
+      },
+    },
+    recipes: {
+      input: {
+        variants: {
+          variant: {
+            outline: {
+              focusVisibleRing: "none",
+            },
+            subtle: {
+              focusVisibleRing: "none",
+            },
+            flushed: {
+              _focusVisible: {
+                boxShadow: "none",
+              },
+            },
+          },
+        },
+      },
+      textarea: {
+        variants: {
+          variant: {
+            outline: {
+              focusVisibleRing: "none",
+            },
+            subtle: {
+              focusVisibleRing: "none",
+            },
+            flushed: {
+              _focusVisible: {
+                boxShadow: "none",
+              },
+            },
+          },
+        },
+      },
+    },
+    slotRecipes: {
+      numberInput: {
+        slots: numberInputAnatomy.keys(),
+        variants: {
+          variant: {
+            outline: {
+              input: {
+                focusVisibleRing: "none",
+              },
+            },
+            subtle: {
+              input: {
+                focusVisibleRing: "none",
+              },
+            },
+            flushed: {
+              input: {
+                _focusVisible: {
+                  boxShadow: "none",
+                },
+              },
+            },
+          },
+        },
       },
     },
   },

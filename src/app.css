@@ -61,22 +61,6 @@ a,
 	color: HighlightText;
 }
 
-:where(
-	button,
-	a,
-	input,
-	textarea,
-	select,
-	[tabindex]:not([tabindex="-1"]),
-	[role="button"],
-	[role="menuitem"],
-	[role="option"],
-	[role="tab"]
-):focus-visible {
-	outline: 2px solid var(--app-focus-ring);
-	outline-offset: 2px;
-}
-
 [data-tauri-drag-region] button,
 [data-tauri-drag-region] a,
 [data-tauri-drag-region] [role="button"] {
