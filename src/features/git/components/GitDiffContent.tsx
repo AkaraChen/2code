@@ -370,13 +370,19 @@ export default function GitDiffContent({
 						value={state.activeTab}
 						onValueChange={(e) => handleTabChange(e.value)}
 						size="sm"
-						variant="line"
+						variant="enclosed"
 						flex="1"
 						minH="0"
 						display="flex"
 						flexDirection="column"
 					>
-						<Tabs.List mx="3" mt="2">
+						<Tabs.List
+							alignSelf="flex-start"
+							mb="2"
+							mx="3"
+							mt="2"
+							w="fit-content"
+						>
 							<Tabs.Trigger value="changes">
 								{m.changes()}
 							</Tabs.Trigger>

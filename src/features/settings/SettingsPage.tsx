@@ -123,15 +123,14 @@ export default function SettingsPage() {
 							{ replace: true },
 						);
 					}}
-					variant="plain"
+					variant="enclosed"
 				>
 					<Tabs.List
-						bg="transparent"
-						borderBottomWidth="1px"
-						borderColor="border"
+						bg="bg.muted"
 						mb="5"
-						gap="1"
 						overflowX="auto"
+						p="1"
+						rounded="l3"
 					>
 						<Tabs.Trigger value="general">
 							{settingsTabIcons.general}
@@ -157,7 +156,7 @@ export default function SettingsPage() {
 							{settingsTabIcons.about}
 							{m.about()}
 						</Tabs.Trigger>
-						<Tabs.Indicator roundedTop="l2" />
+						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">
 						<Stack gap="6" maxW="md">

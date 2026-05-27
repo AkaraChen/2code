@@ -65,7 +65,7 @@ export function ChangesSidebar({
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 
 	return (
-		<Flex direction="column" flex="1" minH="0" overflow="hidden" bg="bg.subtle">
+		<Flex direction="column" flex="1" minH="0" overflow="hidden">
 			{changesFiles.length === 0 ? (
 				<Flex align="center" justify="center" flex="1" minH="0" p="8">
 					<Box color="fg.muted" fontSize="sm">
