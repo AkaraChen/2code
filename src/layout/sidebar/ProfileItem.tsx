@@ -1,4 +1,5 @@
 import { Circle, HStack, Icon, Menu, Portal } from "@chakra-ui/react";
+import { memo } from "react";
 import { FiGitBranch } from "react-icons/fi";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
@@ -9,7 +10,7 @@ import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 
-export function ProfileItem({
+export const ProfileItem = memo(function ProfileItem({
 	profile,
 	projectId,
 	isActive,
@@ -97,4 +98,4 @@ export function ProfileItem({
 			/>
 		</>
 	);
-}
+});

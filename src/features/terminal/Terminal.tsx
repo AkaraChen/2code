@@ -36,9 +36,21 @@ interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
+	shell?: string;
 }
 
-export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
+/** Map a shell command string to a friendly display name. */
+function friendlyShellName(shell: string): string | null {
+	const lower = shell.toLowerCase();
+	if (lower.includes("pwsh")) return "PowerShell 7";
+	if (lower.includes("powershell")) return "Windows PowerShell";
+	if (lower.includes("cmd.exe")) return "Command Prompt";
+	if (lower.includes("wsl")) return "WSL";
+	if (lower.includes("bash") && lower.includes("git")) return "Git Bash";
+	return null;
+}
+
+export function Terminal({ profileId, sessionId, isActive, shell }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const isStreamReadyRef = useRef(false);
@@ -377,7 +389,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				resizePty({ sessionId, rows, cols });
 			});
 
+			const shellFriendlyName = shell ? friendlyShellName(shell) : null;
 			term.onTitleChange((title) => {
+				// If we know the shell, use the friendly name instead of
+				// shell-set titles (which are often just CWD paths)
+				if (shellFriendlyName) {
+					useTerminalStore
+						.getState()
+						.updateTabTitle(profileId, sessionId, shellFriendlyName);
+					return;
+				}
 				useTerminalStore
 					.getState()
 					.updateTabTitle(profileId, sessionId, title);

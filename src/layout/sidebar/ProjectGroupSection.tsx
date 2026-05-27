@@ -1,5 +1,6 @@
 import { Box, HStack, Icon, Text } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { memo } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -17,7 +18,7 @@ interface ProjectGroupSectionProps {
 	projects: ProjectWithProfiles[];
 }
 
-export function ProjectGroupSection({
+export const ProjectGroupSection = memo(function ProjectGroupSection({
 	group,
 	projectGroups,
 	projects,
@@ -131,4 +132,4 @@ export function ProjectGroupSection({
 			</AnimatePresence>
 		</>
 	);
-}
+});

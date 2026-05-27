@@ -42,6 +42,7 @@ import * as m from "@/paraglide/messages.js";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import { TAB_STRIP_HEIGHT, TabStrip, type TabStripGroup } from "./TabStrip";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
@@ -121,6 +122,7 @@ export default function TerminalTabs({
 	profile,
 	emptyFallback,
 }: TerminalTabsProps) {
+	const defaultShell = useTerminalSettingsStore((s) => s.defaultShell);
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
@@ -460,6 +462,7 @@ export default function TerminalTabs({
 							profileId={profileId}
 							sessionId={tab.id}
 							isActive={tab.id === activeTabId && !fileTabActive && !notesActive}
+							shell={defaultShell}
 						/>
 					</Box>
 				))}

@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invalidateQueriesMock, watchProjectsMock } = vi.hoisted(() => ({
-	invalidateQueriesMock: vi.fn(),
-	watchProjectsMock: vi.fn(),
-}));
+const { invalidateQueriesMock, getQueryDataMock, watchProjectsMock } =
+	vi.hoisted(() => ({
+		invalidateQueriesMock: vi.fn(),
+		getQueryDataMock: vi.fn(),
+		watchProjectsMock: vi.fn(),
+	}));
 
 vi.mock("@/generated", () => ({
 	watchProjects: watchProjectsMock,
@@ -12,6 +14,7 @@ vi.mock("@/generated", () => ({
 vi.mock("@/shared/lib/queryClient", () => ({
 	queryClient: {
 		invalidateQueries: invalidateQueriesMock,
+		getQueryData: getQueryDataMock,
 	},
 }));
 
@@ -26,6 +29,8 @@ describe("fileWatcher", () => {
 		vi.resetModules();
 		vi.useFakeTimers();
 		invalidateQueriesMock.mockClear();
+		getQueryDataMock.mockClear();
+		getQueryDataMock.mockReturnValue(undefined);
 		watchProjectsMock.mockClear();
 	});
 

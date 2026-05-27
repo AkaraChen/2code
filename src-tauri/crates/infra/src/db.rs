@@ -30,6 +30,32 @@ pub fn init_db(app_data_dir: &std::path::Path) -> Result<DbPool, String> {
 	{
 		tracing::warn!("Failed to set foreign_keys=ON: {e}");
 	}
+	// Performance: synchronous=NORMAL is the recommended companion for WAL mode.
+	// FULL (default) causes excessive fsync calls, especially slow on Windows NTFS.
+	if let Err(e) =
+		diesel::sql_query("PRAGMA synchronous=NORMAL;").execute(&mut conn)
+	{
+		tracing::warn!("Failed to set synchronous=NORMAL: {e}");
+	}
+	// Allow SQLite to wait up to 5s when the database is locked by another
+	// connection, instead of failing immediately with SQLITE_BUSY.
+	if let Err(e) =
+		diesel::sql_query("PRAGMA busy_timeout=5000;").execute(&mut conn)
+	{
+		tracing::warn!("Failed to set busy_timeout=5000: {e}");
+	}
+	// 64 MB page cache — the default 2 MB is too small for PTY output BLOB workloads.
+	if let Err(e) =
+		diesel::sql_query("PRAGMA cache_size=-65536;").execute(&mut conn)
+	{
+		tracing::warn!("Failed to set cache_size: {e}");
+	}
+	// Keep temp tables in memory instead of writing to disk.
+	if let Err(e) =
+		diesel::sql_query("PRAGMA temp_store=MEMORY;").execute(&mut conn)
+	{
+		tracing::warn!("Failed to set temp_store=MEMORY: {e}");
+	}
 
 	conn.run_pending_migrations(MIGRATIONS)
 		.map_err(|e| format!("Failed to run migrations: {e}"))?;

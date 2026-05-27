@@ -8,7 +8,7 @@ import {
 	Text,
 	Tooltip,
 } from "@chakra-ui/react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
 	FiChevronDown,
 	FiChevronRight,
@@ -33,7 +33,7 @@ import { ProfileList } from "./ProfileList";
 import { ProjectAvatar } from "./ProjectAvatar";
 import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
-export function ProjectMenuItem({
+export const ProjectMenuItem = memo(function ProjectMenuItem({
 	project,
 	projectGroups,
 }: {
@@ -326,4 +326,4 @@ export function ProjectMenuItem({
 			)}
 		</>
 	);
-}
+});

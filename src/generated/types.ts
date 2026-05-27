@@ -60,6 +60,7 @@ export interface AvailableShell {
   label: string;
   command: string;
   is_default: boolean;
+  supports_integration: boolean;
 }
 
 export interface FilePreview {

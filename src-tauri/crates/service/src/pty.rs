@@ -320,8 +320,25 @@ pub fn create_session(
 	let emitter = ctx.emitter.clone();
 	let db = ctx.db.clone();
 	let flush_senders = ctx.flush_senders.clone();
+	// Extract the shell injection temp dir so the read thread can clean it up
+	// when the session exits (these dirs accumulate in %TEMP% otherwise).
+	let cleanup_dir = match &injection {
+		infra::shell_init::ShellInjection::Zsh { zdotdir, .. } => {
+			Some(zdotdir.clone())
+		}
+		infra::shell_init::ShellInjection::Bash { init_file }
+		| infra::shell_init::ShellInjection::Fish { init_script: init_file }
+		| infra::shell_init::ShellInjection::Pwsh { init_script: init_file } => {
+			init_file.parent().map(|p| p.to_path_buf())
+		}
+		infra::shell_init::ShellInjection::None => None,
+	};
 	let handle = std::thread::spawn(move || {
 		read_pty_output(emitter, id, reader, db, flush_senders);
+		// Clean up shell injection temp directory
+		if let Some(dir) = cleanup_dir {
+			let _ = std::fs::remove_dir_all(&dir);
+		}
 	});
 
 	// Track the thread handle so it can be joined on app exit
@@ -331,7 +348,7 @@ pub fn create_session(
 
 	if !config.startup_commands.is_empty() {
 		if cfg!(windows) {
-			std::thread::sleep(Duration::from_secs(1));
+			std::thread::sleep(Duration::from_millis(500));
 		}
 		let startup_commands =
 			build_startup_commands(&config.startup_commands, cfg!(windows));
@@ -531,6 +548,11 @@ fn read_pty_output(
 	db: DbPool,
 	flush_senders: PtyFlushSenders,
 ) {
+	// Windows ConPty (especially pwsh) delivers larger chunks than Unix ptys.
+	// A bigger buffer reduces the number of read() syscalls and event emissions.
+	#[cfg(windows)]
+	let mut buf = [0u8; 16384];
+	#[cfg(not(windows))]
 	let mut buf = [0u8; 4096];
 	let mut utf8_remainder: Vec<u8> = Vec::new();
 

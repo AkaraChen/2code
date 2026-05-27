@@ -4,6 +4,14 @@ use std::process::Command;
 ///
 /// On non-Windows platforms this is identical to `Command::new`.
 pub fn command_without_windows_console(program: &str) -> Command {
+	// Alias for shell_detect.rs
+	silent_command(program)
+}
+
+/// Create a `Command` that won't open a console window on Windows.
+///
+/// On non-Windows platforms this is identical to `Command::new`.
+pub fn silent_command(program: &str) -> Command {
 	#[cfg(target_os = "windows")]
 	{
 		windows_no_window_command(program)

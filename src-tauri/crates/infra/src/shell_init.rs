@@ -5,9 +5,14 @@ use model::error::AppError;
 // 2code's own init scripts.
 // `common` is POSIX-sh compatible — works in bash and zsh (notify hook, claude wrapper, PATH).
 // `zsh` is zsh-only (zle keybindings, unsetopt).
+// `fish` and `pwsh` only set env vars and PATH; file creation is done by setup_2code_home().
 const DEFAULT_INIT_COMMON: &str =
 	include_str!("../scripts/default_init_common.sh");
 const DEFAULT_INIT_ZSH: &str = include_str!("../scripts/default_init_zsh.sh");
+const DEFAULT_INIT_FISH: &str =
+	include_str!("../scripts/default_init_fish.fish");
+const DEFAULT_INIT_PWSH: &str =
+	include_str!("../scripts/default_init_pwsh.ps1");
 
 // VS Code shell integration scripts (MIT licensed, from microsoft/vscode)
 const VSC_BASH: &str = include_str!("../scripts/shellIntegration-bash.sh");
@@ -29,19 +34,67 @@ pub enum ShellType {
 	Unknown,
 }
 
+/// Extract just the executable path from a shell command string, handling paths with spaces.
+/// E.g. `"C:\Program Files\PowerShell\7\pwsh.exe -NoLogo -NoProfile"` → `"C:\Program Files\PowerShell\7\pwsh.exe"`
+pub(crate) fn extract_exe(cmd: &str) -> String {
+	let cmd = cmd.trim();
+	let parts: Vec<&str> = cmd.split_whitespace().collect();
+	if parts.is_empty() {
+		return cmd.to_string();
+	}
+	let first = parts[0];
+	let looks_like_path = (first.len() >= 2 && first.as_bytes()[1] == b':')
+		|| first.contains('/')
+		|| first.contains('\\');
+	if !looks_like_path || parts.len() == 1 {
+		return first.to_string();
+	}
+	let mut end_idx = 1;
+	let mut found = false;
+	while end_idx < parts.len() {
+		let candidate = parts[..=end_idx].join(" ");
+		let lower = candidate.to_lowercase();
+		if lower.ends_with(".exe")
+			|| lower.ends_with(".bat")
+			|| lower.ends_with(".cmd")
+			|| lower.ends_with(".ps1")
+			|| lower.ends_with(".sh")
+			|| Path::new(&candidate).exists()
+		{
+			end_idx += 1;
+			found = true;
+			break;
+		}
+		end_idx += 1;
+		if end_idx > 6 {
+			break;
+		}
+	}
+	if !found {
+		end_idx = parts
+			.iter()
+			.position(|p| p.starts_with('-'))
+			.unwrap_or(parts.len());
+		if end_idx == 0 {
+			end_idx = 1;
+		}
+	}
+	parts[..end_idx].join(" ")
+}
+
 /// Detect shell type from the shell command string.
 pub fn detect_shell_type(shell_cmd: &str) -> ShellType {
-	// Take the basename of the first token (the executable)
-	let exe = shell_cmd.split_whitespace().next().unwrap_or(shell_cmd);
-	let basename = Path::new(exe)
+	let exe = extract_exe(shell_cmd);
+	let basename = Path::new(&exe)
 		.file_stem()
 		.and_then(|s| s.to_str())
-		.unwrap_or(exe)
+		.unwrap_or(&exe)
 		.to_lowercase();
 
 	match basename.as_str() {
 		"zsh" => ShellType::Zsh,
-		"bash" | "sh" => ShellType::Bash,
+		"bash" => ShellType::Bash,
+		"sh" => ShellType::Unknown,
 		"fish" => ShellType::Fish,
 		"pwsh" | "powershell" => ShellType::Pwsh,
 		_ => ShellType::Unknown,
@@ -66,6 +119,135 @@ pub enum ShellInjection {
 	None,
 }
 
+/// Write the 2code home directory files (notify hook, claude wrapper, settings JSON)
+/// so that fish and pwsh sessions have them available without running a bash script.
+/// Skipped silently if HOME is unset or any I/O fails.
+fn setup_2code_home() {
+	let home = std::env::var("HOME")
+		.ok()
+		.filter(|h| !h.is_empty())
+		.or_else(|| std::env::var("USERPROFILE").ok().filter(|h| !h.is_empty()))
+		.or_else(|| {
+			let drive = std::env::var("HOMEDRIVE").ok().filter(|d| !d.is_empty());
+			let path = std::env::var("HOMEPATH").ok().filter(|p| !p.is_empty());
+			match (drive, path) {
+				(Some(d), Some(p)) => Some(format!("{d}{p}")),
+				_ => None,
+			}
+		});
+	let home = match home {
+		Some(h) => PathBuf::from(h),
+		None => return,
+	};
+	let hooks = home.join(".2code/hooks");
+	let bin = home.join(".2code/bin");
+	if std::fs::create_dir_all(&hooks).is_err()
+		|| std::fs::create_dir_all(&bin).is_err()
+	{
+		return;
+	}
+
+	let notify = hooks.join("notify.sh");
+	if !notify.exists() {
+		let _ = std::fs::write(
+			&notify,
+			"#!/bin/bash\n[[ -z \"$_2CODE_HELPER\" ]] && exit 0\n\"$_2CODE_HELPER\" notify &>/dev/null &\n",
+		);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			if let Ok(meta) = std::fs::metadata(&notify) {
+				let mut perms = meta.permissions();
+				perms.set_mode(0o755);
+				let _ = std::fs::set_permissions(&notify, perms);
+			}
+		}
+	}
+
+	let settings = hooks.join("claude-settings.json");
+	if !settings.exists() {
+		let notify_str = notify.to_string_lossy().to_string();
+		let json = serde_json::json!({
+			"hooks": {
+				"Stop": [{ "hooks": [{ "type": "command", "command": &notify_str }] }],
+				"PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": &notify_str }] }]
+			}
+		});
+		if let Ok(content) = serde_json::to_string(&json) {
+			let _ = std::fs::write(&settings, content);
+		}
+	}
+
+	let wrapper = bin.join("claude");
+	if !wrapper.exists() {
+		let settings_str = settings.to_string_lossy();
+		let script = format!(
+			concat!(
+				"#!/bin/bash\n",
+				"_SETTINGS=\"{s}\"\n",
+				"_find_real() {{\n",
+				"  local IFS=:\n",
+				"  for dir in $PATH; do\n",
+				"    [ -z \"$dir\" ] && continue\n",
+				"    case \"${{dir%/}}\" in\n",
+				"      \"$HOME/.2code/bin\") continue ;;\n",
+				"    esac\n",
+				"    if [ -x \"$dir/claude\" ] && [ ! -d \"$dir/claude\" ]; then\n",
+				"      printf '%s\\n' \"$dir/claude\"\n",
+				"      return 0\n",
+				"    fi\n",
+				"  done\n",
+				"  return 1\n",
+				"}}\n",
+				"_REAL=\"$(_find_real)\"\n",
+				"if [ -z \"$_REAL\" ]; then\n",
+				"  echo \"2code: claude not found in PATH\" >&2\n",
+				"  exit 127\n",
+				"fi\n",
+				"exec \"$_REAL\" --settings \"$_SETTINGS\" \"$@\"\n",
+			),
+			s = settings_str
+		);
+		let _ = std::fs::write(&wrapper, script);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			if let Ok(meta) = std::fs::metadata(&wrapper) {
+				let mut perms = meta.permissions();
+				perms.set_mode(0o755);
+				let _ = std::fs::set_permissions(&wrapper, perms);
+			}
+		}
+	}
+
+	// Windows: PowerShell/CMD cannot execute extensionless files from PATH.
+	// Create a claude.cmd batch wrapper alongside the bash script.
+	#[cfg(windows)]
+	{
+		let cmd_wrapper = bin.join("claude.cmd");
+		if !cmd_wrapper.exists() {
+			let settings_str = settings.to_string_lossy();
+			let cmd_script = format!(
+				concat!(
+					"@echo off\r\n",
+					"setlocal\r\n",
+					"set \"_SETTINGS={s}\"\r\n",
+					"for /f \"delims=\" %%d in ('where claude 2^>nul') do (\r\n",
+					"    if /i not \"%%~dpd\"==\"%~dp0\" (\r\n",
+					"        \"%%d\" --settings \"%_SETTINGS%\" %*\r\n",
+					"        exit /b %ERRORLEVEL%\r\n",
+					"    )\r\n",
+					")\r\n",
+					"echo 2code: claude not found in PATH >&2\r\n",
+					"exit /b 127\r\n",
+				),
+				s = settings_str
+			);
+			let _ = std::fs::write(&cmd_wrapper, cmd_script);
+		}
+	}
+}
+
 /// Prepare shell integration injection for the given shell type.
 /// This writes the necessary scripts to a temp directory and returns
 /// an injection descriptor telling the PTY layer what to do.
@@ -74,14 +256,15 @@ pub fn prepare_shell_injection(
 	shell_type: ShellType,
 	project_init_scripts: &[String],
 ) -> Result<ShellInjection, AppError> {
-	let dir = std::env::temp_dir().join(format!("2code-init-{session_id}"));
+	let dir = std::env::temp_dir()
+		.join(format!("2code-init-{}-{session_id}", std::process::id()));
 	std::fs::create_dir_all(&dir)?;
 
 	match shell_type {
 		ShellType::Zsh => prepare_zsh(&dir, project_init_scripts),
 		ShellType::Bash => prepare_bash(&dir, project_init_scripts),
-		ShellType::Fish => prepare_fish(&dir, project_init_scripts),
-		ShellType::Pwsh => prepare_pwsh(&dir, project_init_scripts),
+		ShellType::Fish => prepare_fish(&dir),
+		ShellType::Pwsh => prepare_pwsh(&dir),
 		ShellType::Unknown => Ok(ShellInjection::None),
 	}
 }
@@ -143,32 +326,30 @@ fn prepare_bash(
 }
 
 /// Fish: VS Code's approach — use `--init-command 'source "<path>"'`.
-fn prepare_fish(
-	dir: &Path,
-	project_init_scripts: &[String],
-) -> Result<ShellInjection, AppError> {
+/// Project init scripts are skipped because they are POSIX shell syntax,
+/// incompatible with Fish.
+fn prepare_fish(dir: &Path) -> Result<ShellInjection, AppError> {
+	setup_2code_home();
 	let init_script = dir.join("shellIntegration.fish");
-	let project_init = project_init_scripts.join("\n");
 	let script = format!(
-		"{vsc}\n\n# === 2code project init ===\n{project_init}\n",
+		"{vsc}\n\n# === 2code common init ===\n{common}\n",
 		vsc = VSC_FISH,
-		project_init = project_init.trim_end(),
+		common = DEFAULT_INIT_FISH.trim_end(),
 	);
 	std::fs::write(&init_script, script)?;
 	Ok(ShellInjection::Fish { init_script })
 }
 
 /// Pwsh: VS Code's approach — use `-noexit -command '. "<path>"'`.
-fn prepare_pwsh(
-	dir: &Path,
-	project_init_scripts: &[String],
-) -> Result<ShellInjection, AppError> {
+/// Project init scripts are skipped because they are POSIX shell syntax,
+/// incompatible with PowerShell.
+fn prepare_pwsh(dir: &Path) -> Result<ShellInjection, AppError> {
+	setup_2code_home();
 	let init_script = dir.join("shellIntegration.ps1");
-	let project_init = project_init_scripts.join("\n");
 	let script = format!(
-		"{vsc}\n\n# === 2code project init ===\n{project_init}\n",
+		"{vsc}\n\n# === 2code common init ===\n{common}\n",
 		vsc = VSC_PWSH,
-		project_init = project_init.trim_end(),
+		common = DEFAULT_INIT_PWSH.trim_end(),
 	);
 	std::fs::write(&init_script, script)?;
 	Ok(ShellInjection::Pwsh { init_script })
@@ -177,7 +358,47 @@ fn prepare_pwsh(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::process::Command;
+
+	#[test]
+	fn extract_exe_simple_basename() {
+		assert_eq!(extract_exe("bash"), "bash");
+		assert_eq!(extract_exe("pwsh -NoLogo"), "pwsh");
+	}
+
+	#[test]
+	fn extract_exe_unix_path_with_args() {
+		assert_eq!(extract_exe("/usr/bin/zsh -l"), "/usr/bin/zsh");
+		assert_eq!(extract_exe("/bin/bash --login"), "/bin/bash");
+	}
+
+	#[test]
+	fn extract_exe_windows_path_with_spaces() {
+		assert_eq!(
+			extract_exe(
+				"C:\\Program Files\\PowerShell\\7\\pwsh.exe -NoLogo -NoProfile"
+			),
+			"C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+		);
+	}
+
+	#[test]
+	fn extract_exe_path_with_spaces_no_extension_with_flag() {
+		// Path containing spaces, no .exe/.sh suffix, followed by a flag.
+		// The fallback must split at the first flag-looking token, not swallow it.
+		assert_eq!(
+			extract_exe("C:\\Program Files\\nu\\nu --login"),
+			"C:\\Program Files\\nu\\nu"
+		);
+	}
+
+	#[test]
+	fn extract_exe_path_with_spaces_no_extension_no_flag() {
+		// Path containing spaces, no extension, no following flag — keep the whole thing.
+		assert_eq!(
+			extract_exe("C:\\Program Files\\nu\\nu"),
+			"C:\\Program Files\\nu\\nu"
+		);
+	}
 
 	#[test]
 	fn detect_zsh() {
@@ -201,6 +422,16 @@ mod tests {
 		assert_eq!(detect_shell_type("pwsh"), ShellType::Pwsh);
 		assert_eq!(
 			detect_shell_type("powershell.exe -NoLogo"),
+			ShellType::Pwsh
+		);
+	}
+
+	#[test]
+	fn detect_pwsh_windows_path_with_spaces() {
+		assert_eq!(
+			detect_shell_type(
+				"C:\\Program Files\\PowerShell\\7\\pwsh.exe -NoLogo -NoProfile"
+			),
 			ShellType::Pwsh
 		);
 	}
@@ -260,12 +491,21 @@ mod tests {
 	}
 
 	#[test]
-	fn prepare_fish_creates_script() {
-		let inj = prepare_shell_injection("test-fish-1", ShellType::Fish, &[])
+	fn prepare_fish_includes_common_init() {
+		let inj = prepare_shell_injection("test-fish-2", ShellType::Fish, &[])
 			.unwrap();
 		match inj {
 			ShellInjection::Fish { init_script } => {
 				assert!(init_script.exists());
+				let content = std::fs::read_to_string(&init_script).unwrap();
+				// VSCode integration must be present
+				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
+				// 2code common init must be present
+				assert!(content.contains("2code common init"));
+				assert!(content.contains("fish_add_path"));
+				assert!(content.contains("_2CODE_HOME"));
+				// Project init must NOT be present (POSIX syntax, incompatible)
+				assert!(!content.contains("2code project init"));
 				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
 			}
 			_ => panic!("Expected Fish injection"),
@@ -273,126 +513,23 @@ mod tests {
 	}
 
 	#[test]
-	#[cfg(unix)]
-	fn default_common_init_wraps_claude_stop_hook_and_codex_notify() {
-		let temp = tempfile::tempdir().unwrap();
-		let home = temp.path().join("home with space");
-		let real_bin = temp.path().join("real-bin");
-		let marker = temp.path().join("marker");
-		std::fs::create_dir_all(&home).unwrap();
-		std::fs::create_dir_all(&real_bin).unwrap();
-		std::fs::create_dir_all(&marker).unwrap();
-
-		write_fake_executable(
-			&real_bin.join("claude"),
-			r#"#!/bin/sh
-printf '%s\n' "$@" >"$MARKER/claude.args"
-"#,
-		);
-		write_fake_executable(
-			&real_bin.join("codex"),
-			r#"#!/bin/sh
-printf '%s\n' "$@" >"$MARKER/codex.args"
-"#,
-		);
-		write_fake_executable(
-			&marker.join("helper"),
-			&format!(
-				r#"#!/bin/sh
-printf '%s\n' "$@" >>"{}"
-"#,
-				marker.join("helper.args").display()
-			),
-		);
-
-		let init_file = temp.path().join("default_init_common.sh");
-		std::fs::write(&init_file, DEFAULT_INIT_COMMON).unwrap();
-		let shell = format!(
-			r#". "{}"
-claude --version
-codex exec "say ok"
-"#,
-			init_file.display()
-		);
-
-		let output = Command::new("/bin/bash")
-			.arg("--noprofile")
-			.arg("--norc")
-			.arg("-c")
-			.arg(shell)
-			.env("HOME", &home)
-			.env("MARKER", &marker)
-			.env(
-				"PATH",
-				format!("{}:/usr/bin:/bin", real_bin.to_string_lossy()),
-			)
-			.output()
+	fn prepare_pwsh_includes_common_init() {
+		let inj = prepare_shell_injection("test-pwsh-1", ShellType::Pwsh, &[])
 			.unwrap();
-		assert!(
-			output.status.success(),
-			"init failed\nstdout:\n{}\nstderr:\n{}",
-			String::from_utf8_lossy(&output.stdout),
-			String::from_utf8_lossy(&output.stderr),
-		);
-
-		let hooks_dir = home.join(".2code/hooks");
-		let claude_args =
-			std::fs::read_to_string(marker.join("claude.args")).unwrap();
-		assert!(claude_args.contains("--settings\n"));
-		assert!(claude_args.contains(&format!(
-			"{}\n",
-			hooks_dir.join("claude-settings.json").display()
-		)));
-
-		let codex_args =
-			std::fs::read_to_string(marker.join("codex.args")).unwrap();
-		assert!(codex_args.contains("notify=[\""));
-		assert!(codex_args
-			.contains(&hooks_dir.join("notify.sh").display().to_string()));
-
-		let claude_settings: serde_json::Value = serde_json::from_str(
-			&std::fs::read_to_string(hooks_dir.join("claude-settings.json"))
-				.unwrap(),
-		)
-		.unwrap();
-		assert_eq!(
-			claude_settings["hooks"]["Stop"][0]["hooks"][0]["command"],
-			format!("'{}'", hooks_dir.join("notify.sh").display())
-		);
-
-		let output = Command::new("/bin/bash")
-			.arg("--noprofile")
-			.arg("--norc")
-			.arg("-c")
-			.arg(format!(
-				"'{}'; sleep 1",
-				hooks_dir.join("notify.sh").display()
-			))
-			.env("_2CODE_HELPER", marker.join("helper"))
-			.env("_2CODE_HELPER_URL", "http://127.0.0.1:1")
-			.env("_2CODE_SESSION_ID", "test-session")
-			.env("MARKER", &marker)
-			.output()
-			.unwrap();
-		assert!(
-			output.status.success(),
-			"hook command failed\nstdout:\n{}\nstderr:\n{}",
-			String::from_utf8_lossy(&output.stdout),
-			String::from_utf8_lossy(&output.stderr),
-		);
-		assert_eq!(
-			std::fs::read_to_string(marker.join("helper.args")).unwrap(),
-			"notify\n"
-		);
-	}
-
-	#[cfg(unix)]
-	fn write_fake_executable(path: &Path, content: &str) {
-		use std::os::unix::fs::PermissionsExt;
-
-		std::fs::write(path, content).unwrap();
-		let mut permissions = std::fs::metadata(path).unwrap().permissions();
-		permissions.set_mode(0o755);
-		std::fs::set_permissions(path, permissions).unwrap();
+		match inj {
+			ShellInjection::Pwsh { init_script } => {
+				assert!(init_script.exists());
+				let content = std::fs::read_to_string(&init_script).unwrap();
+				// VSCode integration must be present
+				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
+				// 2code common init must be present
+				assert!(content.contains("2code common init"));
+				assert!(content.contains("_2CODE_HOME"));
+				// Project init must NOT be present (POSIX syntax, incompatible)
+				assert!(!content.contains("2code project init"));
+				std::fs::remove_dir_all(init_script.parent().unwrap()).ok();
+			}
+			_ => panic!("Expected Pwsh injection"),
+		}
 	}
 }
