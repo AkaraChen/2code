@@ -67,7 +67,6 @@ export function TerminalLinkConfirmDialog({
 							</Dialog.ActionTrigger>
 							<HStack gap="0">
 								<Button
-									variant="outline"
 									borderRightRadius="0"
 									onClick={onOpenDefault}
 								>
@@ -76,7 +75,6 @@ export function TerminalLinkConfirmDialog({
 								<Menu.Root>
 									<Menu.Trigger asChild>
 										<IconButton
-											variant="outline"
 											borderLeftRadius="0"
 											ml="-1px"
 											aria-label={m.browserOpenWith()}
