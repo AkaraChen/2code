@@ -7,6 +7,14 @@ $env:_2CODE_HOOKS = "$env:_2CODE_HOME\hooks"
 $env:_2CODE_NOTIFY = "$env:_2CODE_HOOKS\notify.sh"
 $env:_2CODE_SETTINGS = "$env:_2CODE_HOOKS\claude-settings.json"
 
-if ($env:PATH -notlike "*$env:_2CODE_BIN*") {
-    $env:PATH = "$env:_2CODE_BIN$([System.IO.Path]::PathSeparator)$env:PATH"
+$pathSep = [System.IO.Path]::PathSeparator
+$alreadyOnPath = $false
+foreach ($entry in ($env:PATH -split [regex]::Escape($pathSep))) {
+    if ([string]::Equals($entry, $env:_2CODE_BIN, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $alreadyOnPath = $true
+        break
+    }
+}
+if (-not $alreadyOnPath) {
+    $env:PATH = "$env:_2CODE_BIN$pathSep$env:PATH"
 }
