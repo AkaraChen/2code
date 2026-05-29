@@ -15,7 +15,7 @@ import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg"
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
-import { lazy, useMemo, type ReactNode } from "react";
+import { lazy, useMemo, useState, type ReactNode } from "react";
 import { FiFileText, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -33,6 +33,7 @@ import { Terminal } from "./Terminal";
 
 const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
 const ProfileNotesEditor = lazy(() => import("@/features/profiles/ProfileNotesEditor"));
+const UnsavedFileCloseDialog = lazy(() => import("@/features/projects/UnsavedFileCloseDialog"));
 
 // Stable fallbacks — module-level constants prevent new object refs each render,
 // which would break useShallow's equality check and cause infinite re-renders.
@@ -147,6 +148,10 @@ export default function TerminalTabs({
 
 	const closeTab = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
+	const [pendingCloseFile, setPendingCloseFile] = useState<{
+		filePath: string;
+		title: string;
+	} | null>(null);
 
 	// Unified active tab value: file path when a file tab is active, or session ID.
 	const activeValue = fileTabActive ? (activeFilePath ?? "") : (activeTabId ?? "");
@@ -164,6 +169,25 @@ export default function TerminalTabs({
 
 		setActiveTab(profileId, value);
 		setTerminalActive(profileId);
+	}
+
+	function handleFileTabClose(filePath: string, title: string) {
+		if (dirtyFilePathSet.has(filePath)) {
+			setPendingCloseFile({ filePath, title });
+			return;
+		}
+
+		closeFileTab(profileId, filePath);
+	}
+
+	function handleCancelFileClose() {
+		setPendingCloseFile(null);
+	}
+
+	function handleDiscardFileChanges() {
+		if (!pendingCloseFile) return;
+		closeFileTab(profileId, pendingCloseFile.filePath);
+		setPendingCloseFile(null);
 	}
 
 	const tabGroups: TabStripGroup[] = [
@@ -204,7 +228,7 @@ export default function TerminalTabs({
 				badge: dirtyFilePathSet.has(tab.filePath) ? (
 					<Circle size="2" bg="fg.muted" />
 				) : undefined,
-				onClose: () => closeFileTab(profileId, tab.filePath),
+				onClose: () => handleFileTabClose(tab.filePath, tab.title),
 			})),
 		},
 	];
@@ -355,6 +379,20 @@ export default function TerminalTabs({
 				))}
 				{tabs.length === 0 && emptyFallback}
 			</Box>
+
+			<AsyncBoundary
+				fallback={null}
+				errorFallback={({ error, onRetry }) => (
+					<InlineError error={error} height="32" onRetry={onRetry} />
+				)}
+			>
+				<UnsavedFileCloseDialog
+					fileName={pendingCloseFile?.title ?? ""}
+					isOpen={!!pendingCloseFile}
+					onCancel={handleCancelFileClose}
+					onDiscard={handleDiscardFileChanges}
+				/>
+			</AsyncBoundary>
 		</Flex>
 	);
 }

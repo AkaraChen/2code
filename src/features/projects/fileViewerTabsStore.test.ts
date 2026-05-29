@@ -9,7 +9,11 @@ import {
 
 function resetStores() {
 	useFileViewerTabsStore.setState({ profiles: {} });
-	useFileViewerDirtyStore.setState({ profiles: {} });
+	useFileViewerDirtyStore.setState({
+		profiles: {},
+		drafts: {},
+		savedValues: {},
+	});
 	useTerminalStore.setState({
 		profiles: {},
 		notifiedTabs: new Set<string>(),
@@ -87,6 +91,12 @@ describe("fileViewerTabsStore", () => {
 		useFileViewerDirtyStore
 			.getState()
 			.setFileDirty("profile-1", "/repo/src/a.ts", true);
+		useFileViewerDirtyStore
+			.getState()
+			.setFileDraft("profile-1", "/repo/src/a.ts", "draft");
+		useFileViewerDirtyStore
+			.getState()
+			.setFileSavedValue("profile-1", "/repo/src/a.ts", "saved");
 
 		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toEqual([
 			"/repo/src/a.ts",
@@ -95,6 +105,8 @@ describe("fileViewerTabsStore", () => {
 		useFileViewerTabsStore.getState().closeTab("profile-1", "/repo/src/a.ts");
 
 		expect(useFileViewerDirtyStore.getState().profiles["profile-1"]).toBeUndefined();
+		expect(useFileViewerDirtyStore.getState().drafts["profile-1"]).toBeUndefined();
+		expect(useFileViewerDirtyStore.getState().savedValues["profile-1"]).toBeUndefined();
 	});
 
 	it("switches between file and terminal focus for a profile", () => {

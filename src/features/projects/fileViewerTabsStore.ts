@@ -28,16 +28,49 @@ interface FileViewerTabsStore {
 
 interface FileViewerDirtyStore {
 	profiles: Record<string, string[]>;
+	drafts: Record<string, Record<string, string>>;
+	savedValues: Record<string, Record<string, string>>;
+	setFileDraft: (
+		profileId: string,
+		filePath: string,
+		content: string,
+	) => void;
+	setFileSavedValue: (
+		profileId: string,
+		filePath: string,
+		content: string,
+	) => void;
 	setFileDirty: (
 		profileId: string,
 		filePath: string,
 		isDirty: boolean,
 	) => void;
+	clearFileState: (profileId: string, filePath: string) => void;
 }
 
 export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 	immer((set) => ({
 		profiles: {},
+		drafts: {},
+		savedValues: {},
+
+		setFileDraft(profileId, filePath, content) {
+			set((state) => {
+				state.drafts[profileId] = {
+					...(state.drafts[profileId] ?? {}),
+					[filePath]: content,
+				};
+			});
+		},
+
+		setFileSavedValue(profileId, filePath, content) {
+			set((state) => {
+				state.savedValues[profileId] = {
+					...(state.savedValues[profileId] ?? {}),
+					[filePath]: content,
+				};
+			});
+		},
 
 		setFileDirty(profileId, filePath, isDirty) {
 			set((state) => {
@@ -57,6 +90,32 @@ export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 					state.profiles[profileId] = nextDirtyFiles;
 				} else {
 					delete state.profiles[profileId];
+				}
+			});
+		},
+
+		clearFileState(profileId, filePath) {
+			set((state) => {
+				const dirtyFiles = state.profiles[profileId] ?? [];
+				const nextDirtyFiles = dirtyFiles.filter((path) => path !== filePath);
+				if (nextDirtyFiles.length > 0) {
+					state.profiles[profileId] = nextDirtyFiles;
+				} else {
+					delete state.profiles[profileId];
+				}
+
+				if (state.drafts[profileId]) {
+					delete state.drafts[profileId][filePath];
+					if (Object.keys(state.drafts[profileId]).length === 0) {
+						delete state.drafts[profileId];
+					}
+				}
+
+				if (state.savedValues[profileId]) {
+					delete state.savedValues[profileId][filePath];
+					if (Object.keys(state.savedValues[profileId]).length === 0) {
+						delete state.savedValues[profileId];
+					}
 				}
 			});
 		},
@@ -116,7 +175,7 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 				});
 				useFileViewerDirtyStore
 					.getState()
-					.setFileDirty(profileId, filePath, false);
+					.clearFileState(profileId, filePath);
 			},
 
 			setFileActive(profileId, filePath) {

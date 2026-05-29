@@ -131,12 +131,20 @@ function renderPane(path = filePath) {
 	);
 }
 
+function dirtyState() {
+	return useFileViewerDirtyStore.getState();
+}
+
 describe("fileViewerPane", () => {
 	let getClientRectsSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
 		saveMutateMock.mockReset();
-		useFileViewerDirtyStore.setState({ profiles: {} });
+		useFileViewerDirtyStore.setState({
+			profiles: {},
+			drafts: {},
+			savedValues: {},
+		});
 		getClientRectsSpy = vi
 			.spyOn(HTMLElement.prototype, "getClientRects")
 			.mockReturnValue(createVisibleRectList());
@@ -214,6 +222,28 @@ describe("fileViewerPane", () => {
 			expect.objectContaining({ onSuccess: expect.any(Function) }),
 		);
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
+		expect(dirtyState().drafts[profileId]?.[filePath]).toBe(nextContent);
+		expect(dirtyState().savedValues[profileId]?.[filePath]).toBe(nextContent);
+	});
+
+	it("keeps unsaved edits when the pane unmounts and remounts", async () => {
+		const nextContent = `${fileContent}\nconsole.log(beta);`;
+		const { unmount } = renderPane();
+
+		const editor = await screen.findByLabelText("Monaco Editor");
+		fireEvent.change(editor, { target: { value: nextContent } });
+
+		await waitFor(() => {
+			expect(dirtyState().drafts[profileId]?.[filePath]).toBe(nextContent);
+		});
+
+		unmount();
+		renderPane();
+
+		expect(await screen.findByLabelText("Monaco Editor")).toHaveValue(nextContent);
+		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toContain(
+			filePath,
+		);
 	});
 
 	it("renders markdown files with the markdown editor and saves edited content", async () => {

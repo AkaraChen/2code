@@ -13,7 +13,7 @@ import type {
 	OnChange,
 	OnMount,
 } from "@monaco-editor/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import MarkdownEditor from "@/features/markdown/MarkdownEditor";
 import ArchivePreviewTree from "@/features/projects/ArchivePreviewTree";
 import { isPreviewableBinaryFile } from "@/features/projects/filePreview";
@@ -158,12 +158,18 @@ export default function FileViewerPane({
 	const themeId = useTerminalThemeId();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const [draftsByPath, setDraftsByPath] = useState<Record<string, string>>({});
-	const [savedValuesByPath, setSavedValuesByPath] = useState<
-		Record<string, string>
-	>({});
 	const paneRef = useRef<HTMLDivElement | null>(null);
 	const saveHandlerRef = useRef<() => void>(() => {});
+	const draftValue = useFileViewerDirtyStore(
+		(state) => state.drafts[profileId]?.[filePath],
+	);
+	const savedValue = useFileViewerDirtyStore(
+		(state) => state.savedValues[profileId]?.[filePath],
+	);
+	const setFileDraft = useFileViewerDirtyStore((state) => state.setFileDraft);
+	const setFileSavedValue = useFileViewerDirtyStore(
+		(state) => state.setFileSavedValue,
+	);
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
 	const previewableBinaryFile = isPreviewableBinaryFile(filePath);
@@ -183,8 +189,6 @@ export default function FileViewerPane({
 	const markdownFile = isMarkdownFile(filePath);
 	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
-	const draftValue = draftsByPath[filePath];
-	const savedValue = savedValuesByPath[filePath];
 	const editorValue = draftValue ?? content ?? "";
 	const lastSavedValue = savedValue ?? content ?? "";
 	const hasLoadedFile = content != null || draftValue != null;
@@ -231,12 +235,9 @@ export default function FileViewerPane({
 
 	const handleFileChange = useCallback(
 		(nextValue: string) => {
-			setDraftsByPath((prev) => ({
-				...prev,
-				[filePath]: nextValue,
-			}));
+			setFileDraft(profileId, filePath, nextValue);
 		},
-		[filePath],
+		[filePath, profileId, setFileDraft],
 	);
 
 	const handleEditorChange = useCallback<OnChange>(
@@ -254,14 +255,8 @@ export default function FileViewerPane({
 			{ path: filePath, content: contentToSave },
 			{
 				onSuccess: (_result, variables) => {
-					setDraftsByPath((prev) => ({
-						...prev,
-						[variables.path]: variables.content,
-					}));
-					setSavedValuesByPath((prev) => ({
-						...prev,
-						[variables.path]: variables.content,
-					}));
+					setFileDraft(profileId, variables.path, variables.content);
+					setFileSavedValue(profileId, variables.path, variables.content);
 					setFileDirty(profileId, variables.path, false);
 				},
 			},
@@ -274,7 +269,9 @@ export default function FileViewerPane({
 		lastSavedValue,
 		profileId,
 		saveFileContent,
+		setFileDraft,
 		setFileDirty,
+		setFileSavedValue,
 	]);
 
 	saveHandlerRef.current = handleSave;
