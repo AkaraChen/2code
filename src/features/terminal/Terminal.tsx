@@ -44,8 +44,12 @@ function friendlyShellName(shell: string): string | null {
 	const lower = shell.toLowerCase();
 	if (lower.includes("pwsh")) return "PowerShell 7";
 	if (lower.includes("powershell")) return "Windows PowerShell";
-	if (lower.includes("cmd.exe")) return "Command Prompt";
-	if (lower.includes("wsl")) return "WSL";
+	if (/\bcmd(?:\.exe)?\b/.test(lower)) return "Command Prompt";
+	if (lower.includes("wsl")) {
+		// Preserve distro label when launched as `wsl -d <Distro>` (case-insensitive)
+		const distro = shell.match(/-d\s+(\S+)/i)?.[1];
+		return distro ? `WSL (${distro})` : "WSL";
+	}
 	if (lower.includes("bash") && lower.includes("git")) return "Git Bash";
 	return null;
 }
