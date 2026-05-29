@@ -499,9 +499,9 @@ fn reveal_path_in_file_manager_impl(path: &Path) -> Result<(), AppError> {
 			return Ok(());
 		}
 
-		return Err(AppError::IoError(std::io::Error::other(format!(
+		Err(AppError::IoError(std::io::Error::other(format!(
 			"Failed to reveal path in Finder: {status}"
-		))));
+		))))
 	}
 
 	#[cfg(target_os = "windows")]
@@ -556,9 +556,9 @@ fn open_path_in_default_app_impl(path: &Path) -> Result<(), AppError> {
 			return Ok(());
 		}
 
-		return Err(AppError::IoError(std::io::Error::other(format!(
+		Err(AppError::IoError(std::io::Error::other(format!(
 			"Failed to open path in default app: {status}"
-		))));
+		))))
 	}
 
 	#[cfg(target_os = "windows")]

@@ -154,20 +154,16 @@ pub fn run() {
 		use std::sync::atomic::Ordering;
 		use tauri::Manager;
 
-		match event {
-			tauri::RunEvent::Exit => {
-				shutdown_for_exit.store(true, Ordering::Relaxed);
-				infra::pty::close_all_sessions(&sessions_for_exit);
-				tracing::info!(target: "pty", "exit: joining read threads...");
-				infra::pty::join_all_read_threads(&read_threads_for_exit);
-				tracing::info!(target: "pty", "exit: all read threads joined");
+		if let tauri::RunEvent::Exit = event {
+			shutdown_for_exit.store(true, Ordering::Relaxed);
+			infra::pty::close_all_sessions(&sessions_for_exit);
+			tracing::info!(target: "pty", "exit: joining read threads...");
+			infra::pty::join_all_read_threads(&read_threads_for_exit);
+			tracing::info!(target: "pty", "exit: all read threads joined");
 
-				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
-					service::pty::mark_all_closed(&db);
-				}
+			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
+				service::pty::mark_all_closed(&db);
 			}
-
-			_ => {}
 		}
 	});
 }

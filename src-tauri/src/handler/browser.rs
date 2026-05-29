@@ -144,7 +144,7 @@ pub async fn list_installed_browsers() -> Vec<BrowserApp> {
 		let browsers =
 			tauri::async_runtime::spawn_blocking(list_installed_browsers_macos)
 				.await;
-		return browsers.unwrap_or_default();
+		browsers.unwrap_or_default()
 	}
 
 	#[cfg(not(target_os = "macos"))]
@@ -160,10 +160,10 @@ pub async fn open_url_in_browser(
 ) -> Result<(), AppError> {
 	#[cfg(target_os = "macos")]
 	{
-		return super::run_blocking(move || {
+		super::run_blocking(move || {
 			open_url_in_browser_macos(&browser_id, &url)
 		})
-		.await;
+		.await
 	}
 
 	#[cfg(not(target_os = "macos"))]

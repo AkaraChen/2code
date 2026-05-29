@@ -272,7 +272,7 @@ pub fn delete_file_tree_paths(
 		});
 	}
 
-	delete_paths.sort_by(|left, right| right.depth.cmp(&left.depth));
+	delete_paths.sort_by_key(|path| std::cmp::Reverse(path.depth));
 
 	for delete_path in delete_paths {
 		if delete_path.metadata.file_type().is_dir() {
