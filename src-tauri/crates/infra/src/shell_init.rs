@@ -59,7 +59,7 @@ pub(crate) fn extract_exe(cmd: &str) -> String {
 			|| lower.ends_with(".cmd")
 			|| lower.ends_with(".ps1")
 			|| lower.ends_with(".sh")
-			|| Path::new(&candidate).exists()
+			|| Path::new(&candidate).is_file()
 		{
 			end_idx += 1;
 			found = true;
