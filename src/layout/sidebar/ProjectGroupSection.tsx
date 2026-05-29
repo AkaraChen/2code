@@ -18,11 +18,11 @@ interface ProjectGroupSectionProps {
 	projects: ProjectWithProfiles[];
 }
 
-export const ProjectGroupSection = memo(function ProjectGroupSection({
+export const ProjectGroupSection = memo(({
 	group,
 	projectGroups,
 	projects,
-}: ProjectGroupSectionProps) {
+}: ProjectGroupSectionProps) => {
 	const collapsed = useAppSidebarStore((state) =>
 		state.collapsedProjectGroupIds.includes(group.id),
 	);

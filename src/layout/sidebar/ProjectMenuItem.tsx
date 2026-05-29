@@ -33,13 +33,13 @@ import { ProfileList } from "./ProfileList";
 import { ProjectAvatar } from "./ProjectAvatar";
 import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
-export const ProjectMenuItem = memo(function ProjectMenuItem({
+export const ProjectMenuItem = memo(({
 	project,
 	projectGroups,
 }: {
 	project: ProjectWithProfiles;
 	projectGroups: ProjectGroup[];
-}) {
+}) => {
 	const defaultProfile = useMemo(
 		() => project.profiles.find((p) => p.is_default),
 		[project.profiles],

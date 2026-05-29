@@ -10,7 +10,7 @@ import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 
-export const ProfileItem = memo(function ProfileItem({
+export const ProfileItem = memo(({
 	profile,
 	projectId,
 	isActive,
@@ -18,7 +18,7 @@ export const ProfileItem = memo(function ProfileItem({
 	profile: Profile;
 	projectId: string;
 	isActive: boolean;
-}) {
+}) => {
 	const deleteDialog = useDialogState();
 	const hasNotification = useProfileHasNotification(profile.id);
 	const markProfileRead = useTerminalStore((s) => s.markProfileRead);

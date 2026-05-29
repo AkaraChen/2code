@@ -443,6 +443,7 @@ export function Terminal({ profileId, sessionId, isActive, shell }: TerminalProp
 			increaseFontSize,
 			profileId,
 			sessionId,
+			shell,
 			syncTerminalLayout,
 		],
 	);
