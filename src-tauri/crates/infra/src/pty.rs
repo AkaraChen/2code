@@ -134,10 +134,36 @@ pub fn create_session(
 }
 
 /// Parse a shell command string into (program, args), handling paths with spaces.
-/// e.g. `"C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe -NoLogo -NoProfile"`
-/// → `("C:\\Program Files\\PowerShell\\7-preview\\pwsh.exe", ["-NoLogo", "-NoProfile"])`
+///
+/// Accepts three shapes:
+/// 1. Quoted program: `"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo`
+///    → program is the quoted span (quotes stripped), args split by whitespace.
+/// 2. Bare path with spaces ending in a known extension or matching an existing
+///    file: `C:\Program Files\PowerShell\7\pwsh.exe -NoLogo` → joined back into
+///    a single program via the extension/exists fallback below.
+/// 3. Simple `program [args...]`.
 fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
 	let shell = shell.trim();
+	if shell.is_empty() {
+		return (String::new(), vec![]);
+	}
+
+	// Shape 1: quoted program. Preserves spaces and escaping intent the user
+	// expressed explicitly — no heuristic guesswork needed.
+	let first_char = shell.as_bytes()[0];
+	if first_char == b'"' || first_char == b'\'' {
+		let quote = first_char as char;
+		if let Some(end) = shell[1..].find(quote) {
+			let program = shell[1..=end].to_string();
+			let rest = shell[end + 2..].trim();
+			let args = rest
+				.split_whitespace()
+				.map(|s| s.to_string())
+				.collect();
+			return (program, args);
+		}
+	}
+
 	let parts: Vec<&str> = shell.split_whitespace().collect();
 	if parts.is_empty() {
 		return (shell.to_string(), vec![]);
@@ -408,6 +434,29 @@ mod tests {
 	fn parse_shell_git_bash() {
 		let (prog, args) = parse_shell_command(r"C:\Program Files\Git\bin\bash.exe");
 		assert_eq!(prog, r"C:\Program Files\Git\bin\bash.exe");
+		assert!(args.is_empty());
+	}
+
+	#[test]
+	fn parse_shell_quoted_path() {
+		let (prog, args) = parse_shell_command(
+			r#""C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -NoProfile"#,
+		);
+		assert_eq!(prog, r"C:\Program Files\PowerShell\7\pwsh.exe");
+		assert_eq!(args, vec!["-NoLogo".to_string(), "-NoProfile".to_string()]);
+	}
+
+	#[test]
+	fn parse_shell_quoted_path_no_args() {
+		let (prog, args) = parse_shell_command(r#""/usr/local/bin/my shell""#);
+		assert_eq!(prog, "/usr/local/bin/my shell");
+		assert!(args.is_empty());
+	}
+
+	#[test]
+	fn parse_shell_empty() {
+		let (prog, args) = parse_shell_command("");
+		assert!(prog.is_empty());
 		assert!(args.is_empty());
 	}
 }
