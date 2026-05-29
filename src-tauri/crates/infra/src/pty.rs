@@ -186,15 +186,21 @@ fn build_injected_command(shell: &str, injection: &ShellInjection) -> CommandBui
 
 	match injection {
 		ShellInjection::Bash { init_file } => {
-			// bash --init-file /path/to/shellIntegration-bash.sh
+			// bash [user args] --init-file /path/to/shellIntegration-bash.sh
 			let mut cmd = CommandBuilder::new(program);
+			for arg in &existing_args {
+				cmd.arg(arg.as_str());
+			}
 			cmd.arg("--init-file");
 			cmd.arg(init_file.to_string_lossy().as_ref());
 			cmd
 		}
 		ShellInjection::Zsh { .. } => {
-			// zsh -i  (ZDOTDIR is set via env var, scripts are in the dir)
+			// zsh [user args] -i  (ZDOTDIR is set via env var, scripts are in the dir)
 			let mut cmd = CommandBuilder::new(program);
+			for arg in &existing_args {
+				cmd.arg(arg.as_str());
+			}
 			cmd.arg("-i");
 			cmd
 		}
