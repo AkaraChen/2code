@@ -55,6 +55,55 @@ fn push_existing_shell(
 	}
 }
 
+/// An App Execution Alias (`%LOCALAPPDATA%\Microsoft\WindowsApps\*.exe`) is a
+/// zero-byte reparse point whose `IO_REPARSE_TAG_APPEXECLINK` is only honored
+/// by the Windows shell/loader. portable_pty's ConPTY spawn path does not
+/// resolve it, so spawning the alias path produces no child and the terminal
+/// stays blank. We must skip these stubs in favor of the real binary.
+#[cfg(windows)]
+fn is_app_exec_alias_stub(path: &str) -> bool {
+	let lower = path.to_lowercase().replace('/', "\\");
+	if !lower.contains("\\microsoft\\windowsapps\\") {
+		return false;
+	}
+	std::fs::metadata(path)
+		.map(|m| m.len() == 0)
+		.unwrap_or(false)
+}
+
+/// Probe `C:\Program Files\WindowsApps` for a Microsoft Store install of pwsh.
+/// Reading this directory often fails for standard users due to ACLs, so this
+/// is best-effort — callers must handle `None`.
+#[cfg(windows)]
+fn find_store_pwsh() -> Option<String> {
+	let store_root = Path::new(r"C:\Program Files\WindowsApps");
+	let entries = std::fs::read_dir(store_root).ok()?;
+	let mut best: Option<(String, String)> = None;
+	for entry in entries.flatten() {
+		let name = entry.file_name().to_string_lossy().into_owned();
+		if !name.starts_with("Microsoft.PowerShell_") || !name.contains("_x64_")
+		{
+			continue;
+		}
+		let pwsh = entry.path().join("pwsh.exe");
+		if !pwsh.is_file() {
+			continue;
+		}
+		let version = name
+			.strip_prefix("Microsoft.PowerShell_")
+			.and_then(|s| s.split("_x64_").next())
+			.unwrap_or("")
+			.to_string();
+		let pwsh_str = pwsh.to_string_lossy().into_owned();
+		match &best {
+			None => best = Some((version, pwsh_str)),
+			Some((v, _)) if version > *v => best = Some((version, pwsh_str)),
+			_ => {}
+		}
+	}
+	best.map(|(_, p)| p)
+}
+
 #[cfg(windows)]
 fn find_pwsh_path() -> Option<String> {
 	let candidates = [
@@ -67,20 +116,22 @@ fn find_pwsh_path() -> Option<String> {
 			return Some(path.to_string());
 		}
 	}
-	// Fallback: check PATH via `where`
+	if let Some(p) = find_store_pwsh() {
+		return Some(p);
+	}
+	// Fallback: check PATH via `where`, skipping App Execution Alias stubs.
 	let output = command_without_windows_console("where")
 		.arg("pwsh")
 		.output()
 		.ok()?;
 	if output.status.success() {
-		let first = String::from_utf8_lossy(&output.stdout)
-			.lines()
-			.next()
-			.unwrap_or("")
-			.trim()
-			.to_string();
-		if !first.is_empty() {
-			return Some(first);
+		let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+		for line in stdout.lines() {
+			let path = line.trim();
+			if path.is_empty() || is_app_exec_alias_stub(path) {
+				continue;
+			}
+			return Some(path.to_string());
 		}
 	}
 	None
