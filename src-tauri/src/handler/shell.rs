@@ -71,6 +71,16 @@ fn is_app_exec_alias_stub(path: &str) -> bool {
 		.unwrap_or(false)
 }
 
+/// Parse a dotted version string (e.g. `"7.4.10"`) into a numeric vector for
+/// correct ordering. Lexicographic string comparison misorders multi-digit
+/// segments — `"7.4.10" < "7.4.9"` as strings, but `[7,4,10] > [7,4,9]`.
+/// Non-numeric segments become 0, which is fine for the Store package naming
+/// scheme we encounter here.
+#[cfg(windows)]
+fn parse_version(s: &str) -> Vec<u32> {
+	s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+}
+
 /// Probe `C:\Program Files\WindowsApps` for a Microsoft Store install of pwsh.
 /// Reading this directory often fails for standard users due to ACLs, so this
 /// is best-effort — callers must handle `None`.
@@ -78,7 +88,7 @@ fn is_app_exec_alias_stub(path: &str) -> bool {
 fn find_store_pwsh() -> Option<String> {
 	let store_root = Path::new(r"C:\Program Files\WindowsApps");
 	let entries = std::fs::read_dir(store_root).ok()?;
-	let mut best: Option<(String, String)> = None;
+	let mut best: Option<(Vec<u32>, String)> = None;
 	for entry in entries.flatten() {
 		let name = entry.file_name().to_string_lossy().into_owned();
 		if !name.starts_with("Microsoft.PowerShell_") || !name.contains("_x64_")
@@ -89,11 +99,11 @@ fn find_store_pwsh() -> Option<String> {
 		if !pwsh.is_file() {
 			continue;
 		}
-		let version = name
-			.strip_prefix("Microsoft.PowerShell_")
-			.and_then(|s| s.split("_x64_").next())
-			.unwrap_or("")
-			.to_string();
+		let version = parse_version(
+			name.strip_prefix("Microsoft.PowerShell_")
+				.and_then(|s| s.split("_x64_").next())
+				.unwrap_or(""),
+		);
 		let pwsh_str = pwsh.to_string_lossy().into_owned();
 		match &best {
 			None => best = Some((version, pwsh_str)),
