@@ -13,6 +13,7 @@ import { FileTree, useFileTree } from "@pierre/trees/react";
 import { motion, useReducedMotion } from "motion/react";
 import {
 	type CSSProperties,
+	type DragEvent,
 	type KeyboardEvent,
 	type MouseEvent,
 	useCallback,
@@ -25,6 +26,14 @@ import * as m from "@/paraglide/messages.js";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { getErrorMessage } from "@/shared/lib/errors";
+import {
+	createFileTreeTerminalDropPayload,
+	FILE_TREE_TERMINAL_DROP_EVENT,
+	type FileTreeTerminalDropEventDetail,
+	type FileTreeTerminalDropPayload,
+	getFileTreeTerminalDropTargetAtPoint,
+	writeFileTreeTerminalDropPayload,
+} from "@/shared/lib/fileTreeTerminalDrop";
 import { toaster } from "@/shared/providers/appToaster";
 import FileViewerDialog from "./FileViewerDialog";
 import { toFileTreeGitStatus } from "./fileTreeGitStatus";
@@ -92,14 +101,18 @@ const EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY = new Map<
 	readonly string[]
 >();
 
-function getTreeItemPath(event: MouseEvent<HTMLElement>) {
-	for (const target of event.nativeEvent.composedPath()) {
+function getTreeItemPathFromComposedPath(composedPath: readonly EventTarget[]) {
+	for (const target of composedPath) {
 		if (target instanceof HTMLElement) {
 			const itemPath = target.dataset.itemPath;
 			if (itemPath) return itemPath;
 		}
 	}
 	return null;
+}
+
+function getTreeItemPath(event: MouseEvent<HTMLElement>) {
+	return getTreeItemPathFromComposedPath(event.nativeEvent.composedPath());
 }
 
 function toAbsolutePath(rootPath: string, relativePath: string) {
@@ -535,6 +548,9 @@ export default function FileTreePanel({
 		Map<string, Promise<readonly string[]>>
 	>(new Map());
 	const skipNextSelectionOpenRef = useRef(false);
+	const skipNextClickOpenRef = useRef(false);
+	const skipNextClickOpenUntilRef = useRef(0);
+	const dragPayloadRef = useRef<FileTreeTerminalDropPayload | null>(null);
 	const restoreModelRef = useRef(() => {});
 	const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
 	const moveFileTreePathsRef = useRef((_event: FileTreeDropResult) => {});
@@ -847,10 +863,18 @@ export default function FileTreePanel({
 	const handleTreeClick = useCallback(
 		(event: MouseEvent<HTMLElement>) => {
 			setRootContextMenu(null);
+			if (skipNextClickOpenRef.current) {
+				const shouldSkipClick = Date.now() <= skipNextClickOpenUntilRef.current;
+				skipNextClickOpenRef.current = false;
+				skipNextClickOpenUntilRef.current = 0;
+				skipNextSelectionOpenRef.current = false;
+				if (shouldSkipClick) return;
+			}
 			if (event.metaKey || event.ctrlKey || event.shiftKey) {
 				skipNextSelectionOpenRef.current = false;
 				return;
 			}
+			skipNextSelectionOpenRef.current = false;
 			const itemPath = getTreeItemPath(event);
 			if (itemPath && filePathSetRef.current.has(itemPath)) {
 				openRelativeFile(itemPath);
@@ -885,9 +909,8 @@ export default function FileTreePanel({
 	);
 
 	const handleTreeMouseDown = useCallback(
-		(event: MouseEvent<HTMLElement>) => {
-			skipNextSelectionOpenRef.current =
-				event.metaKey || event.ctrlKey || event.shiftKey;
+		() => {
+			skipNextSelectionOpenRef.current = true;
 		},
 		[],
 	);
@@ -940,6 +963,71 @@ export default function FileTreePanel({
 		},
 		[],
 	);
+	const handleTreeDragStart = useCallback(
+		(event: DragEvent<HTMLElement>) => {
+			skipNextSelectionOpenRef.current = true;
+			skipNextClickOpenRef.current = true;
+			skipNextClickOpenUntilRef.current = Date.now() + 500;
+
+			const itemPath = getTreeItemPathFromComposedPath(
+				event.nativeEvent.composedPath(),
+			);
+			if (!itemPath || !hasTreePath(treePathSetRef.current, itemPath)) {
+				return;
+			}
+
+			const candidatePaths =
+				selectedPaths.includes(itemPath) && selectedPaths.length > 0
+					? selectedPaths
+					: [itemPath];
+			const relativePaths = candidatePaths.filter((path) =>
+				hasTreePath(treePathSetRef.current, path),
+			);
+			if (relativePaths.length === 0) {
+				return;
+			}
+
+			const rootPath = rootPathRef.current;
+			const absolutePaths = relativePaths.map((path) =>
+				toAbsolutePath(rootPath, path),
+			);
+			const payload = createFileTreeTerminalDropPayload({
+				profileId,
+				rootPath,
+				relativePaths: [...relativePaths],
+				absolutePaths,
+			});
+			dragPayloadRef.current = payload;
+			writeFileTreeTerminalDropPayload(event.dataTransfer, payload);
+		},
+		[profileId, selectedPaths],
+	);
+	const handleTreeDragEnd = useCallback((event: DragEvent<HTMLElement>) => {
+		if (skipNextClickOpenRef.current) {
+			skipNextClickOpenUntilRef.current = Date.now() + 500;
+		}
+		const payload = dragPayloadRef.current;
+		dragPayloadRef.current = null;
+		if (payload) {
+			const target = getFileTreeTerminalDropTargetAtPoint(
+				event.clientX,
+				event.clientY,
+			);
+			target?.dispatchEvent(
+				new CustomEvent<FileTreeTerminalDropEventDetail>(
+					FILE_TREE_TERMINAL_DROP_EVENT,
+					{
+						bubbles: true,
+						detail: {
+							clientX: event.clientX,
+							clientY: event.clientY,
+							payload,
+						},
+					},
+				),
+			);
+		}
+	}, []);
 	const closeRootContextMenu = useCallback(() => {
 		setRootContextMenu(null);
 	}, []);
@@ -1066,6 +1154,8 @@ export default function FileTreePanel({
 										<FileTree
 											model={model}
 											onClick={handleTreeClick}
+											onDragEnd={handleTreeDragEnd}
+											onDragStart={handleTreeDragStart}
 											onKeyUp={handleTreeKeyUp}
 											onMouseDown={handleTreeMouseDown}
 											renderContextMenu={(

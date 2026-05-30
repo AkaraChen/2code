@@ -100,6 +100,7 @@ vi.mock("@/generated", () => ({
 	startDebugLog: vi.fn(),
 	stopDebugLog: vi.fn(),
 	createPtySession: vi.fn(() => Promise.resolve("mock-session-id")),
+	writeToPty: vi.fn(() => Promise.resolve()),
 	closePtySession: vi.fn(() => Promise.resolve()),
 	deletePtySessionRecord: vi.fn(() => Promise.resolve()),
 	listProjects: vi.fn(() => Promise.resolve([])),

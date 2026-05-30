@@ -1,6 +1,10 @@
 import { Box, CloseButton, HStack } from "@chakra-ui/react";
 import { AnimatePresence, motion } from "motion/react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type {
+	KeyboardEvent,
+	ReactNode,
+	RefCallback,
+} from "react";
 
 const TAB_MIN_WIDTH = "140px";
 export const TAB_STRIP_HEIGHT = "32px";
@@ -12,6 +16,7 @@ export interface TabStripItem {
 	title: string;
 	maxTitleLength: number;
 	badge?: ReactNode;
+	elementRef?: RefCallback<HTMLDivElement>;
 	isSelected?: boolean;
 	onClose?: () => void;
 }
@@ -31,6 +36,7 @@ function TabButton({
 	title,
 	maxTitleLength,
 	badge,
+	elementRef,
 	isSelected,
 	onClose,
 	onSelect,
@@ -90,6 +96,7 @@ function TabButton({
 				outlineOffset: "-2px",
 			}}
 			draggable={false}
+			ref={elementRef}
 			onClick={selectTab}
 			onKeyDown={handleKeyDown}
 		>
@@ -144,6 +151,7 @@ function TabMotionItem({
 					title={item.title}
 					maxTitleLength={item.maxTitleLength}
 					badge={item.badge}
+					elementRef={item.elementRef}
 					isSelected={item.isSelected}
 					onClose={item.onClose}
 					onSelect={onSelect}

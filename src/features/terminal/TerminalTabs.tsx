@@ -15,15 +15,27 @@ import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg"
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
-import { lazy, useMemo, useState, type ReactNode } from "react";
+import {
+	lazy,
+	useMemo,
+	useState,
+	type ReactNode,
+} from "react";
 import { FiFileText, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
+import { writeToPty } from "@/generated";
 import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
+import {
+	FILE_TREE_TERMINAL_DROP_EVENT,
+	FILE_TREE_TERMINAL_DROP_TARGET_ATTR,
+	type FileTreeTerminalDropEventDetail,
+	formatTerminalPathInput,
+} from "@/shared/lib/fileTreeTerminalDrop";
 import * as m from "@/paraglide/messages.js";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
@@ -190,6 +202,47 @@ export default function TerminalTabs({
 		setPendingCloseFile(null);
 	}
 
+	function handleTerminalPathDrop(
+		detail: FileTreeTerminalDropEventDetail,
+		tab: { id: string },
+	) {
+		const { payload } = detail;
+		if (payload.profileId !== profileId) return;
+
+		const data = formatTerminalPathInput(payload.absolutePaths);
+		if (!data) return;
+
+		setActiveTab(profileId, tab.id);
+		setTerminalActive(profileId);
+		writeToPty({ sessionId: tab.id, data });
+	}
+
+	function createTerminalDropRef(tab: { id: string }) {
+		let cleanup: (() => void) | null = null;
+
+		return (node: HTMLDivElement | null) => {
+			cleanup?.();
+			cleanup = null;
+			if (!node) return;
+
+			node.setAttribute(FILE_TREE_TERMINAL_DROP_TARGET_ATTR, "");
+			const handleDrop = (event: Event) => {
+				const customEvent = event as CustomEvent<FileTreeTerminalDropEventDetail>;
+				if (!customEvent.detail?.payload) return;
+				event.stopPropagation();
+				handleTerminalPathDrop(customEvent.detail, tab);
+			};
+			node.addEventListener(FILE_TREE_TERMINAL_DROP_EVENT, handleDrop);
+			cleanup = () => {
+				node.removeEventListener(FILE_TREE_TERMINAL_DROP_EVENT, handleDrop);
+				node.removeAttribute(FILE_TREE_TERMINAL_DROP_TARGET_ATTR);
+			};
+		};
+	}
+
+	const activeTerminalTab =
+		tabs.find((tab) => tab.id === activeTabId) ?? null;
+
 	const tabGroups: TabStripGroup[] = [
 		{
 			id: "terminal",
@@ -199,6 +252,7 @@ export default function TerminalTabs({
 				icon: getTerminalTabIcon(tab.title),
 				title: tab.title,
 				maxTitleLength: 10,
+				elementRef: createTerminalDropRef(tab),
 				isSelected: !fileTabActive && !notesActive && tab.id === activeValue,
 				badge:
 					notifiedTabSet.has(tab.id) && tab.id !== activeTabId ? (
@@ -360,6 +414,11 @@ export default function TerminalTabs({
 				minH="0"
 				position="relative"
 				display={fileTabActive || notesActive ? "none" : "block"}
+				ref={
+					activeTerminalTab
+						? createTerminalDropRef(activeTerminalTab)
+						: undefined
+				}
 			>
 				{tabs.map((tab) => (
 					<Box
