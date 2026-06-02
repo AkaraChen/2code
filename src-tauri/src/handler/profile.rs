@@ -90,6 +90,20 @@ pub async fn get_profile_delete_check(
 	.await
 }
 
+#[tauri::command]
+pub async fn update_profile_notes(
+	id: String,
+	notes: String,
+	state: State<'_, DbPool>,
+) -> Result<Profile, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::profile::update_notes(conn, &id, &notes)
+	})
+	.await
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

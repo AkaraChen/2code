@@ -1,0 +1,2 @@
+ALTER TABLE profiles
+ADD COLUMN notes TEXT NOT NULL DEFAULT '';

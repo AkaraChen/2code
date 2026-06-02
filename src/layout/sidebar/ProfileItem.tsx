@@ -40,10 +40,10 @@ export function ProfileItem({
 						ps="9"
 						pe="4"
 						py="1"
-						cursor="pointer"
 						fontSize="sm"
 						bg={isActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
+						_active={{ bg: "bg.muted" }}
 					>
 						<NavLink
 							to={`/projects/${projectId}/profiles/${profile.id}`}

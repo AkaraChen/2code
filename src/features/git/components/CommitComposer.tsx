@@ -57,7 +57,6 @@ export default function CommitComposer({
 			flexShrink={0}
 			borderTopWidth="1px"
 			borderColor="border.subtle"
-			bg="bg"
 			px="2.5"
 			py="2"
 		>

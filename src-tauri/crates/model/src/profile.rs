@@ -14,6 +14,7 @@ pub struct Profile {
 	pub worktree_path: String,
 	pub created_at: String,
 	pub is_default: bool,
+	pub notes: String,
 }
 
 #[derive(Insertable)]

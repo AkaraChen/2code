@@ -74,7 +74,7 @@ function ProjectSettingsForm({
 	return (
 		<>
 			<Dialog.Body pb="2">
-				<Tabs.Root defaultValue="scripts" variant="plain">
+				<Tabs.Root defaultValue="scripts" variant="enclosed">
 					<Tabs.List bg="bg.muted" rounded="l3" p="1" mb="3">
 						<Tabs.Trigger value="scripts">{m.scripts()}</Tabs.Trigger>
 						<Tabs.Trigger value="templates">{m.templates()}</Tabs.Trigger>

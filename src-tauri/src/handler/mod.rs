@@ -1,5 +1,6 @@
 use model::error::AppError;
 
+pub mod browser;
 pub mod debug;
 pub mod filesystem;
 pub mod font;

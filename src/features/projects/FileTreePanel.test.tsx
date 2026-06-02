@@ -12,33 +12,47 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
 import FileTreePanel from "./FileTreePanel";
 import {
+	useCreateFileTreePath,
 	useDeleteFileTreePaths,
 	useFileTreeChildPaths,
 	useFileTreeGitStatus,
 	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
+	useOpenPathInDefaultApp,
 	useRenameFileTreePath,
+	useRevealPathInFileManager,
 } from "./hooks";
 
 const {
+	addPathMock,
 	closeContextMenuMock,
 	contextMenuItemRef,
+	copyTextToClipboardMock,
+	createMutateAsyncMock,
 	deleteMutateAsyncMock,
 	expandedPathsRef,
 	getFocusedItemMock,
 	moveMutateAsyncMock,
 	renameMutateAsyncMock,
+	revealMutateAsyncMock,
 	resetPathsMock,
 	setGitStatusMock,
 	startRenamingMock,
 	loadChildPathsMock,
 	toasterCreateMock,
 	useFileTreeOptionsRef,
+	openDefaultAppMutateAsyncMock,
 } = vi.hoisted(() => ({
+	addPathMock: vi.fn(),
 	closeContextMenuMock: vi.fn(),
 	contextMenuItemRef: {
-		current: { kind: "file" as const, path: "src/index.ts" },
+		current: {
+			kind: "file" as "directory" | "file",
+			path: "src/index.ts",
+		},
 	},
+	copyTextToClipboardMock: vi.fn(),
+	createMutateAsyncMock: vi.fn(),
 	deleteMutateAsyncMock: vi.fn(),
 	expandedPathsRef: {
 		current: new Set<string>(),
@@ -46,6 +60,7 @@ const {
 	getFocusedItemMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
 	renameMutateAsyncMock: vi.fn(),
+	revealMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
 	startRenamingMock: vi.fn(),
@@ -54,12 +69,17 @@ const {
 	useFileTreeOptionsRef: {
 		current: null as null | FileTreeOptions,
 	},
+	openDefaultAppMutateAsyncMock: vi.fn(),
 }));
 
 vi.mock("@/shared/providers/appToaster", () => ({
 	toaster: {
 		create: toasterCreateMock,
 	},
+}));
+
+vi.mock("@/shared/lib/clipboard", () => ({
+	copyTextToClipboard: copyTextToClipboardMock,
 }));
 
 vi.mock("@pierre/trees/react", () => ({
@@ -73,8 +93,20 @@ vi.mock("@pierre/trees/react", () => ({
 		onKeyUp?: KeyboardEventHandler<HTMLElement>;
 		onMouseDown?: MouseEventHandler<HTMLElement>;
 		renderContextMenu?: (
-			item: { kind: "file"; path: string },
-			context: { close: (options?: unknown) => void },
+			item: { kind: "directory" | "file"; path: string },
+			context: {
+				anchorRect: {
+					bottom: number;
+					height: number;
+					left: number;
+					right: number;
+					top: number;
+					width: number;
+					x: number;
+					y: number;
+				};
+				close: (options?: unknown) => void;
+			},
 		) => ReactNode;
 	}) => (
 		<div data-testid="pierre-tree" onKeyUp={onKeyUp}>
@@ -116,6 +148,16 @@ vi.mock("@pierre/trees/react", () => ({
 				ignored.log
 			</button>
 			{renderContextMenu?.(contextMenuItemRef.current, {
+				anchorRect: {
+					bottom: 10,
+					height: 0,
+					left: 10,
+					right: 10,
+					top: 10,
+					width: 0,
+					x: 10,
+					y: 10,
+				},
 				close: closeContextMenuMock,
 			})}
 		</div>
@@ -128,6 +170,7 @@ vi.mock("@pierre/trees/react", () => ({
 				getItem: (path: string) => {
 					if (path.endsWith("/")) {
 						return {
+							expand: vi.fn(),
 							getPath: () => path,
 							isDirectory: (): true => true,
 							isExpanded: () =>
@@ -139,6 +182,7 @@ vi.mock("@pierre/trees/react", () => ({
 						isDirectory: (): false => false,
 					};
 				},
+				add: addPathMock,
 				resetPaths: resetPathsMock,
 				setGitStatus: setGitStatusMock,
 				startRenaming: startRenamingMock,
@@ -148,12 +192,15 @@ vi.mock("@pierre/trees/react", () => ({
 }));
 
 vi.mock("./hooks", () => ({
+	useCreateFileTreePath: vi.fn(),
 	useDeleteFileTreePaths: vi.fn(),
 	useFileTreeChildPaths: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
 	useLoadFileTreeChildPaths: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
+	useOpenPathInDefaultApp: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
+	useRevealPathInFileManager: vi.fn(),
 }));
 
 vi.mock("./FileViewerDialog", () => ({
@@ -204,21 +251,37 @@ function renderPanel(onOpenFile = vi.fn()) {
 	return { onOpenFile };
 }
 
+function getLastMenuItem(name: string) {
+	const items = screen.getAllByRole("menuitem", { name });
+	const item = items[items.length - 1];
+	if (!item) throw new Error(`missing menu item: ${name}`);
+	return item;
+}
+
 describe("fileTreePanel", () => {
 	beforeEach(() => {
+		addPathMock.mockReset();
 		closeContextMenuMock.mockReset();
+		copyTextToClipboardMock.mockReset();
+		copyTextToClipboardMock.mockResolvedValue(undefined);
 		contextMenuItemRef.current = { kind: "file", path: "src/index.ts" };
+		createMutateAsyncMock.mockReset();
+		createMutateAsyncMock.mockResolvedValue(undefined);
 		deleteMutateAsyncMock.mockReset();
 		deleteMutateAsyncMock.mockResolvedValue(undefined);
 		moveMutateAsyncMock.mockReset();
 		moveMutateAsyncMock.mockResolvedValue(undefined);
 		renameMutateAsyncMock.mockReset();
 		renameMutateAsyncMock.mockResolvedValue(undefined);
+		revealMutateAsyncMock.mockReset();
+		revealMutateAsyncMock.mockResolvedValue(undefined);
 		resetPathsMock.mockReset();
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
 		loadChildPathsMock.mockReset();
 		loadChildPathsMock.mockResolvedValue([]);
+		openDefaultAppMutateAsyncMock.mockReset();
+		openDefaultAppMutateAsyncMock.mockResolvedValue(undefined);
 		getFocusedItemMock.mockReset();
 		expandedPathsRef.current.clear();
 		toasterCreateMock.mockReset();
@@ -232,6 +295,9 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
 			createFileTreeGitStatusResult([], false),
 		);
+		vi.mocked(useCreateFileTreePath).mockReturnValue({
+			mutateAsync: createMutateAsyncMock,
+		} as unknown as ReturnType<typeof useCreateFileTreePath>);
 		vi.mocked(useRenameFileTreePath).mockReturnValue({
 			mutateAsync: renameMutateAsyncMock,
 		} as unknown as ReturnType<typeof useRenameFileTreePath>);
@@ -242,6 +308,12 @@ describe("fileTreePanel", () => {
 			isPending: false,
 			mutateAsync: deleteMutateAsyncMock,
 		} as unknown as ReturnType<typeof useDeleteFileTreePaths>);
+		vi.mocked(useOpenPathInDefaultApp).mockReturnValue({
+			mutateAsync: openDefaultAppMutateAsyncMock,
+		} as unknown as ReturnType<typeof useOpenPathInDefaultApp>);
+		vi.mocked(useRevealPathInFileManager).mockReturnValue({
+			mutateAsync: revealMutateAsyncMock,
+		} as unknown as ReturnType<typeof useRevealPathInFileManager>);
 	});
 
 	it("resets the Pierre tree model with loaded paths", async () => {
@@ -488,6 +560,119 @@ describe("fileTreePanel", () => {
 		});
 	});
 
+	it("starts inline creation for a new file beside the context file", () => {
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New File" }));
+
+		expect(addPathMock).toHaveBeenCalledWith("src/New File");
+		expect(startRenamingMock).toHaveBeenCalledWith("src/New File", {
+			removeIfCanceled: true,
+		});
+		expect(closeContextMenuMock).toHaveBeenCalledWith({
+			restoreFocus: false,
+		});
+	});
+
+	it("shows root actions from the file tree empty area context menu", async () => {
+		renderPanel();
+
+		fireEvent.contextMenu(screen.getByTestId("pierre-tree"), {
+			clientX: 30,
+			clientY: 40,
+		});
+		fireEvent.click(getLastMenuItem("Reveal in Finder"));
+
+		await waitFor(() => {
+			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
+				path: "/root",
+			});
+		});
+	});
+
+	it("copies the root relative path from the empty area context menu", async () => {
+		renderPanel();
+
+		fireEvent.contextMenu(screen.getByTestId("pierre-tree"), {
+			clientX: 30,
+			clientY: 40,
+		});
+		fireEvent.click(getLastMenuItem("Copy Relative Path"));
+
+		expect(copyTextToClipboardMock).toHaveBeenCalledWith(".");
+	});
+
+	it("copies the root absolute path from the empty area context menu", async () => {
+		renderPanel();
+
+		fireEvent.contextMenu(screen.getByTestId("pierre-tree"), {
+			clientX: 30,
+			clientY: 40,
+		});
+		fireEvent.click(getLastMenuItem("Copy Absolute Path"));
+
+		expect(copyTextToClipboardMock).toHaveBeenCalledWith("/root");
+	});
+
+	it("creates a file after the inline creation is renamed", () => {
+		renderPanel();
+		const renaming = useFileTreeOptionsRef.current?.renaming;
+		if (!renaming || typeof renaming === "boolean") {
+			throw new Error("expected renaming config");
+		}
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New File" }));
+		act(() => {
+			renaming.onRename?.({
+				destinationPath: "src/config.json",
+				isFolder: false,
+				sourcePath: "src/New File",
+			});
+		});
+
+		expect(createMutateAsyncMock).toHaveBeenCalledWith({
+			kind: "file",
+			path: "src/config.json",
+		});
+		expect(renameMutateAsyncMock).not.toHaveBeenCalled();
+	});
+
+	it("starts inline creation for a new folder inside the context folder", () => {
+		contextMenuItemRef.current = { kind: "directory", path: "src/" };
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+
+		expect(addPathMock).toHaveBeenCalledWith("src/New Folder/");
+		expect(startRenamingMock).toHaveBeenCalledWith("src/New Folder/", {
+			removeIfCanceled: true,
+		});
+	});
+
+	it("creates a folder after the inline creation is renamed", () => {
+		contextMenuItemRef.current = { kind: "directory", path: "src/" };
+		renderPanel();
+		const renaming = useFileTreeOptionsRef.current?.renaming;
+		if (!renaming || typeof renaming === "boolean") {
+			throw new Error("expected renaming config");
+		}
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+		act(() => {
+			renaming.onRename?.({
+				destinationPath: "src/components/",
+				isFolder: true,
+				sourcePath: "src/New Folder/",
+			});
+		});
+
+		expect(createMutateAsyncMock).toHaveBeenCalledWith({
+			kind: "directory",
+			path: "src/components/",
+		});
+		expect(renameMutateAsyncMock).not.toHaveBeenCalled();
+	});
+
 	it("allows folder rename when Trees passes the public folder path", () => {
 		renderPanel();
 		const renaming = useFileTreeOptionsRef.current?.renaming;
@@ -541,6 +726,36 @@ describe("fileTreePanel", () => {
 		});
 	});
 
+	it("reveals context menu paths in Finder", async () => {
+		renderPanel();
+
+		fireEvent.click(
+			screen.getByRole("menuitem", { name: "Reveal in Finder" }),
+		);
+
+		await waitFor(() => {
+			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
+				path: "/root/src/index.ts",
+			});
+		});
+		expect(closeContextMenuMock).toHaveBeenCalled();
+	});
+
+	it("opens context menu paths in the default app", async () => {
+		renderPanel();
+
+		fireEvent.click(
+			screen.getByRole("menuitem", { name: "Open in Default App" }),
+		);
+
+		await waitFor(() => {
+			expect(openDefaultAppMutateAsyncMock).toHaveBeenCalledWith({
+				path: "/root/src/index.ts",
+			});
+		});
+		expect(closeContextMenuMock).toHaveBeenCalled();
+	});
+
 	it("allows deleting status-only hidden files", async () => {
 		contextMenuItemRef.current = { kind: "file", path: ".DS_Store" };
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
@@ -570,7 +785,10 @@ describe("fileTreePanel", () => {
 		);
 		renderPanel();
 
-		expect(screen.getByRole("menuitem", { name: "Delete" })).toBeDisabled();
+		expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+			"aria-disabled",
+			"true",
+		);
 	});
 
 	it("shows a toast when deleting fails", async () => {

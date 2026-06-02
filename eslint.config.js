@@ -16,6 +16,7 @@ export default antfu({
 			"./src-tauri/target/**",
 			"./src/generated/**",
 			"./src/paraglide/**",
+			"./website/**",
 		],
 	})
 	.append({

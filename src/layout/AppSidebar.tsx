@@ -1,4 +1,3 @@
-import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef } from "react";
@@ -102,25 +101,26 @@ export default function AppSidebar() {
 				minH="0"
 				flexShrink={0}
 				position="relative"
-				bg="bg.subtle"
+				bg="bg"
+				borderRightWidth="1px"
+				borderColor="border.muted"
 				onKeyDown={handleKeyDown}
 			>
 				<LayoutGroup id="app-sidebar">
 					<Flex direction="column" h="full" minH="0" w="full">
 						<Flex
 							data-tauri-drag-region
-							h={isMacPlatform() ? "80px" : "52px"}
+							h={isMacPlatform() ? "66px" : "48px"}
 							flexShrink={0}
 							align="center"
 							justify="start"
 							paddingInline="4"
-							pt={isMacPlatform() ? "8" : "2"}
+							pt={isMacPlatform() ? "5" : "2"}
 						>
 							<Text
-								fontFamily="'Bricolage Grotesque Variable', sans-serif"
-								fontWeight="700"
-								color="fg.muted"
-								letterSpacing="tight"
+								fontWeight="600"
+								color="fg"
+								fontSize="sm"
 								userSelect="none"
 								pointerEvents="none"
 								whiteSpace="nowrap"
@@ -274,7 +274,9 @@ export default function AppSidebar() {
 						},
 					}}
 					_focusVisible={{
-						outline: "none",
+						outline: "2px solid",
+						outlineColor: "var(--app-focus-ring)",
+						outlineOffset: "-2px",
 						_before: {
 							bg: "border.emphasized",
 						},

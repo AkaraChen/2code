@@ -272,13 +272,52 @@ pub fn delete_file_tree_paths(
 		});
 	}
 
-	delete_paths.sort_by(|left, right| right.depth.cmp(&left.depth));
+	delete_paths.sort_by_key(|path| std::cmp::Reverse(path.depth));
 
 	for delete_path in delete_paths {
 		if delete_path.metadata.file_type().is_dir() {
 			std::fs::remove_dir_all(delete_path.absolute_path)?;
 		} else {
 			std::fs::remove_file(delete_path.absolute_path)?;
+		}
+	}
+
+	Ok(())
+}
+
+pub fn create_file_tree_path(
+	root: &Path,
+	path: &str,
+	kind: &str,
+) -> Result<(), AppError> {
+	ensure_root_directory(root)?;
+	let path = validate_file_tree_relative_path(path, "File tree path")?;
+	let absolute_path = root.join(&path);
+	if absolute_path.exists() {
+		return Err(AppError::IoError(std::io::Error::new(
+			std::io::ErrorKind::AlreadyExists,
+			format!("Path already exists: {path}"),
+		)));
+	}
+
+	if let Some(parent) = absolute_path.parent() {
+		std::fs::create_dir_all(parent)?;
+	}
+
+	match kind {
+		"file" => {
+			std::fs::OpenOptions::new()
+				.write(true)
+				.create_new(true)
+				.open(absolute_path)?;
+		}
+		"directory" => {
+			std::fs::create_dir_all(absolute_path)?;
+		}
+		_ => {
+			return Err(invalid_input(format!(
+				"Unsupported file tree path kind: {kind}"
+			)));
 		}
 	}
 
@@ -755,6 +794,39 @@ mod tests {
 				"src/main.rs".to_string(),
 			]
 		);
+	}
+
+	#[test]
+	fn creates_file_tree_file_with_parent_directories() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+
+		create_file_tree_path(root, "src/components/Button.tsx", "file")
+			.expect("create file");
+
+		assert!(root.join("src/components/Button.tsx").is_file());
+	}
+
+	#[test]
+	fn creates_file_tree_directory() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+
+		create_file_tree_path(root, "src/components/", "directory")
+			.expect("create directory");
+
+		assert!(root.join("src/components").is_dir());
+	}
+
+	#[test]
+	fn create_file_tree_path_rejects_git_metadata() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path();
+
+		let error = create_file_tree_path(root, ".git/config", "file")
+			.expect_err("git metadata path should fail");
+
+		assert!(error.to_string().contains(".git"));
 	}
 
 	#[test]

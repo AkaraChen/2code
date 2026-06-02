@@ -190,7 +190,6 @@ export default function CommandPalette({
 							px="3"
 							py="2"
 							rounded="l1"
-							cursor="pointer"
 							css={{
 								"&[data-selected='true']": {
 									background:
