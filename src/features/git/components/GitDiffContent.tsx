@@ -382,7 +382,7 @@ export default function GitDiffContent({
 
 	return (
 		<GitDiffContext value={ctxValue}>
-			<Box position="relative" flex="1" minH="0" overflow="hidden">
+			<Flex position="relative" flex="1" minH="0" overflow="hidden">
 				<Flex flex="1" minH="0" overflow="hidden">
 				{/* Sidebar column */}
 				<Flex
@@ -585,7 +585,7 @@ export default function GitDiffContent({
 					onDelete={handleDeleteReviewComment}
 					onUpdate={handleUpdateReviewComment}
 				/>
-			</Box>
+			</Flex>
 		</GitDiffContext>
 	);
 }
