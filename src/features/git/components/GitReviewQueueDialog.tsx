@@ -23,6 +23,7 @@ interface GitReviewQueueDialogProps {
 	isOpen: boolean;
 	comments: DiffReviewComment[];
 	onClose: () => void;
+	onClear: () => void;
 	onDelete: (id: string) => void;
 	onUpdate: (id: string, body: string) => void;
 }
@@ -31,6 +32,7 @@ export default function GitReviewQueueDialog({
 	isOpen,
 	comments,
 	onClose,
+	onClear,
 	onDelete,
 	onUpdate,
 }: GitReviewQueueDialogProps) {
@@ -38,6 +40,17 @@ export default function GitReviewQueueDialog({
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
 		toaster.create({
 			title: "Review comments copied",
+			type: "success",
+			closable: true,
+		});
+	}
+
+	async function handleCopyAndClearAll() {
+		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
+		onClear();
+		onClose();
+		toaster.create({
+			title: "Review comments copied and cleared",
 			type: "success",
 			closable: true,
 		});
@@ -136,14 +149,23 @@ export default function GitReviewQueueDialog({
 								))}
 							</Flex>
 						</Dialog.Body>
-						<Dialog.Footer>
+						<Dialog.Footer gap="2">
 							<Button
 								variant="outline"
 								onClick={handleCopyAll}
 								disabled={comments.length === 0}
 							>
 								<FiCopy />
-								Copy all
+								Copy
+							</Button>
+							<Button
+								variant="solid"
+								colorPalette="red"
+								onClick={handleCopyAndClearAll}
+								disabled={comments.length === 0}
+							>
+								<FiCopy />
+								Copy and clear all
 							</Button>
 						</Dialog.Footer>
 					</Dialog.Content>

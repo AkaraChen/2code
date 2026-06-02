@@ -139,11 +139,6 @@ export default function GitDiffContent({
 
 	const handleAddReviewComment = useCallback((comment: DiffReviewComment) => {
 		setReviewComments((comments) => [...comments, comment]);
-		toaster.create({
-			title: "Review comment queued",
-			type: "success",
-			closable: true,
-		});
 	}, []);
 
 	const handleUpdateReviewComment = useCallback((id: string, body: string) => {
@@ -158,6 +153,10 @@ export default function GitDiffContent({
 		setReviewComments((comments) =>
 			comments.filter((comment) => comment.id !== id),
 		);
+	}, []);
+
+	const handleClearReviewComments = useCallback(() => {
+		setReviewComments([]);
 	}, []);
 
 	const handleTabChange = (value: string) => {
@@ -582,6 +581,7 @@ export default function GitDiffContent({
 					isOpen={reviewQueueOpen}
 					comments={reviewComments}
 					onClose={() => setReviewQueueOpen(false)}
+					onClear={handleClearReviewComments}
 					onDelete={handleDeleteReviewComment}
 					onUpdate={handleUpdateReviewComment}
 				/>
