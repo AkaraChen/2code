@@ -97,6 +97,7 @@ export default function GitDiffContent({
 	const [commitBody, setCommitBody] = useState("");
 	const sidebarRef = useRef<HTMLDivElement>(null);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
+	const isChanges = state.activeTab === "changes";
 
 	const changesFiles = useGitDiffFiles(profileId);
 	const { data: logData } = useGitLog(profileId);
@@ -104,7 +105,7 @@ export default function GitDiffContent({
 	const openFileTab = useFileViewerTabsStore((store) => store.openFile);
 	const commitGitChanges = useCommitGitChanges(profileId);
 	const discardGitFileChanges = useDiscardGitFileChanges(profileId);
-	const aheadCount = useGitAheadCount(profileId);
+	const aheadCount = useGitAheadCount(profileId, isChanges);
 	const gitPush = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
 		() => collectOrderedIncludedFileNames(changesFiles, includedFileNames),
@@ -342,8 +343,6 @@ export default function GitDiffContent({
 			});
 		}
 	}, [changesFiles.length, dispatch, state.selectedFileIndex]);
-
-	const isChanges = state.activeTab === "changes";
 
 	const ctxValue = useMemo(
 		() => ({ state, dispatch, profileId, changesFiles, commits, options }),
