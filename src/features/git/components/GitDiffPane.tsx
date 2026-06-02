@@ -203,10 +203,6 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		!showLargeDiffGuardrail &&
 		!showRenameOnlyDiff;
-	const handleOpenReviewComposer = useCallback((range: SelectedLineRange) => {
-		setSelectedLines(range);
-		setIsCommentInputOpen(true);
-	}, []);
 	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
 		() => ({
 			...options,
@@ -215,7 +211,7 @@ function ActiveGitDiffFilePane({
 			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
 			onLineNumberClick: (lineEvent) => {
 				if (canReviewDiff) {
-					handleOpenReviewComposer({
+					setSelectedLines({
 						start: lineEvent.lineNumber,
 						end: lineEvent.lineNumber,
 						side: lineEvent.annotationSide,
@@ -225,21 +221,18 @@ function ActiveGitDiffFilePane({
 			},
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
-				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
-				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
 				setSelectedLines(range);
-				setIsCommentInputOpen(range != null);
 				options.onLineSelected?.(range);
 			},
 		}),
-		[canReviewDiff, handleOpenReviewComposer, options],
+		[canReviewDiff, options],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
@@ -297,7 +290,8 @@ function ActiveGitDiffFilePane({
 									onClick={(event) => {
 										event.preventDefault();
 										event.stopPropagation();
-										handleOpenReviewComposer(range);
+										setSelectedLines(range);
+										setIsCommentInputOpen(true);
 									}}
 								>
 									<FiPlus />
