@@ -382,7 +382,7 @@ export default function GitDiffContent({
 
 	return (
 		<GitDiffContext value={ctxValue}>
-			<Flex direction="column" flex="1" minH="0" overflow="hidden">
+			<Box position="relative" flex="1" minH="0" overflow="hidden">
 				<Flex flex="1" minH="0" overflow="hidden">
 				{/* Sidebar column */}
 				<Flex
@@ -549,15 +549,20 @@ export default function GitDiffContent({
 			</Flex>
 				{reviewComments.length > 0 && (
 					<Flex
-						flexShrink={0}
+						position="absolute"
+						right="4"
+						bottom="4"
+						zIndex={3}
 						align="center"
 						justify="space-between"
 						gap="3"
-						px="4"
+						px="3"
 						py="2"
-						borderTopWidth="1px"
-						borderColor="border.subtle"
+						borderWidth="1px"
+						borderColor="border.emphasized"
+						borderRadius="md"
 						bg="bg.panel"
+						boxShadow="lg"
 					>
 						<Text fontSize="sm" color="fg.muted">
 							{reviewComments.length} queued review comment
@@ -580,7 +585,7 @@ export default function GitDiffContent({
 					onDelete={handleDeleteReviewComment}
 					onUpdate={handleUpdateReviewComment}
 				/>
-			</Flex>
+			</Box>
 		</GitDiffContext>
 	);
 }
