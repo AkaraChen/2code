@@ -79,13 +79,21 @@ export function formatReviewCommentsForAgent(
 			`${index + 1}. ${comment.fileName}:${formatReviewRange(comment.range)}`,
 			"Selected diff:",
 			"```diff",
-			comment.selectedText || "(no selected text available)",
+			normalizeClipboardBlock(comment.selectedText) ||
+				"(no selected text available)",
 			"```",
 			"Comment:",
-			comment.body,
+			normalizeClipboardBlock(comment.body),
 			"",
 		]),
 	].join("\n");
+}
+
+function normalizeClipboardBlock(text: string) {
+	const lines = text.split(/\r?\n/).map((line) => line.trimEnd());
+	while (lines[0] === "") lines.shift();
+	while (lines[lines.length - 1] === "") lines.pop();
+	return lines.join("\n");
 }
 
 function getSideLines(
@@ -98,6 +106,6 @@ function getSideLines(
 		side === "additions" ? file.additionLines : file.deletionLines;
 	return lines
 		.slice(Math.max(start - 1, 0), Math.max(end, 0))
-		.map((line) => `${side === "additions" ? "+" : "-"} ${line}`)
+		.map((line) => `${side === "additions" ? "+" : "-"}${line.trimEnd()}`)
 		.join("\n");
 }
