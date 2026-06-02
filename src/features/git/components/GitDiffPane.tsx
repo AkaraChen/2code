@@ -207,6 +207,13 @@ function ActiveGitDiffFilePane({
 		() => ({
 			...options,
 			enableLineSelection: canReviewDiff,
+			enableGutterUtility: canReviewDiff,
+			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
+			onGutterUtilityClick: (range) => {
+				setSelectedLines(range);
+				setIsCommentInputOpen(true);
+				options.onGutterUtilityClick?.(range);
+			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
 				setIsCommentInputOpen(range != null);
