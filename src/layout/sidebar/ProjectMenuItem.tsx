@@ -101,7 +101,6 @@ export function ProjectMenuItem({
 						overflow="hidden"
 						px="4"
 						py="1.5"
-						cursor="pointer"
 						fontWeight="medium"
 						position="relative"
 						bg={
@@ -110,6 +109,7 @@ export function ProjectMenuItem({
 								: "transparent"
 						}
 						_hover={{ bg: "bg.subtle" }}
+						_active={{ bg: "bg.muted" }}
 					>
 						<NavLink
 							to={defaultProfileUrl}
@@ -254,10 +254,10 @@ export function ProjectMenuItem({
 						ps="9"
 						pe="4"
 						py="1"
-						cursor="pointer"
 						fontSize="sm"
 						bg={isDefaultActive ? "bg.subtle" : "transparent"}
 						_hover={{ bg: "bg.subtle" }}
+						_active={{ bg: "bg.muted" }}
 					>
 						<NavLink
 							to={defaultProfileUrl}

@@ -1,80 +1,93 @@
-import { useCallback, useEffect, useRef } from "react";
-import { Box } from "@chakra-ui/react";
-import {
-	Milkdown,
-	MilkdownProvider,
-	useEditor,
-} from "@milkdown/react";
-import { Editor, rootCtx, defaultValueCtx } from "@milkdown/kit/core";
-import { commonmark } from "@milkdown/kit/preset/commonmark";
-import { gfm } from "@milkdown/kit/preset/gfm";
-import { history } from "@milkdown/kit/plugin/history";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { nord } from "@milkdown/theme-nord";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Profile } from "@/generated";
+import MarkdownEditor, {
+	type MarkdownEditorSaveStatus,
+} from "@/features/markdown/MarkdownEditor";
 import { useUpdateProfileNotes } from "@/features/profiles/hooks";
+import * as m from "@/paraglide/messages.js";
+import { toaster } from "@/shared/providers/appToaster";
 
 interface ProfileNotesEditorProps {
 	profile: Profile;
 }
 
-function MilkdownEditor({ profile }: ProfileNotesEditorProps) {
-	const updateNotes = useUpdateProfileNotes();
-	const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	// Clear pending save timer on unmount
-	useEffect(() => {
-		return () => {
-			if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-		};
-	}, []);
-
-	const handleChange = useCallback(
-		(markdown: string) => {
-			if (saveTimerRef.current) {
-				clearTimeout(saveTimerRef.current);
-			}
-			saveTimerRef.current = setTimeout(() => {
-				updateNotes.mutate({ id: profile.id, notes: markdown });
-			}, 500);
-		},
-		[profile.id, updateNotes],
-	);
-
-	// Only re-create the editor when the profile ID changes (not on every keystroke).
-	// profile.notes is read once as the initial value; subsequent edits are handled by the listener.
-	useEditor(
-		(root) => {
-			return Editor.make()
-				.config(nord)
-				.config((ctx) => {
-					ctx.set(rootCtx, root);
-					ctx.set(defaultValueCtx, profile.notes);
-					ctx
-						.get(listenerCtx)
-						.markdownUpdated((_ctx, markdown) => {
-							handleChange(markdown);
-						});
-				})
-				.use(commonmark)
-				.use(gfm)
-				.use(history)
-				.use(listener);
-		},
-		[profile.id],
-	);
-
-	return <Milkdown />;
-}
-
 export default function ProfileNotesEditor({
 	profile,
 }: ProfileNotesEditorProps) {
+	const updateNotes = useUpdateProfileNotes();
+	const [saveStatus, setSaveStatus] = useState<MarkdownEditorSaveStatus>("idle");
+	const updateNotesRef = useRef(updateNotes);
+	const profileIdRef = useRef(profile.id);
+	const lastSavedMarkdownRef = useRef(profile.notes);
+	const saveStatusRef = useRef<MarkdownEditorSaveStatus>("idle");
+	const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		updateNotesRef.current = updateNotes;
+	}, [updateNotes]);
+
+	const setSaveStatusIfChanged = useCallback((status: MarkdownEditorSaveStatus) => {
+		if (saveStatusRef.current === status) return;
+		saveStatusRef.current = status;
+		setSaveStatus(status);
+	}, []);
+
+	useEffect(() => {
+		if (profileIdRef.current === profile.id) return;
+		profileIdRef.current = profile.id;
+		lastSavedMarkdownRef.current = profile.notes;
+		saveStatusRef.current = "idle";
+		if (saveStatusTimerRef.current) {
+			clearTimeout(saveStatusTimerRef.current);
+			saveStatusTimerRef.current = null;
+		}
+	}, [profile.id, profile.notes]);
+
+	useEffect(() => {
+		return () => {
+			if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+		};
+	}, []);
+
+	const handleMarkdownChange = useCallback(
+		(markdown: string) => {
+			if (markdown === lastSavedMarkdownRef.current) return;
+
+			setSaveStatusIfChanged("saving");
+			updateNotesRef.current.mutate(
+				{ id: profileIdRef.current, notes: markdown },
+				{
+					onSuccess: (updatedProfile) => {
+						lastSavedMarkdownRef.current = updatedProfile.notes;
+						setSaveStatusIfChanged("saved");
+						if (saveStatusTimerRef.current) {
+							clearTimeout(saveStatusTimerRef.current);
+						}
+						saveStatusTimerRef.current = setTimeout(() => {
+							setSaveStatusIfChanged("idle");
+							saveStatusTimerRef.current = null;
+						}, 1600);
+					},
+					onError: () => {
+						setSaveStatusIfChanged("failed");
+						toaster.create({
+							title: m.notesSaveFailedTitle(),
+							type: "error",
+						});
+					},
+				},
+			);
+		},
+		[setSaveStatusIfChanged],
+	);
+
 	return (
-		<Box h="full" overflow="auto" p="4" className="milkdown-wrapper">
-			<MilkdownProvider>
-				<MilkdownEditor profile={profile} />
-			</MilkdownProvider>
-		</Box>
+		<MarkdownEditor
+			editorKey={profile.id}
+			initialMarkdown={profile.notes}
+			onMarkdownChange={handleMarkdownChange}
+			placeholder={m.notesPlaceholder()}
+			saveStatus={saveStatus}
+		/>
 	);
 }

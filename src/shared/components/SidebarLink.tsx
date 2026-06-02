@@ -27,11 +27,11 @@ export function SidebarLink({
 			w="full"
 			minW="max-content"
 			px="4"
-			py="2"
-			cursor="pointer"
+			py="1.5"
 			position="relative"
 			bg={isActive ? "bg.subtle" : "transparent"}
 			_hover={{ bg: "bg.subtle" }}
+			_active={{ bg: "bg.muted" }}
 			style={style}
 		>
 			<NavLink to={to}>

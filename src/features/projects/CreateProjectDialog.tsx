@@ -116,7 +116,6 @@ export default function CreateProjectDialog({
 										rounded="lg"
 										px="4"
 										py="6"
-										cursor="pointer"
 										transition="colors"
 										_hover={{
 											bg: "bg.subtle",

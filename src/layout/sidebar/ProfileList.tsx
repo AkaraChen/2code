@@ -39,10 +39,10 @@ export function ProfileList({
 				ps="9"
 				pe="4"
 				py="1"
-				cursor="pointer"
 				fontSize="sm"
 				color="fg.muted"
 				_hover={{ bg: "bg.subtle", color: "fg" }}
+				_active={{ bg: "bg.muted" }}
 				onClick={createDialog.onOpen}
 			>
 				<Icon fontSize="xs" flexShrink={0}>

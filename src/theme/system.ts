@@ -1,20 +1,25 @@
-import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import {
+  createSystem,
+  defaultConfig,
+  defineConfig,
+} from "@chakra-ui/react";
+import { numberInputAnatomy } from "@chakra-ui/react/anatomy";
 
 export const appThemeConfig = defineConfig({
   theme: {
     tokens: {
       radii: {
         none: { value: "0" },
-        "2xs": { value: "0" },
-        xs: { value: "0" },
-        sm: { value: "0" },
-        md: { value: "0" },
-        lg: { value: "0" },
-        xl: { value: "0" },
-        "2xl": { value: "0" },
-        "3xl": { value: "0" },
-        "4xl": { value: "0" },
-        full: { value: "0" },
+        "2xs": { value: "2px" },
+        xs: { value: "3px" },
+        sm: { value: "4px" },
+        md: { value: "6px" },
+        lg: { value: "8px" },
+        xl: { value: "10px" },
+        "2xl": { value: "12px" },
+        "3xl": { value: "14px" },
+        "4xl": { value: "16px" },
+        full: { value: "9999px" },
       },
     },
     semanticTokens: {
@@ -22,86 +27,148 @@ export const appThemeConfig = defineConfig({
         bg: {
           DEFAULT: {
             value: {
-              _light: "{colors.white}",
-              _dark: "{colors.gray.900}",
+              _light: "#f5f5f7",
+              _dark: "#1c1c1e",
             },
           },
           subtle: {
             value: {
-              _light: "{colors.gray.50}",
-              _dark: "#1d1e22",
+              _light: "rgba(0, 0, 0, 0.035)",
+              _dark: "rgba(255, 255, 255, 0.055)",
             },
           },
           muted: {
             value: {
-              _light: "{colors.gray.100}",
-              _dark: "#24262b",
+              _light: "rgba(0, 0, 0, 0.06)",
+              _dark: "rgba(255, 255, 255, 0.08)",
             },
           },
           emphasized: {
             value: {
-              _light: "{colors.gray.200}",
-              _dark: "{colors.gray.700}",
+              _light: "rgba(0, 0, 0, 0.1)",
+              _dark: "rgba(255, 255, 255, 0.12)",
             },
           },
           panel: {
             value: {
               _light: "{colors.white}",
-              _dark: "#1b1c20",
+              _dark: "#1f2023",
             },
           },
         },
         fg: {
           DEFAULT: {
             value: {
-              _light: "{colors.black}",
-              _dark: "{colors.gray.100}",
+              _light: "#1d1d1f",
+              _dark: "#f5f5f7",
             },
           },
           muted: {
             value: {
-              _light: "{colors.gray.600}",
-              _dark: "{colors.gray.400}",
+              _light: "rgba(60, 60, 67, 0.72)",
+              _dark: "rgba(235, 235, 245, 0.68)",
             },
           },
           subtle: {
             value: {
-              _light: "{colors.gray.400}",
-              _dark: "{colors.gray.500}",
+              _light: "rgba(60, 60, 67, 0.46)",
+              _dark: "rgba(235, 235, 245, 0.42)",
             },
           },
         },
         border: {
           DEFAULT: {
             value: {
-              _light: "{colors.gray.200}",
-              _dark: "{colors.gray.800}",
+              _light: "rgba(60, 60, 67, 0.18)",
+              _dark: "rgba(235, 235, 245, 0.16)",
             },
           },
           muted: {
             value: {
-              _light: "{colors.gray.100}",
-              _dark: "#202126",
+              _light: "rgba(60, 60, 67, 0.1)",
+              _dark: "rgba(235, 235, 245, 0.1)",
             },
           },
           subtle: {
             value: {
-              _light: "{colors.gray.50}",
-              _dark: "#191a1d",
+              _light: "rgba(60, 60, 67, 0.08)",
+              _dark: "rgba(235, 235, 245, 0.08)",
             },
           },
           emphasized: {
             value: {
-              _light: "{colors.gray.300}",
-              _dark: "{colors.gray.600}",
+              _light: "rgba(60, 60, 67, 0.28)",
+              _dark: "rgba(235, 235, 245, 0.26)",
             },
           },
         },
       },
       radii: {
-        l1: { value: "0" },
-        l2: { value: "0" },
-        l3: { value: "0" },
+        l1: { value: "4px" },
+        l2: { value: "5px" },
+        l3: { value: "6px" },
+      },
+    },
+    recipes: {
+      input: {
+        variants: {
+          variant: {
+            outline: {
+              focusVisibleRing: "none",
+            },
+            subtle: {
+              focusVisibleRing: "none",
+            },
+            flushed: {
+              _focusVisible: {
+                boxShadow: "none",
+              },
+            },
+          },
+        },
+      },
+      textarea: {
+        variants: {
+          variant: {
+            outline: {
+              focusVisibleRing: "none",
+            },
+            subtle: {
+              focusVisibleRing: "none",
+            },
+            flushed: {
+              _focusVisible: {
+                boxShadow: "none",
+              },
+            },
+          },
+        },
+      },
+    },
+    slotRecipes: {
+      numberInput: {
+        slots: numberInputAnatomy.keys(),
+        variants: {
+          variant: {
+            outline: {
+              input: {
+                focusVisibleRing: "none",
+              },
+            },
+            subtle: {
+              input: {
+                focusVisibleRing: "none",
+              },
+            },
+            flushed: {
+              input: {
+                _focusVisible: {
+                  boxShadow: "none",
+                },
+              },
+            },
+          },
+        },
       },
     },
   },

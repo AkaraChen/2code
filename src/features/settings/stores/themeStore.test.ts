@@ -38,11 +38,27 @@ describe("bORDER_RADIUS_MAP", () => {
 		});
 	});
 
-	it("all non-none values map to 0 for flat UI", () => {
-		const sizes: BorderRadius[] = ["sm", "md", "lg", "xl"];
-		for (const size of sizes) {
-			expect(BORDER_RADIUS_MAP[size]).toEqual({ l1: "0", l2: "0", l3: "0" });
-		}
+	it("maps non-none values to restrained native-style radii", () => {
+		expect(BORDER_RADIUS_MAP.sm).toEqual({
+			l1: "4px",
+			l2: "5px",
+			l3: "6px",
+		});
+		expect(BORDER_RADIUS_MAP.md).toEqual({
+			l1: "5px",
+			l2: "6px",
+			l3: "8px",
+		});
+		expect(BORDER_RADIUS_MAP.lg).toEqual({
+			l1: "6px",
+			l2: "8px",
+			l3: "10px",
+		});
+		expect(BORDER_RADIUS_MAP.xl).toEqual({
+			l1: "8px",
+			l2: "10px",
+			l3: "12px",
+		});
 	});
 });
 
@@ -64,9 +80,9 @@ describe("useThemeStore", () => {
 		it("syncs CSS variables on document.documentElement", () => {
 			getState().setBorderRadius("lg");
 			const style = document.documentElement.style;
-			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("0");
+			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("6px");
+			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("8px");
+			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("10px");
 		});
 
 		it("syncs CSS variables for 'none'", () => {
@@ -80,9 +96,9 @@ describe("useThemeStore", () => {
 		it("syncs CSS variables for 'xl'", () => {
 			getState().setBorderRadius("xl");
 			const style = document.documentElement.style;
-			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("0");
+			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("8px");
+			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("10px");
+			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("12px");
 		});
 	});
 });

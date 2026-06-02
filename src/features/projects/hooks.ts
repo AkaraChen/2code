@@ -17,9 +17,11 @@ import type {
 import {
 	assignProjectToGroup,
 	createProjectFromFolder,
+	createFileTreePath,
 	createProjectGroup,
 	deleteFileTreePaths,
 	deleteProject,
+	getFilePreview,
 	getFileTreeGitStatus,
 	getGitBranch,
 	getProjectConfig,
@@ -29,8 +31,10 @@ import {
 	listProjectGroups,
 	listProjects,
 	moveFileTreePaths,
+	openPathInDefaultApp,
 	readFileContent,
 	renameFileTreePath,
+	revealPathInFileManager,
 	saveProjectConfig,
 	searchFile,
 	updateProject,
@@ -412,12 +416,72 @@ export function useDeleteFileTreePaths(rootPath: string, profileId: string) {
 	});
 }
 
+export function useCreateFileTreePath(rootPath: string, profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			path,
+			kind,
+		}: {
+			path: string;
+			kind: "file" | "directory";
+		}) =>
+			createFileTreePath({
+				rootPath,
+				path,
+				kind,
+			}),
+		onSettled: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.fs.tree(rootPath),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["fs-search"], profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+			]);
+		},
+	});
+}
+
+export function useRevealPathInFileManager() {
+	return useMutation({
+		mutationFn: ({ path }: { path: string }) =>
+			revealPathInFileManager({ path }),
+	});
+}
+
+export function useOpenPathInDefaultApp() {
+	return useMutation({
+		mutationFn: ({ path }: { path: string }) =>
+			openPathInDefaultApp({ path }),
+	});
+}
+
 export function useFileContent(path: string, enabled = true) {
 	return useQuery({
 		queryKey: queryKeys.fs.file(path),
 		queryFn: () => readFileContent({ path }),
 		enabled: !!path && enabled,
 		staleTime: 10000,
+	});
+}
+
+export function useFilePreview(path: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.fs.filePreview(path),
+		queryFn: () => getFilePreview({ path }),
+		enabled: !!path && enabled,
+		staleTime: 60000,
 	});
 }
 

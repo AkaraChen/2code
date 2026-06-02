@@ -90,7 +90,7 @@ fn generate_auto_branch_name_from(
 ) -> Result<String, AppError> {
 	for _ in 0..5 {
 		let seed = Uuid::new_v4();
-		let branch_name = build_auto_branch_name(&existing_branches, &seed);
+		let branch_name = build_auto_branch_name(existing_branches, &seed);
 		if !existing_branches
 			.iter()
 			.any(|existing| existing == &branch_name)
