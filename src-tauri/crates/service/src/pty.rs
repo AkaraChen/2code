@@ -286,14 +286,16 @@ pub fn create_session(
 	// 4. Create PTY session
 	let reader = session::create_session(
 		&ctx.sessions,
-		&session_id,
-		&config.shell,
-		&config.cwd,
-		config.rows,
-		config.cols,
-		&injection,
-		ctx.helper_url.as_deref(),
-		ctx.helper_bin.as_deref(),
+		session::CreateSessionOptions {
+			session_id: &session_id,
+			shell: &config.shell,
+			cwd: &config.cwd,
+			rows: config.rows,
+			cols: config.cols,
+			injection: &injection,
+			helper_url: ctx.helper_url.as_deref(),
+			helper_bin: ctx.helper_bin.as_deref(),
+		},
 	)?;
 
 	// Insert session record into database

@@ -8,12 +8,12 @@ const LINUX_SOUND_EXTENSIONS: &[&str] = &["oga", "ogg", "wav", "aiff", "aif"];
 pub fn list_system_sounds() -> Vec<String> {
 	#[cfg(target_os = "macos")]
 	{
-		return list_macos_sounds();
+		list_macos_sounds()
 	}
 
 	#[cfg(target_os = "linux")]
 	{
-		return list_linux_sounds();
+		list_linux_sounds()
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -30,12 +30,12 @@ pub fn play_system_sound(name: String) -> Result<(), String> {
 pub fn play_sound_name(name: &str) -> Result<(), String> {
 	#[cfg(target_os = "macos")]
 	{
-		return play_macos_sound(name);
+		play_macos_sound(name)
 	}
 
 	#[cfg(target_os = "linux")]
 	{
-		return play_linux_sound(name);
+		play_linux_sound(name)
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "linux")))]

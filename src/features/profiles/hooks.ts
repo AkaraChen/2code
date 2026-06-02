@@ -4,6 +4,7 @@ import {
 	createProfile,
 	deleteProfile,
 	getProfileDeleteCheck,
+	updateProfileNotes,
 	type GitDiffStats,
 } from "@/generated";
 import type { ProjectWithProfiles } from "@/generated";
@@ -99,4 +100,24 @@ export function useProfileDeleteCheck(profileId: string, enabled: boolean) {
 		isFetching: check.isFetching,
 		isError: check.isError,
 	};
+}
+
+export function useUpdateProfileNotes() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ id, notes }: { id: string; notes: string }) =>
+			updateProfileNotes({ id, notes }),
+		onSuccess: (profile) => {
+			queryClient.setQueryData<ProjectWithProfiles[]>(
+				queryKeys.projects.all,
+				(projects) =>
+					projects?.map((project) => ({
+						...project,
+						profiles: project.profiles.map((p) =>
+							p.id === profile.id ? profile : p,
+						),
+					})),
+			);
+		},
+	});
 }
