@@ -20,6 +20,7 @@ describe("queryNamespaces", () => {
 			"profile-delete-check": "profile-delete-check",
 			"profile-notes": "profile-notes",
 			"topbar-apps": "topbar-apps",
+			"browser-apps": "browser-apps",
 			"fs-file": "fs-file",
 			"fs-file-preview": "fs-file-preview",
 			"fs-search": "fs-search",
@@ -66,6 +67,12 @@ describe("queryKeys", () => {
 	describe("topbar", () => {
 		it("returns static key for supported apps", () => {
 			expect(queryKeys.topbar.apps).toEqual(["topbar-apps"]);
+		});
+	});
+
+	describe("browser", () => {
+		it("returns static key for installed apps", () => {
+			expect(queryKeys.browser.installed).toEqual(["browser-apps"]);
 		});
 	});
 
