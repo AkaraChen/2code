@@ -275,56 +275,93 @@ function ActiveGitDiffFilePane({
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
 							position="sticky"
-							float="right"
 							bottom="3"
 							right="3"
 							zIndex={2}
-							mr="3"
-							mb="3"
+							display="flex"
+							justifyContent="flex-end"
+							px="3"
+							pb="3"
+							mt="-1"
+							pointerEvents="none"
 						>
-							<Flex
-								w="min(24rem, calc(100% - 1.5rem))"
-								gap="2"
-								align="start"
+							<Box
+								w="min(28rem, 100%)"
 								borderWidth="1px"
 								borderColor="border.emphasized"
 								borderRadius="lg"
 								bg="bg.panel"
 								boxShadow="xl"
-								p="2"
+								overflow="hidden"
+								pointerEvents="auto"
 							>
+								<HStack
+									px="3"
+									py="2"
+									borderBottomWidth="1px"
+									borderColor="border.subtle"
+									justify="space-between"
+									gap="3"
+								>
+									<Text
+										fontSize="xs"
+										fontWeight="semibold"
+										color="fg.muted"
+										truncate
+									>
+										Comment on{" "}
+										{formatReviewRange(selectedLines)}
+									</Text>
+									<IconButton
+										aria-label="Cancel review comment"
+										size="2xs"
+										variant="ghost"
+										onClick={() => {
+											setCommentBody("");
+											setIsCommentInputOpen(false);
+											setSelectedLines(null);
+										}}
+									>
+										<FiX />
+									</IconButton>
+								</HStack>
 								<Textarea
 									value={commentBody}
-									placeholder={`Comment on ${formatReviewRange(selectedLines)}`}
+									placeholder="Write a review comment..."
 									autoresize
-									minH="2.25rem"
-									maxH="8rem"
+									minH="5.5rem"
+									maxH="10rem"
 									fontSize="sm"
+									borderWidth="0"
+									borderRadius="0"
+									resize="none"
+									_focusVisible={{
+										outline: "none",
+										boxShadow: "none",
+									}}
 									onChange={(event) =>
 										setCommentBody(event.target.value)
 									}
 								/>
-								<IconButton
-									aria-label="Add review comment"
-									size="sm"
-									disabled={!commentBody.trim()}
-									onClick={handleAddReviewComment}
+								<Flex
+									px="3"
+									py="2"
+									borderTopWidth="1px"
+									borderColor="border.subtle"
+									bg="bg.subtle"
+									justify="flex-end"
 								>
-									<FiPlus />
-								</IconButton>
-								<IconButton
-									aria-label="Cancel review comment"
-									size="sm"
-									variant="ghost"
-									onClick={() => {
-										setCommentBody("");
-										setIsCommentInputOpen(false);
-										setSelectedLines(null);
-									}}
-								>
-									<FiX />
-								</IconButton>
-							</Flex>
+									<Button
+										size="xs"
+										colorPalette="blue"
+										disabled={!commentBody.trim()}
+										onClick={handleAddReviewComment}
+									>
+										<FiPlus />
+										Add to queue
+									</Button>
+								</Flex>
+							</Box>
 						</Box>
 					)}
 				</Box>
