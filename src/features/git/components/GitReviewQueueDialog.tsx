@@ -151,7 +151,7 @@ export default function GitReviewQueueDialog({
 						</Dialog.Body>
 						<Dialog.Footer gap="2">
 							<Button
-								variant="outline"
+								variant="subtle"
 								onClick={handleCopyAll}
 								disabled={comments.length === 0}
 							>
