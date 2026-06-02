@@ -342,6 +342,14 @@ function ActiveGitDiffFilePane({
 		},
 		[getCommentAnchor],
 	);
+	const openCommentComposerFromSelection = useCallback(
+		(range: SelectedLineRange | null) => {
+			setSelectedLines(range);
+			syncCommentAnchorFromSelection(range);
+			setIsCommentInputOpen(range != null);
+		},
+		[syncCommentAnchorFromSelection],
+	);
 	useEffect(() => {
 		const anchorElement = commentAnchor;
 		const composerElement = commentComposerRef.current;
@@ -370,23 +378,24 @@ function ActiveGitDiffFilePane({
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
 				syncCommentAnchorFromSelection(range);
-				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
-				setSelectedLines(range);
-				syncCommentAnchorFromSelection(range);
-				setIsCommentInputOpen(range != null);
+				openCommentComposerFromSelection(range);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
-				setSelectedLines(range);
-				syncCommentAnchorFromSelection(range);
-				setIsCommentInputOpen(range != null);
+				openCommentComposerFromSelection(range);
 				options.onLineSelected?.(range);
 			},
 		}),
-		[canReviewDiff, openCommentComposer, options, syncCommentAnchorFromSelection],
+		[
+			canReviewDiff,
+			openCommentComposer,
+			openCommentComposerFromSelection,
+			options,
+			syncCommentAnchorFromSelection,
+		],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
