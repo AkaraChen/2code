@@ -207,7 +207,7 @@ function ActiveGitDiffFilePane({
 		() => ({
 			...options,
 			enableLineSelection: canReviewDiff,
-			enableGutterUtility: canReviewDiff,
+			enableGutterUtility: false,
 			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
 			onLineNumberClick: (lineEvent) => {
 				if (canReviewDiff) {
@@ -216,19 +216,23 @@ function ActiveGitDiffFilePane({
 						end: lineEvent.lineNumber,
 						side: lineEvent.annotationSide,
 					});
+					setIsCommentInputOpen(true);
 				}
 				options.onLineNumberClick?.(lineEvent);
 			},
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
 				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
 				options.onLineSelected?.(range);
 			},
 		}),
@@ -267,37 +271,6 @@ function ActiveGitDiffFilePane({
 						fileDiff={activeFile}
 						options={interactiveOptions}
 						selectedLines={selectedLines}
-						renderGutterUtility={(getHoveredLine) => {
-							const hoveredLine = getHoveredLine();
-							const range =
-								selectedLines ??
-								(hoveredLine
-									? {
-											start: hoveredLine.lineNumber,
-											end: hoveredLine.lineNumber,
-											side: hoveredLine.side,
-										}
-									: null);
-
-							if (!range) return null;
-
-							return (
-								<IconButton
-									aria-label={`Comment on ${formatReviewRange(range)}`}
-									size="2xs"
-									variant="solid"
-									colorPalette="blue"
-									onClick={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-										setSelectedLines(range);
-										setIsCommentInputOpen(true);
-									}}
-								>
-									<FiPlus />
-								</IconButton>
-							);
-						}}
 					/>
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
