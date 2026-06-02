@@ -1,4 +1,13 @@
 import {
+	autoUpdate,
+	computePosition,
+	flip,
+	offset,
+	shift,
+	size,
+} from "@floating-ui/dom";
+import type { Strategy } from "@floating-ui/dom";
+import {
 	Badge,
 	Box,
 	Button,
@@ -14,7 +23,7 @@ import type {
 	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
@@ -186,8 +195,10 @@ function ActiveGitDiffFilePane({
 		useState<SelectedLineRange | null>(null);
 	const [commentBody, setCommentBody] = useState("");
 	const [isCommentInputOpen, setIsCommentInputOpen] = useState(false);
-	const [commentComposerTop, setCommentComposerTop] = useState(0);
+	const [commentAnchorElement, setCommentAnchorElement] =
+		useState<HTMLElement | null>(null);
 	const diffContentRef = useRef<HTMLDivElement>(null);
+	const commentComposerRef = useRef<HTMLDivElement>(null);
 	const { additions, deletions } = useMemo(
 		() => getLineStats(activeFile),
 		[activeFile],
@@ -205,34 +216,63 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		!showLargeDiffGuardrail &&
 		!showRenameOnlyDiff;
-	const updateCommentComposerAnchor = useCallback(
+	const getCommentAnchorElement = useCallback(
 		(range: SelectedLineRange, lineElement?: HTMLElement) => {
-			const diffContent = diffContentRef.current;
-			if (!diffContent) return;
-
-			const line =
+			return (
 				lineElement ??
-				diffContent.querySelector<HTMLElement>(
+				diffContentRef.current?.querySelector<HTMLElement>(
 					`[data-line="${Math.min(range.start, range.end)}"]`,
-				);
-			if (!line) return;
-
-			const containerRect = diffContent.getBoundingClientRect();
-			const lineRect = line.getBoundingClientRect();
-			setCommentComposerTop(
-				Math.max(12, lineRect.top - containerRect.top + diffContent.scrollTop),
+				) ??
+				null
 			);
 		},
 		[],
 	);
+	const updateFloatingComposer = useCallback(() => {
+		const anchorElement = commentAnchorElement;
+		const composerElement = commentComposerRef.current;
+		if (!anchorElement || !composerElement) return;
+
+		void computePosition(anchorElement, composerElement, {
+			placement: "right-start",
+			strategy: "fixed" satisfies Strategy,
+			middleware: [
+				offset(12),
+				flip({
+					fallbackPlacements: ["left-start", "bottom-start", "top-start"],
+				}),
+				shift({ padding: 12 }),
+				size({
+					padding: 12,
+					apply({ availableWidth, elements }) {
+						Object.assign(elements.floating.style, {
+							maxWidth: `${Math.min(448, availableWidth)}px`,
+						});
+					},
+				}),
+			],
+		}).then(({ x, y }) => {
+			Object.assign(composerElement.style, {
+				left: `${x}px`,
+				top: `${y}px`,
+			});
+		});
+	}, [commentAnchorElement]);
 	const openCommentComposer = useCallback(
 		(range: SelectedLineRange, lineElement?: HTMLElement) => {
 			setSelectedLines(range);
-			updateCommentComposerAnchor(range, lineElement);
+			setCommentAnchorElement(getCommentAnchorElement(range, lineElement));
 			setIsCommentInputOpen(true);
 		},
-		[updateCommentComposerAnchor],
+		[getCommentAnchorElement],
 	);
+	useEffect(() => {
+		const anchorElement = commentAnchorElement;
+		const composerElement = commentComposerRef.current;
+		if (!isCommentInputOpen || !anchorElement || !composerElement) return;
+
+		return autoUpdate(anchorElement, composerElement, updateFloatingComposer);
+	}, [commentAnchorElement, isCommentInputOpen, updateFloatingComposer]);
 	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
 		() => ({
 			...options,
@@ -251,24 +291,24 @@ function ActiveGitDiffFilePane({
 			},
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
-				if (range) updateCommentComposerAnchor(range);
+				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
-				if (range) updateCommentComposerAnchor(range);
+				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
 				setSelectedLines(range);
-				if (range) updateCommentComposerAnchor(range);
+				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelected?.(range);
 			},
 		}),
-		[canReviewDiff, openCommentComposer, options, updateCommentComposerAnchor],
+		[canReviewDiff, getCommentAnchorElement, openCommentComposer, options],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
@@ -306,14 +346,13 @@ function ActiveGitDiffFilePane({
 					/>
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
-							position="absolute"
-							top={`${commentComposerTop}px`}
-							right="4"
+							ref={commentComposerRef}
+							position="fixed"
 							zIndex={2}
 							pointerEvents="none"
 						>
 							<Box
-								w="min(28rem, calc(100% - 2rem))"
+								w="min(28rem, calc(100vw - 2rem))"
 								borderWidth="1px"
 								borderColor="border.emphasized"
 								borderRadius="lg"
