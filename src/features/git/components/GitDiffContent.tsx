@@ -150,9 +150,13 @@ export default function GitDiffContent({
 	}, []);
 
 	const handleDeleteReviewComment = useCallback((id: string) => {
-		setReviewComments((comments) =>
-			comments.filter((comment) => comment.id !== id),
-		);
+		setReviewComments((comments) => {
+			const nextComments = comments.filter((comment) => comment.id !== id);
+			if (nextComments.length === 0) {
+				setReviewQueueOpen(false);
+			}
+			return nextComments;
+		});
 	}, []);
 
 	const handleClearReviewComments = useCallback(() => {
