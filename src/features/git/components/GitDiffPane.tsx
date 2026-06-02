@@ -263,18 +263,21 @@ function ActiveGitDiffFilePane({
 							bottom="3"
 							right="3"
 							zIndex={2}
-							w="min(24rem, calc(100% - 1.5rem))"
-							borderWidth="1px"
-							borderColor="border.emphasized"
-							borderRadius="md"
-							bg="bg.panel"
-							boxShadow="lg"
-							p="2"
 							mr="3"
 							mb="3"
 						>
 							{isCommentInputOpen ? (
-								<Flex gap="2" align="start">
+								<Flex
+									w="min(24rem, calc(100% - 1.5rem))"
+									gap="2"
+									align="start"
+									borderWidth="1px"
+									borderColor="border.emphasized"
+									borderRadius="lg"
+									bg="bg.panel"
+									boxShadow="xl"
+									p="2"
+								>
 									<Textarea
 										value={commentBody}
 										placeholder={`Comment on ${formatReviewRange(selectedLines)}`}
@@ -308,13 +311,16 @@ function ActiveGitDiffFilePane({
 									</IconButton>
 								</Flex>
 							) : (
-								<Button
+								<IconButton
 									size="sm"
+									aria-label={`Comment on ${formatReviewRange(selectedLines)}`}
+									borderRadius="full"
+									boxShadow="lg"
+									colorPalette="blue"
 									onClick={() => setIsCommentInputOpen(true)}
 								>
 									<FiMessageSquare />
-									Comment on {formatReviewRange(selectedLines)}
-								</Button>
+								</IconButton>
 							)}
 						</Box>
 					)}
