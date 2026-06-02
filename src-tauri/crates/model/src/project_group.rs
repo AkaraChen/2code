@@ -9,6 +9,7 @@ pub struct ProjectGroup {
 	pub id: String,
 	pub name: String,
 	pub created_at: String,
+	pub sort_order: i32,
 }
 
 #[derive(Insertable)]
@@ -16,4 +17,5 @@ pub struct ProjectGroup {
 pub struct NewProjectGroup<'a> {
 	pub id: &'a str,
 	pub name: &'a str,
+	pub sort_order: i32,
 }

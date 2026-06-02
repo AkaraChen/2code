@@ -78,6 +78,7 @@ describe("useDeleteProject", () => {
 				name: "Project 1",
 				folder: "/projects/one",
 				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 1000,
 				profiles: [],
 			},
 			{
@@ -85,6 +86,7 @@ describe("useDeleteProject", () => {
 				name: "Project 2",
 				folder: "/projects/two",
 				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 2000,
 				profiles: [],
 			},
 		];

@@ -128,6 +128,11 @@ export async function assignProjectToGroup(params: types.AssignProjectToGroupPar
 }
 
 
+export async function updateProjectSidebarLayout(params: types.UpdateProjectSidebarLayoutParams): Promise<void> {
+  return invoke('update_project_sidebar_layout', params);
+}
+
+
 export async function getProjectConfig(params: types.GetProjectConfigParams): Promise<types.ProjectConfig> {
   return invoke('get_project_config', params);
 }

@@ -602,10 +602,8 @@ pub async fn reveal_path_in_file_manager(path: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub async fn open_path_in_default_app(path: String) -> Result<(), AppError> {
-	super::run_blocking(move || {
-		open_path_in_default_app_impl(Path::new(&path))
-	})
-	.await
+	super::run_blocking(move || open_path_in_default_app_impl(Path::new(&path)))
+		.await
 }
 
 #[tauri::command]
@@ -851,6 +849,7 @@ mod tests {
 				name: "Project",
 				folder: "/repo",
 				group_id: None,
+				sort_order: 1000,
 			})
 			.execute(&mut conn)
 			.expect("insert project");

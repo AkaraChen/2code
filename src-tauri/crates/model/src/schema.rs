@@ -17,6 +17,7 @@ diesel::table! {
 		id -> Text,
 		name -> Text,
 		created_at -> Timestamp,
+		sort_order -> Integer,
 	}
 }
 
@@ -27,6 +28,9 @@ diesel::table! {
 		folder -> Text,
 		created_at -> Timestamp,
 		group_id -> Nullable<Text>,
+		sort_order -> Integer,
+		pinned_at -> Nullable<Timestamp>,
+		pinned_order -> Nullable<Integer>,
 	}
 }
 

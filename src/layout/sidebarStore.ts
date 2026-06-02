@@ -15,8 +15,10 @@ export function clampAppSidebarWidth(width: number) {
 interface AppSidebarStore {
 	width: number;
 	collapsedProjectGroupIds: string[];
+	isReorderMode: boolean;
 	setWidth: (width: number) => void;
 	toggleProjectGroup: (groupId: string) => void;
+	toggleReorderMode: () => void;
 }
 
 export const useAppSidebarStore = create<AppSidebarStore>()(
@@ -24,7 +26,10 @@ export const useAppSidebarStore = create<AppSidebarStore>()(
 		(set) => ({
 			width: APP_SIDEBAR_DEFAULT_WIDTH,
 			collapsedProjectGroupIds: [],
+			isReorderMode: false,
 			setWidth: (width) => set({ width: clampAppSidebarWidth(width) }),
+			toggleReorderMode: () =>
+				set((state) => ({ isReorderMode: !state.isReorderMode })),
 			toggleProjectGroup: (groupId) =>
 				set((state) => {
 					const collapsed =

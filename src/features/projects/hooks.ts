@@ -12,6 +12,7 @@ import {
 import type {
 	ProjectConfig,
 	ProjectGroup,
+	ProjectSidebarLayoutUpdate,
 	ProjectWithProfiles,
 } from "@/generated";
 import {
@@ -38,6 +39,7 @@ import {
 	saveProjectConfig,
 	searchFile,
 	updateProject,
+	updateProjectSidebarLayout,
 	writeFileContent,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
@@ -195,6 +197,24 @@ export function useAssignProjectToGroup() {
 							: item,
 					),
 			);
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projects.all,
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.projectGroups.all,
+				}),
+			]);
+		},
+	});
+}
+
+export function useUpdateProjectSidebarLayout() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (updates: ProjectSidebarLayoutUpdate[]) =>
+			updateProjectSidebarLayout({ updates }),
+		onSuccess: async () => {
 			await Promise.all([
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.projects.all,

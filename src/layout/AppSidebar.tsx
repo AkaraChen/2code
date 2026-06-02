@@ -1,15 +1,62 @@
 import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
+import {
+	closestCenter,
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	useDroppable,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef } from "react";
-import { FiFolder, FiHome, FiPlus, FiSettings } from "react-icons/fi";
+import {
+	FiCheck,
+	FiEdit3,
+	FiFolder,
+	FiHome,
+	FiPlus,
+	FiSettings,
+	FiStar,
+} from "react-icons/fi";
+import { PiDotsSixVerticalBold } from "react-icons/pi";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
-import { useProjectGroups, useProjects } from "@/features/projects/hooks";
+import {
+	useProjectGroups,
+	useProjects,
+	useUpdateProjectSidebarLayout,
+} from "@/features/projects/hooks";
+import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
+import { toaster } from "@/shared/providers/appToaster";
 import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
+import { ProjectAvatar } from "./sidebar/ProjectAvatar";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
+import {
+	buildSidebarLayout,
+	createSidebarLayoutUpdates,
+	groupDropId,
+	groupEntryId,
+	parseDropId,
+	parseEntryId,
+	PINNED_DROP_ID,
+	projectEntryId,
+	type SidebarContainerId,
+	type SidebarEntryId,
+	type SidebarLayoutState,
+	type SidebarTopEntry,
+	toSidebarLayoutState,
+	TOP_LEVEL_DROP_ID,
+} from "./sidebar/sidebarLayout";
 import {
 	APP_SIDEBAR_MAX_WIDTH,
 	APP_SIDEBAR_MIN_WIDTH,
@@ -20,11 +67,260 @@ function isMacPlatform() {
 	return /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
 }
 
+function insertAt<T>(items: T[], item: T, index: number) {
+	const next = [...items];
+	next.splice(Math.max(0, Math.min(index, next.length)), 0, item);
+	return next;
+}
+
+function removeProjectFromState(
+	state: SidebarLayoutState,
+	projectId: string,
+): SidebarLayoutState {
+	return {
+		pinnedProjectIds: state.pinnedProjectIds.filter((id) => id !== projectId),
+		topEntryIds: state.topEntryIds.filter(
+			(id) => id !== projectEntryId(projectId),
+		),
+		groupProjectIds: new Map(
+			Array.from(state.groupProjectIds.entries()).map(([groupId, ids]) => [
+				groupId,
+				ids.filter((id) => id !== projectId),
+			]),
+		),
+	};
+}
+
+function removeGroupFromState(
+	state: SidebarLayoutState,
+	groupId: string,
+): SidebarLayoutState {
+	return {
+		...state,
+		topEntryIds: state.topEntryIds.filter((id) => id !== groupEntryId(groupId)),
+	};
+}
+
+function getProjectContainer(
+	project: ProjectWithProfiles,
+): SidebarContainerId {
+	if (project.pinned_order != null) return "pinned";
+	if (project.group_id) return `group:${project.group_id}`;
+	return "top-level";
+}
+
+function getOverContainer(
+	overId: string,
+	model: ReturnType<typeof buildSidebarLayout>,
+	activeKind: "group" | "project",
+): SidebarContainerId | null {
+	const dropContainer = parseDropId(overId);
+	if (dropContainer) return dropContainer;
+
+	const parsed = parseEntryId(overId);
+	if (!parsed) return null;
+
+	if (parsed.kind === "group") {
+		return activeKind === "group" ? "top-level" : `group:${parsed.id}`;
+	}
+
+	const project = model.projectById.get(parsed.id);
+	return project ? getProjectContainer(project) : null;
+}
+
+function getInsertIndex(
+	container: SidebarContainerId,
+	overId: string,
+	state: SidebarLayoutState,
+) {
+	const parsed = parseEntryId(overId);
+	if (!parsed) return Number.POSITIVE_INFINITY;
+
+	if (container === "pinned" && parsed.kind === "project") {
+		const index = state.pinnedProjectIds.indexOf(parsed.id);
+		return index === -1 ? Number.POSITIVE_INFINITY : index;
+	}
+
+	if (container === "top-level") {
+		const index = state.topEntryIds.indexOf(overId as SidebarEntryId);
+		return index === -1 ? Number.POSITIVE_INFINITY : index;
+	}
+
+	if (container.startsWith("group:") && parsed.kind === "project") {
+		const groupId = container.slice("group:".length);
+		const index = state.groupProjectIds.get(groupId)?.indexOf(parsed.id) ?? -1;
+		return index === -1 ? Number.POSITIVE_INFINITY : index;
+	}
+
+	return Number.POSITIVE_INFINITY;
+}
+
+function SidebarDropZone({
+	id,
+	label,
+	compact,
+}: {
+	id: string;
+	label: string;
+	compact?: boolean;
+}) {
+	const { isOver, setNodeRef } = useDroppable({ id });
+	return (
+		<Box
+			ref={setNodeRef}
+			mx="3"
+			my={compact ? "1" : "2"}
+			px="3"
+			py={compact ? "1" : "2"}
+			borderWidth="1px"
+			borderStyle="dashed"
+			borderColor={isOver ? "border.emphasized" : "border.subtle"}
+			bg={isOver ? "bg.muted" : "transparent"}
+			color="fg.subtle"
+			fontSize="xs"
+			borderRadius="md"
+			textAlign="center"
+		>
+			{label}
+		</Box>
+	);
+}
+
+function SortableProjectRow({
+	project,
+	isPinned,
+	onTogglePinned,
+}: {
+	project: ProjectWithProfiles;
+	isPinned: boolean;
+	onTogglePinned: (project: ProjectWithProfiles) => void;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: projectEntryId(project.id) });
+
+	return (
+		<HStack
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.45 : 1,
+			}}
+			{...attributes}
+			gap="2"
+			align="center"
+			w="full"
+			minW="0"
+			px="4"
+			py="1.5"
+			userSelect="none"
+			bg={isDragging ? "bg.subtle" : "transparent"}
+			_hover={{ bg: "bg.subtle" }}
+		>
+			<Box
+				{...listeners}
+				w="5"
+				h="5"
+				display="grid"
+				placeItems="center"
+				color="fg.subtle"
+				cursor="grab"
+				flexShrink={0}
+			>
+				<PiDotsSixVerticalBold />
+			</Box>
+			<ProjectAvatar projectId={project.id} projectName={project.name} />
+			<Text flex="1 1 auto" minW="0" truncate lineHeight="1.25rem">
+				{project.name}
+			</Text>
+			<IconButton
+				aria-label={isPinned ? "Unpin project" : "Pin project"}
+				variant={isPinned ? "solid" : "ghost"}
+				colorPalette={isPinned ? "yellow" : undefined}
+				size="2xs"
+				flexShrink={0}
+				onClick={() => onTogglePinned(project)}
+			>
+				<FiStar />
+			</IconButton>
+		</HStack>
+	);
+}
+
+function SortableGroupRow({
+	entry,
+}: {
+	entry: Extract<SidebarTopEntry, { kind: "group" }>;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: entry.id });
+
+	return (
+		<HStack
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.45 : 1,
+			}}
+			{...attributes}
+			gap="2"
+			align="center"
+			w="full"
+			minW="0"
+			px="4"
+			py="1.5"
+			color="fg.muted"
+			fontSize="xs"
+			fontWeight="semibold"
+			textTransform="uppercase"
+			userSelect="none"
+			bg={isDragging ? "bg.subtle" : "transparent"}
+			_hover={{ bg: "bg.subtle" }}
+		>
+			<Box
+				{...listeners}
+				w="5"
+				h="5"
+				display="grid"
+				placeItems="center"
+				color="fg.subtle"
+				cursor="grab"
+				flexShrink={0}
+			>
+				<PiDotsSixVerticalBold />
+			</Box>
+			<Icon fontSize="sm" flexShrink={0}>
+				<FiFolder />
+			</Icon>
+			<Text flex="1 1 auto" minW="0" truncate>
+				{entry.group.name}
+			</Text>
+			<Text color="fg.subtle">{entry.projects.length}</Text>
+		</HStack>
+	);
+}
+
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const { data: projectGroups } = useProjectGroups();
 	const createDialog = useDialogState();
 	const navRef = useRef<HTMLElement>(null);
+	const updateSidebarLayout = useUpdateProjectSidebarLayout();
+	const isReorderMode = useAppSidebarStore((s) => s.isReorderMode);
+	const toggleReorderMode = useAppSidebarStore((s) => s.toggleReorderMode);
 	const sidebarWidth = useAppSidebarStore((s) => s.width);
 	const setSidebarWidth = useAppSidebarStore((s) => s.setWidth);
 	const resize = useHorizontalResize({
@@ -33,34 +329,123 @@ export default function AppSidebar() {
 		max: APP_SIDEBAR_MAX_WIDTH,
 		onChange: setSidebarWidth,
 	});
-	const groupedProjects = useMemo(() => {
-		const knownGroupIds = new Set(projectGroups.map((group) => group.id));
-		const projectsByGroup = new Map(
-			projectGroups.map((group) => [group.id, [] as typeof projects]),
-		);
-		const ungroupedProjects: typeof projects = [];
+	const sidebarLayout = useMemo(
+		() => buildSidebarLayout(projects, projectGroups),
+		[projectGroups, projects],
+	);
+	const sensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+	);
 
-		for (const project of projects) {
-			const groupId = project.group_id ?? null;
-			if (groupId && knownGroupIds.has(groupId)) {
-				projectsByGroup.get(groupId)?.push(project);
+	const persistLayoutState = useCallback(
+		(state: SidebarLayoutState) => {
+			const updates = createSidebarLayoutUpdates(state);
+			void updateSidebarLayout.mutateAsync(updates).catch((error) => {
+				toaster.create({
+					title: "Failed to update sidebar order",
+					description:
+						error instanceof Error ? error.message : String(error),
+					type: "error",
+					closable: true,
+				});
+			});
+		},
+		[updateSidebarLayout],
+	);
+
+	const handleTogglePinned = useCallback(
+		(project: ProjectWithProfiles) => {
+			const state = removeProjectFromState(
+				toSidebarLayoutState(sidebarLayout),
+				project.id,
+			);
+			if (project.pinned_order == null) {
+				state.pinnedProjectIds = [...state.pinnedProjectIds, project.id];
 			} else {
-				ungroupedProjects.push(project);
+				state.topEntryIds = [
+					...state.topEntryIds,
+					projectEntryId(project.id),
+				];
 			}
-		}
+			persistLayoutState(state);
+		},
+		[persistLayoutState, sidebarLayout],
+	);
 
-		return {
-			groups: projectGroups
-				.map((group) => ({
-					group,
-					projects: projectsByGroup.get(group.id) ?? [],
-				}))
-				.filter((group) => group.projects.length > 0),
-			ungroupedProjects,
-		};
-	}, [projectGroups, projects]);
+	const handleDragEnd = useCallback(
+		(event: DragEndEvent) => {
+			const { active, over } = event;
+			if (!over) return;
+
+			const activeId = String(active.id);
+			const overId = String(over.id);
+			if (activeId === overId) return;
+			const activeEntry = parseEntryId(activeId);
+			if (!activeEntry) return;
+
+			const targetContainer = getOverContainer(
+				overId,
+				sidebarLayout,
+				activeEntry.kind,
+			);
+			if (!targetContainer) return;
+
+			const baseState = toSidebarLayoutState(sidebarLayout);
+			let nextState =
+				activeEntry.kind === "project"
+					? removeProjectFromState(baseState, activeEntry.id)
+					: removeGroupFromState(baseState, activeEntry.id);
+			const insertIndex = getInsertIndex(targetContainer, overId, nextState);
+
+			if (activeEntry.kind === "group") {
+				if (targetContainer !== "top-level") return;
+				nextState = {
+					...nextState,
+					topEntryIds: insertAt(
+						nextState.topEntryIds,
+						groupEntryId(activeEntry.id),
+						insertIndex,
+					),
+				};
+			} else if (targetContainer === "pinned") {
+				nextState = {
+					...nextState,
+					pinnedProjectIds: insertAt(
+						nextState.pinnedProjectIds,
+						activeEntry.id,
+						insertIndex,
+					),
+				};
+			} else if (targetContainer === "top-level") {
+				nextState = {
+					...nextState,
+					topEntryIds: insertAt(
+						nextState.topEntryIds,
+						projectEntryId(activeEntry.id),
+						insertIndex,
+					),
+				};
+			} else {
+				const groupId = targetContainer.slice("group:".length);
+				const groupProjectIds = new Map(nextState.groupProjectIds);
+				groupProjectIds.set(
+					groupId,
+					insertAt(
+						groupProjectIds.get(groupId) ?? [],
+						activeEntry.id,
+						insertIndex,
+					),
+				);
+				nextState = { ...nextState, groupProjectIds };
+			}
+
+			persistLayoutState(nextState);
+		},
+		[persistLayoutState, sidebarLayout],
+	);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+		if (isReorderMode) return;
 		if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
 
 		const nav = navRef.current;
@@ -88,7 +473,7 @@ export default function AppSidebar() {
 
 		items[nextIndex]?.focus();
 		e.preventDefault();
-	}, []);
+	}, [isReorderMode]);
 
 	return (
 		<>
@@ -198,6 +583,19 @@ export default function AppSidebar() {
 									</Text>
 								</HStack>
 								<IconButton
+									aria-label={
+										isReorderMode
+											? "Done editing project order"
+											: "Edit project order"
+									}
+									variant={isReorderMode ? "solid" : "ghost"}
+									size="2xs"
+									flexShrink={0}
+									onClick={toggleReorderMode}
+								>
+									{isReorderMode ? <FiCheck /> : <FiEdit3 />}
+								</IconButton>
+								<IconButton
 									id="add-project-button"
 									aria-label={m.newProject()}
 									variant="ghost"
@@ -209,25 +607,177 @@ export default function AppSidebar() {
 								</IconButton>
 							</HStack>
 
-							{groupedProjects.groups.map(
-								({ group, projects }) => (
-									<ProjectGroupSection
-										key={group.id}
-										group={group}
-										projectGroups={projectGroups}
-										projects={projects}
+							{isReorderMode ? (
+								<DndContext
+									sensors={sensors}
+									collisionDetection={closestCenter}
+									onDragEnd={handleDragEnd}
+								>
+									<Text
+										px="4"
+										pt="1"
+										pb="1"
+										fontSize="xs"
+										color="fg.subtle"
+									>
+										Pinned
+									</Text>
+									<SortableContext
+										items={sidebarLayout.pinnedProjects.map(
+											(project) =>
+												projectEntryId(project.id),
+										)}
+										strategy={verticalListSortingStrategy}
+									>
+										{sidebarLayout.pinnedProjects.map(
+											(project) => (
+												<SortableProjectRow
+													key={project.id}
+													project={project}
+													isPinned
+													onTogglePinned={
+														handleTogglePinned
+													}
+												/>
+											),
+										)}
+									</SortableContext>
+									<SidebarDropZone
+										id={PINNED_DROP_ID}
+										label="Drop here to pin"
+										compact={
+											sidebarLayout.pinnedProjects
+												.length > 0
+										}
 									/>
-								),
-							)}
 
-							{groupedProjects.ungroupedProjects.map(
-								(project) => (
-									<ProjectMenuItem
-										key={project.id}
-										project={project}
-										projectGroups={projectGroups}
+									<Text
+										px="4"
+										pt="2"
+										pb="1"
+										fontSize="xs"
+										color="fg.subtle"
+									>
+										Projects
+									</Text>
+									<SortableContext
+										items={sidebarLayout.topEntries.map(
+											(entry) => entry.id,
+										)}
+										strategy={verticalListSortingStrategy}
+									>
+										{sidebarLayout.topEntries.map(
+											(entry) =>
+												entry.kind === "group" ? (
+													<Box key={entry.id}>
+														<SortableGroupRow
+															entry={entry}
+														/>
+														<Box ps="4">
+															<SortableContext
+																items={entry.projects.map(
+																	(project) =>
+																		projectEntryId(
+																			project.id,
+																		),
+																)}
+																strategy={
+																	verticalListSortingStrategy
+																}
+															>
+																{entry.projects.map(
+																	(
+																		project,
+																	) => (
+																		<SortableProjectRow
+																			key={
+																				project.id
+																			}
+																			project={
+																				project
+																			}
+																			isPinned={
+																				false
+																			}
+																			onTogglePinned={
+																				handleTogglePinned
+																			}
+																		/>
+																	),
+																)}
+															</SortableContext>
+															<SidebarDropZone
+																id={groupDropId(
+																	entry.group
+																		.id,
+																)}
+																label="Drop project into folder"
+																compact
+															/>
+														</Box>
+													</Box>
+												) : (
+													<SortableProjectRow
+														key={entry.id}
+														project={entry.project}
+														isPinned={false}
+														onTogglePinned={
+															handleTogglePinned
+														}
+													/>
+												),
+										)}
+									</SortableContext>
+									<SidebarDropZone
+										id={TOP_LEVEL_DROP_ID}
+										label="Drop here to unpin or move out"
 									/>
-								),
+								</DndContext>
+							) : (
+								<>
+									{sidebarLayout.pinnedProjects.length > 0 && (
+										<>
+											<Text
+												px="4"
+												pt="1"
+												pb="1"
+												fontSize="xs"
+												color="fg.subtle"
+												textTransform="uppercase"
+												fontWeight="semibold"
+											>
+												Pinned
+											</Text>
+											{sidebarLayout.pinnedProjects.map(
+												(project) => (
+													<ProjectMenuItem
+														key={project.id}
+														project={project}
+														projectGroups={
+															projectGroups
+														}
+													/>
+												),
+											)}
+										</>
+									)}
+									{sidebarLayout.topEntries.map((entry) =>
+										entry.kind === "group" ? (
+											<ProjectGroupSection
+												key={entry.group.id}
+												group={entry.group}
+												projectGroups={projectGroups}
+												projects={entry.projects}
+											/>
+										) : (
+											<ProjectMenuItem
+												key={entry.project.id}
+												project={entry.project}
+												projectGroups={projectGroups}
+											/>
+										),
+									)}
+								</>
 							)}
 							</Flex>
 						</Box>

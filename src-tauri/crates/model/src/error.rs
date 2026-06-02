@@ -31,6 +31,12 @@ impl Serialize for AppError {
 	}
 }
 
+impl From<diesel::result::Error> for AppError {
+	fn from(error: diesel::result::Error) -> Self {
+		AppError::DbError(error.to_string())
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

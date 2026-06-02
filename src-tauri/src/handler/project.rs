@@ -4,7 +4,7 @@ use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
-	ProjectConfig, ProjectWithProfiles,
+	ProjectConfig, ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
 
@@ -296,6 +296,19 @@ pub async fn assign_project_to_group(
 }
 
 #[tauri::command]
+pub async fn update_project_sidebar_layout(
+	updates: Vec<ProjectSidebarLayoutUpdate>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::project::update_sidebar_layout(conn, updates)
+	})
+	.await
+}
+
+#[tauri::command]
 pub async fn get_project_config(
 	project_id: String,
 	state: State<'_, DbPool>,
@@ -358,6 +371,7 @@ mod tests {
 				name: "Project",
 				folder: "/repo",
 				group_id: None,
+				sort_order: 1000,
 			})
 			.execute(&mut conn)
 			.expect("insert project");

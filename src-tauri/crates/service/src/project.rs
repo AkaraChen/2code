@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
+use diesel::{Connection, SqliteConnection};
 use uuid::Uuid;
 
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
-	ProjectWithProfiles,
+	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
 
@@ -52,9 +52,7 @@ pub fn update(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	let project = repo::project::find_by_id(conn, id)?;
 	repo::project::delete(conn, id)?;
-	cleanup_empty_group(conn, project.group_id)?;
 	Ok(())
 }
 
@@ -90,7 +88,6 @@ pub fn assign_to_group(
 	project_id: &str,
 	group_id: Option<String>,
 ) -> Result<Project, AppError> {
-	let project = repo::project::find_by_id(conn, project_id)?;
 	let group_id = group_id.and_then(|id| {
 		let trimmed = id.trim().to_string();
 		if trimmed.is_empty() {
@@ -106,22 +103,44 @@ pub fn assign_to_group(
 
 	let updated =
 		repo::project::set_group(conn, project_id, group_id.as_deref())?;
-	if project.group_id != updated.group_id {
-		cleanup_empty_group(conn, project.group_id)?;
-	}
 
 	Ok(updated)
 }
 
-fn cleanup_empty_group(
+pub fn update_sidebar_layout(
 	conn: &mut SqliteConnection,
-	group_id: Option<String>,
+	updates: Vec<ProjectSidebarLayoutUpdate>,
 ) -> Result<(), AppError> {
-	if let Some(group_id) = group_id {
-		repo::project_group::delete_if_empty(conn, &group_id)?;
-	}
+	conn.transaction(|conn| {
+		for update in &updates {
+			match update.kind.as_str() {
+				"group" => {
+					let sort_order = update.sort_order.ok_or_else(|| {
+						AppError::DbError("Group sort_order is required".into())
+					})?;
+					repo::project_group::set_sort_order(
+						conn, &update.id, sort_order,
+					)?;
+				}
+				"project" => {
+					if let Some(group_id) = update.group_id.as_deref() {
+						repo::project_group::find_by_id(conn, group_id)?;
+					}
+					repo::project::update_sidebar_layout(
+						conn,
+						std::slice::from_ref(update),
+					)?;
+				}
+				other => {
+					return Err(AppError::DbError(format!(
+						"Unsupported sidebar layout update kind: {other}"
+					)));
+				}
+			}
+		}
 
-	Ok(())
+		Ok(())
+	})
 }
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
