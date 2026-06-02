@@ -110,6 +110,19 @@ pub fn list_branch_names_by_project(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn update_notes(
+	conn: &mut SqliteConnection,
+	id: &str,
+	notes: &str,
+) -> Result<Profile, AppError> {
+	diesel::update(profiles::table.find(id))
+		.set(profiles::notes.eq(notes))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	find_by_id(conn, id)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -253,5 +266,30 @@ mod tests {
 			.get_result(&mut conn)
 			.unwrap();
 		assert_eq!(count, 0);
+	}
+
+	#[test]
+	fn update_notes_success() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
+
+		let profile = update_notes(&mut conn, "p1", "# Hello\nSome notes").unwrap();
+		assert_eq!(profile.notes, "# Hello\nSome notes");
+	}
+
+	#[test]
+	fn update_notes_not_found() {
+		let mut conn = setup_db();
+		let result = update_notes(&mut conn, "nonexistent", "notes");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn new_profile_has_empty_notes() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		let profile = insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
+		assert_eq!(profile.notes, "");
 	}
 }

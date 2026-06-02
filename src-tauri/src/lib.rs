@@ -120,10 +120,15 @@ pub fn run() {
 			handler::filesystem::rename_file_tree_path,
 			handler::filesystem::move_file_tree_paths,
 			handler::filesystem::delete_file_tree_paths,
+			handler::filesystem::create_file_tree_path,
+			handler::filesystem::reveal_path_in_file_manager,
+			handler::filesystem::open_path_in_default_app,
 			handler::filesystem::read_file_content,
 			handler::filesystem::write_file_content,
+			handler::filesystem::get_file_preview,
 			handler::filesystem::search_file,
 			handler::filesystem::get_file_tree_git_status,
+			handler::filesystem::resolve_terminal_file_path,
 			handler::font::list_system_fonts,
 			handler::shell::list_available_shells,
 			handler::sound::list_system_sounds,
@@ -133,9 +138,12 @@ pub fn run() {
 			handler::profile::create_profile,
 			handler::profile::delete_profile,
 			handler::profile::get_profile_delete_check,
+			handler::profile::update_profile_notes,
 			handler::watcher::watch_projects,
 			handler::updater::check_update,
 			handler::updater::install_update,
+			handler::browser::list_installed_browsers,
+			handler::browser::open_url_in_browser,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
 		])
@@ -146,20 +154,16 @@ pub fn run() {
 		use std::sync::atomic::Ordering;
 		use tauri::Manager;
 
-		match event {
-			tauri::RunEvent::Exit => {
-				shutdown_for_exit.store(true, Ordering::Relaxed);
-				infra::pty::close_all_sessions(&sessions_for_exit);
-				tracing::info!(target: "pty", "exit: joining read threads...");
-				infra::pty::join_all_read_threads(&read_threads_for_exit);
-				tracing::info!(target: "pty", "exit: all read threads joined");
+		if let tauri::RunEvent::Exit = event {
+			shutdown_for_exit.store(true, Ordering::Relaxed);
+			infra::pty::close_all_sessions(&sessions_for_exit);
+			tracing::info!(target: "pty", "exit: joining read threads...");
+			infra::pty::join_all_read_threads(&read_threads_for_exit);
+			tracing::info!(target: "pty", "exit: all read threads joined");
 
-				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
-					service::pty::mark_all_closed(&db);
-				}
+			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
+				service::pty::mark_all_closed(&db);
 			}
-
-			_ => {}
 		}
 	});
 }

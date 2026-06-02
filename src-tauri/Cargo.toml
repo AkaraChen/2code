@@ -27,7 +27,7 @@ infra = { path = "crates/infra" }
 service = { path = "crates/service" }
 
 # Tauri framework
-tauri = { version = "2", features = [  ] }
+tauri = { version = "2", features = [ "protocol-asset" ] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -45,6 +45,9 @@ axum = "0.8"
 tokio = { version = "1", features = [ "net" ] }
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 tauri-plugin-process = "2"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+tar = "0.4.46"
+flate2 = "1.1.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "22"

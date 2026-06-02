@@ -53,10 +53,7 @@ function useBinaryPreviewUrl({
 			return null;
 		}
 
-		const baseUrl =
-			typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
-				? convertFileSrc(previewQuery.data.file_path)
-				: previewQuery.data.file_path;
+		const baseUrl = convertFileSrc(previewQuery.data.file_path);
 		const separator = baseUrl.includes("?") ? "&" : "?";
 
 		return `${baseUrl}${separator}v=${encodeURIComponent(revision)}`;

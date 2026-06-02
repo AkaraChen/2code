@@ -22,6 +22,7 @@ import {
 	resizePty,
 	writeToPty,
 } from "@/generated";
+import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
@@ -161,7 +162,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		setPendingLink(null);
 	}, []);
 
-	const openPendingLink = useCallback(() => {
+	const openPendingLinkExternally = useCallback(() => {
 		const uri = pendingLink;
 		if (!uri) return;
 
@@ -275,6 +276,12 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			term.loadAddon(new ImageAddon());
 			term.loadAddon(new LigaturesAddon());
 			term.loadAddon(new ProgressAddon());
+
+			// Register file-path link provider for clickable file paths
+			const fileLinkProvider = new FileLinkProvider({ profileId });
+			fileLinkProvider.setTerminal(term);
+			const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
+			unlisteners.push(() => fileLinkDisposable.dispose());
 
 			fitAddon.fit();
 			syncTerminalLayout(1);
@@ -431,7 +438,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			<TerminalLinkConfirmDialog
 				link={pendingLink}
 				onClose={closePendingLinkDialog}
-				onOpen={openPendingLink}
+				onOpenDefault={openPendingLinkExternally}
 			/>
 		</>
 	);

@@ -113,7 +113,6 @@ export default function ChangesFileList({
 					justify="space-between"
 					px="3"
 					py="2.5"
-					bg="bg.subtle"
 					borderBottomWidth="1px"
 					borderColor="border.subtle"
 				>

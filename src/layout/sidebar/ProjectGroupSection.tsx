@@ -48,13 +48,13 @@ export function ProjectGroupSection({
 				minW="0"
 				px="4"
 				py="1.5"
-				cursor="pointer"
 				color="fg.muted"
 				fontSize="xs"
 				fontWeight="semibold"
 				textTransform="uppercase"
 				userSelect="none"
 				_hover={{ bg: "bg.subtle" }}
+				_active={{ bg: "bg.muted" }}
 				onClick={handleToggle}
 				onKeyDown={(e) => {
 					if (e.key !== "Enter" && e.key !== " ") return;

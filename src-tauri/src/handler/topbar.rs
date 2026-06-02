@@ -228,7 +228,7 @@ pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 			list_supported_topbar_apps_macos,
 		)
 		.await;
-		return apps.unwrap_or_default();
+		apps.unwrap_or_default()
 	}
 
 	#[cfg(target_os = "windows")]
@@ -237,7 +237,7 @@ pub async fn list_supported_topbar_apps() -> Vec<TopbarApp> {
 			list_supported_topbar_apps_windows,
 		)
 		.await;
-		return apps.unwrap_or_default();
+		apps.unwrap_or_default()
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -253,18 +253,18 @@ pub async fn open_topbar_app(
 ) -> Result<(), AppError> {
 	#[cfg(target_os = "macos")]
 	{
-		return super::run_blocking(move || {
+		super::run_blocking(move || {
 			open_topbar_app_macos(&app_id, &path)
 		})
-		.await;
+		.await
 	}
 
 	#[cfg(target_os = "windows")]
 	{
-		return super::run_blocking(move || {
+		super::run_blocking(move || {
 			open_topbar_app_windows(&app_id, &path)
 		})
-		.await;
+		.await
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "windows")))]
