@@ -1,5 +1,6 @@
-import { Box, Flex, Tabs } from "@chakra-ui/react";
+import { Box, Button, Flex, Tabs, Text } from "@chakra-ui/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
+import { FiMessageSquare } from "react-icons/fi";
 import {
 	Activity,
 	startTransition,
@@ -35,7 +36,9 @@ import {
 import { reconcileIncludedFiles, toggleIncludedFileName } from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
+import GitReviewQueueDialog from "./GitReviewQueueDialog";
 import { collectOrderedIncludedFileNames } from "./includedFileNames";
+import type { DiffReviewComment } from "../reviewQueue";
 
 const SIDEBAR_TAB_CONTENT_PROPS = {
 	position: "absolute",
@@ -95,6 +98,10 @@ export default function GitDiffContent({
 	);
 	const [commitMessage, setCommitMessage] = useState("");
 	const [commitBody, setCommitBody] = useState("");
+	const [reviewQueueOpen, setReviewQueueOpen] = useState(false);
+	const [reviewComments, setReviewComments] = useState<DiffReviewComment[]>(
+		() => [],
+	);
 	const sidebarRef = useRef<HTMLDivElement>(null);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 
@@ -129,6 +136,29 @@ export default function GitDiffContent({
 			});
 		}
 	}, [gitPush]);
+
+	const handleAddReviewComment = useCallback((comment: DiffReviewComment) => {
+		setReviewComments((comments) => [...comments, comment]);
+		toaster.create({
+			title: "Review comment queued",
+			type: "success",
+			closable: true,
+		});
+	}, []);
+
+	const handleUpdateReviewComment = useCallback((id: string, body: string) => {
+		setReviewComments((comments) =>
+			comments.map((comment) =>
+				comment.id === id ? { ...comment, body } : comment,
+			),
+		);
+	}, []);
+
+	const handleDeleteReviewComment = useCallback((id: string) => {
+		setReviewComments((comments) =>
+			comments.filter((comment) => comment.id !== id),
+		);
+	}, []);
 
 	const handleTabChange = (value: string) => {
 		startTransition(() => {
@@ -352,7 +382,8 @@ export default function GitDiffContent({
 
 	return (
 		<GitDiffContext value={ctxValue}>
-			<Flex flex="1" overflow="hidden">
+			<Flex direction="column" flex="1" minH="0" overflow="hidden">
+				<Flex flex="1" minH="0" overflow="hidden">
 				{/* Sidebar column */}
 				<Flex
 					ref={sidebarRef}
@@ -506,12 +537,49 @@ export default function GitDiffContent({
 
 				{/* Pane column — Activity preserves mounted diff state while hidden */}
 				<Activity mode={isChanges ? "visible" : "hidden"}>
-					<ChangesDiffPane visible={isChanges} />
+					<ChangesDiffPane
+						visible={isChanges}
+						onAddReviewComment={handleAddReviewComment}
+					/>
 				</Activity>
 
 				<Activity mode={!isChanges ? "visible" : "hidden"}>
 					<HistoryDiffPane visible={!isChanges} />
 				</Activity>
+			</Flex>
+				{reviewComments.length > 0 && (
+					<Flex
+						flexShrink={0}
+						align="center"
+						justify="space-between"
+						gap="3"
+						px="4"
+						py="2"
+						borderTopWidth="1px"
+						borderColor="border.subtle"
+						bg="bg.panel"
+					>
+						<Text fontSize="sm" color="fg.muted">
+							{reviewComments.length} queued review comment
+							{reviewComments.length === 1 ? "" : "s"}
+						</Text>
+						<Button
+							size="sm"
+							variant="outline"
+							onClick={() => setReviewQueueOpen(true)}
+						>
+							<FiMessageSquare />
+							Review Queue ({reviewComments.length})
+						</Button>
+					</Flex>
+				)}
+				<GitReviewQueueDialog
+					isOpen={reviewQueueOpen}
+					comments={reviewComments}
+					onClose={() => setReviewQueueOpen(false)}
+					onDelete={handleDeleteReviewComment}
+					onUpdate={handleUpdateReviewComment}
+				/>
 			</Flex>
 		</GitDiffContext>
 	);

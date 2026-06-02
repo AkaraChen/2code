@@ -4,14 +4,18 @@ import {
 	Button,
 	Flex,
 	HStack,
+	IconButton,
+	Textarea,
 	Text,
 } from "@chakra-ui/react";
 import type {
 	FileDiffMetadata,
 	FileDiffOptions,
+	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { FiMessageSquare, FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
@@ -20,6 +24,11 @@ import {
 	getLineStats,
 	isBinaryImageDiffPreviewable,
 } from "../utils";
+import {
+	createReviewComment,
+	type DiffReviewComment,
+	formatReviewRange,
+} from "../reviewQueue";
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
 
 export type { GitPreviewContext };
@@ -164,13 +173,19 @@ function ActiveGitDiffFilePane({
 	previewContext,
 	isLargeDiffExpanded,
 	onRevealLargeDiff,
+	onAddReviewComment,
 }: {
 	activeFile: FileDiffMetadata;
 	options: FileDiffOptions<unknown>;
 	previewContext?: GitPreviewContext;
 	isLargeDiffExpanded: boolean;
 	onRevealLargeDiff: () => void;
+	onAddReviewComment?: (comment: DiffReviewComment) => void;
 }) {
+	const [selectedLines, setSelectedLines] =
+		useState<SelectedLineRange | null>(null);
+	const [commentBody, setCommentBody] = useState("");
+	const [isCommentInputOpen, setIsCommentInputOpen] = useState(false);
 	const { additions, deletions } = useMemo(
 		() => getLineStats(activeFile),
 		[activeFile],
@@ -183,6 +198,33 @@ function ActiveGitDiffFilePane({
 		changedLineCount >= GIT_DIFF_LARGE_FILE_LINE_THRESHOLD &&
 		!isLargeDiffExpanded;
 	const showRenameOnlyDiff = activeFile.type === "rename-pure";
+	const canReviewDiff =
+		onAddReviewComment != null &&
+		!showBinaryPreview &&
+		!showLargeDiffGuardrail &&
+		!showRenameOnlyDiff;
+	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
+		() => ({
+			...options,
+			enableLineSelection: canReviewDiff,
+			onLineSelectionEnd: (range) => {
+				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
+				options.onLineSelectionEnd?.(range);
+			},
+		}),
+		[canReviewDiff, options],
+	);
+	const handleAddReviewComment = useCallback(() => {
+		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
+
+		onAddReviewComment(
+			createReviewComment(activeFile, selectedLines, commentBody.trim()),
+		);
+		setCommentBody("");
+		setIsCommentInputOpen(false);
+		setSelectedLines(null);
+	}, [activeFile, commentBody, onAddReviewComment, selectedLines]);
 
 	return (
 		<>
@@ -201,10 +243,75 @@ function ActiveGitDiffFilePane({
 					onReveal={onRevealLargeDiff}
 				/>
 			) : (
-				<FileDiff
-					fileDiff={activeFile}
-					options={options}
-				/>
+				<Box position="relative">
+					<FileDiff
+						fileDiff={activeFile}
+						options={interactiveOptions}
+						selectedLines={selectedLines}
+					/>
+					{canReviewDiff && selectedLines && (
+						<Box
+							position="sticky"
+							float="right"
+							bottom="3"
+							right="3"
+							zIndex={2}
+							w="min(24rem, calc(100% - 1.5rem))"
+							borderWidth="1px"
+							borderColor="border.emphasized"
+							borderRadius="md"
+							bg="bg.panel"
+							boxShadow="lg"
+							p="2"
+							mr="3"
+							mb="3"
+						>
+							{isCommentInputOpen ? (
+								<Flex gap="2" align="start">
+									<Textarea
+										value={commentBody}
+										placeholder={`Comment on ${formatReviewRange(selectedLines)}`}
+										autoresize
+										minH="2.25rem"
+										maxH="8rem"
+										fontSize="sm"
+										onChange={(event) =>
+											setCommentBody(event.target.value)
+										}
+									/>
+									<IconButton
+										aria-label="Add review comment"
+										size="sm"
+										disabled={!commentBody.trim()}
+										onClick={handleAddReviewComment}
+									>
+										<FiPlus />
+									</IconButton>
+									<IconButton
+										aria-label="Cancel review comment"
+										size="sm"
+										variant="ghost"
+										onClick={() => {
+											setCommentBody("");
+											setIsCommentInputOpen(false);
+											setSelectedLines(null);
+										}}
+									>
+										<FiX />
+									</IconButton>
+								</Flex>
+							) : (
+								<Button
+									size="sm"
+									onClick={() => setIsCommentInputOpen(true)}
+								>
+									<FiMessageSquare />
+									Comment on {formatReviewRange(selectedLines)}
+								</Button>
+							)}
+						</Box>
+					)}
+				</Box>
 			)}
 		</>
 	);
@@ -228,6 +335,7 @@ interface GitDiffPaneProps {
 	emptyMessage: string;
 	contextKey?: string;
 	previewContext?: GitPreviewContext;
+	onAddReviewComment?: (comment: DiffReviewComment) => void;
 }
 
 export default function GitDiffPane({
@@ -236,6 +344,7 @@ export default function GitDiffPane({
 	emptyMessage,
 	contextKey = "default",
 	previewContext,
+	onAddReviewComment,
 }: GitDiffPaneProps) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
@@ -263,6 +372,7 @@ export default function GitDiffPane({
 					options={options}
 					previewContext={previewContext}
 					isLargeDiffExpanded={expandedLargeDiffFileKeys.has(activeFileKey)}
+					onAddReviewComment={onAddReviewComment}
 					onRevealLargeDiff={() =>
 						setExpandedLargeDiffFileKeys((prev) => {
 							const next = new Set(prev);

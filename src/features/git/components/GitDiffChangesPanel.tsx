@@ -11,6 +11,7 @@ import ChangesFileList from "./ChangesFileList";
 import CommitComposer from "./CommitComposer";
 import GitDiffPane from "./GitDiffPane";
 import { GitDiffContext } from "../gitDiffReducer";
+import type { DiffReviewComment } from "../reviewQueue";
 
 // CSS display toggle — never unmounts children (preserves diff pane scroll)
 function VisibleBox({
@@ -102,7 +103,13 @@ export function ChangesSidebar({
 	);
 }
 
-export function ChangesDiffPane({ visible }: { visible: boolean }) {
+export function ChangesDiffPane({
+	visible,
+	onAddReviewComment,
+}: {
+	visible: boolean;
+	onAddReviewComment?: (comment: DiffReviewComment) => void;
+}) {
 	const { changesFiles, state, options, profileId } = use(GitDiffContext)!;
 	const activeFile =
 		changesFiles.length > 0 && state.selectedFileIndex < changesFiles.length
@@ -122,6 +129,7 @@ export function ChangesDiffPane({ visible }: { visible: boolean }) {
 					options={options}
 					contextKey="working-tree"
 					previewContext={{ kind: "working-tree", profileId }}
+					onAddReviewComment={onAddReviewComment}
 					emptyMessage={
 						changesFiles.length === 0
 							? m.noChangesDetected()
