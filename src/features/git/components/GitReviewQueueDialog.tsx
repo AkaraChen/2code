@@ -9,6 +9,7 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
+import { FileDiff } from "@pierre/diffs/react";
 import { FiCopy, FiTrash2 } from "react-icons/fi";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { toaster } from "@/shared/providers/appToaster";
@@ -105,16 +106,19 @@ export default function GitReviewQueueDialog({
 											mt="2"
 											maxH="8rem"
 											overflow="auto"
-											whiteSpace="pre-wrap"
-											fontFamily="mono"
-											fontSize="xs"
-											color="fg.muted"
-											bg="bg.subtle"
-											borderRadius="sm"
-											p="2"
+											borderWidth="1px"
+											borderColor="border.subtle"
+											borderRadius="md"
 										>
-											{comment.selectedText ||
-												"(no selected text available)"}
+											<FileDiff
+												fileDiff={comment.fileDiff}
+												options={{
+													disableFileHeader: true,
+													hunkSeparators: "line-info-basic",
+												}}
+												selectedLines={comment.range}
+												disableWorkerPool
+											/>
 										</Box>
 										<Textarea
 											mt="2"

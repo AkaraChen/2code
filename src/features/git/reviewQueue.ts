@@ -4,6 +4,7 @@ export interface DiffReviewComment {
 	id: string;
 	fileName: string;
 	displayName: string;
+	fileDiff: FileDiffMetadata;
 	range: SelectedLineRange;
 	selectedText: string;
 	body: string;
@@ -60,6 +61,7 @@ export function createReviewComment(
 		id: crypto.randomUUID(),
 		fileName: file.name,
 		displayName,
+		fileDiff: file,
 		range,
 		selectedText: getSelectedDiffText(file, range),
 		body,
