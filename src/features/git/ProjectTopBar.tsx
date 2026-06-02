@@ -34,10 +34,8 @@ import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 
 const FILE_TREE_TOGGLE_ICON_TRANSITION = {
-	type: "spring",
-	stiffness: 360,
-	damping: 28,
-	mass: 0.55,
+	duration: 0.12,
+	ease: [0.2, 0, 0.2, 1],
 } as const;
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
@@ -146,8 +144,9 @@ export default function ProjectTopBar({
 				justify="space-between"
 				pl="4"
 				pr="5"
-				pb="1.5"
-				pt="3"
+				pb="2"
+				pt="2"
+				minH="52px"
 			>
 				<HStack gap="2">
 					{onToggleFileTree && (

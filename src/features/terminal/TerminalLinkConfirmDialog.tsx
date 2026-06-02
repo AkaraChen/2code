@@ -1,17 +1,42 @@
-import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
+import {
+	Button,
+	CloseButton,
+	Dialog,
+	HStack,
+	IconButton,
+	Menu,
+	Portal,
+	Text,
+} from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
+import { FiChevronDown } from "react-icons/fi";
+import { listInstalledBrowsers, openUrlInBrowser } from "@/generated";
+import { queryKeys } from "@/shared/lib/queryKeys";
 import * as m from "@/paraglide/messages.js";
 
 interface TerminalLinkConfirmDialogProps {
 	link: string | null;
 	onClose: () => void;
-	onOpen: () => void;
+	onOpenDefault: () => void;
 }
 
 export function TerminalLinkConfirmDialog({
 	link,
 	onClose,
-	onOpen,
+	onOpenDefault,
 }: TerminalLinkConfirmDialogProps) {
+	const { data: browsers = [] } = useQuery({
+		queryKey: queryKeys.browser.installed,
+		queryFn: listInstalledBrowsers,
+		staleTime: 60_000,
+	});
+
+	function openWithBrowser(browserId: string) {
+		if (!link) return;
+		void openUrlInBrowser({ browserId, url: link });
+		onClose();
+	}
+
 	return (
 		<Dialog.Root
 			lazyMount
@@ -40,7 +65,41 @@ export function TerminalLinkConfirmDialog({
 							<Dialog.ActionTrigger asChild>
 								<Button variant="outline">{m.cancel()}</Button>
 							</Dialog.ActionTrigger>
-							<Button onClick={onOpen}>{m.terminalOpenLink()}</Button>
+							<HStack gap="0">
+								<Button
+									borderRightRadius="0"
+									onClick={onOpenDefault}
+								>
+									{m.browserOpenDefault()}
+								</Button>
+								<Menu.Root>
+									<Menu.Trigger asChild>
+										<IconButton
+											borderLeftRadius="0"
+											ml="-1px"
+											aria-label={m.browserOpenWith()}
+											disabled={browsers.length === 0}
+										>
+											<FiChevronDown />
+										</IconButton>
+									</Menu.Trigger>
+									<Portal>
+										<Menu.Positioner>
+											<Menu.Content minW="52">
+												{browsers.map((browser) => (
+													<Menu.Item
+														key={browser.id}
+														value={browser.id}
+														onClick={() => openWithBrowser(browser.id)}
+													>
+														{browser.name}
+													</Menu.Item>
+												))}
+											</Menu.Content>
+										</Menu.Positioner>
+									</Portal>
+								</Menu.Root>
+							</HStack>
 						</Dialog.Footer>
 						<Dialog.CloseTrigger asChild>
 							<CloseButton size="sm" />

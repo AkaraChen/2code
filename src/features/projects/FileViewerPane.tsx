@@ -6,18 +6,23 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import Editor from "@monaco-editor/react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
 	BeforeMount,
 	EditorProps,
 	OnChange,
 	OnMount,
 } from "@monaco-editor/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import MarkdownEditor from "@/features/markdown/MarkdownEditor";
+import ArchivePreviewTree from "@/features/projects/ArchivePreviewTree";
+import { isPreviewableBinaryFile } from "@/features/projects/filePreview";
 import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
+import type { FilePreview } from "@/generated";
 import { detectMonacoLanguage } from "@/shared/lib/languageDetection";
-import { useFileContent, useSaveFileContent } from "./hooks";
+import { useFileContent, useFilePreview, useSaveFileContent } from "./hooks";
 
 interface FileViewerPaneProps {
 	filePath: string;
@@ -28,6 +33,124 @@ function getMonacoTheme(themeId: string) {
 	return themeId.includes("light") ? "light" : "vs-dark";
 }
 
+function isMarkdownFile(filePath: string) {
+	return /\.(?:md|mdx)$/i.test(filePath);
+}
+
+function useFilePreviewAssetUrl(preview: FilePreview | undefined) {
+	return useMemo(() => {
+		if (!preview) return null;
+
+		const baseUrl = convertFileSrc(preview.file_path);
+		const separator = baseUrl.includes("?") ? "&" : "?";
+
+		return `${baseUrl}${separator}v=${encodeURIComponent(preview.file_path)}`;
+	}, [preview]);
+}
+
+function FilePreviewPane({
+	error,
+	filePath,
+	isError,
+	isLoading,
+	preview,
+}: {
+	error: unknown;
+	filePath: string;
+	isError: boolean;
+	isLoading: boolean;
+	preview: FilePreview | undefined;
+}) {
+	const assetUrl = useFilePreviewAssetUrl(preview);
+	const filename = filePath.split("/").pop() ?? filePath;
+	const isImage = preview?.kind === "image";
+	const isArchive = preview?.kind === "archive";
+	const isPdf = preview?.mime_type === "application/pdf";
+
+	if (isArchive && preview?.archive_entries) {
+		return (
+			<ArchivePreviewTree
+				entries={preview.archive_entries}
+				fileName={filename}
+			/>
+		);
+	}
+
+	return (
+		<Flex h="full" minH="0" direction="column" overflow="hidden" bg="bg.panel">
+			<Flex
+				align="center"
+				justify="space-between"
+				gap="3"
+				minH="9"
+				px="3"
+				borderBottomWidth="1px"
+				borderColor="border.subtle"
+				bg="bg.subtle"
+			>
+				<Text fontSize="sm" fontWeight="medium" truncate>
+					{filename}
+				</Text>
+				<Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
+					{preview?.kind === "office-pdf" ? "Office Preview" : "Preview"}
+				</Text>
+			</Flex>
+
+			<Flex flex="1" minH="0" align="center" justify="center" overflow="auto">
+				{isLoading ? (
+					<Spinner size="sm" />
+				) : isError ? (
+					<Text maxW="lg" px="6" color="fg.muted" fontSize="sm" textAlign="center">
+						{error instanceof Error ? error.message : String(error)}
+					</Text>
+				) : assetUrl && isImage ? (
+					<Box
+						w="full"
+						h="full"
+						p="4"
+						display="flex"
+						alignItems="center"
+						justifyContent="center"
+						bgImage={[
+							"linear-gradient(45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
+							"linear-gradient(-45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
+							"linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
+							"linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
+						].join(", ")}
+						bgSize="16px 16px"
+						css={{ backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0" }}
+					>
+						<img
+							src={assetUrl}
+							alt={filename}
+							style={{
+								maxWidth: "100%",
+								maxHeight: "100%",
+								objectFit: "contain",
+							}}
+						/>
+					</Box>
+				) : assetUrl && isPdf ? (
+					<iframe
+						src={assetUrl}
+						title={filename}
+						style={{
+							width: "100%",
+							height: "100%",
+							border: 0,
+							background: "white",
+						}}
+					/>
+				) : (
+					<Text color="fg.muted" fontSize="sm">
+						Preview unavailable
+					</Text>
+				)}
+			</Flex>
+		</Flex>
+	);
+}
+
 export default function FileViewerPane({
 	filePath,
 	profileId,
@@ -35,30 +158,37 @@ export default function FileViewerPane({
 	const themeId = useTerminalThemeId();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const [draftsByPath, setDraftsByPath] = useState<Record<string, string>>({});
-	const [savedValuesByPath, setSavedValuesByPath] = useState<
-		Record<string, string>
-	>({});
 	const paneRef = useRef<HTMLDivElement | null>(null);
 	const saveHandlerRef = useRef<() => void>(() => {});
+	const draftValue = useFileViewerDirtyStore(
+		(state) => state.drafts[profileId]?.[filePath],
+	);
+	const savedValue = useFileViewerDirtyStore(
+		(state) => state.savedValues[profileId]?.[filePath],
+	);
+	const setFileDraft = useFileViewerDirtyStore((state) => state.setFileDraft);
+	const setFileSavedValue = useFileViewerDirtyStore(
+		(state) => state.setFileSavedValue,
+	);
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
+	const previewableBinaryFile = isPreviewableBinaryFile(filePath);
 	const {
 		data: content,
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath, true);
+	} = useFileContent(filePath, !previewableBinaryFile);
+	const previewQuery = useFilePreview(filePath, previewableBinaryFile);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
 	} = useSaveFileContent(profileId);
 
 	const filename = filePath.split("/").pop() ?? "";
+	const markdownFile = isMarkdownFile(filePath);
 	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
-	const draftValue = draftsByPath[filePath];
-	const savedValue = savedValuesByPath[filePath];
 	const editorValue = draftValue ?? content ?? "";
 	const lastSavedValue = savedValue ?? content ?? "";
 	const hasLoadedFile = content != null || draftValue != null;
@@ -103,31 +233,30 @@ export default function FileViewerPane({
 		);
 	}, []);
 
-	const handleEditorChange = useCallback<OnChange>(
-		(nextValue) => {
-			setDraftsByPath((prev) => ({
-				...prev,
-				[filePath]: nextValue ?? "",
-			}));
+	const handleFileChange = useCallback(
+		(nextValue: string) => {
+			setFileDraft(profileId, filePath, nextValue);
 		},
-		[filePath],
+		[filePath, profileId, setFileDraft],
 	);
 
-	const handleSave = useCallback(() => {
-		if (!hasLoadedFile || !hasUnsavedChanges || isSaving) return;
+	const handleEditorChange = useCallback<OnChange>(
+		(nextValue) => {
+			handleFileChange(nextValue ?? "");
+		},
+		[handleFileChange],
+	);
+
+	const handleSave = useCallback((contentOverride?: string) => {
+		const contentToSave = contentOverride ?? editorValue;
+		if (!hasLoadedFile || contentToSave === lastSavedValue || isSaving) return;
 
 		saveFileContent(
-			{ path: filePath, content: editorValue },
+			{ path: filePath, content: contentToSave },
 			{
 				onSuccess: (_result, variables) => {
-					setDraftsByPath((prev) => ({
-						...prev,
-						[variables.path]: variables.content,
-					}));
-					setSavedValuesByPath((prev) => ({
-						...prev,
-						[variables.path]: variables.content,
-					}));
+					setFileDraft(profileId, variables.path, variables.content);
+					setFileSavedValue(profileId, variables.path, variables.content);
 					setFileDirty(profileId, variables.path, false);
 				},
 			},
@@ -136,11 +265,13 @@ export default function FileViewerPane({
 		editorValue,
 		filePath,
 		hasLoadedFile,
-		hasUnsavedChanges,
 		isSaving,
+		lastSavedValue,
 		profileId,
 		saveFileContent,
+		setFileDraft,
 		setFileDirty,
+		setFileSavedValue,
 	]);
 
 	saveHandlerRef.current = handleSave;
@@ -169,6 +300,20 @@ export default function FileViewerPane({
 		);
 	}, []);
 
+	if (previewableBinaryFile) {
+		return (
+			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+				<FilePreviewPane
+					filePath={filePath}
+					preview={previewQuery.data}
+					error={previewQuery.error}
+					isError={previewQuery.isError}
+					isLoading={previewQuery.isLoading}
+				/>
+			</Box>
+		);
+	}
+
 	if (isLoading && !hasLoadedFile) {
 		return (
 			<Flex align="center" justify="center" h="32">
@@ -188,6 +333,20 @@ export default function FileViewerPane({
 	}
 
 	if (!hasLoadedFile) return null;
+
+	if (markdownFile) {
+		return (
+			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+				<MarkdownEditor
+					editorKey={filePath}
+					initialMarkdown={editorValue}
+					onMarkdownChange={handleFileChange}
+					onRequestSave={handleSave}
+					saveStatus={isSaving ? "saving" : "idle"}
+				/>
+			</Box>
+		);
+	}
 
 	return (
 		<Box ref={paneRef} h="full" minH="0" overflow="hidden">

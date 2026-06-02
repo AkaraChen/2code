@@ -28,7 +28,7 @@ export default function App() {
 	});
 
 	return (
-		<Flex direction="column" h="full">
+		<Flex direction="column" h="full" bg="bg" color="fg">
 			<StartupUpdateCheck />
 			<Flex flex="1" minH="0">
 				<AsyncBoundary
@@ -39,7 +39,13 @@ export default function App() {
 				>
 					<AppSidebar />
 				</AsyncBoundary>
-				<Box as="main" flex="1" overflowY="auto" position="relative">
+				<Box
+					as="main"
+					flex="1"
+					overflowY="auto"
+					position="relative"
+					bg="bg.panel"
+				>
 					<AsyncBoundary
 						fallback={<PageSkeleton />}
 						errorFallback={({ error, onRetry }) => (

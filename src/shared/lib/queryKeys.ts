@@ -15,7 +15,9 @@ export const queryNamespaces = {
 	"profile-delete-check": "profile-delete-check",
 	"profile-notes": "profile-notes",
 	"topbar-apps": "topbar-apps",
+	"browser-apps": "browser-apps",
 	"fs-file": "fs-file",
+	"fs-file-preview": "fs-file-preview",
 	"fs-search": "fs-search",
 	"fs-tree": "fs-tree",
 };
@@ -33,6 +35,9 @@ export const queryKeys = {
 		["project-config", projectId] as const,
 	topbar: {
 		apps: ["topbar-apps"] as const,
+	},
+	browser: {
+		installed: ["browser-apps"] as const,
 	},
 	git: {
 		branch: (folder: string) => ["git-branch", folder] as const,
@@ -71,6 +76,7 @@ export const queryKeys = {
 	},
 	fs: {
 		file: (path: string) => ["fs-file", path] as const,
+		filePreview: (path: string) => ["fs-file-preview", path] as const,
 		search: (profileId: string, query: string) =>
 			["fs-search", profileId, query] as const,
 		tree: (path: string) => ["fs-tree", path] as const,

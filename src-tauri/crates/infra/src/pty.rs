@@ -21,6 +21,17 @@ pub type PtySessionMap = Arc<Mutex<HashMap<String, PtySession>>>;
 /// ensuring persistence threads flush their output buffers before the process terminates.
 pub type PtyReadThreads = Arc<Mutex<Vec<JoinHandle<()>>>>;
 
+pub struct CreateSessionOptions<'a> {
+	pub session_id: &'a str,
+	pub shell: &'a str,
+	pub cwd: &'a str,
+	pub rows: u16,
+	pub cols: u16,
+	pub injection: &'a ShellInjection,
+	pub helper_url: Option<&'a str>,
+	pub helper_bin: Option<&'a str>,
+}
+
 pub fn create_session_map() -> PtySessionMap {
 	Arc::new(Mutex::new(HashMap::new()))
 }
@@ -46,28 +57,21 @@ pub fn join_all_read_threads(threads: &PtyReadThreads) {
 
 pub fn create_session(
 	sessions: &PtySessionMap,
-	session_id: &str,
-	shell: &str,
-	cwd: &str,
-	rows: u16,
-	cols: u16,
-	injection: &ShellInjection,
-	helper_url: Option<&str>,
-	helper_bin: Option<&str>,
+	options: CreateSessionOptions<'_>,
 ) -> Result<Box<dyn std::io::Read + Send>, AppError> {
 	let pty_system = native_pty_system();
 
 	let pair = pty_system
 		.openpty(PtySize {
-			rows,
-			cols,
+			rows: options.rows,
+			cols: options.cols,
 			pixel_width: 0,
 			pixel_height: 0,
 		})
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
 	// Build the command with shell-specific args based on injection type
-	let mut cmd = build_injected_command(shell, injection);
+	let mut cmd = build_injected_command(options.shell, options.injection);
 
 	// Common env vars for all shells
 	cmd.env("TERM", "xterm-256color");
@@ -75,25 +79,26 @@ pub fn create_session(
 	cmd.env("VSCODE_INJECTION", "1");  // Tells scripts they were injected (not manually installed)
 
 	// Inject helper env vars for CLI sidecar communication
-	if let Some(url) = helper_url {
+	if let Some(url) = options.helper_url {
 		cmd.env("_2CODE_HELPER_URL", url);
 	}
-	if let Some(bin) = helper_bin {
+	if let Some(bin) = options.helper_bin {
 		cmd.env("_2CODE_HELPER", bin);
 	}
-	cmd.env("_2CODE_SESSION_ID", session_id);
+	cmd.env("_2CODE_SESSION_ID", options.session_id);
 
 	// Apply shell-specific env vars
-	match injection {
-		ShellInjection::Zsh { zdotdir, user_zdotdir } => {
-			cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
-			cmd.env("USER_ZDOTDIR", user_zdotdir.as_str());
-		}
-		_ => {}
+	if let ShellInjection::Zsh {
+		zdotdir,
+		user_zdotdir,
+	} = options.injection
+	{
+		cmd.env("ZDOTDIR", zdotdir.to_string_lossy().as_ref());
+		cmd.env("USER_ZDOTDIR", user_zdotdir.as_str());
 	}
 
-	if !cwd.is_empty() {
-		cmd.cwd(cwd);
+	if !options.cwd.is_empty() {
+		cmd.cwd(options.cwd);
 	}
 
 	let child = pair
@@ -120,7 +125,7 @@ pub fn create_session(
 	sessions
 		.lock()
 		.map_err(|_| AppError::LockError)?
-		.insert(session_id.to_string(), session);
+		.insert(options.session_id.to_string(), session);
 
 	// Drop the slave to avoid blocking
 	drop(pair.slave);

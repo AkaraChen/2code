@@ -47,8 +47,7 @@ fn resolve_sidecar_path() -> PathBuf {
 	// Dev: in the binaries/ directory relative to CARGO_MANIFEST_DIR
 	let manifest_dir =
 		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
-	let dev_path = manifest_dir.join(sidecar_binary_name(target));
-	dev_path
+	manifest_dir.join(sidecar_binary_name(target))
 }
 
 async fn notify_handler(

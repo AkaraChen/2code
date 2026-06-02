@@ -44,7 +44,6 @@ export default function CommitList({
 					align="stretch"
 					px="3"
 					py="1.5"
-					cursor="pointer"
 					bg={
 						selectedIndex === index
 							? "bg.emphasized"

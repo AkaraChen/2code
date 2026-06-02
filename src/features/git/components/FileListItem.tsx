@@ -32,7 +32,6 @@ export function FileListItem({
 			data-testid="git-file-list-item"
 			px="3"
 			py="2"
-			cursor="pointer"
 			bg={isActive ? "bg.emphasized" : "transparent"}
 			_hover={{ bg: isActive ? "bg.emphasized" : "bg.subtle" }}
 			onClick={onClick}
