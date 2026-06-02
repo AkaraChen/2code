@@ -6,7 +6,7 @@ import {
 	shift,
 	size,
 } from "@floating-ui/dom";
-import type { Strategy } from "@floating-ui/dom";
+import type { ReferenceElement, VirtualElement } from "@floating-ui/dom";
 import {
 	Badge,
 	Box,
@@ -176,6 +176,45 @@ function RenameOnlyDiff({ file }: { file: FileDiffMetadata }) {
 	);
 }
 
+function getElementsVirtualReference(
+	elements: HTMLElement[],
+): VirtualElement | null {
+	if (elements.length === 0) return null;
+
+	return {
+		contextElement: elements[0],
+		getBoundingClientRect: () => {
+			const rects = elements
+				.map((element) => element.getBoundingClientRect())
+				.filter((rect) => rect.width > 0 || rect.height > 0);
+
+			if (rects.length === 0) {
+				const fallbackRect = elements[0].getBoundingClientRect();
+				return fallbackRect;
+			}
+
+			const left = Math.min(...rects.map((rect) => rect.left));
+			const top = Math.min(...rects.map((rect) => rect.top));
+			const right = Math.max(...rects.map((rect) => rect.right));
+			const bottom = Math.max(...rects.map((rect) => rect.bottom));
+
+			return {
+				x: left,
+				y: top,
+				left,
+				top,
+				right,
+				bottom,
+				width: right - left,
+				height: bottom - top,
+				toJSON() {
+					return this;
+				},
+			};
+		},
+	};
+}
+
 function ActiveGitDiffFilePane({
 	activeFile,
 	options,
@@ -195,8 +234,9 @@ function ActiveGitDiffFilePane({
 		useState<SelectedLineRange | null>(null);
 	const [commentBody, setCommentBody] = useState("");
 	const [isCommentInputOpen, setIsCommentInputOpen] = useState(false);
-	const [commentAnchorElement, setCommentAnchorElement] =
-		useState<HTMLElement | null>(null);
+	const [commentAnchor, setCommentAnchor] = useState<ReferenceElement | null>(
+		null,
+	);
 	const diffContentRef = useRef<HTMLDivElement>(null);
 	const commentComposerRef = useRef<HTMLDivElement>(null);
 	const { additions, deletions } = useMemo(
@@ -216,33 +256,49 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		!showLargeDiffGuardrail &&
 		!showRenameOnlyDiff;
-	const getCommentAnchorElement = useCallback(
+	const getCommentAnchor = useCallback(
 		(range: SelectedLineRange, lineElement?: HTMLElement) => {
 			const diffContent = diffContentRef.current;
+			if (lineElement) return lineElement;
+			if (!diffContent) return null;
+
+			const selectedElements = Array.from(
+				diffContent.querySelectorAll<HTMLElement>("[data-selected-line]"),
+			);
+			const selectedReference =
+				getElementsVirtualReference(selectedElements);
+			if (selectedReference) return selectedReference;
+
+			const start = Math.min(range.start, range.end);
+			const end = Math.max(range.start, range.end);
+			const fallbackElements = Array.from(
+				diffContent.querySelectorAll<HTMLElement>(
+					[
+						`[data-column-number="${start}"]`,
+						`[data-column-number="${end}"]`,
+						`[data-line="${start}"]`,
+						`[data-line="${end}"]`,
+					].join(", "),
+				),
+			);
+
 			return (
-				lineElement ??
-				diffContent?.querySelector<HTMLElement>(
-					'[data-selected-line="first"], [data-selected-line="single"], [data-selected-line]',
-				) ??
-				diffContent?.querySelector<HTMLElement>(
-					`[data-column-number="${Math.min(range.start, range.end)}"]`,
-				) ??
-				diffContent?.querySelector<HTMLElement>(
-					`[data-line="${Math.min(range.start, range.end)}"]`,
-				) ??
-				null
+				getElementsVirtualReference(fallbackElements) ??
+				diffContent.querySelector<HTMLElement>(
+					`[data-line-index="${start}"], [data-line-index="${end}"]`,
+				)
 			);
 		},
 		[],
 	);
 	const updateFloatingComposer = useCallback(() => {
-		const anchorElement = commentAnchorElement;
+		const anchorElement = commentAnchor;
 		const composerElement = commentComposerRef.current;
 		if (!anchorElement || !composerElement) return;
 
 		void computePosition(anchorElement, composerElement, {
 			placement: "right-start",
-			strategy: "fixed" satisfies Strategy,
+			strategy: "fixed",
 			middleware: [
 				offset(12),
 				flip({
@@ -259,38 +315,42 @@ function ActiveGitDiffFilePane({
 				}),
 			],
 		}).then(({ x, y }) => {
+			if (commentComposerRef.current !== composerElement) return;
+
 			Object.assign(composerElement.style, {
 				left: `${x}px`,
 				top: `${y}px`,
 			});
 		});
-	}, [commentAnchorElement]);
+	}, [commentAnchor]);
 	const openCommentComposer = useCallback(
 		(range: SelectedLineRange, lineElement?: HTMLElement) => {
 			setSelectedLines(range);
-			setCommentAnchorElement(getCommentAnchorElement(range, lineElement));
+			setCommentAnchor(getCommentAnchor(range, lineElement));
 			setIsCommentInputOpen(true);
 		},
-		[getCommentAnchorElement],
+		[getCommentAnchor],
 	);
 	const syncCommentAnchorFromSelection = useCallback(
 		(range: SelectedLineRange | null) => {
-			setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
+			setCommentAnchor(range ? getCommentAnchor(range) : null);
 			if (!range) return;
 
 			requestAnimationFrame(() => {
-				setCommentAnchorElement(getCommentAnchorElement(range));
+				setCommentAnchor(getCommentAnchor(range));
 			});
 		},
-		[getCommentAnchorElement],
+		[getCommentAnchor],
 	);
 	useEffect(() => {
-		const anchorElement = commentAnchorElement;
+		const anchorElement = commentAnchor;
 		const composerElement = commentComposerRef.current;
 		if (!isCommentInputOpen || !anchorElement || !composerElement) return;
 
-		return autoUpdate(anchorElement, composerElement, updateFloatingComposer);
-	}, [commentAnchorElement, isCommentInputOpen, updateFloatingComposer]);
+		return autoUpdate(anchorElement, composerElement, updateFloatingComposer, {
+			animationFrame: true,
+		});
+	}, [commentAnchor, isCommentInputOpen, updateFloatingComposer]);
 	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
 		() => ({
 			...options,
