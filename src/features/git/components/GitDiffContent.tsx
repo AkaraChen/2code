@@ -547,39 +547,44 @@ export default function GitDiffContent({
 				</Activity>
 			</Flex>
 				{reviewComments.length > 0 && (
-					<Flex
+					<Button
 						position="absolute"
 						right="4"
 						bottom="4"
 						zIndex={3}
-						align="center"
-						justify="space-between"
-						gap="3"
+						size="sm"
+						variant="solid"
+						alignItems="center"
+						gap="2"
+						h="9"
 						px="3"
-						py="2"
-						borderWidth="1px"
-						borderColor="border.emphasized"
-						borderRadius="md"
-						bg="bg.panel"
-						boxShadow="lg"
+						borderRadius="full"
+						boxShadow="xl"
+						onClick={() => setReviewQueueOpen(true)}
 					>
-						<Text fontSize="sm" color="fg.muted">
-							{reviewComments.length} queued review comment
-							{reviewComments.length === 1 ? "" : "s"}
+						<FiMessageSquare />
+						<Text fontSize="sm" fontWeight="medium">
+							Review Queue
 						</Text>
-						<Button
-							size="sm"
-							variant="outline"
-							onClick={() => setReviewQueueOpen(true)}
+						<Box
+							as="span"
+							minW="5"
+							px="1.5"
+							borderRadius="full"
+							bg="whiteAlpha.300"
+							fontSize="xs"
+							fontWeight="semibold"
+							lineHeight="5"
+							textAlign="center"
 						>
-							<FiMessageSquare />
-							Review Queue ({reviewComments.length})
-						</Button>
-					</Flex>
+							{reviewComments.length}
+						</Box>
+					</Button>
 				)}
 				<GitReviewQueueDialog
 					isOpen={reviewQueueOpen}
 					comments={reviewComments}
+					options={options}
 					onClose={() => setReviewQueueOpen(false)}
 					onClear={handleClearReviewComments}
 					onDelete={handleDeleteReviewComment}

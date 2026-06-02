@@ -9,8 +9,11 @@ import {
 	Text,
 	Textarea,
 } from "@chakra-ui/react";
+import type { FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import { useMemo } from "react";
 import { FiCopy, FiTrash2 } from "react-icons/fi";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { toaster } from "@/shared/providers/appToaster";
 import {
@@ -22,6 +25,7 @@ import {
 interface GitReviewQueueDialogProps {
 	isOpen: boolean;
 	comments: DiffReviewComment[];
+	options: FileDiffOptions<unknown>;
 	onClose: () => void;
 	onClear: () => void;
 	onDelete: (id: string) => void;
@@ -31,11 +35,24 @@ interface GitReviewQueueDialogProps {
 export default function GitReviewQueueDialog({
 	isOpen,
 	comments,
+	options,
 	onClose,
 	onClear,
 	onDelete,
 	onUpdate,
 }: GitReviewQueueDialogProps) {
+	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+	const reviewDiffOptions = useMemo<FileDiffOptions<unknown>>(
+		() => ({
+			...options,
+			disableFileHeader: true,
+			enableGutterUtility: false,
+			enableLineSelection: false,
+		}),
+		[options],
+	);
+
 	async function handleCopyAll() {
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
 		toaster.create({
@@ -122,13 +139,14 @@ export default function GitReviewQueueDialog({
 											borderWidth="1px"
 											borderColor="border.subtle"
 											borderRadius="md"
+											css={{
+												"--diffs-font-family": `"${fontFamily}", monospace`,
+												"--diffs-font-size": `${fontSize}px`,
+											}}
 										>
 											<FileDiff
 												fileDiff={comment.fileDiff}
-												options={{
-													disableFileHeader: true,
-													hunkSeparators: "line-info-basic",
-												}}
+												options={reviewDiffOptions}
 												selectedLines={comment.range}
 												disableWorkerPool
 											/>
