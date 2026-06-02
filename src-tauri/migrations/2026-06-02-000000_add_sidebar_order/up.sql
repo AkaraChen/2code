@@ -17,7 +17,12 @@ SET sort_order = (
 	WHERE earlier.created_at < project_groups.created_at
 		OR (
 			earlier.created_at = project_groups.created_at
-			AND earlier.name <= project_groups.name
+			AND earlier.name < project_groups.name
+		)
+		OR (
+			earlier.created_at = project_groups.created_at
+			AND earlier.name = project_groups.name
+			AND earlier.id <= project_groups.id
 		)
 ) * 1000;
 
@@ -30,7 +35,12 @@ SET sort_order = (
 			earlier.created_at < projects.created_at
 			OR (
 				earlier.created_at = projects.created_at
-				AND earlier.name <= projects.name
+				AND earlier.name < projects.name
+			)
+			OR (
+				earlier.created_at = projects.created_at
+				AND earlier.name = projects.name
+				AND earlier.id <= projects.id
 			)
 		)
 ) * 1000;

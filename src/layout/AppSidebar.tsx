@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGroup } from "motion/react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
 	FiCheck,
 	FiEdit3,
@@ -190,10 +190,12 @@ function SortableProjectRow({
 	project,
 	isPinned,
 	onTogglePinned,
+	disabled,
 }: {
 	project: ProjectWithProfiles;
 	isPinned: boolean;
 	onTogglePinned: (project: ProjectWithProfiles) => void;
+	disabled?: boolean;
 }) {
 	const {
 		attributes,
@@ -202,7 +204,7 @@ function SortableProjectRow({
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id: projectEntryId(project.id) });
+	} = useSortable({ id: projectEntryId(project.id), disabled });
 
 	return (
 		<HStack
@@ -213,6 +215,8 @@ function SortableProjectRow({
 				opacity: isDragging ? 0.45 : 1,
 			}}
 			{...attributes}
+			data-sidebar-item
+			tabIndex={0}
 			gap="2"
 			align="center"
 			w="full"
@@ -230,7 +234,7 @@ function SortableProjectRow({
 				display="grid"
 				placeItems="center"
 				color="fg.subtle"
-				cursor="grab"
+				cursor={disabled ? "default" : "grab"}
 				flexShrink={0}
 			>
 				<PiDotsSixVerticalBold />
@@ -240,11 +244,12 @@ function SortableProjectRow({
 				{project.name}
 			</Text>
 			<IconButton
-				aria-label={isPinned ? "Unpin project" : "Pin project"}
+				aria-label={isPinned ? m.unpinProject() : m.pinProject()}
 				variant={isPinned ? "solid" : "ghost"}
 				colorPalette={isPinned ? "yellow" : undefined}
 				size="2xs"
 				flexShrink={0}
+				disabled={disabled}
 				onClick={() => onTogglePinned(project)}
 			>
 				<FiStar />
@@ -255,8 +260,10 @@ function SortableProjectRow({
 
 function SortableGroupRow({
 	entry,
+	disabled,
 }: {
 	entry: Extract<SidebarTopEntry, { kind: "group" }>;
+	disabled?: boolean;
 }) {
 	const {
 		attributes,
@@ -265,7 +272,7 @@ function SortableGroupRow({
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id: entry.id });
+	} = useSortable({ id: entry.id, disabled });
 
 	return (
 		<HStack
@@ -276,6 +283,8 @@ function SortableGroupRow({
 				opacity: isDragging ? 0.45 : 1,
 			}}
 			{...attributes}
+			data-sidebar-item
+			tabIndex={0}
 			gap="2"
 			align="center"
 			w="full"
@@ -297,7 +306,7 @@ function SortableGroupRow({
 				display="grid"
 				placeItems="center"
 				color="fg.subtle"
-				cursor="grab"
+				cursor={disabled ? "default" : "grab"}
 				flexShrink={0}
 			>
 				<PiDotsSixVerticalBold />
@@ -318,6 +327,8 @@ export default function AppSidebar() {
 	const { data: projectGroups } = useProjectGroups();
 	const createDialog = useDialogState();
 	const navRef = useRef<HTMLElement>(null);
+	const isLayoutSaveInFlightRef = useRef(false);
+	const [isSidebarLayoutSaving, setIsSidebarLayoutSaving] = useState(false);
 	const updateSidebarLayout = useUpdateProjectSidebarLayout();
 	const isReorderMode = useAppSidebarStore((s) => s.isReorderMode);
 	const toggleReorderMode = useAppSidebarStore((s) => s.toggleReorderMode);
@@ -338,23 +349,34 @@ export default function AppSidebar() {
 	);
 
 	const persistLayoutState = useCallback(
-		(state: SidebarLayoutState) => {
+		async (state: SidebarLayoutState) => {
+			if (isLayoutSaveInFlightRef.current) return;
+
+			isLayoutSaveInFlightRef.current = true;
+			setIsSidebarLayoutSaving(true);
 			const updates = createSidebarLayoutUpdates(state);
-			void updateSidebarLayout.mutateAsync(updates).catch((error) => {
+			try {
+				await updateSidebarLayout.mutateAsync(updates);
+			} catch (error) {
 				toaster.create({
-					title: "Failed to update sidebar order",
+					title: m.sidebarOrderUpdateFailed(),
 					description:
 						error instanceof Error ? error.message : String(error),
 					type: "error",
 					closable: true,
 				});
-			});
+			} finally {
+				isLayoutSaveInFlightRef.current = false;
+				setIsSidebarLayoutSaving(false);
+			}
 		},
 		[updateSidebarLayout],
 	);
 
 	const handleTogglePinned = useCallback(
 		(project: ProjectWithProfiles) => {
+			if (isLayoutSaveInFlightRef.current) return;
+
 			const state = removeProjectFromState(
 				toSidebarLayoutState(sidebarLayout),
 				project.id,
@@ -367,13 +389,15 @@ export default function AppSidebar() {
 					projectEntryId(project.id),
 				];
 			}
-			persistLayoutState(state);
+			void persistLayoutState(state);
 		},
 		[persistLayoutState, sidebarLayout],
 	);
 
 	const handleDragEnd = useCallback(
 		(event: DragEndEvent) => {
+			if (isLayoutSaveInFlightRef.current) return;
+
 			const { active, over } = event;
 			if (!over) return;
 
@@ -439,13 +463,12 @@ export default function AppSidebar() {
 				nextState = { ...nextState, groupProjectIds };
 			}
 
-			persistLayoutState(nextState);
+			void persistLayoutState(nextState);
 		},
 		[persistLayoutState, sidebarLayout],
 	);
 
 	const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-		if (isReorderMode) return;
 		if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
 
 		const nav = navRef.current;
@@ -473,7 +496,7 @@ export default function AppSidebar() {
 
 		items[nextIndex]?.focus();
 		e.preventDefault();
-	}, [isReorderMode]);
+	}, []);
 
 	return (
 		<>
@@ -585,12 +608,13 @@ export default function AppSidebar() {
 								<IconButton
 									aria-label={
 										isReorderMode
-											? "Done editing project order"
-											: "Edit project order"
+											? m.doneEditingProjectOrder()
+											: m.editProjectOrder()
 									}
 									variant={isReorderMode ? "solid" : "ghost"}
 									size="2xs"
 									flexShrink={0}
+									disabled={isSidebarLayoutSaving}
 									onClick={toggleReorderMode}
 								>
 									{isReorderMode ? <FiCheck /> : <FiEdit3 />}
@@ -620,7 +644,7 @@ export default function AppSidebar() {
 										fontSize="xs"
 										color="fg.subtle"
 									>
-										Pinned
+										{m.pinnedProjects()}
 									</Text>
 									<SortableContext
 										items={sidebarLayout.pinnedProjects.map(
@@ -638,13 +662,16 @@ export default function AppSidebar() {
 													onTogglePinned={
 														handleTogglePinned
 													}
+													disabled={
+														isSidebarLayoutSaving
+													}
 												/>
 											),
 										)}
 									</SortableContext>
 									<SidebarDropZone
 										id={PINNED_DROP_ID}
-										label="Drop here to pin"
+										label={m.dropHereToPin()}
 										compact={
 											sidebarLayout.pinnedProjects
 												.length > 0
@@ -658,7 +685,7 @@ export default function AppSidebar() {
 										fontSize="xs"
 										color="fg.subtle"
 									>
-										Projects
+										{m.sidebarProjectsSection()}
 									</Text>
 									<SortableContext
 										items={sidebarLayout.topEntries.map(
@@ -672,6 +699,9 @@ export default function AppSidebar() {
 													<Box key={entry.id}>
 														<SortableGroupRow
 															entry={entry}
+															disabled={
+																isSidebarLayoutSaving
+															}
 														/>
 														<Box ps="4">
 															<SortableContext
@@ -702,6 +732,9 @@ export default function AppSidebar() {
 																			onTogglePinned={
 																				handleTogglePinned
 																			}
+																			disabled={
+																				isSidebarLayoutSaving
+																			}
 																		/>
 																	),
 																)}
@@ -711,7 +744,7 @@ export default function AppSidebar() {
 																	entry.group
 																		.id,
 																)}
-																label="Drop project into folder"
+																label={m.dropProjectIntoFolder()}
 																compact
 															/>
 														</Box>
@@ -724,13 +757,16 @@ export default function AppSidebar() {
 														onTogglePinned={
 															handleTogglePinned
 														}
+														disabled={
+															isSidebarLayoutSaving
+														}
 													/>
 												),
 										)}
 									</SortableContext>
 									<SidebarDropZone
 										id={TOP_LEVEL_DROP_ID}
-										label="Drop here to unpin or move out"
+										label={m.dropHereToUnpinOrMoveOut()}
 									/>
 								</DndContext>
 							) : (
@@ -746,7 +782,7 @@ export default function AppSidebar() {
 												textTransform="uppercase"
 												fontWeight="semibold"
 											>
-												Pinned
+												{m.pinnedProjects()}
 											</Text>
 											{sidebarLayout.pinnedProjects.map(
 												(project) => (

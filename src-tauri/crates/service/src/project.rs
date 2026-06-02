@@ -123,6 +123,13 @@ pub fn update_sidebar_layout(
 					)?;
 				}
 				"project" => {
+					if update.group_id.is_some()
+						&& update.pinned_order.is_some()
+					{
+						return Err(AppError::DbError(
+							"Grouped projects cannot be pinned".into(),
+						));
+					}
 					if let Some(group_id) = update.group_id.as_deref() {
 						repo::project_group::find_by_id(conn, group_id)?;
 					}

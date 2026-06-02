@@ -190,21 +190,31 @@ pub fn update_sidebar_layout(
 				)));
 			}
 			"project" => {
-				let sort_order = update.sort_order.unwrap_or(0);
 				let pinned_at = if update.pinned_order.is_some() {
 					Some(sidebar_timestamp())
 				} else {
 					None
 				};
-				let rows = diesel::update(projects::table.find(&update.id))
-					.set((
-						projects::group_id.eq(update.group_id.as_deref()),
-						projects::sort_order.eq(sort_order),
-						projects::pinned_at.eq(pinned_at),
-						projects::pinned_order.eq(update.pinned_order),
-					))
-					.execute(conn)
-					.map_err(|e| AppError::DbError(e.to_string()))?;
+				let rows = if let Some(sort_order) = update.sort_order {
+					diesel::update(projects::table.find(&update.id))
+						.set((
+							projects::group_id.eq(update.group_id.as_deref()),
+							projects::sort_order.eq(sort_order),
+							projects::pinned_at.eq(pinned_at),
+							projects::pinned_order.eq(update.pinned_order),
+						))
+						.execute(conn)
+						.map_err(|e| AppError::DbError(e.to_string()))?
+				} else {
+					diesel::update(projects::table.find(&update.id))
+						.set((
+							projects::group_id.eq(update.group_id.as_deref()),
+							projects::pinned_at.eq(pinned_at),
+							projects::pinned_order.eq(update.pinned_order),
+						))
+						.execute(conn)
+						.map_err(|e| AppError::DbError(e.to_string()))?
+				};
 
 				if rows == 0 {
 					return Err(AppError::NotFound(format!(
