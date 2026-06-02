@@ -218,9 +218,16 @@ function ActiveGitDiffFilePane({
 		!showRenameOnlyDiff;
 	const getCommentAnchorElement = useCallback(
 		(range: SelectedLineRange, lineElement?: HTMLElement) => {
+			const diffContent = diffContentRef.current;
 			return (
 				lineElement ??
-				diffContentRef.current?.querySelector<HTMLElement>(
+				diffContent?.querySelector<HTMLElement>(
+					'[data-selected-line="first"], [data-selected-line="single"], [data-selected-line]',
+				) ??
+				diffContent?.querySelector<HTMLElement>(
+					`[data-column-number="${Math.min(range.start, range.end)}"]`,
+				) ??
+				diffContent?.querySelector<HTMLElement>(
 					`[data-line="${Math.min(range.start, range.end)}"]`,
 				) ??
 				null
@@ -266,6 +273,17 @@ function ActiveGitDiffFilePane({
 		},
 		[getCommentAnchorElement],
 	);
+	const syncCommentAnchorFromSelection = useCallback(
+		(range: SelectedLineRange | null) => {
+			setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
+			if (!range) return;
+
+			requestAnimationFrame(() => {
+				setCommentAnchorElement(getCommentAnchorElement(range));
+			});
+		},
+		[getCommentAnchorElement],
+	);
 	useEffect(() => {
 		const anchorElement = commentAnchorElement;
 		const composerElement = commentComposerRef.current;
@@ -291,24 +309,24 @@ function ActiveGitDiffFilePane({
 			},
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
-				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
+				syncCommentAnchorFromSelection(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
-				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
+				syncCommentAnchorFromSelection(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
 				setSelectedLines(range);
-				setCommentAnchorElement(range ? getCommentAnchorElement(range) : null);
+				syncCommentAnchorFromSelection(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelected?.(range);
 			},
 		}),
-		[canReviewDiff, getCommentAnchorElement, openCommentComposer, options],
+		[canReviewDiff, openCommentComposer, options, syncCommentAnchorFromSelection],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
