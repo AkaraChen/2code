@@ -15,7 +15,7 @@ import type {
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useCallback, useMemo, useState } from "react";
-import { FiMessageSquare, FiPlus, FiX } from "react-icons/fi";
+import { FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
@@ -210,13 +210,13 @@ function ActiveGitDiffFilePane({
 			enableGutterUtility: canReviewDiff,
 			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
 			onGutterUtilityClick: (range) => {
-				setSelectedLines(range);
+				setSelectedLines((currentRange) => currentRange ?? range);
 				setIsCommentInputOpen(true);
 				options.onGutterUtilityClick?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
-				setIsCommentInputOpen(range != null);
+				setIsCommentInputOpen(false);
 				options.onLineSelectionEnd?.(range);
 			},
 		}),
@@ -256,7 +256,7 @@ function ActiveGitDiffFilePane({
 						options={interactiveOptions}
 						selectedLines={selectedLines}
 					/>
-					{canReviewDiff && selectedLines && (
+					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
 							position="sticky"
 							float="right"
@@ -266,62 +266,49 @@ function ActiveGitDiffFilePane({
 							mr="3"
 							mb="3"
 						>
-							{isCommentInputOpen ? (
-								<Flex
-									w="min(24rem, calc(100% - 1.5rem))"
-									gap="2"
-									align="start"
-									borderWidth="1px"
-									borderColor="border.emphasized"
-									borderRadius="lg"
-									bg="bg.panel"
-									boxShadow="xl"
-									p="2"
-								>
-									<Textarea
-										value={commentBody}
-										placeholder={`Comment on ${formatReviewRange(selectedLines)}`}
-										autoresize
-										minH="2.25rem"
-										maxH="8rem"
-										fontSize="sm"
-										onChange={(event) =>
-											setCommentBody(event.target.value)
-										}
-									/>
-									<IconButton
-										aria-label="Add review comment"
-										size="sm"
-										disabled={!commentBody.trim()}
-										onClick={handleAddReviewComment}
-									>
-										<FiPlus />
-									</IconButton>
-									<IconButton
-										aria-label="Cancel review comment"
-										size="sm"
-										variant="ghost"
-										onClick={() => {
-											setCommentBody("");
-											setIsCommentInputOpen(false);
-											setSelectedLines(null);
-										}}
-									>
-										<FiX />
-									</IconButton>
-								</Flex>
-							) : (
+							<Flex
+								w="min(24rem, calc(100% - 1.5rem))"
+								gap="2"
+								align="start"
+								borderWidth="1px"
+								borderColor="border.emphasized"
+								borderRadius="lg"
+								bg="bg.panel"
+								boxShadow="xl"
+								p="2"
+							>
+								<Textarea
+									value={commentBody}
+									placeholder={`Comment on ${formatReviewRange(selectedLines)}`}
+									autoresize
+									minH="2.25rem"
+									maxH="8rem"
+									fontSize="sm"
+									onChange={(event) =>
+										setCommentBody(event.target.value)
+									}
+								/>
 								<IconButton
+									aria-label="Add review comment"
 									size="sm"
-									aria-label={`Comment on ${formatReviewRange(selectedLines)}`}
-									borderRadius="full"
-									boxShadow="lg"
-									colorPalette="blue"
-									onClick={() => setIsCommentInputOpen(true)}
+									disabled={!commentBody.trim()}
+									onClick={handleAddReviewComment}
 								>
-									<FiMessageSquare />
+									<FiPlus />
 								</IconButton>
-							)}
+								<IconButton
+									aria-label="Cancel review comment"
+									size="sm"
+									variant="ghost"
+									onClick={() => {
+										setCommentBody("");
+										setIsCommentInputOpen(false);
+										setSelectedLines(null);
+									}}
+								>
+									<FiX />
+								</IconButton>
+							</Flex>
 						</Box>
 					)}
 				</Box>
