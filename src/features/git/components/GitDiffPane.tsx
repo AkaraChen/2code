@@ -203,24 +203,43 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		!showLargeDiffGuardrail &&
 		!showRenameOnlyDiff;
+	const handleOpenReviewComposer = useCallback((range: SelectedLineRange) => {
+		setSelectedLines(range);
+		setIsCommentInputOpen(true);
+	}, []);
 	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
 		() => ({
 			...options,
 			enableLineSelection: canReviewDiff,
 			enableGutterUtility: canReviewDiff,
 			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
-			onGutterUtilityClick: (range) => {
-				setSelectedLines((currentRange) => currentRange ?? range);
-				setIsCommentInputOpen(true);
-				options.onGutterUtilityClick?.(range);
+			onLineNumberClick: (lineEvent) => {
+				if (canReviewDiff) {
+					handleOpenReviewComposer({
+						start: lineEvent.lineNumber,
+						end: lineEvent.lineNumber,
+						side: lineEvent.annotationSide,
+					});
+				}
+				options.onLineNumberClick?.(lineEvent);
+			},
+			onLineSelectionChange: (range) => {
+				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
+				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
-				setIsCommentInputOpen(false);
+				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
+			onLineSelected: (range) => {
+				setSelectedLines(range);
+				setIsCommentInputOpen(range != null);
+				options.onLineSelected?.(range);
+			},
 		}),
-		[canReviewDiff, options],
+		[canReviewDiff, handleOpenReviewComposer, options],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
@@ -255,6 +274,36 @@ function ActiveGitDiffFilePane({
 						fileDiff={activeFile}
 						options={interactiveOptions}
 						selectedLines={selectedLines}
+						renderGutterUtility={(getHoveredLine) => {
+							const hoveredLine = getHoveredLine();
+							const range =
+								selectedLines ??
+								(hoveredLine
+									? {
+											start: hoveredLine.lineNumber,
+											end: hoveredLine.lineNumber,
+											side: hoveredLine.side,
+										}
+									: null);
+
+							if (!range) return null;
+
+							return (
+								<IconButton
+									aria-label={`Comment on ${formatReviewRange(range)}`}
+									size="2xs"
+									variant="solid"
+									colorPalette="blue"
+									onClick={(event) => {
+										event.preventDefault();
+										event.stopPropagation();
+										handleOpenReviewComposer(range);
+									}}
+								>
+									<FiPlus />
+								</IconButton>
+							);
+						}}
 					/>
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
