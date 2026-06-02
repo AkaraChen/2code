@@ -1,10 +1,12 @@
 import {
+	Badge,
 	Box,
 	Button,
 	CloseButton,
 	Dialog,
 	Flex,
 	HStack,
+	IconButton,
 	Portal,
 	Text,
 	Textarea,
@@ -99,9 +101,17 @@ export default function GitReviewQueueDialog({
 										borderWidth="1px"
 										borderColor="border.subtle"
 										borderRadius="md"
-										p="3"
+										overflow="hidden"
 									>
-										<HStack align="start" gap="3">
+										<HStack
+											align="start"
+											gap="3"
+											px="3"
+											py="2.5"
+											bg="bg.subtle"
+											borderBottomWidth="1px"
+											borderColor="border.subtle"
+										>
 											<Box flex="1" minW="0">
 												<Text
 													fontSize="sm"
@@ -111,29 +121,41 @@ export default function GitReviewQueueDialog({
 												>
 													{comment.displayName}
 												</Text>
-												<Text
-													mt="0.5"
-													fontSize="xs"
-													color="fg.muted"
-												>
-													{formatReviewRange(
-														comment.range,
-													)}
-												</Text>
+												<HStack mt="1" gap="2">
+													<Badge
+														size="xs"
+														variant="subtle"
+														colorPalette="blue"
+														fontFamily="mono"
+													>
+														{formatReviewRange(
+															comment.range,
+														)}
+													</Badge>
+													<Text
+														fontSize="xs"
+														color="fg.muted"
+													>
+														Selected diff
+													</Text>
+												</HStack>
 											</Box>
-											<Button
+											<IconButton
+												aria-label="Delete review comment"
 												size="xs"
 												variant="ghost"
 												colorPalette="red"
+												flexShrink={0}
 												onClick={() =>
 													onDelete(comment.id)
 												}
 											>
 												<FiTrash2 />
-											</Button>
+											</IconButton>
 										</HStack>
 										<Box
-											mt="2"
+											mx="3"
+											mt="3"
 											maxH="8rem"
 											overflow="auto"
 											borderWidth="1px"
@@ -151,8 +173,20 @@ export default function GitReviewQueueDialog({
 												disableWorkerPool
 											/>
 										</Box>
+										<Text
+											px="3"
+											pt="3"
+											fontSize="xs"
+											fontWeight="semibold"
+											color="fg.muted"
+										>
+											Comment
+										</Text>
 										<Textarea
-											mt="2"
+											mx="3"
+											mt="1.5"
+											mb="3"
+											w="calc(100% - 1.5rem)"
 											value={comment.body}
 											autoresize
 											minH="5rem"

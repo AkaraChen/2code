@@ -14,7 +14,7 @@ import type {
 	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
@@ -186,6 +186,8 @@ function ActiveGitDiffFilePane({
 		useState<SelectedLineRange | null>(null);
 	const [commentBody, setCommentBody] = useState("");
 	const [isCommentInputOpen, setIsCommentInputOpen] = useState(false);
+	const [commentComposerTop, setCommentComposerTop] = useState(0);
+	const diffContentRef = useRef<HTMLDivElement>(null);
 	const { additions, deletions } = useMemo(
 		() => getLineStats(activeFile),
 		[activeFile],
@@ -203,6 +205,34 @@ function ActiveGitDiffFilePane({
 		!showBinaryPreview &&
 		!showLargeDiffGuardrail &&
 		!showRenameOnlyDiff;
+	const updateCommentComposerAnchor = useCallback(
+		(range: SelectedLineRange, lineElement?: HTMLElement) => {
+			const diffContent = diffContentRef.current;
+			if (!diffContent) return;
+
+			const line =
+				lineElement ??
+				diffContent.querySelector<HTMLElement>(
+					`[data-line="${Math.min(range.start, range.end)}"]`,
+				);
+			if (!line) return;
+
+			const containerRect = diffContent.getBoundingClientRect();
+			const lineRect = line.getBoundingClientRect();
+			setCommentComposerTop(
+				Math.max(12, lineRect.top - containerRect.top + diffContent.scrollTop),
+			);
+		},
+		[],
+	);
+	const openCommentComposer = useCallback(
+		(range: SelectedLineRange, lineElement?: HTMLElement) => {
+			setSelectedLines(range);
+			updateCommentComposerAnchor(range, lineElement);
+			setIsCommentInputOpen(true);
+		},
+		[updateCommentComposerAnchor],
+	);
 	const interactiveOptions = useMemo<FileDiffOptions<unknown>>(
 		() => ({
 			...options,
@@ -211,32 +241,34 @@ function ActiveGitDiffFilePane({
 			lineHoverHighlight: canReviewDiff ? "both" : options.lineHoverHighlight,
 			onLineNumberClick: (lineEvent) => {
 				if (canReviewDiff) {
-					setSelectedLines({
+					openCommentComposer({
 						start: lineEvent.lineNumber,
 						end: lineEvent.lineNumber,
 						side: lineEvent.annotationSide,
-					});
-					setIsCommentInputOpen(true);
+					}, lineEvent.lineElement);
 				}
 				options.onLineNumberClick?.(lineEvent);
 			},
 			onLineSelectionChange: (range) => {
 				setSelectedLines(range);
+				if (range) updateCommentComposerAnchor(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
 				setSelectedLines(range);
+				if (range) updateCommentComposerAnchor(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
 				setSelectedLines(range);
+				if (range) updateCommentComposerAnchor(range);
 				setIsCommentInputOpen(range != null);
 				options.onLineSelected?.(range);
 			},
 		}),
-		[canReviewDiff, options],
+		[canReviewDiff, openCommentComposer, options, updateCommentComposerAnchor],
 	);
 	const handleAddReviewComment = useCallback(() => {
 		if (!selectedLines || !commentBody.trim() || !onAddReviewComment) return;
@@ -266,7 +298,7 @@ function ActiveGitDiffFilePane({
 					onReveal={onRevealLargeDiff}
 				/>
 			) : (
-				<Box position="relative">
+				<Box ref={diffContentRef} position="relative">
 					<FileDiff
 						fileDiff={activeFile}
 						options={interactiveOptions}
@@ -274,19 +306,14 @@ function ActiveGitDiffFilePane({
 					/>
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
 						<Box
-							position="sticky"
-							bottom="3"
-							right="3"
+							position="absolute"
+							top={`${commentComposerTop}px`}
+							right="4"
 							zIndex={2}
-							display="flex"
-							justifyContent="flex-end"
-							px="3"
-							pb="3"
-							mt="-1"
 							pointerEvents="none"
 						>
 							<Box
-								w="min(28rem, 100%)"
+								w="min(28rem, calc(100% - 2rem))"
 								borderWidth="1px"
 								borderColor="border.emphasized"
 								borderRadius="lg"
