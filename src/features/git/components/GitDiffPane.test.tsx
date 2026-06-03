@@ -1,10 +1,18 @@
 import { ChakraProvider } from "@chakra-ui/react";
-import type { FileDiffMetadata } from "@pierre/diffs";
-import { fireEvent, render, screen } from "@testing-library/react";
+import type {
+	FileDiffMetadata,
+	FileDiffOptions,
+	SelectedLineRange,
+} from "@pierre/diffs";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
 import { GIT_DIFF_LARGE_FILE_LINE_THRESHOLD } from "../utils";
 import GitDiffPane from "./GitDiffPane";
+
+const fileDiffMockState = vi.hoisted(() => ({
+	latestOptions: undefined as FileDiffOptions<unknown> | undefined,
+}));
 
 vi.mock("@/paraglide/messages.js", async () => {
 	const actual = await vi.importActual<typeof import("@/paraglide/messages.js")>(
@@ -29,9 +37,16 @@ vi.mock("@/paraglide/messages.js", async () => {
 });
 
 vi.mock("@pierre/diffs/react", () => ({
-	FileDiff: ({ fileDiff }: { fileDiff: { name: string } }) => (
-		<div data-testid="mock-file-diff">{fileDiff.name}</div>
-	),
+	FileDiff: ({
+		fileDiff,
+		options,
+	}: {
+		fileDiff: { name: string };
+		options: FileDiffOptions<unknown>;
+	}) => {
+		fileDiffMockState.latestOptions = options;
+		return <div data-testid="mock-file-diff">{fileDiff.name}</div>;
+	},
 }));
 
 function makeDiffFile(
@@ -61,6 +76,31 @@ function renderPane(activeFile: FileDiffMetadata) {
 			<GitDiffPane activeFile={activeFile} options={{}} emptyMessage="empty" />
 		</ChakraProvider>,
 	);
+}
+
+function renderReviewPane(activeFile: FileDiffMetadata) {
+	return render(
+		<ChakraProvider value={appSystem}>
+			<GitDiffPane
+				activeFile={activeFile}
+				options={{}}
+				emptyMessage="empty"
+				onAddReviewComment={vi.fn()}
+			/>
+		</ChakraProvider>,
+	);
+}
+
+function emitSelectionChange(range: SelectedLineRange | null) {
+	act(() => {
+		fileDiffMockState.latestOptions?.onLineSelectionChange?.(range);
+	});
+}
+
+function emitSelectionEnd(range: SelectedLineRange | null) {
+	act(() => {
+		fileDiffMockState.latestOptions?.onLineSelectionEnd?.(range);
+	});
 }
 
 function makeRenameOnlyFile(): FileDiffMetadata {
@@ -130,5 +170,29 @@ describe("gitDiffPane rename display", () => {
 		expect(screen.getByText("Current path")).toBeInTheDocument();
 		expect(screen.getByText("src/new-name.ts")).toBeInTheDocument();
 		expect(screen.queryByTestId("mock-file-diff")).not.toBeInTheDocument();
+	});
+});
+
+describe("gitDiffPane review composer", () => {
+	it("waits until a line selection is committed before opening", () => {
+		renderReviewPane(makeDiffFile("src/review.ts", 3));
+		const selection = {
+			start: 1,
+			end: 3,
+			side: "additions",
+		} satisfies SelectedLineRange;
+
+		emitSelectionChange(selection);
+
+		expect(
+			screen.queryByPlaceholderText("Write a review comment..."),
+		).not.toBeInTheDocument();
+
+		emitSelectionEnd(selection);
+
+		expect(
+			screen.getByPlaceholderText("Write a review comment..."),
+		).toBeInTheDocument();
+		expect(screen.getByText("Comment on 1-3")).toBeInTheDocument();
 	});
 });

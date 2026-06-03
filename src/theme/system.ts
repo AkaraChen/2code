@@ -110,6 +110,23 @@ export const appThemeConfig = defineConfig({
       },
     },
     recipes: {
+      button: {
+        variants: {
+          variant: {
+            secondary: {
+              bg: "bg.muted",
+              color: "fg",
+              borderColor: "transparent",
+              _hover: {
+                bg: "bg.emphasized",
+              },
+              _expanded: {
+                bg: "bg.emphasized",
+              },
+            },
+          },
+        },
+      },
       input: {
         variants: {
           variant: {
