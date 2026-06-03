@@ -27,6 +27,8 @@ describe("reviewQueue formatting", () => {
 
 		expect(formatReviewCommentsForAgent([comment])).toContain(
 			[
+				"1. src/example.ts:1-3",
+				"Selected diff:",
 				"```diff",
 				"+  const value = 1;",
 				"+",

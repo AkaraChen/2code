@@ -17,6 +17,7 @@ import {
 	Textarea,
 	Text,
 } from "@chakra-ui/react";
+import type { ButtonProps } from "@chakra-ui/react";
 import type {
 	FileDiffMetadata,
 	FileDiffOptions,
@@ -41,6 +42,9 @@ import {
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
 
 export type { GitPreviewContext };
+
+const SECONDARY_BUTTON_VARIANT =
+	"secondary" as unknown as NonNullable<ButtonProps["variant"]>;
 
 function FileDiffHeader({
 	file,
@@ -537,7 +541,7 @@ function ActiveGitDiffFilePane({
 								>
 									<Button
 										size="xs"
-										colorPalette="blue"
+										variant={SECONDARY_BUTTON_VARIANT}
 										disabled={!commentBody.trim()}
 										onClick={handleAddReviewComment}
 									>

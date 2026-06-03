@@ -193,6 +193,6 @@ describe("gitDiffPane review composer", () => {
 		expect(
 			screen.getByPlaceholderText("Write a review comment..."),
 		).toBeInTheDocument();
-		expect(screen.getByText("Comment on 1-3 (additions)")).toBeInTheDocument();
+		expect(screen.getByText("Comment on 1-3")).toBeInTheDocument();
 	});
 });

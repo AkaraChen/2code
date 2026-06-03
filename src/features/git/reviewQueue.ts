@@ -12,16 +12,9 @@ export interface DiffReviewComment {
 }
 
 export function formatReviewRange(range: SelectedLineRange) {
-	const startSide = range.side ?? "additions";
-	const endSide = range.endSide ?? startSide;
-	const side =
-		startSide === endSide
-			? startSide
-			: `${startSide}->${endSide}`;
 	const start = Math.min(range.start, range.end);
 	const end = Math.max(range.start, range.end);
-	const lineRange = start === end ? `${start}` : `${start}-${end}`;
-	return `${lineRange} (${side})`;
+	return start === end ? `${start}` : `${start}-${end}`;
 }
 
 export function getSelectedDiffText(
