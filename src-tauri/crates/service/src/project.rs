@@ -52,7 +52,9 @@ pub fn update(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
+	let project = repo::project::find_by_id(conn, id)?;
 	repo::project::delete(conn, id)?;
+	cleanup_empty_group(conn, project.group_id)?;
 	Ok(())
 }
 
@@ -88,6 +90,7 @@ pub fn assign_to_group(
 	project_id: &str,
 	group_id: Option<String>,
 ) -> Result<Project, AppError> {
+	let project = repo::project::find_by_id(conn, project_id)?;
 	let group_id = group_id.and_then(|id| {
 		let trimmed = id.trim().to_string();
 		if trimmed.is_empty() {
@@ -103,6 +106,9 @@ pub fn assign_to_group(
 
 	let updated =
 		repo::project::set_group(conn, project_id, group_id.as_deref())?;
+	if project.group_id != updated.group_id {
+		cleanup_empty_group(conn, project.group_id)?;
+	}
 
 	Ok(updated)
 }
@@ -112,6 +118,8 @@ pub fn update_sidebar_layout(
 	updates: Vec<ProjectSidebarLayoutUpdate>,
 ) -> Result<(), AppError> {
 	conn.transaction(|conn| {
+		let mut previous_group_ids = Vec::new();
+
 		for update in &updates {
 			match update.kind.as_str() {
 				"group" => {
@@ -133,6 +141,10 @@ pub fn update_sidebar_layout(
 					if let Some(group_id) = update.group_id.as_deref() {
 						repo::project_group::find_by_id(conn, group_id)?;
 					}
+					let project = repo::project::find_by_id(conn, &update.id)?;
+					if project.group_id != update.group_id {
+						previous_group_ids.push(project.group_id);
+					}
 					repo::project::update_sidebar_layout(
 						conn,
 						std::slice::from_ref(update),
@@ -146,8 +158,23 @@ pub fn update_sidebar_layout(
 			}
 		}
 
+		for group_id in previous_group_ids {
+			cleanup_empty_group(conn, group_id)?;
+		}
+
 		Ok(())
 	})
+}
+
+fn cleanup_empty_group(
+	conn: &mut SqliteConnection,
+	group_id: Option<String>,
+) -> Result<(), AppError> {
+	if let Some(group_id) = group_id {
+		repo::project_group::delete_if_empty(conn, &group_id)?;
+	}
+
+	Ok(())
 }
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
