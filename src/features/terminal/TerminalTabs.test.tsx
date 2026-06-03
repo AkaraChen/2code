@@ -115,7 +115,7 @@ function renderTerminalTabs() {
 	);
 }
 
-describe("TerminalTabs file tree drops", () => {
+describe("terminalTabs file tree drops", () => {
 	beforeEach(() => {
 		useTerminalStore.setState({
 			profiles: {},
