@@ -37,6 +37,14 @@ channel.onmessage = () => {
 			exact: false,
 		});
 		queryClient.invalidateQueries({
+			queryKey: [queryNamespaces["git-branch"]],
+			exact: false,
+		});
+		queryClient.invalidateQueries({
+			queryKey: [queryNamespaces["git-ahead-count"]],
+			exact: false,
+		});
+		queryClient.invalidateQueries({
 			queryKey: [queryNamespaces["fs-tree"]],
 			exact: false,
 		});

@@ -43,8 +43,8 @@ import {
 	writeFileContent,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 
-const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
 interface UseProjectAvatarOptions {
 	enabled?: boolean;
 }
@@ -68,8 +68,8 @@ export function useGitBranch(folder: string, enabled = true) {
 		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
 		enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 }
 
@@ -330,8 +330,8 @@ export function useFileTreeGitStatus(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.status(profileId),
 		queryFn: () => getFileTreeGitStatus({ profileId }),
 		enabled: !!profileId && enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 }
 
