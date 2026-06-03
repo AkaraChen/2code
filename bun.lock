@@ -32,7 +32,7 @@
         "@tauri-apps/plugin-updater": "~2",
         "@types/react-syntax-highlighter": "^15.5.13",
         "@xterm/addon-clipboard": "^0.3.0-beta.197",
-        "@xterm/addon-fit": "^0.12.0-beta.197",
+        "@xterm/addon-fit": "^0.12.0-beta.220",
         "@xterm/addon-image": "^0.10.0-beta.197",
         "@xterm/addon-ligatures": "^0.11.0-beta.197",
         "@xterm/addon-progress": "^0.3.0-beta.197",
@@ -846,7 +846,7 @@
 
     "@xterm/addon-clipboard": ["@xterm/addon-clipboard@0.3.0-beta.197", "", { "dependencies": { "js-base64": "^3.7.5" }, "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.197" } }, "sha512-o0u0xR/6QwTj7WytfMaNbz4Gm/lp2eW3EFzHN6LvQhqZEBdMt+GUb/GHgCM7YO35TP21W7DInqvZl+1WOzanJQ=="],
 
-    "@xterm/addon-fit": ["@xterm/addon-fit@0.12.0-beta.197", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.197" } }, "sha512-EoYQVIWp90XmNXBfrEocz5tk44JLMdHL9+Asd57Bj9DuERLLszA8pkF3wbuR5C7555g3sRTMTHlzYQ3gv9xbOw=="],
+    "@xterm/addon-fit": ["@xterm/addon-fit@0.12.0-beta.220", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.220" } }, "sha512-lTiEjsdJBYTvIdA8USs90j+pu7/9oCQEh8JYBDJoRxzzAcvk4V1GlEA++Ztspbfk4nSh2HVxwJvdeTD6ffAQlg=="],
 
     "@xterm/addon-image": ["@xterm/addon-image@0.10.0-beta.197", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.197" } }, "sha512-31oIqBm+Yk3xyYGjBhhp308gDyFywv3JJAWBflycgqZFbvfZ2ju4IvHmvKJhp8qC+0ac6SRAA7XBKGqtoZjcsA=="],
 
