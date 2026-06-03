@@ -23,6 +23,9 @@ export interface Project {
   folder: string;
   created_at: string;
   group_id?: string | null;
+  sort_order: number;
+  pinned_at?: string | null;
+  pinned_order?: number | null;
 }
 
 export interface ProjectTerminalTemplate {
@@ -169,6 +172,7 @@ export interface ProjectGroup {
   id: string;
   name: string;
   created_at: string;
+  sort_order: number;
 }
 
 export interface PtySessionMeta {
@@ -198,7 +202,18 @@ export interface ProjectWithProfiles {
   folder: string;
   created_at: string;
   group_id?: string | null;
+  sort_order: number;
+  pinned_at?: string | null;
+  pinned_order?: number | null;
   profiles: Profile[];
+}
+
+export interface ProjectSidebarLayoutUpdate {
+  kind: string;
+  id: string;
+  groupId?: string | null;
+  sortOrder?: number | null;
+  pinnedOrder?: number | null;
 }
 
 export interface TopbarApp {
@@ -339,6 +354,11 @@ export interface CreateProjectGroupParams {
 export interface AssignProjectToGroupParams {
   projectId: string;
   groupId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface UpdateProjectSidebarLayoutParams {
+  updates: ProjectSidebarLayoutUpdate[];
   [key: string]: unknown;
 }
 

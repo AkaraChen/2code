@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
+use diesel::{Connection, SqliteConnection};
 use uuid::Uuid;
 
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
-	ProjectWithProfiles,
+	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
 
@@ -111,6 +111,59 @@ pub fn assign_to_group(
 	}
 
 	Ok(updated)
+}
+
+pub fn update_sidebar_layout(
+	conn: &mut SqliteConnection,
+	updates: Vec<ProjectSidebarLayoutUpdate>,
+) -> Result<(), AppError> {
+	conn.transaction(|conn| {
+		let mut previous_group_ids = Vec::new();
+
+		for update in &updates {
+			match update.kind.as_str() {
+				"group" => {
+					let sort_order = update.sort_order.ok_or_else(|| {
+						AppError::DbError("Group sort_order is required".into())
+					})?;
+					repo::project_group::set_sort_order(
+						conn, &update.id, sort_order,
+					)?;
+				}
+				"project" => {
+					if update.group_id.is_some()
+						&& update.pinned_order.is_some()
+					{
+						return Err(AppError::DbError(
+							"Grouped projects cannot be pinned".into(),
+						));
+					}
+					if let Some(group_id) = update.group_id.as_deref() {
+						repo::project_group::find_by_id(conn, group_id)?;
+					}
+					let project = repo::project::find_by_id(conn, &update.id)?;
+					if project.group_id != update.group_id {
+						previous_group_ids.push(project.group_id);
+					}
+					repo::project::update_sidebar_layout(
+						conn,
+						std::slice::from_ref(update),
+					)?;
+				}
+				other => {
+					return Err(AppError::DbError(format!(
+						"Unsupported sidebar layout update kind: {other}"
+					)));
+				}
+			}
+		}
+
+		for group_id in previous_group_ids {
+			cleanup_empty_group(conn, group_id)?;
+		}
+
+		Ok(())
+	})
 }
 
 fn cleanup_empty_group(

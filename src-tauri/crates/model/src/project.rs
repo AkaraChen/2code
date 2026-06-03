@@ -33,6 +33,9 @@ pub struct Project {
 	pub folder: String,
 	pub created_at: String,
 	pub group_id: Option<String>,
+	pub sort_order: i32,
+	pub pinned_at: Option<String>,
+	pub pinned_order: Option<i32>,
 }
 
 #[derive(Insertable)]
@@ -42,6 +45,7 @@ pub struct NewProject<'a> {
 	pub name: &'a str,
 	pub folder: &'a str,
 	pub group_id: Option<&'a str>,
+	pub sort_order: i32,
 }
 
 #[derive(AsChangeset)]
@@ -58,7 +62,20 @@ pub struct ProjectWithProfiles {
 	pub folder: String,
 	pub created_at: String,
 	pub group_id: Option<String>,
+	pub sort_order: i32,
+	pub pinned_at: Option<String>,
+	pub pinned_order: Option<i32>,
 	pub profiles: Vec<Profile>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSidebarLayoutUpdate {
+	pub kind: String,
+	pub id: String,
+	pub group_id: Option<String>,
+	pub sort_order: Option<i32>,
+	pub pinned_order: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

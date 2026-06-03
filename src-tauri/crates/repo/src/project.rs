@@ -1,10 +1,15 @@
+use diesel::dsl::max;
 use diesel::prelude::*;
 
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use model::error::AppError;
 use model::profile::Profile;
-use model::project::{NewProject, Project, ProjectWithProfiles, UpdateProject};
+use model::project::{
+	NewProject, Project, ProjectSidebarLayoutUpdate, ProjectWithProfiles,
+	UpdateProject,
+};
 use model::schema::{profiles, projects};
 
 pub fn insert(
@@ -13,12 +18,14 @@ pub fn insert(
 	name: &str,
 	folder: &str,
 ) -> Result<Project, AppError> {
+	let sort_order = next_top_level_sort_order(conn)?;
 	diesel::insert_into(projects::table)
 		.values(&NewProject {
 			id,
 			name,
 			folder,
 			group_id: None,
+			sort_order,
 		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
@@ -31,9 +38,23 @@ pub fn insert(
 
 pub fn list_all(conn: &mut SqliteConnection) -> Result<Vec<Project>, AppError> {
 	projects::table
+		.order((projects::sort_order.asc(), projects::created_at.asc()))
 		.select(Project::as_select())
 		.load(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn next_top_level_sort_order(
+	conn: &mut SqliteConnection,
+) -> Result<i32, AppError> {
+	let current_max: Option<i32> = projects::table
+		.filter(projects::group_id.is_null())
+		.filter(projects::pinned_order.is_null())
+		.select(max(projects::sort_order))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	Ok(current_max.unwrap_or(0) + 1000)
 }
 
 pub fn find_by_id(
@@ -51,6 +72,7 @@ pub fn list_all_with_profiles(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	let all_projects: Vec<Project> = projects::table
+		.order((projects::sort_order.asc(), projects::created_at.asc()))
 		.select(Project::as_select())
 		.load(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
@@ -78,6 +100,9 @@ pub fn list_all_with_profiles(
 				folder: project.folder,
 				created_at: project.created_at,
 				group_id: project.group_id,
+				sort_order: project.sort_order,
+				pinned_at: project.pinned_at,
+				pinned_order: project.pinned_order,
 				profiles,
 			}
 		})
@@ -134,7 +159,11 @@ pub fn set_group(
 ) -> Result<Project, AppError> {
 	let target = projects::table.find(id);
 	let rows = diesel::update(target)
-		.set(projects::group_id.eq(group_id))
+		.set((
+			projects::group_id.eq(group_id),
+			projects::pinned_at.eq::<Option<String>>(None),
+			projects::pinned_order.eq::<Option<i32>>(None),
+		))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
@@ -146,6 +175,71 @@ pub fn set_group(
 		.select(Project::as_select())
 		.first(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn update_sidebar_layout(
+	conn: &mut SqliteConnection,
+	updates: &[ProjectSidebarLayoutUpdate],
+) -> Result<(), AppError> {
+	for update in updates {
+		match update.kind.as_str() {
+			"group" => {
+				return Err(AppError::DbError(format!(
+					"Group updates must be handled by project_group repo: {}",
+					update.id
+				)));
+			}
+			"project" => {
+				let pinned_at = if update.pinned_order.is_some() {
+					Some(sidebar_timestamp())
+				} else {
+					None
+				};
+				let rows = if let Some(sort_order) = update.sort_order {
+					diesel::update(projects::table.find(&update.id))
+						.set((
+							projects::group_id.eq(update.group_id.as_deref()),
+							projects::sort_order.eq(sort_order),
+							projects::pinned_at.eq(pinned_at),
+							projects::pinned_order.eq(update.pinned_order),
+						))
+						.execute(conn)
+						.map_err(|e| AppError::DbError(e.to_string()))?
+				} else {
+					diesel::update(projects::table.find(&update.id))
+						.set((
+							projects::group_id.eq(update.group_id.as_deref()),
+							projects::pinned_at.eq(pinned_at),
+							projects::pinned_order.eq(update.pinned_order),
+						))
+						.execute(conn)
+						.map_err(|e| AppError::DbError(e.to_string()))?
+				};
+
+				if rows == 0 {
+					return Err(AppError::NotFound(format!(
+						"Project: {}",
+						update.id
+					)));
+				}
+			}
+			other => {
+				return Err(AppError::DbError(format!(
+					"Unsupported sidebar layout update kind: {other}"
+				)));
+			}
+		}
+	}
+
+	Ok(())
+}
+
+fn sidebar_timestamp() -> String {
+	let seconds = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.map(|duration| duration.as_secs())
+		.unwrap_or_default();
+	seconds.to_string()
 }
 
 #[cfg(test)]
@@ -256,6 +350,7 @@ mod tests {
 			.values((
 				project_groups::id.eq("g1"),
 				project_groups::name.eq("Work"),
+				project_groups::sort_order.eq(1000),
 			))
 			.execute(&mut conn)
 			.unwrap();
@@ -275,6 +370,7 @@ mod tests {
 			.values((
 				project_groups::id.eq("g1"),
 				project_groups::name.eq("Work"),
+				project_groups::sort_order.eq(1000),
 			))
 			.execute(&mut conn)
 			.unwrap();

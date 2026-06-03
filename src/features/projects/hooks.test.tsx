@@ -5,22 +5,29 @@ import {
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FileSearchResult, ProjectWithProfiles } from "@/generated";
+import type {
+	FileSearchResult,
+	ProjectSidebarLayoutUpdate,
+	ProjectWithProfiles,
+} from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 import {
 	useDeleteFileTreePaths,
 	useDeleteProject,
 	useFileSearch,
+	useUpdateProjectSidebarLayout,
 } from "./hooks";
 
 const {
 	deleteFileTreePathsMock,
 	deleteProjectMock,
 	searchFileMock,
+	updateProjectSidebarLayoutMock,
 } = vi.hoisted(() => ({
 	deleteFileTreePathsMock: vi.fn(),
 	deleteProjectMock: vi.fn(),
 	searchFileMock: vi.fn(),
+	updateProjectSidebarLayoutMock: vi.fn(),
 }));
 
 vi.mock("@/generated", async () => {
@@ -32,6 +39,7 @@ vi.mock("@/generated", async () => {
 		deleteFileTreePaths: deleteFileTreePathsMock,
 		deleteProject: deleteProjectMock,
 		searchFile: searchFileMock,
+		updateProjectSidebarLayout: updateProjectSidebarLayoutMock,
 	};
 });
 
@@ -78,6 +86,7 @@ describe("useDeleteProject", () => {
 				name: "Project 1",
 				folder: "/projects/one",
 				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 1000,
 				profiles: [],
 			},
 			{
@@ -85,6 +94,7 @@ describe("useDeleteProject", () => {
 				name: "Project 2",
 				folder: "/projects/two",
 				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 2000,
 				profiles: [],
 			},
 		];
@@ -162,6 +172,45 @@ describe("useDeleteFileTreePaths", () => {
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
 			queryKey: queryKeys.git.diffStats("profile-1"),
+		});
+		invalidateQueriesSpy.mockRestore();
+	});
+});
+
+describe("useUpdateProjectSidebarLayout", () => {
+	beforeEach(() => {
+		updateProjectSidebarLayoutMock.mockReset();
+	});
+
+	it("refreshes project and project group caches after saving sidebar order", async () => {
+		const queryClient = createQueryClient();
+		const invalidateQueriesSpy = vi.spyOn(queryClient, "invalidateQueries");
+		const updates: ProjectSidebarLayoutUpdate[] = [
+			{
+				kind: "project",
+				id: "project-1",
+				groupId: null,
+				sortOrder: 1000,
+				pinnedOrder: null,
+			},
+		];
+		updateProjectSidebarLayoutMock.mockResolvedValue(undefined);
+
+		const { result } = renderHook(
+			() => useUpdateProjectSidebarLayout(),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.mutateAsync(updates);
+		});
+
+		expect(updateProjectSidebarLayoutMock).toHaveBeenCalledWith({ updates });
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.projects.all,
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.projectGroups.all,
 		});
 		invalidateQueriesSpy.mockRestore();
 	});

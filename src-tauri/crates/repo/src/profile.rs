@@ -141,6 +141,7 @@ mod tests {
 				name: "Test Project",
 				folder,
 				group_id: None,
+				sort_order: 1000,
 			})
 			.execute(conn)
 			.expect("insert project");
@@ -274,7 +275,8 @@ mod tests {
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
 		insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
 
-		let profile = update_notes(&mut conn, "p1", "# Hello\nSome notes").unwrap();
+		let profile =
+			update_notes(&mut conn, "p1", "# Hello\nSome notes").unwrap();
 		assert_eq!(profile.notes, "# Hello\nSome notes");
 	}
 
@@ -289,7 +291,8 @@ mod tests {
 	fn new_profile_has_empty_notes() {
 		let mut conn = setup_db();
 		insert_test_project(&mut conn, "proj-1", "/tmp/test");
-		let profile = insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
+		let profile =
+			insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
 		assert_eq!(profile.notes, "");
 	}
 }

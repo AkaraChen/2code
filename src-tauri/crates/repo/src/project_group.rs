@@ -1,3 +1,4 @@
+use diesel::dsl::max;
 use diesel::prelude::*;
 
 use model::error::AppError;
@@ -9,8 +10,13 @@ pub fn insert(
 	id: &str,
 	name: &str,
 ) -> Result<ProjectGroup, AppError> {
+	let sort_order = next_sort_order(conn)?;
 	diesel::insert_into(project_groups::table)
-		.values(&NewProjectGroup { id, name })
+		.values(&NewProjectGroup {
+			id,
+			name,
+			sort_order,
+		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
@@ -25,10 +31,40 @@ pub fn list_all(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectGroup>, AppError> {
 	project_groups::table
-		.order((project_groups::created_at.asc(), project_groups::name.asc()))
+		.order((
+			project_groups::sort_order.asc(),
+			project_groups::created_at.asc(),
+			project_groups::name.asc(),
+		))
 		.select(ProjectGroup::as_select())
 		.load(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
+pub fn next_sort_order(conn: &mut SqliteConnection) -> Result<i32, AppError> {
+	let current_max: Option<i32> = project_groups::table
+		.select(max(project_groups::sort_order))
+		.first(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	Ok(current_max.unwrap_or(0) + 1000)
+}
+
+pub fn set_sort_order(
+	conn: &mut SqliteConnection,
+	id: &str,
+	sort_order: i32,
+) -> Result<(), AppError> {
+	let rows = diesel::update(project_groups::table.find(id))
+		.set(project_groups::sort_order.eq(sort_order))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if rows == 0 {
+		return Err(AppError::NotFound(format!("Project group: {id}")));
+	}
+
+	Ok(())
 }
 
 pub fn find_by_id(
@@ -124,10 +160,8 @@ mod tests {
 	fn delete_if_empty_returns_false_for_missing_group() {
 		let mut conn = setup_db();
 
-		assert!(
-			!delete_if_empty(&mut conn, "missing")
-				.expect("missing group is not deleted")
-		);
+		assert!(!delete_if_empty(&mut conn, "missing")
+			.expect("missing group is not deleted"));
 	}
 
 	#[test]

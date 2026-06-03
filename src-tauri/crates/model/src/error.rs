@@ -31,6 +31,17 @@ impl Serialize for AppError {
 	}
 }
 
+impl From<diesel::result::Error> for AppError {
+	fn from(error: diesel::result::Error) -> Self {
+		match error {
+			diesel::result::Error::NotFound => {
+				AppError::NotFound("Record".into())
+			}
+			error => AppError::DbError(error.to_string()),
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -115,6 +126,12 @@ mod tests {
 		let io_err = std::io::Error::other("custom msg");
 		let app_err: AppError = io_err.into();
 		assert!(app_err.to_string().contains("custom msg"));
+	}
+
+	#[test]
+	fn from_diesel_not_found_maps_to_not_found() {
+		let app_err: AppError = diesel::result::Error::NotFound.into();
+		assert!(matches!(app_err, AppError::NotFound(_)));
 	}
 
 	#[test]
