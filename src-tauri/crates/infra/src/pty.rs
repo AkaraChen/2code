@@ -76,7 +76,7 @@ pub fn create_session(
 	// Common env vars for all shells
 	cmd.env("TERM", "xterm-256color");
 	cmd.env("TERM_PROGRAM", "vscode"); // Makes VS Code's shell integration scripts work
-	cmd.env("VSCODE_INJECTION", "1");  // Tells scripts they were injected (not manually installed)
+	cmd.env("VSCODE_INJECTION", "1"); // Tells scripts they were injected (not manually installed)
 
 	// Inject helper env vars for CLI sidecar communication
 	if let Some(url) = options.helper_url {
@@ -156,10 +156,7 @@ fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
 		if let Some(end) = shell[1..].find(quote) {
 			let program = shell[1..=end].to_string();
 			let rest = shell[end + 2..].trim();
-			let args = rest
-				.split_whitespace()
-				.map(|s| s.to_string())
-				.collect();
+			let args = rest.split_whitespace().map(|s| s.to_string()).collect();
 			return (program, args);
 		}
 	}
@@ -169,12 +166,14 @@ fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
 		return (shell.to_string(), vec![]);
 	}
 	let first = parts[0];
-	let looks_like_path =
-		first.len() >= 2 && first.as_bytes()[1] == b':' // C: D: etc
+	let looks_like_path = first.len() >= 2 && first.as_bytes()[1] == b':' // C: D: etc
 		|| first.contains('/') || first.contains('\\');
 
 	if !looks_like_path || parts.len() == 1 {
-		return (first.to_string(), parts[1..].iter().map(|s| s.to_string()).collect());
+		return (
+			first.to_string(),
+			parts[1..].iter().map(|s| s.to_string()).collect(),
+		);
 	}
 
 	// Reconstruct the path by joining tokens until we hit one ending with a
@@ -193,11 +192,18 @@ fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
 			break;
 		}
 		end_idx += 1;
-		if end_idx > 6 { break; }
+		if end_idx > 6 {
+			break;
+		}
 	}
 	if end_idx > parts.len() {
-		end_idx = parts.iter().position(|p| p.starts_with('-')).unwrap_or(parts.len());
-		if end_idx == 0 { end_idx = 1; }
+		end_idx = parts
+			.iter()
+			.position(|p| p.starts_with('-'))
+			.unwrap_or(parts.len());
+		if end_idx == 0 {
+			end_idx = 1;
+		}
 	}
 	let program = parts[..end_idx].join(" ");
 	let args = parts[end_idx..].iter().map(|s| s.to_string()).collect();
@@ -205,7 +211,10 @@ fn parse_shell_command(shell: &str) -> (String, Vec<String>) {
 }
 
 /// Build a CommandBuilder with the right executable and args for the given injection type.
-fn build_injected_command(shell: &str, injection: &ShellInjection) -> CommandBuilder {
+fn build_injected_command(
+	shell: &str,
+	injection: &ShellInjection,
+) -> CommandBuilder {
 	// Parse the shell command, handling paths with spaces like
 	// "C:\Program Files\PowerShell\7-preview\pwsh.exe -NoLogo -NoProfile"
 	let (program, existing_args) = parse_shell_command(shell);
@@ -237,10 +246,7 @@ fn build_injected_command(shell: &str, injection: &ShellInjection) -> CommandBui
 				cmd.arg(arg.as_str());
 			}
 			cmd.arg("--init-command");
-			cmd.arg(format!(
-				"source \"{}\"",
-				init_script.to_string_lossy()
-			));
+			cmd.arg(format!("source \"{}\"", init_script.to_string_lossy()));
 			cmd
 		}
 		ShellInjection::Pwsh { init_script } => {
@@ -255,10 +261,7 @@ fn build_injected_command(shell: &str, injection: &ShellInjection) -> CommandBui
 			}
 			cmd.arg("-noexit");
 			cmd.arg("-command");
-			cmd.arg(format!(
-				". \"{}\"",
-				init_script.to_string_lossy()
-			));
+			cmd.arg(format!(". \"{}\"", init_script.to_string_lossy()));
 			cmd
 		}
 		ShellInjection::None => {
@@ -416,7 +419,8 @@ mod tests {
 
 	#[test]
 	fn parse_shell_with_args() {
-		let (prog, args) = parse_shell_command("powershell.exe -NoLogo -NoProfile");
+		let (prog, args) =
+			parse_shell_command("powershell.exe -NoLogo -NoProfile");
 		assert_eq!(prog, "powershell.exe");
 		assert_eq!(args, vec!["-NoLogo".to_string(), "-NoProfile".to_string()]);
 	}
@@ -432,7 +436,8 @@ mod tests {
 
 	#[test]
 	fn parse_shell_git_bash() {
-		let (prog, args) = parse_shell_command(r"C:\Program Files\Git\bin\bash.exe");
+		let (prog, args) =
+			parse_shell_command(r"C:\Program Files\Git\bin\bash.exe");
 		assert_eq!(prog, r"C:\Program Files\Git\bin\bash.exe");
 		assert!(args.is_empty());
 	}

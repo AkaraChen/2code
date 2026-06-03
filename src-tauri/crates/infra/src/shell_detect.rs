@@ -192,21 +192,19 @@ fn detect_wsl_distros() -> Vec<String> {
 	}
 
 	// Try UTF-16LE decoding (skip BOM if present)
-	let words: Vec<u16> = if stdout.len() >= 2
-		&& stdout[0] == 0xFF
-		&& stdout[1] == 0xFE
-	{
-		// Has BOM — skip first 2 bytes
-		stdout[2..]
-			.chunks_exact(2)
-			.map(|c| u16::from_le_bytes([c[0], c[1]]))
-			.collect()
-	} else {
-		stdout
-			.chunks_exact(2)
-			.map(|c| u16::from_le_bytes([c[0], c[1]]))
-			.collect()
-	};
+	let words: Vec<u16> =
+		if stdout.len() >= 2 && stdout[0] == 0xFF && stdout[1] == 0xFE {
+			// Has BOM — skip first 2 bytes
+			stdout[2..]
+				.chunks_exact(2)
+				.map(|c| u16::from_le_bytes([c[0], c[1]]))
+				.collect()
+		} else {
+			stdout
+				.chunks_exact(2)
+				.map(|c| u16::from_le_bytes([c[0], c[1]]))
+				.collect()
+		};
 
 	let text = String::from_utf16_lossy(&words);
 	text.lines()

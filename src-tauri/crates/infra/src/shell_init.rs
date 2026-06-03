@@ -85,10 +85,15 @@ pub(crate) fn extract_exe(cmd: &str) -> String {
 /// Detect shell type from the shell command string.
 pub fn detect_shell_type(shell_cmd: &str) -> ShellType {
 	let exe = extract_exe(shell_cmd);
-	let basename = Path::new(&exe)
+	let executable_name = exe
+		.rsplit(['/', '\\'])
+		.next()
+		.filter(|name| !name.is_empty())
+		.unwrap_or(&exe);
+	let basename = Path::new(executable_name)
 		.file_stem()
 		.and_then(|s| s.to_str())
-		.unwrap_or(&exe)
+		.unwrap_or(executable_name)
 		.to_lowercase();
 
 	match basename.as_str() {
@@ -128,7 +133,8 @@ fn setup_2code_home() {
 		.filter(|h| !h.is_empty())
 		.or_else(|| std::env::var("USERPROFILE").ok().filter(|h| !h.is_empty()))
 		.or_else(|| {
-			let drive = std::env::var("HOMEDRIVE").ok().filter(|d| !d.is_empty());
+			let drive =
+				std::env::var("HOMEDRIVE").ok().filter(|d| !d.is_empty());
 			let path = std::env::var("HOMEPATH").ok().filter(|p| !p.is_empty());
 			match (drive, path) {
 				(Some(d), Some(p)) => Some(format!("{d}{p}")),
@@ -498,7 +504,7 @@ mod tests {
 			ShellInjection::Fish { init_script } => {
 				assert!(init_script.exists());
 				let content = std::fs::read_to_string(&init_script).unwrap();
-				// VSCode integration must be present
+				// VS Code integration must be present.
 				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
 				// 2code common init must be present
 				assert!(content.contains("2code common init"));
@@ -520,8 +526,8 @@ mod tests {
 			ShellInjection::Pwsh { init_script } => {
 				assert!(init_script.exists());
 				let content = std::fs::read_to_string(&init_script).unwrap();
-				// VSCode integration must be present
-				assert!(content.contains("VSCODE_SHELL_INTEGRATION"));
+				// VS Code integration must be present.
+				assert!(content.contains("__VSCodeState"));
 				// 2code common init must be present
 				assert!(content.contains("2code common init"));
 				assert!(content.contains("_2CODE_HOME"));

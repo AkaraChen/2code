@@ -327,10 +327,12 @@ pub fn create_session(
 			Some(zdotdir.clone())
 		}
 		infra::shell_init::ShellInjection::Bash { init_file }
-		| infra::shell_init::ShellInjection::Fish { init_script: init_file }
-		| infra::shell_init::ShellInjection::Pwsh { init_script: init_file } => {
-			init_file.parent().map(|p| p.to_path_buf())
+		| infra::shell_init::ShellInjection::Fish {
+			init_script: init_file,
 		}
+		| infra::shell_init::ShellInjection::Pwsh {
+			init_script: init_file,
+		} => init_file.parent().map(|p| p.to_path_buf()),
 		infra::shell_init::ShellInjection::None => None,
 	};
 	let handle = std::thread::spawn(move || {
