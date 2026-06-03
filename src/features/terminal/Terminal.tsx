@@ -188,7 +188,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			if (!container) return;
 			const unlisteners: UnlistenFn[] = [];
 
-			consola.info(`[pty-terminal] mount sessionId=${sessionId}`);
 			let disposed = false;
 			isStreamReadyRef.current = false;
 			pendingEventsRef.current = [];
@@ -198,9 +197,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				fontFamily: `"${initFontFamilyRef.current}", monospace`,
 				fontSize: initFontSizeRef.current,
 				theme: initThemeRef.current,
+				allowProposedApi: true,
 				cursorBlink: true,
 				cursorStyle: "bar",
 				cursorWidth: 4,
+				// ImageAddon mutates windowOptions during activation; keep it per-terminal.
+				windowOptions: {
+					getCellSizePixels: true,
+					getWinSizeChars: true,
+					getWinSizePixels: true,
+				},
 			});
 			unlisteners.push(() => term.dispose());
 
@@ -310,9 +316,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 					return;
 				}
 
-				consola.info(
-					`[pty-terminal] replaying ${history.length} bytes of history for session ${sessionId}`,
-				);
 				const historyText = new TextDecoder().decode(history);
 				term.write(history, () => {
 					flushPendingEventsAfterHistory(historyText);
@@ -344,10 +347,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 					return;
 				}
 				unlisteners.push(unlistenOutput, unlistenExit);
-				consola.info(
-					`[pty-terminal] live listeners registered for session ${sessionId}`,
-				);
-
 				const restoredHistory = sessionHistory.get(sessionId);
 				if (restoredHistory) {
 					sessionHistory.delete(sessionId);
@@ -398,7 +397,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
 			// 4. React 19 ref cleanup
 			return () => {
-				consola.info(`[pty-terminal] unmount sessionId=${sessionId}`);
 				disposed = true;
 
 				// Flush buffered PTY output to DB before teardown (best-effort)

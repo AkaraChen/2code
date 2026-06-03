@@ -50,13 +50,13 @@
     "@tauri-apps/plugin-store": "^2.4.3",
     "@tauri-apps/plugin-updater": "~2",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@xterm/addon-clipboard": "^0.3.0-beta.197",
-    "@xterm/addon-fit": "^0.12.0-beta.220",
-    "@xterm/addon-image": "^0.10.0-beta.197",
-    "@xterm/addon-ligatures": "^0.11.0-beta.197",
-    "@xterm/addon-progress": "^0.3.0-beta.197",
-    "@xterm/addon-web-links": "^0.13.0-beta.218",
-    "@xterm/xterm": "^6.1.0-beta.220",
+    "@xterm/addon-clipboard": "^0.2.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-image": "^0.9.0",
+    "@xterm/addon-ligatures": "^0.10.0",
+    "@xterm/addon-progress": "^0.2.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "cmdk": "^1.1.1",
     "consola": "^3.4.2",
     "driver.js": "^1.4.0",
@@ -100,8 +100,5 @@
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
     "vitest": "^4.1.4"
-  },
-  "patchedDependencies": {
-    "@xterm/xterm@6.1.0-beta.197": "patches/@xterm%2Fxterm@6.1.0-beta.197.patch"
   }
 }

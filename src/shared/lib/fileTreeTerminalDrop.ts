@@ -61,7 +61,11 @@ export function writeFileTreeTerminalDropPayload(
 	dataTransfer: DataTransfer,
 	payload: FileTreeTerminalDropPayload,
 ) {
-	dataTransfer.effectAllowed = "copyMove";
+	try {
+		dataTransfer.effectAllowed = "copyMove";
+	} catch {
+		// WebKit can expose readonly DataTransfer effect fields for some drag paths.
+	}
 	dataTransfer.setData(
 		FILE_TREE_TERMINAL_DROP_MIME,
 		JSON.stringify(payload),

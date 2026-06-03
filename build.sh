@@ -1,2 +1,2 @@
-nr tauri build
+bun tauri build
 nr open:dmg

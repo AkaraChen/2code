@@ -210,7 +210,7 @@ export default function ProjectTopBar({
 			<Box color="fg.muted">
 				{profile.is_default ? (
 					isActive ? (
-						<GitBranchLabel cwd={profile.worktree_path} isActive={isActive} />
+						<GitBranchLabel cwd={profile.worktree_path} />
 					) : null
 				) : (
 					<HStack gap="1" userSelect="none">

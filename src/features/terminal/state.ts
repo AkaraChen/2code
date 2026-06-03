@@ -32,10 +32,6 @@ function createRestorationPipeline(): Promise<void> {
 		let restored = false;
 
 		observer.subscribe((result) => {
-			consola.info("[pty-restore] projects query updated", {
-				dataLength: result.data?.length,
-				error: result.error,
-			});
 			if (!result.data) return;
 
 			// Stale profile cleanup
@@ -43,9 +39,6 @@ function createRestorationPipeline(): Promise<void> {
 				result.data.flatMap((p) => p.profiles.map((pr) => pr.id)),
 			);
 			useTerminalStore.getState().removeStaleProfiles(validIds);
-			consola.info("[pty-restore] cleaned up stale profiles", {
-				validCount: validIds.size,
-			});
 
 			// One-shot restoration
 			if (!restored) {
@@ -61,8 +54,6 @@ function createRestorationPipeline(): Promise<void> {
 }
 
 async function restoreTerminals(projects: ProjectWithProfiles[]) {
-	consola.info(`[pty-restore] starting for ${projects.length} projects`);
-
 	const projectSessions = await Promise.all(
 		projects.map(async (p) => ({
 			project: p,
@@ -71,7 +62,6 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	);
 
 	const allSessions = projectSessions.flatMap(({ sessions }) => sessions);
-	consola.info(`[pty-restore] found ${allSessions.length} sessions`);
 	if (allSessions.length === 0) return;
 
 	await mapWithLimit(allSessions, 3, async (session) => {
@@ -87,10 +77,6 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 					startupCommands: [],
 				},
 			});
-			consola.info(`[pty-restore] restorePtySession result`, {
-				newSessionId: result.newSessionId,
-				historyLength: result.history.length,
-			});
 
 			if (result.history.length > 0) {
 				sessionHistory.set(
@@ -102,15 +88,10 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 			useTerminalStore
 				.getState()
 				.addTab(session.profile_id, result.newSessionId, session.title);
-			consola.info(
-				`[pty-restore] ${session.id} → ${result.newSessionId}`,
-			);
 		} catch (e) {
 			consola.error(`[pty-restore] failed: ${session.id}`, e);
 		}
 	});
-
-	consola.info("[pty-restore] complete");
 }
 
 export async function mapWithLimit<T>(

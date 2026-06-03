@@ -238,7 +238,11 @@ export default function TerminalTabs({
 				if (!hasFileTreeTerminalDropPayload(event.dataTransfer)) return;
 				event.preventDefault();
 				if (event.dataTransfer) {
-					event.dataTransfer.dropEffect = "copy";
+					try {
+						event.dataTransfer.dropEffect = "copy";
+					} catch {
+						// WebKit can expose readonly DataTransfer effect fields.
+					}
 				}
 			};
 			const handleNativeDrop = (event: DragEvent) => {
