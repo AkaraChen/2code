@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
+#[cfg(windows)]
 use crate::no_window::silent_command;
 
 #[derive(Debug, Serialize, Clone)]
