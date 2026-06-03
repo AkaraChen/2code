@@ -27,7 +27,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
-import { SECONDARY_BUTTON_VARIANT } from "@/theme/buttonVariants";
 import {
 	changeBadge,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
@@ -538,7 +537,7 @@ function ActiveGitDiffFilePane({
 								>
 									<Button
 										size="xs"
-										variant={SECONDARY_BUTTON_VARIANT}
+										variant="solid"
 										disabled={!commentBody.trim()}
 										onClick={handleAddReviewComment}
 									>
