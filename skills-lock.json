@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "conductor-rewrite-performance": {
+      "source": "brotzky/performance-skills",
+      "sourceType": "github",
+      "skillPath": "performance/skills/conductor-rewrite-performance/SKILL.md",
+      "computedHash": "b8cefa4b09111cdfd3e7d7be13e7dd8e8cc194b59fe344810fa80753bfd9ee9e"
+    },
+    "linear-local-first-architecture": {
+      "source": "brotzky/performance-skills",
+      "sourceType": "github",
+      "skillPath": "performance/skills/linear-local-first-architecture/SKILL.md",
+      "computedHash": "8d72e73a2a11b05aaeb0a645d3e7c18844d06756a4895c54dd6f5f4a1f916301"
+    }
+  }
+}
