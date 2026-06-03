@@ -249,6 +249,7 @@ function ActiveGitDiffFilePane({
 	);
 	const diffContentRef = useRef<HTMLDivElement>(null);
 	const commentComposerRef = useRef<HTMLDivElement>(null);
+	const pendingSelectionRef = useRef<SelectedLineRange | null>(null);
 	const { additions, deletions } = useMemo(
 		() => getLineStats(activeFile),
 		[activeFile],
@@ -356,21 +357,26 @@ function ActiveGitDiffFilePane({
 	);
 	const openCommentComposerFromSelection = useCallback(
 		(range: SelectedLineRange | null) => {
+			pendingSelectionRef.current = null;
 			setSelectedLines(range);
 			syncCommentAnchorFromSelection(range);
 			setIsCommentInputOpen(range != null);
 		},
 		[syncCommentAnchorFromSelection],
 	);
-	const syncOpenCommentComposerFromSelection = useCallback(
+	const syncPendingSelection = useCallback(
 		(range: SelectedLineRange | null) => {
+			pendingSelectionRef.current = range;
 			setSelectedLines(range);
 			syncCommentAnchorFromSelection(range);
-			if (range) {
-				setIsCommentInputOpen(true);
-			}
 		},
 		[syncCommentAnchorFromSelection],
+	);
+	const openCommentComposerOnSelectionCommit = useCallback(
+		(range: SelectedLineRange | null) => {
+			openCommentComposerFromSelection(range ?? pendingSelectionRef.current);
+		},
+		[openCommentComposerFromSelection],
 	);
 	useEffect(() => {
 		const anchorElement = commentAnchor;
@@ -398,28 +404,28 @@ function ActiveGitDiffFilePane({
 				options.onLineNumberClick?.(lineEvent);
 			},
 			onLineSelectionStart: (range) => {
-				syncOpenCommentComposerFromSelection(range);
+				syncPendingSelection(range);
 				options.onLineSelectionStart?.(range);
 			},
 			onLineSelectionChange: (range) => {
-				syncOpenCommentComposerFromSelection(range);
+				syncPendingSelection(range);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
-				openCommentComposerFromSelection(range);
+				openCommentComposerOnSelectionCommit(range);
 				options.onLineSelectionEnd?.(range);
 			},
 			onLineSelected: (range) => {
-				openCommentComposerFromSelection(range);
+				openCommentComposerOnSelectionCommit(range);
 				options.onLineSelected?.(range);
 			},
 		}),
 		[
 			canReviewDiff,
 			openCommentComposer,
-			openCommentComposerFromSelection,
+			openCommentComposerOnSelectionCommit,
 			options,
-			syncOpenCommentComposerFromSelection,
+			syncPendingSelection,
 		],
 	);
 	const handleAddReviewComment = useCallback(() => {

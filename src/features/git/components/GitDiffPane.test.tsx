@@ -97,6 +97,12 @@ function emitSelectionChange(range: SelectedLineRange | null) {
 	});
 }
 
+function emitSelectionEnd(range: SelectedLineRange | null) {
+	act(() => {
+		fileDiffMockState.latestOptions?.onLineSelectionEnd?.(range);
+	});
+}
+
 function makeRenameOnlyFile(): FileDiffMetadata {
 	return {
 		name: "src/new-name.ts",
@@ -168,14 +174,21 @@ describe("gitDiffPane rename display", () => {
 });
 
 describe("gitDiffPane review composer", () => {
-	it("opens while a line selection is changing", () => {
+	it("waits until a line selection is committed before opening", () => {
 		renderReviewPane(makeDiffFile("src/review.ts", 3));
-
-		emitSelectionChange({
+		const selection = {
 			start: 1,
 			end: 3,
 			side: "additions",
-		});
+		} satisfies SelectedLineRange;
+
+		emitSelectionChange(selection);
+
+		expect(
+			screen.queryByPlaceholderText("Write a review comment..."),
+		).not.toBeInTheDocument();
+
+		emitSelectionEnd(selection);
 
 		expect(
 			screen.getByPlaceholderText("Write a review comment..."),
