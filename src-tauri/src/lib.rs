@@ -48,6 +48,16 @@ pub fn run() {
 		.manage(handler::updater::PendingUpdate::default())
 		.setup(|app| {
 			use tauri::Manager;
+
+			// On Windows the native title bar would render as an opaque bar
+			// above the app content. Drop system decorations so the frontend
+			// can render a custom title bar that matches the macOS overlay
+			// look; the WindowControls component supplies min/max/close.
+			#[cfg(target_os = "windows")]
+			if let Some(window) = app.get_webview_window("main") {
+				let _ = window.set_decorations(false);
+			}
+
 			let app_data_dir = app
 				.path()
 				.app_data_dir()
