@@ -558,11 +558,6 @@ export default function GitDiffContent({
 						zIndex={3}
 						size="sm"
 						variant="solid"
-						alignItems="center"
-						gap="2"
-						h="9"
-						px="3"
-						borderRadius="full"
 						boxShadow="xl"
 						onClick={() => setReviewQueueOpen(true)}
 					>
