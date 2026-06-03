@@ -5,7 +5,7 @@ import {
 	useQueryClient,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
 	commitGitChanges,
 	discardGitFileChanges,
@@ -19,13 +19,24 @@ import {
 	gitPush,
 } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import { collectPatchFiles } from "./patchFiles";
 import type { GitBinaryPreviewSource } from "./utils";
 
-const GIT_LIGHT_REFRESH_INTERVAL_MS = 10_000;
 const GIT_DIFF_SNAPSHOT_STALE_MS = 30_000;
 const GIT_HISTORY_STALE_MS = 60_000;
 const PR_STATUS_REFRESH_INTERVAL_MS = 2 * 60 * 1_000;
+
+function useRefreshOnEnable(enabled: boolean, refetch: () => Promise<unknown>) {
+	const wasEnabledRef = useRef(enabled);
+
+	useEffect(() => {
+		if (!wasEnabledRef.current && enabled) {
+			void refetch();
+		}
+		wasEnabledRef.current = enabled;
+	}, [enabled, refetch]);
+}
 
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
@@ -33,7 +44,7 @@ function useGitDiff(profileId: string) {
 		queryFn: () => getGitDiff({ profileId }),
 		staleTime: GIT_DIFF_SNAPSHOT_STALE_MS,
 		refetchOnMount: "always",
-		refetchInterval: false,
+		refetchInterval: GIT_LIGHT_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -43,7 +54,7 @@ export function useGitLog(profileId: string) {
 		queryFn: () => getGitLog({ profileId }),
 		staleTime: GIT_HISTORY_STALE_MS,
 		refetchOnMount: "always",
-		refetchInterval: false,
+		refetchInterval: GIT_LIGHT_REFRESH_INTERVAL_MS,
 	});
 }
 
@@ -55,13 +66,14 @@ function useCommitDiff(profileId: string, commitHash: string) {
 }
 
 export function useGitDiffStats(profileId: string, enabled = true) {
-	const { data } = useQuery({
+	const { data, refetch } = useQuery({
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
 		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
 		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
+	useRefreshOnEnable(enabled, refetch);
 
 	return useMemo(() => {
 		if (!data) return null;
@@ -75,13 +87,14 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 }
 
 export function useGitAheadCount(profileId: string, enabled = true) {
-	const { data } = useQuery({
+	const { data, refetch } = useQuery({
 		queryKey: queryKeys.git.aheadCount(profileId),
 		queryFn: () => getGitAheadCount({ profileId }),
 		enabled,
 		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
 		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
+	useRefreshOnEnable(enabled, refetch);
 	return data ?? 0;
 }
 

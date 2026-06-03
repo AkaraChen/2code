@@ -41,8 +41,8 @@ import {
 	writeFileContent,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 
-const GIT_LIGHT_REFRESH_INTERVAL_MS = 10_000;
 interface UseProjectAvatarOptions {
 	enabled?: boolean;
 }

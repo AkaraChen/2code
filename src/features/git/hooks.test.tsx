@@ -10,16 +10,19 @@ import {
 	useCommitGitChanges,
 	useGitDiffFiles,
 	useGitDiffStats,
+	useGitLog,
 } from "./hooks";
 
 const {
 	commitGitChangesMock,
 	getGitDiffMock,
 	getGitDiffStatsMock,
+	getGitLogMock,
 } = vi.hoisted(() => ({
 	commitGitChangesMock: vi.fn(),
 	getGitDiffMock: vi.fn(),
 	getGitDiffStatsMock: vi.fn(),
+	getGitLogMock: vi.fn(),
 }));
 
 vi.mock("@/generated", async () => {
@@ -31,6 +34,7 @@ vi.mock("@/generated", async () => {
 		commitGitChanges: commitGitChangesMock,
 		getGitDiff: getGitDiffMock,
 		getGitDiffStats: getGitDiffStatsMock,
+		getGitLog: getGitLogMock,
 	};
 });
 
@@ -66,9 +70,10 @@ describe("git query refresh policy", () => {
 		commitGitChangesMock.mockReset();
 		getGitDiffMock.mockReset();
 		getGitDiffStatsMock.mockReset();
+		getGitLogMock.mockReset();
 	});
 
-	it("keeps full diff snapshots out of the background polling loop", async () => {
+	it("keeps full diff snapshots on the low-frequency fallback refresh", async () => {
 		const queryClient = createQueryClient();
 		getGitDiffMock.mockResolvedValue("");
 
@@ -85,8 +90,29 @@ describe("git query refresh policy", () => {
 			queryClient,
 			queryKeys.git.diff("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(false);
+		expect(options?.refetchInterval).toBe(10_000);
 		expect(options?.staleTime).toBe(30_000);
+		expect(options?.refetchOnMount).toBe("always");
+	});
+
+	it("keeps commit history on the low-frequency fallback refresh", async () => {
+		const queryClient = createQueryClient();
+		getGitLogMock.mockResolvedValue([]);
+
+		const { result } = renderHook(() => useGitLog("profile-1"), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		await waitFor(() => {
+			expect(result.current.data).toEqual([]);
+		});
+
+		const options = getRuntimeQueryOptions(
+			queryClient,
+			queryKeys.git.log("profile-1"),
+		);
+		expect(options?.refetchInterval).toBe(10_000);
+		expect(options?.staleTime).toBe(60_000);
 		expect(options?.refetchOnMount).toBe("always");
 	});
 
@@ -117,6 +143,36 @@ describe("git query refresh policy", () => {
 		);
 		expect(options?.refetchInterval).toBe(10_000);
 		expect(options?.staleTime).toBe(10_000);
+	});
+
+	it("refetches diff stats when an enabled-gated profile reactivates", async () => {
+		const queryClient = createQueryClient();
+		queryClient.setQueryData(queryKeys.git.diffStats("profile-1"), {
+			files_changed: 1,
+			insertions: 2,
+			deletions: 3,
+		});
+		getGitDiffStatsMock.mockResolvedValue({
+			files_changed: 2,
+			insertions: 5,
+			deletions: 8,
+		});
+
+		const { rerender } = renderHook(
+			({ enabled }) => useGitDiffStats("profile-1", enabled),
+			{
+				initialProps: { enabled: false },
+				wrapper: createWrapper(queryClient),
+			},
+		);
+
+		expect(getGitDiffStatsMock).not.toHaveBeenCalled();
+
+		rerender({ enabled: true });
+
+		await waitFor(() => {
+			expect(getGitDiffStatsMock).toHaveBeenCalledTimes(1);
+		});
 	});
 });
 
