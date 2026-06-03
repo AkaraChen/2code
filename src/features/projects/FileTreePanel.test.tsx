@@ -7,9 +7,15 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import type { KeyboardEventHandler, MouseEventHandler, ReactNode } from "react";
+import type {
+	DragEventHandler,
+	KeyboardEventHandler,
+	MouseEventHandler,
+	ReactNode,
+} from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSystem } from "@/theme/system";
+import { FILE_TREE_TERMINAL_DROP_MIME } from "@/shared/lib/fileTreeTerminalDrop";
 import FileTreePanel from "./FileTreePanel";
 import {
 	useCreateFileTreePath,
@@ -85,11 +91,13 @@ vi.mock("@/shared/lib/clipboard", () => ({
 vi.mock("@pierre/trees/react", () => ({
 	FileTree: ({
 		onClick,
+		onDragStart,
 		onKeyUp,
 		onMouseDown,
 		renderContextMenu,
 	}: {
 		onClick?: MouseEventHandler<HTMLElement>;
+		onDragStart?: DragEventHandler<HTMLElement>;
 		onKeyUp?: KeyboardEventHandler<HTMLElement>;
 		onMouseDown?: MouseEventHandler<HTMLElement>;
 		renderContextMenu?: (
@@ -120,6 +128,9 @@ vi.mock("@pierre/trees/react", () => ({
 					}
 					onClick?.(event);
 				}}
+				onDragStart={
+					onDragStart as DragEventHandler<HTMLButtonElement>
+				}
 				onMouseDown={
 					onMouseDown as MouseEventHandler<HTMLButtonElement>
 				}
@@ -130,6 +141,9 @@ vi.mock("@pierre/trees/react", () => ({
 			<button
 				data-item-path="src/index.ts"
 				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
+				onDragStart={
+					onDragStart as DragEventHandler<HTMLButtonElement>
+				}
 				onMouseDown={
 					onMouseDown as MouseEventHandler<HTMLButtonElement>
 				}
@@ -140,6 +154,9 @@ vi.mock("@pierre/trees/react", () => ({
 			<button
 				data-item-path="ignored.log"
 				onClick={onClick as MouseEventHandler<HTMLButtonElement>}
+				onDragStart={
+					onDragStart as DragEventHandler<HTMLButtonElement>
+				}
 				onMouseDown={
 					onMouseDown as MouseEventHandler<HTMLButtonElement>
 				}
@@ -256,6 +273,35 @@ function getLastMenuItem(name: string) {
 	const item = items[items.length - 1];
 	if (!item) throw new Error(`missing menu item: ${name}`);
 	return item;
+}
+
+function createTestDataTransfer(): DataTransfer {
+	const data = new Map<string, string>();
+	const types: string[] = [];
+	const transfer = {
+		dropEffect: "none",
+		effectAllowed: "uninitialized",
+		files: [] as unknown as FileList,
+		items: [] as unknown as DataTransferItemList,
+		types,
+		clearData: vi.fn((format?: string) => {
+			if (format) {
+				data.delete(format);
+				const index = types.indexOf(format);
+				if (index >= 0) types.splice(index, 1);
+			} else {
+				data.clear();
+				types.splice(0);
+			}
+		}),
+		getData: vi.fn((format: string) => data.get(format) ?? ""),
+		setData: vi.fn((format: string, value: string) => {
+			data.set(format, value);
+			if (!types.includes(format)) types.push(format);
+		}),
+		setDragImage: vi.fn(),
+	} as unknown as DataTransfer;
+	return transfer;
 }
 
 describe("fileTreePanel", () => {
@@ -517,6 +563,23 @@ describe("fileTreePanel", () => {
 		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
 	});
 
+	it("does not open files while mouse selection is waiting for click", () => {
+		const { onOpenFile } = renderPanel();
+
+		fireEvent.mouseDown(screen.getByText("index.ts"));
+		act(() => {
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
+		});
+
+		expect(onOpenFile).not.toHaveBeenCalled();
+
+		fireEvent.click(screen.getByText("index.ts"));
+
+		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+	});
+
 	it("does not open files while extending multi-selection", () => {
 		const { onOpenFile } = renderPanel();
 
@@ -529,6 +592,31 @@ describe("fileTreePanel", () => {
 		fireEvent.click(screen.getByText("index.ts"), { metaKey: true });
 
 		expect(onOpenFile).not.toHaveBeenCalled();
+	});
+
+	it("adds absolute file paths to file tree drag data without opening the file", () => {
+		const { onOpenFile } = renderPanel();
+		const dataTransfer = createTestDataTransfer();
+
+		fireEvent.mouseDown(screen.getByText("index.ts"));
+		act(() => {
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
+		});
+		fireEvent.dragStart(screen.getByText("index.ts"), { dataTransfer });
+
+		expect(onOpenFile).not.toHaveBeenCalled();
+		expect(dataTransfer.effectAllowed).toBe("copyMove");
+		expect(dataTransfer.getData("text/plain")).toBe("/root/src/index.ts");
+		expect(
+			JSON.parse(dataTransfer.getData(FILE_TREE_TERMINAL_DROP_MIME)),
+		).toMatchObject({
+			profileId,
+			rootPath,
+			relativePaths: ["src/index.ts"],
+			absolutePaths: ["/root/src/index.ts"],
+		});
 	});
 
 	it("does not open directory rows", () => {
