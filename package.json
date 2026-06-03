@@ -33,7 +33,7 @@
     "@floating-ui/dom": "^1.7.6",
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
     "@icons-pack/react-simple-icons": "^13.13.0",
-    "@lobehub/icons-static-svg": "^1.88.0",
+    "@lobehub/icons-static-svg": "^1.90.0",
     "@milkdown/kit": "^7.21.1",
     "@milkdown/react": "^7.21.1",
     "@milkdown/theme-nord": "^7.21.1",
