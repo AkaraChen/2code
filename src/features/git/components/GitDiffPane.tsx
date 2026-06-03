@@ -215,6 +215,16 @@ function getElementsVirtualReference(
 	};
 }
 
+function queryDiffElements(root: ParentNode, selector: string): HTMLElement[] {
+	const elements = Array.from(root.querySelectorAll<HTMLElement>(selector));
+	for (const host of root.querySelectorAll<HTMLElement>("*")) {
+		if (host.shadowRoot) {
+			elements.push(...queryDiffElements(host.shadowRoot, selector));
+		}
+	}
+	return elements;
+}
+
 function ActiveGitDiffFilePane({
 	activeFile,
 	options,
@@ -262,8 +272,9 @@ function ActiveGitDiffFilePane({
 			if (lineElement) return lineElement;
 			if (!diffContent) return null;
 
-			const selectedElements = Array.from(
-				diffContent.querySelectorAll<HTMLElement>("[data-selected-line]"),
+			const selectedElements = queryDiffElements(
+				diffContent,
+				"[data-selected-line]",
 			);
 			const selectedReference =
 				getElementsVirtualReference(selectedElements);
@@ -271,22 +282,23 @@ function ActiveGitDiffFilePane({
 
 			const start = Math.min(range.start, range.end);
 			const end = Math.max(range.start, range.end);
-			const fallbackElements = Array.from(
-				diffContent.querySelectorAll<HTMLElement>(
-					[
-						`[data-column-number="${start}"]`,
-						`[data-column-number="${end}"]`,
-						`[data-line="${start}"]`,
-						`[data-line="${end}"]`,
-					].join(", "),
-				),
+			const fallbackElements = queryDiffElements(
+				diffContent,
+				[
+					`[data-column-number="${start}"]`,
+					`[data-column-number="${end}"]`,
+					`[data-line="${start}"]`,
+					`[data-line="${end}"]`,
+				].join(", "),
 			);
 
 			return (
 				getElementsVirtualReference(fallbackElements) ??
-				diffContent.querySelector<HTMLElement>(
+				queryDiffElements(
+					diffContent,
 					`[data-line-index="${start}"], [data-line-index="${end}"]`,
-				)
+				)[0] ??
+				null
 			);
 		},
 		[],
@@ -350,6 +362,16 @@ function ActiveGitDiffFilePane({
 		},
 		[syncCommentAnchorFromSelection],
 	);
+	const syncOpenCommentComposerFromSelection = useCallback(
+		(range: SelectedLineRange | null) => {
+			setSelectedLines(range);
+			syncCommentAnchorFromSelection(range);
+			if (range) {
+				setIsCommentInputOpen(true);
+			}
+		},
+		[syncCommentAnchorFromSelection],
+	);
 	useEffect(() => {
 		const anchorElement = commentAnchor;
 		const composerElement = commentComposerRef.current;
@@ -375,9 +397,12 @@ function ActiveGitDiffFilePane({
 				}
 				options.onLineNumberClick?.(lineEvent);
 			},
+			onLineSelectionStart: (range) => {
+				syncOpenCommentComposerFromSelection(range);
+				options.onLineSelectionStart?.(range);
+			},
 			onLineSelectionChange: (range) => {
-				setSelectedLines(range);
-				syncCommentAnchorFromSelection(range);
+				syncOpenCommentComposerFromSelection(range);
 				options.onLineSelectionChange?.(range);
 			},
 			onLineSelectionEnd: (range) => {
@@ -394,7 +419,7 @@ function ActiveGitDiffFilePane({
 			openCommentComposer,
 			openCommentComposerFromSelection,
 			options,
-			syncCommentAnchorFromSelection,
+			syncOpenCommentComposerFromSelection,
 		],
 	);
 	const handleAddReviewComment = useCallback(() => {
