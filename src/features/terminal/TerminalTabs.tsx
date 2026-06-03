@@ -35,6 +35,8 @@ import {
 	FILE_TREE_TERMINAL_DROP_TARGET_ATTR,
 	type FileTreeTerminalDropEventDetail,
 	formatTerminalPathInput,
+	hasFileTreeTerminalDropPayload,
+	readFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
 import * as m from "@/paraglide/messages.js";
 import { useCloseTerminalTab } from "./hooks";
@@ -232,9 +234,34 @@ export default function TerminalTabs({
 				event.stopPropagation();
 				handleTerminalPathDrop(customEvent.detail, tab);
 			};
+			const handleDragOver = (event: DragEvent) => {
+				if (!hasFileTreeTerminalDropPayload(event.dataTransfer)) return;
+				event.preventDefault();
+				if (event.dataTransfer) {
+					event.dataTransfer.dropEffect = "copy";
+				}
+			};
+			const handleNativeDrop = (event: DragEvent) => {
+				const payload = readFileTreeTerminalDropPayload(event.dataTransfer);
+				if (!payload) return;
+				event.preventDefault();
+				event.stopPropagation();
+				handleTerminalPathDrop(
+					{
+						clientX: event.clientX,
+						clientY: event.clientY,
+						payload,
+					},
+					tab,
+				);
+			};
 			node.addEventListener(FILE_TREE_TERMINAL_DROP_EVENT, handleDrop);
+			node.addEventListener("dragover", handleDragOver);
+			node.addEventListener("drop", handleNativeDrop);
 			cleanup = () => {
 				node.removeEventListener(FILE_TREE_TERMINAL_DROP_EVENT, handleDrop);
+				node.removeEventListener("dragover", handleDragOver);
+				node.removeEventListener("drop", handleNativeDrop);
 				node.removeAttribute(FILE_TREE_TERMINAL_DROP_TARGET_ATTR);
 			};
 		};
