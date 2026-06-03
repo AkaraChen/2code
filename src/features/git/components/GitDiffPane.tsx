@@ -17,7 +17,6 @@ import {
 	Textarea,
 	Text,
 } from "@chakra-ui/react";
-import type { ButtonProps } from "@chakra-ui/react";
 import type {
 	FileDiffMetadata,
 	FileDiffOptions,
@@ -28,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { SECONDARY_BUTTON_VARIANT } from "@/theme/buttonVariants";
 import {
 	changeBadge,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
@@ -42,9 +42,6 @@ import {
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
 
 export type { GitPreviewContext };
-
-const SECONDARY_BUTTON_VARIANT =
-	"secondary" as unknown as NonNullable<ButtonProps["variant"]>;
 
 function FileDiffHeader({
 	file,

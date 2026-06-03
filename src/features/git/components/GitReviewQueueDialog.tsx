@@ -18,6 +18,7 @@ import { FiCopy, FiTrash2 } from "react-icons/fi";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { toaster } from "@/shared/providers/appToaster";
+import { SECONDARY_BUTTON_VARIANT } from "@/theme/buttonVariants";
 import {
 	type DiffReviewComment,
 	formatReviewCommentsForAgent,
@@ -203,7 +204,7 @@ export default function GitReviewQueueDialog({
 						</Dialog.Body>
 						<Dialog.Footer gap="2">
 							<Button
-								variant="outline"
+								variant={SECONDARY_BUTTON_VARIANT}
 								onClick={handleCopyAll}
 								disabled={comments.length === 0}
 							>
