@@ -390,8 +390,7 @@ pub fn search_files(
 			&query_chars,
 			&name,
 			&relative_path,
-		)
-		else {
+		) else {
 			continue;
 		};
 
@@ -406,7 +405,8 @@ pub fn search_files(
 	}
 
 	if results.len() > MAX_SEARCH_RESULTS {
-		results.select_nth_unstable_by(MAX_SEARCH_RESULTS, compare_file_matches);
+		results
+			.select_nth_unstable_by(MAX_SEARCH_RESULTS, compare_file_matches);
 		results.truncate(MAX_SEARCH_RESULTS);
 	}
 	results.sort_by(compare_file_matches);
@@ -426,7 +426,9 @@ fn compare_file_matches(
 				.len()
 				.cmp(&right.result.relative_path.len())
 		})
-		.then_with(|| left.result.relative_path.cmp(&right.result.relative_path))
+		.then_with(|| {
+			left.result.relative_path.cmp(&right.result.relative_path)
+		})
 }
 
 fn normalize_relative_path(path: &Path) -> String {
@@ -637,7 +639,9 @@ mod tests {
 		}
 	}
 
-	fn full_sort_limit(mut results: Vec<ScoredFileMatch>) -> Vec<ScoredFileMatch> {
+	fn full_sort_limit(
+		mut results: Vec<ScoredFileMatch>,
+	) -> Vec<ScoredFileMatch> {
 		results.sort_by(compare_file_matches);
 		results.truncate(MAX_SEARCH_RESULTS);
 		results
@@ -717,7 +721,11 @@ mod tests {
 	#[test]
 	fn scores_unicode_subsequence_by_character_positions() {
 		assert_eq!(
-			test_score_file_match("功能", "新功x能登录.ts", "src/新功x能登录.ts"),
+			test_score_file_match(
+				"功能",
+				"新功x能登录.ts",
+				"src/新功x能登录.ts"
+			),
 			Some(127)
 		);
 	}
