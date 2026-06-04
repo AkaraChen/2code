@@ -65,10 +65,10 @@ interface CommandPaletteResultItemProps {
 	onSelect: (result: FileSearchResult) => void;
 }
 
-const CommandPaletteResultItem = memo(function CommandPaletteResultItem({
+const CommandPaletteResultItem = memo(({
 	result,
 	onSelect,
-}: CommandPaletteResultItemProps) {
+}: CommandPaletteResultItemProps) => {
 	const handleSelect = useCallback(() => {
 		onSelect(result);
 	}, [onSelect, result]);
@@ -105,13 +105,13 @@ const CommandPaletteResultItem = memo(function CommandPaletteResultItem({
 	);
 });
 
-const CommandPaletteResultList = memo(function CommandPaletteResultList({
+const CommandPaletteResultList = memo(({
 	results,
 	onSelect,
 }: {
 	results: readonly FileSearchResult[];
 	onSelect: (result: FileSearchResult) => void;
-}) {
+}) => {
 	return (
 		<>
 			{results.map((result) => (

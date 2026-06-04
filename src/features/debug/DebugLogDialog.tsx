@@ -40,7 +40,7 @@ const levelColor: Record<string, string> = {
 	INFO: "blue",
 };
 
-const LogRow = memo(function LogRow({ entry }: { entry: LogEntry }) {
+const LogRow = memo(({ entry }: { entry: LogEntry }) => {
 	return (
 		<HStack
 			gap="2"

@@ -71,13 +71,13 @@ function HistorySidebarPanel({
 	);
 }
 
-const CommitFileSidebar = memo(function CommitFileSidebar({
+const CommitFileSidebar = memo(({
 	commit,
 	selectedIndex,
 }: {
 	commit: GitCommit;
 	selectedIndex: number;
-}) {
+}) => {
 	const { profileId, dispatch } = use(GitDiffContext)!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
 	const handleFileSelect = useCallback(
@@ -107,13 +107,13 @@ const CommitFileSidebar = memo(function CommitFileSidebar({
 	);
 });
 
-const CommitDiffViewer = memo(function CommitDiffViewer({
+const CommitDiffViewer = memo(({
 	commit,
 	selectedIndex,
 }: {
 	commit: GitCommit;
 	selectedIndex: number;
-}) {
+}) => {
 	const { profileId, options } = use(GitDiffContext)!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
 	const previewContext = useMemo(
@@ -136,7 +136,7 @@ const CommitDiffViewer = memo(function CommitDiffViewer({
 	);
 });
 
-export const HistorySidebar = memo(function HistorySidebar() {
+export const HistorySidebar = memo(() => {
 	const { commits, state, dispatch } = use(GitDiffContext)!;
 	const selectedCommit = state.selectedCommit;
 	const handleCommitSelect = useCallback(
@@ -189,7 +189,7 @@ export const HistorySidebar = memo(function HistorySidebar() {
 	);
 });
 
-export const HistoryDiffPane = memo(function HistoryDiffPane({ visible }: { visible: boolean }) {
+export const HistoryDiffPane = memo(({ visible }: { visible: boolean }) => {
 	const { state, options, profileId } = use(GitDiffContext)!;
 	const selectedCommit = state.selectedCommit;
 	const emptyPreviewContext = useMemo(

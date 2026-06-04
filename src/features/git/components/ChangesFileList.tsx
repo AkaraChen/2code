@@ -44,7 +44,7 @@ interface ChangesFileListRowProps {
 	) => void;
 }
 
-const ChangesFileListRow = memo(function ChangesFileListRow({
+const ChangesFileListRow = memo(({
 	file,
 	index,
 	isActive,
@@ -53,7 +53,7 @@ const ChangesFileListRow = memo(function ChangesFileListRow({
 	onToggleIncluded,
 	onOpenFile,
 	onOpenContextMenu,
-}: ChangesFileListRowProps) {
+}: ChangesFileListRowProps) => {
 	const handleClick = useCallback(() => {
 		onSelect(index);
 	}, [index, onSelect]);

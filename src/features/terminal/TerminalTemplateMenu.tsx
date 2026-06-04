@@ -50,12 +50,12 @@ interface TemplateMenuItemProps {
 	) => void;
 }
 
-const TemplateMenuItem = memo(function TemplateMenuItem({
+const TemplateMenuItem = memo(({
 	template,
 	scope,
 	isPending,
 	onTemplateClick,
-}: TemplateMenuItemProps) {
+}: TemplateMenuItemProps) => {
 	const handleClick = useCallback(() => {
 		onTemplateClick(template, scope);
 	}, [onTemplateClick, scope, template]);
@@ -92,13 +92,13 @@ const TemplateMenuItem = memo(function TemplateMenuItem({
 	);
 });
 
-export const TerminalTemplateDropdownContent = memo(function TerminalTemplateDropdownContent({
+export const TerminalTemplateDropdownContent = memo(({
 	projectTemplates,
 	globalTemplates,
 	isPending,
 	onTemplateClick,
 	showEmptyState = true,
-}: TerminalTemplateDropdownContentProps) {
+}: TerminalTemplateDropdownContentProps) => {
 	const hasTemplates = projectTemplates.length > 0 || globalTemplates.length > 0;
 
 	if (!hasTemplates) {

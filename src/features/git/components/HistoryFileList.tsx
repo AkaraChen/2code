@@ -51,12 +51,12 @@ interface HistoryFileListRowProps {
 	onFileSelect: (index: number) => void;
 }
 
-const HistoryFileListRow = memo(function HistoryFileListRow({
+const HistoryFileListRow = memo(({
 	file,
 	index,
 	isActive,
 	onFileSelect,
-}: HistoryFileListRowProps) {
+}: HistoryFileListRowProps) => {
 	const handleClick = useCallback(() => {
 		onFileSelect(index);
 	}, [index, onFileSelect]);

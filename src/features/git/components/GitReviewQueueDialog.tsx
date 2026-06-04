@@ -45,14 +45,14 @@ interface ReviewQueueCommentCardProps {
 	onUpdate: (id: string, body: string) => void;
 }
 
-const ReviewQueueCommentCard = memo(function ReviewQueueCommentCard({
+const ReviewQueueCommentCard = memo(({
 	comment,
 	fontFamily,
 	fontSize,
 	options,
 	onDelete,
 	onUpdate,
-}: ReviewQueueCommentCardProps) {
+}: ReviewQueueCommentCardProps) => {
 	const diffCss = useMemo(
 		() => ({
 			"--diffs-font-family": `"${fontFamily}", monospace`,

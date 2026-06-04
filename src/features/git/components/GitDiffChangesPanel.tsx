@@ -46,7 +46,7 @@ export interface ChangesSidebarProps {
 	onPush: () => void;
 }
 
-export const ChangesSidebar = memo(function ChangesSidebar({
+export const ChangesSidebar = memo(({
 	includedFileNames,
 	commitMessage,
 	commitBody,
@@ -62,7 +62,7 @@ export const ChangesSidebar = memo(function ChangesSidebar({
 	onCommitBodyChange,
 	onCommit,
 	onPush,
-}: ChangesSidebarProps) {
+}: ChangesSidebarProps) => {
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
 	const handleSelectFile = useCallback(
 		(index: number) => {
@@ -109,13 +109,13 @@ export const ChangesSidebar = memo(function ChangesSidebar({
 	);
 });
 
-export const ChangesDiffPane = memo(function ChangesDiffPane({
+export const ChangesDiffPane = memo(({
 	visible,
 	onAddReviewComment,
 }: {
 	visible: boolean;
 	onAddReviewComment?: (comment: DiffReviewComment) => void;
-}) {
+}) => {
 	const { changesFiles, state, options, profileId } = use(GitDiffContext)!;
 	const previewContext = useMemo(
 		() => ({ kind: "working-tree" as const, profileId }),

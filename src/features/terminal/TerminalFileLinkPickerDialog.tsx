@@ -20,10 +20,10 @@ interface CandidateRowProps {
 	onOpen: (path: string) => void;
 }
 
-const CandidateRow = memo(function CandidateRow({
+const CandidateRow = memo(({
 	candidate,
 	onOpen,
-}: CandidateRowProps) {
+}: CandidateRowProps) => {
 	const handleClick = useCallback(() => {
 		onOpen(candidate.path);
 	}, [candidate.path, onOpen]);

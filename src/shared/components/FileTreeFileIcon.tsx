@@ -16,12 +16,12 @@ interface FileTreeFileIconProps
 	size?: number;
 }
 
-const FileTreeFileIcon = memo(function FileTreeFileIcon({
+const FileTreeFileIcon = memo(({
 	fileName,
 	size = 14,
 	style,
 	...props
-}: FileTreeFileIconProps) {
+}: FileTreeFileIconProps) => {
 	const icon = resolveFileTreeFileIcon(fileName);
 	const symbol = getFileTreeIconSymbol(icon.name);
 	const color = icon.token == null

@@ -1,5 +1,6 @@
 import antfu from "@antfu/eslint-config";
 import eslintReact from "@eslint-react/eslint-plugin";
+import reactCompiler from "eslint-plugin-react-compiler";
 import reactRefresh from "eslint-plugin-react-refresh";
 
 const reactFiles = ["src/**/*.ts", "src/**/*.tsx"];
@@ -35,6 +36,11 @@ export default antfu({
 			"@eslint-react/dom-no-string-style-prop": "off",
 			"@eslint-react/dom-no-unknown-property": "off",
 		},
+	})
+	.append({
+		files: reactFiles,
+		plugins: reactCompiler.configs.recommended.plugins,
+		rules: reactCompiler.configs.recommended.rules,
 	})
 	.append({
 		files: reactComponentFiles,

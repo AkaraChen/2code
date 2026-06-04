@@ -35,12 +35,12 @@ interface CommitListRowProps {
 	onCommitSelect: (commit: GitCommit, index: number) => void;
 }
 
-const CommitListRow = memo(function CommitListRow({
+const CommitListRow = memo(({
 	commit,
 	index,
 	isActive,
 	onCommitSelect,
-}: CommitListRowProps) {
+}: CommitListRowProps) => {
 	const handleClick = useCallback(() => {
 		onCommitSelect(commit, index);
 	}, [commit, index, onCommitSelect]);

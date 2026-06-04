@@ -27,10 +27,10 @@ interface BrowserMenuItemProps {
 	onOpen: (browserId: string) => void;
 }
 
-const BrowserMenuItem = memo(function BrowserMenuItem({
+const BrowserMenuItem = memo(({
 	browser,
 	onOpen,
-}: BrowserMenuItemProps) {
+}: BrowserMenuItemProps) => {
 	const handleClick = useCallback(() => {
 		onOpen(browser.id);
 	}, [browser.id, onOpen]);
