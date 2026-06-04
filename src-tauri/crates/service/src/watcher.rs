@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -36,7 +35,7 @@ fn run_coordinator(
 	db: DbPool,
 	shutdown: WatcherShutdownFlag,
 ) {
-	let (tx, rx) = mpsc::channel::<(String, PathBuf)>();
+	let (tx, rx) = mpsc::channel::<String>();
 
 	let mut watchers: HashMap<String, ProjectWatcher> = HashMap::new();
 	let mut last_poll = Instant::now() - DB_POLL_INTERVAL;
@@ -55,7 +54,7 @@ fn run_coordinator(
 
 		// Receive filesystem events with timeout
 		match rx.recv_timeout(RECV_TIMEOUT) {
-			Ok((project_id, _path)) => {
+			Ok(project_id) => {
 				let now = Instant::now();
 				let should_send = last_event
 					.get(&project_id)
@@ -64,7 +63,11 @@ fn run_coordinator(
 
 				if should_send {
 					last_event.insert(project_id.clone(), now);
-					tracing::info!(target: "watcher", %project_id, "file changed");
+					tracing::trace!(
+						target: "watcher",
+						%project_id,
+						"file changed"
+					);
 					let event = WatchEvent { project_id };
 					if !sender.send(event) {
 						// Channel closed — frontend dropped it
@@ -80,7 +83,7 @@ fn run_coordinator(
 
 fn reconcile_watchers(
 	db: &DbPool,
-	tx: &mpsc::Sender<(String, PathBuf)>,
+	tx: &mpsc::Sender<String>,
 	watchers: &mut HashMap<String, ProjectWatcher>,
 ) {
 	let projects = match db.lock() {
@@ -119,13 +122,12 @@ fn reconcile_watchers(
 						| EventKind::Remove(_)
 				);
 				if dominated {
-					for path in &event.paths {
+					let has_project_file = event.paths.iter().any(|path| {
 						// Skip .git internal files to reduce noise
-						if path.components().any(|c| c.as_os_str() == ".git") {
-							continue;
-						}
-						let _ =
-							tx_clone.send((project_id.clone(), path.clone()));
+						!path.components().any(|c| c.as_os_str() == ".git")
+					});
+					if has_project_file {
+						let _ = tx_clone.send(project_id.clone());
 					}
 				}
 			}

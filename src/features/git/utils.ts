@@ -67,6 +67,22 @@ export function getLineStats(file: FileDiffMetadata) {
 	return { additions, deletions };
 }
 
+export function getDiffStatsFromFiles(files: readonly FileDiffMetadata[]) {
+	let insertions = 0;
+	let deletions = 0;
+	for (const file of files) {
+		const stats = getLineStats(file);
+		insertions += stats.additions;
+		deletions += stats.deletions;
+	}
+
+	return {
+		files_changed: files.length,
+		insertions,
+		deletions,
+	};
+}
+
 export function getChangedLineCount(file: FileDiffMetadata) {
 	const { additions, deletions } = getLineStats(file);
 	return additions + deletions;

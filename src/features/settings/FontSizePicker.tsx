@@ -7,7 +7,8 @@ import {
 } from "./stores/terminalSettingsStore";
 
 export function FontSizePicker() {
-	const { fontSize, setFontSize } = useTerminalSettingsStore();
+	const fontSize = useTerminalSettingsStore((state) => state.fontSize);
+	const setFontSize = useTerminalSettingsStore((state) => state.setFontSize);
 
 	return (
 		<Field.Root>

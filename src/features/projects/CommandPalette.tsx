@@ -2,6 +2,8 @@ import { Box, Text } from "@chakra-ui/react";
 import { Command, useCommandState } from "cmdk";
 import {
 	type ReactNode,
+	memo,
+	useCallback,
 	useDeferredValue,
 	useEffect,
 	useRef,
@@ -58,6 +60,71 @@ function CommandPaletteStatusMessage({ children }: { children: ReactNode }) {
 	);
 }
 
+interface CommandPaletteResultItemProps {
+	result: FileSearchResult;
+	onSelect: (result: FileSearchResult) => void;
+}
+
+const CommandPaletteResultItem = memo(function CommandPaletteResultItem({
+	result,
+	onSelect,
+}: CommandPaletteResultItemProps) {
+	const handleSelect = useCallback(() => {
+		onSelect(result);
+	}, [onSelect, result]);
+
+	return (
+		<Box
+			asChild
+			userSelect="none"
+			display="flex"
+			alignItems="center"
+			gap="2"
+			minW="0"
+			px="3"
+			py="2"
+			rounded="l1"
+			css={{
+				"&[data-selected='true']": {
+					background: "var(--chakra-colors-bg-subtle)",
+				},
+			}}
+		>
+			<Command.Item value={result.path} onSelect={handleSelect}>
+				<FileTreeFileIcon fileName={result.name} size={16} />
+				<Box flex="1" minW="0">
+					<Text fontSize="sm" truncate>
+						{result.name}
+					</Text>
+					<Text fontSize="xs" color="fg.muted" truncate>
+						{getParentPathLabel(result)}
+					</Text>
+				</Box>
+			</Command.Item>
+		</Box>
+	);
+});
+
+const CommandPaletteResultList = memo(function CommandPaletteResultList({
+	results,
+	onSelect,
+}: {
+	results: readonly FileSearchResult[];
+	onSelect: (result: FileSearchResult) => void;
+}) {
+	return (
+		<>
+			{results.map((result) => (
+				<CommandPaletteResultItem
+					key={result.path}
+					result={result}
+					onSelect={onSelect}
+				/>
+			))}
+		</>
+	);
+});
+
 export default function CommandPalette({
 	profileId,
 	isActive,
@@ -106,22 +173,29 @@ export default function CommandPalette({
 		return () => window.cancelAnimationFrame(frameId);
 	}, [isPaletteOpen]);
 
-	function closePalette() {
+	const closePalette = useCallback(() => {
 		setIsOpen(false);
 		setSearch("");
-	}
+	}, []);
 
-	function commitSelection(result: FileSearchResult) {
-		openFile(profileId, result.path);
-		closePalette();
-	}
+	const commitSelection = useCallback(
+		(result: FileSearchResult) => {
+			openFile(profileId, result.path);
+			closePalette();
+		},
+		[closePalette, openFile, profileId],
+	);
+	const handleOpenChange = useCallback(
+		(open: boolean) => {
+			if (!open) closePalette();
+		},
+		[closePalette],
+	);
 
 	return (
 		<Command.Dialog
 			open={isPaletteOpen}
-			onOpenChange={(open) => {
-				if (!open) closePalette();
-			}}
+			onOpenChange={handleOpenChange}
 			label={m.commandPaletteTitle()}
 			shouldFilter={false}
 			loop
@@ -178,48 +252,10 @@ export default function CommandPalette({
 					) : shouldShowEmptyState ? (
 						<CommandPaletteEmptyState />
 					) : null}
-					{results.map((result) => (
-						<Box
-							key={result.path}
-							asChild
-							userSelect="none"
-							display="flex"
-							alignItems="center"
-							gap="2"
-							minW="0"
-							px="3"
-							py="2"
-							rounded="l1"
-							css={{
-								"&[data-selected='true']": {
-									background:
-										"var(--chakra-colors-bg-subtle)",
-								},
-							}}
-						>
-							<Command.Item
-								value={result.path}
-								onSelect={() => commitSelection(result)}
-							>
-								<FileTreeFileIcon
-									fileName={result.name}
-									size={16}
-								/>
-								<Box flex="1" minW="0">
-									<Text fontSize="sm" truncate>
-										{result.name}
-									</Text>
-									<Text
-										fontSize="xs"
-										color="fg.muted"
-										truncate
-									>
-										{getParentPathLabel(result)}
-									</Text>
-								</Box>
-							</Command.Item>
-						</Box>
-					))}
+					<CommandPaletteResultList
+						results={results}
+						onSelect={commitSelection}
+					/>
 				</Command.List>
 			</Box>
 		</Command.Dialog>

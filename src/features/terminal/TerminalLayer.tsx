@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { use, useMemo } from "react";
+import { use, useCallback, useMemo } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
 import ProfileLayout from "@/features/projects/ProfileLayout";
@@ -23,8 +23,8 @@ export default function TerminalLayer() {
 	});
 
 	const activeProfileIds = useActiveProfileIds();
-	const createTab = useCreateTerminalTab();
-	const closeTab = useCloseTerminalTab();
+	const { mutate: createTerminalTab } = useCreateTerminalTab();
+	const { mutate: closeTerminalTab } = useCloseTerminalTab();
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -46,35 +46,38 @@ export default function TerminalLayer() {
 		return map;
 	}, [projects]);
 
-	// Only match /projects/:id/profiles/:profileId
-	const profileMatch = matchPath(
-		"/projects/:id/profiles/:profileId",
-		location.pathname,
+	const activeProfileId = useMemo(
+		() =>
+			matchPath("/projects/:id/profiles/:profileId", location.pathname)
+				?.params.profileId ?? null,
+		[location.pathname],
 	);
-	const activeProfileId = profileMatch?.params.profileId ?? null;
 
-	useKey(["t"], (e) => {
+	const handleCreateTerminalShortcut = useCallback((e: KeyboardEvent) => {
 		if (!e.metaKey || !activeProfileId) return;
 		e.preventDefault();
 		const profile = profileMap.get(activeProfileId);
 		if (!profile) return;
-		createTab.mutate({
+		createTerminalTab({
 			profileId: activeProfileId,
 			cwd: profile.worktree_path,
 		});
-	});
+	}, [activeProfileId, createTerminalTab, profileMap]);
 
-	useKey(["w"], (e) => {
+	const handleCloseTerminalShortcut = useCallback((e: KeyboardEvent) => {
 		if (!e.metaKey || !activeProfileId) return;
 		e.preventDefault();
 		const profileState =
 			useTerminalStore.getState().profiles[activeProfileId];
 		if (!profileState?.activeTabId) return;
-		closeTab.mutate({
+		closeTerminalTab({
 			profileId: activeProfileId,
 			sessionId: profileState.activeTabId,
 		});
-	});
+	}, [activeProfileId, closeTerminalTab]);
+
+	useKey(["t"], handleCreateTerminalShortcut);
+	useKey(["w"], handleCloseTerminalShortcut);
 
 	return (
 		<>

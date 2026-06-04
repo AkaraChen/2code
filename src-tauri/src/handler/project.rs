@@ -233,12 +233,16 @@ pub async fn git_push(
 #[tauri::command]
 pub async fn get_git_pull_request_status(
 	profile_id: String,
+	branch_name: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
 		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		service::project::get_pull_request_status_for_folder(&worktree_path)
+		service::project::get_pull_request_status_for_folder(
+			&worktree_path,
+			branch_name.as_deref(),
+		)
 	})
 	.await
 }

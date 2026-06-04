@@ -11,7 +11,15 @@ import {
 	Text,
 	VStack,
 } from "@chakra-ui/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ChangeEvent,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { FiTrash2 } from "react-icons/fi";
 import type { LogEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
@@ -32,7 +40,7 @@ const levelColor: Record<string, string> = {
 	INFO: "blue",
 };
 
-function LogRow({ entry }: { entry: LogEntry }) {
+const LogRow = memo(function LogRow({ entry }: { entry: LogEntry }) {
 	return (
 		<HStack
 			gap="2"
@@ -62,17 +70,14 @@ function LogRow({ entry }: { entry: LogEntry }) {
 			</Text>
 		</HStack>
 	);
-}
+});
 
 interface DebugLogDialogProps {
 	isOpen: boolean;
 	onClose: () => void;
 }
 
-export default function DebugLogDialog({
-	isOpen,
-	onClose,
-}: DebugLogDialogProps) {
+function DebugLogContent() {
 	const logs = useDebugLogStore((s) => s.logs);
 	const clear = useDebugLogStore((s) => s.clear);
 	const [search, setSearch] = useState("");
@@ -96,7 +101,12 @@ export default function DebugLogDialog({
 		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
 		autoScrollRef.current = atBottom;
 	}, []);
-
+	const handleSearchChange = useCallback(
+		(event: ChangeEvent<HTMLInputElement>) => {
+			setSearch(event.target.value);
+		},
+		[],
+	);
 	useEffect(() => {
 		if (autoScrollRef.current && scrollRef.current) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -104,92 +114,99 @@ export default function DebugLogDialog({
 	}, [filtered]);
 
 	return (
+		<>
+			<HStack px="4" pb="2" gap="2">
+				<Input
+					size="sm"
+					placeholder={m.debugSearchPlaceholder()}
+					value={search}
+					onChange={handleSearchChange}
+					flex="1"
+				/>
+				<IconButton
+					aria-label={m.debugClear()}
+					size="sm"
+					variant="ghost"
+					onClick={clear}
+				>
+					<FiTrash2 />
+				</IconButton>
+			</HStack>
+
+			<Dialog.Body p="0" flex="1" overflow="hidden">
+				<Box
+					ref={scrollRef}
+					overflowY="auto"
+					h="full"
+					onScroll={handleScroll}
+				>
+					<VStack gap="0" align="stretch">
+						{filtered.length === 0 ? (
+							<Flex align="center" justify="center" py="8">
+								<Text color="fg.muted" fontSize="sm">
+									{m.debugNoLogs()}
+								</Text>
+							</Flex>
+						) : (
+							filtered.map((entry) => (
+								<LogRow key={entry.timestamp} entry={entry} />
+							))
+						)}
+					</VStack>
+				</Box>
+			</Dialog.Body>
+
+			<Flex px="4" py="2" justify="end">
+				<Text fontSize="xs" color="fg.muted">
+					{filtered.length} /{logs.length}
+				</Text>
+			</Flex>
+		</>
+	);
+}
+
+export default function DebugLogDialog({
+	isOpen,
+	onClose,
+}: DebugLogDialogProps) {
+	const handleOpenChange = useCallback(
+		(e: { open: boolean }) => {
+			if (!e.open) onClose();
+		},
+		[onClose],
+	);
+
+	return (
 		<Dialog.Root
 			lazyMount
 			size="lg"
 			placement="center"
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
-			}}
+			onOpenChange={handleOpenChange}
 		>
-			<Portal>
-				<Dialog.Backdrop zIndex="max" />
-				<Dialog.Positioner zIndex="max">
-					<Dialog.Content
-						overflow="hidden"
-						display="flex"
-						flexDirection="column"
-						maxH="70vh"
-					>
-						<Dialog.Header py="2" px="4">
-							<Dialog.Title fontSize="sm">
-								{m.debugLog()}
-							</Dialog.Title>
-							<Dialog.CloseTrigger asChild>
-								<CloseButton size="sm" />
-							</Dialog.CloseTrigger>
-						</Dialog.Header>
-
-						<HStack px="4" pb="2" gap="2">
-							<Input
-								size="sm"
-								placeholder={m.debugSearchPlaceholder()}
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								flex="1"
-							/>
-							<IconButton
-								aria-label={m.debugClear()}
-								size="sm"
-								variant="ghost"
-								onClick={clear}
-							>
-								<FiTrash2 />
-							</IconButton>
-						</HStack>
-
-						<Dialog.Body p="0" flex="1" overflow="hidden">
-							<Box
-								ref={scrollRef}
-								overflowY="auto"
-								h="full"
-								onScroll={handleScroll}
-							>
-								<VStack gap="0" align="stretch">
-									{filtered.length === 0 ? (
-										<Flex
-											align="center"
-											justify="center"
-											py="8"
-										>
-											<Text
-												color="fg.muted"
-												fontSize="sm"
-											>
-												{m.debugNoLogs()}
-											</Text>
-										</Flex>
-									) : (
-										filtered.map((entry) => (
-											<LogRow
-												key={entry.timestamp}
-												entry={entry}
-											/>
-										))
-									)}
-								</VStack>
-							</Box>
-						</Dialog.Body>
-
-						<Flex px="4" py="2" justify="end">
-							<Text fontSize="xs" color="fg.muted">
-								{filtered.length} /{logs.length}
-							</Text>
-						</Flex>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
+			{isOpen ? (
+				<Portal>
+					<Dialog.Backdrop zIndex="max" />
+					<Dialog.Positioner zIndex="max">
+						<Dialog.Content
+							overflow="hidden"
+							display="flex"
+							flexDirection="column"
+							maxH="70vh"
+						>
+							<Dialog.Header py="2" px="4">
+								<Dialog.Title fontSize="sm">
+									{m.debugLog()}
+								</Dialog.Title>
+								<Dialog.CloseTrigger asChild>
+									<CloseButton size="sm" />
+								</Dialog.CloseTrigger>
+							</Dialog.Header>
+							<DebugLogContent />
+						</Dialog.Content>
+					</Dialog.Positioner>
+				</Portal>
+			) : null}
 		</Dialog.Root>
 	);
 }

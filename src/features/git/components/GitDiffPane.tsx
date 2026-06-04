@@ -592,15 +592,28 @@ export default function GitDiffPane({
 	const activeFileKey = activeFile
 		? getGitDiffPaneFileKey(activeFile, contextKey)
 		: null;
+	const diffCss = useMemo(
+		() => ({
+			"--diffs-font-family": `"${fontFamily}", monospace`,
+			"--diffs-font-size": `${fontSize}px`,
+		}),
+		[fontFamily, fontSize],
+	);
+	const handleRevealLargeDiff = useCallback(() => {
+		if (!activeFileKey) return;
+
+		setExpandedLargeDiffFileKeys((prev) => {
+			const next = new Set(prev);
+			next.add(activeFileKey);
+			return next;
+		});
+	}, [activeFileKey]);
 
 	return (
 		<Box
 			flex="1"
 			overflow="auto"
-			css={{
-				"--diffs-font-family": `"${fontFamily}", monospace`,
-				"--diffs-font-size": `${fontSize}px`,
-			}}
+			css={diffCss}
 		>
 			{activeFile && activeFileKey ? (
 				<ActiveGitDiffFilePane
@@ -610,13 +623,7 @@ export default function GitDiffPane({
 					previewContext={previewContext}
 					isLargeDiffExpanded={expandedLargeDiffFileKeys.has(activeFileKey)}
 					onAddReviewComment={onAddReviewComment}
-					onRevealLargeDiff={() =>
-						setExpandedLargeDiffFileKeys((prev) => {
-							const next = new Set(prev);
-							next.add(activeFileKey);
-							return next;
-						})
-					}
+					onRevealLargeDiff={handleRevealLargeDiff}
 				/>
 			) : (
 				<Flex align="center" justify="center" h="full" p="8">

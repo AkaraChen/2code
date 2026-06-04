@@ -4,6 +4,7 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use flate2::read::GzDecoder;
 use serde::Serialize;
@@ -35,6 +36,7 @@ pub struct ArchivePreviewEntry {
 const OFFICE_PREVIEW_MAX_BYTES: u64 = 50 * 1024 * 1024;
 const ARCHIVE_PREVIEW_MAX_BYTES: u64 = 200 * 1024 * 1024;
 const ARCHIVE_PREVIEW_MAX_ENTRIES: usize = 10_000;
+static SOFFICE_COMMAND: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 fn previewable_image_mime_type(path: &Path) -> Option<&'static str> {
 	let extension = path.extension()?.to_string_lossy().to_lowercase();
@@ -158,13 +160,8 @@ fn sorted_archive_entries(
 	entries: HashMap<String, ArchivePreviewEntry>,
 ) -> Vec<ArchivePreviewEntry> {
 	let mut entries = entries.into_values().collect::<Vec<_>>();
-	entries.sort_by(|left, right| {
-		left.path
-			.to_lowercase()
-			.cmp(&right.path.to_lowercase())
-			.then_with(|| {
-				right.path.ends_with('/').cmp(&left.path.ends_with('/'))
-			})
+	entries.sort_by_cached_key(|entry| {
+		(entry.path.to_lowercase(), !entry.path.ends_with('/'))
 	});
 	entries
 }
@@ -311,6 +308,12 @@ fn office_preview_cache_dir(
 }
 
 fn find_soffice_command() -> Option<PathBuf> {
+	SOFFICE_COMMAND
+		.get_or_init(find_soffice_command_uncached)
+		.clone()
+}
+
+fn find_soffice_command_uncached() -> Option<PathBuf> {
 	let candidates: &[&str] = if cfg!(target_os = "macos") {
 		&[
 			"soffice",

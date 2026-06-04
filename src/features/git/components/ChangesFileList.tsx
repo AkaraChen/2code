@@ -6,7 +6,8 @@ import {
 	Stack,
 	Text,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -27,7 +28,68 @@ interface ChangesFileListProps {
 	onIncludeNone: () => void;
 }
 
-export default function ChangesFileList({
+interface ChangesFileListRowProps {
+	file: FileDiffMetadata;
+	index: number;
+	isActive: boolean;
+	isIncluded: boolean;
+	onSelect: (index: number) => void;
+	onToggleIncluded: (fileName: string, included: boolean) => void;
+	onOpenFile: (file: FileDiffMetadata) => void;
+	onOpenContextMenu: (
+		file: FileDiffMetadata,
+		index: number,
+		clientX: number,
+		clientY: number,
+	) => void;
+}
+
+const ChangesFileListRow = memo(function ChangesFileListRow({
+	file,
+	index,
+	isActive,
+	isIncluded,
+	onSelect,
+	onToggleIncluded,
+	onOpenFile,
+	onOpenContextMenu,
+}: ChangesFileListRowProps) {
+	const handleClick = useCallback(() => {
+		onSelect(index);
+	}, [index, onSelect]);
+	const handleDoubleClick = useCallback(() => {
+		onOpenFile(file);
+	}, [file, onOpenFile]);
+	const handleContextMenu = useCallback(
+		(event: MouseEvent<HTMLDivElement>) => {
+			event.preventDefault();
+			onOpenContextMenu(file, index, event.clientX, event.clientY);
+		},
+		[file, index, onOpenContextMenu],
+	);
+	const handleToggleIncluded = useCallback(
+		(included: boolean) => {
+			onToggleIncluded(file.name, included);
+		},
+		[file.name, onToggleIncluded],
+	);
+
+	return (
+		<div data-index={index}>
+			<FileListItem
+				file={file}
+				isActive={isActive}
+				isIncluded={isIncluded}
+				onClick={handleClick}
+				onDoubleClick={handleDoubleClick}
+				onContextMenu={handleContextMenu}
+				onToggleIncluded={handleToggleIncluded}
+			/>
+		</div>
+	);
+});
+
+function ChangesFileList({
 	files,
 	selectedIndex,
 	includedFileNames,
@@ -82,11 +144,12 @@ export default function ChangesFileList({
 		};
 	}, [contextMenu]);
 
-	function openContextMenu(
+	const openContextMenu = useCallback((
 		file: FileDiffMetadata,
+		index: number,
 		clientX: number,
 		clientY: number,
-	) {
+	) => {
 		const maxLeft = Math.max(
 			CONTEXT_MENU_OFFSET,
 			window.innerWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_OFFSET,
@@ -96,12 +159,13 @@ export default function ChangesFileList({
 			window.innerHeight - 56 - CONTEXT_MENU_OFFSET,
 		);
 
+		onSelect(index);
 		setContextMenu({
 			file,
 			left: Math.min(clientX, maxLeft),
 			top: Math.min(clientY, maxTop),
 		});
-	}
+	}, [onSelect]);
 
 	return (
 		<>
@@ -139,23 +203,17 @@ export default function ChangesFileList({
 					</HStack>
 				</HStack>
 				{files.map((file, i) => (
-					<div key={file.name} data-index={i}>
-						<FileListItem
-							file={file}
-							isActive={selectedIndex === i}
-							isIncluded={includedFileNames.has(file.name)}
-							onClick={() => onSelect(i)}
-							onDoubleClick={() => onOpenFile(file)}
-							onContextMenu={(event) => {
-								event.preventDefault();
-								onSelect(i);
-								openContextMenu(file, event.clientX, event.clientY);
-							}}
-							onToggleIncluded={(included) =>
-								onToggleIncluded(file.name, included)
-							}
-						/>
-					</div>
+					<ChangesFileListRow
+						key={file.name}
+						file={file}
+						index={i}
+						isActive={selectedIndex === i}
+						isIncluded={includedFileNames.has(file.name)}
+						onSelect={onSelect}
+						onToggleIncluded={onToggleIncluded}
+						onOpenFile={onOpenFile}
+						onOpenContextMenu={openContextMenu}
+					/>
 				))}
 			</Box>
 
@@ -196,3 +254,5 @@ export default function ChangesFileList({
 		</>
 	);
 }
+
+export default memo(ChangesFileList);

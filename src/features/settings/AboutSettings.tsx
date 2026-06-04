@@ -25,8 +25,15 @@ import { useLocale } from "@/shared/lib/locale";
 import { formatReleaseDate } from "./releaseDate";
 
 export function AboutSettings() {
-	const { status, update, error } = useUpdaterStore();
-	const { acceptBetaUpdates, setAcceptBetaUpdates } = useUpdaterSettingsStore();
+	const status = useUpdaterStore((state) => state.status);
+	const update = useUpdaterStore((state) => state.update);
+	const error = useUpdaterStore((state) => state.error);
+	const acceptBetaUpdates = useUpdaterSettingsStore(
+		(state) => state.acceptBetaUpdates,
+	);
+	const setAcceptBetaUpdates = useUpdaterSettingsStore(
+		(state) => state.setAcceptBetaUpdates,
+	);
 	const locale = useLocale();
 	const [appVersion, setAppVersion] = useState<string | null>(() =>
 		isTauri() ? null : "dev",

@@ -3,8 +3,12 @@ import * as m from "@/paraglide/messages.js";
 import { useSidebarSettingsStore } from "./stores/sidebarSettingsStore";
 
 export function SidebarAppearanceSettings() {
-	const { showProjectAvatars, setShowProjectAvatars } =
-		useSidebarSettingsStore();
+	const showProjectAvatars = useSidebarSettingsStore(
+		(state) => state.showProjectAvatars,
+	);
+	const setShowProjectAvatars = useSidebarSettingsStore(
+		(state) => state.setShowProjectAvatars,
+	);
 
 	return (
 		<Field.Root>

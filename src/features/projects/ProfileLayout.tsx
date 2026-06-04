@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/react";
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import CommandPalette from "@/features/projects/CommandPalette";
 import FileTreePanel from "@/features/projects/FileTreePanel";
@@ -25,6 +25,15 @@ export default function ProfileLayout({
 	const fileTreeOpen = useFileTreeStore((s) => s.isOpen(profile.id));
 	const toggleFileTree = useFileTreeStore((s) => s.toggle);
 	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
+	const handleToggleFileTree = useCallback(() => {
+		toggleFileTree(profile.id);
+	}, [profile.id, toggleFileTree]);
+	const handleOpenFile = useCallback(
+		(filePath: string) => {
+			openFileTab(profile.id, filePath);
+		},
+		[openFileTab, profile.id],
+	);
 
 	return (
 		<Flex direction="column" h="full">
@@ -36,7 +45,7 @@ export default function ProfileLayout({
 					profile={profile}
 					isActive={isActive}
 					isFileTreeOpen={fileTreeOpen}
-					onToggleFileTree={() => toggleFileTree(profile.id)}
+					onToggleFileTree={handleToggleFileTree}
 				/>
 			</Box>
 			<Flex flex="1" minH="0" minW="0">
@@ -44,7 +53,7 @@ export default function ProfileLayout({
 					profileId={profile.id}
 					rootPath={profile.worktree_path}
 					isOpen={fileTreeOpen}
-					onOpenFile={(filePath) => openFileTab(profile.id, filePath)}
+					onOpenFile={handleOpenFile}
 				/>
 				<Box
 					flex="1"

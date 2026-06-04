@@ -1,5 +1,6 @@
 import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { FiGitCommit } from "react-icons/fi";
+import { memo, useCallback } from "react";
 import type { GitCommit } from "@/generated";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 
@@ -27,6 +28,70 @@ interface CommitListProps {
 	onCommitSelect: (commit: GitCommit, index: number) => void;
 }
 
+interface CommitListRowProps {
+	commit: GitCommit;
+	index: number;
+	isActive: boolean;
+	onCommitSelect: (commit: GitCommit, index: number) => void;
+}
+
+const CommitListRow = memo(function CommitListRow({
+	commit,
+	index,
+	isActive,
+	onCommitSelect,
+}: CommitListRowProps) {
+	const handleClick = useCallback(() => {
+		onCommitSelect(commit, index);
+	}, [commit, index, onCommitSelect]);
+
+	return (
+		<VStack
+			data-index={index}
+			align="stretch"
+			px="3"
+			py="1.5"
+			bg={isActive ? "bg.emphasized" : "transparent"}
+			_hover={{
+				bg: isActive ? "bg.emphasized" : "bg.muted",
+			}}
+			onClick={handleClick}
+			gap="0.5"
+			userSelect="none"
+		>
+			<Text fontSize="sm" lineClamp={1}>
+				{commit.message}
+			</Text>
+			<HStack gap="2" fontSize="xs" color="fg.muted">
+				<HStack gap="1">
+					<Icon fontSize="xs">
+						<FiGitCommit />
+					</Icon>
+					<Text fontFamily="mono">{commit.hash}</Text>
+				</HStack>
+				<Text truncate flex="1">
+					{commit.author.name}
+				</Text>
+				<Text flexShrink={0}>{formatRelativeTime(commit.date)}</Text>
+			</HStack>
+			<HStack gap="2" fontSize="xs">
+				{commit.files_changed > 0 && (
+					<Text color="fg.muted">
+						{commit.files_changed}{" "}
+						{commit.files_changed === 1 ? "file" : "files"}
+					</Text>
+				)}
+				{commit.insertions > 0 && (
+					<Text color="green.solid">+{commit.insertions}</Text>
+				)}
+				{commit.deletions > 0 && (
+					<Text color="red.solid">-{commit.deletions}</Text>
+				)}
+			</HStack>
+		</VStack>
+	);
+});
+
 export default function CommitList({
 	commits,
 	selectedIndex,
@@ -38,61 +103,13 @@ export default function CommitList({
 	return (
 		<Box ref={containerRef} flex="1" overflowY="auto" minH="0">
 			{commits.map((commit, index) => (
-				<VStack
+				<CommitListRow
 					key={commit.full_hash}
-					data-index={index}
-					align="stretch"
-					px="3"
-					py="1.5"
-					bg={
-						selectedIndex === index
-							? "bg.emphasized"
-							: "transparent"
-					}
-					_hover={{
-						bg:
-							selectedIndex === index
-								? "bg.emphasized"
-								: "bg.muted",
-					}}
-					onClick={() => onCommitSelect(commit, index)}
-					gap="0.5"
-					userSelect="none"
-				>
-					<Text fontSize="sm" lineClamp={1}>
-						{commit.message}
-					</Text>
-					<HStack gap="2" fontSize="xs" color="fg.muted">
-						<HStack gap="1">
-							<Icon fontSize="xs">
-								<FiGitCommit />
-							</Icon>
-							<Text fontFamily="mono">{commit.hash}</Text>
-						</HStack>
-						<Text truncate flex="1">
-							{commit.author.name}
-						</Text>
-						<Text flexShrink={0}>
-							{formatRelativeTime(commit.date)}
-						</Text>
-					</HStack>
-					<HStack gap="2" fontSize="xs">
-						{commit.files_changed > 0 && (
-							<Text color="fg.muted">
-								{commit.files_changed}{" "}
-								{commit.files_changed === 1 ? "file" : "files"}
-							</Text>
-						)}
-						{commit.insertions > 0 && (
-							<Text color="green.solid">
-								+{commit.insertions}
-							</Text>
-						)}
-						{commit.deletions > 0 && (
-							<Text color="red.solid">-{commit.deletions}</Text>
-						)}
-					</HStack>
-				</VStack>
+					commit={commit}
+					index={index}
+					isActive={selectedIndex === index}
+					onCommitSelect={onCommitSelect}
+				/>
 			))}
 		</Box>
 	);

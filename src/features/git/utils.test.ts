@@ -4,6 +4,7 @@ import {
 	changeBadge,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
 	getChangedLineCount,
+	getDiffStatsFromFiles,
 	getGitBinaryPreviewPath,
 	getGitBinaryPreviewRevision,
 	getLineStats,
@@ -224,6 +225,33 @@ describe("getLineStats", () => {
 			},
 		]);
 		expect(getLineStats(file)).toEqual({ additions: 1, deletions: 0 });
+	});
+});
+
+describe("getDiffStatsFromFiles", () => {
+	it("sums file count, insertions, and deletions across parsed files", () => {
+		const files = [
+			makeFile([
+				{
+					hunkContent: [
+						{ type: "change", additions: 2, deletions: 1 },
+					],
+				},
+			]),
+			makeFile([
+				{
+					hunkContent: [
+						{ type: "change", additions: 3, deletions: 0 },
+					],
+				},
+			]),
+		];
+
+		expect(getDiffStatsFromFiles(files)).toEqual({
+			files_changed: 2,
+			insertions: 5,
+			deletions: 1,
+		});
 	});
 });
 

@@ -124,7 +124,9 @@ pub async fn check_update(
 	pending_update: State<'_, PendingUpdate>,
 	accept_beta: bool,
 ) -> Result<Option<UpdateMetadata>, AppError> {
-	let auth_token = gh_auth_token();
+	let auth_token = tauri::async_runtime::spawn_blocking(gh_auth_token)
+		.await
+		.unwrap_or(None);
 	let mut builder = app.updater_builder();
 	if let Some(token) = auth_token.as_deref() {
 		builder = builder

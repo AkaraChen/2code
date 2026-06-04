@@ -16,7 +16,9 @@ export function ProjectAvatar({
 	projectId,
 	projectName,
 }: { projectId: string; projectName: string }) {
-	const { showProjectAvatars } = useSidebarSettingsStore();
+	const showProjectAvatars = useSidebarSettingsStore(
+		(state) => state.showProjectAvatars,
+	);
 	const { data: avatarUrl } = useProjectAvatar(projectId, {
 		enabled: showProjectAvatars,
 	});

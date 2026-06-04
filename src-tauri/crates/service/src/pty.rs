@@ -551,7 +551,7 @@ fn read_pty_output(
 		match reader.read(&mut buf) {
 			Ok(0) => break,
 			Ok(n) => {
-				tracing::info!(target: "pty", %session_id, n, "read: bytes from PTY");
+				tracing::trace!(target: "pty", %session_id, n, "read: bytes from PTY");
 				let raw = &buf[..n];
 
 				// Detect clear-scrollback sequence and notify persistence thread
@@ -624,7 +624,7 @@ fn flush_pending_output(db: &DbPool, session_id: &str, pending: &mut Vec<u8>) {
 	let n = data.len();
 	match repo::pty::append_output(&mut conn, session_id, &data) {
 		Ok(()) => {
-			tracing::info!(target: "pty", %session_id, n, "persist: appended");
+			tracing::trace!(target: "pty", %session_id, n, "persist: appended");
 		}
 		Err(e) => {
 			tracing::warn!(

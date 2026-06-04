@@ -6,7 +6,7 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus } from "react-icons/fi";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import * as m from "@/paraglide/messages.js";
@@ -21,6 +21,7 @@ const BUTTON_MOTION_PROPS = {
 	layout: "position" as const,
 	transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
 } as const;
+const REDUCED_MOTION_PROPS = {};
 
 interface TerminalTemplateMenuProps {
 	profileId: string;
@@ -39,7 +40,59 @@ interface TerminalTemplateDropdownContentProps {
 	showEmptyState?: boolean;
 }
 
-export function TerminalTemplateDropdownContent({
+interface TemplateMenuItemProps {
+	template: GlobalTerminalTemplate | ProjectTerminalTemplate;
+	scope: "global" | "project";
+	isPending: boolean;
+	onTemplateClick: (
+		template: GlobalTerminalTemplate | ProjectTerminalTemplate,
+		scope: "global" | "project",
+	) => void;
+}
+
+const TemplateMenuItem = memo(function TemplateMenuItem({
+	template,
+	scope,
+	isPending,
+	onTemplateClick,
+}: TemplateMenuItemProps) {
+	const handleClick = useCallback(() => {
+		onTemplateClick(template, scope);
+	}, [onTemplateClick, scope, template]);
+	const cwd =
+		scope === "project"
+			? (template as ProjectTerminalTemplate).cwd.trim()
+			: "";
+
+	return (
+		<Button
+			size="sm"
+			variant="ghost"
+			justifyContent="flex-start"
+			alignItems="flex-start"
+			h="auto"
+			px="2"
+			py="2"
+			disabled={isPending}
+			onClick={handleClick}
+		>
+			{scope === "project" ? (
+				<Stack gap="0.5" align="start" textAlign="left">
+					<Text fontSize="sm">{template.name}</Text>
+					{cwd ? (
+						<Text fontSize="xs" color="fg.muted">
+							{cwd}
+						</Text>
+					) : null}
+				</Stack>
+			) : (
+				<Text fontSize="sm">{template.name}</Text>
+			)}
+		</Button>
+	);
+});
+
+export const TerminalTemplateDropdownContent = memo(function TerminalTemplateDropdownContent({
 	projectTemplates,
 	globalTemplates,
 	isPending,
@@ -78,27 +131,13 @@ export function TerminalTemplateDropdownContent({
 						{m.projectTerminalTemplates()}
 					</Text>
 					{projectTemplates.map((template) => (
-						<Button
+						<TemplateMenuItem
 							key={template.id}
-							size="sm"
-							variant="ghost"
-							justifyContent="flex-start"
-							alignItems="flex-start"
-							h="auto"
-							px="2"
-							py="2"
-							disabled={isPending}
-							onClick={() => onTemplateClick(template, "project")}
-						>
-							<Stack gap="0.5" align="start" textAlign="left">
-								<Text fontSize="sm">{template.name}</Text>
-								{template.cwd.trim() ? (
-									<Text fontSize="xs" color="fg.muted">
-										{template.cwd.trim()}
-									</Text>
-								) : null}
-							</Stack>
-						</Button>
+							template={template}
+							scope="project"
+							isPending={isPending}
+							onTemplateClick={onTemplateClick}
+						/>
 					))}
 				</>
 			) : null}
@@ -120,26 +159,19 @@ export function TerminalTemplateDropdownContent({
 						{m.globalTerminalTemplates()}
 					</Text>
 					{globalTemplates.map((template) => (
-						<Button
+						<TemplateMenuItem
 							key={template.id}
-							size="sm"
-							variant="ghost"
-							justifyContent="flex-start"
-							alignItems="flex-start"
-							h="auto"
-							px="2"
-							py="2"
-							disabled={isPending}
-							onClick={() => onTemplateClick(template, "global")}
-						>
-							<Text fontSize="sm">{template.name}</Text>
-						</Button>
+							template={template}
+							scope="global"
+							isPending={isPending}
+							onTemplateClick={onTemplateClick}
+						/>
 					))}
 				</>
 			) : null}
 		</Stack>
 	);
-}
+});
 
 export default function TerminalTemplateMenu({
 	profileId,
@@ -148,6 +180,9 @@ export default function TerminalTemplateMenu({
 }: TerminalTemplateMenuProps) {
 	const setTerminalActive = useFileViewerTabsStore((s) => s.setTerminalActive);
 	const prefersReducedMotion = useReducedMotion();
+	const handleCreated = useCallback(() => {
+		setTerminalActive(profileId);
+	}, [profileId, setTerminalActive]);
 	const {
 		createDefaultTerminal,
 		createTab,
@@ -158,7 +193,7 @@ export default function TerminalTemplateMenu({
 		profileId,
 		cwd,
 		projectId,
-		onCreated: () => setTerminalActive(profileId),
+		onCreated: handleCreated,
 	});
 
 	const [isOpen, setIsOpen] = useState(false);
@@ -170,41 +205,57 @@ export default function TerminalTemplateMenu({
 	const buttonRef = useRef<HTMLDivElement | null>(null);
 	const closeTimerRef = useRef<number | null>(null);
 
-	const buttonMotionProps = prefersReducedMotion ? {} : BUTTON_MOTION_PROPS;
+	const buttonMotionProps = prefersReducedMotion
+		? REDUCED_MOTION_PROPS
+		: BUTTON_MOTION_PROPS;
 
-	function clearCloseTimer() {
+	const clearCloseTimer = useCallback(() => {
 		if (closeTimerRef.current !== null) {
 			window.clearTimeout(closeTimerRef.current);
 			closeTimerRef.current = null;
 		}
-	}
+	}, []);
 
-	function open() {
+	const open = useCallback(() => {
 		const rect = buttonRef.current?.getBoundingClientRect();
 		if (!rect) return;
 		clearCloseTimer();
 		setMenuPosition({ top: rect.bottom + 8, left: rect.left, width: rect.width });
 		setIsOpen(true);
-	}
+	}, [clearCloseTimer]);
 
-	function scheduleClose() {
+	const scheduleClose = useCallback(() => {
 		clearCloseTimer();
 		closeTimerRef.current = window.setTimeout(() => {
 			setIsOpen(false);
 		}, 120);
-	}
+	}, [clearCloseTimer]);
 
 	useEffect(() => {
 		return () => clearCloseTimer();
-	}, []);
+	}, [clearCloseTimer]);
 
-	async function handleTemplateClick(
-		template: GlobalTerminalTemplate | ProjectTerminalTemplate,
-		scope: "global" | "project",
-	) {
+	const handleTemplateClick = useCallback(
+		async (
+			template: GlobalTerminalTemplate | ProjectTerminalTemplate,
+			scope: "global" | "project",
+		) => {
+			setIsOpen(false);
+			await createTemplateTerminal(template, scope);
+		},
+		[createTemplateTerminal],
+	);
+	const handleCreateDefaultTerminal = useCallback(() => {
 		setIsOpen(false);
-		await createTemplateTerminal(template, scope);
-	}
+		createDefaultTerminal();
+	}, [createDefaultTerminal]);
+	const menuWidth = useMemo(
+		() =>
+			menuPosition
+				? `${Math.max(menuPosition.width + 32, 200)}px`
+				: "200px",
+		[menuPosition],
+	);
 
 	return (
 		<>
@@ -227,10 +278,7 @@ export default function TerminalTemplateMenu({
 						size="2xs"
 						variant="ghost"
 						disabled={createTab.isPending}
-						onClick={() => {
-							setIsOpen(false);
-							createDefaultTerminal();
-						}}
+						onClick={handleCreateDefaultTerminal}
 					>
 						<FiPlus /> {m.newTerminal()}
 					</Button>
@@ -244,7 +292,7 @@ export default function TerminalTemplateMenu({
 						top={menuPosition.top}
 						left={menuPosition.left}
 						minW="2xs"
-						w={`${Math.max(menuPosition.width + 32, 200)}px`}
+						w={menuWidth}
 						rounded="l3"
 						borderWidth="1px"
 						borderColor="border.subtle"
@@ -259,9 +307,7 @@ export default function TerminalTemplateMenu({
 							projectTemplates={projectTemplates}
 							globalTemplates={globalTemplates}
 							isPending={createTab.isPending}
-							onTemplateClick={(template, scope) => {
-								void handleTemplateClick(template, scope);
-							}}
+							onTemplateClick={handleTemplateClick}
 						/>
 					</Box>
 				</Portal>

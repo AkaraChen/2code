@@ -1,6 +1,7 @@
 import { Badge, Checkbox, HStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { MouseEventHandler } from "react";
+import { memo, useMemo } from "react";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { changeBadge, getFileDisplayParts } from "../utils";
 
@@ -14,7 +15,7 @@ export interface FileListItemProps {
 	onToggleIncluded?: (included: boolean) => void;
 }
 
-export function FileListItem({
+function FileListItemComponent({
 	file,
 	isActive,
 	isIncluded,
@@ -24,7 +25,10 @@ export function FileListItem({
 	onToggleIncluded,
 }: FileListItemProps) {
 	const badge = changeBadge[file.type] ?? changeBadge.change;
-	const { basename, parentPath } = getFileDisplayParts(file.name);
+	const { basename, parentPath } = useMemo(
+		() => getFileDisplayParts(file.name),
+		[file.name],
+	);
 	const effectiveIncluded = isIncluded ?? true;
 
 	return (
@@ -92,3 +96,5 @@ export function FileListItem({
 		</HStack>
 	);
 }
+
+export const FileListItem = memo(FileListItemComponent);

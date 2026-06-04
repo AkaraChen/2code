@@ -16,6 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { matchPath, useLocation } from "react-router";
 import {
 	FiCheck,
 	FiEdit3,
@@ -63,6 +64,8 @@ import {
 	APP_SIDEBAR_MIN_WIDTH,
 	useAppSidebarStore,
 } from "./sidebarStore";
+
+const IS_MAC_PLATFORM = isMacPlatform();
 
 function insertAt<T>(items: T[], item: T, index: number) {
 	const next = [...items];
@@ -322,6 +325,7 @@ function SortableGroupRow({
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const { data: projectGroups } = useProjectGroups();
+	const location = useLocation();
 	const createDialog = useDialogState();
 	const navRef = useRef<HTMLElement>(null);
 	const isLayoutSaveInFlightRef = useRef(false);
@@ -340,6 +344,12 @@ export default function AppSidebar() {
 	const sidebarLayout = useMemo(
 		() => buildSidebarLayout(projects, projectGroups),
 		[projectGroups, projects],
+	);
+	const activeProfileId = useMemo(
+		() =>
+			matchPath("/projects/:id/profiles/:profileId", location.pathname)
+				?.params.profileId ?? null,
+		[location.pathname],
 	);
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -515,12 +525,12 @@ export default function AppSidebar() {
 					<Flex direction="column" h="full" minH="0" w="full">
 						<Flex
 							data-tauri-drag-region
-							h={isMacPlatform() ? "66px" : "48px"}
+							h={IS_MAC_PLATFORM ? "66px" : "48px"}
 							flexShrink={0}
 							align="center"
 							justify="start"
 							paddingInline="4"
-							pt={isMacPlatform() ? "5" : "2"}
+							pt={IS_MAC_PLATFORM ? "5" : "2"}
 						>
 							<Text
 								fontWeight="600"
@@ -789,6 +799,9 @@ export default function AppSidebar() {
 														projectGroups={
 															projectGroups
 														}
+														activeProfileId={
+															activeProfileId
+														}
 													/>
 												),
 											)}
@@ -801,12 +814,18 @@ export default function AppSidebar() {
 												group={entry.group}
 												projectGroups={projectGroups}
 												projects={entry.projects}
+												activeProfileId={
+													activeProfileId
+												}
 											/>
 										) : (
 											<ProjectMenuItem
 												key={entry.project.id}
 												project={entry.project}
 												projectGroups={projectGroups}
+												activeProfileId={
+													activeProfileId
+												}
 											/>
 										),
 									)}

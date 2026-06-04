@@ -17,6 +17,7 @@ import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { useReducedMotion } from "motion/react";
 import {
 	lazy,
+	useCallback,
 	useMemo,
 	useState,
 	type ReactNode,
@@ -86,6 +87,7 @@ const FULL_TAB_MOTION_PROPS = {
 	exit: { opacity: 0, scale: 0.88, y: -6, width: 0 },
 	transition: { default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
 } as const;
+const REDUCED_TAB_MOTION_PROPS = {};
 
 function getTerminalTabIcon(title: string) {
 	const lowerTitle = title.toLowerCase();
@@ -160,7 +162,7 @@ export default function TerminalTabs({
 		[dirtyFilePaths],
 	);
 
-	const closeTab = useCloseTerminalTab();
+	const { mutate: closeTerminalTab } = useCloseTerminalTab();
 	const prefersReducedMotion = useReducedMotion();
 	const [pendingCloseFile, setPendingCloseFile] = useState<{
 		filePath: string;
@@ -169,9 +171,11 @@ export default function TerminalTabs({
 
 	// Unified active tab value: file path when a file tab is active, or session ID.
 	const activeValue = fileTabActive ? (activeFilePath ?? "") : (activeTabId ?? "");
-	const tabMotionProps = prefersReducedMotion ? {} : FULL_TAB_MOTION_PROPS;
+	const tabMotionProps = prefersReducedMotion
+		? REDUCED_TAB_MOTION_PROPS
+		: FULL_TAB_MOTION_PROPS;
 
-	function handleTabChange(value: string) {
+	const handleTabChange = useCallback((value: string) => {
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
 			setFileActive(profileId, value);
@@ -183,31 +187,38 @@ export default function TerminalTabs({
 
 		setActiveTab(profileId, value);
 		setTerminalActive(profileId);
-	}
+	}, [
+		fileTabs,
+		profileId,
+		setActiveTab,
+		setFileActive,
+		setTerminalActive,
+		tabs,
+	]);
 
-	function handleFileTabClose(filePath: string, title: string) {
+	const handleFileTabClose = useCallback((filePath: string, title: string) => {
 		if (dirtyFilePathSet.has(filePath)) {
 			setPendingCloseFile({ filePath, title });
 			return;
 		}
 
 		closeFileTab(profileId, filePath);
-	}
+	}, [closeFileTab, dirtyFilePathSet, profileId]);
 
-	function handleCancelFileClose() {
+	const handleCancelFileClose = useCallback(() => {
 		setPendingCloseFile(null);
-	}
+	}, []);
 
-	function handleDiscardFileChanges() {
+	const handleDiscardFileChanges = useCallback(() => {
 		if (!pendingCloseFile) return;
 		closeFileTab(profileId, pendingCloseFile.filePath);
 		setPendingCloseFile(null);
-	}
+	}, [closeFileTab, pendingCloseFile, profileId]);
 
-	function handleTerminalPathDrop(
+	const handleTerminalPathDrop = useCallback((
 		detail: FileTreeTerminalDropEventDetail,
 		tab: { id: string },
-	) {
+	) => {
 		const { payload } = detail;
 		if (payload.profileId !== profileId) return;
 
@@ -217,9 +228,9 @@ export default function TerminalTabs({
 		setActiveTab(profileId, tab.id);
 		setTerminalActive(profileId);
 		writeToPty({ sessionId: tab.id, data });
-	}
+	}, [profileId, setActiveTab, setTerminalActive]);
 
-	function createTerminalDropRef(tab: { id: string }) {
+	const createTerminalDropRef = useCallback((tab: { id: string }) => {
 		let cleanup: (() => void) | null = null;
 
 		return (node: HTMLDivElement | null) => {
@@ -269,55 +280,83 @@ export default function TerminalTabs({
 				node.removeAttribute(FILE_TREE_TERMINAL_DROP_TARGET_ATTR);
 			};
 		};
-	}
+	}, [handleTerminalPathDrop]);
 
 	const activeTerminalTab =
 		tabs.find((tab) => tab.id === activeTabId) ?? null;
 
-	const tabGroups: TabStripGroup[] = [
-		{
-			id: "terminal",
-			items: tabs.map((tab) => ({
-				key: tab.id,
-				value: tab.id,
-				icon: getTerminalTabIcon(tab.title),
-				title: tab.title,
-				maxTitleLength: 10,
-				elementRef: createTerminalDropRef(tab),
-				isSelected: !fileTabActive && !notesActive && tab.id === activeValue,
-				badge:
-					notifiedTabSet.has(tab.id) && tab.id !== activeTabId ? (
-						<Circle size="2" bg="green.500" />
+	const activeTerminalDropRef = useMemo(
+		() =>
+			activeTerminalTab
+				? createTerminalDropRef(activeTerminalTab)
+				: undefined,
+		[activeTerminalTab, createTerminalDropRef],
+	);
+
+	const tabGroups = useMemo<TabStripGroup[]>(
+		() => [
+			{
+				id: "terminal",
+				items: tabs.map((tab) => ({
+					key: tab.id,
+					value: tab.id,
+					icon: getTerminalTabIcon(tab.title),
+					title: tab.title,
+					maxTitleLength: 10,
+					elementRef: createTerminalDropRef(tab),
+					isSelected:
+						!fileTabActive && !notesActive && tab.id === activeValue,
+					badge:
+						notifiedTabSet.has(tab.id) && tab.id !== activeTabId ? (
+							<Circle size="2" bg="green.500" />
+						) : undefined,
+					onClose: () =>
+						closeTerminalTab({
+							profileId,
+							sessionId: tab.id,
+						}),
+				})),
+			},
+			{
+				id: "file",
+				items: fileTabs.map((tab) => ({
+					key: tab.filePath,
+					value: tab.filePath,
+					icon: (
+						<FileTreeFileIcon
+							fileName={tab.title}
+							size={14}
+						/>
+					),
+					title: tab.title,
+					maxTitleLength: 14,
+					isSelected:
+						fileTabActive &&
+						!notesActive &&
+						tab.filePath === activeValue,
+					badge: dirtyFilePathSet.has(tab.filePath) ? (
+						<Circle size="2" bg="fg.muted" />
 					) : undefined,
-				onClose: () =>
-					closeTab.mutate({
-						profileId,
-						sessionId: tab.id,
-					}),
-			})),
-		},
-		{
-			id: "file",
-			items: fileTabs.map((tab) => ({
-				key: tab.filePath,
-				value: tab.filePath,
-				icon: (
-					<FileTreeFileIcon
-						fileName={tab.title}
-						size={14}
-					/>
-				),
-				title: tab.title,
-				maxTitleLength: 14,
-				isSelected: fileTabActive && !notesActive && tab.filePath === activeValue,
-				badge: dirtyFilePathSet.has(tab.filePath) ? (
-					<Circle size="2" bg="fg.muted" />
-				) : undefined,
-				onClose: () => handleFileTabClose(tab.filePath, tab.title),
-			})),
-		},
-	];
-	const notesControl = profile ? (
+					onClose: () => handleFileTabClose(tab.filePath, tab.title),
+				})),
+			},
+		],
+		[
+			activeTabId,
+			activeValue,
+			closeTerminalTab,
+			createTerminalDropRef,
+			dirtyFilePathSet,
+			fileTabActive,
+			fileTabs,
+			handleFileTabClose,
+			notesActive,
+			notifiedTabSet,
+			profileId,
+			tabs,
+		],
+	);
+	const notesControl = useMemo(() => profile ? (
 		<Tooltip.Root>
 			<Tooltip.Trigger asChild>
 				<Box
@@ -376,7 +415,18 @@ export default function TerminalTabs({
 				</Tooltip.Positioner>
 			</Portal>
 		</Tooltip.Root>
-	) : null;
+	) : null, [notesActive, profile, profileId, setNotesActive]);
+
+	const trailingControls = useMemo(
+		() => (
+			<TerminalTemplateMenu
+				profileId={profileId}
+				cwd={cwd}
+				projectId={projectId}
+			/>
+		),
+		[cwd, profileId, projectId],
+	);
 
 	return (
 		<Flex direction="column" h="full" w="full" minW="0">
@@ -393,13 +443,7 @@ export default function TerminalTabs({
 					groups={tabGroups}
 					motionProps={tabMotionProps}
 					onSelect={handleTabChange}
-					trailingControls={(
-						<TerminalTemplateMenu
-							profileId={profileId}
-							cwd={cwd}
-							projectId={projectId}
-						/>
-					)}
+					trailingControls={trailingControls}
 				/>
 			</Box>
 
@@ -445,11 +489,7 @@ export default function TerminalTabs({
 				minH="0"
 				position="relative"
 				display={fileTabActive || notesActive ? "none" : "block"}
-				ref={
-					activeTerminalTab
-						? createTerminalDropRef(activeTerminalTab)
-						: undefined
-				}
+				ref={activeTerminalDropRef}
 			>
 				{tabs.map((tab) => (
 					<Box

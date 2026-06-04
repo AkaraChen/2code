@@ -7,6 +7,7 @@ import {
 	SegmentGroup,
 	Text,
 } from "@chakra-ui/react";
+import { memo, useCallback, useMemo } from "react";
 import { FiGitBranch } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import type { GitDiffAction, GitDiffViewMode } from "../gitDiffReducer";
@@ -17,15 +18,29 @@ interface GitDiffHeaderProps {
 	dispatch: React.Dispatch<GitDiffAction>;
 }
 
-export default function GitDiffHeader({
+function GitDiffHeader({
 	branchName,
 	viewMode,
 	dispatch,
 }: GitDiffHeaderProps) {
-	const previewModeItems = [
-		{ value: "unified", label: m.gitDiffPreviewModeUnified() },
-		{ value: "split", label: m.gitDiffPreviewModeSplit() },
-	];
+	const previewModeItems = useMemo(
+		() => [
+			{ value: "unified", label: m.gitDiffPreviewModeUnified() },
+			{ value: "split", label: m.gitDiffPreviewModeSplit() },
+		],
+		[],
+	);
+	const handleViewModeChange = useCallback(
+		(event: { value: string | null }) => {
+			const nextViewMode = event.value;
+			if (!nextViewMode) return;
+			dispatch({
+				type: "setViewMode",
+				viewMode: nextViewMode as GitDiffViewMode,
+			});
+		},
+		[dispatch],
+	);
 
 	return (
 		<Dialog.Header py="2" pl="4" pr="16">
@@ -44,14 +59,7 @@ export default function GitDiffHeader({
 						aria-label={m.gitDiffPreviewMode()}
 						size="xs"
 						value={viewMode}
-						onValueChange={(e) => {
-							const nextViewMode = e.value;
-							if (!nextViewMode) return;
-							dispatch({
-								type: "setViewMode",
-								viewMode: nextViewMode as GitDiffViewMode,
-							});
-						}}
+						onValueChange={handleViewModeChange}
 					>
 						<SegmentGroup.Indicator />
 						<SegmentGroup.Items items={previewModeItems} />
@@ -65,3 +73,5 @@ export default function GitDiffHeader({
 		</Dialog.Header>
 	);
 }
+
+export default memo(GitDiffHeader);

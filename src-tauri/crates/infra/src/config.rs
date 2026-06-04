@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use model::error::AppError;
 pub use model::project::ProjectConfig;
@@ -52,12 +52,16 @@ pub fn execute_scripts(scripts: &[String], cwd: &Path) {
 
 	for script in scripts {
 		let mut command = script_command();
-		let result = command.arg(script).current_dir(cwd).output();
+		let result = command
+			.arg(script)
+			.current_dir(cwd)
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.status();
 
 		match result {
-			Ok(output) if !output.status.success() => {
-				let stderr = String::from_utf8_lossy(&output.stderr);
-				tracing::warn!("Script failed: {script} — {stderr}");
+			Ok(status) if !status.success() => {
+				tracing::warn!("Script failed: {script} — {status}");
 				return;
 			}
 			Err(e) => {

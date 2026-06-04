@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import { useProjectConfigQuery } from "@/features/projects/hooks";
 import { useTerminalTemplatesStore } from "@/features/settings/stores/terminalTemplatesStore";
 import { useCreateTerminalTab } from "./hooks";
@@ -7,6 +8,8 @@ import {
 	type GlobalTerminalTemplate,
 	type ProjectTerminalTemplate,
 } from "./templates";
+
+const EMPTY_PROJECT_TEMPLATES: ProjectTerminalTemplate[] = [];
 
 interface UseTerminalTemplateActionsProps {
 	profileId: string;
@@ -25,43 +28,57 @@ export function useTerminalTemplateActions({
 	const projectConfig = useProjectConfigQuery(projectId);
 	const globalTemplates = useTerminalTemplatesStore((s) => s.templates);
 
-	const projectTemplates = projectConfig.data?.terminal_templates ?? [];
+	const projectTemplates =
+		projectConfig.data?.terminal_templates ?? EMPTY_PROJECT_TEMPLATES;
 	const hasTemplates = projectTemplates.length > 0 || globalTemplates.length > 0;
 
-	function createDefaultTerminal() {
+	const createDefaultTerminal = useCallback(() => {
 		createTab.mutate({ profileId, cwd });
 		onCreated?.();
-	}
+	}, [createTab, cwd, onCreated, profileId]);
 
-	async function createTemplateTerminal(
-		template: GlobalTerminalTemplate | ProjectTerminalTemplate,
-		scope: "global" | "project",
-	) {
-		const resolved =
-			scope === "project"
-				? await resolveProjectTerminalTemplate(
-						template as ProjectTerminalTemplate,
-						cwd,
-					)
-				: resolveGlobalTerminalTemplate(
-						template as GlobalTerminalTemplate,
-						cwd,
-					);
-		await createTab.mutateAsync({
-			profileId,
-			cwd: resolved.cwd,
-			title: resolved.name,
-			startupCommands: resolved.commands,
-		});
-		onCreated?.();
-	}
+	const createTemplateTerminal = useCallback(
+		async (
+			template: GlobalTerminalTemplate | ProjectTerminalTemplate,
+			scope: "global" | "project",
+		) => {
+			const resolved =
+				scope === "project"
+					? await resolveProjectTerminalTemplate(
+							template as ProjectTerminalTemplate,
+							cwd,
+						)
+					: resolveGlobalTerminalTemplate(
+							template as GlobalTerminalTemplate,
+							cwd,
+						);
+			await createTab.mutateAsync({
+				profileId,
+				cwd: resolved.cwd,
+				title: resolved.name,
+				startupCommands: resolved.commands,
+			});
+			onCreated?.();
+		},
+		[createTab, cwd, onCreated, profileId],
+	);
 
-	return {
-		createDefaultTerminal,
-		createTemplateTerminal,
-		createTab,
-		globalTemplates,
-		hasTemplates,
-		projectTemplates,
-	};
+	return useMemo(
+		() => ({
+			createDefaultTerminal,
+			createTemplateTerminal,
+			createTab,
+			globalTemplates,
+			hasTemplates,
+			projectTemplates,
+		}),
+		[
+			createDefaultTerminal,
+			createTab,
+			createTemplateTerminal,
+			globalTemplates,
+			hasTemplates,
+			projectTemplates,
+		],
+	);
 }

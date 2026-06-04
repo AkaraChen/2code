@@ -15,7 +15,7 @@ import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
 
 interface FileViewerDialogProps {
-	filePath: string | null;
+	filePath: string;
 	onClose: () => void;
 }
 
@@ -33,17 +33,14 @@ export default function FileViewerDialog({
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(
-		filePath ?? "",
-		!!filePath,
-	);
+	} = useFileContent(filePath);
 
-	const filename = filePath?.split("/").pop() ?? "";
+	const filename = filePath.split("/").pop() ?? "";
 	const language = detectLanguage(filename);
 
 	return (
 		<Dialog.Root
-			open={!!filePath}
+			open
 			onOpenChange={(e) => { if (!e.open) onClose(); }}
 			size="xl"
 		>

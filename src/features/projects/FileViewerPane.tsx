@@ -13,7 +13,7 @@ import type {
 	OnChange,
 	OnMount,
 } from "@monaco-editor/react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MarkdownEditor from "@/features/markdown/MarkdownEditor";
 import ArchivePreviewTree from "@/features/projects/ArchivePreviewTree";
 import { isPreviewableBinaryFile } from "@/features/projects/filePreview";
@@ -27,6 +27,14 @@ import { useFileContent, useFilePreview, useSaveFileContent } from "./hooks";
 interface FileViewerPaneProps {
 	filePath: string;
 	profileId: string;
+}
+
+const DRAFT_SYNC_DELAY_MS = 400;
+
+interface PendingDraft {
+	profileId: string;
+	filePath: string;
+	content: string;
 }
 
 function getMonacoTheme(themeId: string) {
@@ -160,6 +168,13 @@ export default function FileViewerPane({
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
 	const paneRef = useRef<HTMLDivElement | null>(null);
 	const saveHandlerRef = useRef<() => void>(() => {});
+	const pendingDraftRef = useRef<PendingDraft | null>(null);
+	const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const [localEditorValue, setLocalEditorValue] = useState<string | null>(
+		null,
+	);
 	const draftValue = useFileViewerDirtyStore(
 		(state) => state.drafts[profileId]?.[filePath],
 	);
@@ -172,27 +187,76 @@ export default function FileViewerPane({
 	);
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
 
-	const previewableBinaryFile = isPreviewableBinaryFile(filePath);
+	const fileMeta = useMemo(
+		() => {
+			const filename = filePath.split("/").pop() ?? "";
+			return {
+				filename,
+				language: detectMonacoLanguage(filename),
+				markdownFile: isMarkdownFile(filePath),
+				previewableBinaryFile: isPreviewableBinaryFile(filePath),
+			};
+		},
+		[filePath],
+	);
 	const {
 		data: content,
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath, !previewableBinaryFile);
-	const previewQuery = useFilePreview(filePath, previewableBinaryFile);
+	} = useFileContent(filePath, !fileMeta.previewableBinaryFile);
+	const previewQuery = useFilePreview(filePath, fileMeta.previewableBinaryFile);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
 	} = useSaveFileContent(profileId);
 
-	const filename = filePath.split("/").pop() ?? "";
-	const markdownFile = isMarkdownFile(filePath);
-	const language = detectMonacoLanguage(filename);
 	const monacoTheme = getMonacoTheme(themeId);
-	const editorValue = draftValue ?? content ?? "";
+	const editorValue = localEditorValue ?? draftValue ?? content ?? "";
 	const lastSavedValue = savedValue ?? content ?? "";
-	const hasLoadedFile = content != null || draftValue != null;
+	const hasLoadedFile =
+		content != null || draftValue != null || localEditorValue != null;
 	const hasUnsavedChanges = editorValue !== lastSavedValue;
+
+	const flushPendingDraft = useCallback(() => {
+		if (draftSyncTimerRef.current) {
+			clearTimeout(draftSyncTimerRef.current);
+			draftSyncTimerRef.current = null;
+		}
+
+		const pendingDraft = pendingDraftRef.current;
+		if (!pendingDraft) return;
+		pendingDraftRef.current = null;
+
+		const currentDraft =
+			useFileViewerDirtyStore.getState().drafts[pendingDraft.profileId]?.[
+				pendingDraft.filePath
+			];
+		if (currentDraft === pendingDraft.content) return;
+
+		setFileDraft(
+			pendingDraft.profileId,
+			pendingDraft.filePath,
+			pendingDraft.content,
+		);
+	}, [setFileDraft]);
+
+	useEffect(() => {
+		const pendingDraft = pendingDraftRef.current;
+		const pendingContent =
+			pendingDraft?.profileId === profileId &&
+			pendingDraft.filePath === filePath
+				? pendingDraft.content
+				: undefined;
+		flushPendingDraft();
+		setLocalEditorValue(pendingContent ?? draftValue ?? null);
+	}, [content, draftValue, filePath, flushPendingDraft, profileId]);
+
+	useEffect(() => {
+		return () => {
+			flushPendingDraft();
+		};
+	}, [flushPendingDraft]);
 
 	useEffect(() => {
 		if (!hasLoadedFile) return;
@@ -235,9 +299,20 @@ export default function FileViewerPane({
 
 	const handleFileChange = useCallback(
 		(nextValue: string) => {
-			setFileDraft(profileId, filePath, nextValue);
+			setLocalEditorValue(nextValue);
+			pendingDraftRef.current = {
+				profileId,
+				filePath,
+				content: nextValue,
+			};
+			if (draftSyncTimerRef.current) {
+				clearTimeout(draftSyncTimerRef.current);
+			}
+			draftSyncTimerRef.current = setTimeout(() => {
+				flushPendingDraft();
+			}, DRAFT_SYNC_DELAY_MS);
 		},
-		[filePath, profileId, setFileDraft],
+		[filePath, flushPendingDraft, profileId],
 	);
 
 	const handleEditorChange = useCallback<OnChange>(
@@ -251,6 +326,7 @@ export default function FileViewerPane({
 		const contentToSave = contentOverride ?? editorValue;
 		if (!hasLoadedFile || contentToSave === lastSavedValue || isSaving) return;
 
+		flushPendingDraft();
 		saveFileContent(
 			{ path: filePath, content: contentToSave },
 			{
@@ -264,6 +340,7 @@ export default function FileViewerPane({
 	}, [
 		editorValue,
 		filePath,
+		flushPendingDraft,
 		hasLoadedFile,
 		isSaving,
 		lastSavedValue,
@@ -300,7 +377,7 @@ export default function FileViewerPane({
 		);
 	}, []);
 
-	if (previewableBinaryFile) {
+	if (fileMeta.previewableBinaryFile) {
 		return (
 			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
 				<FilePreviewPane
@@ -334,7 +411,7 @@ export default function FileViewerPane({
 
 	if (!hasLoadedFile) return null;
 
-	if (markdownFile) {
+	if (fileMeta.markdownFile) {
 		return (
 			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
 				<MarkdownEditor
@@ -353,7 +430,7 @@ export default function FileViewerPane({
 			<Editor
 				height="100%"
 				path={filePath}
-				language={language}
+				language={fileMeta.language}
 				theme={monacoTheme}
 				value={editorValue}
 				options={editorOptions}

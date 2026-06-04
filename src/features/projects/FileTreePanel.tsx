@@ -161,9 +161,14 @@ function buildModelPaths(
 	treePaths: readonly string[] | undefined,
 	gitStatus: readonly GitStatusEntry[],
 ) {
-	const paths = [...(treePaths ?? [])];
-	const seenPaths = new Set(paths);
-	const seenPathCollisionKeys = new Set(paths.map(toPathCollisionKey));
+	const paths: string[] = [];
+	const seenPaths = new Set<string>();
+	const seenPathCollisionKeys = new Set<string>();
+	for (const path of treePaths ?? []) {
+		paths.push(path);
+		seenPaths.add(path);
+		seenPathCollisionKeys.add(toPathCollisionKey(path));
+	}
 	for (const entry of gitStatus) {
 		const collisionKey = toPathCollisionKey(entry.path);
 		if (
@@ -539,7 +544,7 @@ export default function FileTreePanel({
 		Map<string, { kind: "directory" | "file" }>
 	>(new Map());
 	const lastResetModelRef = useRef<FileTreeModel | null>(null);
-	const lastResetModelPathsSignatureRef = useRef<string | null>(null);
+	const lastResetModelPathsRef = useRef<readonly string[] | null>(null);
 	const expandedPathSetRef = useRef<Set<string>>(new Set());
 	const loadedDirectoryChildPathsRef = useRef<
 		Map<string, readonly string[]>
@@ -583,19 +588,15 @@ export default function FileTreePanel({
 		loadedChildPathsState.rootChildPaths === rootChildPaths
 			? loadedChildPathsState.childPathsByDirectory
 			: EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY;
-	const loadedChildPathsByDirectory = useMemo(() => {
-		const next = new Map<string | null, readonly string[]>();
-		for (const [directoryPath, childPaths] of loadedDirectoryChildPaths) {
-			next.set(directoryPath, childPaths);
-		}
-		if (rootChildPaths) {
-			next.set(null, rootChildPaths);
-		}
-		return next;
-	}, [loadedDirectoryChildPaths, rootChildPaths]);
 	const treePaths = useMemo(
-		() => [...loadedChildPathsByDirectory.values()].flat(),
-		[loadedChildPathsByDirectory],
+		() => {
+			const paths = rootChildPaths ? [...rootChildPaths] : [];
+			for (const childPaths of loadedDirectoryChildPaths.values()) {
+				paths.push(...childPaths);
+			}
+			return paths;
+		},
+		[loadedDirectoryChildPaths, rootChildPaths],
 	);
 	const gitStatus = useMemo(
 		() => toFileTreeGitStatus(gitStatusEntries),
@@ -610,8 +611,15 @@ export default function FileTreePanel({
 		[gitStatus, treePaths],
 	);
 	const filePathSet = useMemo(
-		() =>
-			new Set([...existingPathSet].filter((path) => !path.endsWith("/"))),
+		() => {
+			const next = new Set<string>();
+			for (const path of existingPathSet) {
+				if (!path.endsWith("/")) {
+					next.add(path);
+				}
+			}
+			return next;
+		},
 		[existingPathSet],
 	);
 	const treePathSet = existingPathSet;
@@ -630,7 +638,7 @@ export default function FileTreePanel({
 		loadedDirectoryChildPathsRef.current.clear();
 		loadingDirectoryPromisesRef.current.clear();
 		pendingCreatePathRef.current.clear();
-		lastResetModelPathsSignatureRef.current = null;
+		lastResetModelPathsRef.current = null;
 	}, [rootPath]);
 
 	useEffect(() => {
@@ -638,7 +646,7 @@ export default function FileTreePanel({
 		expandedPathSetRef.current.clear();
 		loadedDirectoryChildPathsRef.current.clear();
 		loadingDirectoryPromisesRef.current.clear();
-		lastResetModelPathsSignatureRef.current = null;
+		lastResetModelPathsRef.current = null;
 	}, [rootPath, rootChildPaths]);
 
 	const openRelativeFile = useCallback((relativePath: string) => {
@@ -836,10 +844,9 @@ export default function FileTreePanel({
 	modelRef.current = model;
 
 	useEffect(() => {
-		const modelPathsSignature = modelPaths.join("\0");
 		if (
 			lastResetModelRef.current === model &&
-			lastResetModelPathsSignatureRef.current === modelPathsSignature
+			lastResetModelPathsRef.current === modelPaths
 		) {
 			return;
 		}
@@ -853,7 +860,7 @@ export default function FileTreePanel({
 			model.resetPaths(modelPaths);
 		}
 		lastResetModelRef.current = model;
-		lastResetModelPathsSignatureRef.current = modelPathsSignature;
+		lastResetModelPathsRef.current = modelPaths;
 	}, [model, modelPaths]);
 
 	useEffect(() => {
@@ -1265,10 +1272,12 @@ export default function FileTreePanel({
 				</Box>
 			</Box>
 
-			<FileViewerDialog
-				filePath={openFilePath}
-				onClose={() => setOpenFilePath(null)}
-			/>
+			{openFilePath && (
+				<FileViewerDialog
+					filePath={openFilePath}
+					onClose={() => setOpenFilePath(null)}
+				/>
+			)}
 		</>
 	);
 }

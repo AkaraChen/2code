@@ -234,10 +234,11 @@ export function useProjectConfig(projectId: string) {
 	});
 }
 
-export function useProjectConfigQuery(projectId: string) {
+export function useProjectConfigQuery(projectId: string, enabled = true) {
 	return useQuery({
 		queryKey: queryKeys.projectConfig(projectId),
 		queryFn: () => getProjectConfig({ projectId }),
+		enabled: !!projectId && enabled,
 	});
 }
 

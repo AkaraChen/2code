@@ -3,6 +3,7 @@ use infra::no_window::command_without_windows_console;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::OnceLock;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct AvailableShell {
@@ -10,6 +11,8 @@ pub struct AvailableShell {
 	pub command: String,
 	pub is_default: bool,
 }
+
+static AVAILABLE_SHELLS: OnceLock<Vec<AvailableShell>> = OnceLock::new();
 
 fn shell_label(command: &str) -> String {
 	command.to_string()
@@ -272,9 +275,13 @@ fn load_available_shells() -> Vec<AvailableShell> {
 	}
 }
 
+fn cached_available_shells() -> Vec<AvailableShell> {
+	AVAILABLE_SHELLS.get_or_init(load_available_shells).clone()
+}
+
 #[tauri::command]
 pub async fn list_available_shells() -> Vec<AvailableShell> {
-	tauri::async_runtime::spawn_blocking(load_available_shells)
+	tauri::async_runtime::spawn_blocking(cached_available_shells)
 		.await
 		.unwrap_or_default()
 }

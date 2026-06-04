@@ -191,6 +191,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			let disposed = false;
 			isStreamReadyRef.current = false;
 			pendingEventsRef.current = [];
+			const liveOutputBuffer: string[] = [];
+			let liveOutputFrame: number | null = null;
 
 			// 1. Create xterm (sync)
 			const term = new XTerm({
@@ -295,6 +297,24 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			// Resize PTY to match xterm dimensions
 			resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
+			function flushLiveOutputBuffer() {
+				liveOutputFrame = null;
+				if (liveOutputBuffer.length === 0 || disposed) return;
+
+				const output = liveOutputBuffer.join("");
+				liveOutputBuffer.length = 0;
+				term.write(output);
+			}
+
+			function writeLiveOutput(output: string) {
+				if (!output || disposed) return;
+				liveOutputBuffer.push(output);
+				if (liveOutputFrame !== null) return;
+
+				liveOutputFrame =
+					window.requestAnimationFrame(flushLiveOutputBuffer);
+			}
+
 			function flushPendingEventsAfterHistory(historyText: string) {
 				const pendingText = pendingEventsRef.current.join("");
 				const overlap = getSuffixPrefixOverlapLength(historyText, pendingText);
@@ -304,7 +324,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				isStreamReadyRef.current = true;
 
 				if (remainingPendingText.length > 0) {
-					term.write(remainingPendingText);
+					writeLiveOutput(remainingPendingText);
 				}
 			}
 
@@ -332,13 +352,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 							pendingEventsRef.current.push(event.payload);
 							return;
 						}
-						term.write(event.payload);
+						writeLiveOutput(event.payload);
 					},
 				);
 				const unlistenExit = await listen(
 					`pty-exit-${sessionId}`,
 					() => {
-						term.write("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
+						writeLiveOutput("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
 					},
 				);
 				if (disposed) {
@@ -405,6 +425,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				// Reset stream state (sessionHistory is only deleted after successful write)
 				isStreamReadyRef.current = false;
 				pendingEventsRef.current = [];
+				liveOutputBuffer.length = 0;
+				if (liveOutputFrame !== null) {
+					window.cancelAnimationFrame(liveOutputFrame);
+					liveOutputFrame = null;
+				}
 
 				for (const unlisten of unlisteners) {
 					unlisten();

@@ -20,7 +20,9 @@ const getSoundsPromise = createCachedPromise<string[]>(() =>
 
 export function SoundPicker() {
 	const sounds = use(getSoundsPromise());
-	const { enabled, sound, setSound } = useNotificationStore();
+	const enabled = useNotificationStore((state) => state.enabled);
+	const sound = useNotificationStore((state) => state.sound);
+	const setSound = useNotificationStore((state) => state.setSound);
 	const locale = useLocale();
 
 	const soundCollection = useMemo(

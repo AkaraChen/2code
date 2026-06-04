@@ -1,11 +1,14 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct SystemFont {
 	pub family: String,
 	pub is_mono: bool,
 }
+
+static SYSTEM_FONTS: OnceLock<Vec<SystemFont>> = OnceLock::new();
 
 fn fonts_from_family_map(families: BTreeMap<String, bool>) -> Vec<SystemFont> {
 	families
@@ -75,8 +78,12 @@ fn load_system_fonts() -> Vec<SystemFont> {
 	Vec::new()
 }
 
+fn cached_system_fonts() -> Vec<SystemFont> {
+	SYSTEM_FONTS.get_or_init(load_system_fonts).clone()
+}
+
 #[tauri::command]
 pub async fn list_system_fonts() -> Vec<SystemFont> {
-	let fonts = tauri::async_runtime::spawn_blocking(load_system_fonts).await;
+	let fonts = tauri::async_runtime::spawn_blocking(cached_system_fonts).await;
 	fonts.unwrap_or_default()
 }

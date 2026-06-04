@@ -9,7 +9,9 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
+import { memo, useCallback } from "react";
 import { FiChevronDown } from "react-icons/fi";
+import type { BrowserApp } from "@/generated";
 import { listInstalledBrowsers, openUrlInBrowser } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import * as m from "@/paraglide/messages.js";
@@ -20,6 +22,30 @@ interface TerminalLinkConfirmDialogProps {
 	onOpenDefault: () => void;
 }
 
+interface BrowserMenuItemProps {
+	browser: BrowserApp;
+	onOpen: (browserId: string) => void;
+}
+
+const BrowserMenuItem = memo(function BrowserMenuItem({
+	browser,
+	onOpen,
+}: BrowserMenuItemProps) {
+	const handleClick = useCallback(() => {
+		onOpen(browser.id);
+	}, [browser.id, onOpen]);
+
+	return (
+		<Menu.Item
+			key={browser.id}
+			value={browser.id}
+			onClick={handleClick}
+		>
+			{browser.name}
+		</Menu.Item>
+	);
+});
+
 export function TerminalLinkConfirmDialog({
 	link,
 	onClose,
@@ -28,22 +54,27 @@ export function TerminalLinkConfirmDialog({
 	const { data: browsers = [] } = useQuery({
 		queryKey: queryKeys.browser.installed,
 		queryFn: listInstalledBrowsers,
+		enabled: !!link,
 		staleTime: 60_000,
 	});
 
-	function openWithBrowser(browserId: string) {
+	const openWithBrowser = useCallback((browserId: string) => {
 		if (!link) return;
 		void openUrlInBrowser({ browserId, url: link });
 		onClose();
-	}
+	}, [link, onClose]);
+	const handleOpenChange = useCallback(
+		(event: { open: boolean }) => {
+			if (!event.open) onClose();
+		},
+		[onClose],
+	);
 
 	return (
 		<Dialog.Root
 			lazyMount
 			open={!!link}
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
-			}}
+			onOpenChange={handleOpenChange}
 		>
 			<Portal>
 				<Dialog.Backdrop />
@@ -87,13 +118,11 @@ export function TerminalLinkConfirmDialog({
 										<Menu.Positioner>
 											<Menu.Content minW="52">
 												{browsers.map((browser) => (
-													<Menu.Item
+													<BrowserMenuItem
 														key={browser.id}
-														value={browser.id}
-														onClick={() => openWithBrowser(browser.id)}
-													>
-														{browser.name}
-													</Menu.Item>
+														browser={browser}
+														onOpen={openWithBrowser}
+													/>
 												))}
 											</Menu.Content>
 										</Menu.Positioner>

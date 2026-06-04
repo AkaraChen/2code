@@ -393,7 +393,7 @@ pub fn read_head_file(
 ) -> Result<Option<String>, AppError> {
 	let path = validate_repo_relative_path(path, "Preview file path")?;
 	let cache_path = preview_cache_path(folder, "head", None, &path);
-	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path)
+	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path, false)
 }
 
 pub fn read_commit_file(
@@ -409,6 +409,7 @@ pub fn read_commit_file(
 		folder,
 		&format!("{commit_hash}:{path}"),
 		&cache_path,
+		true,
 	)
 }
 
@@ -425,6 +426,7 @@ pub fn read_parent_commit_file(
 		folder,
 		&format!("{commit_hash}^:{path}"),
 		&cache_path,
+		true,
 	)
 }
 
@@ -632,6 +634,14 @@ pub fn pull_request_status(
 	folder: &str,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
 	let branch_name = branch(folder)?;
+	pull_request_status_for_branch(folder, &branch_name)
+}
+
+pub fn pull_request_status_for_branch(
+	folder: &str,
+	branch_name: &str,
+) -> Result<Option<GitPullRequestStatus>, AppError> {
+	let branch_name = branch_name.trim();
 	if branch_name.is_empty() || branch_name == "HEAD" {
 		return Ok(None);
 	}
@@ -1220,7 +1230,14 @@ fn read_git_blob_to_cache(
 	folder: &str,
 	spec: &str,
 	cache_path: &Path,
+	cache_key_is_immutable: bool,
 ) -> Result<Option<String>, AppError> {
+	if cache_key_is_immutable
+		&& std::fs::metadata(cache_path).is_ok_and(|metadata| metadata.is_file())
+	{
+		return Ok(Some(cache_path.to_string_lossy().to_string()));
+	}
+
 	let blob_size = get_git_blob_size(folder, spec)?;
 	let Some(blob_size) = blob_size else {
 		return Ok(None);

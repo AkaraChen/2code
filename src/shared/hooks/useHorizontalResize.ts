@@ -3,6 +3,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -71,16 +72,16 @@ export function useHorizontalResize({
 		};
 	}, [applyValue, isDragging]);
 
-	function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
+	const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
 		if (disabled || event.button !== 0) return;
 
 		startXRef.current = event.clientX;
 		startValueRef.current = valueRef.current;
 		setIsDragging(true);
 		event.preventDefault();
-	}
+	}, [disabled]);
 
-	function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+	const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
 		if (disabled) return;
 
 		switch (event.key) {
@@ -105,11 +106,14 @@ export function useHorizontalResize({
 				break;
 			}
 		}
-	}
+	}, [applyValue, disabled, max, min, step]);
 
-	return {
-		isDragging,
-		handlePointerDown,
-		handleKeyDown,
-	};
+	return useMemo(
+		() => ({
+			isDragging,
+			handlePointerDown,
+			handleKeyDown,
+		}),
+		[handleKeyDown, handlePointerDown, isDragging],
+	);
 }

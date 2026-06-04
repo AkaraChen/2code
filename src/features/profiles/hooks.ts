@@ -57,15 +57,21 @@ export function useDeleteProfile() {
 	return useMutation({
 		mutationFn: ({ id }: { id: string; projectId: string }) =>
 			deleteProfile({ id }),
-		onSuccess: (_data, { id }) => {
+		onSuccess: (_data, { id, projectId }) => {
 			useTerminalStore.getState().removeProfile(id);
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) =>
-					projects?.map((project) => ({
-						...project,
-						profiles: project.profiles.filter((profile) => profile.id !== id),
-					})),
+					projects?.map((project) => {
+						if (project.id !== projectId) return project;
+						const profiles = project.profiles.filter(
+							(profile) => profile.id !== id,
+						);
+						if (profiles.length === project.profiles.length) {
+							return project;
+						}
+						return { ...project, profiles };
+					}),
 			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 		},
@@ -111,12 +117,16 @@ export function useUpdateProfileNotes() {
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) =>
-					projects?.map((project) => ({
-						...project,
-						profiles: project.profiles.map((p) =>
-							p.id === profile.id ? profile : p,
-						),
-					})),
+					projects?.map((project) => {
+						if (project.id !== profile.project_id) return project;
+						let changed = false;
+						const profiles = project.profiles.map((p) => {
+							if (p.id !== profile.id) return p;
+							changed = true;
+							return profile;
+						});
+						return changed ? { ...project, profiles } : project;
+					}),
 			);
 		},
 	});

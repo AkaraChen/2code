@@ -90,14 +90,24 @@ export function TerminalThemePicker({
 }: {
 	onPreview: (id: TerminalThemeId | null) => void;
 }) {
-	const {
-		darkTerminalTheme,
-		lightTerminalTheme,
-		syncTerminalTheme,
-		setDarkTerminalTheme,
-		setLightTerminalTheme,
-		setSyncTerminalTheme,
-	} = useTerminalSettingsStore();
+	const darkTerminalTheme = useTerminalSettingsStore(
+		(state) => state.darkTerminalTheme,
+	);
+	const lightTerminalTheme = useTerminalSettingsStore(
+		(state) => state.lightTerminalTheme,
+	);
+	const syncTerminalTheme = useTerminalSettingsStore(
+		(state) => state.syncTerminalTheme,
+	);
+	const setDarkTerminalTheme = useTerminalSettingsStore(
+		(state) => state.setDarkTerminalTheme,
+	);
+	const setLightTerminalTheme = useTerminalSettingsStore(
+		(state) => state.setLightTerminalTheme,
+	);
+	const setSyncTerminalTheme = useTerminalSettingsStore(
+		(state) => state.setSyncTerminalTheme,
+	);
 
 	return (
 		<>

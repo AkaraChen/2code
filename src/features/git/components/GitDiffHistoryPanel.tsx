@@ -1,6 +1,6 @@
 import { Box, Flex } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { startTransition, use, useEffect } from "react";
+import { memo, startTransition, use, useCallback, useEffect, useMemo } from "react";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import {
@@ -71,7 +71,7 @@ function HistorySidebarPanel({
 	);
 }
 
-function CommitFileSidebar({
+const CommitFileSidebar = memo(function CommitFileSidebar({
 	commit,
 	selectedIndex,
 }: {
@@ -80,6 +80,17 @@ function CommitFileSidebar({
 }) {
 	const { profileId, dispatch } = use(GitDiffContext)!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
+	const handleFileSelect = useCallback(
+		(index: number) => {
+			dispatch({ type: "selectCommitFile", index });
+		},
+		[dispatch],
+	);
+	const handleBack = useCallback(() => {
+		startTransition(() => {
+			dispatch({ type: "commitBack" });
+		});
+	}, [dispatch]);
 
 	useEffect(() => {
 		dispatch({ type: "setCommitFileCount", count: files.length });
@@ -90,17 +101,13 @@ function CommitFileSidebar({
 			commit={commit}
 			files={files}
 			selectedIndex={selectedIndex}
-			onFileSelect={(i) => dispatch({ type: "selectCommitFile", index: i })}
-			onBack={() =>
-				startTransition(() => {
-					dispatch({ type: "commitBack" });
-				})
-			}
+			onFileSelect={handleFileSelect}
+			onBack={handleBack}
 		/>
 	);
-}
+});
 
-function CommitDiffViewer({
+const CommitDiffViewer = memo(function CommitDiffViewer({
 	commit,
 	selectedIndex,
 }: {
@@ -109,6 +116,10 @@ function CommitDiffViewer({
 }) {
 	const { profileId, options } = use(GitDiffContext)!;
 	const files = useCommitDiffFiles(profileId, commit.full_hash);
+	const previewContext = useMemo(
+		() => ({ kind: "commit" as const, profileId, commitHash: commit.full_hash }),
+		[commit.full_hash, profileId],
+	);
 	const activeFile =
 		files.length > 0 && selectedIndex < files.length
 			? files[selectedIndex]
@@ -119,15 +130,23 @@ function CommitDiffViewer({
 			activeFile={activeFile}
 			options={options}
 			contextKey={commit.full_hash}
-			previewContext={{ kind: "commit", profileId, commitHash: commit.full_hash }}
+			previewContext={previewContext}
 			emptyMessage={m.selectFileToView()}
 		/>
 	);
-}
+});
 
-export function HistorySidebar() {
+export const HistorySidebar = memo(function HistorySidebar() {
 	const { commits, state, dispatch } = use(GitDiffContext)!;
 	const selectedCommit = state.selectedCommit;
+	const handleCommitSelect = useCallback(
+		(commit: GitCommit, index: number) => {
+			startTransition(() => {
+				dispatch({ type: "selectCommit", commit, index });
+			});
+		},
+		[dispatch],
+	);
 
 	if (selectedCommit) {
 		return (
@@ -164,19 +183,19 @@ export function HistorySidebar() {
 			<CommitList
 				commits={commits}
 				selectedIndex={state.selectedCommitIndex}
-				onCommitSelect={(commit, index) =>
-					startTransition(() => {
-						dispatch({ type: "selectCommit", commit, index });
-					})
-				}
+				onCommitSelect={handleCommitSelect}
 			/>
 		</HistorySidebarPanel>
 	);
-}
+});
 
-export function HistoryDiffPane({ visible }: { visible: boolean }) {
+export const HistoryDiffPane = memo(function HistoryDiffPane({ visible }: { visible: boolean }) {
 	const { state, options, profileId } = use(GitDiffContext)!;
 	const selectedCommit = state.selectedCommit;
+	const emptyPreviewContext = useMemo(
+		() => ({ kind: "working-tree" as const, profileId }),
+		[profileId],
+	);
 
 	if (!selectedCommit) {
 		return (
@@ -186,7 +205,7 @@ export function HistoryDiffPane({ visible }: { visible: boolean }) {
 						activeFile={null}
 						options={options}
 						contextKey="history"
-						previewContext={{ kind: "working-tree", profileId }}
+						previewContext={emptyPreviewContext}
 						emptyMessage={m.selectFileToView()}
 					/>
 				</HistorySidebarPanel>
@@ -211,4 +230,4 @@ export function HistoryDiffPane({ visible }: { visible: boolean }) {
 			</HistorySidebarPanel>
 		</VisibleBox>
 	);
-}
+});

@@ -178,7 +178,8 @@ export function WarpControl(props: ControlProps) {
 
 export function GitDiffControl({ profile, isActive, options }: ControlProps) {
 	const onOpen = options.onOpen as (() => void) | undefined;
-	const stats = useGitDiffStats(profile.id, isActive);
+	const statsPaused = options.statsPaused === true;
+	const stats = useGitDiffStats(profile.id, isActive && !statsPaused);
 
 	return (
 		<Tooltip.Root>

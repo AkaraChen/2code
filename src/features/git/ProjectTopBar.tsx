@@ -9,7 +9,13 @@ import {
 } from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { Dispatch } from "react";
-import { useCallback, useEffect, useReducer, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useReducer,
+	useState,
+} from "react";
 import {
 	PiGearSixFill,
 	PiGitBranchFill,
@@ -38,6 +44,8 @@ const FILE_TREE_TOGGLE_ICON_TRANSITION = {
 	duration: 0.12,
 	ease: [0.2, 0, 0.2, 1],
 } as const;
+const EMPTY_CONTROL_OPTIONS: Record<string, unknown> = {};
+const IS_WINDOWS_PLATFORM = isWindowsPlatform();
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -114,6 +122,9 @@ export default function ProjectTopBar({
 		dispatchGitDiff({ type: "switchTab", tab: "changes" });
 		setGitDiffOpen(true);
 	}, []);
+	const closeGitDiffDialog = useCallback(() => setGitDiffOpen(false), []);
+	const openSettingsDialog = useCallback(() => setSettingsOpen(true), []);
+	const closeSettingsDialog = useCallback(() => setSettingsOpen(false), []);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -130,13 +141,26 @@ export default function ProjectTopBar({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [isActive, onToggleFileTree, openGitDiffDialog]);
-	const supportedControlIdSet = new Set(
-		getSupportedControlIds(supportedAppIds),
+	const supportedControlIds = useMemo(
+		() => getSupportedControlIds(supportedAppIds),
+		[supportedAppIds],
 	);
-	const visibleActiveControls = activeControls.filter((id) =>
-		supportedControlIdSet.has(id),
+	const supportedControlIdSet = useMemo(
+		() => new Set(supportedControlIds),
+		[supportedControlIds],
 	);
-	const isWindows = isWindowsPlatform();
+	const visibleActiveControls = useMemo(
+		() => activeControls.filter((id) => supportedControlIdSet.has(id)),
+		[activeControls, supportedControlIdSet],
+	);
+	const gitDiffControlOptions = useMemo(
+		() => ({
+			...(controlOptions["git-diff"] ?? EMPTY_CONTROL_OPTIONS),
+			onOpen: openGitDiffDialog,
+			statsPaused: gitDiffOpen,
+		}),
+		[controlOptions, gitDiffOpen, openGitDiffDialog],
+	);
 
 	const titleContent = (
 		<HStack gap="2">
@@ -233,12 +257,11 @@ export default function ProjectTopBar({
 						key={controlId}
 						profile={profile}
 						isActive={isActive}
-						options={{
-							...(controlOptions[controlId] ?? {}),
-							...(controlId === "git-diff"
-								? { onOpen: openGitDiffDialog }
-								: {}),
-						}}
+						options={
+							controlId === "git-diff"
+								? gitDiffControlOptions
+								: (controlOptions[controlId] ?? EMPTY_CONTROL_OPTIONS)
+						}
 					/>
 				);
 			})}
@@ -248,7 +271,7 @@ export default function ProjectTopBar({
 						aria-label={m.projectSettings()}
 						size="xs"
 						variant="subtle"
-						onClick={() => setSettingsOpen(true)}
+						onClick={openSettingsDialog}
 					>
 						<PiGearSixFill />
 					</IconButton>
@@ -271,7 +294,7 @@ export default function ProjectTopBar({
 				align="flex-end"
 				justify="space-between"
 				pl="4"
-				pr={isWindows ? "118px" : "5"}
+				pr={IS_WINDOWS_PLATFORM ? "118px" : "5"}
 				pb="2"
 				pt="2"
 				minH="52px"
@@ -282,7 +305,7 @@ export default function ProjectTopBar({
 
 			<ProjectSettingsDialog
 				isOpen={settingsOpen}
-				onClose={() => setSettingsOpen(false)}
+				onClose={closeSettingsDialog}
 				projectId={projectId}
 			/>
 
@@ -291,7 +314,7 @@ export default function ProjectTopBar({
 					cwd={profile.worktree_path}
 					isOpen={gitDiffOpen}
 					isActive={isActive}
-					onClose={() => setGitDiffOpen(false)}
+					onClose={closeGitDiffDialog}
 					profileId={profile.id}
 					worktreePath={profile.worktree_path}
 					state={gitDiffState}
@@ -300,7 +323,7 @@ export default function ProjectTopBar({
 			) : (
 				<GitDiffDialog
 					isOpen={gitDiffOpen}
-					onClose={() => setGitDiffOpen(false)}
+					onClose={closeGitDiffDialog}
 					profileId={profile.id}
 					worktreePath={profile.worktree_path}
 					branchName={profile.branch_name}

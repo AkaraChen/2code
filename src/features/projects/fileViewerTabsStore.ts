@@ -56,19 +56,15 @@ export const useFileViewerDirtyStore = create<FileViewerDirtyStore>()(
 
 		setFileDraft(profileId, filePath, content) {
 			set((state) => {
-				state.drafts[profileId] = {
-					...(state.drafts[profileId] ?? {}),
-					[filePath]: content,
-				};
+				state.drafts[profileId] ??= {};
+				state.drafts[profileId][filePath] = content;
 			});
 		},
 
 		setFileSavedValue(profileId, filePath, content) {
 			set((state) => {
-				state.savedValues[profileId] = {
-					...(state.savedValues[profileId] ?? {}),
-					[filePath]: content,
-				};
+				state.savedValues[profileId] ??= {};
+				state.savedValues[profileId][filePath] = content;
 			});
 		},
 

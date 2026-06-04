@@ -1,7 +1,7 @@
 import { Dialog, Portal } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import type { Dispatch } from "react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import {
@@ -71,6 +71,12 @@ export default function GitDiffDialog({
 		}),
 		[state.viewMode, termThemeId],
 	);
+	const handleOpenChange = useCallback(
+		(event: { open: boolean }) => {
+			if (!event.open) onClose();
+		},
+		[onClose],
+	);
 
 	return (
 		<Dialog.Root
@@ -78,9 +84,7 @@ export default function GitDiffDialog({
 			size="cover"
 			placement="center"
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
-			}}
+			onOpenChange={handleOpenChange}
 		>
 			<Portal>
 				<Dialog.Backdrop />

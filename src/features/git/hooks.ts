@@ -1,4 +1,3 @@
-import { parsePatchFiles } from "@pierre/diffs";
 import {
 	useMutation,
 	useQuery,
@@ -18,9 +17,11 @@ import {
 	getGitPullRequestStatus,
 	gitPush,
 } from "@/generated";
+import type { GitDiffStats } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
-import { collectPatchFiles } from "./patchFiles";
+import { parseDiffFiles } from "./patchFiles";
+import { getDiffStatsFromFiles } from "./utils";
 import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_DIFF_SNAPSHOT_STALE_MS = 30_000;
@@ -48,13 +49,24 @@ function useGitDiff(profileId: string) {
 	});
 }
 
-export function useGitLog(profileId: string) {
-	return useSuspenseQuery({
+function toGitDiffSummary(data: GitDiffStats | null | undefined) {
+	if (!data) return null;
+	if (data.insertions === 0 && data.deletions === 0) return null;
+	return {
+		additions: data.insertions,
+		deletions: data.deletions,
+		filesChanged: data.files_changed,
+	};
+}
+
+export function useGitLog(profileId: string, enabled = true) {
+	return useQuery({
 		queryKey: queryKeys.git.log(profileId),
 		queryFn: () => getGitLog({ profileId }),
+		enabled,
 		staleTime: GIT_HISTORY_STALE_MS,
 		refetchOnMount: "always",
-		refetchInterval: GIT_LIGHT_REFRESH_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 }
 
@@ -75,15 +87,7 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 	});
 	useRefreshOnEnable(enabled, refetch);
 
-	return useMemo(() => {
-		if (!data) return null;
-		if (data.insertions === 0 && data.deletions === 0) return null;
-		return {
-			additions: data.insertions,
-			deletions: data.deletions,
-			filesChanged: data.files_changed,
-		};
-	}, [data]);
+	return useMemo(() => toGitDiffSummary(data), [data]);
 }
 
 export function useGitAheadCount(profileId: string, enabled = true) {
@@ -105,7 +109,11 @@ export function useGitPullRequestStatus(
 ) {
 	return useQuery({
 		queryKey: queryKeys.git.pullRequestStatus(profileId, branchName ?? null),
-		queryFn: () => getGitPullRequestStatus({ profileId }),
+		queryFn: () =>
+			getGitPullRequestStatus({
+				profileId,
+				branchName: branchName ?? null,
+			}),
 		enabled: !!profileId && !!branchName && enabled,
 		staleTime: 30_000,
 		refetchInterval: enabled ? PR_STATUS_REFRESH_INTERVAL_MS : false,
@@ -200,16 +208,23 @@ export function useDiscardGitFileChanges(profileId: string) {
 }
 
 export function useGitDiffFiles(profileId: string) {
+	const queryClient = useQueryClient();
 	const { data: diff } = useGitDiff(profileId);
-	return useMemo(() => collectPatchFiles(parsePatchFiles(diff)), [diff]);
+	const files = useMemo(() => parseDiffFiles(diff), [diff]);
+
+	useEffect(() => {
+		queryClient.setQueryData(
+			queryKeys.git.diffStats(profileId),
+			getDiffStatsFromFiles(files),
+		);
+	}, [files, profileId, queryClient]);
+
+	return files;
 }
 
 export function useCommitDiffFiles(profileId: string, commitHash: string) {
 	const { data: commitDiff } = useCommitDiff(profileId, commitHash);
-	return useMemo(
-		() => collectPatchFiles(parsePatchFiles(commitDiff)),
-		[commitDiff],
-	);
+	return useMemo(() => parseDiffFiles(commitDiff), [commitDiff]);
 }
 
 interface GitBinaryPreviewRequest {

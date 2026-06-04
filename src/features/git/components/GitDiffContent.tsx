@@ -105,15 +105,24 @@ export default function GitDiffContent({
 	const sidebarRef = useRef<HTMLDivElement>(null);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 	const isChanges = state.activeTab === "changes";
+	const isHistory = state.activeTab === "history";
 
 	const changesFiles = useGitDiffFiles(profileId);
-	const { data: logData } = useGitLog(profileId);
+	const { data: logData } = useGitLog(profileId, isHistory);
 	const commits = useMemo(() => logData ?? [], [logData]);
+	const changeFileNames = useMemo(
+		() => changesFiles.map((file) => file.name),
+		[changesFiles],
+	);
 	const openFileTab = useFileViewerTabsStore((store) => store.openFile);
-	const commitGitChanges = useCommitGitChanges(profileId);
-	const discardGitFileChanges = useDiscardGitFileChanges(profileId);
+	const {
+		mutateAsync: commitGitChanges,
+		isPending: isCommitting,
+	} = useCommitGitChanges(profileId);
+	const { mutateAsync: discardGitFileChanges } =
+		useDiscardGitFileChanges(profileId);
 	const aheadCount = useGitAheadCount(profileId, isChanges);
-	const gitPush = useGitPush(profileId);
+	const { mutateAsync: gitPush, isPending: isPushing } = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
 		() => collectOrderedIncludedFileNames(changesFiles, includedFileNames),
 		[changesFiles, includedFileNames],
@@ -121,7 +130,7 @@ export default function GitDiffContent({
 
 	const handlePush = useCallback(async () => {
 		try {
-			await gitPush.mutateAsync();
+			await gitPush();
 			toaster.create({
 				title: m.gitPushSuccessTitle(),
 				type: "success",
@@ -164,30 +173,36 @@ export default function GitDiffContent({
 		setReviewComments([]);
 	}, []);
 
-	const handleTabChange = (value: string) => {
+	const handleTabChange = useCallback((value: string) => {
 		startTransition(() => {
 			dispatch({
 				type: "switchTab",
 				tab: value as "changes" | "history",
 			});
 		});
-	};
+	}, [dispatch]);
+	const handleTabValueChange = useCallback(
+		(details: { value: string }) => {
+			handleTabChange(details.value);
+		},
+		[handleTabChange],
+	);
 
-	const setFileIncluded = (fileName: string, included: boolean) => {
+	const setFileIncluded = useCallback((fileName: string, included: boolean) => {
 		setIncludedFileNames((prev) =>
 			toggleIncludedFileName(prev, fileName, included),
 		);
-	};
+	}, []);
 
-	const handleOpenFile = (file: FileDiffMetadata) => {
+	const handleOpenFile = useCallback((file: FileDiffMetadata) => {
 		openFileTab(
 			profileId,
 			resolveWorktreeFilePath(worktreePath, file.name),
 		);
 		onClose();
-	};
+	}, [onClose, openFileTab, profileId, worktreePath]);
 
-	const handleDiscardFile = async (file: FileDiffMetadata) => {
+	const handleDiscardFile = useCallback(async (file: FileDiffMetadata) => {
 		const relativePaths = Array.from(
 			new Set(
 				[file.name, file.prevName].filter((path): path is string =>
@@ -200,7 +215,7 @@ export default function GitDiffContent({
 		);
 
 		try {
-			await discardGitFileChanges.mutateAsync({
+			await discardGitFileChanges({
 				paths: relativePaths,
 				filePathsToRefresh: absolutePaths,
 			});
@@ -221,11 +236,55 @@ export default function GitDiffContent({
 				closable: true,
 			});
 		}
-	};
+	}, [discardGitFileChanges, worktreePath]);
+
+	const handleIncludeAll = useCallback(() => {
+		setIncludedFileNames(new Set(changeFileNames));
+	}, [changeFileNames]);
+
+	const handleIncludeNone = useCallback(() => {
+		setIncludedFileNames(new Set());
+	}, []);
+
+	const handleCommit = useCallback(async () => {
+		try {
+			const hash = await commitGitChanges({
+				files: orderedIncludedFileNames,
+				message: commitMessage.trim(),
+				body: commitBody.trim() || undefined,
+			});
+			setCommitMessage("");
+			setCommitBody("");
+			toaster.create({
+				title: m.gitCommitSuccessTitle(),
+				description: m.gitCommitSuccessDescription({
+					hash: hash.slice(0, 7),
+				}),
+				type: "success",
+				closable: true,
+			});
+		} catch (error) {
+			toaster.create({
+				title: m.gitCommitErrorTitle(),
+				description:
+					error instanceof Error ? error.message : String(error),
+				type: "error",
+				closable: true,
+			});
+		}
+	}, [commitBody, commitGitChanges, commitMessage, orderedIncludedFileNames]);
+
+	const handleOpenReviewQueue = useCallback(() => {
+		setReviewQueueOpen(true);
+	}, []);
+
+	const handleCloseReviewQueue = useCallback(() => {
+		setReviewQueueOpen(false);
+	}, []);
 
 	// Keyboard navigation — dispatch arrow keys to the active list,
 	// handle Enter / Escape / Backspace for commit drill-in/back.
-	const activeListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+	const activeListKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
 		if (isInteractiveKeyboardTarget(e.target)) return;
 
 		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -311,7 +370,18 @@ export default function GitDiffContent({
 				});
 			}
 		}
-	};
+	}, [
+		changesFiles,
+		commits,
+		dispatch,
+		includedFileNames,
+		setFileIncluded,
+		state.activeTab,
+		state.commitFileCount,
+		state.selectedCommit,
+		state.selectedCommitIndex,
+		state.selectedFileIndex,
+	]);
 
 	// Cmd+Enter triggers push when push button is visible (no local changes, commits ahead)
 	useEffect(() => {
@@ -320,7 +390,7 @@ export default function GitDiffContent({
 			if (
 				changesFiles.length === 0 &&
 				aheadCount > 0 &&
-				!gitPush.isPending
+				!isPushing
 			) {
 				e.preventDefault();
 				handlePush();
@@ -328,7 +398,7 @@ export default function GitDiffContent({
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [changesFiles.length, aheadCount, gitPush.isPending, handlePush]);
+	}, [changesFiles.length, aheadCount, isPushing, handlePush]);
 
 	// Auto-focus sidebar on tab change (also covers initial dialog open)
 	useEffect(() => {
@@ -346,12 +416,11 @@ export default function GitDiffContent({
 	}, [state.selectedCommit]);
 
 	useEffect(() => {
-		const nextFileNames = changesFiles.map((file) => file.name);
 		const prevFileNames = previousChangeFileNamesRef.current;
 
 		setIncludedFileNames((prevIncluded) => {
 			const nextIncluded = reconcileIncludedFiles(
-				nextFileNames,
+				changeFileNames,
 				prevIncluded,
 				prevFileNames,
 			);
@@ -360,8 +429,8 @@ export default function GitDiffContent({
 				: nextIncluded;
 		});
 
-		previousChangeFileNamesRef.current = new Set(nextFileNames);
-	}, [changesFiles]);
+		previousChangeFileNamesRef.current = new Set(changeFileNames);
+	}, [changeFileNames]);
 
 	useEffect(() => {
 		if (
@@ -401,7 +470,7 @@ export default function GitDiffContent({
 				>
 					<Tabs.Root
 						value={state.activeTab}
-						onValueChange={(e) => handleTabChange(e.value)}
+						onValueChange={handleTabValueChange}
 						size="sm"
 						variant="enclosed"
 						flex="1"
@@ -448,70 +517,18 @@ export default function GitDiffContent({
 										includedFileNames={includedFileNames}
 										commitMessage={commitMessage}
 										commitBody={commitBody}
-										isCommitting={
-											commitGitChanges.isPending
-										}
+										isCommitting={isCommitting}
 										aheadCount={aheadCount}
-										isPushing={gitPush.isPending}
+										isPushing={isPushing}
 										onToggleIncluded={setFileIncluded}
 										onOpenFile={handleOpenFile}
 										onDiscardFile={handleDiscardFile}
-										onIncludeAll={() =>
-											setIncludedFileNames(
-												new Set(
-													changesFiles.map(
-														(file) => file.name,
-													),
-												),
-											)
-										}
-										onIncludeNone={() =>
-											setIncludedFileNames(new Set())
-										}
+										onIncludeAll={handleIncludeAll}
+										onIncludeNone={handleIncludeNone}
 										onCommitMessageChange={setCommitMessage}
 										onCommitBodyChange={setCommitBody}
 										onPush={handlePush}
-										onCommit={async () => {
-											try {
-												const hash =
-													await commitGitChanges.mutateAsync(
-														{
-															files: orderedIncludedFileNames,
-															message:
-																commitMessage.trim(),
-															body:
-																commitBody.trim() ||
-																undefined,
-														},
-													);
-												setCommitMessage("");
-												setCommitBody("");
-												toaster.create({
-													title: m.gitCommitSuccessTitle(),
-													description:
-														m.gitCommitSuccessDescription(
-															{
-																hash: hash.slice(
-																	0,
-																	7,
-																),
-															},
-														),
-													type: "success",
-													closable: true,
-												});
-											} catch (error) {
-												toaster.create({
-													title: m.gitCommitErrorTitle(),
-													description:
-														error instanceof Error
-															? error.message
-															: String(error),
-													type: "error",
-													closable: true,
-												});
-											}
-										}}
+										onCommit={handleCommit}
 									/>
 								</AsyncBoundary>
 							</Tabs.Content>
@@ -558,7 +575,7 @@ export default function GitDiffContent({
 						size="sm"
 						variant="solid"
 						boxShadow="xl"
-						onClick={() => setReviewQueueOpen(true)}
+						onClick={handleOpenReviewQueue}
 					>
 						<FiMessageSquare />
 						<Text fontSize="sm" fontWeight="medium">
@@ -579,15 +596,17 @@ export default function GitDiffContent({
 						</Box>
 					</Button>
 				)}
-				<GitReviewQueueDialog
-					isOpen={reviewQueueOpen}
-					comments={reviewComments}
-					options={options}
-					onClose={() => setReviewQueueOpen(false)}
-					onClear={handleClearReviewComments}
-					onDelete={handleDeleteReviewComment}
-					onUpdate={handleUpdateReviewComment}
-				/>
+				{reviewQueueOpen && (
+					<GitReviewQueueDialog
+						isOpen={reviewQueueOpen}
+						comments={reviewComments}
+						options={options}
+						onClose={handleCloseReviewQueue}
+						onClear={handleClearReviewComments}
+						onDelete={handleDeleteReviewComment}
+						onUpdate={handleUpdateReviewComment}
+					/>
+				)}
 			</Flex>
 		</GitDiffContext>
 	);

@@ -1,18 +1,22 @@
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { Preference, ThemeContextValue } from "./themeContext";
 import { ThemeContext } from "./themeContext";
 
 function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
+	const setPreference = useCallback(
+		(preference: Preference) => setTheme(preference),
+		[setTheme],
+	);
 
 	const value = useMemo<ThemeContextValue>(
 		() => ({
 			preference: (theme as Preference) ?? "system",
-			setPreference: (p: Preference) => setTheme(p),
+			setPreference,
 			isDark: resolvedTheme === "dark",
 		}),
-		[theme, setTheme, resolvedTheme],
+		[theme, setPreference, resolvedTheme],
 	);
 
 	return (

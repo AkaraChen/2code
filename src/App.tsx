@@ -1,4 +1,5 @@
 import { Box, Flex } from "@chakra-ui/react";
+import { useCallback } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
@@ -20,14 +21,18 @@ import {
 import { isWindowsPlatform } from "./shared/lib/platform";
 import "./app.css";
 
+const IS_WINDOWS_PLATFORM = isWindowsPlatform();
+
 export default function App() {
-	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
-	useKey("D", (e) => {
+	const handleDebugShortcut = useCallback((e: KeyboardEvent) => {
 		if (e.shiftKey && (e.metaKey || e.ctrlKey)) {
 			e.preventDefault();
 			useDebugStore.getState().togglePanel();
 		}
-	});
+	}, []);
+
+	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
+	useKey("D", handleDebugShortcut);
 
 	return (
 		<Flex direction="column" h="full" bg="bg" color="fg">
@@ -82,7 +87,7 @@ export default function App() {
 				</Box>
 			</Flex>
 			<DebugFloat />
-			{isWindowsPlatform() && <WindowControls />}
+			{IS_WINDOWS_PLATFORM && <WindowControls />}
 		</Flex>
 	);
 }

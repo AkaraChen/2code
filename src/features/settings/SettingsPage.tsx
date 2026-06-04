@@ -77,8 +77,8 @@ function readSettingsTab(value: string | null): SettingsTab {
 
 export default function SettingsPage() {
 	const { preference, setPreference } = use(ThemeContext);
-	const { enabled: debugEnabled, setEnabled: setDebugEnabled } =
-		useDebugStore();
+	const debugEnabled = useDebugStore((state) => state.enabled);
+	const setDebugEnabled = useDebugStore((state) => state.setEnabled);
 	const locale = useLocale();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const activeTab = readSettingsTab(searchParams.get("tab"));

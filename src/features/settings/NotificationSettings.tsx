@@ -9,7 +9,8 @@ import { SoundPicker } from "./SoundPicker";
 import { useNotificationStore } from "./stores/notificationStore";
 
 export function NotificationSettings() {
-	const { enabled, setEnabled } = useNotificationStore();
+	const enabled = useNotificationStore((state) => state.enabled);
+	const setEnabled = useNotificationStore((state) => state.setEnabled);
 
 	const handleToggle = async (checked: boolean) => {
 		if (checked) {

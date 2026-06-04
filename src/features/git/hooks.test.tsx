@@ -95,6 +95,38 @@ describe("git query refresh policy", () => {
 		expect(options?.refetchOnMount).toBe("always");
 	});
 
+	it("hydrates diff stats cache from parsed full diff snapshots", async () => {
+		const queryClient = createQueryClient();
+		getGitDiffMock.mockResolvedValue(`diff --git a/a.ts b/a.ts
+index 587be6b..f9264f7 100644
+--- a/a.ts
++++ b/a.ts
+@@ -1 +1,2 @@
+-old
++new
++line
+`);
+
+		const { result } = renderHook(
+			() => useGitDiffFiles("profile-1"),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() => {
+			expect(result.current).toHaveLength(1);
+		});
+		await waitFor(() => {
+			expect(
+				queryClient.getQueryData(queryKeys.git.diffStats("profile-1")),
+			).toEqual({
+				files_changed: 1,
+				insertions: 2,
+				deletions: 1,
+			});
+		});
+		expect(getGitDiffStatsMock).not.toHaveBeenCalled();
+	});
+
 	it("keeps commit history on the low-frequency fallback refresh", async () => {
 		const queryClient = createQueryClient();
 		getGitLogMock.mockResolvedValue([]);
@@ -114,6 +146,22 @@ describe("git query refresh policy", () => {
 		expect(options?.refetchInterval).toBe(10_000);
 		expect(options?.staleTime).toBe(60_000);
 		expect(options?.refetchOnMount).toBe("always");
+	});
+
+	it("does not fetch commit history while the history panel is inactive", () => {
+		const queryClient = createQueryClient();
+
+		renderHook(() => useGitLog("profile-1", false), {
+			wrapper: createWrapper(queryClient),
+		});
+
+		expect(getGitLogMock).not.toHaveBeenCalled();
+		const options = getRuntimeQueryOptions(
+			queryClient,
+			queryKeys.git.log("profile-1"),
+		);
+		expect(options?.enabled).toBe(false);
+		expect(options?.refetchInterval).toBe(false);
 	});
 
 	it("uses a low-frequency fallback refresh for visible diff stats", async () => {

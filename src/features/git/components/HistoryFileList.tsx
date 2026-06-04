@@ -1,6 +1,7 @@
 import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FiArrowLeft } from "react-icons/fi";
+import { memo, useCallback } from "react";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -43,6 +44,34 @@ function CommitHeader({
 	);
 }
 
+interface HistoryFileListRowProps {
+	file: FileDiffMetadata;
+	index: number;
+	isActive: boolean;
+	onFileSelect: (index: number) => void;
+}
+
+const HistoryFileListRow = memo(function HistoryFileListRow({
+	file,
+	index,
+	isActive,
+	onFileSelect,
+}: HistoryFileListRowProps) {
+	const handleClick = useCallback(() => {
+		onFileSelect(index);
+	}, [index, onFileSelect]);
+
+	return (
+		<div data-index={index}>
+			<FileListItem
+				file={file}
+				isActive={isActive}
+				onClick={handleClick}
+			/>
+		</div>
+	);
+});
+
 export default function HistoryFileList({
 	commit,
 	files,
@@ -74,13 +103,13 @@ export default function HistoryFileList({
 					</Text>
 					<Box ref={listRef} flex="1" overflowY="auto" minH="0">
 						{files.map((file, i) => (
-							<div key={file.name} data-index={i}>
-								<FileListItem
-									file={file}
-									isActive={selectedIndex === i}
-									onClick={() => onFileSelect(i)}
-								/>
-							</div>
+							<HistoryFileListRow
+								key={file.name}
+								file={file}
+								index={i}
+								isActive={selectedIndex === i}
+								onFileSelect={onFileSelect}
+							/>
 						))}
 					</Box>
 				</>

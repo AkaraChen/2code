@@ -15,7 +15,7 @@ import {
 	FiPlus,
 	FiTerminal,
 } from "react-icons/fi";
-import { NavLink, useMatch } from "react-router";
+import { NavLink } from "react-router";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -34,9 +34,11 @@ import { ProjectAvatar } from "./ProjectAvatar";
 import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
 export function ProjectMenuItem({
+	activeProfileId,
 	project,
 	projectGroups,
 }: {
+	activeProfileId: string | null;
 	project: ProjectWithProfiles;
 	projectGroups: ProjectGroup[];
 }) {
@@ -51,10 +53,6 @@ export function ProjectMenuItem({
 
 	const hasOnlyDefaultProfile = nonDefaultProfiles.length === 0;
 
-	const profileMatch = useMatch(
-		`/projects/${project.id}/profiles/:profileId`,
-	);
-	const activeProfileId = profileMatch?.params.profileId ?? null;
 	const isDefaultActive = activeProfileId === defaultProfile?.id;
 
 	const defaultProfileUrl = defaultProfile

@@ -1,5 +1,5 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { use } from "react";
+import { memo, use, useCallback, useMemo } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import * as m from "@/paraglide/messages.js";
 import {
@@ -46,7 +46,7 @@ export interface ChangesSidebarProps {
 	onPush: () => void;
 }
 
-export function ChangesSidebar({
+export const ChangesSidebar = memo(function ChangesSidebar({
 	includedFileNames,
 	commitMessage,
 	commitBody,
@@ -64,6 +64,12 @@ export function ChangesSidebar({
 	onPush,
 }: ChangesSidebarProps) {
 	const { changesFiles, state, dispatch } = use(GitDiffContext)!;
+	const handleSelectFile = useCallback(
+		(index: number) => {
+			dispatch({ type: "selectFile", index });
+		},
+		[dispatch],
+	);
 
 	return (
 		<Flex direction="column" flex="1" minH="0" overflow="hidden">
@@ -78,7 +84,7 @@ export function ChangesSidebar({
 					files={changesFiles}
 					selectedIndex={state.selectedFileIndex}
 					includedFileNames={includedFileNames}
-					onSelect={(i) => dispatch({ type: "selectFile", index: i })}
+					onSelect={handleSelectFile}
 					onToggleIncluded={onToggleIncluded}
 					onOpenFile={onOpenFile}
 					onDiscardFile={onDiscardFile}
@@ -101,9 +107,9 @@ export function ChangesSidebar({
 			/>
 		</Flex>
 	);
-}
+});
 
-export function ChangesDiffPane({
+export const ChangesDiffPane = memo(function ChangesDiffPane({
 	visible,
 	onAddReviewComment,
 }: {
@@ -111,6 +117,10 @@ export function ChangesDiffPane({
 	onAddReviewComment?: (comment: DiffReviewComment) => void;
 }) {
 	const { changesFiles, state, options, profileId } = use(GitDiffContext)!;
+	const previewContext = useMemo(
+		() => ({ kind: "working-tree" as const, profileId }),
+		[profileId],
+	);
 	const activeFile =
 		changesFiles.length > 0 && state.selectedFileIndex < changesFiles.length
 			? changesFiles[state.selectedFileIndex]
@@ -128,7 +138,7 @@ export function ChangesDiffPane({
 					activeFile={activeFile}
 					options={options}
 					contextKey="working-tree"
-					previewContext={{ kind: "working-tree", profileId }}
+					previewContext={previewContext}
 					onAddReviewComment={onAddReviewComment}
 					emptyMessage={
 						changesFiles.length === 0
@@ -139,4 +149,4 @@ export function ChangesDiffPane({
 			</AsyncBoundary>
 		</VisibleBox>
 	);
-}
+});

@@ -12,12 +12,14 @@ const GROUP_COLLAPSE_TRANSITION = {
 } as const;
 
 interface ProjectGroupSectionProps {
+	activeProfileId: string | null;
 	group: ProjectGroup;
 	projectGroups: ProjectGroup[];
 	projects: ProjectWithProfiles[];
 }
 
 export function ProjectGroupSection({
+	activeProfileId,
 	group,
 	projectGroups,
 	projects,
@@ -122,6 +124,7 @@ export function ProjectGroupSection({
 						{projects.map((project) => (
 							<ProjectMenuItem
 								key={project.id}
+								activeProfileId={activeProfileId}
 								project={project}
 								projectGroups={projectGroups}
 							/>

@@ -4,6 +4,7 @@ import {
 	horizontalListSortingStrategy,
 	SortableContext,
 } from "@dnd-kit/sortable";
+import { useMemo } from "react";
 import * as m from "@/paraglide/messages.js";
 import { DraggableControl } from "./DraggableControl";
 import { controlRegistry } from "./registry";
@@ -18,8 +19,13 @@ export function AvailableControls({
 	activeControls,
 	supportedControls,
 }: AvailableControlsProps) {
-	const available = supportedControls.filter(
-		(id) => !activeControls.includes(id),
+	const activeControlSet = useMemo(
+		() => new Set(activeControls),
+		[activeControls],
+	);
+	const available = useMemo(
+		() => supportedControls.filter((id) => !activeControlSet.has(id)),
+		[activeControlSet, supportedControls],
 	);
 	const { setNodeRef } = useDroppable({ id: "available-area" });
 

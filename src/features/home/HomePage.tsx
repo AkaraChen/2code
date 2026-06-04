@@ -1,5 +1,5 @@
 import { Box, Center, EmptyState, HStack, Icon, Text, VStack } from "@chakra-ui/react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { FiFolder, FiFolderPlus } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
@@ -10,19 +10,21 @@ export default function HomePage() {
 	const { data: projects } = useProjects();
 	const navigate = useNavigate();
 	const hasNoProjects = projects.length === 0;
+	const firstProjectProfilePath = useMemo(() => {
+		const firstProject = projects[0];
+		const defaultProfile = firstProject?.profiles.find((p) => p.is_default);
+		if (!firstProject || !defaultProfile) return null;
+		return `/projects/${firstProject.id}/profiles/${defaultProfile.id}`;
+	}, [projects]);
 
 	// Auto-navigate to first project's default profile if projects exist
 	useEffect(() => {
-		if (projects.length > 0) {
-			const firstProject = projects[0];
-			const defaultProfile = firstProject.profiles.find((p) => p.is_default);
-			if (defaultProfile) {
-				navigate(`/projects/${firstProject.id}/profiles/${defaultProfile.id}`, {
-					replace: true,
-				});
-			}
+		if (firstProjectProfilePath) {
+			navigate(firstProjectProfilePath, {
+				replace: true,
+			});
 		}
-	}, [projects, navigate]);
+	}, [firstProjectProfilePath, navigate]);
 
 	return (
 		<Box h="full">

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
 use ignore::WalkBuilder;
@@ -33,6 +34,7 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 	walker.git_exclude(false);
 	walker.parents(true);
 	walker.follow_links(false);
+	walker.filter_entry(|entry| !is_git_metadata_name(entry.file_name()));
 
 	for entry in walker.build() {
 		let entry = entry.map_err(|error| {
@@ -40,12 +42,6 @@ pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
 		})?;
 		let path = entry.path();
 		if path == root {
-			continue;
-		}
-		if path
-			.components()
-			.any(|component| component.as_os_str() == ".git")
-		{
 			continue;
 		}
 
@@ -355,6 +351,7 @@ pub fn search_files(
 	walker.git_exclude(true);
 	walker.parents(true);
 	walker.follow_links(false);
+	walker.filter_entry(|entry| !is_git_metadata_name(entry.file_name()));
 
 	for entry in walker.build() {
 		let entry = entry.map_err(|error| {
@@ -362,12 +359,6 @@ pub fn search_files(
 		})?;
 		let path = entry.path();
 		if path == root {
-			continue;
-		}
-		if path
-			.components()
-			.any(|component| component.as_os_str() == ".git")
-		{
 			continue;
 		}
 
@@ -461,6 +452,10 @@ fn sort_file_tree_paths(paths: &mut [String]) {
 
 fn is_hidden_file_name(file_name: &std::ffi::OsStr) -> bool {
 	file_name.to_string_lossy().starts_with('.')
+}
+
+fn is_git_metadata_name(file_name: &OsStr) -> bool {
+	file_name == OsStr::new(".git")
 }
 
 fn ensure_root_directory(root: &Path) -> Result<(), AppError> {

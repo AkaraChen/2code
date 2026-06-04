@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
+use std::sync::OnceLock;
 
 use infra::no_window::command_without_windows_console;
 use model::browser::BrowserApp;
@@ -70,6 +72,16 @@ const KNOWN_BROWSERS: [BrowserSpec; 9] = [
 	},
 ];
 
+#[cfg(target_os = "macos")]
+static INSTALLED_BROWSERS: OnceLock<Vec<InstalledBrowser>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+#[derive(Clone)]
+struct InstalledBrowser {
+	app: BrowserApp,
+	path: PathBuf,
+}
+
 fn known_browser_spec(browser_id: &str) -> Option<&'static BrowserSpec> {
 	KNOWN_BROWSERS.iter().find(|spec| spec.id == browser_id)
 }
@@ -98,14 +110,34 @@ fn resolve_browser_path(spec: &BrowserSpec) -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn list_installed_browsers_macos() -> Vec<BrowserApp> {
+fn load_installed_browsers_macos() -> Vec<InstalledBrowser> {
 	KNOWN_BROWSERS
 		.iter()
-		.filter(|spec| resolve_browser_path(spec).is_some())
-		.map(|spec| BrowserApp {
-			id: spec.id.to_string(),
-			name: spec.name.to_string(),
+		.filter_map(|spec| {
+			let path = resolve_browser_path(spec)?;
+			Some(InstalledBrowser {
+				app: BrowserApp {
+					id: spec.id.to_string(),
+					name: spec.name.to_string(),
+				},
+				path,
+			})
 		})
+		.collect()
+}
+
+#[cfg(target_os = "macos")]
+fn installed_browsers_macos() -> Vec<InstalledBrowser> {
+	INSTALLED_BROWSERS
+		.get_or_init(load_installed_browsers_macos)
+		.clone()
+}
+
+#[cfg(target_os = "macos")]
+fn list_installed_browsers_macos() -> Vec<BrowserApp> {
+	installed_browsers_macos()
+		.into_iter()
+		.map(|browser| browser.app)
 		.collect()
 }
 
@@ -117,9 +149,14 @@ fn open_url_in_browser_macos(
 	let spec = known_browser_spec(browser_id).ok_or_else(|| {
 		AppError::NotFound(format!("Unknown browser: {browser_id}"))
 	})?;
-	let app_path = resolve_browser_path(spec).ok_or_else(|| {
-		AppError::NotFound(format!("Browser not found: {browser_id}"))
-	})?;
+	let app_path = installed_browsers_macos()
+		.into_iter()
+		.find(|browser| browser.app.id == browser_id)
+		.map(|browser| browser.path)
+		.or_else(|| resolve_browser_path(spec))
+		.ok_or_else(|| {
+			AppError::NotFound(format!("Browser not found: {browser_id}"))
+		})?;
 
 	let status = command_without_windows_console("open")
 		.arg("-a")

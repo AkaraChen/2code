@@ -1,6 +1,7 @@
 /* eslint-disable react/dom-no-dangerously-set-innerhtml -- Renders static SVG symbol markup from @pierre/trees. */
 import { getBuiltInFileIconColor } from "@pierre/trees";
 import type { CSSProperties, SVGProps } from "react";
+import { memo } from "react";
 import {
 	getFileTreeIconSymbol,
 	resolveFileTreeFileIcon,
@@ -15,7 +16,7 @@ interface FileTreeFileIconProps
 	size?: number;
 }
 
-export default function FileTreeFileIcon({
+const FileTreeFileIcon = memo(function FileTreeFileIcon({
 	fileName,
 	size = 14,
 	style,
@@ -47,4 +48,6 @@ export default function FileTreeFileIcon({
 			dangerouslySetInnerHTML={{ __html: symbol.body }}
 		/>
 	);
-}
+});
+
+export default FileTreeFileIcon;

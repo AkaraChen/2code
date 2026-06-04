@@ -10,7 +10,7 @@ import {
 	useSensors,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as m from "@/paraglide/messages.js";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { AvailableControls } from "./AvailableControls";
@@ -46,6 +46,10 @@ export function TopBarSettings() {
 		() => activeControls.filter((id) => supportedControlIdSet.has(id)),
 		[activeControls, supportedControlIdSet],
 	);
+	const visibleActiveControlSet = useMemo(
+		() => new Set(visibleActiveControls),
+		[visibleActiveControls],
+	);
 
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -66,25 +70,26 @@ export function TopBarSettings() {
 		visibleActiveControls,
 	]);
 
-	function handleDragStart(event: DragStartEvent) {
+	const handleDragStart = useCallback((event: DragStartEvent) => {
 		setActiveId(event.active.id as ControlId);
-	}
+	}, []);
 
-	function handleDragEnd(event: DragEndEvent) {
+	const handleDragEnd = useCallback((event: DragEndEvent) => {
 		setActiveId(null);
 		const { active, over } = event;
 		if (!over) return;
 
 		const activeControlId = active.id as ControlId;
 		const overControlId = over.id as string;
-		const isActiveInPreview =
-			visibleActiveControls.includes(activeControlId);
+		const isActiveInPreview = visibleActiveControlSet.has(
+			activeControlId,
+		);
 		const isOverPreviewArea =
 			overControlId === "preview-area" ||
-			visibleActiveControls.includes(overControlId as ControlId);
+			visibleActiveControlSet.has(overControlId as ControlId);
 		const isOverAvailableArea =
 			overControlId === "available-area" ||
-			(!visibleActiveControls.includes(overControlId as ControlId) &&
+			(!visibleActiveControlSet.has(overControlId as ControlId) &&
 				overControlId !== "preview-area");
 
 		if (isActiveInPreview && isOverPreviewArea) {
@@ -117,9 +122,16 @@ export function TopBarSettings() {
 				setActiveControls(newList);
 			}
 		}
-	}
+	}, [
+		setActiveControls,
+		visibleActiveControls,
+		visibleActiveControlSet,
+	]);
 
-	const activeDef = activeId ? controlRegistry.get(activeId) : null;
+	const activeDef = useMemo(
+		() => (activeId ? controlRegistry.get(activeId) : null),
+		[activeId],
+	);
 
 	if (isPending) {
 		return (

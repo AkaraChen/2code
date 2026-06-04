@@ -28,18 +28,41 @@ interface ArchivePreviewTreeProps {
 	fileName: string;
 }
 
+function addParentDirectories(path: string, directories: Set<string>) {
+	let slashIndex = path.lastIndexOf("/");
+	while (slashIndex > 0) {
+		directories.add(`${path.slice(0, slashIndex)}/`);
+		slashIndex = path.lastIndexOf("/", slashIndex - 1);
+	}
+}
+
 export default function ArchivePreviewTree({
 	entries,
 	fileName,
 }: ArchivePreviewTreeProps) {
-	const paths = useMemo(
-		() => entries.map((entry) => entry.path),
-		[entries],
-	);
-	const fileCount = useMemo(
-		() => entries.filter((entry) => entry.kind === "file").length,
-		[entries],
-	);
+	const { expandedPaths, fileCount, paths } = useMemo(() => {
+		const paths: string[] = [];
+		const expandedDirectories = new Set<string>();
+		let fileCount = 0;
+
+		for (const entry of entries) {
+			paths.push(entry.path);
+			if (entry.kind === "file") {
+				fileCount += 1;
+				addParentDirectories(entry.path, expandedDirectories);
+				continue;
+			}
+
+			expandedDirectories.add(entry.path);
+			addParentDirectories(entry.path.replace(/\/$/, ""), expandedDirectories);
+		}
+
+		return {
+			expandedPaths: [...expandedDirectories],
+			fileCount,
+			paths,
+		};
+	}, [entries]);
 	const directoryCount = entries.length - fileCount;
 	const { model } = useFileTree({
 		density: "compact",
@@ -52,8 +75,8 @@ export default function ArchivePreviewTree({
 	});
 
 	useEffect(() => {
-		model.resetPaths(paths, { initialExpandedPaths: paths });
-	}, [model, paths]);
+		model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
+	}, [expandedPaths, model, paths]);
 
 	return (
 		<Flex h="full" minH="0" direction="column" overflow="hidden">

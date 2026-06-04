@@ -1,11 +1,19 @@
+use std::sync::OnceLock;
+
 #[cfg(target_os = "macos")]
 const SOUNDS_DIR: &str = "/System/Library/Sounds";
 
 #[cfg(target_os = "linux")]
 const LINUX_SOUND_EXTENSIONS: &[&str] = &["oga", "ogg", "wav", "aiff", "aif"];
 
+static SYSTEM_SOUNDS: OnceLock<Vec<String>> = OnceLock::new();
+
 #[tauri::command]
 pub fn list_system_sounds() -> Vec<String> {
+	SYSTEM_SOUNDS.get_or_init(load_system_sounds).clone()
+}
+
+fn load_system_sounds() -> Vec<String> {
 	#[cfg(target_os = "macos")]
 	{
 		list_macos_sounds()

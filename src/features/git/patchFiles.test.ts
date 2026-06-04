@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
-import type { FileDiffMetadata } from "@pierre/diffs";
-import { collectPatchFiles } from "./patchFiles";
+import { parseDiffFiles } from "./patchFiles";
 
-const fileA = { name: "a.ts" } as FileDiffMetadata;
-const fileB = { name: "b.ts" } as FileDiffMetadata;
+const patch = `diff --git a/a.ts b/a.ts
+index 587be6b..f9264f7 100644
+--- a/a.ts
++++ b/a.ts
+@@ -1 +1,2 @@
+-old
++new
++line
+`;
 
-describe("collectPatchFiles", () => {
-	it("flattens patch files in order", () => {
-		expect(
-			collectPatchFiles([
-				{ files: [fileA] },
-				{ files: [] },
-				{ files: [fileB] },
-			]),
-		).toEqual([fileA, fileB]);
+describe("parseDiffFiles", () => {
+	it("reuses parsed file metadata for the same patch text", () => {
+		const first = parseDiffFiles(patch);
+		const second = parseDiffFiles(patch);
+
+		expect(second).toBe(first);
+		expect(first).toHaveLength(1);
 	});
 });

@@ -1,11 +1,13 @@
 import { Portal, Text, Tooltip } from "@chakra-ui/react";
 import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 
 interface MeasuredTextSnapshot {
 	availableWidth: number;
 	font: string;
 }
+
+const TOOLTIP_POSITIONING = { placement: "top-start" } as const;
 
 export interface OverflowTooltipTextProps {
 	displayValue: string;
@@ -28,7 +30,7 @@ function buildCanvasFont(style: CSSStyleDeclaration) {
 	return `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
 }
 
-export default function OverflowTooltipText({
+function OverflowTooltipText({
 	displayValue,
 	tooltipValue,
 	minW,
@@ -92,7 +94,7 @@ export default function OverflowTooltipText({
 		<Tooltip.Root
 			disabled={!isOverflowing}
 			openDelay={300}
-			positioning={{ placement: "top-start" }}
+			positioning={TOOLTIP_POSITIONING}
 		>
 			<Tooltip.Trigger asChild>
 				<Text
@@ -129,3 +131,5 @@ export default function OverflowTooltipText({
 		</Tooltip.Root>
 	);
 }
+
+export default memo(OverflowTooltipText);
