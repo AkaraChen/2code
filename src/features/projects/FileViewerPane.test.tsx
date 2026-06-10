@@ -285,6 +285,62 @@ describe("fileViewerPane", () => {
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
 	});
 
+	it("does not leak markdown edits into Monaco when switching files", async () => {
+		const markdownPath = "/repo/README.md";
+		const markdownContent = "# Readme";
+		const markdownDraft = `${markdownContent}\n\nUpdated.`;
+		vi.mocked(useFileContent).mockImplementation((path: string) => ({
+			data: path === markdownPath ? markdownContent : fileContent,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FileContentResult));
+
+		const { rerender } = renderPane(markdownPath);
+
+		const markdownEditor = await screen.findByLabelText("Markdown Editor");
+		fireEvent.change(markdownEditor, { target: { value: markdownDraft } });
+
+		rerender(
+			<ChakraProvider value={appSystem}>
+				<FileViewerPane filePath={filePath} profileId={profileId} />
+			</ChakraProvider>,
+		);
+
+		const monacoEditor = await screen.findByLabelText("Monaco Editor");
+		expect(monacoEditor).toHaveValue(fileContent);
+		expect(monacoEditor).not.toHaveValue(markdownDraft);
+		expect(dirtyState().drafts[profileId]?.[markdownPath]).toBe(markdownDraft);
+	});
+
+	it("does not leak Monaco edits into markdown when switching files", async () => {
+		const markdownPath = "/repo/README.md";
+		const markdownContent = "# Readme";
+		const codeDraft = `${fileContent}\nconsole.log(beta);`;
+		vi.mocked(useFileContent).mockImplementation((path: string) => ({
+			data: path === markdownPath ? markdownContent : fileContent,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FileContentResult));
+
+		const { rerender } = renderPane(filePath);
+
+		const monacoEditor = await screen.findByLabelText("Monaco Editor");
+		fireEvent.change(monacoEditor, { target: { value: codeDraft } });
+
+		rerender(
+			<ChakraProvider value={appSystem}>
+				<FileViewerPane filePath={markdownPath} profileId={profileId} />
+			</ChakraProvider>,
+		);
+
+		const markdownEditor = await screen.findByLabelText("Markdown Editor");
+		expect(markdownEditor).toHaveValue(markdownContent);
+		expect(markdownEditor).not.toHaveValue(codeDraft);
+		expect(dirtyState().drafts[profileId]?.[filePath]).toBe(codeDraft);
+	});
+
 	it("renders image files with the binary preview instead of Monaco", async () => {
 		const imagePath = "/repo/assets/logo.png";
 		vi.mocked(useFilePreview).mockReturnValue({
