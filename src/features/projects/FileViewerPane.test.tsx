@@ -313,6 +313,48 @@ describe("fileViewerPane", () => {
 		expect(dirtyState().drafts[profileId]?.[markdownPath]).toBe(markdownDraft);
 	});
 
+	it("does not restore discarded inactive edits when reopening a file", async () => {
+		const markdownPath = "/repo/README.md";
+		const markdownContent = "# Readme";
+		const markdownDraft = `${markdownContent}\n\nUpdated.`;
+		vi.mocked(useFileContent).mockImplementation((path: string) => ({
+			data: path === markdownPath ? markdownContent : fileContent,
+			isLoading: false,
+			isError: false,
+			error: null,
+		} as FileContentResult));
+
+		const { rerender } = renderPane(markdownPath);
+
+		const markdownEditor = await screen.findByLabelText("Markdown Editor");
+		fireEvent.change(markdownEditor, { target: { value: markdownDraft } });
+
+		rerender(
+			<ChakraProvider value={appSystem}>
+				<FileViewerPane filePath={filePath} profileId={profileId} />
+			</ChakraProvider>,
+		);
+
+		await waitFor(() => {
+			expect(dirtyState().drafts[profileId]?.[markdownPath]).toBe(markdownDraft);
+		});
+
+		act(() => {
+			dirtyState().clearFileState(profileId, markdownPath);
+		});
+
+		rerender(
+			<ChakraProvider value={appSystem}>
+				<FileViewerPane filePath={markdownPath} profileId={profileId} />
+			</ChakraProvider>,
+		);
+
+		expect(await screen.findByLabelText("Markdown Editor")).toHaveValue(
+			markdownContent,
+		);
+		expect(dirtyState().drafts[profileId]?.[markdownPath]).toBeUndefined();
+	});
+
 	it("does not leak Monaco edits into markdown when switching files", async () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";

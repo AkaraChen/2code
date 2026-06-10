@@ -37,6 +37,14 @@ interface PendingDraft {
 	content: string;
 }
 
+function isDraftForFile(
+	draft: PendingDraft | null,
+	profileId: string,
+	filePath: string,
+): draft is PendingDraft {
+	return draft?.profileId === profileId && draft.filePath === filePath;
+}
+
 function getMonacoTheme(themeId: string) {
 	return themeId.includes("light") ? "light" : "vs-dark";
 }
@@ -212,11 +220,17 @@ export default function FileViewerPane({
 	} = useSaveFileContent(profileId);
 
 	const monacoTheme = getMonacoTheme(themeId);
-	const currentLocalEditorValue =
-		localEditorValue?.profileId === profileId &&
-		localEditorValue.filePath === filePath
-			? localEditorValue.content
-			: undefined;
+	const localEditorValueMatchesFile = isDraftForFile(
+		localEditorValue,
+		profileId,
+		filePath,
+	);
+	if (localEditorValue && !localEditorValueMatchesFile) {
+		setLocalEditorValue(null);
+	}
+	const currentLocalEditorValue = localEditorValueMatchesFile
+		? localEditorValue.content
+		: undefined;
 	const editorValue = currentLocalEditorValue ?? draftValue ?? content ?? "";
 	const lastSavedValue = savedValue ?? content ?? "";
 	const hasLoadedFile =
