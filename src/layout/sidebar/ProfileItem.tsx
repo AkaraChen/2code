@@ -1,8 +1,9 @@
-import { Circle, HStack, Icon, Menu, Portal } from "@chakra-ui/react";
+import { HStack, Icon, Menu, Portal } from "@chakra-ui/react";
 import { FiGitBranch } from "react-icons/fi";
 import { NavLink } from "react-router";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
-import { useProfileHasNotification, useTerminalStore } from "@/features/terminal/store";
+import { AgentStatusDot } from "@/features/terminal/AgentStatusDot";
+import { useProfileAgentStatus } from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
@@ -19,8 +20,7 @@ export function ProfileItem({
 	isActive: boolean;
 }) {
 	const deleteDialog = useDialogState();
-	const hasNotification = useProfileHasNotification(profile.id);
-	const markProfileRead = useTerminalStore((s) => s.markProfileRead);
+	const agentStatus = useProfileAgentStatus(profile.id);
 
 	return (
 		<>
@@ -45,10 +45,7 @@ export function ProfileItem({
 						_hover={{ bg: "bg.subtle" }}
 						_active={{ bg: "bg.muted" }}
 					>
-						<NavLink
-							to={`/projects/${projectId}/profiles/${profile.id}`}
-							onClick={() => markProfileRead(profile.id)}
-						>
+						<NavLink to={`/projects/${projectId}/profiles/${profile.id}`}>
 							{isActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
@@ -64,14 +61,7 @@ export function ProfileItem({
 								flex="1 1 auto"
 								minW="0"
 							/>
-							{hasNotification && (
-								<Circle
-									size="2"
-									bg="green.500"
-									alignSelf="center"
-									flexShrink={0}
-								/>
-							)}
+							{agentStatus && <AgentStatusDot status={agentStatus} />}
 						</NavLink>
 					</HStack>
 				</Menu.ContextTrigger>

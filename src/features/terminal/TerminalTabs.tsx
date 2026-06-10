@@ -40,6 +40,7 @@ import {
 	readFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
 import * as m from "@/paraglide/messages.js";
+import { AgentStatusDot } from "./AgentStatusDot";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import { TAB_STRIP_HEIGHT, TabStrip, type TabStripGroup } from "./TabStrip";
@@ -127,18 +128,23 @@ export default function TerminalTabs({
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
 	// Scope to this profile's tabs only — avoids re-rendering on unrelated PTY notifications
-	const notifiedTabIds = useTerminalStore(
+	const agentStatusEntries = useTerminalStore(
 		useShallow((state) => {
 			const profile = state.profiles[profileId];
-			if (!profile) return [] as string[];
+			if (!profile) return [] as [string, "running" | "waiting"][];
 			return profile.tabs
-				.filter((tab) => state.notifiedTabs.has(tab.id))
-				.map((tab) => tab.id);
+				.map((tab): [string, "running" | "waiting" | undefined] => [
+					tab.id,
+					state.agentStatuses[tab.id],
+				])
+				.filter((entry): entry is [string, "running" | "waiting"] =>
+					Boolean(entry[1]),
+				);
 		}),
 	);
-	const notifiedTabSet = useMemo(
-		() => new Set(notifiedTabIds),
-		[notifiedTabIds],
+	const agentStatusByTabId = useMemo(
+		() => new Map(agentStatusEntries),
+		[agentStatusEntries],
 	);
 	const setActiveTab = useTerminalStore((state) => state.setActiveTab);
 
@@ -306,10 +312,9 @@ export default function TerminalTabs({
 					elementRef: createTerminalDropRef(tab),
 					isSelected:
 						!fileTabActive && !notesActive && tab.id === activeValue,
-					badge:
-						notifiedTabSet.has(tab.id) && tab.id !== activeTabId ? (
-							<Circle size="2" bg="green.500" />
-						) : undefined,
+					badge: agentStatusByTabId.has(tab.id) ? (
+						<AgentStatusDot status={agentStatusByTabId.get(tab.id)!} />
+					) : undefined,
 					onClose: () =>
 						closeTerminalTab({
 							profileId,
@@ -342,7 +347,6 @@ export default function TerminalTabs({
 			},
 		],
 		[
-			activeTabId,
 			activeValue,
 			closeTerminalTab,
 			createTerminalDropRef,
@@ -351,7 +355,7 @@ export default function TerminalTabs({
 			fileTabs,
 			handleFileTabClose,
 			notesActive,
-			notifiedTabSet,
+			agentStatusByTabId,
 			profileId,
 			tabs,
 		],

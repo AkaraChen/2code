@@ -274,7 +274,7 @@ mod tests {
 
 	#[test]
 	#[cfg(unix)]
-	fn default_common_init_wraps_claude_stop_hook_and_codex_notify() {
+	fn default_common_init_wraps_agent_status_hooks() {
 		let temp = tempfile::tempdir().unwrap();
 		let home = temp.path().join("home with space");
 		let real_bin = temp.path().join("real-bin");
@@ -282,6 +282,19 @@ mod tests {
 		std::fs::create_dir_all(&home).unwrap();
 		std::fs::create_dir_all(&real_bin).unwrap();
 		std::fs::create_dir_all(&marker).unwrap();
+		let user_opencode_dir = home.join(".config/opencode");
+		let user_opencode_plugins = user_opencode_dir.join("plugins");
+		std::fs::create_dir_all(&user_opencode_plugins).unwrap();
+		std::fs::write(
+			user_opencode_dir.join("opencode.json"),
+			r#"{"model":"test"}"#,
+		)
+		.unwrap();
+		std::fs::write(
+			user_opencode_plugins.join("user-plugin.js"),
+			"export const UserPlugin = async () => ({});\n",
+		)
+		.unwrap();
 
 		write_fake_executable(
 			&real_bin.join("claude"),
@@ -296,10 +309,17 @@ printf '%s\n' "$@" >"$MARKER/codex.args"
 "#,
 		);
 		write_fake_executable(
+			&real_bin.join("opencode"),
+			r#"#!/bin/sh
+printf '%s\n' "$OPENCODE_CONFIG_DIR" >"$MARKER/opencode.config_dir"
+printf '%s\n' "$@" >"$MARKER/opencode.args"
+"#,
+		);
+		write_fake_executable(
 			&marker.join("helper"),
 			&format!(
 				r#"#!/bin/sh
-printf '%s\n' "$@" >>"{}"
+printf '%s\n' "$*" >>"{}"
 "#,
 				marker.join("helper.args").display()
 			),
@@ -311,6 +331,7 @@ printf '%s\n' "$@" >>"{}"
 			r#". "{}"
 claude --version
 codex exec "say ok"
+opencode --version
 "#,
 			init_file.display()
 		);
@@ -346,9 +367,40 @@ codex exec "say ok"
 
 		let codex_args =
 			std::fs::read_to_string(marker.join("codex.args")).unwrap();
-		assert!(codex_args.contains("notify=[\""));
+		assert!(codex_args.contains("hooks.UserPromptSubmit"));
+		assert!(codex_args.contains("hooks.PermissionRequest"));
+		assert!(codex_args.contains("hooks.Stop"));
+		assert!(codex_args.contains(
+			&hooks_dir.join("status-running.sh").display().to_string()
+		));
+		assert!(codex_args.contains(
+			&hooks_dir.join("status-waiting.sh").display().to_string()
+		));
 		assert!(codex_args
-			.contains(&hooks_dir.join("notify.sh").display().to_string()));
+			.contains(&hooks_dir.join("status-idle.sh").display().to_string()));
+
+		let opencode_dir = home.join(".2code/opencode");
+		assert_eq!(
+			std::fs::read_to_string(marker.join("opencode.config_dir"))
+				.unwrap()
+				.trim(),
+			opencode_dir.display().to_string()
+		);
+		let opencode_plugin = std::fs::read_to_string(
+			opencode_dir.join("plugins/2code-status.js"),
+		)
+		.unwrap();
+		assert!(opencode_plugin.contains("permission.asked"));
+		assert!(opencode_plugin.contains("tool.execute.before"));
+		assert_eq!(
+			std::fs::read_link(opencode_dir.join("opencode.json")).unwrap(),
+			user_opencode_dir.join("opencode.json")
+		);
+		assert_eq!(
+			std::fs::read_link(opencode_dir.join("plugins/user-plugin.js"))
+				.unwrap(),
+			user_opencode_plugins.join("user-plugin.js")
+		);
 
 		let claude_settings: serde_json::Value = serde_json::from_str(
 			&std::fs::read_to_string(hooks_dir.join("claude-settings.json"))
@@ -356,8 +408,18 @@ codex exec "say ok"
 		)
 		.unwrap();
 		assert_eq!(
+			claude_settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+				["command"],
+			format!("'{}'", hooks_dir.join("status-running.sh").display())
+		);
+		assert_eq!(
+			claude_settings["hooks"]["PermissionRequest"][0]["hooks"][0]
+				["command"],
+			format!("'{}'", hooks_dir.join("status-waiting.sh").display())
+		);
+		assert_eq!(
 			claude_settings["hooks"]["Stop"][0]["hooks"][0]["command"],
-			format!("'{}'", hooks_dir.join("notify.sh").display())
+			format!("'{}'", hooks_dir.join("status-idle.sh").display())
 		);
 
 		let output = Command::new("/bin/bash")
@@ -365,8 +427,10 @@ codex exec "say ok"
 			.arg("--norc")
 			.arg("-c")
 			.arg(format!(
-				"'{}'; sleep 1",
-				hooks_dir.join("notify.sh").display()
+				"'{}'; '{}'; '{}'; sleep 1",
+				hooks_dir.join("status-running.sh").display(),
+				hooks_dir.join("status-waiting.sh").display(),
+				hooks_dir.join("status-idle.sh").display()
 			))
 			.env("_2CODE_HELPER", marker.join("helper"))
 			.env("_2CODE_HELPER_URL", "http://127.0.0.1:1")
@@ -380,10 +444,12 @@ codex exec "say ok"
 			String::from_utf8_lossy(&output.stdout),
 			String::from_utf8_lossy(&output.stderr),
 		);
-		assert_eq!(
-			std::fs::read_to_string(marker.join("helper.args")).unwrap(),
-			"notify\n"
-		);
+		let helper_args =
+			std::fs::read_to_string(marker.join("helper.args")).unwrap();
+		assert!(helper_args.contains("status running"));
+		assert!(helper_args.contains("status waiting"));
+		assert!(helper_args.contains("status idle"));
+		assert!(helper_args.contains("notify"));
 	}
 
 	#[cfg(unix)]

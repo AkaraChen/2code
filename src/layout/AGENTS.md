@@ -10,12 +10,12 @@ layout/
 └── sidebar/
     ├── ProjectMenuItem.tsx # Single project item + collapse/expand
     ├── ProfileList.tsx     # Profiles under a project
-    └── ProfileItem.tsx     # Single profile with notification dot + active state
+    └── ProfileItem.tsx     # Single profile with agent status dot + active state
 ```
 
 ## KEY PATTERNS
 
-**Notification dot**: `ProfileItem` reads `useProfileHasNotification(profileId)` from `features/terminal/store.ts` — renders green dot when PTY notified.
+**Agent status dot**: `ProfileItem` reads `useProfileAgentStatus(profileId)` from `features/terminal/store.ts` — renders yellow when waiting for input and blinking green while running.
 
 **Active state**: Profile items highlight based on current route params (`/projects/:id/profiles/:profileId`). Uses `react-router` `useParams`.
 
@@ -26,6 +26,6 @@ layout/
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Notification dot logic | `features/terminal/store.ts::useProfileHasNotification` |
+| Agent status dot logic | `features/terminal/store.ts::useProfileAgentStatus` |
 | Project query | `features/projects/hooks.ts::useProjects` |
 | Profile query | `features/projects/hooks.ts::useProjectProfiles` |

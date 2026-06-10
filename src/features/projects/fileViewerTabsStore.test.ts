@@ -16,7 +16,8 @@ function resetStores() {
 	});
 	useTerminalStore.setState({
 		profiles: {},
-		notifiedTabs: new Set<string>(),
+		agentStatuses: {},
+		sessionProfileIds: {},
 	});
 	localStorage.clear();
 }

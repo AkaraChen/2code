@@ -8,17 +8,19 @@ interface TerminalTab {
 	title: string;
 }
 
+export type AgentStatus = "running" | "waiting";
+type AgentStatusEventStatus = AgentStatus | "idle";
+
+interface AgentStatusEvent {
+	sessionId?: string;
+	session_id?: string;
+	status?: AgentStatusEventStatus;
+}
+
 interface ProjectTerminalState {
 	tabs: TerminalTab[];
 	activeTabId: string | null;
 	counter: number;
-}
-
-const PROFILE_PATH_REGEX = /^\/projects\/[^/]+\/profiles\/([^/]+)$/;
-
-function getFocusedProfileId(): string | null {
-	if (typeof window === "undefined") return null;
-	return window.location.pathname.match(PROFILE_PATH_REGEX)?.[1] ?? null;
 }
 
 function findProfileIdBySessionId(
@@ -46,21 +48,9 @@ function refreshSessionProfileId(
 	}
 }
 
-function clearProfileActiveTabNotification(
-	state: Pick<TerminalStore, "profiles" | "notifiedTabs">,
-	profileId: string | null,
-) {
-	if (!profileId) return;
-
-	const activeTabId = state.profiles[profileId]?.activeTabId;
-	if (activeTabId) {
-		state.notifiedTabs.delete(activeTabId);
-	}
-}
-
 interface TerminalStore {
 	profiles: Record<string, ProjectTerminalState>;
-	notifiedTabs: Set<string>;
+	agentStatuses: Record<string, AgentStatus>;
 	sessionProfileIds: Record<string, string>;
 	addTab: (profileId: string, sessionId: string, title: string) => void;
 	closeTab: (profileId: string, tabId: string) => void;
@@ -68,9 +58,8 @@ interface TerminalStore {
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
 	removeStaleProfiles: (validIds: Set<string>) => void;
-	markNotified: (sessionId: string) => void;
-	markRead: (sessionId: string) => void;
-	markProfileRead: (profileId: string) => void;
+	setAgentStatus: (sessionId: string, status: AgentStatusEventStatus) => void;
+	clearAgentStatus: (sessionId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>()((set) => {
@@ -80,7 +69,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 
 	return {
 		profiles: {},
-		notifiedTabs: new Set<string>(),
+		agentStatuses: {},
 		sessionProfileIds: {},
 
 		addTab(profileId, sessionId, title) {
@@ -97,10 +86,6 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 					counter: existing.counter + 1,
 				};
 				state.sessionProfileIds[sessionId] ??= profileId;
-
-				if (getFocusedProfileId() === profileId) {
-					clearProfileActiveTabNotification(state, profileId);
-				}
 			});
 		},
 
@@ -110,7 +95,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 				if (!profile) return;
 				const wasActiveTab = tabId === profile.activeTabId;
 
-				state.notifiedTabs.delete(tabId);
+				delete state.agentStatuses[tabId];
 
 				const idx = profile.tabs.findIndex((t) => t.id === tabId);
 				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
@@ -124,9 +109,6 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 				if (wasActiveTab) {
 					const newIdx = Math.min(idx, profile.tabs.length - 1);
 					profile.activeTabId = profile.tabs[newIdx].id;
-					if (getFocusedProfileId() === profileId) {
-						clearProfileActiveTabNotification(state, profileId);
-					}
 				}
 			});
 		},
@@ -136,14 +118,15 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 				const profile = state.profiles[profileId];
 				if (!profile) return;
 				profile.activeTabId = tabId;
-				state.notifiedTabs.delete(tabId);
 			});
 		},
 
 		removeProfile(profileId) {
 			mutate((state) => {
 				const profile = state.profiles[profileId];
-				profile?.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
+				profile?.tabs.forEach((tab) => {
+					delete state.agentStatuses[tab.id];
+				});
 				delete state.profiles[profileId];
 				profile?.tabs.forEach((tab) =>
 					refreshSessionProfileId(state, tab.id),
@@ -164,9 +147,9 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 			mutate((state) => {
 				for (const id of Object.keys(state.profiles)) {
 					if (!validIds.has(id)) {
-						state.profiles[id].tabs.forEach((tab) =>
-							state.notifiedTabs.delete(tab.id),
-						);
+						state.profiles[id].tabs.forEach((tab) => {
+							delete state.agentStatuses[tab.id];
+						});
 						const removedSessionIds = state.profiles[id].tabs.map(
 							(tab) => tab.id,
 						);
@@ -179,33 +162,20 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 			});
 		},
 
-		markNotified(sessionId) {
+		setAgentStatus(sessionId, status) {
 			mutate((state) => {
-				const profileId = state.sessionProfileIds[sessionId] ?? null;
-				if (
-					profileId &&
-					profileId === getFocusedProfileId() &&
-					state.profiles[profileId]?.activeTabId === sessionId
-				) {
-					state.notifiedTabs.delete(sessionId);
+				if (status === "idle") {
+					delete state.agentStatuses[sessionId];
 					return;
 				}
 
-				state.notifiedTabs.add(sessionId);
+				state.agentStatuses[sessionId] = status;
 			});
 		},
 
-		markRead(sessionId) {
+		clearAgentStatus(sessionId) {
 			mutate((state) => {
-				state.notifiedTabs.delete(sessionId);
-			});
-		},
-
-		markProfileRead(profileId) {
-			mutate((state) => {
-				const profile = state.profiles[profileId];
-				if (!profile) return;
-				profile.tabs.forEach((tab) => state.notifiedTabs.delete(tab.id));
+				delete state.agentStatuses[sessionId];
 			});
 		},
 	};
@@ -216,16 +186,39 @@ export function useTerminalProfileIds() {
 	return useTerminalStore(useShallow((s) => Object.keys(s.profiles)));
 }
 
-/** Whether a profile has any tab with an unread notification. */
-export function useProfileHasNotification(profileId: string): boolean {
+function getProfileAgentStatus(
+	state: Pick<TerminalStore, "profiles" | "agentStatuses">,
+	profileId: string,
+): AgentStatus | null {
+	const profile = state.profiles[profileId];
+	if (!profile) return null;
+
+	let hasRunning = false;
+	for (const tab of profile.tabs) {
+		const status = state.agentStatuses[tab.id];
+		if (status === "waiting") return "waiting";
+		if (status === "running") hasRunning = true;
+	}
+
+	return hasRunning ? "running" : null;
+}
+
+/** The highest-priority agent status among a profile's terminal tabs. */
+export function useProfileAgentStatus(profileId: string): AgentStatus | null {
 	return useTerminalStore((s) => {
-		const profile = s.profiles[profileId];
-		if (!profile) return false;
-		return profile.tabs.some((t) => s.notifiedTabs.has(t.id));
+		return getProfileAgentStatus(s, profileId);
 	});
 }
 
-// Module-level listener for notification events from the backend
-listen<string>("pty-notify", (event) => {
-	useTerminalStore.getState().markNotified(event.payload);
+/** Whether a profile has any active agent status. */
+export function useProfileHasNotification(profileId: string): boolean {
+	return useTerminalStore((s) => getProfileAgentStatus(s, profileId) !== null);
+}
+
+// Module-level listener for agent status events from the backend
+listen<AgentStatusEvent>("pty-agent-status", (event) => {
+	const sessionId = event.payload.sessionId ?? event.payload.session_id;
+	const status = event.payload.status;
+	if (!sessionId || !status) return;
+	useTerminalStore.getState().setAgentStatus(sessionId, status);
 });
