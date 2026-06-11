@@ -284,7 +284,10 @@ mod tests {
 		std::fs::create_dir_all(&marker).unwrap();
 		let user_opencode_dir = home.join(".config/opencode");
 		let user_opencode_plugins = user_opencode_dir.join("plugins");
+		let custom_opencode_dir = temp.path().join("custom-opencode");
+		let custom_opencode_plugins = custom_opencode_dir.join("plugins");
 		std::fs::create_dir_all(&user_opencode_plugins).unwrap();
+		std::fs::create_dir_all(&custom_opencode_plugins).unwrap();
 		std::fs::write(
 			user_opencode_dir.join("opencode.json"),
 			r#"{"model":"test"}"#,
@@ -293,6 +296,16 @@ mod tests {
 		std::fs::write(
 			user_opencode_plugins.join("user-plugin.js"),
 			"export const UserPlugin = async () => ({});\n",
+		)
+		.unwrap();
+		std::fs::write(
+			custom_opencode_dir.join("opencode.json"),
+			r#"{"model":"custom"}"#,
+		)
+		.unwrap();
+		std::fs::write(
+			custom_opencode_plugins.join("custom-plugin.js"),
+			"export const CustomPlugin = async () => ({});\n",
 		)
 		.unwrap();
 
@@ -392,14 +405,49 @@ opencode --version
 		.unwrap();
 		assert!(opencode_plugin.contains("permission.asked"));
 		assert!(opencode_plugin.contains("tool.execute.before"));
+		assert!(!opencode_dir.join("opencode.json").exists());
+		assert!(!opencode_dir.join("plugins/user-plugin.js").exists());
+
+		let custom_home = temp.path().join("custom home");
+		std::fs::create_dir_all(&custom_home).unwrap();
+		let custom_shell = format!(
+			r#". "{}"
+opencode --version
+"#,
+			init_file.display()
+		);
+		let output = Command::new("/bin/bash")
+			.arg("--noprofile")
+			.arg("--norc")
+			.arg("-c")
+			.arg(custom_shell)
+			.env("HOME", &custom_home)
+			.env("OPENCODE_CONFIG_DIR", &custom_opencode_dir)
+			.env("MARKER", &marker)
+			.env(
+				"PATH",
+				format!("{}:/usr/bin:/bin", real_bin.to_string_lossy()),
+			)
+			.output()
+			.unwrap();
+		assert!(
+			output.status.success(),
+			"custom init failed\nstdout:\n{}\nstderr:\n{}",
+			String::from_utf8_lossy(&output.stdout),
+			String::from_utf8_lossy(&output.stderr),
+		);
+		let custom_2code_opencode_dir = custom_home.join(".2code/opencode");
 		assert_eq!(
-			std::fs::read_link(opencode_dir.join("opencode.json")).unwrap(),
-			user_opencode_dir.join("opencode.json")
+			std::fs::read_link(custom_2code_opencode_dir.join("opencode.json"))
+				.unwrap(),
+			custom_opencode_dir.join("opencode.json")
 		);
 		assert_eq!(
-			std::fs::read_link(opencode_dir.join("plugins/user-plugin.js"))
-				.unwrap(),
-			user_opencode_plugins.join("user-plugin.js")
+			std::fs::read_link(
+				custom_2code_opencode_dir.join("plugins/custom-plugin.js")
+			)
+			.unwrap(),
+			custom_opencode_plugins.join("custom-plugin.js")
 		);
 
 		let claude_settings: serde_json::Value = serde_json::from_str(

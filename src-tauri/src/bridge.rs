@@ -4,6 +4,7 @@ use tauri::{ipc::Channel, AppHandle, Emitter, Manager};
 
 use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
+use model::notification::{AgentStatus, AgentStatusEvent};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders};
 use service::{PtyEventEmitter, WatchEventSender};
@@ -20,6 +21,13 @@ impl PtyEventEmitter for TauriPtyEmitter {
 
 	fn emit_exit(&self, session_id: &str) {
 		let _ = self.0.emit(&format!("pty-exit-{session_id}"), ());
+		let _ = self.0.emit(
+			"pty-agent-status",
+			AgentStatusEvent {
+				session_id: session_id.to_string(),
+				status: AgentStatus::Idle,
+			},
+		);
 	}
 }
 

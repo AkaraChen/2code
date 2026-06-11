@@ -3,7 +3,7 @@ _2CODE_BIN="${_2CODE_HOME}/bin"
 _2CODE_HOOKS="${_2CODE_HOME}/hooks"
 _2CODE_OPENCODE_DIR="${_2CODE_HOME}/opencode"
 _2CODE_OPENCODE_PLUGINS="${_2CODE_OPENCODE_DIR}/plugins"
-_2CODE_OPENCODE_SOURCE_DIR="${OPENCODE_CONFIG_DIR:-${HOME}/.config/opencode}"
+_2CODE_OPENCODE_SOURCE_DIR="${OPENCODE_CONFIG_DIR:-}"
 _2CODE_NOTIFY="${_2CODE_HOOKS}/notify.sh"
 _2CODE_STATUS_RUNNING="${_2CODE_HOOKS}/status-running.sh"
 _2CODE_STATUS_WAITING="${_2CODE_HOOKS}/status-waiting.sh"
@@ -32,7 +32,7 @@ _2code_link_opencode_items() {
   done
 }
 
-if [ -d "$_2CODE_OPENCODE_SOURCE_DIR" ] && [ "$_2CODE_OPENCODE_SOURCE_DIR" != "$_2CODE_OPENCODE_DIR" ]; then
+if [ -n "$_2CODE_OPENCODE_SOURCE_DIR" ] && [ -d "$_2CODE_OPENCODE_SOURCE_DIR" ] && [ "$_2CODE_OPENCODE_SOURCE_DIR" != "$_2CODE_OPENCODE_DIR" ]; then
   _2code_link_opencode_items "$_2CODE_OPENCODE_SOURCE_DIR" "$_2CODE_OPENCODE_DIR" "plugins"
   _2code_link_opencode_items "$_2CODE_OPENCODE_SOURCE_DIR/plugins" "$_2CODE_OPENCODE_PLUGINS" "2code-status.js"
 fi
