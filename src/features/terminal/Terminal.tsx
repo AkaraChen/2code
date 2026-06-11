@@ -203,6 +203,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				cursorBlink: true,
 				cursorStyle: "bar",
 				cursorWidth: 4,
+				linkHandler: {
+					activate: handleTerminalLinkOpen,
+				},
 				// ImageAddon mutates windowOptions during activation; keep it per-terminal.
 				windowOptions: {
 					getCellSizePixels: true,
