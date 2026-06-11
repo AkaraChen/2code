@@ -37,6 +37,14 @@ interface PendingDraft {
 	content: string;
 }
 
+function isDraftForFile(
+	draft: PendingDraft | null,
+	profileId: string,
+	filePath: string,
+): draft is PendingDraft {
+	return draft?.profileId === profileId && draft.filePath === filePath;
+}
+
 function getMonacoTheme(themeId: string) {
 	return themeId.includes("light") ? "light" : "vs-dark";
 }
@@ -172,7 +180,7 @@ export default function FileViewerPane({
 	const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
-	const [localEditorValue, setLocalEditorValue] = useState<string | null>(
+	const [localEditorValue, setLocalEditorValue] = useState<PendingDraft | null>(
 		null,
 	);
 	const draftValue = useFileViewerDirtyStore(
@@ -212,10 +220,21 @@ export default function FileViewerPane({
 	} = useSaveFileContent(profileId);
 
 	const monacoTheme = getMonacoTheme(themeId);
-	const editorValue = localEditorValue ?? draftValue ?? content ?? "";
+	const localEditorValueMatchesFile = isDraftForFile(
+		localEditorValue,
+		profileId,
+		filePath,
+	);
+	if (localEditorValue && !localEditorValueMatchesFile) {
+		setLocalEditorValue(null);
+	}
+	const currentLocalEditorValue = localEditorValueMatchesFile
+		? localEditorValue.content
+		: undefined;
+	const editorValue = currentLocalEditorValue ?? draftValue ?? content ?? "";
 	const lastSavedValue = savedValue ?? content ?? "";
 	const hasLoadedFile =
-		content != null || draftValue != null || localEditorValue != null;
+		content != null || draftValue != null || currentLocalEditorValue != null;
 	const hasUnsavedChanges = editorValue !== lastSavedValue;
 
 	const flushPendingDraft = useCallback(() => {
@@ -242,15 +261,8 @@ export default function FileViewerPane({
 	}, [setFileDraft]);
 
 	useEffect(() => {
-		const pendingDraft = pendingDraftRef.current;
-		const pendingContent =
-			pendingDraft?.profileId === profileId &&
-			pendingDraft.filePath === filePath
-				? pendingDraft.content
-				: undefined;
 		flushPendingDraft();
-		setLocalEditorValue(pendingContent ?? draftValue ?? null);
-	}, [content, draftValue, filePath, flushPendingDraft, profileId]);
+	}, [filePath, flushPendingDraft, profileId]);
 
 	useEffect(() => {
 		return () => {
@@ -299,7 +311,11 @@ export default function FileViewerPane({
 
 	const handleFileChange = useCallback(
 		(nextValue: string) => {
-			setLocalEditorValue(nextValue);
+			setLocalEditorValue({
+				profileId,
+				filePath,
+				content: nextValue,
+			});
 			pendingDraftRef.current = {
 				profileId,
 				filePath,
