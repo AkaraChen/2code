@@ -53,7 +53,8 @@ function createWrapper(isDark = true) {
 function resetStores() {
 	useTerminalStore.setState({
 		profiles: {},
-		notifiedTabs: new Set<string>(),
+		agentStatuses: {},
+		sessionProfileIds: {},
 	});
 	useFileViewerTabsStore.setState({ profiles: {} });
 	useTerminalSettingsStore.setState({

@@ -119,7 +119,7 @@ describe("terminalTabs file tree drops", () => {
 	beforeEach(() => {
 		useTerminalStore.setState({
 			profiles: {},
-			notifiedTabs: new Set<string>(),
+			agentStatuses: {},
 			sessionProfileIds: {},
 		});
 		useFileViewerTabsStore.setState({ profiles: {} });

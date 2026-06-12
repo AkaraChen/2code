@@ -73,6 +73,24 @@ a,
 	}
 }
 
+@keyframes agent-status-pulse {
+	50% {
+		opacity: 0.35;
+		transform: scale(0.72);
+	}
+}
+
+.agent-status-dot--running {
+	animation: agent-status-pulse 1.1s ease-in-out infinite;
+	transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.agent-status-dot--running {
+		animation: none;
+	}
+}
+
 .project-command-palette__overlay {
 	position: fixed;
 	inset: 0;

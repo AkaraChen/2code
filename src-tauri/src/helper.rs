@@ -13,8 +13,9 @@ pub struct HelperState {
 }
 
 #[derive(Debug, serde::Deserialize)]
-struct NotifyQuery {
+struct StatusQuery {
 	session_id: Option<String>,
+	status: model::notification::AgentStatus,
 }
 
 fn sidecar_binary_name(target: &str) -> String {
@@ -52,13 +53,26 @@ fn resolve_sidecar_path() -> PathBuf {
 
 async fn notify_handler(
 	State(app): State<AppHandle>,
-	Query(params): Query<NotifyQuery>,
 ) -> Json<model::notification::NotifyResponse> {
 	let played = try_play_notification(&app);
-	if let Some(session_id) = params.session_id.as_deref() {
-		let _ = app.emit("pty-notify", session_id);
-	}
 	Json(model::notification::NotifyResponse { played })
+}
+
+async fn status_handler(
+	State(app): State<AppHandle>,
+	Query(params): Query<StatusQuery>,
+) -> Json<model::notification::StatusResponse> {
+	let emitted = if let Some(session_id) = params.session_id {
+		let event = model::notification::AgentStatusEvent {
+			session_id,
+			status: params.status,
+		};
+		app.emit("pty-agent-status", event).is_ok()
+	} else {
+		false
+	};
+
+	Json(model::notification::StatusResponse { emitted })
 }
 
 fn try_play_notification(app: &AppHandle) -> bool {
@@ -99,6 +113,7 @@ pub fn start(app: &AppHandle) -> HelperState {
 	tauri::async_runtime::spawn(async move {
 		let router = axum::Router::new()
 			.route("/notify", get(notify_handler))
+			.route("/status", get(status_handler))
 			.route("/health", get(health_handler))
 			.with_state(app_handle);
 
