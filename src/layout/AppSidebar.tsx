@@ -546,7 +546,7 @@ export default function AppSidebar() {
 						<Box
 							flex="1"
 							minH="0"
-							overflowY="scroll"
+							overflowY="auto"
 							overflowX="hidden"
 							css={{ scrollbarGutter: "stable" }}
 						>
