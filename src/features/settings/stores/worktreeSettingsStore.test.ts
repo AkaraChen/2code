@@ -31,4 +31,18 @@ describe("useWorktreeSettingsStore", () => {
 
 		expect(getState().defaultWorktreeDir).toBe("");
 	});
+
+	it("normalizes persisted default worktree directory on migration", async () => {
+		localStorage.setItem(
+			"worktree-settings",
+			JSON.stringify({
+				state: { defaultWorktreeDir: "  /tmp/worktrees  " },
+				version: 0,
+			}),
+		);
+
+		await useWorktreeSettingsStore.persist.rehydrate();
+
+		expect(getState().defaultWorktreeDir).toBe("/tmp/worktrees");
+	});
 });

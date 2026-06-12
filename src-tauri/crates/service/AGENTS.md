@@ -32,6 +32,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 **Worktree path**: Project `2code.json` `worktree_dir` wins, then the global Settings default, then `~/.2code/workspace`. Relative paths and `~` are resolved before `git worktree add`.
 
 ## WHERE TO LOOK
+
 | Task | Location |
 |------|----------|
 | Profile worktree path | `profile.rs` — `resolve_worktree_base` + `build_worktree_dir_name` |

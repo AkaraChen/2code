@@ -371,6 +371,12 @@ fn create_worktree(
 	}
 }
 
+fn load_project_config(
+	project_folder: &str,
+) -> Result<infra::config::ProjectConfig, AppError> {
+	infra::config::load_project_config(project_folder)
+}
+
 pub fn create_with_db(
 	db: &DbPool,
 	project_id: &str,
@@ -389,8 +395,7 @@ pub fn create_with_db(
 		};
 		(project_folder, existing_branches)
 	};
-	let project_config =
-		infra::config::load_project_config(&project_folder).unwrap_or_default();
+	let project_config = load_project_config(&project_folder)?;
 
 	let created = create_worktree(
 		&project_folder,
@@ -426,15 +431,19 @@ pub fn create_with_default_worktree_dir(
 	branch_name: &str,
 	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
-	let project_config =
-		infra::config::load_project_config(&project_folder).unwrap_or_default();
 	let auto_generated = branch_name.trim().is_empty();
-	let mut existing_branches = if auto_generated {
-		repo::profile::list_branch_names_by_project(conn, project_id)?
-	} else {
-		Vec::new()
+	let (project_folder, project_config, mut existing_branches) = {
+		let project_folder =
+			repo::profile::get_project_folder(conn, project_id)?;
+		let project_config = load_project_config(&project_folder)?;
+		let existing_branches = if auto_generated {
+			repo::profile::list_branch_names_by_project(conn, project_id)?
+		} else {
+			Vec::new()
+		};
+		(project_folder, project_config, existing_branches)
 	};
+
 	let created = create_worktree(
 		&project_folder,
 		branch_name,
@@ -444,13 +453,15 @@ pub fn create_with_default_worktree_dir(
 		default_worktree_dir,
 	)?;
 
-	let profile = repo::profile::insert(
-		conn,
-		&created.id,
-		project_id,
-		&created.branch_name,
-		&created.worktree_str,
-	)?;
+	let profile = {
+		repo::profile::insert(
+			conn,
+			&created.id,
+			project_id,
+			&created.branch_name,
+			&created.worktree_str,
+		)?
+	};
 
 	infra::config::execute_scripts(
 		&project_config.setup_script,
@@ -676,6 +687,26 @@ mod tests {
 		assert!(dir_name.ends_with(&profile.id[..8]));
 
 		delete(&mut conn, &profile.id).unwrap();
+	}
+
+	#[test]
+	fn create_profile_returns_invalid_project_config_errors() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
+		let global_base =
+			TempDir::new().expect("global worktree base fallback");
+
+		let result = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/broken-config",
+			Some(global_base.path().to_str().unwrap()),
+		);
+
+		assert!(
+			matches!(result, Err(AppError::IoError(error)) if error.kind() == std::io::ErrorKind::InvalidData)
+		);
 	}
 
 	#[test]

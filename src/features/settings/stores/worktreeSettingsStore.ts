@@ -7,18 +7,42 @@ interface WorktreeSettingsStore {
 	clearDefaultWorktreeDir: () => void;
 }
 
+type PersistedWorktreeSettings = Pick<
+	WorktreeSettingsStore,
+	"defaultWorktreeDir"
+>;
+
 function normalizeWorktreeDir(path: string) {
 	return path.trim();
 }
 
+function migrateWorktreeSettings(
+	persistedState: unknown,
+): PersistedWorktreeSettings {
+	const state = persistedState as Partial<PersistedWorktreeSettings>;
+	const defaultWorktreeDir =
+		typeof state.defaultWorktreeDir === "string"
+			? normalizeWorktreeDir(state.defaultWorktreeDir)
+			: "";
+
+	return { defaultWorktreeDir };
+}
+
 export const useWorktreeSettingsStore = create<WorktreeSettingsStore>()(
-	persist(
+	persist<WorktreeSettingsStore, [], [], PersistedWorktreeSettings>(
 		(set) => ({
 			defaultWorktreeDir: "",
 			setDefaultWorktreeDir: (path) =>
 				set({ defaultWorktreeDir: normalizeWorktreeDir(path) }),
 			clearDefaultWorktreeDir: () => set({ defaultWorktreeDir: "" }),
 		}),
-		{ name: "worktree-settings" },
+		{
+			name: "worktree-settings",
+			partialize: (state) => ({
+				defaultWorktreeDir: state.defaultWorktreeDir,
+			}),
+			version: 1,
+			migrate: migrateWorktreeSettings,
+		},
 	),
 );
