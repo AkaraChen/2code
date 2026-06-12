@@ -133,6 +133,7 @@
 	"terminal": "终端",
 	"accentColor": "主题色",
 	"borderRadius": "圆角",
+	"windowOpacity": "窗口不透明度",
 	"radiusNone": "无",
 	"radiusSmall": "小",
 	"radiusMedium": "中",

@@ -133,6 +133,7 @@
 	"terminal": "Terminal",
 	"accentColor": "Accent Color",
 	"borderRadius": "Border Radius",
+	"windowOpacity": "Window Opacity",
 	"radiusNone": "None",
 	"radiusSmall": "Small",
 	"radiusMedium": "Medium",
