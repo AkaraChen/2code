@@ -202,6 +202,7 @@ mod tests {
 	fn write_config_round_trip() {
 		let dir = TempDir::new().unwrap();
 		let config = ProjectConfig {
+			worktree_dir: Some("../.worktrees".to_string()),
 			setup_script: vec!["npm install".to_string()],
 			teardown_script: vec!["rm -rf node_modules".to_string()],
 			init_script: vec!["echo ready".to_string()],

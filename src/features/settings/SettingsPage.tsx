@@ -41,6 +41,7 @@ import { NotificationSettings } from "./NotificationSettings";
 import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { ShellPicker } from "./ShellPicker";
 import { TerminalThemePicker } from "./TerminalThemePicker";
+import { WorktreeSettings } from "./WorktreeSettings";
 
 const localeCollection = createListCollection({
 	items: [
@@ -242,6 +243,7 @@ export default function SettingsPage() {
 								</Select.Root>
 							</Field.Root>
 							<BorderRadiusPicker />
+							<WorktreeSettings />
 							<Field.Root>
 								<Field.Label>{m.debugMode()}</Field.Label>
 								<Switch.Root

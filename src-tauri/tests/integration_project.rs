@@ -460,6 +460,90 @@ fn create_profile_returns_correct_shape() {
 }
 
 #[test]
+fn create_profile_uses_project_worktree_dir_relative_to_project() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let relative_base_name = format!(".worktrees-{}", &project.id[..8]);
+	std::fs::write(
+		dir.join("2code.json"),
+		format!(r#"{{"worktree_dir":"../{relative_base_name}"}}"#),
+	)
+	.unwrap();
+	let expected_base = dir.parent().unwrap().join(&relative_base_name);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "feature-worktree")
+			.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+	let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
+
+	assert!(worktree_path.starts_with(&expected_base));
+	assert!(worktree_path.exists());
+	assert_ne!(dir_name.as_ref(), profile.id);
+	assert!(dir_name.contains("feature-worktree"));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&expected_base);
+	cleanup(&dir);
+}
+
+#[test]
+fn create_profile_uses_global_worktree_dir_when_project_config_absent() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let global_base = std::env::temp_dir()
+		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
+
+	let profile = service::profile::create_with_default_worktree_dir(
+		&mut conn,
+		&project.id,
+		"feature-global",
+		Some(global_base.to_str().unwrap()),
+	)
+	.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	assert!(worktree_path.starts_with(&global_base));
+	assert!(worktree_path.exists());
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&global_base);
+	cleanup(&dir);
+}
+
+#[test]
+fn create_profile_project_worktree_dir_overrides_global_default() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let project_base_name = format!(".worktrees-{}", &project.id[..8]);
+	std::fs::write(
+		dir.join("2code.json"),
+		format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
+	)
+	.unwrap();
+	let project_base = dir.parent().unwrap().join(&project_base_name);
+	let global_base = std::env::temp_dir()
+		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
+
+	let profile = service::profile::create_with_default_worktree_dir(
+		&mut conn,
+		&project.id,
+		"feature-override",
+		Some(global_base.to_str().unwrap()),
+	)
+	.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	assert!(worktree_path.starts_with(&project_base));
+	assert!(!worktree_path.starts_with(&global_base));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&project_base);
+	cleanup(&global_base);
+	cleanup(&dir);
+}
+
+#[test]
 fn create_profile_sanitizes_cjk() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);

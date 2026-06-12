@@ -2,10 +2,11 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfileDeleteCheck } from "./hooks";
+import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
+import { useCreateProfile, useProfileDeleteCheck } from "./hooks";
 
 const {
 	createProfileMock,
@@ -45,11 +46,76 @@ function createWrapper() {
 	);
 }
 
-describe("useProfileDeleteCheck", () => {
+describe("profile hooks", () => {
 	beforeEach(() => {
 		createProfileMock.mockReset();
 		deleteProfileMock.mockReset();
 		getProfileDeleteCheckMock.mockReset();
+		useWorktreeSettingsStore.setState({ defaultWorktreeDir: "" });
+		localStorage.clear();
+	});
+
+	describe("useCreateProfile", () => {
+		it("passes the configured default worktree directory to IPC", async () => {
+			createProfileMock.mockResolvedValue({
+				id: "profile-1",
+				project_id: "project-1",
+				branch_name: "feature/worktree",
+				worktree_path: "/tmp/worktrees/profile-1",
+				created_at: "now",
+				is_default: false,
+				notes: "",
+			});
+			useWorktreeSettingsStore
+				.getState()
+				.setDefaultWorktreeDir(" /tmp/worktrees ");
+
+			const { result } = renderHook(() => useCreateProfile(), {
+				wrapper: createWrapper(),
+			});
+
+			await act(async () => {
+				await result.current.mutateAsync({
+					projectId: "project-1",
+					branchName: "feature/worktree",
+				});
+			});
+
+			expect(createProfileMock).toHaveBeenCalledWith({
+				projectId: "project-1",
+				branchName: "feature/worktree",
+				defaultWorktreeDir: "/tmp/worktrees",
+			});
+		});
+
+		it("passes null when no default worktree directory is configured", async () => {
+			createProfileMock.mockResolvedValue({
+				id: "profile-1",
+				project_id: "project-1",
+				branch_name: "feature/worktree",
+				worktree_path: "/tmp/worktrees/profile-1",
+				created_at: "now",
+				is_default: false,
+				notes: "",
+			});
+
+			const { result } = renderHook(() => useCreateProfile(), {
+				wrapper: createWrapper(),
+			});
+
+			await act(async () => {
+				await result.current.mutateAsync({
+					projectId: "project-1",
+					branchName: "feature/worktree",
+				});
+			});
+
+			expect(createProfileMock).toHaveBeenCalledWith({
+				projectId: "project-1",
+				branchName: "feature/worktree",
+				defaultWorktreeDir: null,
+			});
+		});
 	});
 
 	it("reports local changes and unpushed commits before profile deletion", async () => {

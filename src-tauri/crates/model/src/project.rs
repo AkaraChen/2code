@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Clone)]
 pub struct ProjectConfig {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub worktree_dir: Option<String>,
 	#[serde(default)]
 	pub setup_script: Vec<String>,
 	#[serde(default)]

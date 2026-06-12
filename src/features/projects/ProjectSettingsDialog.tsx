@@ -3,6 +3,7 @@ import {
 	CloseButton,
 	Dialog,
 	Field,
+	Input,
 	Portal,
 	Spinner,
 	Stack,
@@ -31,6 +32,7 @@ interface ProjectSettingsDialogProps {
 }
 
 interface FormValues {
+	worktreeDir: string;
 	initScript: string;
 	setupScript: string;
 	teardownScript: string;
@@ -52,6 +54,7 @@ function ProjectSettingsForm({
 	);
 	const form = useForm<FormValues>({
 		defaultValues: {
+			worktreeDir: config.worktree_dir ?? "",
 			initScript: commandsToText(config.init_script),
 			setupScript: commandsToText(config.setup_script),
 			teardownScript: commandsToText(config.teardown_script),
@@ -62,6 +65,7 @@ function ProjectSettingsForm({
 		await saveConfig.mutateAsync({
 			projectId,
 			config: {
+				worktree_dir: data.worktreeDir.trim() || null,
 				init_script: textToCommands(data.initScript),
 				setup_script: textToCommands(data.setupScript),
 				teardown_script: textToCommands(data.teardownScript),
@@ -83,6 +87,17 @@ function ProjectSettingsForm({
 
 					<Tabs.Content value="scripts">
 						<Stack gap="3">
+							<Field.Root>
+								<Field.Label>{m.projectWorktreeDir()}</Field.Label>
+								<Text fontSize="xs" color="fg.muted" mb="1">
+									{m.projectWorktreeDirDesc()}
+								</Text>
+								<Input
+									{...form.register("worktreeDir")}
+									placeholder={m.projectWorktreeDirPlaceholder()}
+								/>
+							</Field.Root>
+
 							<Field.Root>
 								<Field.Label>{m.initScript()}</Field.Label>
 								<Text fontSize="xs" color="fg.muted" mb="1">
