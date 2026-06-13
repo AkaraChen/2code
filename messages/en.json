@@ -313,5 +313,11 @@
 	"notesTableAddColumn": "Add column right",
 	"notesTableAddRowBefore": "Add row above",
 	"notesTableAddColumnBefore": "Add column left",
-	"notesTableDeleteCells": "Delete cells"
+	"notesTableDeleteCells": "Delete cells",
+	"notesCodeBlockSearchLanguage": "Search language",
+	"notesCodeBlockNoLanguage": "No matching language",
+	"notesCodeBlockCopy": "Copy",
+	"notesCodeBlockPreviewLoading": "Loading preview...",
+	"notesCodeBlockEdit": "Edit",
+	"notesCodeBlockHidePreview": "Hide preview"
 }

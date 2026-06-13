@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LanguageDescription, LanguageSupport, StreamLanguage } from "@codemirror/language";
+import { oneDark } from "@codemirror/theme-one-dark";
 import {
 	Badge,
 	Box,
@@ -25,6 +27,7 @@ import {
 	editorViewCtx,
 	serializerCtx,
 } from "@milkdown/kit/core";
+import { codeBlockComponent, codeBlockConfig } from "@milkdown/kit/component/code-block";
 import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { Plugin, PluginKey } from "@milkdown/kit/prose/state";
 import { Decoration, DecorationSet, type EditorView } from "@milkdown/kit/prose/view";
@@ -80,6 +83,7 @@ import {
 	FiType,
 	FiX,
 } from "react-icons/fi";
+import { basicSetup } from "codemirror";
 import type { Ctx } from "@milkdown/kit/ctx";
 import * as m from "@/paraglide/messages.js";
 
@@ -122,6 +126,157 @@ const DEFAULT_TOOLBAR_STATE: ToolbarState = {
 	block: "paragraph",
 };
 
+const CODE_BLOCK_EXPAND_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<path d="m6 9 6 6 6-6" />
+</svg>
+`;
+
+const CODE_BLOCK_SEARCH_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<circle cx="11" cy="11" r="7" />
+	<path d="m20 20-3.5-3.5" />
+</svg>
+`;
+
+const CODE_BLOCK_CLEAR_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<path d="M18 6 6 18" />
+	<path d="m6 6 12 12" />
+</svg>
+`;
+
+const CODE_BLOCK_COPY_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<rect width="12" height="12" x="8" y="8" rx="2" />
+	<path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+</svg>
+`;
+
+const CODE_BLOCK_EDIT_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<path d="M12 20h9" />
+	<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+</svg>
+`;
+
+const CODE_BLOCK_HIDE_ICON = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+	<path d="m2 2 20 20" />
+	<path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+	<path d="M9.9 4.2A10.5 10.5 0 0 1 12 4c5 0 9 5 10 8a13.4 13.4 0 0 1-2 3.3" />
+	<path d="M6.5 6.5C4.2 8 2.7 10.4 2 12c1 3 5 8 10 8a10.5 10.5 0 0 0 4.4-1" />
+</svg>
+`;
+
+const CODE_BLOCK_EXTENSIONS = [
+	basicSetup,
+	oneDark,
+];
+
+function loadShellLanguage() {
+	return import("@codemirror/legacy-modes/mode/shell").then(
+		(module) => new LanguageSupport(StreamLanguage.define(module.shell)),
+	);
+}
+
+const CODE_BLOCK_LANGUAGES = [
+	LanguageDescription.of({
+		name: "TypeScript",
+		alias: ["ts"],
+		extensions: ["ts", "mts", "cts"],
+		load: () => import("@codemirror/lang-javascript").then((module) => module.javascript({ typescript: true })),
+	}),
+	LanguageDescription.of({
+		name: "TSX",
+		extensions: ["tsx"],
+		load: () => import("@codemirror/lang-javascript").then((module) => module.javascript({ jsx: true, typescript: true })),
+	}),
+	LanguageDescription.of({
+		name: "JavaScript",
+		alias: ["js", "node"],
+		extensions: ["js", "mjs", "cjs"],
+		load: () => import("@codemirror/lang-javascript").then((module) => module.javascript()),
+	}),
+	LanguageDescription.of({
+		name: "JSX",
+		extensions: ["jsx"],
+		load: () => import("@codemirror/lang-javascript").then((module) => module.javascript({ jsx: true })),
+	}),
+	LanguageDescription.of({
+		name: "JSON",
+		extensions: ["json", "jsonc", "map"],
+		load: () => import("@codemirror/lang-json").then((module) => module.json()),
+	}),
+	LanguageDescription.of({
+		name: "HTML",
+		alias: ["xhtml"],
+		extensions: ["html", "htm"],
+		load: () => import("@codemirror/lang-html").then((module) => module.html()),
+	}),
+	LanguageDescription.of({
+		name: "CSS",
+		extensions: ["css"],
+		load: () => import("@codemirror/lang-css").then((module) => module.css()),
+	}),
+	LanguageDescription.of({
+		name: "Markdown",
+		alias: ["md"],
+		extensions: ["md", "markdown", "mdx"],
+		load: () => import("@codemirror/lang-markdown").then((module) => module.markdown()),
+	}),
+	LanguageDescription.of({
+		name: "Rust",
+		extensions: ["rs"],
+		load: () => import("@codemirror/lang-rust").then((module) => module.rust()),
+	}),
+	LanguageDescription.of({
+		name: "Python",
+		alias: ["py"],
+		extensions: ["py", "pyw"],
+		load: () => import("@codemirror/lang-python").then((module) => module.python()),
+	}),
+	LanguageDescription.of({
+		name: "Go",
+		extensions: ["go"],
+		load: () => import("@codemirror/lang-go").then((module) => module.go()),
+	}),
+	LanguageDescription.of({
+		name: "SQL",
+		extensions: ["sql"],
+		load: () => import("@codemirror/lang-sql").then((module) => module.sql()),
+	}),
+	LanguageDescription.of({
+		name: "YAML",
+		alias: ["yml"],
+		extensions: ["yaml", "yml"],
+		load: () => import("@codemirror/lang-yaml").then((module) => module.yaml()),
+	}),
+	LanguageDescription.of({
+		name: "XML",
+		extensions: ["xml", "svg"],
+		load: () => import("@codemirror/lang-xml").then((module) => module.xml()),
+	}),
+	LanguageDescription.of({
+		name: "C",
+		extensions: ["c", "h"],
+		load: () => import("@codemirror/lang-cpp").then((module) => module.cpp()),
+	}),
+	LanguageDescription.of({
+		name: "C++",
+		alias: ["cpp"],
+		extensions: ["cpp", "cc", "cxx", "hpp", "hh", "hxx"],
+		load: () => import("@codemirror/lang-cpp").then((module) => module.cpp()),
+	}),
+	LanguageDescription.of({
+		name: "Shell",
+		alias: ["bash", "sh", "zsh"],
+		extensions: ["sh", "bash", "zsh"],
+		filename: /^(\.bashrc|\.zshrc|\.profile)$/,
+		load: loadShellLanguage,
+	}),
+];
+
 function toolbarStatesEqual(a: ToolbarState, b: ToolbarState) {
 	return (
 		a.bold === b.bold &&
@@ -132,6 +287,27 @@ function toolbarStatesEqual(a: ToolbarState, b: ToolbarState) {
 		a.linkHref === b.linkHref &&
 		a.block === b.block
 	);
+}
+
+function configureCodeBlock(ctx: Ctx) {
+	ctx.update(codeBlockConfig.key, (defaultConfig) => ({
+		...defaultConfig,
+		extensions: CODE_BLOCK_EXTENSIONS,
+		languages: CODE_BLOCK_LANGUAGES,
+		expandIcon: CODE_BLOCK_EXPAND_ICON,
+		searchIcon: CODE_BLOCK_SEARCH_ICON,
+		clearSearchIcon: CODE_BLOCK_CLEAR_ICON,
+		searchPlaceholder: m.notesCodeBlockSearchLanguage(),
+		noResultText: m.notesCodeBlockNoLanguage(),
+		copyText: m.notesCodeBlockCopy(),
+		copyIcon: CODE_BLOCK_COPY_ICON,
+		previewLabel: m.preview(),
+		previewLoading: m.notesCodeBlockPreviewLoading(),
+		previewToggleButton: (previewOnlyMode) =>
+			previewOnlyMode
+				? `${CODE_BLOCK_EDIT_ICON} ${m.notesCodeBlockEdit()}`
+				: `${CODE_BLOCK_HIDE_ICON} ${m.notesCodeBlockHidePreview()}`,
+	}));
 }
 
 function getMarkState(ctx: Ctx, markName: string) {
@@ -816,6 +992,7 @@ function MilkdownEditor({
 		(root) => {
 			return Editor.make()
 				.config(nord)
+				.config(configureCodeBlock)
 				.config((ctx) => {
 					ctx.set(rootCtx, root);
 					ctx.set(defaultValueCtx, initialMarkdown);
@@ -830,6 +1007,7 @@ function MilkdownEditor({
 						});
 				})
 				.use(commonmark)
+				.use(codeBlockComponent)
 				.use(gfm)
 				.use(history)
 				.use(listener)
