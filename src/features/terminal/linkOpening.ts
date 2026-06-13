@@ -1,4 +1,4 @@
-export interface TerminalLinkActivationEvent {
+interface TerminalLinkActivationEvent {
 	ctrlKey: boolean;
 }
 

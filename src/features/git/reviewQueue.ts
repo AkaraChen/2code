@@ -17,7 +17,7 @@ export function formatReviewRange(range: SelectedLineRange) {
 	return start === end ? `${start}` : `${start}-${end}`;
 }
 
-export function getSelectedDiffText(
+function getSelectedDiffText(
 	file: FileDiffMetadata,
 	range: SelectedLineRange,
 ) {

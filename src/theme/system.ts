@@ -5,7 +5,7 @@ import {
 } from "@chakra-ui/react";
 import { numberInputAnatomy } from "@chakra-ui/react/anatomy";
 
-export const appThemeConfig = defineConfig({
+const appThemeConfig = defineConfig({
   theme: {
     tokens: {
       radii: {

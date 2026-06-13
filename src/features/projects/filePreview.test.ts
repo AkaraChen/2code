@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
-import {
-	isArchiveFile,
-	isPreviewableBinaryFile,
-} from "./filePreview";
+import { isPreviewableBinaryFile } from "./filePreview";
 
 describe("filePreview", () => {
-	it("detects gzip archives before text loading", () => {
-		expect(isArchiveFile("/repo/dump.sql.gz")).toBe(true);
-		expect(isArchiveFile("/repo/archive.tar.gz")).toBe(true);
-		expect(isArchiveFile("/repo/archive.tgz")).toBe(true);
+	it("detects archive files as previewable binaries", () => {
 		expect(isPreviewableBinaryFile("/repo/dump.sql.gz")).toBe(true);
+		expect(isPreviewableBinaryFile("/repo/archive.tar.gz")).toBe(true);
+		expect(isPreviewableBinaryFile("/repo/archive.tgz")).toBe(true);
 	});
 
-	it("does not treat similarly named files as archives", () => {
-		expect(isArchiveFile("/repo/gzip-notes.md")).toBe(false);
-		expect(isArchiveFile("/repo/archive.gz.md")).toBe(false);
+	it("does not treat files with archive-like names as binaries", () => {
+		expect(isPreviewableBinaryFile("/repo/gzip-notes.md")).toBe(false);
+		expect(isPreviewableBinaryFile("/repo/archive.gz.md")).toBe(false);
 	});
 });

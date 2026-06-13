@@ -3,7 +3,7 @@ export const FILE_TREE_TERMINAL_DROP_MIME =
 export const FILE_TREE_TERMINAL_DROP_EVENT = "2code:file-tree-terminal-drop";
 export const FILE_TREE_TERMINAL_DROP_TARGET_ATTR =
 	"data-file-tree-terminal-drop-target";
-export const FILE_TREE_TERMINAL_DROP_TARGET_SELECTOR =
+const FILE_TREE_TERMINAL_DROP_TARGET_SELECTOR =
 	`[${FILE_TREE_TERMINAL_DROP_TARGET_ATTR}]`;
 
 const FILE_TREE_TERMINAL_DROP_SOURCE = "2code-file-tree";

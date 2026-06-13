@@ -133,6 +133,3 @@ export default function WindowControls() {
 		</HStack>
 	);
 }
-
-export const WINDOW_CONTROLS_WIDTH = 36 * 3;
-export const WINDOW_CONTROLS_HEIGHT = 28;

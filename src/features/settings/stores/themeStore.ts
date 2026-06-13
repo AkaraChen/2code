@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type BorderRadius = "none" | "sm" | "md" | "lg" | "xl";
-export type WindowOpacity = number;
+type WindowOpacity = number;
 
 interface ThemeStore {
 	borderRadius: BorderRadius;
@@ -27,7 +27,7 @@ export const BORDER_RADIUS_MAP: Record<
 	xl: { l1: "8px", l2: "10px", l3: "12px" },
 };
 
-export const BORDER_RADIUS_VALUES = [
+const BORDER_RADIUS_VALUES = [
 	"none",
 	"sm",
 	"md",

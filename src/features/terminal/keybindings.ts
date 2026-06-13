@@ -8,7 +8,7 @@ export interface TerminalShortcutKeyEvent {
 	shiftKey: boolean;
 }
 
-export type TerminalShortcutAction =
+type TerminalShortcutAction =
 	| { type: "write-sequence"; sequence: string }
 	| { type: "increase-font-size" }
 	| { type: "decrease-font-size" }

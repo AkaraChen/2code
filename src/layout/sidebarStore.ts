@@ -5,7 +5,7 @@ export const APP_SIDEBAR_MIN_WIDTH = 220;
 export const APP_SIDEBAR_MAX_WIDTH = 420;
 export const APP_SIDEBAR_DEFAULT_WIDTH = 250;
 
-export function clampAppSidebarWidth(width: number) {
+function clampAppSidebarWidth(width: number) {
 	return Math.min(
 		APP_SIDEBAR_MAX_WIDTH,
 		Math.max(APP_SIDEBAR_MIN_WIDTH, width),

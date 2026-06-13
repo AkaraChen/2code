@@ -28,7 +28,6 @@ import {
 	getProjectConfig,
 	getProjectGithubAvatar,
 	listFileTreeChildPaths,
-	listFileTreePaths,
 	listProjectGroups,
 	listProjects,
 	moveFileTreePaths,
@@ -288,15 +287,6 @@ export function useDeleteProject(options?: {
 				}),
 			]);
 		},
-	});
-}
-
-export function useFileTreePaths(path: string, enabled = true) {
-	return useQuery({
-		queryKey: queryKeys.fs.tree(path),
-		queryFn: () => listFileTreePaths({ path }),
-		enabled: !!path && enabled,
-		staleTime: 5000,
 	});
 }
 

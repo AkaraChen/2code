@@ -28,53 +28,39 @@ const officeExtensions = new Set([
 	"odp",
 ]);
 
-const archiveSuffixes = [
-	".zip",
-	".tar",
-	".tar.gz",
-	".tgz",
-	".gz",
-];
-
 function getBasename(filePath: string) {
 	return filePath.split(/[\\/]/).pop()?.toLowerCase() ?? "";
 }
 
-export function getFileExtension(filePath: string) {
+function getFileExtension(filePath: string) {
 	const basename = getBasename(filePath);
 	const dotIndex = basename.lastIndexOf(".");
 	if (dotIndex <= 0 || dotIndex === basename.length - 1) return "";
 	return basename.slice(dotIndex + 1);
 }
 
-export function getCompoundFileExtension(filePath: string) {
-	const basename = getBasename(filePath);
-	if (basename.endsWith(".tar.gz")) return "tar.gz";
-	return getFileExtension(filePath);
-}
-
-export function getPreviewableImageMimeType(filePath: string) {
+function getPreviewableImageMimeType(filePath: string) {
 	return imageMimeTypes[getFileExtension(filePath)] ?? null;
 }
 
-export function isPdfFile(filePath: string) {
+function isPdfFile(filePath: string) {
 	return getFileExtension(filePath) === "pdf";
 }
 
-export function isOfficeFile(filePath: string) {
+function isOfficeFile(filePath: string) {
 	return officeExtensions.has(getFileExtension(filePath));
 }
 
-export function isArchiveFile(filePath: string) {
-	const basename = getBasename(filePath);
-	return archiveSuffixes.some((suffix) => basename.endsWith(suffix));
-}
+const archiveSuffixes = [".zip", ".tar", ".tar.gz", ".tgz", ".gz"];
 
 export function isPreviewableBinaryFile(filePath: string) {
+	const basename = getBasename(filePath);
+	const isArchive = archiveSuffixes.some((suffix) => basename.endsWith(suffix));
+
 	return (
 		getPreviewableImageMimeType(filePath) != null
 		|| isPdfFile(filePath)
 		|| isOfficeFile(filePath)
-		|| isArchiveFile(filePath)
+		|| isArchive
 	);
 }

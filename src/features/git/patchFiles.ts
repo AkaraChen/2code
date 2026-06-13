@@ -8,7 +8,7 @@ interface PatchWithFiles {
 const PARSED_DIFF_CACHE_LIMIT = 20;
 const parsedDiffFilesCache = new Map<string, FileDiffMetadata[]>();
 
-export function collectPatchFiles(patches: readonly PatchWithFiles[]) {
+function collectPatchFiles(patches: readonly PatchWithFiles[]) {
 	let fileCount = 0;
 	for (const patch of patches) {
 		fileCount += patch.files.length;

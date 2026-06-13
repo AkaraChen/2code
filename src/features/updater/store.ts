@@ -12,7 +12,7 @@ import { useUpdaterSettingsStore } from "./settingsStore";
 
 type UpdateChannel = "stable" | "beta";
 
-export type UpdaterStatus =
+type UpdaterStatus =
 	| "idle"
 	| "checking"
 	| "available"
@@ -21,7 +21,7 @@ export type UpdaterStatus =
 	| "readyToRelaunch"
 	| "error";
 
-export type AvailableUpdateInfo = UpdateMetadata;
+type AvailableUpdateInfo = UpdateMetadata;
 
 interface UpdaterStore {
 	status: UpdaterStatus;

@@ -658,7 +658,7 @@ pub fn pull_request_status_for_branch(
 			"pr",
 			"list",
 			"--head",
-			&branch_name,
+			branch_name,
 			"--state",
 			"all",
 			"--json",
@@ -1233,7 +1233,8 @@ fn read_git_blob_to_cache(
 	cache_key_is_immutable: bool,
 ) -> Result<Option<String>, AppError> {
 	if cache_key_is_immutable
-		&& std::fs::metadata(cache_path).is_ok_and(|metadata| metadata.is_file())
+		&& std::fs::metadata(cache_path)
+			.is_ok_and(|metadata| metadata.is_file())
 	{
 		return Ok(Some(cache_path.to_string_lossy().to_string()));
 	}

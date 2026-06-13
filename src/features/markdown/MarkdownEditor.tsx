@@ -87,7 +87,7 @@ import { basicSetup } from "codemirror";
 import type { Ctx } from "@milkdown/kit/ctx";
 import * as m from "@/paraglide/messages.js";
 
-export interface MarkdownEditorProps {
+interface MarkdownEditorProps {
 	editorKey: string;
 	initialMarkdown: string;
 	onMarkdownChange: (markdown: string) => void;

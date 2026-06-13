@@ -30,7 +30,7 @@ export interface ProjectTerminalTemplate extends GlobalTerminalTemplate {
 	cwd: string;
 }
 
-export interface ResolvedTerminalTemplate {
+interface ResolvedTerminalTemplate {
 	id: string;
 	name: string;
 	cwd: string;

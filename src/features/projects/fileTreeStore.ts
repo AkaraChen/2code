@@ -5,7 +5,7 @@ export const FILE_TREE_PANEL_MIN_WIDTH = 180;
 export const FILE_TREE_PANEL_MAX_WIDTH = 560;
 export const DEFAULT_FILE_TREE_PANEL_WIDTH = 208;
 
-export function clampFileTreePanelWidth(width: number) {
+function clampFileTreePanelWidth(width: number) {
 	return Math.min(
 		FILE_TREE_PANEL_MAX_WIDTH,
 		Math.max(FILE_TREE_PANEL_MIN_WIDTH, width),

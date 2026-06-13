@@ -302,7 +302,10 @@ pub fn get_pull_request_status_for_folder(
 	folder: &str,
 	branch_name: Option<&str>,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
-	match branch_name.map(str::trim).filter(|branch| !branch.is_empty()) {
+	match branch_name
+		.map(str::trim)
+		.filter(|branch| !branch.is_empty())
+	{
 		Some(branch_name) => {
 			infra::git::pull_request_status_for_branch(folder, branch_name)
 		}
