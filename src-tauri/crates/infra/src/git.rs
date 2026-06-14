@@ -732,40 +732,38 @@ pub fn worktree_add(
 	)))
 }
 
-pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
+pub fn worktree_remove(project_folder: &str, worktree_path: &str) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["worktree", "remove", worktree_path, "--force"])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git worktree remove failed: {stderr}");
-		}
-		Err(e) => {
-			tracing::warn!("git worktree remove error: {e}");
-		}
-		_ => {}
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		tracing::warn!("git worktree remove failed: {stderr}");
+		return Err(AppError::GitError(format!(
+			"git worktree remove failed: {stderr}"
+		)));
 	}
+
+	Ok(())
 }
 
-pub fn branch_delete(project_folder: &str, branch_name: &str) {
+pub fn branch_delete(project_folder: &str, branch_name: &str) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["branch", "-D", branch_name])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git branch delete failed: {stderr}");
-		}
-		Err(e) => {
-			tracing::warn!("git branch delete error: {e}");
-		}
-		_ => {}
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		tracing::warn!("git branch delete failed: {stderr}");
+		return Err(AppError::GitError(format!(
+			"git branch delete failed: {stderr}"
+		)));
 	}
+
+	Ok(())
 }
 
 fn refs_except_branch(

@@ -732,6 +732,43 @@ fn delete_nonexistent_profile_returns_error() {
 	assert!(result.is_err());
 }
 
+#[test]
+fn delete_profile_cleanup_failure_leaves_row() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "cleanup-fail").unwrap();
+
+	// Simulate prior external removal of the worktree so that worktree_remove during
+	// profile delete will fail (git will report it is not a working tree). This makes
+	// cleanup fail deterministically; profile row must not be deleted.
+	command_without_windows_console("git")
+		.args(["worktree", "remove", &profile.worktree_path, "--force"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+
+	let result = service::profile::delete(&mut conn, &profile.id);
+	assert!(result.is_err(), "expected error when worktree cleanup fails");
+	let err_msg = result.unwrap_err().to_string();
+	assert!(
+		err_msg.contains("worktree remove failed") || err_msg.contains(&profile.worktree_path),
+		"error should indicate worktree remove failure, got: {err_msg}"
+	);
+
+	// Critical: the profile row must still exist so user can see it / retry delete later.
+	let list = service::project::list(&mut conn).unwrap();
+	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
+	let row_still_present = pwp.profiles.iter().any(|p| p.id == profile.id);
+	assert!(
+		row_still_present,
+		"profile row must remain in DB after cleanup failure (for retryability)"
+	);
+
+	cleanup(&dir);
+}
+
 // ============================================================
 // Profile Creation (non-git folder)
 // ============================================================
