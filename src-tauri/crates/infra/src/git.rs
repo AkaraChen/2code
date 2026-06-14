@@ -691,8 +691,8 @@ pub fn pull_request_status_for_branch(
 
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
-/// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
-/// delete the conflicting branch and retry once.
+/// If a ref namespace conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
+/// return a clear GitError naming the conflicting branch; never delete user branches.
 pub fn worktree_add(
 	project_folder: &str,
 	branch_name: &str,
@@ -716,26 +716,13 @@ pub fn worktree_add(
 		)));
 	}
 
-	// Ref conflict: e.g. 'refs/heads/feat' blocks 'refs/heads/feat/auth'.
-	// Try to delete the conflicting branch and retry once.
+	// Ref namespace conflict: e.g. 'refs/heads/feat' blocks 'refs/heads/feat/auth'.
+	// Never delete the conflicting branch (that would destroy unrelated user work).
+	// Return a specific error so callers (profile creation) can surface a clear message.
 	if stderr.contains("cannot lock ref") {
 		if let Some(conflicting) = extract_conflicting_ref(&stderr) {
-			let _ = command_without_windows_console("git")
-				.args(["branch", "-D", &conflicting])
-				.current_dir(project_folder)
-				.output();
-
-			// Retry
-			let retry = command_without_windows_console("git")
-				.args(["worktree", "add", "-b", branch_name, worktree_path])
-				.current_dir(project_folder)
-				.output()?;
-			if retry.status.success() {
-				return Ok(());
-			}
-			let retry_err = String::from_utf8_lossy(&retry.stderr);
 			return Err(AppError::GitError(format!(
-				"git worktree add failed: {retry_err}"
+				"Branch namespace conflict: '{conflicting}' exists and blocks creation of '{branch_name}'"
 			)));
 		}
 	}
