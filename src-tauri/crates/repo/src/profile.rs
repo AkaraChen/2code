@@ -65,8 +65,18 @@ pub fn find_by_id(
 		.map_err(|_| AppError::NotFound(format!("Profile: {id}")))
 }
 
+/// Delete the profile row only (assumes caller validated not default etc).
+/// Used internally after successful cleanup in service layer.
+pub fn delete_row(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
+	diesel::delete(profiles::table.find(id))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+	Ok(())
+}
+
 /// Delete a profile record and return the profile + project folder.
 /// Default profiles cannot be deleted directly — they are removed via cascade when the project is deleted.
+/// Note: this eagerly deletes the row (for repo unit tests and any legacy direct use); prefer service orchestration for production delete.
 pub fn delete(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -81,9 +91,7 @@ pub fn delete(
 
 	let project_folder = get_project_folder(conn, &profile.project_id)?;
 
-	diesel::delete(profiles::table.find(id))
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
+	delete_row(conn, id)?;
 
 	Ok((profile, project_folder))
 }
