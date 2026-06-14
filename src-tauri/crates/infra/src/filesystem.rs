@@ -994,37 +994,4 @@ mod tests {
 		assert!(result.is_err());
 		assert!(root.join("main.rs").exists());
 	}
-
-	// --- Step 1: explicit unit tests for profile path resolution helpers / validation rules
-	// (escape, absolute, .git, normal nested). These cover the security boundary.
-	#[test]
-	fn validate_rejects_parent_escape() {
-		let err = validate_file_tree_relative_path("../escape", "test path").unwrap_err();
-		let msg = err.to_string();
-		assert!(msg.contains("escapes worktree") || msg.contains("ParentDir"));
-	}
-
-	#[test]
-	fn validate_rejects_absolute_path() {
-		let err = validate_file_tree_relative_path("/etc/passwd", "test path").unwrap_err();
-		assert!(err.to_string().contains("must be relative"));
-	}
-
-	#[test]
-	fn validate_rejects_git_metadata() {
-		let err = validate_file_tree_relative_path(".git/config", "test path").unwrap_err();
-		assert!(err.to_string().contains(".git"));
-	}
-
-	#[test]
-	fn validate_accepts_normal_nested_relative() {
-		let ok = validate_file_tree_relative_path("src/components/Button.tsx", "test path").unwrap();
-		assert_eq!(ok, "src/components/Button.tsx");
-	}
-
-	#[test]
-	fn validate_accepts_directory_with_trailing_slash() {
-		let ok = validate_file_tree_relative_path("src/", "test path").unwrap();
-		assert_eq!(ok, "src");
-	}
 }

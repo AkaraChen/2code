@@ -268,65 +268,37 @@ pub fn create(
 	Ok(profile)
 }
 
-pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, id)?;
-	if profile.is_default {
-		return Err(AppError::DbError(
-			"Cannot delete default profile".to_string(),
-		));
-	}
-	let project_folder = repo::profile::get_project_folder(conn, &profile.project_id)?;
-
+fn cleanup_profile(profile: &Profile, project_folder: &str) -> Result<(), AppError> {
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 
 	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
 		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
 	}
 
-	infra::git::worktree_remove(&project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(&project_folder, &profile.branch_name)?;
-
-	// Delete DB row only after successful cleanup
-	repo::profile::delete_row(conn, id)?;
+	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
+	infra::git::branch_delete(project_folder, &profile.branch_name)?;
 
 	Ok(())
 }
 
-/// DB-pool variant for Tauri handler (matches create_with_db pattern).
-/// Reads identity under lock (no delete), performs teardown + git cleanup (propagating errors),
-/// then deletes the profile row only on success.
 pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let profile = repo::profile::find_by_id(conn, id)?;
-		if profile.is_default {
-			return Err(AppError::DbError(
-				"Cannot delete default profile".to_string(),
-			));
-		}
-		let project_folder = repo::profile::get_project_folder(conn, &profile.project_id)?;
-		(profile, project_folder)
+		repo::profile::get_delete_target(conn, id)?
 	};
 
-	let worktree_path = PathBuf::from(&profile.worktree_path);
+	cleanup_profile(&profile, &project_folder)?;
 
-	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(
-			&cfg.teardown_script,
-			&worktree_path,
-		);
-	}
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	repo::profile::delete_record(conn, id)
+}
 
-	infra::git::worktree_remove(&project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(&project_folder, &profile.branch_name)?;
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
+	let (profile, project_folder) = repo::profile::get_delete_target(conn, id)?;
 
-	// Delete row under fresh lock, only after cleanup succeeded
-	{
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::delete_row(conn, id)?;
-	}
+	cleanup_profile(&profile, &project_folder)?;
 
-	Ok(())
+	repo::profile::delete_record(conn, id)
 }
 
 pub fn delete_check(

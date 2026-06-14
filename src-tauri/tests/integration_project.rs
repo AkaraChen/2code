@@ -1,12 +1,12 @@
 mod common;
 
 use diesel::prelude::*;
+use infra::no_window::command_without_windows_console;
 
 use common::{
 	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
 	setup_db,
 };
-use infra::no_window::command_without_windows_console;
 
 fn create_project_named(
 	conn: &mut SqliteConnection,
@@ -572,6 +572,63 @@ fn create_profile_preserves_namespace() {
 }
 
 #[test]
+fn profile_branch_namespace_conflict_does_not_delete_existing_branch() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let branch_output = command_without_windows_console("git")
+		.args(["branch", "feat"])
+		.current_dir(&dir)
+		.output()
+		.expect("create conflicting branch");
+	assert!(
+		branch_output.status.success(),
+		"failed to create branch: {}",
+		String::from_utf8_lossy(&branch_output.stderr)
+	);
+
+	let result = service::profile::create(&mut conn, &project.id, "feat/auth");
+	let created_profile_id =
+		result.as_ref().ok().map(|profile| profile.id.clone());
+
+	let branch_list = command_without_windows_console("git")
+		.args(["branch", "--list", "feat"])
+		.current_dir(&dir)
+		.output()
+		.expect("list conflicting branch");
+	let branch_survived =
+		String::from_utf8_lossy(&branch_list.stdout).contains("feat");
+
+	let profile_count: i64 = model::schema::profiles::table
+		.filter(model::schema::profiles::project_id.eq(&project.id))
+		.filter(model::schema::profiles::branch_name.eq("feat/auth"))
+		.count()
+		.get_result(&mut conn)
+		.expect("count profiles");
+
+	if let Some(profile_id) = created_profile_id {
+		let _ = service::profile::delete(&mut conn, &profile_id);
+	}
+	cleanup(&dir);
+
+	let error_message = match result {
+		Ok(_) => panic!("namespace conflict should fail profile creation"),
+		Err(error) => error.to_string(),
+	};
+	assert!(
+		error_message.to_lowercase().contains("conflict")
+			&& error_message.contains("feat")
+			&& error_message.contains("feat/auth"),
+		"expected namespace conflict error, got: {error_message}"
+	);
+	assert!(branch_survived, "existing branch must not be deleted");
+	assert_eq!(
+		profile_count, 0,
+		"profile row should not be inserted when worktree creation fails"
+	);
+}
+
+#[test]
 fn create_profile_duplicate_branch_returns_error() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
@@ -598,60 +655,6 @@ fn create_profile_for_nonexistent_project_returns_error() {
 	let result =
 		service::profile::create(&mut conn, "nonexistent-project-id", "branch");
 	assert!(result.is_err());
-}
-
-#[test]
-fn profile_branch_namespace_conflict_does_not_delete_existing_branch() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	// Create an existing "feat" branch that will namespace-conflict with "feat/auth"
-	command_without_windows_console("git")
-		.args(["branch", "feat"])
-		.current_dir(&dir)
-		.output()
-		.unwrap();
-
-	// Attempt to create profile with branch that conflicts: feat/auth blocked by feat
-	let result = service::profile::create(&mut conn, &project.id, "feat/auth");
-
-	let error = match result {
-		Ok(_) => panic!("expected error for namespace ref conflict"),
-		Err(error) => error,
-	};
-	let error_message = error.to_string();
-	assert!(
-		error_message.to_lowercase().contains("conflict")
-			&& error_message.contains("feat")
-			&& error_message.contains("feat/auth"),
-		"expected namespace conflict error, got: {error_message}"
-	);
-
-	// The 'feat' branch must still exist (core assertion: creation must not delete it)
-	let branch_list = command_without_windows_console("git")
-		.args(["branch", "--list", "feat"])
-		.current_dir(&dir)
-		.output()
-		.unwrap();
-	let branch_out = String::from_utf8_lossy(&branch_list.stdout);
-	assert!(
-		branch_out.contains("feat"),
-		"existing 'feat' branch must survive failed profile creation, got: {branch_out}"
-	);
-
-	// No profile row for the conflicting branch name should have been inserted
-	let list = service::project::list(&mut conn).unwrap();
-	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	let has_conflict_profile = pwp
-		.profiles
-		.iter()
-		.any(|p| p.branch_name == "feat/auth");
-	assert!(
-		!has_conflict_profile,
-		"no profile for 'feat/auth' should be inserted on conflict"
-	);
-
-	cleanup(&dir);
 }
 
 // ============================================================
@@ -726,47 +729,87 @@ fn delete_profile_cascades_sessions() {
 }
 
 #[test]
-fn delete_nonexistent_profile_returns_error() {
-	let mut conn = setup_db();
-	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
-	assert!(result.is_err());
-}
-
-#[test]
-fn delete_profile_cleanup_failure_leaves_row() {
+fn delete_profile_keeps_row_when_cleanup_fails() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
 
 	let profile =
-		service::profile::create(&mut conn, &project.id, "cleanup-fail").unwrap();
+		service::profile::create(&mut conn, &project.id, "cleanup-fails")
+			.unwrap();
 
-	// Simulate prior external removal of the worktree so that worktree_remove during
-	// profile delete will fail (git will report it is not a working tree). This makes
-	// cleanup fail deterministically; profile row must not be deleted.
-	command_without_windows_console("git")
+	let missing_folder = dir.join("missing-project-folder");
+	diesel::update(model::schema::projects::table.find(&project.id))
+		.set(
+			model::schema::projects::folder
+				.eq(missing_folder.to_string_lossy().to_string()),
+		)
+		.execute(&mut conn)
+		.expect("point project at missing folder");
+
+	let result = service::profile::delete(&mut conn, &profile.id);
+	assert!(result.is_err(), "cleanup failure should abort deletion");
+
+	let persisted = repo::profile::find_by_id(&mut conn, &profile.id)
+		.expect("profile row should remain retryable");
+	assert_eq!(persisted.id, profile.id);
+
+	diesel::update(model::schema::projects::table.find(&project.id))
+		.set(
+			model::schema::projects::folder
+				.eq(dir.to_string_lossy().to_string()),
+		)
+		.execute(&mut conn)
+		.expect("restore project folder");
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_succeeds_when_git_resources_already_missing() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "already-cleaned")
+			.unwrap();
+
+	let remove_worktree = command_without_windows_console("git")
 		.args(["worktree", "remove", &profile.worktree_path, "--force"])
 		.current_dir(&dir)
 		.output()
-		.unwrap();
-
-	let result = service::profile::delete(&mut conn, &profile.id);
-	assert!(result.is_err(), "expected error when worktree cleanup fails");
-	let err_msg = result.unwrap_err().to_string();
+		.expect("remove worktree outside service");
 	assert!(
-		err_msg.contains("worktree remove failed") || err_msg.contains(&profile.worktree_path),
-		"error should indicate worktree remove failure, got: {err_msg}"
+		remove_worktree.status.success(),
+		"failed to remove worktree: {}",
+		String::from_utf8_lossy(&remove_worktree.stderr)
 	);
 
-	// Critical: the profile row must still exist so user can see it / retry delete later.
-	let list = service::project::list(&mut conn).unwrap();
-	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	let row_still_present = pwp.profiles.iter().any(|p| p.id == profile.id);
+	let delete_branch = command_without_windows_console("git")
+		.args(["branch", "-D", &profile.branch_name])
+		.current_dir(&dir)
+		.output()
+		.expect("delete branch outside service");
 	assert!(
-		row_still_present,
-		"profile row must remain in DB after cleanup failure (for retryability)"
+		delete_branch.status.success(),
+		"failed to delete branch: {}",
+		String::from_utf8_lossy(&delete_branch.stderr)
+	);
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	assert!(
+		repo::profile::find_by_id(&mut conn, &profile.id).is_err(),
+		"profile row should be deleted when cleanup is already complete"
 	);
 
 	cleanup(&dir);
+}
+
+#[test]
+fn delete_nonexistent_profile_returns_error() {
+	let mut conn = setup_db();
+	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
+	assert!(result.is_err());
 }
 
 // ============================================================

@@ -1,6 +1,5 @@
 use diesel::SqliteConnection;
 
-use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
 
@@ -20,66 +19,6 @@ pub fn get_file_tree_git_status(
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	infra::git::status(&profile.worktree_path)
-}
-
-/// Resolve profile ID to its worktree path (short DB lock).
-pub fn get_profile_worktree_path(
-	db: &DbPool,
-	profile_id: &str,
-) -> Result<std::path::PathBuf, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	Ok(std::path::PathBuf::from(profile.worktree_path))
-}
-
-// Profile-scoped wrappers for tree operations (resolve trusted root from profile ID,
-// then delegate to infra which enforces relative path validation and root boundary).
-pub fn list_file_tree_child_paths(
-	db: &DbPool,
-	profile_id: &str,
-	parent_path: Option<&str>,
-) -> Result<Vec<String>, AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::list_file_tree_child_paths(&root, parent_path)
-}
-
-pub fn rename_file_tree_path(
-	db: &DbPool,
-	profile_id: &str,
-	source_path: &str,
-	destination_path: &str,
-) -> Result<(), AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::rename_file_tree_path(&root, source_path, destination_path)
-}
-
-pub fn move_file_tree_paths(
-	db: &DbPool,
-	profile_id: &str,
-	source_paths: &[String],
-	target_dir_path: Option<&str>,
-) -> Result<(), AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::move_file_tree_paths(&root, source_paths, target_dir_path)
-}
-
-pub fn delete_file_tree_paths(
-	db: &DbPool,
-	profile_id: &str,
-	paths: &[String],
-) -> Result<(), AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::delete_file_tree_paths(&root, paths)
-}
-
-pub fn create_file_tree_path(
-	db: &DbPool,
-	profile_id: &str,
-	path: &str,
-	kind: &str,
-) -> Result<(), AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::create_file_tree_path(&root, path, kind)
 }
 
 #[cfg(test)]
