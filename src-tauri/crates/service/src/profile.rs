@@ -268,48 +268,24 @@ pub fn create(
 	Ok(profile)
 }
 
-pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, id)?;
-	if profile.is_default {
-		return Err(AppError::DbError(
-			"Cannot delete default profile".to_string(),
-		));
-	}
-	let project_folder = repo::profile::get_project_folder(conn, &profile.project_id)?;
-
-	cleanup_profile(&profile, &project_folder)?;
-
-	// Delete DB row only after successful cleanup
-	repo::profile::delete_row(conn, id)?;
-
-	Ok(())
-}
-
-/// DB-pool variant for Tauri handler (matches create_with_db pattern).
-/// Reads identity under lock (no delete), performs teardown + git cleanup (propagating errors),
-/// then deletes the profile row only on success.
 pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let profile = repo::profile::find_by_id(conn, id)?;
-		if profile.is_default {
-			return Err(AppError::DbError(
-				"Cannot delete default profile".to_string(),
-			));
-		}
-		let project_folder = repo::profile::get_project_folder(conn, &profile.project_id)?;
-		(profile, project_folder)
+		repo::profile::get_delete_target(conn, id)?
 	};
 
 	cleanup_profile(&profile, &project_folder)?;
 
-	// Delete row under fresh lock, only after cleanup succeeded
-	{
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::delete_row(conn, id)?;
-	}
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	repo::profile::delete_record(conn, id)
+}
 
-	Ok(())
+pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
+	let (profile, project_folder) = repo::profile::get_delete_target(conn, id)?;
+
+	cleanup_profile(&profile, &project_folder)?;
+
+	repo::profile::delete_record(conn, id)
 }
 
 fn cleanup_profile(
