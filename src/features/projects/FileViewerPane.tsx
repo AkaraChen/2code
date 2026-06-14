@@ -18,6 +18,7 @@ import MarkdownEditor from "@/features/markdown/MarkdownEditor";
 import ArchivePreviewTree from "@/features/projects/ArchivePreviewTree";
 import { isPreviewableBinaryFile } from "@/features/projects/filePreview";
 import { useFileViewerDirtyStore } from "@/features/projects/fileViewerTabsStore";
+import { toProfileRelativePath } from "@/features/projects/pathUtils";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { FilePreview } from "@/generated";
@@ -27,6 +28,8 @@ import { useFileContent, useFilePreview, useSaveFileContent } from "./hooks";
 interface FileViewerPaneProps {
 	filePath: string;
 	profileId: string;
+	rootPath: string;
+	isActive?: boolean;
 }
 
 const DRAFT_SYNC_DELAY_MS = 400;
@@ -170,6 +173,8 @@ function FilePreviewPane({
 export default function FileViewerPane({
 	filePath,
 	profileId,
+	rootPath,
+	isActive = true,
 }: FileViewerPaneProps) {
 	const themeId = useTerminalThemeId();
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
@@ -194,6 +199,10 @@ export default function FileViewerPane({
 		(state) => state.setFileSavedValue,
 	);
 	const setFileDirty = useFileViewerDirtyStore((state) => state.setFileDirty);
+	const scopedFilePath = useMemo(
+		() => toProfileRelativePath(rootPath, filePath),
+		[rootPath, filePath],
+	);
 
 	const fileMeta = useMemo(
 		() => {
@@ -212,8 +221,16 @@ export default function FileViewerPane({
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(profileId, filePath, !fileMeta.previewableBinaryFile);
-	const previewQuery = useFilePreview(profileId, filePath, fileMeta.previewableBinaryFile);
+	} = useFileContent(
+		profileId,
+		scopedFilePath,
+		isActive && !fileMeta.previewableBinaryFile,
+	);
+	const previewQuery = useFilePreview(
+		profileId,
+		scopedFilePath,
+		isActive && fileMeta.previewableBinaryFile,
+	);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
@@ -344,12 +361,12 @@ export default function FileViewerPane({
 
 		flushPendingDraft();
 		saveFileContent(
-			{ path: filePath, content: contentToSave },
+			{ path: scopedFilePath, content: contentToSave },
 			{
 				onSuccess: (_result, variables) => {
-					setFileDraft(profileId, variables.path, variables.content);
-					setFileSavedValue(profileId, variables.path, variables.content);
-					setFileDirty(profileId, variables.path, false);
+					setFileDraft(profileId, filePath, variables.content);
+					setFileSavedValue(profileId, filePath, variables.content);
+					setFileDirty(profileId, filePath, false);
 				},
 			},
 		);
@@ -362,6 +379,7 @@ export default function FileViewerPane({
 		lastSavedValue,
 		profileId,
 		saveFileContent,
+		scopedFilePath,
 		setFileDraft,
 		setFileDirty,
 		setFileSavedValue,

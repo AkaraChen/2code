@@ -1,5 +1,4 @@
 /* eslint-disable react/dom-no-dangerously-set-innerhtml -- Renders static SVG symbol markup from @pierre/trees. */
-import { getBuiltInFileIconColor } from "@pierre/trees";
 import type { CSSProperties, SVGProps } from "react";
 import { memo } from "react";
 import {
@@ -26,7 +25,7 @@ const FileTreeFileIcon = memo(({
 	const symbol = getFileTreeIconSymbol(icon.name);
 	const color = icon.token == null
 		? undefined
-		: getBuiltInFileIconColor(icon.token);
+		: `var(--trees-file-icon-color-${icon.token}, var(--trees-file-icon-color, currentColor))`;
 	const iconStyle = {
 		color,
 		display: "block",

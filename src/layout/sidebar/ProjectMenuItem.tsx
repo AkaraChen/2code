@@ -97,7 +97,11 @@ export function ProjectMenuItem({
 						_hover={{ bg: "bg.subtle" }}
 						_active={{ bg: "bg.muted" }}
 					>
-						<NavLink to={defaultProfileUrl}>
+						<NavLink
+							data-project-id={project.id}
+							data-testid="project-sidebar-item"
+							to={defaultProfileUrl}
+						>
 							{hasOnlyDefaultProfile && isDefaultActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
 							)}
@@ -196,6 +200,7 @@ export function ProjectMenuItem({
 								{m.projectSettings()}
 							</Menu.Item>
 							<Menu.Item
+								data-testid="project-menu-rename"
 								value="rename"
 								onClick={renameDialog.onOpen}
 							>
