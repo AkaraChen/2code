@@ -23,13 +23,21 @@ describe("createCachedPromise", () => {
 		await expect(getter()).resolves.toBe(42);
 	});
 
-	it("caches a rejected promise (does not retry)", async () => {
-		const error = new Error("fail");
-		const getter = createCachedPromise(() => Promise.reject(error));
+	it("shares pending failures but retries after rejection", async () => {
+		const factory = vi.fn()
+			.mockRejectedValueOnce(new Error("fail"))
+			.mockResolvedValueOnce("recovered");
+		const getter = createCachedPromise(factory);
+
 		const p1 = getter();
 		const p2 = getter();
+
 		expect(p1).toBe(p2);
 		await expect(p1).rejects.toThrow("fail");
+		expect(factory).toHaveBeenCalledTimes(1);
+
+		await expect(getter()).resolves.toBe("recovered");
+		expect(factory).toHaveBeenCalledTimes(2);
 	});
 
 	it("works with async factory functions", async () => {
