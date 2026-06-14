@@ -673,7 +673,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root",
+				profileId: "profile-1",
+				path: "",
 			});
 		});
 	});
@@ -823,7 +824,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root/src/index.ts",
+				profileId: "profile-1",
+				path: "src/index.ts",
 			});
 		});
 		expect(closeContextMenuMock).toHaveBeenCalled();
@@ -838,7 +840,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(openDefaultAppMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root/src/index.ts",
+				profileId: "profile-1",
+				path: "src/index.ts",
 			});
 		});
 		expect(closeContextMenuMock).toHaveBeenCalled();

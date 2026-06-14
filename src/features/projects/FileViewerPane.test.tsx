@@ -289,8 +289,8 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
-		vi.mocked(useFileContent).mockImplementation((path: string) => ({
-			data: path === markdownPath ? markdownContent : fileContent,
+		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
+			data: p === markdownPath ? markdownContent : fileContent,
 			isLoading: false,
 			isError: false,
 			error: null,
@@ -317,8 +317,8 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
-		vi.mocked(useFileContent).mockImplementation((path: string) => ({
-			data: path === markdownPath ? markdownContent : fileContent,
+		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
+			data: p === markdownPath ? markdownContent : fileContent,
 			isLoading: false,
 			isError: false,
 			error: null,
@@ -359,8 +359,8 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const codeDraft = `${fileContent}\nconsole.log(beta);`;
-		vi.mocked(useFileContent).mockImplementation((path: string) => ({
-			data: path === markdownPath ? markdownContent : fileContent,
+		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
+			data: p === markdownPath ? markdownContent : fileContent,
 			isLoading: false,
 			isError: false,
 			error: null,
@@ -402,8 +402,8 @@ describe("fileViewerPane", () => {
 		const image = await screen.findByRole("img", { name: "logo.png" });
 		expect(image).toHaveAttribute("src", expect.stringContaining(imagePath));
 		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
-		expect(useFileContent).toHaveBeenCalledWith(imagePath, false);
-		expect(useFilePreview).toHaveBeenCalledWith(imagePath, true);
+		expect(useFileContent).toHaveBeenCalledWith("profile-1", imagePath, false);
+		expect(useFilePreview).toHaveBeenCalledWith("profile-1", imagePath, true);
 	});
 
 	it("renders Office previews as converted PDFs", async () => {
@@ -453,6 +453,6 @@ describe("fileViewerPane", () => {
 		expect(screen.getByText("archive.zip")).toBeInTheDocument();
 		expect(screen.getByText("src/index.ts")).toBeInTheDocument();
 		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
-		expect(useFileContent).toHaveBeenCalledWith(archivePath, false);
+		expect(useFileContent).toHaveBeenCalledWith("profile-1", archivePath, false);
 	});
 });

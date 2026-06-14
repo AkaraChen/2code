@@ -15,11 +15,13 @@ import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
 
 interface FileViewerDialogProps {
+	profileId: string;
 	filePath: string;
 	onClose: () => void;
 }
 
 export default function FileViewerDialog({
+	profileId,
 	filePath,
 	onClose,
 }: FileViewerDialogProps) {
@@ -33,7 +35,7 @@ export default function FileViewerDialog({
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath);
+	} = useFileContent(profileId, filePath);
 
 	const filename = filePath.split("/").pop() ?? "";
 	const language = detectLanguage(filename);

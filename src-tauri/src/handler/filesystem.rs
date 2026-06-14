@@ -396,14 +396,6 @@ fn convert_office_file_to_pdf(
 	})
 }
 
-fn profile_worktree_path(
-	db: &DbPool,
-	profile_id: &str,
-) -> Result<String, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
-}
-
 #[tauri::command]
 pub async fn list_file_tree_paths(
 	path: String,
@@ -414,14 +406,19 @@ pub async fn list_file_tree_paths(
 	.await
 }
 
+// Profile-scoped versions (preferred). Renderer sends profileId (trusted lookup in Rust)
+// + relative path(s). Rust resolves worktree from DB and enforces boundary via infra validators.
 #[tauri::command]
 pub async fn list_file_tree_child_paths(
-	root_path: String,
+	state: State<'_, DbPool>,
+	profile_id: String,
 	parent_path: Option<String>,
 ) -> Result<Vec<String>, AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::list_file_tree_child_paths(
-			Path::new(&root_path),
+		service::filesystem::list_file_tree_child_paths(
+			&db,
+			&profile_id,
 			parent_path.as_deref(),
 		)
 	})
@@ -430,13 +427,16 @@ pub async fn list_file_tree_child_paths(
 
 #[tauri::command]
 pub async fn rename_file_tree_path(
-	root_path: String,
+	state: State<'_, DbPool>,
+	profile_id: String,
 	source_path: String,
 	destination_path: String,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::rename_file_tree_path(
-			Path::new(&root_path),
+		service::filesystem::rename_file_tree_path(
+			&db,
+			&profile_id,
 			&source_path,
 			&destination_path,
 		)
@@ -446,13 +446,16 @@ pub async fn rename_file_tree_path(
 
 #[tauri::command]
 pub async fn move_file_tree_paths(
-	root_path: String,
+	state: State<'_, DbPool>,
+	profile_id: String,
 	source_paths: Vec<String>,
 	target_dir_path: Option<String>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::move_file_tree_paths(
-			Path::new(&root_path),
+		service::filesystem::move_file_tree_paths(
+			&db,
+			&profile_id,
 			&source_paths,
 			target_dir_path.as_deref(),
 		)
@@ -462,27 +465,27 @@ pub async fn move_file_tree_paths(
 
 #[tauri::command]
 pub async fn delete_file_tree_paths(
-	root_path: String,
+	state: State<'_, DbPool>,
+	profile_id: String,
 	paths: Vec<String>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::delete_file_tree_paths(Path::new(&root_path), &paths)
+		service::filesystem::delete_file_tree_paths(&db, &profile_id, &paths)
 	})
 	.await
 }
 
 #[tauri::command]
 pub async fn create_file_tree_path(
-	root_path: String,
+	state: State<'_, DbPool>,
+	profile_id: String,
 	path: String,
 	kind: String,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::create_file_tree_path(
-			Path::new(&root_path),
-			&path,
-			&kind,
-		)
+		service::filesystem::create_file_tree_path(&db, &profile_id, &path, &kind)
 	})
 	.await
 }
@@ -596,23 +599,50 @@ fn open_path_in_default_app_impl(path: &Path) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn reveal_path_in_file_manager(path: String) -> Result<(), AppError> {
+pub async fn reveal_path_in_file_manager(
+	state: State<'_, DbPool>,
+	profile_id: String,
+	path: String,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		reveal_path_in_file_manager_impl(Path::new(&path))
+		let root = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		let rel = infra::filesystem::validate_file_tree_relative_path(&path, "Path")?;
+		let full = root.join(&rel);
+		reveal_path_in_file_manager_impl(&full)
 	})
 	.await
 }
 
 #[tauri::command]
-pub async fn open_path_in_default_app(path: String) -> Result<(), AppError> {
-	super::run_blocking(move || open_path_in_default_app_impl(Path::new(&path)))
+pub async fn open_path_in_default_app(
+	state: State<'_, DbPool>,
+	profile_id: String,
+	path: String,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let root = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		let rel = infra::filesystem::validate_file_tree_relative_path(&path, "Path")?;
+		let full = root.join(&rel);
+		open_path_in_default_app_impl(&full)
+	})
 		.await
 }
 
 #[tauri::command]
-pub async fn read_file_content(path: String) -> Result<String, AppError> {
+pub async fn read_file_content(
+	state: State<'_, DbPool>,
+	profile_id: String,
+	path: String,
+) -> Result<String, AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let file_path = Path::new(&path);
+		let root = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		let rel = infra::filesystem::validate_file_tree_relative_path(&path, "File path")?;
+		let full = root.join(&rel);
+
+		let file_path = &full;
 		if !file_path.exists() {
 			return Err(AppError::NotFound(format!("File: {path}")));
 		}
@@ -622,14 +652,14 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 			)));
 		}
 
-		let metadata = std::fs::metadata(&path)?;
+		let metadata = std::fs::metadata(file_path)?;
 		if metadata.len() > 1_000_000 {
 			return Err(AppError::IoError(std::io::Error::other(
 				"File too large (> 1MB)",
 			)));
 		}
 
-		let bytes = std::fs::read(&path)?;
+		let bytes = std::fs::read(file_path)?;
 
 		// Heuristic binary check: presence of null bytes
 		if bytes.contains(&0) {
@@ -647,11 +677,18 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 
 #[tauri::command]
 pub async fn write_file_content(
+	state: State<'_, DbPool>,
+	profile_id: String,
 	path: String,
 	content: String,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let file_path = Path::new(&path);
+		let root = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		let rel = infra::filesystem::validate_file_tree_relative_path(&path, "File path")?;
+		let full = root.join(&rel);
+
+		let file_path = &full;
 		if !file_path.exists() {
 			return Err(AppError::NotFound(format!("File: {path}")));
 		}
@@ -666,7 +703,7 @@ pub async fn write_file_content(
 			)));
 		}
 
-		std::fs::write(&path, content)?;
+		std::fs::write(full, content)?;
 		Ok(())
 	})
 	.await
@@ -674,9 +711,12 @@ pub async fn write_file_content(
 
 #[tauri::command]
 pub async fn get_file_preview(
+	state: State<'_, DbPool>,
+	profile_id: String,
 	path: String,
 	app: AppHandle,
 ) -> Result<FilePreview, AppError> {
+	let db = state.inner().clone();
 	let cache_root = app
 		.path()
 		.app_cache_dir()
@@ -684,7 +724,9 @@ pub async fn get_file_preview(
 		.join("office-preview");
 
 	super::run_blocking(move || {
-		let file_path = PathBuf::from(&path);
+		let root = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		let rel = infra::filesystem::validate_file_tree_relative_path(&path, "File path")?;
+		let file_path = root.join(&rel);
 		let metadata = ensure_previewable_file(&file_path)?;
 		let canonical_path =
 			file_path.canonicalize().map_err(AppError::IoError)?;
@@ -753,8 +795,8 @@ pub async fn search_file(
 ) -> Result<Vec<FileSearchResult>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::filesystem::search_files(Path::new(&worktree_path), &query)
+		let worktree = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		infra::filesystem::search_files(&worktree, &query)
 	})
 	.await
 }
@@ -766,8 +808,8 @@ pub async fn get_file_tree_git_status(
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::status(&worktree_path)
+		let worktree = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		infra::git::status(&worktree.to_string_lossy())
 	})
 	.await
 }
@@ -784,8 +826,8 @@ pub async fn resolve_terminal_file_path(
 ) -> Result<ResolvedFilePath, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree = profile_worktree_path(&db, &profile_id)?;
-		resolve_file_path_in_worktree(Path::new(&worktree), &file_path)
+		let worktree = service::filesystem::get_profile_worktree_path(&db, &profile_id)?;
+		resolve_file_path_in_worktree(&worktree, &file_path)
 	})
 	.await
 }
@@ -876,24 +918,6 @@ mod tests {
 			.join(format!("2code-filesystem-test-{}", Uuid::new_v4()));
 		std::fs::create_dir_all(&path).expect("create temp worktree");
 		path
-	}
-
-	#[test]
-	fn profile_worktree_path_reads_only_the_needed_field() {
-		let db = setup_db();
-
-		let worktree = profile_worktree_path(&db, "profile-1").unwrap();
-
-		assert_eq!(worktree, "/repo/worktree");
-	}
-
-	#[test]
-	fn profile_worktree_path_returns_not_found_for_missing_profile() {
-		let db = setup_db();
-
-		let result = profile_worktree_path(&db, "missing-profile");
-
-		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}
 
 	#[test]
