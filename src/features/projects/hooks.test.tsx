@@ -11,9 +11,11 @@ import type {
 	ProjectWithProfiles,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import {
 	useDeleteFileTreePaths,
 	useDeleteProject,
+	useFileTreeGitStatus,
 	useFileSearch,
 	useUpdateProjectSidebarLayout,
 } from "./hooks";
@@ -21,11 +23,13 @@ import {
 const {
 	deleteFileTreePathsMock,
 	deleteProjectMock,
+	getFileTreeGitStatusMock,
 	searchFileMock,
 	updateProjectSidebarLayoutMock,
 } = vi.hoisted(() => ({
 	deleteFileTreePathsMock: vi.fn(),
 	deleteProjectMock: vi.fn(),
+	getFileTreeGitStatusMock: vi.fn(),
 	searchFileMock: vi.fn(),
 	updateProjectSidebarLayoutMock: vi.fn(),
 }));
@@ -38,6 +42,7 @@ vi.mock("@/generated", async () => {
 		...actual,
 		deleteFileTreePaths: deleteFileTreePathsMock,
 		deleteProject: deleteProjectMock,
+		getFileTreeGitStatus: getFileTreeGitStatusMock,
 		searchFile: searchFileMock,
 		updateProjectSidebarLayout: updateProjectSidebarLayoutMock,
 	};
@@ -71,6 +76,15 @@ function createWrapperWithClient(queryClient: QueryClient) {
 			{children}
 		</QueryClientProvider>
 	);
+}
+
+function getRuntimeQueryOptions(
+	queryClient: QueryClient,
+	queryKey: readonly unknown[],
+) {
+	return queryClient.getQueryCache().find({ queryKey })?.options as
+		| Record<string, unknown>
+		| undefined;
 }
 
 describe("useDeleteProject", () => {
@@ -159,7 +173,10 @@ describe("useDeleteFileTreePaths", () => {
 			queryKey: queryKeys.fs.tree("profile-1"),
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
-			queryKey: [queryNamespaces["fs-file"]],
+			queryKey: [queryNamespaces["fs-file"], "profile-1"],
+		});
+		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+			queryKey: [queryNamespaces["fs-file-preview"], "profile-1"],
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
 			queryKey: [queryNamespaces["fs-search"], "profile-1"],
@@ -174,6 +191,33 @@ describe("useDeleteFileTreePaths", () => {
 			queryKey: queryKeys.git.diffStats("profile-1"),
 		});
 		invalidateQueriesSpy.mockRestore();
+	});
+});
+
+describe("useFileTreeGitStatus", () => {
+	beforeEach(() => {
+		getFileTreeGitStatusMock.mockReset();
+	});
+
+	it("uses a fast fallback refresh for visible file-tree status", async () => {
+		const queryClient = createQueryClient();
+		getFileTreeGitStatusMock.mockResolvedValue([]);
+
+		const { result } = renderHook(
+			() => useFileTreeGitStatus("profile-1", true),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await waitFor(() => {
+			expect(result.current.data).toEqual([]);
+		});
+
+		const options = getRuntimeQueryOptions(
+			queryClient,
+			queryKeys.git.status("profile-1"),
+		);
+		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
+		expect(options?.staleTime).toBe(10_000);
 	});
 });
 
