@@ -19,6 +19,7 @@ export default function ProfileNotesEditor({
 	const updateNotesRef = useRef(updateNotes);
 	const profileIdRef = useRef(profile.id);
 	const lastSavedMarkdownRef = useRef(profile.notes);
+	const latestSaveRevisionRef = useRef(0);
 	const saveStatusRef = useRef<MarkdownEditorSaveStatus>("idle");
 	const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -36,6 +37,7 @@ export default function ProfileNotesEditor({
 		if (profileIdRef.current === profile.id) return;
 		profileIdRef.current = profile.id;
 		lastSavedMarkdownRef.current = profile.notes;
+		latestSaveRevisionRef.current = 0;
 		saveStatusRef.current = "idle";
 		if (saveStatusTimerRef.current) {
 			clearTimeout(saveStatusTimerRef.current);
@@ -53,11 +55,14 @@ export default function ProfileNotesEditor({
 		(markdown: string) => {
 			if (markdown === lastSavedMarkdownRef.current) return;
 
+			const saveRevision = latestSaveRevisionRef.current + 1;
+			latestSaveRevisionRef.current = saveRevision;
 			setSaveStatusIfChanged("saving");
 			updateNotesRef.current.mutate(
 				{ id: profileIdRef.current, notes: markdown },
 				{
 					onSuccess: (updatedProfile) => {
+						if (saveRevision !== latestSaveRevisionRef.current) return;
 						lastSavedMarkdownRef.current = updatedProfile.notes;
 						setSaveStatusIfChanged("saved");
 						if (saveStatusTimerRef.current) {
@@ -69,6 +74,7 @@ export default function ProfileNotesEditor({
 						}, 1600);
 					},
 					onError: () => {
+						if (saveRevision !== latestSaveRevisionRef.current) return;
 						setSaveStatusIfChanged("failed");
 						toaster.create({
 							title: m.notesSaveFailedTitle(),
