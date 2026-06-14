@@ -1,6 +1,7 @@
 name: Tauri Smoke
 
 on:
+  workflow_call:
   push:
     branches:
       - dev
