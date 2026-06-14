@@ -6,8 +6,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { Suspense, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import {
 	useCommitGitChanges,
+	useGitAheadCount,
 	useGitDiffFiles,
 	useGitDiffStats,
 	useGitLog,
@@ -15,11 +17,13 @@ import {
 
 const {
 	commitGitChangesMock,
+	getGitAheadCountMock,
 	getGitDiffMock,
 	getGitDiffStatsMock,
 	getGitLogMock,
 } = vi.hoisted(() => ({
 	commitGitChangesMock: vi.fn(),
+	getGitAheadCountMock: vi.fn(),
 	getGitDiffMock: vi.fn(),
 	getGitDiffStatsMock: vi.fn(),
 	getGitLogMock: vi.fn(),
@@ -32,6 +36,7 @@ vi.mock("@/generated", async () => {
 	return {
 		...actual,
 		commitGitChanges: commitGitChangesMock,
+		getGitAheadCount: getGitAheadCountMock,
 		getGitDiff: getGitDiffMock,
 		getGitDiffStats: getGitDiffStatsMock,
 		getGitLog: getGitLogMock,
@@ -68,12 +73,13 @@ function getRuntimeQueryOptions(
 describe("git query refresh policy", () => {
 	beforeEach(() => {
 		commitGitChangesMock.mockReset();
+		getGitAheadCountMock.mockReset();
 		getGitDiffMock.mockReset();
 		getGitDiffStatsMock.mockReset();
 		getGitLogMock.mockReset();
 	});
 
-	it("keeps full diff snapshots on the low-frequency fallback refresh", async () => {
+	it("keeps full diff snapshots on the fast fallback refresh", async () => {
 		const queryClient = createQueryClient();
 		getGitDiffMock.mockResolvedValue("");
 
@@ -90,7 +96,7 @@ describe("git query refresh policy", () => {
 			queryClient,
 			queryKeys.git.diff("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(10_000);
+		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
 		expect(options?.staleTime).toBe(30_000);
 		expect(options?.refetchOnMount).toBe("always");
 	});
@@ -127,7 +133,7 @@ index 587be6b..f9264f7 100644
 		expect(getGitDiffStatsMock).not.toHaveBeenCalled();
 	});
 
-	it("keeps commit history on the low-frequency fallback refresh", async () => {
+	it("keeps commit history on the fast fallback refresh", async () => {
 		const queryClient = createQueryClient();
 		getGitLogMock.mockResolvedValue([]);
 
@@ -143,7 +149,7 @@ index 587be6b..f9264f7 100644
 			queryClient,
 			queryKeys.git.log("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(10_000);
+		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
 		expect(options?.staleTime).toBe(60_000);
 		expect(options?.refetchOnMount).toBe("always");
 	});
@@ -164,7 +170,7 @@ index 587be6b..f9264f7 100644
 		expect(options?.refetchInterval).toBe(false);
 	});
 
-	it("uses a low-frequency fallback refresh for visible diff stats", async () => {
+	it("uses a fast fallback refresh for visible diff stats", async () => {
 		const queryClient = createQueryClient();
 		getGitDiffStatsMock.mockResolvedValue({
 			files_changed: 1,
@@ -189,7 +195,28 @@ index 587be6b..f9264f7 100644
 			queryClient,
 			queryKeys.git.diffStats("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(10_000);
+		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
+		expect(options?.staleTime).toBe(10_000);
+	});
+
+	it("uses a fast fallback refresh for visible ahead counts", async () => {
+		const queryClient = createQueryClient();
+		getGitAheadCountMock.mockResolvedValue(2);
+
+		const { result } = renderHook(
+			() => useGitAheadCount("profile-1", true),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() => {
+			expect(result.current).toBe(2);
+		});
+
+		const options = getRuntimeQueryOptions(
+			queryClient,
+			queryKeys.git.aheadCount("profile-1"),
+		);
+		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
 		expect(options?.staleTime).toBe(10_000);
 	});
 
