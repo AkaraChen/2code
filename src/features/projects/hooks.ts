@@ -408,7 +408,10 @@ export function useDeleteFileTreePaths(profileId: string) {
 					queryKey: queryKeys.fs.tree(profileId),
 				}),
 				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-file"]],
+					queryKey: [queryNamespaces["fs-file"], profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["fs-file-preview"], profileId],
 				}),
 				queryClient.invalidateQueries({
 					queryKey: [queryNamespaces["fs-search"], profileId],
@@ -464,21 +467,25 @@ export function useCreateFileTreePath(profileId: string) {
 	});
 }
 
-export function useRevealPathInFileManager() {
+export function useRevealPathInFileManager(profileId: string) {
 	return useMutation({
-		mutationFn: ({ profileId, path }: { profileId: string; path: string }) =>
+		mutationFn: ({ path }: { path: string | null }) =>
 			revealPathInFileManager({ profileId, path }),
 	});
 }
 
-export function useOpenPathInDefaultApp() {
+export function useOpenPathInDefaultApp(profileId: string) {
 	return useMutation({
-		mutationFn: ({ profileId, path }: { profileId: string; path: string }) =>
+		mutationFn: ({ path }: { path: string }) =>
 			openPathInDefaultApp({ profileId, path }),
 	});
 }
 
-export function useFileContent(profileId: string, path: string, enabled = true) {
+export function useFileContent(
+	profileId: string,
+	path: string,
+	enabled = true,
+) {
 	return useQuery({
 		queryKey: queryKeys.fs.file(profileId, path),
 		queryFn: () => readFileContent({ profileId, path }),
@@ -487,7 +494,11 @@ export function useFileContent(profileId: string, path: string, enabled = true) 
 	});
 }
 
-export function useFilePreview(profileId: string, path: string, enabled = true) {
+export function useFilePreview(
+	profileId: string,
+	path: string,
+	enabled = true,
+) {
 	return useQuery({
 		queryKey: queryKeys.fs.filePreview(profileId, path),
 		queryFn: () => getFilePreview({ profileId, path }),
