@@ -1,7 +1,8 @@
 import path from "node:path";
 import process from "node:process";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
-import react from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { localFileIconsPlugin } from "./scripts/vite-plugin-local-file-icons";
 
@@ -11,10 +12,9 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [
     localFileIconsPlugin(),
-    react({
-      babel: {
-        plugins: ["babel-plugin-react-compiler"],
-      },
+    react(),
+    babel({
+      presets: [reactCompilerPreset()],
     }),
     paraglideVitePlugin({
       project: "./project.inlang",

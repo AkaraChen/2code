@@ -12,8 +12,13 @@ on:
       - "v*"
 
 jobs:
+  smoke:
+    name: Linux Smoke Gate
+    uses: ./.github/workflows/tauri-smoke.yml
+
   publish:
     name: Publish (${{ matrix.name }})
+    needs: smoke
     runs-on: ${{ matrix.platform }}
     permissions:
       contents: write

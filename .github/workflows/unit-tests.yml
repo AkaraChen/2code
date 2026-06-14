@@ -27,8 +27,34 @@ jobs:
       - name: Run ESLint
         run: bun run lint:check
 
+      - name: Run node tooling typecheck
+        run: ./node_modules/.bin/tsc -p tsconfig.node.json --noEmit
+
       - name: Run Vitest
         run: bun run test
+
+  website:
+    name: Website
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install website dependencies
+        working-directory: website
+        run: bun install --frozen-lockfile
+
+      - name: Run website ESLint
+        working-directory: website
+        run: bun run lint
+
+      - name: Build website
+        working-directory: website
+        run: bun run build
 
   rust:
     name: Rust (${{ matrix.os }})

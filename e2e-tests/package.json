@@ -6,8 +6,12 @@
     "test": "bunx mocha \"test/**/*.test.mjs\""
   },
   "dependencies": {
-    "chai": "^6.0.0",
+    "chai": "^6.2.2",
     "mocha": "^11.7.6",
     "selenium-webdriver": "^4.44.0"
+  },
+  "overrides": {
+    "serialize-javascript": "7.0.5",
+    "tmp": "0.2.7"
   }
 }
