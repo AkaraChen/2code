@@ -93,6 +93,7 @@ interface FileTreePanelProps {
 	profileId: string;
 	rootPath: string;
 	isOpen: boolean;
+	isActive?: boolean;
 	onOpenFile?: (filePath: string) => void;
 }
 
@@ -517,6 +518,7 @@ export default function FileTreePanel({
 	profileId,
 	rootPath,
 	isOpen,
+	isActive = true,
 	onOpenFile,
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
@@ -574,15 +576,18 @@ export default function FileTreePanel({
 		data: rootChildPaths,
 		error: treePathsError,
 		isError: isTreePathsError,
-	} = useFileTreeChildPaths(profileId, null, isOpen);
-	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
+	} = useFileTreeChildPaths(profileId, null, isOpen && isActive);
+	const { data: gitStatusEntries } = useFileTreeGitStatus(
+		profileId,
+		isOpen && isActive,
+	);
 	const loadFileTreeChildPaths = useLoadFileTreeChildPaths(profileId);
 	const createFileTreePath = useCreateFileTreePath(profileId);
 	const renameFileTreePath = useRenameFileTreePath(profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(profileId);
-	const openPathInDefaultApp = useOpenPathInDefaultApp();
-	const revealPathInFileManager = useRevealPathInFileManager();
+	const openPathInDefaultApp = useOpenPathInDefaultApp(profileId);
+	const revealPathInFileManager = useRevealPathInFileManager(profileId);
 	const loadedDirectoryChildPaths =
 		loadedChildPathsState.rootPath === rootPath &&
 		loadedChildPathsState.rootChildPaths === rootChildPaths
@@ -650,11 +655,10 @@ export default function FileTreePanel({
 	}, [rootPath, rootChildPaths]);
 
 	const openRelativeFile = useCallback((relativePath: string) => {
-		const filePath = toAbsolutePath(rootPathRef.current, relativePath);
 		if (onOpenFileRef.current) {
-			onOpenFileRef.current(filePath);
+			onOpenFileRef.current(relativePath);
 		} else {
-			setOpenFilePath(filePath);
+			setOpenFilePath(relativePath);
 		}
 	}, []);
 
@@ -1058,7 +1062,6 @@ export default function FileTreePanel({
 		async (relativePath: string) => {
 			try {
 				await revealPathInFileManager.mutateAsync({
-					profileId,
 					path: relativePath,
 				});
 			} catch (error) {
@@ -1070,13 +1073,12 @@ export default function FileTreePanel({
 				});
 			}
 		},
-		[profileId, revealPathInFileManager],
+		[revealPathInFileManager],
 	);
 	const handleRevealRoot = useCallback(async () => {
 		try {
 			await revealPathInFileManager.mutateAsync({
-				profileId,
-				path: "",
+				path: null,
 			});
 		} catch (error) {
 			toaster.create({
@@ -1086,12 +1088,11 @@ export default function FileTreePanel({
 				closable: true,
 			});
 		}
-	}, [profileId, revealPathInFileManager]);
+	}, [revealPathInFileManager]);
 	const handleOpenPathInDefaultApp = useCallback(
 		async (relativePath: string) => {
 			try {
 				await openPathInDefaultApp.mutateAsync({
-					profileId,
 					path: relativePath,
 				});
 			} catch (error) {
@@ -1103,7 +1104,7 @@ export default function FileTreePanel({
 				});
 			}
 		},
-		[profileId, openPathInDefaultApp],
+		[openPathInDefaultApp],
 	);
 
 	return (
@@ -1278,6 +1279,7 @@ export default function FileTreePanel({
 			{openFilePath && (
 				<FileViewerDialog
 					profileId={profileId}
+					rootPath={rootPath}
 					filePath={openFilePath}
 					onClose={() => setOpenFilePath(null)}
 				/>

@@ -100,6 +100,7 @@ vi.mock("@/features/terminal/hooks", () => ({
 }));
 
 const filePath = "/repo/src/index.ts";
+const rootPath = "/repo";
 const profileId = "profile-1";
 const fileContent = [
 	"function alpha() {}",
@@ -123,10 +124,15 @@ function createVisibleRectList(): DOMRectList {
 	} as unknown as DOMRectList;
 }
 
-function renderPane(path = filePath) {
+function renderPane(path = filePath, isActive = true) {
 	return render(
 		<ChakraProvider value={appSystem}>
-			<FileViewerPane filePath={path} profileId={profileId} />
+			<FileViewerPane
+				filePath={path}
+				profileId={profileId}
+				rootPath={rootPath}
+				isActive={isActive}
+			/>
 		</ChakraProvider>,
 	);
 }
@@ -183,6 +189,21 @@ describe("fileViewerPane", () => {
 		expect(screen.queryByRole("button")).not.toBeInTheDocument();
 	});
 
+	it("disables file content and preview queries while inactive", () => {
+		renderPane("/repo/assets/logo.png", false);
+
+		expect(useFileContent).toHaveBeenCalledWith(
+			profileId,
+			"assets/logo.png",
+			false,
+		);
+		expect(useFilePreview).toHaveBeenCalledWith(
+			profileId,
+			"assets/logo.png",
+			false,
+		);
+	});
+
 	it("renders the file load error before content is available", () => {
 		vi.mocked(useFileContent).mockReturnValue({
 			data: undefined,
@@ -218,7 +239,7 @@ describe("fileViewerPane", () => {
 		});
 
 		expect(saveMutateMock).toHaveBeenCalledWith(
-			{ path: filePath, content: nextContent },
+			{ path: "src/index.ts", content: nextContent },
 			expect.objectContaining({ onSuccess: expect.any(Function) }),
 		);
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
@@ -279,7 +300,7 @@ describe("fileViewerPane", () => {
 		});
 
 		expect(saveMutateMock).toHaveBeenCalledWith(
-			{ path: markdownPath, content: nextContent },
+			{ path: "README.md", content: nextContent },
 			expect.objectContaining({ onSuccess: expect.any(Function) }),
 		);
 		expect(useFileViewerDirtyStore.getState().profiles[profileId]).toBeUndefined();
@@ -289,12 +310,14 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
-		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
-			data: p === markdownPath ? markdownContent : fileContent,
-			isLoading: false,
-			isError: false,
-			error: null,
-		} as FileContentResult));
+		vi.mocked(useFileContent).mockImplementation(
+			(_profileId: string, path: string) => ({
+				data: path === "README.md" ? markdownContent : fileContent,
+				isLoading: false,
+				isError: false,
+				error: null,
+			}) as FileContentResult,
+		);
 
 		const { rerender } = renderPane(markdownPath);
 
@@ -303,7 +326,11 @@ describe("fileViewerPane", () => {
 
 		rerender(
 			<ChakraProvider value={appSystem}>
-				<FileViewerPane filePath={filePath} profileId={profileId} />
+				<FileViewerPane
+					filePath={filePath}
+					profileId={profileId}
+					rootPath={rootPath}
+				/>
 			</ChakraProvider>,
 		);
 
@@ -317,12 +344,14 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
-		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
-			data: p === markdownPath ? markdownContent : fileContent,
-			isLoading: false,
-			isError: false,
-			error: null,
-		} as FileContentResult));
+		vi.mocked(useFileContent).mockImplementation(
+			(_profileId: string, path: string) => ({
+				data: path === "README.md" ? markdownContent : fileContent,
+				isLoading: false,
+				isError: false,
+				error: null,
+			}) as FileContentResult,
+		);
 
 		const { rerender } = renderPane(markdownPath);
 
@@ -331,7 +360,11 @@ describe("fileViewerPane", () => {
 
 		rerender(
 			<ChakraProvider value={appSystem}>
-				<FileViewerPane filePath={filePath} profileId={profileId} />
+				<FileViewerPane
+					filePath={filePath}
+					profileId={profileId}
+					rootPath={rootPath}
+				/>
 			</ChakraProvider>,
 		);
 
@@ -345,7 +378,11 @@ describe("fileViewerPane", () => {
 
 		rerender(
 			<ChakraProvider value={appSystem}>
-				<FileViewerPane filePath={markdownPath} profileId={profileId} />
+				<FileViewerPane
+					filePath={markdownPath}
+					profileId={profileId}
+					rootPath={rootPath}
+				/>
 			</ChakraProvider>,
 		);
 
@@ -359,12 +396,14 @@ describe("fileViewerPane", () => {
 		const markdownPath = "/repo/README.md";
 		const markdownContent = "# Readme";
 		const codeDraft = `${fileContent}\nconsole.log(beta);`;
-		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
-			data: p === markdownPath ? markdownContent : fileContent,
-			isLoading: false,
-			isError: false,
-			error: null,
-		} as FileContentResult));
+		vi.mocked(useFileContent).mockImplementation(
+			(_profileId: string, path: string) => ({
+				data: path === "README.md" ? markdownContent : fileContent,
+				isLoading: false,
+				isError: false,
+				error: null,
+			}) as FileContentResult,
+		);
 
 		const { rerender } = renderPane(filePath);
 
@@ -373,7 +412,11 @@ describe("fileViewerPane", () => {
 
 		rerender(
 			<ChakraProvider value={appSystem}>
-				<FileViewerPane filePath={markdownPath} profileId={profileId} />
+				<FileViewerPane
+					filePath={markdownPath}
+					profileId={profileId}
+					rootPath={rootPath}
+				/>
 			</ChakraProvider>,
 		);
 
@@ -402,8 +445,16 @@ describe("fileViewerPane", () => {
 		const image = await screen.findByRole("img", { name: "logo.png" });
 		expect(image).toHaveAttribute("src", expect.stringContaining(imagePath));
 		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
-		expect(useFileContent).toHaveBeenCalledWith("profile-1", imagePath, false);
-		expect(useFilePreview).toHaveBeenCalledWith("profile-1", imagePath, true);
+		expect(useFileContent).toHaveBeenCalledWith(
+			profileId,
+			"assets/logo.png",
+			false,
+		);
+		expect(useFilePreview).toHaveBeenCalledWith(
+			profileId,
+			"assets/logo.png",
+			true,
+		);
 	});
 
 	it("renders Office previews as converted PDFs", async () => {
@@ -453,6 +504,10 @@ describe("fileViewerPane", () => {
 		expect(screen.getByText("archive.zip")).toBeInTheDocument();
 		expect(screen.getByText("src/index.ts")).toBeInTheDocument();
 		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
-		expect(useFileContent).toHaveBeenCalledWith("profile-1", archivePath, false);
+		expect(useFileContent).toHaveBeenCalledWith(
+			profileId,
+			"archive.zip",
+			false,
+		);
 	});
 });

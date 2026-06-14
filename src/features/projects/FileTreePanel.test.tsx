@@ -254,13 +254,17 @@ function createFileTreeGitStatusResult(
 	} as FileTreeGitStatusResult;
 }
 
-function renderPanel(onOpenFile = vi.fn()) {
+function renderPanel(
+	onOpenFile = vi.fn(),
+	options: { isOpen?: boolean; isActive?: boolean } = {},
+) {
 	render(
 		<ChakraProvider value={appSystem}>
 			<FileTreePanel
 				profileId={profileId}
 				rootPath={rootPath}
-				isOpen
+				isOpen={options.isOpen ?? true}
+				isActive={options.isActive ?? true}
 				onOpenFile={onOpenFile}
 			/>
 		</ChakraProvider>,
@@ -368,6 +372,17 @@ describe("fileTreePanel", () => {
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(treePaths);
 		});
+	});
+
+	it("disables tree and git status queries while inactive", () => {
+		renderPanel(vi.fn(), { isActive: false });
+
+		expect(useFileTreeChildPaths).toHaveBeenCalledWith(
+			profileId,
+			null,
+			false,
+		);
+		expect(useFileTreeGitStatus).toHaveBeenCalledWith(profileId, false);
 	});
 
 	it("loads direct children when a directory is expanded", async () => {
@@ -520,7 +535,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("index.ts"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("opens status-only ignored file rows from tree click events", () => {
@@ -534,7 +549,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("ignored.log"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/ignored.log");
+		expect(onOpenFile).toHaveBeenCalledWith("ignored.log");
 	});
 
 	it("does not open status-only deleted file rows", () => {
@@ -560,7 +575,7 @@ describe("fileTreePanel", () => {
 			]);
 		});
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("does not open files while mouse selection is waiting for click", () => {
@@ -577,7 +592,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("index.ts"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("does not open files while extending multi-selection", () => {
@@ -673,8 +688,7 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				profileId: "profile-1",
-				path: "",
+				path: null,
 			});
 		});
 	});
@@ -824,7 +838,6 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				profileId: "profile-1",
 				path: "src/index.ts",
 			});
 		});
@@ -840,7 +853,6 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(openDefaultAppMutateAsyncMock).toHaveBeenCalledWith({
-				profileId: "profile-1",
 				path: "src/index.ts",
 			});
 		});

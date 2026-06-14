@@ -180,7 +180,7 @@ export default function CommandPalette({
 
 	const commitSelection = useCallback(
 		(result: FileSearchResult) => {
-			openFile(profileId, result.path);
+			openFile(profileId, result.relative_path);
 			closePalette();
 		},
 		[closePalette, openFile, profileId],
