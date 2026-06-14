@@ -393,8 +393,13 @@ pub fn read_head_file(
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	let path = validate_repo_relative_path(path, "Preview file path")?;
-	let cache_path = preview_cache_path(cache_root, folder, "head", None, &path);
-	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path, false)
+let spec = format!("HEAD:{path}");
+	let Some(blob_oid) = get_git_blob_oid(folder, &spec)? else {
+		return Ok(None);
+	};
+	let cache_path =
+		preview_cache_path(cache_root, folder, "head", Some(&blob_oid), &path);
+	read_git_blob_to_cache(folder, &spec, &cache_path, true)
 }
 
 pub fn read_commit_file(
@@ -748,8 +753,11 @@ pub fn worktree_remove(
 		.output()?;
 
 	if !output.status.success() {
-		let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
-		if stderr.contains("is not a working tree") {
+let stderr = String::from_utf8_lossy(&output.stderr);
+		let normalized = stderr.to_lowercase();
+		if normalized.contains("not a working tree")
+			&& !Path::new(worktree_path).exists()
+		{
 			tracing::warn!(
 				"git worktree remove skipped missing worktree: {worktree_path}"
 			);
@@ -764,6 +772,45 @@ pub fn worktree_remove(
 	Ok(())
 }
 
+pub fn worktree_current_branch(worktree_path: &str) -> Result<Option<String>, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["branch", "--show-current"])
+		.current_dir(worktree_path)
+		.output();
+
+	let output = match output {
+		Ok(output) => output,
+		Err(error) if !Path::new(worktree_path).exists() => {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}: {error}"
+			);
+			return Ok(None);
+		}
+		Err(error) => return Err(AppError::from(error)),
+	};
+
+	if !output.status.success() {
+		if !Path::new(worktree_path).exists() {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}"
+			);
+			return Ok(None);
+		}
+
+		return Err(AppError::GitError(command_error(
+			"git branch --show-current failed",
+			&output,
+		)));
+	}
+
+	let branch_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if branch_name.is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(branch_name))
+}
+
 pub fn branch_delete(
 	project_folder: &str,
 	branch_name: &str,
@@ -774,8 +821,9 @@ pub fn branch_delete(
 		.output()?;
 
 	if !output.status.success() {
-		let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
-		if stderr.contains("branch") && stderr.contains("not found") {
+let stderr = String::from_utf8_lossy(&output.stderr);
+	let normalized = stderr.to_lowercase();
+	if normalized.contains("branch") && normalized.contains("not found") {
 			tracing::warn!(
 				"git branch delete skipped missing branch: {branch_name}"
 			);
@@ -1309,6 +1357,31 @@ fn get_git_blob_size(
 
 	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 	if is_missing_blob_error(&stderr) {
+		return Ok(None);
+	}
+
+	Err(AppError::GitError(stderr))
+}
+
+fn get_git_blob_oid(
+	folder: &str,
+	spec: &str,
+) -> Result<Option<String>, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["rev-parse", "--verify", "--quiet", spec])
+		.current_dir(folder)
+		.output()?;
+
+	if output.status.success() {
+		let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+		if oid.is_empty() {
+			return Ok(None);
+		}
+		return Ok(Some(oid));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if stderr.is_empty() || is_missing_blob_error(&stderr) {
 		return Ok(None);
 	}
 
@@ -1860,6 +1933,60 @@ mod tests {
 		assert_eq!(std::fs::read(head_preview).unwrap(), initial);
 		assert_eq!(worktree_preview, dir.join("image.bin").to_string_lossy());
 		assert_eq!(std::fs::read(worktree_preview).unwrap(), modified);
+
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn read_head_file_cache_key_changes_when_head_blob_changes() {
+		let dir = create_temp_git_repo();
+		let cache_dir = tempfile::TempDir::new().unwrap();
+		let initial = vec![0_u8, 1, 2, 3];
+		let updated_same_size = vec![4_u8, 5, 6, 7];
+
+		std::fs::write(dir.join("image.bin"), &initial).unwrap();
+		command_without_windows_console("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		command_without_windows_console("git")
+			.args(["commit", "-m", "add image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let initial_preview = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+
+		std::fs::write(dir.join("image.bin"), &updated_same_size).unwrap();
+		command_without_windows_console("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		command_without_windows_console("git")
+			.args(["commit", "-m", "update image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let updated_preview = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+
+		assert_ne!(initial_preview, updated_preview);
+		assert_eq!(std::fs::read(initial_preview).unwrap(), initial);
+		assert_eq!(std::fs::read(updated_preview).unwrap(), updated_same_size);
 
 		std::fs::remove_dir_all(dir).unwrap();
 	}

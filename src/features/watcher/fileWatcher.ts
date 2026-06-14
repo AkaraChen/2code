@@ -54,10 +54,47 @@ function addFileInvalidation(
 	path: string | null | undefined,
 ) {
 	const paths = fileInvalidations.get(profileId) ?? new Set<string | null>();
-	paths.add(path?.trim() ? path : null);
+const normalizedPath = path == null ? null : normalizeFilePath(path);
+	paths.add(normalizedPath || null);
 	fileInvalidations.set(profileId, paths);
 }
 
+function normalizeFilePath(path: string) {
+	return path.replaceAll("\\", "/").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function isSameOrDescendantPath(candidatePath: string, changedPath: string) {
+	const normalizedCandidate = normalizeFilePath(candidatePath);
+	const normalizedChanged = normalizeFilePath(changedPath);
+	return (
+		normalizedCandidate === normalizedChanged
+		|| normalizedCandidate.startsWith(`${normalizedChanged}/`)
+	);
+}
+
+function invalidateMatchingCachedFileQueries(
+	namespace: string,
+	profileId: string,
+	changedPath: string,
+) {
+	const queries = queryClient.getQueryCache().findAll({
+		queryKey: [namespace, profileId],
+	});
+
+	for (const query of queries) {
+		const queryKey = query.queryKey;
+		const cachedPath = queryKey[2];
+		if (
+			typeof cachedPath !== "string"
+			|| normalizeFilePath(cachedPath) === changedPath
+			|| !isSameOrDescendantPath(cachedPath, changedPath)
+		) {
+			continue;
+		}
+
+		queryClient.invalidateQueries({ queryKey });
+	}
+}
 function invalidateChangedEvents(events: readonly WatchEvent[]) {
 	const projects = queryClient.getQueryData<ProjectWithProfiles[]>(
 		queryKeys.projects.all,
@@ -127,12 +164,23 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 
 		for (const path of paths) {
 			if (path == null) continue;
+const normalizedPath = normalizeFilePath(path);
 			queryClient.invalidateQueries({
-				queryKey: queryKeys.fs.file(profileId, path),
+				queryKey: queryKeys.fs.file(profileId, normalizedPath),
 			});
 			queryClient.invalidateQueries({
-				queryKey: queryKeys.fs.filePreview(profileId, path),
+				queryKey: queryKeys.fs.filePreview(profileId, normalizedPath),
 			});
+			invalidateMatchingCachedFileQueries(
+				queryNamespaces["fs-file"],
+				profileId,
+				normalizedPath,
+			);
+			invalidateMatchingCachedFileQueries(
+				queryNamespaces["fs-file-preview"],
+				profileId,
+				normalizedPath,
+			);
 		}
 	}
 }

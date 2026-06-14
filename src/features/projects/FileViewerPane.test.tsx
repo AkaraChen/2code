@@ -99,7 +99,7 @@ vi.mock("@/features/terminal/hooks", () => ({
 	useTerminalThemeId: () => "github-dark",
 }));
 
-const filePath = "/repo/src/index.ts";
+const filePath = "src/index.ts";
 const profileId = "profile-1";
 const fileContent = [
 	"function alpha() {}",
@@ -247,7 +247,7 @@ describe("fileViewerPane", () => {
 	});
 
 	it("renders markdown files with the markdown editor and saves edited content", async () => {
-		const markdownPath = "/repo/README.md";
+		const markdownPath = "README.md";
 		const markdownContent = "# Readme";
 		const nextContent = `${markdownContent}\n\nUpdated.`;
 		vi.mocked(useFileContent).mockReturnValue({
@@ -286,7 +286,7 @@ describe("fileViewerPane", () => {
 	});
 
 	it("does not leak markdown edits into Monaco when switching files", async () => {
-		const markdownPath = "/repo/README.md";
+		const markdownPath = "README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
 		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
@@ -314,7 +314,7 @@ describe("fileViewerPane", () => {
 	});
 
 	it("does not restore discarded inactive edits when reopening a file", async () => {
-		const markdownPath = "/repo/README.md";
+		const markdownPath = "README.md";
 		const markdownContent = "# Readme";
 		const markdownDraft = `${markdownContent}\n\nUpdated.`;
 		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
@@ -356,7 +356,7 @@ describe("fileViewerPane", () => {
 	});
 
 	it("does not leak Monaco edits into markdown when switching files", async () => {
-		const markdownPath = "/repo/README.md";
+		const markdownPath = "README.md";
 		const markdownContent = "# Readme";
 		const codeDraft = `${fileContent}\nconsole.log(beta);`;
 		vi.mocked(useFileContent).mockImplementation((_profileId: string, p: string) => ({
@@ -384,11 +384,12 @@ describe("fileViewerPane", () => {
 	});
 
 	it("renders image files with the binary preview instead of Monaco", async () => {
-		const imagePath = "/repo/assets/logo.png";
+		const imagePath = "assets/logo.png";
+		const previewPath = "/repo/assets/logo.png";
 		vi.mocked(useFilePreview).mockReturnValue({
 			data: {
 				kind: "image",
-				file_path: imagePath,
+				file_path: previewPath,
 				mime_type: "image/png",
 				source_path: null,
 			},
@@ -400,21 +401,22 @@ describe("fileViewerPane", () => {
 		renderPane(imagePath);
 
 		const image = await screen.findByRole("img", { name: "logo.png" });
-		expect(image).toHaveAttribute("src", expect.stringContaining(imagePath));
+		expect(image).toHaveAttribute("src", expect.stringContaining(previewPath));
 		expect(screen.queryByLabelText("Monaco Editor")).not.toBeInTheDocument();
 		expect(useFileContent).toHaveBeenCalledWith("profile-1", imagePath, false);
 		expect(useFilePreview).toHaveBeenCalledWith("profile-1", imagePath, true);
 	});
 
 	it("renders Office previews as converted PDFs", async () => {
-		const officePath = "/repo/docs/spec.docx";
+		const officePath = "docs/spec.docx";
+		const officeSourcePath = "/repo/docs/spec.docx";
 		const pdfPath = "/cache/spec.pdf";
 		vi.mocked(useFilePreview).mockReturnValue({
 			data: {
 				kind: "office-pdf",
 				file_path: pdfPath,
 				mime_type: "application/pdf",
-				source_path: officePath,
+				source_path: officeSourcePath,
 			},
 			isLoading: false,
 			isError: false,
@@ -430,11 +432,12 @@ describe("fileViewerPane", () => {
 	});
 
 	it("renders archives with the archive tree preview", async () => {
-		const archivePath = "/repo/archive.zip";
+		const archivePath = "archive.zip";
+		const archivePreviewPath = "/repo/archive.zip";
 		vi.mocked(useFilePreview).mockReturnValue({
 			data: {
 				kind: "archive",
-				file_path: archivePath,
+				file_path: archivePreviewPath,
 				mime_type: "application/x-archive",
 				source_path: null,
 				archive_entries: [

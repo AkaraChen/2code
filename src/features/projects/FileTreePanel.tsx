@@ -650,11 +650,10 @@ export default function FileTreePanel({
 	}, [rootPath, rootChildPaths]);
 
 	const openRelativeFile = useCallback((relativePath: string) => {
-		const filePath = toAbsolutePath(rootPathRef.current, relativePath);
 		if (onOpenFileRef.current) {
-			onOpenFileRef.current(filePath);
+			onOpenFileRef.current(relativePath);
 		} else {
-			setOpenFilePath(filePath);
+			setOpenFilePath(relativePath);
 		}
 	}, []);
 

@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -418,13 +418,80 @@ fn path_outside_workspace_error() -> AppError {
 	))
 }
 
+fn invalid_file_path(message: impl Into<String>) -> AppError {
+	AppError::IoError(std::io::Error::new(
+		std::io::ErrorKind::InvalidInput,
+		message.into(),
+	))
+}
+
+fn validate_worktree_relative_path(
+	path: &str,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	if path.is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be empty")));
+	}
+	if path.contains('\0') {
+		return Err(invalid_file_path(format!(
+			"{label} contains invalid characters"
+		)));
+	}
+
+	let without_trailing_separator =
+		path.trim_end_matches(['/', '\\']).to_string();
+	if without_trailing_separator.is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be root")));
+	}
+
+	let parsed = Path::new(&without_trailing_separator);
+	if parsed.is_absolute() {
+		return Err(invalid_file_path(format!(
+			"{label} must be relative: {path}"
+		)));
+	}
+
+	let mut relative_path = PathBuf::new();
+	for component in parsed.components() {
+		match component {
+			Component::CurDir => {}
+			Component::Normal(value) => {
+				if value == ".git" {
+					return Err(invalid_file_path(format!(
+						"{label} cannot target .git metadata"
+					)));
+				}
+				relative_path.push(value);
+			}
+			Component::ParentDir
+			| Component::RootDir
+			| Component::Prefix(_) => {
+				return Err(invalid_file_path(format!(
+					"{label} escapes worktree: {path}"
+				)));
+			}
+		}
+	}
+
+	if relative_path.as_os_str().is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be empty")));
+	}
+
+	Ok(relative_path)
+}
 fn ensure_canonical_path_inside_worktree(
 	worktree_root: &Path,
 	path: &Path,
 ) -> Result<PathBuf, AppError> {
 	let canonical_worktree =
 		worktree_root.canonicalize().map_err(AppError::IoError)?;
-	let canonical_path = path.canonicalize().map_err(AppError::IoError)?;
+let canonical_path = path.canonicalize().map_err(|error| {
+		if error.kind() == std::io::ErrorKind::NotFound {
+			AppError::NotFound(format!("Path: {}", path.display()))
+		} else {
+			AppError::IoError(error)
+		}
+	})?;
 
 	if !canonical_path.starts_with(&canonical_worktree) {
 		return Err(path_outside_workspace_error());
@@ -438,8 +505,7 @@ fn resolve_existing_worktree_path(
 	path: &str,
 	label: &str,
 ) -> Result<PathBuf, AppError> {
-	let relative_path =
-		infra::filesystem::validate_file_tree_relative_path(path, label)?;
+	let relative_path = validate_worktree_relative_path(path, label)?;
 	ensure_canonical_path_inside_worktree(
 		worktree_root,
 		&worktree_root.join(relative_path),
@@ -450,9 +516,12 @@ fn resolve_existing_worktree_path_or_root(
 	worktree_root: &Path,
 	path: Option<&str>,
 ) -> Result<PathBuf, AppError> {
-	let Some(path) = path.filter(|path| !path.trim().is_empty()) else {
+	let Some(path) = path else {
 		return worktree_root.canonicalize().map_err(AppError::IoError);
 	};
+	if path.is_empty() {
+		return worktree_root.canonicalize().map_err(AppError::IoError);
+	}
 
 	resolve_existing_worktree_path(worktree_root, path, "File tree path")
 }
@@ -462,8 +531,7 @@ fn ensure_creatable_worktree_path(
 	path: &str,
 	label: &str,
 ) -> Result<(), AppError> {
-	let relative_path =
-		infra::filesystem::validate_file_tree_relative_path(path, label)?;
+	let relative_path = validate_worktree_relative_path(path, label)?;
 	let candidate = worktree_root.join(&relative_path);
 	if candidate.exists() {
 		ensure_canonical_path_inside_worktree(worktree_root, &candidate)?;
@@ -1093,6 +1161,35 @@ mod tests {
 	}
 
 	#[test]
+	fn resolve_existing_worktree_path_preserves_whitespace() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("  spaced name .txt  ");
+		std::fs::write(&file_path, "content").expect("write file");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"  spaced name .txt  ",
+			"File",
+		)
+		.unwrap();
+
+		assert_eq!(result, file_path.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_or_root_accepts_empty_path() {
+		let worktree = temp_worktree();
+
+		let result =
+			resolve_existing_worktree_path_or_root(&worktree, Some(""))
+				.unwrap();
+
+		assert_eq!(result, worktree.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
 	fn resolve_existing_worktree_path_rejects_escape_inputs() {
 		let worktree = temp_worktree();
 		std::fs::write(worktree.join("main.rs"), "fn main() {}")
@@ -1112,6 +1209,29 @@ mod tests {
 		assert!(matches!(absolute_result, Err(AppError::IoError(_))));
 		assert!(matches!(git_result, Err(AppError::IoError(_))));
 		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn resolve_existing_worktree_path_rejects_symlink_escape() {
+		let temp_dir = temp_worktree();
+		let worktree = temp_dir.join("worktree");
+		let outside = temp_dir.join("outside");
+		std::fs::create_dir_all(&worktree).expect("create worktree");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::fs::write(outside.join("secret.txt"), "secret")
+			.expect("write outside file");
+		std::os::unix::fs::symlink(&outside, worktree.join("link"))
+			.expect("create symlink");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"link/secret.txt",
+			"File",
+		);
+
+		assert!(matches!(result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
 	}
 
 	#[cfg(unix)]

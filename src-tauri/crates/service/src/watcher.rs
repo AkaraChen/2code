@@ -16,6 +16,7 @@ use crate::WatchEventSender;
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const RECV_TIMEOUT: Duration = Duration::from_millis(100);
 const DEBOUNCE_DURATION: Duration = Duration::from_millis(500);
+const MAX_DEBOUNCE_KEYS: usize = 1024;
 
 struct ProjectWatcher {
 	// The watcher must be kept alive — dropping it stops watching.
@@ -66,6 +67,7 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok(event) => {
 				let now = Instant::now();
+prune_debounce_cache(&mut last_event, now);
 				let event_key = watch_event_debounce_key(&event);
 				let should_send = last_event
 					.get(&event_key)
@@ -172,34 +174,58 @@ fn reconcile_watchers(
 }
 
 fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
-	let mut targets_by_root: HashMap<String, WatchTarget> = HashMap::new();
+let mut targets = Vec::new();
 
 	for project in projects {
-		targets_by_root
-			.entry(project.folder.clone())
-			.or_insert_with(|| WatchTarget {
-				key: project.folder.clone(),
+		let mut has_project_root_profile = false;
+
+		for profile in &project.profiles {
+			if profile.worktree_path == project.folder {
+				has_project_root_profile = true;
+			}
+
+			targets.push(WatchTarget {
+				key: format!("profile:{}:{}", profile.id, profile.worktree_path),
+				project_id: project.id.clone(),
+				profile_id: Some(profile.id.clone()),
+				root_path: profile.worktree_path.clone(),
+			});
+		}
+
+		if !has_project_root_profile {
+			targets.push(WatchTarget {
+				key: format!("project:{}:{}", project.id, project.folder),
 				project_id: project.id.clone(),
 				profile_id: None,
 				root_path: project.folder.clone(),
 			});
-
-		for profile in &project.profiles {
-			targets_by_root.insert(
-				profile.worktree_path.clone(),
-				WatchTarget {
-					key: profile.worktree_path.clone(),
-					project_id: project.id.clone(),
-					profile_id: Some(profile.id.clone()),
-					root_path: profile.worktree_path.clone(),
-				},
-			);
 		}
 	}
-
-	let mut targets = targets_by_root.into_values().collect::<Vec<_>>();
 	targets.sort_by(|left, right| left.key.cmp(&right.key));
 	targets
+}
+
+fn prune_debounce_cache(
+	last_event: &mut HashMap<String, Instant>,
+	now: Instant,
+) {
+	last_event
+		.retain(|_, timestamp| now.duration_since(*timestamp) < DEBOUNCE_DURATION);
+
+	if last_event.len() <= MAX_DEBOUNCE_KEYS {
+		return;
+	}
+
+	let mut entries = last_event
+		.iter()
+		.map(|(key, timestamp)| (key.clone(), *timestamp))
+		.collect::<Vec<_>>();
+	entries.sort_by_key(|(_, timestamp)| *timestamp);
+
+	let remove_count = last_event.len().saturating_sub(MAX_DEBOUNCE_KEYS);
+	for (key, _) in entries.into_iter().take(remove_count) {
+		last_event.remove(&key);
+	}
 }
 
 fn watch_event_debounce_key(event: &WatchEvent) -> String {
@@ -343,6 +369,59 @@ mod tests {
 		assert_eq!(targets.len(), 1);
 		assert_eq!(targets[0].root_path, "/repo");
 		assert_eq!(targets[0].profile_id, None);
+	}
+
+	#[test]
+	fn watcher_targets_preserve_duplicate_project_folders() {
+		let projects = vec![
+			project_with_profiles(
+				"project-1",
+				"/repo",
+				vec![profile("default-1", "project-1", "/repo", true)],
+			),
+			project_with_profiles(
+				"project-2",
+				"/repo",
+				vec![profile("default-2", "project-2", "/repo", true)],
+			),
+		];
+
+		let targets = watcher_targets(&projects);
+
+		assert_eq!(targets.len(), 2);
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/repo"
+				&& target.project_id == "project-1"
+				&& target.profile_id.as_deref() == Some("default-1")
+		}));
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/repo"
+				&& target.project_id == "project-2"
+				&& target.profile_id.as_deref() == Some("default-2")
+		}));
+	}
+
+	#[test]
+	fn prune_debounce_cache_removes_expired_entries_and_bounds_size() {
+		let now = Instant::now();
+		let expired = now - DEBOUNCE_DURATION - Duration::from_millis(1);
+		let fresh = now - Duration::from_millis(1);
+		let mut last_event = HashMap::from([("expired".to_string(), expired)]);
+
+		for index in 0..(MAX_DEBOUNCE_KEYS + 10) {
+			last_event.insert(
+				format!("fresh-{index}"),
+				fresh + Duration::from_nanos(index as u64),
+			);
+		}
+
+		prune_debounce_cache(&mut last_event, now);
+
+		assert!(!last_event.contains_key("expired"));
+		assert_eq!(last_event.len(), MAX_DEBOUNCE_KEYS);
+		for index in 0..10 {
+			assert!(!last_event.contains_key(&format!("fresh-{index}")));
+		}
 	}
 
 	#[test]

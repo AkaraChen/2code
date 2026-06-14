@@ -72,7 +72,7 @@ pub fn list_file_tree_child_paths(
 	root: &Path,
 	parent_path: Option<&str>,
 ) -> Result<Vec<String>, AppError> {
-	ensure_root_directory(root)?;
+	let canonical_root = canonical_root_directory(root)?;
 
 	let parent_path = parent_path
 		.filter(|path| !path.trim().is_empty())
@@ -81,6 +81,8 @@ pub fn list_file_tree_child_paths(
 	let parent_dir = parent_path
 		.as_ref()
 		.map_or_else(|| root.to_path_buf(), |path| root.join(path));
+	let parent_dir =
+		ensure_canonical_path_within_root(&canonical_root, &parent_dir, "Parent path")?;
 	if !parent_dir.is_dir() {
 		return Err(AppError::NotFound(format!(
 			"Directory: {}",
@@ -102,7 +104,7 @@ pub fn list_file_tree_child_paths(
 		}
 
 		let path = entry.path();
-		let relative_path = path.strip_prefix(root).unwrap_or(&path);
+		let relative_path = path.strip_prefix(&canonical_root).unwrap_or(&path);
 		let mut relative_path = normalize_relative_path(relative_path);
 		if relative_path.is_empty() {
 			continue;
@@ -123,7 +125,7 @@ pub fn rename_file_tree_path(
 	source_path: &str,
 	destination_path: &str,
 ) -> Result<(), AppError> {
-	ensure_root_directory(root)?;
+	let canonical_root = canonical_root_directory(root)?;
 	let source_path =
 		validate_file_tree_relative_path(source_path, "Source path")?;
 	let destination_path =
@@ -133,6 +135,7 @@ pub fn rename_file_tree_path(
 	}
 
 	let source = root.join(&source_path);
+	ensure_parent_within_root(&canonical_root, &source, "Source path")?;
 	if !source.exists() {
 		return Err(AppError::NotFound(format!(
 			"File tree path: {source_path}"
@@ -140,6 +143,11 @@ pub fn rename_file_tree_path(
 	}
 
 	let destination = root.join(&destination_path);
+	ensure_existing_ancestor_within_root(
+		&canonical_root,
+		&destination,
+		"Destination path",
+	)?;
 	if destination.exists() {
 		return Err(AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::AlreadyExists,
@@ -157,7 +165,7 @@ pub fn move_file_tree_paths(
 	source_paths: &[String],
 	target_dir_path: Option<&str>,
 ) -> Result<(), AppError> {
-	ensure_root_directory(root)?;
+	let canonical_root = canonical_root_directory(root)?;
 	if source_paths.is_empty() {
 		return Err(invalid_input("Select at least one path to move"));
 	}
@@ -169,6 +177,11 @@ pub fn move_file_tree_paths(
 	let target_dir = target_dir_path
 		.as_ref()
 		.map_or_else(|| root.to_path_buf(), |path| root.join(path));
+	ensure_canonical_path_within_root(
+		&canonical_root,
+		&target_dir,
+		"Target directory",
+	)?;
 	if !target_dir.is_dir() {
 		return Err(AppError::NotFound(format!(
 			"Target directory: {}",
@@ -189,6 +202,7 @@ pub fn move_file_tree_paths(
 		reject_descendant_move(&source_path, target_dir_path.as_deref())?;
 
 		let source = root.join(&source_path);
+		ensure_parent_within_root(&canonical_root, &source, "Source path")?;
 		if !source.exists() {
 			return Err(AppError::NotFound(format!(
 				"File tree path: {source_path}"
@@ -233,7 +247,7 @@ pub fn delete_file_tree_paths(
 	root: &Path,
 	paths: &[String],
 ) -> Result<(), AppError> {
-	ensure_root_directory(root)?;
+	let canonical_root = canonical_root_directory(root)?;
 	if paths.is_empty() {
 		return Err(invalid_input("Select at least one path to delete"));
 	}
@@ -248,6 +262,7 @@ pub fn delete_file_tree_paths(
 		}
 
 		let absolute_path = root.join(&path);
+		ensure_parent_within_root(&canonical_root, &absolute_path, "File tree path")?;
 		let metadata =
 			std::fs::symlink_metadata(&absolute_path).map_err(|error| {
 				if error.kind() == std::io::ErrorKind::NotFound {
@@ -286,9 +301,14 @@ pub fn create_file_tree_path(
 	path: &str,
 	kind: &str,
 ) -> Result<(), AppError> {
-	ensure_root_directory(root)?;
+	let canonical_root = canonical_root_directory(root)?;
 	let path = validate_file_tree_relative_path(path, "File tree path")?;
 	let absolute_path = root.join(&path);
+	ensure_existing_ancestor_within_root(
+		&canonical_root,
+		&absolute_path,
+		"File tree path",
+	)?;
 	if absolute_path.exists() {
 		return Err(AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::AlreadyExists,
@@ -468,6 +488,61 @@ fn ensure_root_directory(root: &Path) -> Result<(), AppError> {
 	Ok(())
 }
 
+fn canonical_root_directory(root: &Path) -> Result<PathBuf, AppError> {
+	ensure_root_directory(root)?;
+	root.canonicalize().map_err(AppError::IoError)
+}
+
+fn ensure_canonical_path_within_root(
+	canonical_root: &Path,
+	path: &Path,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	let canonical_path = path.canonicalize().map_err(|error| {
+		if error.kind() == std::io::ErrorKind::NotFound {
+			AppError::NotFound(format!("{label}: {}", path.display()))
+		} else {
+			AppError::IoError(error)
+		}
+	})?;
+	if !canonical_path.starts_with(canonical_root) {
+		return Err(invalid_input(format!(
+			"{label} escapes worktree: {}",
+			path.display()
+		)));
+	}
+	Ok(canonical_path)
+}
+
+fn ensure_parent_within_root(
+	canonical_root: &Path,
+	path: &Path,
+	label: &str,
+) -> Result<(), AppError> {
+	let parent = path.parent().ok_or_else(|| {
+		invalid_input(format!("{label} has no parent: {}", path.display()))
+	})?;
+	ensure_canonical_path_within_root(canonical_root, parent, label)?;
+	Ok(())
+}
+
+fn ensure_existing_ancestor_within_root(
+	canonical_root: &Path,
+	path: &Path,
+	label: &str,
+) -> Result<(), AppError> {
+	for ancestor in path.ancestors().skip(1) {
+		if ancestor.exists() {
+			ensure_canonical_path_within_root(canonical_root, ancestor, label)?;
+			return Ok(());
+		}
+	}
+
+	Err(AppError::NotFound(format!(
+		"Directory: {}",
+		canonical_root.display()
+	)))
+}
 pub fn validate_file_tree_relative_path(
 	path: &str,
 	label: &str,
@@ -993,5 +1068,75 @@ mod tests {
 
 		assert!(result.is_err());
 		assert!(root.join("main.rs").exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn create_rejects_symlink_parent_escape() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path().join("root");
+		let outside = temp_dir.path().join("outside");
+		std::fs::create_dir_all(&root).expect("create root");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::os::unix::fs::symlink(&outside, root.join("link"))
+			.expect("create symlink");
+
+		let result = create_file_tree_path(&root, "link/new.txt", "file");
+
+		assert!(result.is_err());
+		assert!(!outside.join("new.txt").exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn delete_rejects_symlink_directory_escape() {
+		let temp_dir = tempfile::tempdir().expect("temp dir");
+		let root = temp_dir.path().join("root");
+		let outside = temp_dir.path().join("outside");
+		std::fs::create_dir_all(&root).expect("create root");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::fs::write(outside.join("secret.txt"), "secret")
+			.expect("write outside file");
+		std::os::unix::fs::symlink(&outside, root.join("link"))
+			.expect("create symlink");
+
+		let result =
+			delete_file_tree_paths(&root, &["link/secret.txt".to_string()]);
+
+		assert!(result.is_err());
+		assert!(outside.join("secret.txt").exists());
+	}
+
+	// --- Step 1: explicit unit tests for profile path resolution helpers / validation rules
+	// (escape, absolute, .git, normal nested). These cover the security boundary.
+	#[test]
+	fn validate_rejects_parent_escape() {
+		let err = validate_file_tree_relative_path("../escape", "test path").unwrap_err();
+		let msg = err.to_string();
+		assert!(msg.contains("escapes worktree") || msg.contains("ParentDir"));
+	}
+
+	#[test]
+	fn validate_rejects_absolute_path() {
+		let err = validate_file_tree_relative_path("/etc/passwd", "test path").unwrap_err();
+		assert!(err.to_string().contains("must be relative"));
+	}
+
+	#[test]
+	fn validate_rejects_git_metadata() {
+		let err = validate_file_tree_relative_path(".git/config", "test path").unwrap_err();
+		assert!(err.to_string().contains(".git"));
+	}
+
+	#[test]
+	fn validate_accepts_normal_nested_relative() {
+		let ok = validate_file_tree_relative_path("src/components/Button.tsx", "test path").unwrap();
+		assert_eq!(ok, "src/components/Button.tsx");
+	}
+
+	#[test]
+	fn validate_accepts_directory_with_trailing_slash() {
+		let ok = validate_file_tree_relative_path("src/", "test path").unwrap();
+		assert_eq!(ok, "src");
 	}
 }

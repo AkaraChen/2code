@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getQueryDataMock, invalidateQueriesMock, watchProjectsMock } = vi.hoisted(() => ({
+const {
+	getQueryCacheMock,
+	getQueryDataMock,
+	invalidateQueriesMock,
+	queryCacheFindAllMock,
+	watchProjectsMock,
+} = vi.hoisted(() => ({
+	getQueryCacheMock: vi.fn(),
 	getQueryDataMock: vi.fn(),
 	invalidateQueriesMock: vi.fn(),
+	queryCacheFindAllMock: vi.fn(),
 	watchProjectsMock: vi.fn(),
 }));
 
@@ -12,6 +20,7 @@ vi.mock("@/generated", () => ({
 
 vi.mock("@/shared/lib/queryClient", () => ({
 	queryClient: {
+		getQueryCache: getQueryCacheMock,
 		getQueryData: getQueryDataMock,
 		invalidateQueries: invalidateQueriesMock,
 	},
@@ -36,6 +45,12 @@ describe("fileWatcher", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		vi.useFakeTimers();
+		queryCacheFindAllMock.mockReset();
+		queryCacheFindAllMock.mockReturnValue([]);
+		getQueryCacheMock.mockReset();
+		getQueryCacheMock.mockReturnValue({
+			findAll: queryCacheFindAllMock,
+		});
 		getQueryDataMock.mockReset();
 		invalidateQueriesMock.mockClear();
 		watchProjectsMock.mockClear();
@@ -159,6 +174,67 @@ describe("fileWatcher", () => {
 			[{ queryKey: ["fs-file", "profile-1", "src/index.ts"] }],
 			[{ queryKey: ["fs-file-preview", "profile-1", "src/index.ts"] }],
 		]);
+	});
+
+it("invalidates cached descendant file queries for directory events", async () => {
+		queryCacheFindAllMock.mockImplementation(({ queryKey }) => {
+			if (queryKey[0] === "fs-file") {
+				return [
+					{ queryKey: ["fs-file", "profile-1", "src/index.ts"] },
+					{ queryKey: ["fs-file", "profile-1", "src"] },
+					{ queryKey: ["fs-file", "profile-1", "src-other/index.ts"] },
+				];
+			}
+
+			return [
+				{
+					queryKey: [
+						"fs-file-preview",
+						"profile-1",
+						"src/components/Button.tsx",
+					],
+				},
+			];
+		});
+		const channel = await loadWatcher();
+
+		channel.onmessage?.({
+			project_id: "project-1",
+			profile_id: "profile-1",
+			root_path: "/repo",
+			path: "src",
+		});
+		vi.advanceTimersByTime(1000);
+
+		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1"],
+		});
+		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file-preview", "profile-1"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src/index.ts"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: [
+				"fs-file-preview",
+				"profile-1",
+				"src/components/Button.tsx",
+			],
+		});
+		expect(invalidateQueriesMock).not.toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src-other/index.ts"],
+		});
+		expect(
+			invalidateQueriesMock.mock.calls.filter(
+				([call]) =>
+					JSON.stringify(call.queryKey)
+					=== JSON.stringify(["fs-file", "profile-1", "src"]),
+			),
+		).toHaveLength(1);
 	});
 
 	it("invalidates profile file namespaces when event has no precise path", async () => {

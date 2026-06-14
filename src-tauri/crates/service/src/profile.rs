@@ -271,12 +271,19 @@ pub fn create(
 fn cleanup_profile(profile: &Profile, project_folder: &str) -> Result<(), AppError> {
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 
-	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
+	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
+		infra::config::execute_scripts(
+			&cfg.teardown_script,
+			&worktree_path,
+		);
 	}
 
+let branch_name =
+		infra::git::worktree_current_branch(&profile.worktree_path)?
+			.unwrap_or_else(|| profile.branch_name.clone());
+
 	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(project_folder, &profile.branch_name)?;
+	infra::git::branch_delete(project_folder, &branch_name)?;
 
 	Ok(())
 }
