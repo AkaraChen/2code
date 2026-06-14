@@ -6,6 +6,7 @@ use common::{
 	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
 	setup_db,
 };
+use infra::no_window::command_without_windows_console;
 
 fn create_project_named(
 	conn: &mut SqliteConnection,
@@ -597,6 +598,60 @@ fn create_profile_for_nonexistent_project_returns_error() {
 	let result =
 		service::profile::create(&mut conn, "nonexistent-project-id", "branch");
 	assert!(result.is_err());
+}
+
+#[test]
+fn profile_branch_namespace_conflict_does_not_delete_existing_branch() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	// Create an existing "feat" branch that will namespace-conflict with "feat/auth"
+	command_without_windows_console("git")
+		.args(["branch", "feat"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+
+	// Attempt to create profile with branch that conflicts: feat/auth blocked by feat
+	let result = service::profile::create(&mut conn, &project.id, "feat/auth");
+
+	let error = match result {
+		Ok(_) => panic!("expected error for namespace ref conflict"),
+		Err(error) => error,
+	};
+	let error_message = error.to_string();
+	assert!(
+		error_message.to_lowercase().contains("conflict")
+			&& error_message.contains("feat")
+			&& error_message.contains("feat/auth"),
+		"expected namespace conflict error, got: {error_message}"
+	);
+
+	// The 'feat' branch must still exist (core assertion: creation must not delete it)
+	let branch_list = command_without_windows_console("git")
+		.args(["branch", "--list", "feat"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	let branch_out = String::from_utf8_lossy(&branch_list.stdout);
+	assert!(
+		branch_out.contains("feat"),
+		"existing 'feat' branch must survive failed profile creation, got: {branch_out}"
+	);
+
+	// No profile row for the conflicting branch name should have been inserted
+	let list = service::project::list(&mut conn).unwrap();
+	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
+	let has_conflict_profile = pwp
+		.profiles
+		.iter()
+		.any(|p| p.branch_name == "feat/auth");
+	assert!(
+		!has_conflict_profile,
+		"no profile for 'feat/auth' should be inserted on conflict"
+	);
+
+	cleanup(&dir);
 }
 
 // ============================================================
