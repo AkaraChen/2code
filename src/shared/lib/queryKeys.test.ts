@@ -169,7 +169,7 @@ describe("queryKeys", () => {
 			]);
 		});
 
-		it("treeChildren() includes the profileId and parent path", () => {
+		it("treeChildren() includes the profile and parent path", () => {
 			expect(queryKeys.fs.treeChildren("profile-1", "src/")).toEqual([
 				"fs-tree",
 				"profile-1",
@@ -177,7 +177,7 @@ describe("queryKeys", () => {
 			]);
 		});
 
-		it("file() includes the profileId and file path", () => {
+		it("file() includes the profile and file path", () => {
 			expect(queryKeys.fs.file("profile-1", "README.md")).toEqual([
 				"fs-file",
 				"profile-1",
@@ -185,7 +185,7 @@ describe("queryKeys", () => {
 			]);
 		});
 
-		it("filePreview() includes the profileId and file path", () => {
+		it("filePreview() includes the profile and file path", () => {
 			expect(queryKeys.fs.filePreview("profile-1", "spec.docx")).toEqual([
 				"fs-file-preview",
 				"profile-1",
