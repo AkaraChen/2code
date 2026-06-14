@@ -732,40 +732,97 @@ pub fn worktree_add(
 	)))
 }
 
-pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
+pub fn worktree_remove(project_folder: &str, worktree_path: &str) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["worktree", "remove", worktree_path, "--force"])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git worktree remove failed: {stderr}");
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		let normalized = stderr.to_lowercase();
+		if normalized.contains("not a working tree")
+			&& !Path::new(worktree_path).exists()
+		{
+			tracing::warn!(
+				"git worktree remove skipped missing worktree: {worktree_path}"
+			);
+			return Ok(());
 		}
-		Err(e) => {
-			tracing::warn!("git worktree remove error: {e}");
-		}
-		_ => {}
+
+		tracing::warn!("git worktree remove failed: {stderr}");
+		return Err(AppError::GitError(command_error(
+			"git worktree remove failed",
+			&output,
+		)));
 	}
+
+	Ok(())
 }
 
-pub fn branch_delete(project_folder: &str, branch_name: &str) {
+pub fn worktree_current_branch(worktree_path: &str) -> Result<Option<String>, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["branch", "--show-current"])
+		.current_dir(worktree_path)
+		.output();
+
+	let output = match output {
+		Ok(output) => output,
+		Err(error) if !Path::new(worktree_path).exists() => {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}: {error}"
+			);
+			return Ok(None);
+		}
+		Err(error) => return Err(AppError::from(error)),
+	};
+
+	if !output.status.success() {
+		if !Path::new(worktree_path).exists() {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}"
+			);
+			return Ok(None);
+		}
+
+		return Err(AppError::GitError(command_error(
+			"git branch --show-current failed",
+			&output,
+		)));
+	}
+
+	let branch_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if branch_name.is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(branch_name))
+}
+
+pub fn branch_delete(project_folder: &str, branch_name: &str) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["branch", "-D", branch_name])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git branch delete failed: {stderr}");
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		let normalized = stderr.to_lowercase();
+		if normalized.contains("branch") && normalized.contains("not found") {
+			tracing::warn!(
+				"git branch delete skipped missing branch: {branch_name}"
+			);
+			return Ok(());
 		}
-		Err(e) => {
-			tracing::warn!("git branch delete error: {e}");
-		}
-		_ => {}
+
+		tracing::warn!("git branch delete failed: {stderr}");
+		return Err(AppError::GitError(command_error(
+			"git branch delete failed",
+			&output,
+		)));
 	}
+
+	Ok(())
 }
 
 fn refs_except_branch(

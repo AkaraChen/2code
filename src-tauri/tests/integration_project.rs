@@ -642,10 +642,8 @@ fn profile_branch_namespace_conflict_does_not_delete_existing_branch() {
 	// No profile row for the conflicting branch name should have been inserted
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	let has_conflict_profile = pwp
-		.profiles
-		.iter()
-		.any(|p| p.branch_name == "feat/auth");
+	let has_conflict_profile =
+		pwp.profiles.iter().any(|p| p.branch_name == "feat/auth");
 	assert!(
 		!has_conflict_profile,
 		"no profile for 'feat/auth' should be inserted on conflict"
@@ -730,6 +728,111 @@ fn delete_nonexistent_profile_returns_error() {
 	let mut conn = setup_db();
 	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
 	assert!(result.is_err());
+}
+
+#[test]
+fn delete_profile_keeps_row_when_cleanup_fails() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "cleanup-fail")
+			.unwrap();
+
+	let missing_project_folder = dir.with_extension("missing-project-folder");
+	repo::project::update(
+		&mut conn,
+		&project.id,
+		None,
+		Some(missing_project_folder.to_string_lossy().to_string()),
+	)
+	.unwrap();
+
+	let result = service::profile::delete(&mut conn, &profile.id);
+	assert!(result.is_err(), "expected error when cleanup fails");
+
+	// Critical: the profile row must still exist so user can see it / retry delete later.
+	let list = service::project::list(&mut conn).unwrap();
+	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
+	let row_still_present = pwp.profiles.iter().any(|p| p.id == profile.id);
+	assert!(
+		row_still_present,
+		"profile row must remain in DB after cleanup failure (for retryability)"
+	);
+
+	repo::project::update(
+		&mut conn,
+		&project.id,
+		None,
+		Some(dir.to_string_lossy().to_string()),
+	)
+	.unwrap();
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_succeeds_when_git_resources_already_missing() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "already-clean")
+			.unwrap();
+
+	command_without_windows_console("git")
+		.args(["worktree", "remove", &profile.worktree_path, "--force"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	command_without_windows_console("git")
+		.args(["branch", "-D", &profile.branch_name])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_err());
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_removes_live_renamed_branch() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "rename-me").unwrap();
+
+	command_without_windows_console("git")
+		.args(["branch", "-m", "renamed-outside"])
+		.current_dir(&profile.worktree_path)
+		.output()
+		.unwrap();
+
+	let branch_list = command_without_windows_console("git")
+		.args(["branch", "--list", "renamed-outside"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	assert!(String::from_utf8_lossy(&branch_list.stdout)
+		.contains("renamed-outside"));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	let branch_list = command_without_windows_console("git")
+		.args(["branch", "--list", "renamed-outside"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	assert!(!String::from_utf8_lossy(&branch_list.stdout)
+		.contains("renamed-outside"));
+	assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_err());
+
+	cleanup(&dir);
 }
 
 // ============================================================
