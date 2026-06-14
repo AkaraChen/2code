@@ -149,6 +149,7 @@ export default function ProjectDetailPage() {
 						profileId={profile.id}
 						cwd={profile.worktree_path}
 						profile={profile}
+						isActive
 						emptyFallback={emptyTerminalState}
 					/>
 				</ProfileLayout>

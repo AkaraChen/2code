@@ -22,6 +22,9 @@ describe("fileTreeFileIcon", () => {
 		expect(icon).toHaveAttribute("data-icon-name", "file-tree-icon-file");
 		expect(icon).toHaveAttribute("data-icon-token", "react");
 		expect(icon).toHaveAttribute("viewBox", "0 0 16 16");
+		expect(icon.getAttribute("style")).toContain(
+			"color: var(--trees-file-icon-color-react, var(--trees-file-icon-color, currentColor));",
+		);
 		expect(icon.querySelector("path")).not.toBeNull();
 	});
 

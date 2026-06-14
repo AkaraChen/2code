@@ -114,6 +114,7 @@ interface TerminalTabsProps {
 	profileId: string;
 	cwd: string;
 	profile?: import("@/generated").Profile;
+	isActive?: boolean;
 	emptyFallback?: ReactNode;
 }
 
@@ -122,6 +123,7 @@ export default function TerminalTabs({
 	profileId,
 	cwd,
 	profile,
+	isActive = true,
 	emptyFallback,
 }: TerminalTabsProps) {
 	const { tabs, activeTabId } = useTerminalStore(
@@ -464,7 +466,12 @@ export default function TerminalTabs({
 							<InlineError error={error} height="32" onRetry={onRetry} />
 						)}
 					>
-						<FileViewerPane filePath={activeFilePath} profileId={profileId} />
+						<FileViewerPane
+							filePath={activeFilePath}
+							profileId={profileId}
+							rootPath={profile?.worktree_path ?? ""}
+							isActive={isActive}
+						/>
 					</AsyncBoundary>
 				</Box>
 			)}
@@ -507,7 +514,12 @@ export default function TerminalTabs({
 						<Terminal
 							profileId={profileId}
 							sessionId={tab.id}
-							isActive={tab.id === activeTabId && !fileTabActive && !notesActive}
+							isActive={
+								isActive &&
+								tab.id === activeTabId &&
+								!fileTabActive &&
+								!notesActive
+							}
 						/>
 					</Box>
 				))}

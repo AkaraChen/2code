@@ -136,7 +136,7 @@ describe("commandPalette", () => {
 		await waitFor(() => {
 			expect(
 				useFileViewerTabsStore.getState().profiles["profile-1"]?.activeFilePath,
-			).toBe("/repo/src/main.ts");
+			).toBe("src/main.ts");
 		});
 		expect(
 			screen.queryByRole("combobox", {

@@ -106,6 +106,7 @@ export default function TerminalLayer() {
 								profileId={profileId}
 								cwd={profile.worktree_path}
 								profile={profile}
+								isActive={profileId === activeProfileId}
 							/>
 						</ProfileLayout>
 					</div>
