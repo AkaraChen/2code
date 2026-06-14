@@ -199,7 +199,7 @@ export function useDiscardGitFileChanges(profileId: string) {
 				}),
 				...filePathsToRefresh.map((filePath) =>
 					queryClient.invalidateQueries({
-						queryKey: queryKeys.fs.file(filePath),
+						queryKey: queryKeys.fs.file(profileId, filePath),
 					}),
 				),
 			]);

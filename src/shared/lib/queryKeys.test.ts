@@ -169,25 +169,27 @@ describe("queryKeys", () => {
 			]);
 		});
 
-		it("treeChildren() includes the root and parent path", () => {
-			expect(queryKeys.fs.treeChildren("/tmp/worktree", "src/")).toEqual([
+		it("treeChildren() includes the profileId and parent path", () => {
+			expect(queryKeys.fs.treeChildren("profile-1", "src/")).toEqual([
 				"fs-tree",
-				"/tmp/worktree",
+				"profile-1",
 				"src/",
 			]);
 		});
 
-		it("file() includes the file path", () => {
-			expect(queryKeys.fs.file("/tmp/worktree/README.md")).toEqual([
+		it("file() includes the profileId and file path", () => {
+			expect(queryKeys.fs.file("profile-1", "README.md")).toEqual([
 				"fs-file",
-				"/tmp/worktree/README.md",
+				"profile-1",
+				"README.md",
 			]);
 		});
 
-		it("filePreview() includes the file path", () => {
-			expect(queryKeys.fs.filePreview("/tmp/worktree/spec.docx")).toEqual([
+		it("filePreview() includes the profileId and file path", () => {
+			expect(queryKeys.fs.filePreview("profile-1", "spec.docx")).toEqual([
 				"fs-file-preview",
-				"/tmp/worktree/spec.docx",
+				"profile-1",
+				"spec.docx",
 			]);
 		});
 

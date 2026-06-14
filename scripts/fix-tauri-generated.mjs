@@ -3,7 +3,12 @@ import { readFile, writeFile } from "node:fs/promises";
 const replacements = [
 	{
 		path: new URL("../src/generated/types.ts", import.meta.url),
-		pairs: [],
+		pairs: [
+			[
+				"export interface AgentStatusEvent {\n",
+				"export type AgentStatus = \"running\" | \"waiting\" | \"idle\";\n\nexport interface AgentStatusEvent {\n",
+			],
+		],
 	},
 	{
 		path: new URL("../src/generated/commands.ts", import.meta.url),
@@ -21,7 +26,6 @@ const replacements = [
 				"import { listen, type UnlistenFn, type Event } from '@tauri-apps/api/event';",
 				"import { listen, type UnlistenFn } from '@tauri-apps/api/event';",
 			],
-			["import * as types from './types';\n", ""],
 			["types.session_id", "unknown"],
 		],
 	},

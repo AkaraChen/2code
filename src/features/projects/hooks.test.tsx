@@ -143,7 +143,7 @@ describe("useDeleteFileTreePaths", () => {
 		deleteFileTreePathsMock.mockResolvedValue(undefined);
 
 		const { result } = renderHook(
-			() => useDeleteFileTreePaths("/repo", "profile-1"),
+			() => useDeleteFileTreePaths("profile-1"),
 			{ wrapper: createWrapperWithClient(queryClient) },
 		);
 
@@ -152,11 +152,11 @@ describe("useDeleteFileTreePaths", () => {
 		});
 
 		expect(deleteFileTreePathsMock).toHaveBeenCalledWith({
-			rootPath: "/repo",
+			profileId: "profile-1",
 			paths: ["src/index.ts"],
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
-			queryKey: queryKeys.fs.tree("/repo"),
+			queryKey: queryKeys.fs.tree("profile-1"),
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
 			queryKey: [queryNamespaces["fs-file"]],

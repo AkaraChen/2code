@@ -75,12 +75,12 @@ export const queryKeys = {
 			["profile-notes", profileId] as const,
 	},
 	fs: {
-		file: (path: string) => ["fs-file", path] as const,
-		filePreview: (path: string) => ["fs-file-preview", path] as const,
+		file: (profileId: string, path: string) => ["fs-file", profileId, path] as const,
+		filePreview: (profileId: string, path: string) => ["fs-file-preview", profileId, path] as const,
 		search: (profileId: string, query: string) =>
 			["fs-search", profileId, query] as const,
-		tree: (path: string) => ["fs-tree", path] as const,
-		treeChildren: (rootPath: string, parentPath: string | null) =>
-			["fs-tree", rootPath, parentPath] as const,
+		tree: (profileId: string) => ["fs-tree", profileId] as const,
+		treeChildren: (profileId: string, parentPath: string | null) =>
+			["fs-tree", profileId, parentPath] as const,
 	},
 };
