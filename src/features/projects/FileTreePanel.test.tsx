@@ -520,7 +520,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("index.ts"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("opens status-only ignored file rows from tree click events", () => {
@@ -534,7 +534,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("ignored.log"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/ignored.log");
+		expect(onOpenFile).toHaveBeenCalledWith("ignored.log");
 	});
 
 	it("does not open status-only deleted file rows", () => {
@@ -560,7 +560,7 @@ describe("fileTreePanel", () => {
 			]);
 		});
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("does not open files while mouse selection is waiting for click", () => {
@@ -577,7 +577,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByText("index.ts"));
 
-		expect(onOpenFile).toHaveBeenCalledWith("/root/src/index.ts");
+		expect(onOpenFile).toHaveBeenCalledWith("src/index.ts");
 	});
 
 	it("does not open files while extending multi-selection", () => {
@@ -673,7 +673,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root",
+				profileId: "profile-1",
+				path: "",
 			});
 		});
 	});
@@ -823,7 +824,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root/src/index.ts",
+				profileId: "profile-1",
+				path: "src/index.ts",
 			});
 		});
 		expect(closeContextMenuMock).toHaveBeenCalled();
@@ -838,7 +840,8 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(openDefaultAppMutateAsyncMock).toHaveBeenCalledWith({
-				path: "/root/src/index.ts",
+				profileId: "profile-1",
+				path: "src/index.ts",
 			});
 		});
 		expect(closeContextMenuMock).toHaveBeenCalled();

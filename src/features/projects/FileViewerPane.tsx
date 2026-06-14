@@ -212,8 +212,8 @@ export default function FileViewerPane({
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath, !fileMeta.previewableBinaryFile);
-	const previewQuery = useFilePreview(filePath, fileMeta.previewableBinaryFile);
+	} = useFileContent(profileId, filePath, !fileMeta.previewableBinaryFile);
+	const previewQuery = useFilePreview(profileId, filePath, fileMeta.previewableBinaryFile);
 	const {
 		isPending: isSaving,
 		mutate: saveFileContent,
