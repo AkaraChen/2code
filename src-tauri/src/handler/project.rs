@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use infra::db::DbPool;
 use model::error::AppError;
@@ -127,16 +127,24 @@ pub async fn get_git_binary_preview(
 	path: String,
 	source: String,
 	commit_hash: Option<String>,
+	app: AppHandle,
 	state: State<'_, DbPool>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
 	let db = state.inner().clone();
+	let cache_root = app
+		.path()
+		.app_cache_dir()
+		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?
+		.join("git-preview-cache");
 	super::run_blocking(move || {
 		let worktree_path = profile_worktree_path(&db, &profile_id)?;
 		let file_path = match source.as_str() {
 			"working_tree" => {
 				infra::git::read_worktree_file(&worktree_path, &path)?
 			}
-			"head" => infra::git::read_head_file(&worktree_path, &path)?,
+			"head" => {
+				infra::git::read_head_file(&worktree_path, &cache_root, &path)?
+			}
 			"commit" => {
 				let commit_hash = commit_hash.as_deref().ok_or_else(|| {
 					AppError::GitError(
@@ -145,6 +153,7 @@ pub async fn get_git_binary_preview(
 				})?;
 				infra::git::read_commit_file(
 					&worktree_path,
+					&cache_root,
 					commit_hash,
 					&path,
 				)?
@@ -158,6 +167,7 @@ pub async fn get_git_binary_preview(
 				})?;
 				infra::git::read_parent_commit_file(
 					&worktree_path,
+					&cache_root,
 					commit_hash,
 					&path,
 				)?
