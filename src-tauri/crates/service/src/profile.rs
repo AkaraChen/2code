@@ -268,6 +268,26 @@ pub fn create(
 	Ok(profile)
 }
 
+fn cleanup_profile(profile: &Profile, project_folder: &str) -> Result<(), AppError> {
+	let worktree_path = PathBuf::from(&profile.worktree_path);
+
+	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
+		infra::config::execute_scripts(
+			&cfg.teardown_script,
+			&worktree_path,
+		);
+	}
+
+let branch_name =
+		infra::git::worktree_current_branch(&profile.worktree_path)?
+			.unwrap_or_else(|| profile.branch_name.clone());
+
+	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
+	infra::git::branch_delete(project_folder, &branch_name)?;
+
+	Ok(())
+}
+
 pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
@@ -286,29 +306,6 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	cleanup_profile(&profile, &project_folder)?;
 
 	repo::profile::delete_record(conn, id)
-}
-
-fn cleanup_profile(
-	profile: &Profile,
-	project_folder: &str,
-) -> Result<(), AppError> {
-	let worktree_path = PathBuf::from(&profile.worktree_path);
-
-	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(
-			&cfg.teardown_script,
-			&worktree_path,
-		);
-	}
-
-	let branch_name =
-		infra::git::worktree_current_branch(&profile.worktree_path)?
-			.unwrap_or_else(|| profile.branch_name.clone());
-
-	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(project_folder, &branch_name)?;
-
-	Ok(())
 }
 
 pub fn delete_check(

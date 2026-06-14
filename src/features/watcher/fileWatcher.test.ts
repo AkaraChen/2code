@@ -176,7 +176,7 @@ describe("fileWatcher", () => {
 		]);
 	});
 
-	it("invalidates cached descendant file queries for directory events", async () => {
+it("invalidates cached descendant file queries for directory events", async () => {
 		queryCacheFindAllMock.mockImplementation(({ queryKey }) => {
 			if (queryKey[0] === "fs-file") {
 				return [

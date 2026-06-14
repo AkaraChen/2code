@@ -28,13 +28,20 @@ SELECT
 	s.title, s.shell, s.cwd, s.created_at, s.closed_at
 FROM pty_sessions s;
 
+CREATE TABLE pty_output_chunks_new (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+session_id TEXT NOT NULL REFERENCES pty_sessions_new (id) ON DELETE CASCADE,
+data BLOB NOT NULL
+) ;
+
+INSERT INTO pty_output_chunks_new (id, session_id, data)
+SELECT c.id, c.session_id, c.data
+FROM pty_output_chunks c
+INNER JOIN pty_sessions_new s ON s.id = c.session_id
+ORDER BY c.id ;
+
 DROP TABLE pty_output_chunks;
 DROP TABLE pty_sessions;
 ALTER TABLE pty_sessions_new RENAME TO pty_sessions;
-
-CREATE TABLE pty_output_chunks (
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-session_id TEXT NOT NULL REFERENCES pty_sessions (id) ON DELETE CASCADE,
-data BLOB NOT NULL
-) ;
+ALTER TABLE pty_output_chunks_new RENAME TO pty_output_chunks;
 CREATE INDEX idx_pty_output_session ON pty_output_chunks (session_id) ;

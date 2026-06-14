@@ -54,7 +54,7 @@ function addFileInvalidation(
 	path: string | null | undefined,
 ) {
 	const paths = fileInvalidations.get(profileId) ?? new Set<string | null>();
-	const normalizedPath = path == null ? null : normalizeFilePath(path);
+const normalizedPath = path == null ? null : normalizeFilePath(path);
 	paths.add(normalizedPath || null);
 	fileInvalidations.set(profileId, paths);
 }
@@ -95,7 +95,6 @@ function invalidateMatchingCachedFileQueries(
 		queryClient.invalidateQueries({ queryKey });
 	}
 }
-
 function invalidateChangedEvents(events: readonly WatchEvent[]) {
 	const projects = queryClient.getQueryData<ProjectWithProfiles[]>(
 		queryKeys.projects.all,
@@ -165,7 +164,7 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 
 		for (const path of paths) {
 			if (path == null) continue;
-			const normalizedPath = normalizeFilePath(path);
+const normalizedPath = normalizeFilePath(path);
 			queryClient.invalidateQueries({
 				queryKey: queryKeys.fs.file(profileId, normalizedPath),
 			});

@@ -67,7 +67,7 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok(event) => {
 				let now = Instant::now();
-				prune_debounce_cache(&mut last_event, now);
+prune_debounce_cache(&mut last_event, now);
 				let event_key = watch_event_debounce_key(&event);
 				let should_send = last_event
 					.get(&event_key)
@@ -174,7 +174,7 @@ fn reconcile_watchers(
 }
 
 fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
-	let mut targets = Vec::new();
+let mut targets = Vec::new();
 
 	for project in projects {
 		let mut has_project_root_profile = false;
@@ -201,7 +201,6 @@ fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
 			});
 		}
 	}
-
 	targets.sort_by(|left, right| left.key.cmp(&right.key));
 	targets
 }

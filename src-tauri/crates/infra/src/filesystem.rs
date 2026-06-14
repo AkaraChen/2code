@@ -543,7 +543,6 @@ fn ensure_existing_ancestor_within_root(
 		canonical_root.display()
 	)))
 }
-
 pub fn validate_file_tree_relative_path(
 	path: &str,
 	label: &str,

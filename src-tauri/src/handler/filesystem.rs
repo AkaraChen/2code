@@ -479,14 +479,13 @@ fn validate_worktree_relative_path(
 
 	Ok(relative_path)
 }
-
 fn ensure_canonical_path_inside_worktree(
 	worktree_root: &Path,
 	path: &Path,
 ) -> Result<PathBuf, AppError> {
 	let canonical_worktree =
 		worktree_root.canonicalize().map_err(AppError::IoError)?;
-	let canonical_path = path.canonicalize().map_err(|error| {
+let canonical_path = path.canonicalize().map_err(|error| {
 		if error.kind() == std::io::ErrorKind::NotFound {
 			AppError::NotFound(format!("Path: {}", path.display()))
 		} else {

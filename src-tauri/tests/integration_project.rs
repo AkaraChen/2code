@@ -729,6 +729,83 @@ fn delete_profile_cascades_sessions() {
 }
 
 #[test]
+fn delete_profile_keeps_row_when_cleanup_fails() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "cleanup-fails")
+			.unwrap();
+
+	let missing_folder = dir.join("missing-project-folder");
+	diesel::update(model::schema::projects::table.find(&project.id))
+		.set(
+			model::schema::projects::folder
+				.eq(missing_folder.to_string_lossy().to_string()),
+		)
+		.execute(&mut conn)
+		.expect("point project at missing folder");
+
+	let result = service::profile::delete(&mut conn, &profile.id);
+	assert!(result.is_err(), "cleanup failure should abort deletion");
+
+	let persisted = repo::profile::find_by_id(&mut conn, &profile.id)
+		.expect("profile row should remain retryable");
+	assert_eq!(persisted.id, profile.id);
+
+	diesel::update(model::schema::projects::table.find(&project.id))
+		.set(
+			model::schema::projects::folder
+				.eq(dir.to_string_lossy().to_string()),
+		)
+		.execute(&mut conn)
+		.expect("restore project folder");
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_succeeds_when_git_resources_already_missing() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "already-cleaned")
+			.unwrap();
+
+	let remove_worktree = command_without_windows_console("git")
+		.args(["worktree", "remove", &profile.worktree_path, "--force"])
+		.current_dir(&dir)
+		.output()
+		.expect("remove worktree outside service");
+	assert!(
+		remove_worktree.status.success(),
+		"failed to remove worktree: {}",
+		String::from_utf8_lossy(&remove_worktree.stderr)
+	);
+
+	let delete_branch = command_without_windows_console("git")
+		.args(["branch", "-D", &profile.branch_name])
+		.current_dir(&dir)
+		.output()
+		.expect("delete branch outside service");
+	assert!(
+		delete_branch.status.success(),
+		"failed to delete branch: {}",
+		String::from_utf8_lossy(&delete_branch.stderr)
+	);
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	assert!(
+		repo::profile::find_by_id(&mut conn, &profile.id).is_err(),
+		"profile row should be deleted when cleanup is already complete"
+	);
+
+	cleanup(&dir);
+}
+
+#[test]
 fn delete_nonexistent_profile_returns_error() {
 	let mut conn = setup_db();
 	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
