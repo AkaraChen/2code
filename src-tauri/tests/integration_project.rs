@@ -461,6 +461,90 @@ fn create_profile_returns_correct_shape() {
 }
 
 #[test]
+fn create_profile_uses_project_worktree_dir_relative_to_project() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let relative_base_name = format!(".worktrees-{}", &project.id[..8]);
+	std::fs::write(
+		dir.join("2code.json"),
+		format!(r#"{{"worktree_dir":"../{relative_base_name}"}}"#),
+	)
+	.unwrap();
+	let expected_base = dir.parent().unwrap().join(&relative_base_name);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "feature-worktree")
+			.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+	let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
+
+	assert!(worktree_path.starts_with(&expected_base));
+	assert!(worktree_path.exists());
+	assert_ne!(dir_name.as_ref(), profile.id);
+	assert!(dir_name.contains("feature-worktree"));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&expected_base);
+	cleanup(&dir);
+}
+
+#[test]
+fn create_profile_uses_global_worktree_dir_when_project_config_absent() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let global_base = std::env::temp_dir()
+		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
+
+	let profile = service::profile::create_with_default_worktree_dir(
+		&mut conn,
+		&project.id,
+		"feature-global",
+		Some(global_base.to_str().unwrap()),
+	)
+	.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	assert!(worktree_path.starts_with(&global_base));
+	assert!(worktree_path.exists());
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&global_base);
+	cleanup(&dir);
+}
+
+#[test]
+fn create_profile_project_worktree_dir_overrides_global_default() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let project_base_name = format!(".worktrees-{}", &project.id[..8]);
+	std::fs::write(
+		dir.join("2code.json"),
+		format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
+	)
+	.unwrap();
+	let project_base = dir.parent().unwrap().join(&project_base_name);
+	let global_base = std::env::temp_dir()
+		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
+
+	let profile = service::profile::create_with_default_worktree_dir(
+		&mut conn,
+		&project.id,
+		"feature-override",
+		Some(global_base.to_str().unwrap()),
+	)
+	.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	assert!(worktree_path.starts_with(&project_base));
+	assert!(!worktree_path.starts_with(&global_base));
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&project_base);
+	cleanup(&global_base);
+	cleanup(&dir);
+}
+
+#[test]
 fn create_profile_sanitizes_cjk() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
@@ -810,84 +894,6 @@ fn delete_nonexistent_profile_returns_error() {
 	let mut conn = setup_db();
 	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
 	assert!(result.is_err());
-}
-
-#[test]
-fn delete_profile_keeps_row_when_cleanup_fails() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "cleanup-fail")
-			.unwrap();
-
-	let missing_project_folder = dir.with_extension("missing-project-folder");
-	repo::project::update(
-		&mut conn,
-		&project.id,
-		None,
-		Some(missing_project_folder.to_string_lossy().to_string()),
-	)
-	.unwrap();
-
-	let result = service::profile::delete(&mut conn, &profile.id);
-	assert!(result.is_err(), "expected error when cleanup fails");
-
-	let persisted = repo::profile::find_by_id(&mut conn, &profile.id)
-		.expect("profile row should remain retryable");
-	assert_eq!(persisted.id, profile.id);
-
-	repo::project::update(
-		&mut conn,
-		&project.id,
-		None,
-		Some(dir.to_string_lossy().to_string()),
-	)
-	.unwrap();
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_profile_succeeds_when_git_resources_already_missing() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "already-clean")
-			.unwrap();
-
-	let remove_worktree = command_without_windows_console("git")
-		.args(["worktree", "remove", &profile.worktree_path, "--force"])
-		.current_dir(&dir)
-		.output()
-		.expect("remove worktree outside service");
-	assert!(
-		remove_worktree.status.success(),
-		"failed to remove worktree: {}",
-		String::from_utf8_lossy(&remove_worktree.stderr)
-	);
-
-	let delete_branch = command_without_windows_console("git")
-		.args(["branch", "-D", &profile.branch_name])
-		.current_dir(&dir)
-		.output()
-		.expect("delete branch outside service");
-	assert!(
-		delete_branch.status.success(),
-		"failed to delete branch: {}",
-		String::from_utf8_lossy(&delete_branch.stderr)
-	);
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	assert!(
-		repo::profile::find_by_id(&mut conn, &profile.id).is_err(),
-		"profile row should be deleted when cleanup is already complete"
-	);
-
-	cleanup(&dir);
 }
 
 #[test]

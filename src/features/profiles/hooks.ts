@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
+import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
 import { useTerminalStore } from "@/features/terminal/store";
 import {
 	createProfile,
@@ -28,7 +29,15 @@ export function useCreateProfile() {
 		}: {
 			projectId: string;
 			branchName: string;
-		}) => createProfile({ projectId, branchName }),
+		}) => {
+			const defaultWorktreeDir =
+				useWorktreeSettingsStore.getState().defaultWorktreeDir;
+			return createProfile({
+				projectId,
+				branchName,
+				defaultWorktreeDir: defaultWorktreeDir || null,
+			});
+		},
 		onSuccess: (profile) => {
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,

@@ -54,13 +54,13 @@ function addFileInvalidation(
 	path: string | null | undefined,
 ) {
 	const paths = fileInvalidations.get(profileId) ?? new Set<string | null>();
-const normalizedPath = path == null ? null : normalizeFilePath(path);
+	const normalizedPath = path == null ? null : normalizeFilePath(path);
 	paths.add(normalizedPath || null);
 	fileInvalidations.set(profileId, paths);
 }
 
 function normalizeFilePath(path: string) {
-	return path.replaceAll("\\", "/").replace(/^\/+/, "").replace(/\/+$/, "");
+	return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
 function isSameOrDescendantPath(candidatePath: string, changedPath: string) {

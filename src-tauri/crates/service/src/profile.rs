@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use diesel::SqliteConnection;
 use infra::db::DbPool;
@@ -10,6 +10,9 @@ use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
+const WORKTREE_DIR_NAME_MAX_BYTES: usize = 120;
+const WORKTREE_DIR_PROJECT_SLUG_MAX_BYTES: usize = 40;
+const WORKTREE_DIR_BRANCH_SLUG_MAX_BYTES: usize = 70;
 const AUTO_BRANCH_CITIES: &[&str] = &[
 	"tokyo",
 	"osaka",
@@ -104,14 +107,181 @@ fn generate_auto_branch_name_from(
 	))
 }
 
-fn resolve_worktree_base() -> Result<PathBuf, AppError> {
-	let home = dirs::home_dir().ok_or_else(|| {
+fn default_worktree_base() -> Result<PathBuf, AppError> {
+	Ok(home_dir()?.join(".2code").join("workspace"))
+}
+
+fn normalize_path(path: PathBuf) -> PathBuf {
+	let mut normalized = PathBuf::new();
+	for component in path.components() {
+		match component {
+			Component::CurDir => {}
+			Component::ParentDir => {
+				if !normalized.pop() {
+					normalized.push(component.as_os_str());
+				}
+			}
+			Component::Normal(value) => normalized.push(value),
+			Component::RootDir => normalized.push(component.as_os_str()),
+			Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+		}
+	}
+
+	if normalized.as_os_str().is_empty() {
+		PathBuf::from(".")
+	} else {
+		normalized
+	}
+}
+
+fn non_empty_path(value: Option<&str>) -> Option<&str> {
+	value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn home_dir() -> Result<PathBuf, AppError> {
+	dirs::home_dir().ok_or_else(|| {
 		AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::NotFound,
 			"Could not resolve home directory",
 		))
-	})?;
-	Ok(home.join(".2code").join("workspace"))
+	})
+}
+
+fn expand_home_path(worktree_dir: &str) -> Result<PathBuf, AppError> {
+	if worktree_dir == "~" {
+		return home_dir();
+	}
+	if let Some(rest) = worktree_dir.strip_prefix("~/") {
+		return Ok(home_dir()?.join(rest));
+	}
+	if let Some(rest) = worktree_dir.strip_prefix("~\\") {
+		return Ok(home_dir()?.join(rest));
+	}
+
+	Ok(PathBuf::from(worktree_dir))
+}
+
+fn resolve_configured_worktree_base(
+	project_folder: &str,
+	worktree_dir: &str,
+) -> Result<PathBuf, AppError> {
+	let configured = expand_home_path(worktree_dir)?;
+	let resolved = if configured.is_absolute() {
+		configured
+	} else {
+		Path::new(project_folder).join(&configured)
+	};
+	Ok(normalize_path(resolved))
+}
+
+fn resolve_worktree_base(
+	project_folder: &str,
+	project_worktree_dir: Option<&str>,
+	default_worktree_dir: Option<&str>,
+) -> Result<PathBuf, AppError> {
+	if let Some(worktree_dir) = non_empty_path(project_worktree_dir) {
+		return resolve_configured_worktree_base(project_folder, worktree_dir);
+	}
+
+	if let Some(worktree_dir) = non_empty_path(default_worktree_dir) {
+		return resolve_configured_worktree_base(project_folder, worktree_dir);
+	}
+
+	default_worktree_base()
+}
+
+fn slug_from_path_part(value: &str) -> Option<String> {
+	let slug = infra::slug::slugify_cjk(value);
+	if slug.is_empty() {
+		None
+	} else {
+		Some(slug)
+	}
+}
+
+fn project_slug(project_folder: &str) -> String {
+	Path::new(project_folder)
+		.file_name()
+		.and_then(|value| value.to_str())
+		.and_then(slug_from_path_part)
+		.unwrap_or_else(|| "project".to_string())
+}
+
+fn branch_slug(branch_name: &str) -> String {
+	let slug = branch_name
+		.split('/')
+		.filter_map(slug_from_path_part)
+		.collect::<Vec<_>>()
+		.join("-");
+	if slug.is_empty() {
+		"profile".to_string()
+	} else {
+		slug
+	}
+}
+
+fn truncate_slug_to_bytes(slug: &str, max_bytes: usize) -> String {
+	if slug.len() <= max_bytes {
+		return slug.to_string();
+	}
+
+	let mut end = 0;
+	for (index, ch) in slug.char_indices() {
+		let next = index + ch.len_utf8();
+		if next > max_bytes {
+			break;
+		}
+		end = next;
+	}
+
+	slug[..end].trim_end_matches('-').to_string()
+}
+
+fn bounded_slug(slug: String, max_bytes: usize, fallback: &str) -> String {
+	let bounded = truncate_slug_to_bytes(&slug, max_bytes);
+	if bounded.is_empty() {
+		fallback.to_string()
+	} else {
+		bounded
+	}
+}
+
+fn build_worktree_dir_name(
+	project_folder: &str,
+	branch_name: &str,
+	profile_id: &str,
+) -> String {
+	let short_id = profile_id.get(..8).unwrap_or(profile_id);
+	let name = format!(
+		"{}-{}-{}",
+		bounded_slug(
+			project_slug(project_folder),
+			WORKTREE_DIR_PROJECT_SLUG_MAX_BYTES,
+			"project",
+		),
+		bounded_slug(
+			branch_slug(branch_name),
+			WORKTREE_DIR_BRANCH_SLUG_MAX_BYTES,
+			"profile",
+		),
+		short_id
+	);
+
+	debug_assert!(name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
+	name
+}
+
+fn build_worktree_path(
+	worktree_base: &Path,
+	project_folder: &str,
+	branch_name: &str,
+	profile_id: &str,
+) -> PathBuf {
+	worktree_base.join(build_worktree_dir_name(
+		project_folder,
+		branch_name,
+		profile_id,
+	))
 }
 
 struct CreatedWorktree {
@@ -126,6 +296,8 @@ fn create_worktree(
 	branch_name: &str,
 	auto_generated: bool,
 	existing_branches: &mut Vec<String>,
+	project_worktree_dir: Option<&str>,
+	default_worktree_dir: Option<&str>,
 ) -> Result<CreatedWorktree, AppError> {
 	let branch_name = if auto_generated {
 		generate_auto_branch_name_from(existing_branches)?
@@ -138,23 +310,35 @@ fn create_worktree(
 	};
 
 	let id = Uuid::new_v4().to_string();
-	let worktree_base = resolve_worktree_base()?;
+	let worktree_base = resolve_worktree_base(
+		project_folder,
+		project_worktree_dir,
+		default_worktree_dir,
+	)?;
 	std::fs::create_dir_all(&worktree_base)?;
-	let worktree_path = worktree_base.join(&id);
-	let worktree_str = worktree_path.to_string_lossy().to_string();
 
-	let branch_name = if auto_generated {
+	if auto_generated {
 		let mut candidate = branch_name;
-		let mut created = false;
 		for _ in 0..5 {
+			let worktree_path = build_worktree_path(
+				&worktree_base,
+				project_folder,
+				&candidate,
+				&id,
+			);
+			let worktree_str = worktree_path.to_string_lossy().to_string();
 			match infra::git::worktree_add(
 				project_folder,
 				&candidate,
 				&worktree_str,
 			) {
 				Ok(()) => {
-					created = true;
-					break;
+					return Ok(CreatedWorktree {
+						id,
+						branch_name: candidate,
+						worktree_path,
+						worktree_str,
+					});
 				}
 				Err(AppError::GitError(message))
 					if message.contains("already exists") =>
@@ -166,29 +350,38 @@ fn create_worktree(
 				Err(err) => return Err(err),
 			}
 		}
-		if !created {
-			return Err(AppError::GitError(
-				"Failed to auto-generate a unique branch name".to_string(),
-			));
-		}
-		candidate
+		return Err(AppError::GitError(
+			"Failed to auto-generate a unique branch name".to_string(),
+		));
 	} else {
+		let worktree_path = build_worktree_path(
+			&worktree_base,
+			project_folder,
+			&branch_name,
+			&id,
+		);
+		let worktree_str = worktree_path.to_string_lossy().to_string();
 		infra::git::worktree_add(project_folder, &branch_name, &worktree_str)?;
-		branch_name
-	};
+		return Ok(CreatedWorktree {
+			id,
+			branch_name,
+			worktree_path,
+			worktree_str,
+		});
+	}
+}
 
-	Ok(CreatedWorktree {
-		id,
-		branch_name,
-		worktree_path,
-		worktree_str,
-	})
+fn load_project_config(
+	project_folder: &str,
+) -> Result<infra::config::ProjectConfig, AppError> {
+	infra::config::load_project_config(project_folder)
 }
 
 pub fn create_with_db(
 	db: &DbPool,
 	project_id: &str,
 	branch_name: &str,
+	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
 	let auto_generated = branch_name.trim().is_empty();
 	let (project_folder, mut existing_branches) = {
@@ -202,12 +395,15 @@ pub fn create_with_db(
 		};
 		(project_folder, existing_branches)
 	};
+	let project_config = load_project_config(&project_folder)?;
 
 	let created = create_worktree(
 		&project_folder,
 		branch_name,
 		auto_generated,
 		&mut existing_branches,
+		project_config.worktree_dir.as_deref(),
+		default_worktree_dir,
 	)?;
 
 	let profile = {
@@ -221,12 +417,56 @@ pub fn create_with_db(
 		)?
 	};
 
-	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(
-			&cfg.setup_script,
-			&created.worktree_path,
-		);
-	}
+	infra::config::execute_scripts(
+		&project_config.setup_script,
+		&created.worktree_path,
+	);
+
+	Ok(profile)
+}
+
+pub fn create_with_default_worktree_dir(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+	branch_name: &str,
+	default_worktree_dir: Option<&str>,
+) -> Result<Profile, AppError> {
+	let auto_generated = branch_name.trim().is_empty();
+	let (project_folder, project_config, mut existing_branches) = {
+		let project_folder =
+			repo::profile::get_project_folder(conn, project_id)?;
+		let project_config = load_project_config(&project_folder)?;
+		let existing_branches = if auto_generated {
+			repo::profile::list_branch_names_by_project(conn, project_id)?
+		} else {
+			Vec::new()
+		};
+		(project_folder, project_config, existing_branches)
+	};
+
+	let created = create_worktree(
+		&project_folder,
+		branch_name,
+		auto_generated,
+		&mut existing_branches,
+		project_config.worktree_dir.as_deref(),
+		default_worktree_dir,
+	)?;
+
+	let profile = {
+		repo::profile::insert(
+			conn,
+			&created.id,
+			project_id,
+			&created.branch_name,
+			&created.worktree_str,
+		)?
+	};
+
+	infra::config::execute_scripts(
+		&project_config.setup_script,
+		&created.worktree_path,
+	);
 
 	Ok(profile)
 }
@@ -236,36 +476,7 @@ pub fn create(
 	project_id: &str,
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
-	let project_folder = repo::profile::get_project_folder(conn, project_id)?;
-	let auto_generated = branch_name.trim().is_empty();
-	let mut existing_branches = if auto_generated {
-		repo::profile::list_branch_names_by_project(conn, project_id)?
-	} else {
-		Vec::new()
-	};
-	let created = create_worktree(
-		&project_folder,
-		branch_name,
-		auto_generated,
-		&mut existing_branches,
-	)?;
-
-	let profile = repo::profile::insert(
-		conn,
-		&created.id,
-		project_id,
-		&created.branch_name,
-		&created.worktree_str,
-	)?;
-
-	if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-		infra::config::execute_scripts(
-			&cfg.setup_script,
-			&created.worktree_path,
-		);
-	}
-
-	Ok(profile)
+	create_with_default_worktree_dir(conn, project_id, branch_name, None)
 }
 
 fn cleanup_profile(profile: &Profile, project_folder: &str) -> Result<(), AppError> {
@@ -342,13 +553,246 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use diesel::Connection;
+	use diesel::RunQueryDsl;
+	use diesel_migrations::MigrationHarness;
+	use std::path::Path;
+	use tempfile::TempDir;
+
+	fn setup_db() -> SqliteConnection {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		diesel::sql_query("PRAGMA foreign_keys=ON;")
+			.execute(&mut conn)
+			.ok();
+		conn.run_pending_migrations(infra::db::MIGRATIONS)
+			.expect("run migrations");
+		conn
+	}
+
+	fn run_git<const N: usize>(dir: &Path, args: [&str; N]) {
+		let output = infra::no_window::command_without_windows_console("git")
+			.args(args)
+			.current_dir(dir)
+			.output()
+			.expect("run git");
+		assert!(
+			output.status.success(),
+			"git failed: {}",
+			String::from_utf8_lossy(&output.stderr)
+		);
+	}
+
+	fn create_temp_git_repo() -> TempDir {
+		let dir = TempDir::new().expect("temp git repo");
+		run_git(dir.path(), ["init"]);
+		run_git(dir.path(), ["config", "user.email", "test@test.com"]);
+		run_git(dir.path(), ["config", "user.name", "Test User"]);
+		std::fs::write(dir.path().join("README.md"), "# Test").unwrap();
+		run_git(dir.path(), ["add", "README.md"]);
+		run_git(dir.path(), ["commit", "-m", "Initial commit"]);
+		dir
+	}
+
+	fn create_project_with_git_repo(
+		conn: &mut SqliteConnection,
+	) -> (model::project::Project, TempDir) {
+		let dir = create_temp_git_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		let project =
+			crate::project::create_from_folder(conn, "Test Project", &folder)
+				.expect("create project from folder");
+		(project, dir)
+	}
 
 	// --- worktree base resolution ---
 
 	#[test]
 	fn resolve_worktree_base_returns_valid_path() {
-		let base = resolve_worktree_base().unwrap();
+		let base = resolve_worktree_base("/tmp/project", None, None).unwrap();
 		assert!(base.ends_with(".2code/workspace"));
+	}
+
+	#[test]
+	fn resolve_worktree_base_uses_project_config_before_default() {
+		let project_folder = std::env::temp_dir().join("repo").join("app");
+		let project_base = project_folder.parent().unwrap().join(".worktrees");
+		let default_base = std::env::temp_dir().join("global-worktrees");
+
+		let base = resolve_worktree_base(
+			project_folder.to_str().unwrap(),
+			Some("../.worktrees"),
+			Some(default_base.to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(base, project_base);
+	}
+
+	#[test]
+	fn resolve_worktree_base_uses_default_when_project_config_blank() {
+		let project_folder = std::env::temp_dir().join("repo").join("app");
+		let default_base = project_folder.join("default-worktrees");
+
+		let base = resolve_worktree_base(
+			project_folder.to_str().unwrap(),
+			Some("  "),
+			Some("default-worktrees"),
+		)
+		.unwrap();
+
+		assert_eq!(base, default_base);
+	}
+
+	#[test]
+	fn resolve_worktree_base_expands_home_dir() {
+		let home = home_dir().unwrap();
+
+		let base = resolve_worktree_base(
+			"/tmp/project",
+			Some("~/.2code-worktrees"),
+			None,
+		)
+		.unwrap();
+
+		assert_eq!(base, home.join(".2code-worktrees"));
+	}
+
+	#[test]
+	fn build_worktree_dir_name_includes_project_branch_and_short_id() {
+		let name = build_worktree_dir_name(
+			"/tmp/My Project",
+			"feat/用户 auth",
+			"12345678-1234-4000-8000-000000000000",
+		);
+
+		assert_eq!(name, "my-project-feat-yong-hu-auth-12345678");
+	}
+
+	#[test]
+	fn build_worktree_dir_name_caps_readable_segments() {
+		let long_branch = std::iter::once("feature".to_string())
+			.chain((0..30).map(|index| format!("segment-{index:02}")))
+			.collect::<Vec<_>>()
+			.join("/");
+
+		let name = build_worktree_dir_name(
+			"/tmp/My Extraordinarily Long Project Name That Keeps Going",
+			&long_branch,
+			"12345678-1234-4000-8000-000000000000",
+		);
+
+		assert!(name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
+		assert!(name.ends_with("-12345678"));
+	}
+
+	#[test]
+	fn create_profile_accepts_long_valid_branch_name_with_bounded_dir_name() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let global_base =
+			TempDir::new().expect("global worktree base fallback");
+		let long_branch = std::iter::once("feature".to_string())
+			.chain((0..30).map(|index| format!("segment-{index:02}")))
+			.collect::<Vec<_>>()
+			.join("/");
+
+		let profile = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			&long_branch,
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+		let worktree_path = PathBuf::from(&profile.worktree_path);
+		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
+
+		assert_eq!(profile.branch_name, long_branch);
+		assert!(worktree_path.exists());
+		assert!(dir_name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
+		assert!(dir_name.ends_with(&profile.id[..8]));
+
+		delete(&mut conn, &profile.id).unwrap();
+	}
+
+	#[test]
+	fn create_profile_returns_invalid_project_config_errors() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
+		let global_base =
+			TempDir::new().expect("global worktree base fallback");
+
+		let result = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/broken-config",
+			Some(global_base.path().to_str().unwrap()),
+		);
+
+		assert!(
+			matches!(result, Err(AppError::IoError(error)) if error.kind() == std::io::ErrorKind::InvalidData)
+		);
+	}
+
+	#[test]
+	fn create_profile_uses_project_configured_worktree_dir() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let project_base_name = format!(".worktrees-{}", &project.id[..8]);
+		std::fs::write(
+			dir.path().join("2code.json"),
+			format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
+		)
+		.unwrap();
+		let project_base =
+			dir.path().parent().unwrap().join(&project_base_name);
+		let global_base =
+			TempDir::new().expect("global worktree base fallback");
+
+		let profile = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/worktree",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+		let worktree_path = PathBuf::from(&profile.worktree_path);
+		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
+
+		assert!(worktree_path.starts_with(&project_base));
+		assert!(!worktree_path.starts_with(global_base.path()));
+		assert!(worktree_path.exists());
+		assert_ne!(dir_name.as_ref(), profile.id);
+		assert!(dir_name.contains("feature-worktree"));
+
+		delete(&mut conn, &profile.id).unwrap();
+		let _ = std::fs::remove_dir_all(project_base);
+	}
+
+	#[test]
+	fn create_profile_uses_default_worktree_dir_without_project_config() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let global_base =
+			TempDir::new().expect("global worktree base fallback");
+
+		let profile = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/global",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+		let worktree_path = PathBuf::from(&profile.worktree_path);
+		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
+
+		assert!(worktree_path.starts_with(global_base.path()));
+		assert!(worktree_path.exists());
+		assert_ne!(dir_name.as_ref(), profile.id);
+		assert!(dir_name.contains("feature-global"));
+
+		delete(&mut conn, &profile.id).unwrap();
 	}
 
 	// --- branch name sanitization ---
@@ -433,6 +877,8 @@ mod tests {
 			" /// ",
 			false,
 			&mut existing_branches,
+			None,
+			None,
 		);
 
 		assert!(

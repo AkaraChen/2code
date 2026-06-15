@@ -127,8 +127,8 @@ describe("tauri smoke", () => {
 	it("renames a project through the desktop UI and persists the mutation", async function () {
 		this.timeout(90_000);
 
-		const initialName = "Smoke Project Before";
-		const renamedName = "Smoke Project After";
+		const initialName = "smoke project before";
+		const renamedName = "smoke project after";
 		const project = await invokeTauri("create_project_from_folder", {
 			name: initialName,
 			folder: fixtureDir,
@@ -435,7 +435,12 @@ async function closeResources() {
 	}
 
 	if (runtimeRoot) {
-		await fsp.rm(runtimeRoot, { recursive: true, force: true });
+		await fsp.rm(runtimeRoot, {
+			recursive: true,
+			force: true,
+			maxRetries: 5,
+			retryDelay: 200,
+		});
 		runtimeRoot = undefined;
 	}
 }

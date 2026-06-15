@@ -11,11 +11,11 @@ Project CRUD, folder selection, project detail page, and settings. Core domain.
 | `CreateProjectDialog.tsx` | New project dialog with folder picker |
 | `DeleteProjectDialog.tsx` | Confirm delete with warning |
 | `RenameProjectDialog.tsx` | Inline rename |
-| `ProjectSettingsDialog.tsx` | Edit `2code.json` config (setup/teardown scripts) |
+| `ProjectSettingsDialog.tsx` | Edit `2code.json` config (worktree dir, setup/teardown/init scripts, templates) |
 
 ## KEY PATTERNS
 
-**`2code.json` config**: Projects can have a `2code.json` in their root with `setup_script` and `teardown_script` arrays. Runs via `sh -c` during profile create/delete. Managed via `useProjectConfig` + `useSaveProjectConfig`.
+**`2code.json` config**: Projects can have a `2code.json` in their root with `worktree_dir`, `setup_script`, `teardown_script`, `init_script`, and project terminal templates. `worktree_dir` overrides the global worktree default for profile creation; scripts run via `sh -c`. Managed via `useProjectConfig` + `useSaveProjectConfig`.
 
 **Routing**: `ProjectDetailPage` is at `/projects/:id/profiles/:profileId`. If no `profileId`, redirects to first profile or prompts creation.
 

@@ -17,11 +17,17 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 pub async fn create_profile(
 	project_id: String,
 	branch_name: String,
+	default_worktree_dir: Option<String>,
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		service::profile::create_with_db(&db, &project_id, &branch_name)
+		service::profile::create_with_db(
+			&db,
+			&project_id,
+			&branch_name,
+			default_worktree_dir.as_deref(),
+		)
 	})
 	.await
 }
