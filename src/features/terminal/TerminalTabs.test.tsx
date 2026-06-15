@@ -104,12 +104,13 @@ function createFileTreeDrop(paths: string[]) {
 	return dataTransfer;
 }
 
-function renderTerminalTabs() {
+function renderTerminalTabs(options: { isActive?: boolean } = {}) {
 	render(
 		<TerminalTabs
 			projectId="project-1"
 			profileId={profileId}
 			cwd="/root"
+			isActive={options.isActive ?? true}
 		/>,
 		{ wrapper: createWrapper() },
 	);
@@ -119,7 +120,7 @@ describe("terminalTabs file tree drops", () => {
 	beforeEach(() => {
 		useTerminalStore.setState({
 			profiles: {},
-			notifiedTabs: new Set<string>(),
+			agentStatuses: {},
 			sessionProfileIds: {},
 		});
 		useFileViewerTabsStore.setState({ profiles: {} });
@@ -163,6 +164,18 @@ describe("terminalTabs file tree drops", () => {
 		expect(screen.getByTestId("terminal-session-2")).toHaveAttribute(
 			"data-active",
 			"true",
+		);
+	});
+
+	it("keeps terminal instances mounted but inactive when the profile is hidden", () => {
+		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
+		useTerminalStore.getState().setActiveTab(profileId, "session-1");
+
+		renderTerminalTabs({ isActive: false });
+
+		expect(screen.getByTestId("terminal-session-1")).toHaveAttribute(
+			"data-active",
+			"false",
 		);
 	});
 });

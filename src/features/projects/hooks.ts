@@ -28,7 +28,6 @@ import {
 	getProjectConfig,
 	getProjectGithubAvatar,
 	listFileTreeChildPaths,
-	listFileTreePaths,
 	listProjectGroups,
 	listProjects,
 	moveFileTreePaths,
@@ -291,38 +290,29 @@ export function useDeleteProject(options?: {
 	});
 }
 
-export function useFileTreePaths(path: string, enabled = true) {
-	return useQuery({
-		queryKey: queryKeys.fs.tree(path),
-		queryFn: () => listFileTreePaths({ path }),
-		enabled: !!path && enabled,
-		staleTime: 5000,
-	});
-}
-
 export function useFileTreeChildPaths(
-	rootPath: string,
+	profileId: string,
 	parentPath: string | null,
 	enabled = true,
 ) {
 	return useQuery({
-		queryKey: queryKeys.fs.treeChildren(rootPath, parentPath),
-		queryFn: () => listFileTreeChildPaths({ rootPath, parentPath }),
-		enabled: !!rootPath && enabled,
+		queryKey: queryKeys.fs.treeChildren(profileId, parentPath),
+		queryFn: () => listFileTreeChildPaths({ profileId, parentPath }),
+		enabled: !!profileId && enabled,
 		staleTime: 5000,
 	});
 }
 
-export function useLoadFileTreeChildPaths(rootPath: string) {
+export function useLoadFileTreeChildPaths(profileId: string) {
 	const queryClient = useQueryClient();
 	return useCallback(
 		(parentPath: string) =>
 			queryClient.fetchQuery({
-				queryKey: queryKeys.fs.treeChildren(rootPath, parentPath),
-				queryFn: () => listFileTreeChildPaths({ rootPath, parentPath }),
+				queryKey: queryKeys.fs.treeChildren(profileId, parentPath),
+				queryFn: () => listFileTreeChildPaths({ profileId, parentPath }),
 				staleTime: 5000,
 			}),
-		[queryClient, rootPath],
+		[queryClient, profileId],
 	);
 }
 
@@ -336,7 +326,7 @@ export function useFileTreeGitStatus(profileId: string, enabled = true) {
 	});
 }
 
-export function useRenameFileTreePath(rootPath: string, profileId: string) {
+export function useRenameFileTreePath(profileId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -347,14 +337,14 @@ export function useRenameFileTreePath(rootPath: string, profileId: string) {
 			destinationPath: string;
 		}) =>
 			renameFileTreePath({
-				rootPath,
+				profileId,
 				sourcePath,
 				destinationPath,
 			}),
 		onSettled: async () => {
 			await Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
+					queryKey: queryKeys.fs.tree(profileId),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),
@@ -370,7 +360,7 @@ export function useRenameFileTreePath(rootPath: string, profileId: string) {
 	});
 }
 
-export function useMoveFileTreePaths(rootPath: string, profileId: string) {
+export function useMoveFileTreePaths(profileId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -381,14 +371,14 @@ export function useMoveFileTreePaths(rootPath: string, profileId: string) {
 			targetDirPath: string | null;
 		}) =>
 			moveFileTreePaths({
-				rootPath,
+				profileId,
 				sourcePaths,
 				targetDirPath,
 			}),
 		onSettled: async () => {
 			await Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
+					queryKey: queryKeys.fs.tree(profileId),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),
@@ -404,21 +394,24 @@ export function useMoveFileTreePaths(rootPath: string, profileId: string) {
 	});
 }
 
-export function useDeleteFileTreePaths(rootPath: string, profileId: string) {
+export function useDeleteFileTreePaths(profileId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({ paths }: { paths: string[] }) =>
 			deleteFileTreePaths({
-				rootPath,
+				profileId,
 				paths,
 			}),
 		onSettled: async () => {
 			await Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
+					queryKey: queryKeys.fs.tree(profileId),
 				}),
 				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-file"]],
+					queryKey: [queryNamespaces["fs-file"], profileId],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["fs-file-preview"], profileId],
 				}),
 				queryClient.invalidateQueries({
 					queryKey: [queryNamespaces["fs-search"], profileId],
@@ -437,7 +430,7 @@ export function useDeleteFileTreePaths(rootPath: string, profileId: string) {
 	});
 }
 
-export function useCreateFileTreePath(rootPath: string, profileId: string) {
+export function useCreateFileTreePath(profileId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -448,14 +441,14 @@ export function useCreateFileTreePath(rootPath: string, profileId: string) {
 			kind: "file" | "directory";
 		}) =>
 			createFileTreePath({
-				rootPath,
+				profileId,
 				path,
 				kind,
 			}),
 		onSettled: async () => {
 			await Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(rootPath),
+					queryKey: queryKeys.fs.tree(profileId),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: [queryNamespaces["fs-search"], profileId],
@@ -474,34 +467,42 @@ export function useCreateFileTreePath(rootPath: string, profileId: string) {
 	});
 }
 
-export function useRevealPathInFileManager() {
+export function useRevealPathInFileManager(profileId: string) {
 	return useMutation({
-		mutationFn: ({ path }: { path: string }) =>
-			revealPathInFileManager({ path }),
+		mutationFn: ({ path }: { path: string | null }) =>
+			revealPathInFileManager({ profileId, path }),
 	});
 }
 
-export function useOpenPathInDefaultApp() {
+export function useOpenPathInDefaultApp(profileId: string) {
 	return useMutation({
 		mutationFn: ({ path }: { path: string }) =>
-			openPathInDefaultApp({ path }),
+			openPathInDefaultApp({ profileId, path }),
 	});
 }
 
-export function useFileContent(path: string, enabled = true) {
+export function useFileContent(
+	profileId: string,
+	path: string,
+	enabled = true,
+) {
 	return useQuery({
-		queryKey: queryKeys.fs.file(path),
-		queryFn: () => readFileContent({ path }),
-		enabled: !!path && enabled,
+		queryKey: queryKeys.fs.file(profileId, path),
+		queryFn: () => readFileContent({ profileId, path }),
+		enabled: !!profileId && !!path && enabled,
 		staleTime: 10000,
 	});
 }
 
-export function useFilePreview(path: string, enabled = true) {
+export function useFilePreview(
+	profileId: string,
+	path: string,
+	enabled = true,
+) {
 	return useQuery({
-		queryKey: queryKeys.fs.filePreview(path),
-		queryFn: () => getFilePreview({ path }),
-		enabled: !!path && enabled,
+		queryKey: queryKeys.fs.filePreview(profileId, path),
+		queryFn: () => getFilePreview({ profileId, path }),
+		enabled: !!profileId && !!path && enabled,
 		staleTime: 60000,
 	});
 }
@@ -510,12 +511,12 @@ export function useSaveFileContent(profileId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: ({ path, content }: { path: string; content: string }) =>
-			writeFileContent({ path, content }),
+			writeFileContent({ profileId, path, content }),
 		onSuccess: async (_result, { path, content }) => {
-			queryClient.setQueryData(queryKeys.fs.file(path), content);
+			queryClient.setQueryData(queryKeys.fs.file(profileId, path), content);
 			await Promise.all([
 				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.file(path),
+					queryKey: queryKeys.fs.file(profileId, path),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.status(profileId),

@@ -4,13 +4,14 @@ import { listen } from "@tauri-apps/api/event";
 import {
 	useTerminalStore,
 	useTerminalProfileIds,
+	useProfileAgentStatus,
 	useProfileHasNotification,
 } from "./store";
 
 function resetStore() {
 	useTerminalStore.setState({
 		profiles: {},
-		notifiedTabs: new Set(),
+		agentStatuses: {},
 		sessionProfileIds: {},
 	});
 	window.history.pushState({}, "", "/");
@@ -18,10 +19,6 @@ function resetStore() {
 
 function getState() {
 	return useTerminalStore.getState();
-}
-
-function setPathname(pathname: string) {
-	window.history.pushState({}, "", pathname);
 }
 
 describe("useTerminalStore", () => {
@@ -68,11 +65,10 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p2.tabs).toHaveLength(1);
 		});
 
-		it("clears pending notification when a focused profile opens the tab", () => {
-			setPathname("/projects/project-1/profiles/p1");
-			getState().markNotified("s1");
+		it("keeps existing agent status when adding a matching tab", () => {
+			getState().setAgentStatus("s1", "running");
 			getState().addTab("p1", "s1", "Shell 1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBe("running");
 		});
 	});
 
@@ -91,13 +87,13 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p1).toBeUndefined();
 		});
 
-		it("removes the tab from notifiedTabs set", () => {
+		it("removes the tab from agentStatuses", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(true);
+			getState().setAgentStatus("s1", "running");
+			expect(getState().agentStatuses.s1).toBe("running");
 			getState().closeTab("p1", "s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBeUndefined();
 		});
 
 		it("reassigns activeTab when closing the active mid-list tab", () => {
@@ -156,14 +152,13 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p1.activeTabId).toBe("s1");
 		});
 
-		it("clears notification from the newly focused tab after closing the active tab", () => {
-			setPathname("/projects/project-1/profiles/p1");
+		it("keeps agent status on the newly focused tab after closing the active tab", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s1");
+			getState().setAgentStatus("s1", "running");
 			getState().closeTab("p1", "s2");
 			expect(getState().profiles.p1.activeTabId).toBe("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBe("running");
 		});
 	});
 
@@ -175,12 +170,12 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p1.activeTabId).toBe("s1");
 		});
 
-		it("removes the tab from notifiedTabs (clears notification)", () => {
+		it("does not clear agent status when the tab becomes active", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s1");
+			getState().setAgentStatus("s1", "waiting");
 			getState().setActiveTab("p1", "s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBe("waiting");
 		});
 
 		it("no-ops when profile does not exist", () => {
@@ -258,44 +253,42 @@ describe("useTerminalStore", () => {
 		});
 	});
 
-	describe("markNotified", () => {
-		it("adds sessionId to notifiedTabs set", () => {
-			getState().markNotified("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(true);
+	describe("setAgentStatus", () => {
+		it("stores a running status for a session", () => {
+			getState().setAgentStatus("s1", "running");
+			expect(getState().agentStatuses.s1).toBe("running");
 		});
 
-		it("is idempotent (adding same ID twice)", () => {
-			getState().markNotified("s1");
-			getState().markNotified("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(true);
-			expect(getState().notifiedTabs.size).toBe(1);
+		it("overwrites the same session status", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "waiting");
+			expect(getState().agentStatuses).toEqual({ s1: "waiting" });
 		});
 
-		it("does not keep unread state for the focused active tab", () => {
-			setPathname("/projects/project-1/profiles/p1");
+		it("keeps status for active tabs", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().markNotified("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			getState().setAgentStatus("s1", "waiting");
+			expect(getState().agentStatuses.s1).toBe("waiting");
 		});
 
-		it("still marks unread for active tabs in background profiles", () => {
-			setPathname("/projects/project-1/profiles/p1");
-			getState().addTab("p1", "s1", "T1");
-			getState().addTab("p2", "s2", "T2");
-			getState().markNotified("s2");
-			expect(getState().notifiedTabs.has("s2")).toBe(true);
+		it("clears a session status when idle is received", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			expect(getState().agentStatuses.s1).toBeUndefined();
 		});
 	});
 
-	describe("markRead", () => {
-		it("removes sessionId from notifiedTabs set", () => {
-			getState().markNotified("s1");
-			getState().markRead("s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+	describe("clearAgentStatus", () => {
+		it("removes a session from agentStatuses", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().clearAgentStatus("s1");
+			expect(getState().agentStatuses.s1).toBeUndefined();
 		});
 
 		it("is idempotent (removing non-existent ID)", () => {
-			expect(() => getState().markRead("nonexistent")).not.toThrow();
+			expect(() =>
+				getState().clearAgentStatus("nonexistent"),
+			).not.toThrow();
 		});
 	});
 
@@ -328,11 +321,11 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p2.tabs).toHaveLength(1);
 		});
 
-		it("clears notified state even when closing the last tab (profile deleted)", () => {
+		it("clears agent status even when closing the last tab (profile deleted)", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().markNotified("s1");
+			getState().setAgentStatus("s1", "running");
 			getState().closeTab("p1", "s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBeUndefined();
 			expect(getState().profiles.p1).toBeUndefined();
 		});
 	});
@@ -365,36 +358,40 @@ describe("useTerminalStore", () => {
 		});
 	});
 
-	describe("notification edge cases", () => {
-		it("multiple notifications on different tabs", () => {
+	describe("agent status edge cases", () => {
+		it("tracks statuses on different tabs", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s1");
-			getState().markNotified("s2");
-			expect(getState().notifiedTabs.size).toBe(2);
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s2", "waiting");
+			expect(getState().agentStatuses).toEqual({
+				s1: "running",
+				s2: "waiting",
+			});
 		});
 
-		it("markNotified for non-existent session does not throw", () => {
-			expect(() => getState().markNotified("ghost")).not.toThrow();
-			expect(getState().notifiedTabs.has("ghost")).toBe(true);
+		it("setAgentStatus for non-existent session does not throw", () => {
+			expect(() =>
+				getState().setAgentStatus("ghost", "running"),
+			).not.toThrow();
+			expect(getState().agentStatuses.ghost).toBe("running");
 		});
 
-		it("closing notified tab and re-adding it starts without notification", () => {
+		it("closing a status tab and re-adding a new session starts without status", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s1");
+			getState().setAgentStatus("s1", "waiting");
 			getState().closeTab("p1", "s1");
 			getState().addTab("p1", "s1-new", "T1 New");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
-			expect(getState().notifiedTabs.has("s1-new")).toBe(false);
+			expect(getState().agentStatuses.s1).toBeUndefined();
+			expect(getState().agentStatuses["s1-new"]).toBeUndefined();
 		});
 
-		it("setActiveTab on already-active tab still clears notification", () => {
+		it("setActiveTab on already-active tab still keeps status", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().markNotified("s1");
-			// s1 is already active, but markNotified added it back
+			getState().setAgentStatus("s1", "waiting");
 			getState().setActiveTab("p1", "s1");
-			expect(getState().notifiedTabs.has("s1")).toBe(false);
+			expect(getState().agentStatuses.s1).toBe("waiting");
 		});
 	});
 
@@ -436,7 +433,7 @@ describe("useTerminalStore", () => {
 			expect(result.current).toBe(false);
 		});
 
-		it("returns false when profile has no notified tabs", () => {
+		it("returns false when profile has no active agent status", () => {
 			getState().addTab("p1", "s1", "T1");
 			const { result } = renderHook(() =>
 				useProfileHasNotification("p1"),
@@ -444,29 +441,29 @@ describe("useTerminalStore", () => {
 			expect(result.current).toBe(false);
 		});
 
-		it("returns true when profile has a notified tab", () => {
+		it("returns true when profile has a running tab", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().markNotified("s1");
+			getState().setAgentStatus("s1", "running");
 			const { result } = renderHook(() =>
 				useProfileHasNotification("p1"),
 			);
 			expect(result.current).toBe(true);
 		});
 
-		it("returns true when any tab in profile is notified", () => {
+		it("returns true when any tab in profile is waiting", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().addTab("p1", "s2", "T2");
-			getState().markNotified("s2");
+			getState().setAgentStatus("s2", "waiting");
 			const { result } = renderHook(() =>
 				useProfileHasNotification("p1"),
 			);
 			expect(result.current).toBe(true);
 		});
 
-		it("returns false after notification is cleared", () => {
+		it("returns false after status is cleared", () => {
 			getState().addTab("p1", "s1", "T1");
-			getState().markNotified("s1");
-			getState().markRead("s1");
+			getState().setAgentStatus("s1", "running");
+			getState().clearAgentStatus("s1");
 			const { result } = renderHook(() =>
 				useProfileHasNotification("p1"),
 			);
@@ -474,24 +471,61 @@ describe("useTerminalStore", () => {
 		});
 	});
 
-	describe("pty-notify listener", () => {
-		it("calls markNotified when pty-notify event fires", () => {
+	describe("useProfileAgentStatus", () => {
+		it("returns null when no profile tabs have status", () => {
+			getState().addTab("p1", "s1", "T1");
+			const { result } = renderHook(() => useProfileAgentStatus("p1"));
+			expect(result.current).toBeNull();
+		});
+
+		it("returns running when the profile has a running tab", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().setAgentStatus("s1", "running");
+			const { result } = renderHook(() => useProfileAgentStatus("p1"));
+			expect(result.current).toBe("running");
+		});
+
+		it("prioritizes waiting over running", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s2", "waiting");
+			const { result } = renderHook(() => useProfileAgentStatus("p1"));
+			expect(result.current).toBe("waiting");
+		});
+	});
+
+	describe("pty-agent-status listener", () => {
+		it("updates status when pty-agent-status event fires", () => {
 			// The listen mock was called at module load time
 			const listenMock = vi.mocked(listen);
 			expect(listenMock).toHaveBeenCalledWith(
-				"pty-notify",
+				"pty-agent-status",
 				expect.any(Function),
 			);
 
 			// Extract the callback that was registered
 			const callback = listenMock.mock.calls.find(
-				(call) => call[0] === "pty-notify",
-			)?.[1] as (event: { payload: string }) => void;
+				(call) => call[0] === "pty-agent-status",
+			)?.[1] as (event: {
+				payload: { sessionId: string; status: "running" };
+			}) => void;
 			expect(callback).toBeDefined();
 
-			// Fire the callback and verify markNotified is triggered
-			callback({ payload: "session-xyz" });
-			expect(getState().notifiedTabs.has("session-xyz")).toBe(true);
+			callback({ payload: { sessionId: "session-xyz", status: "running" } });
+			expect(getState().agentStatuses["session-xyz"]).toBe("running");
+		});
+
+		it("clears status when an idle event fires with snake_case payload", () => {
+			const listenMock = vi.mocked(listen);
+			const callback = listenMock.mock.calls.find(
+				(call) => call[0] === "pty-agent-status",
+			)?.[1] as (event: {
+				payload: { session_id: string; status: "idle" };
+			}) => void;
+			getState().setAgentStatus("session-xyz", "waiting");
+			callback({ payload: { session_id: "session-xyz", status: "idle" } });
+			expect(getState().agentStatuses["session-xyz"]).toBeUndefined();
 		});
 	});
 

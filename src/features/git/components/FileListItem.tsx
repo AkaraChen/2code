@@ -5,7 +5,7 @@ import { memo, useMemo } from "react";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { changeBadge, getFileDisplayParts } from "../utils";
 
-export interface FileListItemProps {
+interface FileListItemProps {
 	file: FileDiffMetadata;
 	isActive: boolean;
 	isIncluded?: boolean;

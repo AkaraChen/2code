@@ -253,18 +253,13 @@ pub async fn open_topbar_app(
 ) -> Result<(), AppError> {
 	#[cfg(target_os = "macos")]
 	{
-		super::run_blocking(move || {
-			open_topbar_app_macos(&app_id, &path)
-		})
-		.await
+		super::run_blocking(move || open_topbar_app_macos(&app_id, &path)).await
 	}
 
 	#[cfg(target_os = "windows")]
 	{
-		super::run_blocking(move || {
-			open_topbar_app_windows(&app_id, &path)
-		})
-		.await
+		super::run_blocking(move || open_topbar_app_windows(&app_id, &path))
+			.await
 	}
 
 	#[cfg(not(any(target_os = "macos", target_os = "windows")))]

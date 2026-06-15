@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use tauri::State;
 
 use infra::db::DbPool;
@@ -40,26 +38,8 @@ pub async fn delete_profile(
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let (profile, project_folder) = {
-			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-			repo::profile::delete(conn, &id)?
-		};
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-
-		if let Ok(cfg) = infra::config::load_project_config(&project_folder) {
-			infra::config::execute_scripts(
-				&cfg.teardown_script,
-				&worktree_path,
-			);
-		}
-
-		infra::git::worktree_remove(&project_folder, &profile.worktree_path);
-		infra::git::branch_delete(&project_folder, &profile.branch_name);
-
-		Ok(())
-	})
-	.await
+	super::run_blocking(move || service::profile::delete_with_db(&db, &id))
+		.await
 }
 
 #[tauri::command]

@@ -53,6 +53,7 @@ export default function ProfileLayout({
 					profileId={profile.id}
 					rootPath={profile.worktree_path}
 					isOpen={fileTreeOpen}
+					isActive={isActive}
 					onOpenFile={handleOpenFile}
 				/>
 				<Box

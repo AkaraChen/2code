@@ -133,6 +133,7 @@
 	"terminal": "终端",
 	"accentColor": "主题色",
 	"borderRadius": "圆角",
+	"windowOpacity": "窗口不透明度",
 	"radiusNone": "无",
 	"radiusSmall": "小",
 	"radiusMedium": "中",
@@ -319,5 +320,11 @@
 	"notesTableAddColumn": "右侧加列",
 	"notesTableAddRowBefore": "上方加行",
 	"notesTableAddColumnBefore": "左侧加列",
-	"notesTableDeleteCells": "删除单元格"
+	"notesTableDeleteCells": "删除单元格",
+	"notesCodeBlockSearchLanguage": "搜索语言",
+	"notesCodeBlockNoLanguage": "没有匹配的语言",
+	"notesCodeBlockCopy": "复制",
+	"notesCodeBlockPreviewLoading": "正在加载预览...",
+	"notesCodeBlockEdit": "编辑",
+	"notesCodeBlockHidePreview": "隐藏预览"
 }

@@ -5,7 +5,7 @@ import { immer } from "zustand/middleware/immer";
 import { useShallow } from "zustand/react/shallow";
 import { useTerminalStore } from "@/features/terminal/store";
 
-export interface FileViewerTab {
+interface FileViewerTab {
 	filePath: string;
 	title: string;
 }

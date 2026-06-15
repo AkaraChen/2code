@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { expect } from "chai";
 import { after, afterEach, before, describe, it } from "mocha";
-import { Builder, By, Capabilities } from "selenium-webdriver";
+import { Builder, By, Capabilities, Key } from "selenium-webdriver";
 
 const testDir = fileURLToPath(new URL(".", import.meta.url));
 const e2eRoot = path.resolve(testDir, "..");
@@ -31,6 +31,8 @@ const appBinary = path.join(
 let driver;
 let tauriDriver;
 let tauriDriverClosed = false;
+let runtimeRoot;
+let fixtureDir;
 
 describe("tauri smoke", () => {
 	before(async function () {
@@ -45,6 +47,12 @@ describe("tauri smoke", () => {
 		this.timeout(15 * 60 * 1000);
 
 		await fsp.mkdir(artifactsDir, { recursive: true });
+		runtimeRoot = await fsp.mkdtemp(
+			path.join(os.tmpdir(), "2code-smoke-"),
+		);
+		await prepareRuntimeDirs();
+		fixtureDir = await createGitFixture();
+
 		assertExecutableExists(
 			tauriDriverBinary,
 			"Install it first with `cargo install tauri-driver`.",
@@ -68,6 +76,7 @@ describe("tauri smoke", () => {
 			.withCapabilities(capabilities)
 			.build();
 
+		await driver.manage().setTimeouts({ script: 60_000 });
 		await waitForPageReady();
 	});
 
@@ -114,6 +123,47 @@ describe("tauri smoke", () => {
 			/No projects yet|暂无项目|Create your first project|从侧边栏创建|Projects|项目|Settings|设置/,
 		);
 	});
+
+	it("renames a project through the desktop UI and persists the mutation", async function () {
+		this.timeout(90_000);
+
+		const initialName = "Smoke Project Before";
+		const renamedName = "Smoke Project After";
+		const project = await invokeTauri("create_project_from_folder", {
+			name: initialName,
+			folder: fixtureDir,
+		});
+
+		expect(project).to.include({
+			name: initialName,
+			folder: fixtureDir,
+		});
+
+		await reloadApp();
+		const projectItem = await waitForProjectItem(project.id);
+		await waitForBodyText((text) => text.includes(initialName));
+
+		await driver.actions({ async: true }).contextClick(projectItem).perform();
+		const renameItem = await waitForElement(
+			"[data-testid='project-menu-rename']",
+		);
+		await renameItem.click();
+
+		const renameInput = await waitForElement("[data-rename-input]");
+		await renameInput.clear();
+		await renameInput.sendKeys(renamedName, Key.ENTER);
+
+		await waitForBodyText(
+			(text) => text.includes(renamedName) && !text.includes(initialName),
+		);
+
+		const projects = await invokeTauri("list_projects");
+		const persisted = projects.find((item) => item.id === project.id);
+		expect(persisted).to.include({
+			id: project.id,
+			name: renamedName,
+		});
+	});
 });
 
 function buildAppForSmoke() {
@@ -127,6 +177,14 @@ function startTauriDriver() {
 	}
 
 	tauriDriver = spawn(tauriDriverBinary, args, {
+		env: {
+			...process.env,
+			HOME: path.join(runtimeRoot, "home"),
+			XDG_CACHE_HOME: path.join(runtimeRoot, "cache"),
+			XDG_CONFIG_HOME: path.join(runtimeRoot, "config"),
+			XDG_DATA_HOME: path.join(runtimeRoot, "data"),
+			TMPDIR: path.join(runtimeRoot, "tmp"),
+		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 
@@ -240,6 +298,53 @@ async function waitForBodyText(predicate, timeoutMs = 60_000) {
 	throw lastError ?? new Error("Timed out waiting for non-empty body text.");
 }
 
+async function reloadApp() {
+	await driver.navigate().refresh();
+	await waitForPageReady();
+}
+
+async function waitForProjectItem(projectId, timeoutMs = 60_000) {
+	return waitForElement(
+		`[data-testid='project-sidebar-item'][data-project-id='${cssString(projectId)}']`,
+		timeoutMs,
+	);
+}
+
+async function invokeTauri(command, args = {}) {
+	const result = await driver.executeAsyncScript(
+		`
+		const command = arguments[0];
+		const args = arguments[1] ?? {};
+		const done = arguments[arguments.length - 1];
+		const invoke =
+			window.__TAURI_INTERNALS__?.invoke
+			?? window.__TAURI__?.core?.invoke;
+
+		if (typeof invoke !== "function") {
+			done({ ok: false, error: "Tauri invoke API not found" });
+			return;
+		}
+
+		Promise.resolve(invoke(command, args))
+			.then((value) => done({ ok: true, value }))
+			.catch((error) => {
+				done({
+					ok: false,
+					error: error?.message ?? String(error),
+				});
+			});
+		`,
+		command,
+		args,
+	);
+
+	if (!result?.ok) {
+		throw new Error(`Tauri command failed: ${command}: ${result?.error}`);
+	}
+
+	return result.value;
+}
+
 function isTransientNavigationError(error) {
 	const name = error?.name ?? "";
 	const message = error?.message ?? "";
@@ -248,14 +353,47 @@ function isTransientNavigationError(error) {
 		|| /unload event|stale element/i.test(message);
 }
 
-function runOrThrow(command, args) {
+async function prepareRuntimeDirs() {
+	await Promise.all(
+		["home", "cache", "config", "data", "tmp"].map((name) =>
+			fsp.mkdir(path.join(runtimeRoot, name), { recursive: true }),
+		),
+	);
+}
+
+async function createGitFixture() {
+	const fixture = path.join(runtimeRoot, "fixture-repo");
+	await fsp.mkdir(fixture, { recursive: true });
+	await fsp.writeFile(
+		path.join(fixture, "README.md"),
+		"# 2code smoke fixture\n",
+		"utf8",
+	);
+
+	runOrThrow("git", ["init", "."], { cwd: fixture });
+	runOrThrow("git", ["config", "user.email", "smoke@example.invalid"], {
+		cwd: fixture,
+	});
+	runOrThrow("git", ["config", "user.name", "2code Smoke"], {
+		cwd: fixture,
+	});
+	runOrThrow("git", ["add", "README.md"], { cwd: fixture });
+	runOrThrow("git", ["commit", "-m", "initial smoke fixture"], {
+		cwd: fixture,
+	});
+
+	return fixture;
+}
+
+function runOrThrow(command, args, options = {}) {
 	const result = spawnSync(command, args, {
-		cwd: repoRoot,
+		cwd: options.cwd ?? repoRoot,
 		stdio: "inherit",
 		shell: process.platform === "win32",
 		env: {
 			...process.env,
 			CI: process.env.CI ?? "1",
+			...options.env,
 		},
 	});
 
@@ -274,6 +412,10 @@ function sanitize(value) {
 	return value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
+function cssString(value) {
+	return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -290,5 +432,10 @@ async function closeResources() {
 		tauriDriverClosed = true;
 		tauriDriver.kill();
 		tauriDriver = undefined;
+	}
+
+	if (runtimeRoot) {
+		await fsp.rm(runtimeRoot, { recursive: true, force: true });
+		runtimeRoot = undefined;
 	}
 }

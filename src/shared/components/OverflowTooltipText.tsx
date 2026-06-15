@@ -9,7 +9,7 @@ interface MeasuredTextSnapshot {
 
 const TOOLTIP_POSITIONING = { placement: "top-start" } as const;
 
-export interface OverflowTooltipTextProps {
+interface OverflowTooltipTextProps {
 	displayValue: string;
 	tooltipValue: string;
 	minW?: string;

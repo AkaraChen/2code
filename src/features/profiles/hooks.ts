@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
 import { useTerminalStore } from "@/features/terminal/store";
 import {
@@ -119,10 +120,22 @@ export function useProfileDeleteCheck(profileId: string, enabled: boolean) {
 
 export function useUpdateProfileNotes() {
 	const queryClient = useQueryClient();
+	const latestRevisionByProfileIdRef = useRef(new Map<string, number>());
 	return useMutation({
 		mutationFn: ({ id, notes }: { id: string; notes: string }) =>
 			updateProfileNotes({ id, notes }),
-		onSuccess: (profile) => {
+		onMutate: ({ id }) => {
+			const revision = (latestRevisionByProfileIdRef.current.get(id) ?? 0) + 1;
+			latestRevisionByProfileIdRef.current.set(id, revision);
+			return { revision };
+		},
+		onSuccess: (profile, { id }, context) => {
+			if (
+				!context ||
+				latestRevisionByProfileIdRef.current.get(id) !== context.revision
+			) {
+				return;
+			}
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) =>

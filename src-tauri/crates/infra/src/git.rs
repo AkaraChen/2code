@@ -389,22 +389,29 @@ pub fn read_worktree_file(
 
 pub fn read_head_file(
 	folder: &str,
+	cache_root: &Path,
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	let path = validate_repo_relative_path(path, "Preview file path")?;
-	let cache_path = preview_cache_path(folder, "head", None, &path);
-	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path, false)
+let spec = format!("HEAD:{path}");
+	let Some(blob_oid) = get_git_blob_oid(folder, &spec)? else {
+		return Ok(None);
+	};
+	let cache_path =
+		preview_cache_path(cache_root, folder, "head", Some(&blob_oid), &path);
+	read_git_blob_to_cache(folder, &spec, &cache_path, true)
 }
 
 pub fn read_commit_file(
 	folder: &str,
+	cache_root: &Path,
 	commit_hash: &str,
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	validate_commit_hash(commit_hash)?;
 	let path = validate_repo_relative_path(path, "Preview file path")?;
 	let cache_path =
-		preview_cache_path(folder, "commit", Some(commit_hash), &path);
+		preview_cache_path(cache_root, folder, "commit", Some(commit_hash), &path);
 	read_git_blob_to_cache(
 		folder,
 		&format!("{commit_hash}:{path}"),
@@ -415,13 +422,19 @@ pub fn read_commit_file(
 
 pub fn read_parent_commit_file(
 	folder: &str,
+	cache_root: &Path,
 	commit_hash: &str,
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	validate_commit_hash(commit_hash)?;
 	let path = validate_repo_relative_path(path, "Preview file path")?;
-	let cache_path =
-		preview_cache_path(folder, "parent-commit", Some(commit_hash), &path);
+	let cache_path = preview_cache_path(
+		cache_root,
+		folder,
+		"parent-commit",
+		Some(commit_hash),
+		&path,
+	);
 	read_git_blob_to_cache(
 		folder,
 		&format!("{commit_hash}^:{path}"),
@@ -658,7 +671,7 @@ pub fn pull_request_status_for_branch(
 			"pr",
 			"list",
 			"--head",
-			&branch_name,
+			branch_name,
 			"--state",
 			"all",
 			"--json",
@@ -692,7 +705,7 @@ pub fn pull_request_status_for_branch(
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),
-/// delete the conflicting branch and retry once.
+/// return an error without deleting user branches.
 pub fn worktree_add(
 	project_folder: &str,
 	branch_name: &str,
@@ -717,25 +730,10 @@ pub fn worktree_add(
 	}
 
 	// Ref conflict: e.g. 'refs/heads/feat' blocks 'refs/heads/feat/auth'.
-	// Try to delete the conflicting branch and retry once.
 	if stderr.contains("cannot lock ref") {
 		if let Some(conflicting) = extract_conflicting_ref(&stderr) {
-			let _ = command_without_windows_console("git")
-				.args(["branch", "-D", &conflicting])
-				.current_dir(project_folder)
-				.output();
-
-			// Retry
-			let retry = command_without_windows_console("git")
-				.args(["worktree", "add", "-b", branch_name, worktree_path])
-				.current_dir(project_folder)
-				.output()?;
-			if retry.status.success() {
-				return Ok(());
-			}
-			let retry_err = String::from_utf8_lossy(&retry.stderr);
 			return Err(AppError::GitError(format!(
-				"git worktree add failed: {retry_err}"
+				"Cannot create branch '{branch_name}' because existing branch '{conflicting}' conflicts with that namespace"
 			)));
 		}
 	}
@@ -745,40 +743,99 @@ pub fn worktree_add(
 	)))
 }
 
-pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
+pub fn worktree_remove(
+	project_folder: &str,
+	worktree_path: &str,
+) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["worktree", "remove", worktree_path, "--force"])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git worktree remove failed: {stderr}");
+	if !output.status.success() {
+let stderr = String::from_utf8_lossy(&output.stderr);
+		let normalized = stderr.to_lowercase();
+		if normalized.contains("not a working tree")
+			&& !Path::new(worktree_path).exists()
+		{
+			tracing::warn!(
+				"git worktree remove skipped missing worktree: {worktree_path}"
+			);
+			return Ok(());
 		}
-		Err(e) => {
-			tracing::warn!("git worktree remove error: {e}");
-		}
-		_ => {}
+
+		let message = command_error("git worktree remove failed", &output);
+		tracing::warn!("{message}");
+		return Err(AppError::GitError(message));
 	}
+
+	Ok(())
 }
 
-pub fn branch_delete(project_folder: &str, branch_name: &str) {
+pub fn worktree_current_branch(worktree_path: &str) -> Result<Option<String>, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["branch", "--show-current"])
+		.current_dir(worktree_path)
+		.output();
+
+	let output = match output {
+		Ok(output) => output,
+		Err(error) if !Path::new(worktree_path).exists() => {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}: {error}"
+			);
+			return Ok(None);
+		}
+		Err(error) => return Err(AppError::from(error)),
+	};
+
+	if !output.status.success() {
+		if !Path::new(worktree_path).exists() {
+			tracing::warn!(
+				"git branch --show-current skipped missing worktree: {worktree_path}"
+			);
+			return Ok(None);
+		}
+
+		return Err(AppError::GitError(command_error(
+			"git branch --show-current failed",
+			&output,
+		)));
+	}
+
+	let branch_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	if branch_name.is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(branch_name))
+}
+
+pub fn branch_delete(
+	project_folder: &str,
+	branch_name: &str,
+) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["branch", "-D", branch_name])
 		.current_dir(project_folder)
-		.output();
+		.output()?;
 
-	match output {
-		Ok(o) if !o.status.success() => {
-			let stderr = String::from_utf8_lossy(&o.stderr);
-			tracing::warn!("git branch delete failed: {stderr}");
+	if !output.status.success() {
+let stderr = String::from_utf8_lossy(&output.stderr);
+	let normalized = stderr.to_lowercase();
+	if normalized.contains("branch") && normalized.contains("not found") {
+			tracing::warn!(
+				"git branch delete skipped missing branch: {branch_name}"
+			);
+			return Ok(());
 		}
-		Err(e) => {
-			tracing::warn!("git branch delete error: {e}");
-		}
-		_ => {}
+
+		let message = command_error("git branch delete failed", &output);
+		tracing::warn!("{message}");
+		return Err(AppError::GitError(message));
 	}
+
+	Ok(())
 }
 
 fn refs_except_branch(
@@ -1233,7 +1290,8 @@ fn read_git_blob_to_cache(
 	cache_key_is_immutable: bool,
 ) -> Result<Option<String>, AppError> {
 	if cache_key_is_immutable
-		&& std::fs::metadata(cache_path).is_ok_and(|metadata| metadata.is_file())
+		&& std::fs::metadata(cache_path)
+			.is_ok_and(|metadata| metadata.is_file())
 	{
 		return Ok(Some(cache_path.to_string_lossy().to_string()));
 	}
@@ -1305,6 +1363,31 @@ fn get_git_blob_size(
 	Err(AppError::GitError(stderr))
 }
 
+fn get_git_blob_oid(
+	folder: &str,
+	spec: &str,
+) -> Result<Option<String>, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["rev-parse", "--verify", "--quiet", spec])
+		.current_dir(folder)
+		.output()?;
+
+	if output.status.success() {
+		let oid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+		if oid.is_empty() {
+			return Ok(None);
+		}
+		return Ok(Some(oid));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if stderr.is_empty() || is_missing_blob_error(&stderr) {
+		return Ok(None);
+	}
+
+	Err(AppError::GitError(stderr))
+}
+
 fn is_missing_blob_error(stderr: &str) -> bool {
 	[
 		"does not exist in",
@@ -1318,6 +1401,7 @@ fn is_missing_blob_error(stderr: &str) -> bool {
 }
 
 fn preview_cache_path(
+	cache_root: &Path,
 	folder: &str,
 	source: &str,
 	commit_hash: Option<&str>,
@@ -1327,9 +1411,7 @@ fn preview_cache_path(
 	folder.hash(&mut hasher);
 	let repo_hash = hasher.finish();
 
-	let mut cache_path = std::env::temp_dir()
-		.join("2code")
-		.join("git-preview-cache")
+	let mut cache_path = cache_root
 		.join(format!("{repo_hash:016x}"))
 		.join(source);
 
@@ -1816,6 +1898,7 @@ mod tests {
 	#[test]
 	fn read_preview_files_from_worktree_and_head() {
 		let dir = create_temp_git_repo();
+		let cache_dir = tempfile::TempDir::new().unwrap();
 		let initial = vec![0_u8, 1, 2, 3];
 		let modified = vec![4_u8, 5, 6, 7];
 
@@ -1833,16 +1916,20 @@ mod tests {
 
 		std::fs::write(dir.join("image.bin"), &modified).unwrap();
 
-		let head_preview =
-			read_head_file(dir.to_string_lossy().as_ref(), "image.bin")
-				.unwrap()
-				.unwrap();
+		let head_preview = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
 		let worktree_preview =
 			read_worktree_file(dir.to_string_lossy().as_ref(), "image.bin")
 				.unwrap()
 				.unwrap();
 
 		assert_ne!(head_preview, dir.join("image.bin").to_string_lossy());
+		assert!(Path::new(&head_preview).starts_with(cache_dir.path()));
 		assert_eq!(std::fs::read(head_preview).unwrap(), initial);
 		assert_eq!(worktree_preview, dir.join("image.bin").to_string_lossy());
 		assert_eq!(std::fs::read(worktree_preview).unwrap(), modified);
@@ -1851,8 +1938,63 @@ mod tests {
 	}
 
 	#[test]
+	fn read_head_file_cache_key_changes_when_head_blob_changes() {
+		let dir = create_temp_git_repo();
+		let cache_dir = tempfile::TempDir::new().unwrap();
+		let initial = vec![0_u8, 1, 2, 3];
+		let updated_same_size = vec![4_u8, 5, 6, 7];
+
+		std::fs::write(dir.join("image.bin"), &initial).unwrap();
+		command_without_windows_console("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		command_without_windows_console("git")
+			.args(["commit", "-m", "add image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let initial_preview = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+
+		std::fs::write(dir.join("image.bin"), &updated_same_size).unwrap();
+		command_without_windows_console("git")
+			.args(["add", "image.bin"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+		command_without_windows_console("git")
+			.args(["commit", "-m", "update image"])
+			.current_dir(&dir)
+			.output()
+			.unwrap();
+
+		let updated_preview = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
+
+		assert_ne!(initial_preview, updated_preview);
+		assert_eq!(std::fs::read(initial_preview).unwrap(), initial);
+		assert_eq!(std::fs::read(updated_preview).unwrap(), updated_same_size);
+
+		std::fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
 	fn read_preview_files_from_commit_and_parent_commit() {
 		let dir = create_temp_git_repo();
+		let cache_dir = tempfile::TempDir::new().unwrap();
 		let before = vec![1_u8, 2, 3, 4];
 		let after = vec![5_u8, 6, 7, 8];
 
@@ -1890,6 +2032,7 @@ mod tests {
 
 		let commit_preview = read_commit_file(
 			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
 			&commit_hash,
 			"image.bin",
 		)
@@ -1897,12 +2040,15 @@ mod tests {
 		.unwrap();
 		let parent_preview = read_parent_commit_file(
 			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
 			&commit_hash,
 			"image.bin",
 		)
 		.unwrap()
 		.unwrap();
 
+		assert!(Path::new(&commit_preview).starts_with(cache_dir.path()));
+		assert!(Path::new(&parent_preview).starts_with(cache_dir.path()));
 		assert_eq!(std::fs::read(commit_preview).unwrap(), after);
 		assert_eq!(std::fs::read(parent_preview).unwrap(), before);
 
@@ -1912,6 +2058,7 @@ mod tests {
 	#[test]
 	fn read_preview_files_reject_large_committed_blob() {
 		let dir = create_temp_git_repo();
+		let cache_dir = tempfile::TempDir::new().unwrap();
 		let oversized = vec![0_u8; MAX_BINARY_PREVIEW_BYTES + 1];
 
 		std::fs::write(dir.join("large.bin"), oversized).unwrap();
@@ -1926,8 +2073,12 @@ mod tests {
 			.output()
 			.unwrap();
 
-		let error = read_head_file(dir.to_string_lossy().as_ref(), "large.bin")
-			.unwrap_err();
+		let error = read_head_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"large.bin",
+		)
+		.unwrap_err();
 
 		assert!(
 			matches!(error, AppError::GitError(message) if message.contains("too large"))

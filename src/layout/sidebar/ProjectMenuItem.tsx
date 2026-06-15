@@ -1,5 +1,4 @@
 import {
-	Circle,
 	HStack,
 	Icon,
 	IconButton,
@@ -20,10 +19,8 @@ import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
-import {
-	useProfileHasNotification,
-	useTerminalStore,
-} from "@/features/terminal/store";
+import { AgentStatusDot } from "@/features/terminal/AgentStatusDot";
+import { useProfileAgentStatus } from "@/features/terminal/store";
 import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
@@ -58,10 +55,9 @@ export function ProjectMenuItem({
 	const defaultProfileUrl = defaultProfile
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
-	const hasDefaultNotification = useProfileHasNotification(
+	const defaultAgentStatus = useProfileAgentStatus(
 		defaultProfile?.id ?? "",
 	);
-	const markProfileRead = useTerminalStore((s) => s.markProfileRead);
 	const defaultProfileLabel = m.defaultProfile();
 
 	const renameDialog = useDialogState();
@@ -71,14 +67,6 @@ export function ProjectMenuItem({
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
 	const expanded = userExpanded ?? true;
-	const showProjectNotification =
-		hasOnlyDefaultProfile && hasDefaultNotification;
-
-	function handleDefaultProfileClick() {
-		if (defaultProfile) {
-			markProfileRead(defaultProfile.id);
-		}
-	}
 
 	return (
 		<>
@@ -110,8 +98,9 @@ export function ProjectMenuItem({
 						_active={{ bg: "bg.muted" }}
 					>
 						<NavLink
+							data-project-id={project.id}
+							data-testid="project-sidebar-item"
 							to={defaultProfileUrl}
-							onClick={handleDefaultProfileClick}
 						>
 							{hasOnlyDefaultProfile && isDefaultActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
@@ -137,14 +126,8 @@ export function ProjectMenuItem({
 								>
 									{project.name}
 								</Text>
-								{showProjectNotification && (
-									<Circle
-										aria-hidden="true"
-										size="2"
-										bg="green.500"
-										alignSelf="center"
-										flexShrink={0}
-									/>
+								{hasOnlyDefaultProfile && defaultAgentStatus && (
+									<AgentStatusDot status={defaultAgentStatus} />
 								)}
 							</HStack>
 
@@ -217,6 +200,7 @@ export function ProjectMenuItem({
 								{m.projectSettings()}
 							</Menu.Item>
 							<Menu.Item
+								data-testid="project-menu-rename"
 								value="rename"
 								onClick={renameDialog.onOpen}
 							>
@@ -259,11 +243,6 @@ export function ProjectMenuItem({
 					>
 						<NavLink
 							to={defaultProfileUrl}
-							onClick={() => {
-								if (defaultProfile) {
-									markProfileRead(defaultProfile.id);
-								}
-							}}
 						>
 							{isDefaultActive && (
 								<SidebarActiveIndicator insetInlineStart="0" />
@@ -280,13 +259,8 @@ export function ProjectMenuItem({
 								flex="1 1 auto"
 								minW="0"
 							/>
-							{hasDefaultNotification && (
-								<Circle
-									size="2"
-									bg="green.500"
-									alignSelf="center"
-									flexShrink={0}
-								/>
+							{defaultAgentStatus && (
+								<AgentStatusDot status={defaultAgentStatus} />
 							)}
 						</NavLink>
 					</HStack>

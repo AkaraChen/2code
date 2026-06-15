@@ -4,7 +4,7 @@ import type {
 	ProjectWithProfiles,
 } from "@/generated";
 
-export const SIDEBAR_ORDER_STEP = 1000;
+const SIDEBAR_ORDER_STEP = 1000;
 export const PINNED_DROP_ID = "sidebar-drop:pinned";
 export const TOP_LEVEL_DROP_ID = "sidebar-drop:top-level";
 
@@ -29,7 +29,7 @@ export interface SidebarProjectEntry {
 
 export type SidebarTopEntry = SidebarGroupEntry | SidebarProjectEntry;
 
-export interface SidebarLayoutModel {
+interface SidebarLayoutModel {
 	pinnedProjects: ProjectWithProfiles[];
 	topEntries: SidebarTopEntry[];
 	groupedProjects: Map<string, ProjectWithProfiles[]>;

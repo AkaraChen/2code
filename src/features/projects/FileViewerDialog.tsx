@@ -13,14 +13,19 @@ import { useTerminalThemeId } from "@/features/terminal/hooks";
 import { detectLanguage } from "@/shared/lib/languageDetection";
 import { getPrismTheme } from "./prismThemes";
 import { useFileContent } from "./hooks";
+import { toProfileRelativePath } from "./pathUtils";
 
 interface FileViewerDialogProps {
 	filePath: string;
+	profileId: string;
+	rootPath: string;
 	onClose: () => void;
 }
 
 export default function FileViewerDialog({
 	filePath,
+	profileId,
+	rootPath,
 	onClose,
 }: FileViewerDialogProps) {
 	const themeId = useTerminalThemeId();
@@ -33,7 +38,7 @@ export default function FileViewerDialog({
 		error,
 		isError,
 		isLoading,
-	} = useFileContent(filePath);
+	} = useFileContent(profileId, toProfileRelativePath(rootPath, filePath));
 
 	const filename = filePath.split("/").pop() ?? "";
 	const language = detectLanguage(filename);

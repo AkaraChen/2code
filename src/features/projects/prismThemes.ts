@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 
-export type PrismThemeStyle = Record<string, CSSProperties>;
+type PrismThemeStyle = Record<string, CSSProperties>;
 
 interface PrismThemePalette {
 	background: string;

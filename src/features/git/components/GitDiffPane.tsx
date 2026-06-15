@@ -40,8 +40,6 @@ import {
 } from "../reviewQueue";
 import { BinaryImageDiffPreview, type GitPreviewContext } from "./GitBinaryPreview";
 
-export type { GitPreviewContext };
-
 function FileDiffHeader({
 	file,
 	additions,

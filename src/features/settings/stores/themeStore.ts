@@ -2,10 +2,18 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type BorderRadius = "none" | "sm" | "md" | "lg" | "xl";
+type WindowOpacity = number;
 
 interface ThemeStore {
 	borderRadius: BorderRadius;
+	windowOpacity: WindowOpacity;
 	setBorderRadius: (radius: BorderRadius) => void;
+	setWindowOpacity: (opacity: WindowOpacity) => void;
+}
+
+interface ThemePersistedState {
+	borderRadius?: unknown;
+	windowOpacity?: unknown;
 }
 
 export const BORDER_RADIUS_MAP: Record<
@@ -19,13 +27,55 @@ export const BORDER_RADIUS_MAP: Record<
 	xl: { l1: "8px", l2: "10px", l3: "12px" },
 };
 
+const BORDER_RADIUS_VALUES = [
+	"none",
+	"sm",
+	"md",
+	"lg",
+	"xl",
+] as const;
+
+function normalizeBorderRadius(value: unknown): BorderRadius {
+	return BORDER_RADIUS_VALUES.includes(value as BorderRadius)
+		? (value as BorderRadius)
+		: "sm";
+}
+
+function normalizeWindowOpacity(value: unknown): WindowOpacity {
+	if (typeof value !== "number" || !Number.isFinite(value)) return 100;
+
+	return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+export function migrateThemePersistedState(
+	persistedState: unknown,
+): Pick<ThemeStore, "borderRadius" | "windowOpacity"> {
+	const state =
+		persistedState && typeof persistedState === "object"
+			? (persistedState as ThemePersistedState)
+			: {};
+
+	return {
+		borderRadius: normalizeBorderRadius(state.borderRadius),
+		windowOpacity: normalizeWindowOpacity(state.windowOpacity),
+	};
+}
+
 export const useThemeStore = create<ThemeStore>()(
 	persist(
 		(set) => ({
 			borderRadius: "sm",
+			windowOpacity: 100,
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
+			setWindowOpacity: (opacity) =>
+				set({ windowOpacity: normalizeWindowOpacity(opacity) }),
 		}),
-		{ name: "theme-settings" },
+		{
+			name: "theme-settings",
+			version: 1,
+			migrate: (persistedState) =>
+				migrateThemePersistedState(persistedState),
+		},
 	),
 );
 
@@ -37,8 +87,18 @@ function syncBorderRadius(borderRadius: BorderRadius) {
 	root.style.setProperty("--chakra-radii-l3", radii.l3);
 }
 
+function syncWindowOpacity(windowOpacity: WindowOpacity) {
+	document.documentElement.style.setProperty(
+		"--app-window-bg-alpha",
+		String(windowOpacity / 100),
+	);
+}
+
 syncBorderRadius(useThemeStore.getState().borderRadius);
+syncWindowOpacity(useThemeStore.getState().windowOpacity);
 
 useThemeStore.subscribe((s, prev) => {
 	if (s.borderRadius !== prev.borderRadius) syncBorderRadius(s.borderRadius);
+	if (s.windowOpacity !== prev.windowOpacity)
+		syncWindowOpacity(s.windowOpacity);
 });

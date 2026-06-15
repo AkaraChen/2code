@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -13,22 +13,37 @@ struct Cli {
 	command: Commands,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum AgentStatusArg {
+	Running,
+	Waiting,
+	Idle,
+}
+
+impl AgentStatusArg {
+	fn as_str(self) -> &'static str {
+		match self {
+			Self::Running => "running",
+			Self::Waiting => "waiting",
+			Self::Idle => "idle",
+		}
+	}
+}
+
 #[derive(Subcommand)]
 enum Commands {
 	/// Trigger a notification sound
 	Notify,
+	/// Update the agent status indicator for the current PTY session
+	Status { status: AgentStatusArg },
 }
 
 fn main() {
 	let cli = Cli::parse();
 	match cli.command {
 		Commands::Notify => {
-			let url = std::env::var("_2CODE_HELPER_URL")
-				.expect("_2CODE_HELPER_URL not set");
-			let notify_url = match std::env::var("_2CODE_SESSION_ID").ok() {
-				Some(sid) => format!("{url}/notify?session_id={sid}"),
-				None => format!("{url}/notify"),
-			};
+			let url = helper_url();
+			let notify_url = format!("{url}/notify");
 			match ureq::get(&notify_url).call() {
 				Ok(mut resp) => {
 					let body: NotifyResponse = resp
@@ -45,5 +60,29 @@ fn main() {
 				}
 			}
 		}
+		Commands::Status { status } => {
+			let Some(session_id) = session_id() else {
+				return;
+			};
+			let url = helper_url();
+			let status_url = format!(
+				"{url}/status?session_id={session_id}&status={}",
+				status.as_str(),
+			);
+			if let Err(e) = ureq::get(&status_url).call() {
+				eprintln!("status failed: {e}");
+				std::process::exit(1);
+			}
+		}
 	}
+}
+
+fn helper_url() -> String {
+	std::env::var("_2CODE_HELPER_URL").expect("_2CODE_HELPER_URL not set")
+}
+
+fn session_id() -> Option<String> {
+	std::env::var("_2CODE_SESSION_ID")
+		.ok()
+		.filter(|sid| !sid.is_empty())
 }

@@ -3,6 +3,7 @@ import {
 	terminalThemeIds,
 	terminalThemeNames,
 	terminalThemes,
+	withTerminalBackgroundAlpha,
 } from "./themes";
 
 const requiredThemeKeys = [
@@ -48,5 +49,37 @@ describe("terminalThemes", () => {
 		);
 		expect(terminalThemes["github-dark"].background).toBe("#161616");
 		expect(terminalThemes["github-light"].background).toBe("#ffffff");
+	});
+
+	it("applies opacity to terminal background without changing palette colors", () => {
+		const theme = withTerminalBackgroundAlpha(
+			terminalThemes["github-dark"],
+			40,
+		);
+
+		expect(theme.background).toBe("rgba(22, 22, 22, 0.4)");
+		expect(theme.foreground).toBe(terminalThemes["github-dark"].foreground);
+		expect(theme.green).toBe(terminalThemes["github-dark"].green);
+	});
+
+	it("keeps terminal background unchanged at full opacity", () => {
+		const theme = withTerminalBackgroundAlpha(
+			terminalThemes["github-dark"],
+			100,
+		);
+
+		expect(theme.background).toBe("#161616");
+	});
+
+	it("parses css color backgrounds before applying opacity", () => {
+		const theme = withTerminalBackgroundAlpha(
+			{
+				background: "rgb(40, 42, 54)",
+				foreground: "#f8f8f2",
+			},
+			20,
+		);
+
+		expect(theme.background).toBe("rgba(40, 42, 54, 0.2)");
 	});
 });

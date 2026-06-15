@@ -516,7 +516,7 @@ export default function AppSidebar() {
 				minH="0"
 				flexShrink={0}
 				position="relative"
-				bg="bg"
+				bg="var(--app-shell-bg)"
 				borderRightWidth="1px"
 				borderColor="border.muted"
 				onKeyDown={handleKeyDown}
@@ -546,7 +546,7 @@ export default function AppSidebar() {
 						<Box
 							flex="1"
 							minH="0"
-							overflowY="scroll"
+							overflowY="auto"
 							overflowX="hidden"
 							css={{ scrollbarGutter: "stable" }}
 						>

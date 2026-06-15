@@ -13,7 +13,7 @@ import {
 import * as m from "@/paraglide/messages.js";
 import type { GlobalTerminalTemplateDraft } from "./templates";
 
-export interface TerminalTemplateDraftDialogProps<
+interface TerminalTemplateDraftDialogProps<
 	T extends GlobalTerminalTemplateDraft,
 > {
 	draft: T;

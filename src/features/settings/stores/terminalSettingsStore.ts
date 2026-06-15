@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { DEFAULT_TERMINAL_SHELL } from "@/features/terminal/templates";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 
-export const DEFAULT_TERMINAL_FONT_SIZE = 13;
+const DEFAULT_TERMINAL_FONT_SIZE = 13;
 export const MIN_TERMINAL_FONT_SIZE = 10;
 export const MAX_TERMINAL_FONT_SIZE = 20;
 

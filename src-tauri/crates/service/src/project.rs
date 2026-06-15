@@ -218,6 +218,7 @@ pub fn get_commit_diff(
 pub fn get_binary_preview(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
+	cache_root: &Path,
 	path: &str,
 	source: &str,
 	commit_hash: Option<&str>,
@@ -227,7 +228,9 @@ pub fn get_binary_preview(
 		"working_tree" => {
 			infra::git::read_worktree_file(&profile.worktree_path, path)?
 		}
-		"head" => infra::git::read_head_file(&profile.worktree_path, path)?,
+		"head" => {
+			infra::git::read_head_file(&profile.worktree_path, cache_root, path)?
+		}
 		"commit" => {
 			let commit_hash = commit_hash.ok_or_else(|| {
 				AppError::GitError(
@@ -236,6 +239,7 @@ pub fn get_binary_preview(
 			})?;
 			infra::git::read_commit_file(
 				&profile.worktree_path,
+				cache_root,
 				commit_hash,
 				path,
 			)?
@@ -248,6 +252,7 @@ pub fn get_binary_preview(
 			})?;
 			infra::git::read_parent_commit_file(
 				&profile.worktree_path,
+				cache_root,
 				commit_hash,
 				path,
 			)?
@@ -302,7 +307,10 @@ pub fn get_pull_request_status_for_folder(
 	folder: &str,
 	branch_name: Option<&str>,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
-	match branch_name.map(str::trim).filter(|branch| !branch.is_empty()) {
+	match branch_name
+		.map(str::trim)
+		.filter(|branch| !branch.is_empty())
+	{
 		Some(branch_name) => {
 			infra::git::pull_request_status_for_branch(folder, branch_name)
 		}

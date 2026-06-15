@@ -65,9 +65,9 @@ pub fn find_by_id(
 		.map_err(|_| AppError::NotFound(format!("Profile: {id}")))
 }
 
-/// Delete a profile record and return the profile + project folder.
+/// Return the profile and project folder needed to delete a profile.
 /// Default profiles cannot be deleted directly — they are removed via cascade when the project is deleted.
-pub fn delete(
+pub fn get_delete_target(
 	conn: &mut SqliteConnection,
 	id: &str,
 ) -> Result<(Profile, String), AppError> {
@@ -81,11 +81,31 @@ pub fn delete(
 
 	let project_folder = get_project_folder(conn, &profile.project_id)?;
 
-	diesel::delete(profiles::table.find(id))
+	Ok((profile, project_folder))
+}
+
+pub fn delete_record(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<(), AppError> {
+	let deleted = diesel::delete(profiles::table.find(id))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
-	Ok((profile, project_folder))
+	if deleted == 0 {
+		return Err(AppError::NotFound(format!("Profile: {id}")));
+	}
+
+	Ok(())
+}
+
+pub fn delete(
+	conn: &mut SqliteConnection,
+	id: &str,
+) -> Result<(Profile, String), AppError> {
+	let target = get_delete_target(conn, id)?;
+	delete_record(conn, id)?;
+	Ok(target)
 }
 
 pub fn get_project_folder(

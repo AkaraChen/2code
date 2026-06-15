@@ -28,7 +28,7 @@ function VisibleBox({
 	);
 }
 
-export interface ChangesSidebarProps {
+interface ChangesSidebarProps {
 	includedFileNames: Set<string>;
 	commitMessage: string;
 	commitBody: string;

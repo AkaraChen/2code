@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -404,24 +404,188 @@ fn profile_worktree_path(
 	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
 }
 
+fn profile_worktree_root(
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<PathBuf, AppError> {
+	Ok(PathBuf::from(profile_worktree_path(db, profile_id)?))
+}
+
+fn path_outside_workspace_error() -> AppError {
+	AppError::IoError(std::io::Error::new(
+		std::io::ErrorKind::InvalidInput,
+		"Path is outside the workspace",
+	))
+}
+
+fn invalid_file_path(message: impl Into<String>) -> AppError {
+	AppError::IoError(std::io::Error::new(
+		std::io::ErrorKind::InvalidInput,
+		message.into(),
+	))
+}
+
+fn validate_worktree_relative_path(
+	path: &str,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	if path.is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be empty")));
+	}
+	if path.contains('\0') {
+		return Err(invalid_file_path(format!(
+			"{label} contains invalid characters"
+		)));
+	}
+
+	let without_trailing_separator =
+		path.trim_end_matches(['/', '\\']).to_string();
+	if without_trailing_separator.is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be root")));
+	}
+
+	let parsed = Path::new(&without_trailing_separator);
+	if parsed.is_absolute() {
+		return Err(invalid_file_path(format!(
+			"{label} must be relative: {path}"
+		)));
+	}
+
+	let mut relative_path = PathBuf::new();
+	for component in parsed.components() {
+		match component {
+			Component::CurDir => {}
+			Component::Normal(value) => {
+				if value == ".git" {
+					return Err(invalid_file_path(format!(
+						"{label} cannot target .git metadata"
+					)));
+				}
+				relative_path.push(value);
+			}
+			Component::ParentDir
+			| Component::RootDir
+			| Component::Prefix(_) => {
+				return Err(invalid_file_path(format!(
+					"{label} escapes worktree: {path}"
+				)));
+			}
+		}
+	}
+
+	if relative_path.as_os_str().is_empty() {
+		return Err(invalid_file_path(format!("{label} cannot be empty")));
+	}
+
+	Ok(relative_path)
+}
+fn ensure_canonical_path_inside_worktree(
+	worktree_root: &Path,
+	path: &Path,
+) -> Result<PathBuf, AppError> {
+	let canonical_worktree =
+		worktree_root.canonicalize().map_err(AppError::IoError)?;
+let canonical_path = path.canonicalize().map_err(|error| {
+		if error.kind() == std::io::ErrorKind::NotFound {
+			AppError::NotFound(format!("Path: {}", path.display()))
+		} else {
+			AppError::IoError(error)
+		}
+	})?;
+
+	if !canonical_path.starts_with(&canonical_worktree) {
+		return Err(path_outside_workspace_error());
+	}
+
+	Ok(canonical_path)
+}
+
+fn resolve_existing_worktree_path(
+	worktree_root: &Path,
+	path: &str,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	let relative_path = validate_worktree_relative_path(path, label)?;
+	ensure_canonical_path_inside_worktree(
+		worktree_root,
+		&worktree_root.join(relative_path),
+	)
+}
+
+fn resolve_existing_worktree_path_or_root(
+	worktree_root: &Path,
+	path: Option<&str>,
+) -> Result<PathBuf, AppError> {
+	let Some(path) = path else {
+		return worktree_root.canonicalize().map_err(AppError::IoError);
+	};
+	if path.is_empty() {
+		return worktree_root.canonicalize().map_err(AppError::IoError);
+	}
+
+	resolve_existing_worktree_path(worktree_root, path, "File tree path")
+}
+
+fn ensure_creatable_worktree_path(
+	worktree_root: &Path,
+	path: &str,
+	label: &str,
+) -> Result<(), AppError> {
+	let relative_path = validate_worktree_relative_path(path, label)?;
+	let candidate = worktree_root.join(&relative_path);
+	if candidate.exists() {
+		ensure_canonical_path_inside_worktree(worktree_root, &candidate)?;
+		return Ok(());
+	}
+
+	let canonical_worktree =
+		worktree_root.canonicalize().map_err(AppError::IoError)?;
+	let Some(parent) = Path::new(&relative_path).parent() else {
+		return Ok(());
+	};
+
+	let mut current = worktree_root.to_path_buf();
+	for component in parent.components() {
+		let std::path::Component::Normal(segment) = component else {
+			continue;
+		};
+		current.push(segment);
+		if current.exists() {
+			let canonical_current =
+				current.canonicalize().map_err(AppError::IoError)?;
+			if !canonical_current.starts_with(&canonical_worktree) {
+				return Err(path_outside_workspace_error());
+			}
+		}
+	}
+
+	Ok(())
+}
+
 #[tauri::command]
 pub async fn list_file_tree_paths(
-	path: String,
+	profile_id: String,
+	state: State<'_, DbPool>,
 ) -> Result<Vec<String>, AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::list_file_tree_paths(Path::new(&path))
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		infra::filesystem::list_file_tree_paths(&worktree_root)
 	})
 	.await
 }
 
 #[tauri::command]
 pub async fn list_file_tree_child_paths(
-	root_path: String,
+	profile_id: String,
 	parent_path: Option<String>,
+	state: State<'_, DbPool>,
 ) -> Result<Vec<String>, AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
 		infra::filesystem::list_file_tree_child_paths(
-			Path::new(&root_path),
+			&worktree_root,
 			parent_path.as_deref(),
 		)
 	})
@@ -430,13 +594,26 @@ pub async fn list_file_tree_child_paths(
 
 #[tauri::command]
 pub async fn rename_file_tree_path(
-	root_path: String,
+	profile_id: String,
 	source_path: String,
 	destination_path: String,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		resolve_existing_worktree_path(
+			&worktree_root,
+			&source_path,
+			"Source path",
+		)?;
+		ensure_creatable_worktree_path(
+			&worktree_root,
+			&destination_path,
+			"Destination path",
+		)?;
 		infra::filesystem::rename_file_tree_path(
-			Path::new(&root_path),
+			&worktree_root,
 			&source_path,
 			&destination_path,
 		)
@@ -446,13 +623,30 @@ pub async fn rename_file_tree_path(
 
 #[tauri::command]
 pub async fn move_file_tree_paths(
-	root_path: String,
+	profile_id: String,
 	source_paths: Vec<String>,
 	target_dir_path: Option<String>,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		for source_path in &source_paths {
+			resolve_existing_worktree_path(
+				&worktree_root,
+				source_path,
+				"Source path",
+			)?;
+		}
+		if let Some(target_dir_path) = target_dir_path.as_deref() {
+			resolve_existing_worktree_path(
+				&worktree_root,
+				target_dir_path,
+				"Target directory",
+			)?;
+		}
 		infra::filesystem::move_file_tree_paths(
-			Path::new(&root_path),
+			&worktree_root,
 			&source_paths,
 			target_dir_path.as_deref(),
 		)
@@ -462,27 +656,41 @@ pub async fn move_file_tree_paths(
 
 #[tauri::command]
 pub async fn delete_file_tree_paths(
-	root_path: String,
+	profile_id: String,
 	paths: Vec<String>,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::delete_file_tree_paths(Path::new(&root_path), &paths)
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		for path in &paths {
+			resolve_existing_worktree_path(
+				&worktree_root,
+				path,
+				"File tree path",
+			)?;
+		}
+		infra::filesystem::delete_file_tree_paths(&worktree_root, &paths)
 	})
 	.await
 }
 
 #[tauri::command]
 pub async fn create_file_tree_path(
-	root_path: String,
+	profile_id: String,
 	path: String,
 	kind: String,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		infra::filesystem::create_file_tree_path(
-			Path::new(&root_path),
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		ensure_creatable_worktree_path(
+			&worktree_root,
 			&path,
-			&kind,
-		)
+			"File tree path",
+		)?;
+		infra::filesystem::create_file_tree_path(&worktree_root, &path, &kind)
 	})
 	.await
 }
@@ -596,23 +804,53 @@ fn open_path_in_default_app_impl(path: &Path) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn reveal_path_in_file_manager(path: String) -> Result<(), AppError> {
+pub async fn reveal_path_in_file_manager(
+	profile_id: String,
+	path: Option<String>,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		reveal_path_in_file_manager_impl(Path::new(&path))
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		let path = resolve_existing_worktree_path_or_root(
+			&worktree_root,
+			path.as_deref(),
+		)?;
+		reveal_path_in_file_manager_impl(&path)
 	})
 	.await
 }
 
 #[tauri::command]
-pub async fn open_path_in_default_app(path: String) -> Result<(), AppError> {
-	super::run_blocking(move || open_path_in_default_app_impl(Path::new(&path)))
-		.await
+pub async fn open_path_in_default_app(
+	profile_id: String,
+	path: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		let path = resolve_existing_worktree_path(
+			&worktree_root,
+			&path,
+			"File tree path",
+		)?;
+		open_path_in_default_app_impl(&path)
+	})
+	.await
 }
 
 #[tauri::command]
-pub async fn read_file_content(path: String) -> Result<String, AppError> {
+pub async fn read_file_content(
+	profile_id: String,
+	path: String,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let file_path = Path::new(&path);
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		let file_path =
+			resolve_existing_worktree_path(&worktree_root, &path, "File path")?;
 		if !file_path.exists() {
 			return Err(AppError::NotFound(format!("File: {path}")));
 		}
@@ -622,14 +860,14 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 			)));
 		}
 
-		let metadata = std::fs::metadata(&path)?;
+		let metadata = std::fs::metadata(&file_path)?;
 		if metadata.len() > 1_000_000 {
 			return Err(AppError::IoError(std::io::Error::other(
 				"File too large (> 1MB)",
 			)));
 		}
 
-		let bytes = std::fs::read(&path)?;
+		let bytes = std::fs::read(&file_path)?;
 
 		// Heuristic binary check: presence of null bytes
 		if bytes.contains(&0) {
@@ -647,11 +885,16 @@ pub async fn read_file_content(path: String) -> Result<String, AppError> {
 
 #[tauri::command]
 pub async fn write_file_content(
+	profile_id: String,
 	path: String,
 	content: String,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let file_path = Path::new(&path);
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		let file_path =
+			resolve_existing_worktree_path(&worktree_root, &path, "File path")?;
 		if !file_path.exists() {
 			return Err(AppError::NotFound(format!("File: {path}")));
 		}
@@ -666,7 +909,7 @@ pub async fn write_file_content(
 			)));
 		}
 
-		std::fs::write(&path, content)?;
+		std::fs::write(&file_path, content)?;
 		Ok(())
 	})
 	.await
@@ -674,9 +917,12 @@ pub async fn write_file_content(
 
 #[tauri::command]
 pub async fn get_file_preview(
+	profile_id: String,
 	path: String,
 	app: AppHandle,
+	state: State<'_, DbPool>,
 ) -> Result<FilePreview, AppError> {
+	let db = state.inner().clone();
 	let cache_root = app
 		.path()
 		.app_cache_dir()
@@ -684,7 +930,9 @@ pub async fn get_file_preview(
 		.join("office-preview");
 
 	super::run_blocking(move || {
-		let file_path = PathBuf::from(&path);
+		let worktree_root = profile_worktree_root(&db, &profile_id)?;
+		let file_path =
+			resolve_existing_worktree_path(&worktree_root, &path, "File path")?;
 		let metadata = ensure_previewable_file(&file_path)?;
 		let canonical_path =
 			file_path.canonicalize().map_err(AppError::IoError)?;
@@ -894,6 +1142,117 @@ mod tests {
 		let result = profile_worktree_path(&db, "missing-profile");
 
 		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_returns_canonical_path() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("src/main.rs");
+		std::fs::create_dir_all(file_path.parent().expect("parent"))
+			.expect("create parent");
+		std::fs::write(&file_path, "fn main() {}").expect("write file");
+
+		let result =
+			resolve_existing_worktree_path(&worktree, "src/main.rs", "File")
+				.unwrap();
+
+		assert_eq!(result, file_path.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_preserves_whitespace() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("  spaced name .txt  ");
+		std::fs::write(&file_path, "content").expect("write file");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"  spaced name .txt  ",
+			"File",
+		)
+		.unwrap();
+
+		assert_eq!(result, file_path.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_or_root_accepts_empty_path() {
+		let worktree = temp_worktree();
+
+		let result =
+			resolve_existing_worktree_path_or_root(&worktree, Some(""))
+				.unwrap();
+
+		assert_eq!(result, worktree.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_rejects_escape_inputs() {
+		let worktree = temp_worktree();
+		std::fs::write(worktree.join("main.rs"), "fn main() {}")
+			.expect("write file");
+
+		let parent_result =
+			resolve_existing_worktree_path(&worktree, "../main.rs", "File");
+		let absolute_result = resolve_existing_worktree_path(
+			&worktree,
+			worktree.join("main.rs").to_string_lossy().as_ref(),
+			"File",
+		);
+		let git_result =
+			resolve_existing_worktree_path(&worktree, ".git/config", "File");
+
+		assert!(matches!(parent_result, Err(AppError::IoError(_))));
+		assert!(matches!(absolute_result, Err(AppError::IoError(_))));
+		assert!(matches!(git_result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn resolve_existing_worktree_path_rejects_symlink_escape() {
+		let temp_dir = temp_worktree();
+		let worktree = temp_dir.join("worktree");
+		let outside = temp_dir.join("outside");
+		std::fs::create_dir_all(&worktree).expect("create worktree");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::fs::write(outside.join("secret.txt"), "secret")
+			.expect("write outside file");
+		std::os::unix::fs::symlink(&outside, worktree.join("link"))
+			.expect("create symlink");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"link/secret.txt",
+			"File",
+		);
+
+		assert!(matches!(result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn ensure_creatable_worktree_path_rejects_symlink_parent_escape() {
+		let temp_dir = temp_worktree();
+		let worktree = temp_dir.join("worktree");
+		let outside = temp_dir.join("outside");
+		std::fs::create_dir_all(&worktree).expect("create worktree");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::os::unix::fs::symlink(&outside, worktree.join("link"))
+			.expect("create symlink");
+
+		let result = ensure_creatable_worktree_path(
+			&worktree,
+			"link/created.txt",
+			"File",
+		);
+
+		assert!(matches!(result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
 	}
 
 	#[test]

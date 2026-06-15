@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getQueryDataMock, invalidateQueriesMock, watchProjectsMock } = vi.hoisted(() => ({
+const {
+	getQueryCacheMock,
+	getQueryDataMock,
+	invalidateQueriesMock,
+	queryCacheFindAllMock,
+	watchProjectsMock,
+} = vi.hoisted(() => ({
+	getQueryCacheMock: vi.fn(),
 	getQueryDataMock: vi.fn(),
 	invalidateQueriesMock: vi.fn(),
+	queryCacheFindAllMock: vi.fn(),
 	watchProjectsMock: vi.fn(),
 }));
 
@@ -12,6 +20,7 @@ vi.mock("@/generated", () => ({
 
 vi.mock("@/shared/lib/queryClient", () => ({
 	queryClient: {
+		getQueryCache: getQueryCacheMock,
 		getQueryData: getQueryDataMock,
 		invalidateQueries: invalidateQueriesMock,
 	},
@@ -21,7 +30,14 @@ async function loadWatcher() {
 	await import("./fileWatcher");
 	const [{ onEvent }] = watchProjectsMock.mock.calls.map((args) => args[0]);
 	return onEvent as {
-		onmessage: ((event: { project_id: string }) => void) | null;
+		onmessage: ((
+			event: {
+				project_id: string;
+				profile_id?: string | null;
+				root_path: string;
+				path?: string | null;
+			},
+		) => void) | null;
 	};
 }
 
@@ -29,6 +45,12 @@ describe("fileWatcher", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		vi.useFakeTimers();
+		queryCacheFindAllMock.mockReset();
+		queryCacheFindAllMock.mockReturnValue([]);
+		getQueryCacheMock.mockReset();
+		getQueryCacheMock.mockReturnValue({
+			findAll: queryCacheFindAllMock,
+		});
 		getQueryDataMock.mockReset();
 		invalidateQueriesMock.mockClear();
 		watchProjectsMock.mockClear();
@@ -48,8 +70,8 @@ describe("fileWatcher", () => {
 	it("debounces bursts of file events into a single invalidation batch", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.({ project_id: "project-1" });
-		channel.onmessage?.({ project_id: "project-1" });
+		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
+		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
@@ -97,23 +119,146 @@ describe("fileWatcher", () => {
 					exact: false,
 				},
 			],
+			[
+				{
+					queryKey: ["fs-file"],
+					exact: false,
+				},
+			],
+			[
+				{
+					queryKey: ["fs-file-preview"],
+					exact: false,
+				},
+			],
 		]);
 	});
 
 	it("resets the debounce timer when another event arrives before the flush", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.({ project_id: "project-1" });
+		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
 		vi.advanceTimersByTime(500);
-		channel.onmessage?.({ project_id: "project-1" });
+		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
 		vi.advanceTimersByTime(1);
-		expect(invalidateQueriesMock).toHaveBeenCalledTimes(7);
+		expect(invalidateQueriesMock).toHaveBeenCalledTimes(9);
 	});
 
-	it("invalidates only the changed project's profile and tree queries when projects are cached", async () => {
+	it("invalidates precise profile file and preview queries when event includes a path", async () => {
+		const channel = await loadWatcher();
+
+		channel.onmessage?.({
+			project_id: "project-1",
+			profile_id: "profile-1",
+			root_path: "/repo",
+			path: "src/index.ts",
+		});
+		vi.advanceTimersByTime(1000);
+
+		expect(invalidateQueriesMock.mock.calls).toEqual([
+			[{ queryKey: ["git-diff", "profile-1"] }],
+			[{ queryKey: ["git-diff-stats", "profile-1"] }],
+			[{ queryKey: ["git-status", "profile-1"] }],
+			[{ queryKey: ["git-log", "profile-1"] }],
+			[{ queryKey: ["git-ahead-count", "profile-1"] }],
+			[
+				{
+					queryKey: ["fs-tree", "profile-1"],
+					exact: false,
+				},
+			],
+			[{ queryKey: ["git-branch", "/repo"] }],
+			[{ queryKey: ["fs-file", "profile-1", "src/index.ts"] }],
+			[{ queryKey: ["fs-file-preview", "profile-1", "src/index.ts"] }],
+		]);
+	});
+
+it("invalidates cached descendant file queries for directory events", async () => {
+		queryCacheFindAllMock.mockImplementation(({ queryKey }) => {
+			if (queryKey[0] === "fs-file") {
+				return [
+					{ queryKey: ["fs-file", "profile-1", "src/index.ts"] },
+					{ queryKey: ["fs-file", "profile-1", "src"] },
+					{ queryKey: ["fs-file", "profile-1", "src-other/index.ts"] },
+				];
+			}
+
+			return [
+				{
+					queryKey: [
+						"fs-file-preview",
+						"profile-1",
+						"src/components/Button.tsx",
+					],
+				},
+			];
+		});
+		const channel = await loadWatcher();
+
+		channel.onmessage?.({
+			project_id: "project-1",
+			profile_id: "profile-1",
+			root_path: "/repo",
+			path: "src",
+		});
+		vi.advanceTimersByTime(1000);
+
+		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1"],
+		});
+		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file-preview", "profile-1"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src/index.ts"],
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: [
+				"fs-file-preview",
+				"profile-1",
+				"src/components/Button.tsx",
+			],
+		});
+		expect(invalidateQueriesMock).not.toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1", "src-other/index.ts"],
+		});
+		expect(
+			invalidateQueriesMock.mock.calls.filter(
+				([call]) =>
+					JSON.stringify(call.queryKey)
+					=== JSON.stringify(["fs-file", "profile-1", "src"]),
+			),
+		).toHaveLength(1);
+	});
+
+	it("invalidates profile file namespaces when event has no precise path", async () => {
+		const channel = await loadWatcher();
+
+		channel.onmessage?.({
+			project_id: "project-1",
+			profile_id: "profile-1",
+			root_path: "/repo",
+			path: null,
+		});
+		vi.advanceTimersByTime(1000);
+
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1"],
+			exact: false,
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file-preview", "profile-1"],
+			exact: false,
+		});
+	});
+
+	it("invalidates changed project profiles when project-only events are cached", async () => {
 		getQueryDataMock.mockReturnValue([
 			{
 				id: "project-1",
@@ -138,7 +283,7 @@ describe("fileWatcher", () => {
 		]);
 		const channel = await loadWatcher();
 
-		channel.onmessage?.({ project_id: "project-1" });
+		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
 		vi.advanceTimersByTime(1000);
 
 		expect(invalidateQueriesMock.mock.calls).toEqual([
@@ -147,10 +292,22 @@ describe("fileWatcher", () => {
 			[{ queryKey: ["git-status", "profile-1"] }],
 			[{ queryKey: ["git-log", "profile-1"] }],
 			[{ queryKey: ["git-ahead-count", "profile-1"] }],
+			[
+				{
+					queryKey: ["fs-tree", "profile-1"],
+					exact: false,
+				},
+			],
 			[{ queryKey: ["git-branch", "/repo"] }],
 			[
 				{
-					queryKey: ["fs-tree", "/repo"],
+					queryKey: ["fs-file", "profile-1"],
+					exact: false,
+				},
+			],
+			[
+				{
+					queryKey: ["fs-file-preview", "profile-1"],
 					exact: false,
 				},
 			],

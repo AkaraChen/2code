@@ -2,19 +2,21 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
 	BORDER_RADIUS_MAP,
 	type BorderRadius,
+	migrateThemePersistedState,
 	useThemeStore,
 } from "./themeStore";
 
 function resetStore() {
-	useThemeStore.setState({ borderRadius: "sm" });
+	useThemeStore.setState({ borderRadius: "sm", windowOpacity: 100 });
 	localStorage.clear();
+	document.documentElement.style.removeProperty("--app-window-bg-alpha");
 }
 
 function getState() {
 	return useThemeStore.getState();
 }
 
-describe("bORDER_RADIUS_MAP", () => {
+describe("border radius map", () => {
 	it("contains entries for all BorderRadius values", () => {
 		const keys: BorderRadius[] = ["none", "sm", "md", "lg", "xl"];
 		for (const key of keys) {
@@ -69,6 +71,10 @@ describe("useThemeStore", () => {
 		it("borderRadius defaults to 'sm'", () => {
 			expect(getState().borderRadius).toBe("sm");
 		});
+
+		it("windowOpacity defaults to 100", () => {
+			expect(getState().windowOpacity).toBe(100);
+		});
 	});
 
 	describe("setBorderRadius", () => {
@@ -99,6 +105,85 @@ describe("useThemeStore", () => {
 			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("8px");
 			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("10px");
 			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("12px");
+		});
+	});
+
+	describe("setWindowOpacity", () => {
+		it("updates windowOpacity", () => {
+			getState().setWindowOpacity(37);
+			expect(getState().windowOpacity).toBe(37);
+		});
+
+		it("syncs background alpha on document.documentElement", () => {
+			getState().setWindowOpacity(60);
+			const style = document.documentElement.style;
+			expect(style.getPropertyValue("--app-window-bg-alpha")).toBe("0.6");
+		});
+
+		it("normalizes opacity to an integer percentage between 0 and 100", () => {
+			getState().setWindowOpacity(1000);
+			expect(getState().windowOpacity).toBe(100);
+
+			getState().setWindowOpacity(-10);
+			expect(getState().windowOpacity).toBe(0);
+
+			getState().setWindowOpacity(33.6);
+			expect(getState().windowOpacity).toBe(34);
+		});
+	});
+});
+
+describe("migrateThemePersistedState", () => {
+	it("defaults missing windowOpacity to 100", () => {
+		expect(migrateThemePersistedState({ borderRadius: "lg" })).toEqual({
+			borderRadius: "lg",
+			windowOpacity: 100,
+		});
+	});
+
+	it("keeps valid persisted windowOpacity values", () => {
+		expect(
+			migrateThemePersistedState({
+				borderRadius: "md",
+				windowOpacity: 37,
+			}),
+		).toEqual({
+			borderRadius: "md",
+			windowOpacity: 37,
+		});
+	});
+
+	it("normalizes invalid persisted values", () => {
+		expect(
+			migrateThemePersistedState({
+				borderRadius: "massive",
+				windowOpacity: "transparent",
+			}),
+		).toEqual({
+			borderRadius: "sm",
+			windowOpacity: 100,
+		});
+	});
+
+	it("clamps out-of-range persisted windowOpacity values", () => {
+		expect(
+			migrateThemePersistedState({
+				borderRadius: "md",
+				windowOpacity: 120,
+			}),
+		).toEqual({
+			borderRadius: "md",
+			windowOpacity: 100,
+		});
+
+		expect(
+			migrateThemePersistedState({
+				borderRadius: "md",
+				windowOpacity: -20,
+			}),
+		).toEqual({
+			borderRadius: "md",
+			windowOpacity: 0,
 		});
 	});
 });
