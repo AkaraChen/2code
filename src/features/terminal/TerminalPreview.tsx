@@ -1,9 +1,7 @@
-import { useMemo } from "react";
-import { useThemeStore } from "@/features/settings/stores/themeStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { useTerminalTheme } from "./hooks";
 import type { TerminalThemeId } from "./themes";
-import { terminalThemes, withTerminalBackgroundAlpha } from "./themes";
+import { terminalThemes } from "./themes";
 
 const lines = [
 	{ id: "whoami", prompt: true, text: "whoami" },
@@ -27,13 +25,8 @@ export function TerminalPreview({
 }) {
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const windowOpacity = useThemeStore((s) => s.windowOpacity);
 	const autoTheme = useTerminalTheme();
-	const baseTheme = themeId ? terminalThemes[themeId] : autoTheme;
-	const theme = useMemo(
-		() => withTerminalBackgroundAlpha(baseTheme, windowOpacity),
-		[baseTheme, windowOpacity],
-	);
+	const theme = themeId ? terminalThemes[themeId] : autoTheme;
 
 	return (
 		<div

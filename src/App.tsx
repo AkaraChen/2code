@@ -35,12 +35,7 @@ export default function App() {
 	useKey("D", handleDebugShortcut);
 
 	return (
-		<Flex
-			direction="column"
-			h="full"
-			bg="var(--app-shell-bg)"
-			color="fg"
-		>
+		<Flex direction="column" h="full" bg="bg" color="fg">
 			<StartupUpdateCheck />
 			<Flex flex="1" minH="0">
 				<AsyncBoundary
@@ -56,7 +51,7 @@ export default function App() {
 					flex="1"
 					overflowY="auto"
 					position="relative"
-					bg="var(--app-shell-panel-bg)"
+					bg="bg.panel"
 				>
 					<AsyncBoundary
 						fallback={<PageSkeleton />}

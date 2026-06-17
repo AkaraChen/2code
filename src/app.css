@@ -1,11 +1,6 @@
 :root {
 	--sidebar-width: 250px;
 	--app-focus-ring: Highlight;
-	--app-window-bg-alpha: 1;
-	--app-bg-rgb: 245 245 247;
-	--app-panel-bg-rgb: 255 255 255;
-	--app-shell-bg: rgb(var(--app-bg-rgb) / var(--app-window-bg-alpha));
-	--app-shell-panel-bg: rgb(var(--app-panel-bg-rgb) / var(--app-window-bg-alpha));
 	font-family:
 		-apple-system,
 		BlinkMacSystemFont,
@@ -19,15 +14,10 @@
 		"Segoe UI Emoji",
 		"Segoe UI Symbol";
 	color-scheme: light dark;
-	background: transparent;
+	background: var(--chakra-colors-bg);
 	accent-color: Highlight;
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
-}
-
-.dark {
-	--app-bg-rgb: 28 28 30;
-	--app-panel-bg-rgb: 31 32 35;
 }
 
 html,
@@ -37,7 +27,6 @@ body,
 	height: 100%;
 	margin: 0;
 	overflow: hidden;
-	background: transparent;
 }
 
 body {
@@ -54,13 +43,6 @@ textarea,
 .milkdown-wrapper .ProseMirror {
 	user-select: text;
 	-webkit-user-select: text;
-}
-
-.xterm .composition-view,
-.xterm .xterm-scrollable-element,
-.xterm .xterm-viewport {
-	background: transparent !important;
-	background-color: transparent !important;
 }
 
 button,

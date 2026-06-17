@@ -27,7 +27,7 @@ infra = { path = "crates/infra" }
 service = { path = "crates/service" }
 
 # Tauri framework
-tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"

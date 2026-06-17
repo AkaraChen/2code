@@ -516,7 +516,7 @@ export default function AppSidebar() {
 				minH="0"
 				flexShrink={0}
 				position="relative"
-				bg="var(--app-shell-bg)"
+				bg="bg"
 				borderRightWidth="1px"
 				borderColor="border.muted"
 				onKeyDown={handleKeyDown}

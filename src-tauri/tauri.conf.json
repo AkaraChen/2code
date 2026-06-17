@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "app": {
-    "macOSPrivateApi": true,
     "security": {
       "assetProtocol": {
         "enable": true,
@@ -14,7 +13,6 @@
     },
     "windows": [
       {
-        "backgroundColor": [0, 0, 0, 0],
         "center": true,
         "decorations": true,
         "height": 900,
@@ -26,7 +24,6 @@
           "x": 16,
           "y": 18
         },
-        "transparent": true,
         "width": 1440
       }
     ]

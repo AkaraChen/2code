@@ -71,7 +71,6 @@
     "@xterm/xterm": "^6.0.0",
     "cmdk": "^1.1.1",
     "codemirror": "^6.0.2",
-    "colord": "^2.9.3",
     "consola": "^3.4.2",
     "driver.js": "^1.4.0",
     "immer": "^11.1.8",

@@ -14,7 +14,6 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useThemeStore } from "@/features/settings/stores/themeStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	clearPtyOutput,
@@ -31,7 +30,6 @@ import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
 import { getSuffixPrefixOverlapLength } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
-import { withTerminalBackgroundAlpha } from "./themes";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -55,12 +53,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const decreaseFontSize = useTerminalSettingsStore(
 		(s) => s.decreaseFontSize,
 	);
-	const baseTheme = useTerminalTheme();
-	const windowOpacity = useThemeStore((s) => s.windowOpacity);
-	const theme = useMemo(
-		() => withTerminalBackgroundAlpha(baseTheme, windowOpacity),
-		[baseTheme, windowOpacity],
-	);
+	const theme = useTerminalTheme();
 
 	const initFontFamilyRef = useRef(fontFamily);
 	const initFontSizeRef = useRef(fontSize);
@@ -206,7 +199,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				fontFamily: `"${initFontFamilyRef.current}", monospace`,
 				fontSize: initFontSizeRef.current,
 				theme: initThemeRef.current,
-				allowTransparency: true,
 				allowProposedApi: true,
 				cursorBlink: true,
 				cursorStyle: "bar",

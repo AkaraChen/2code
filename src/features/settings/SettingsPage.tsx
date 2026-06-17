@@ -42,7 +42,6 @@ import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { ShellPicker } from "./ShellPicker";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 import { WorktreeSettings } from "./WorktreeSettings";
-import { WindowOpacityPicker } from "./WindowOpacityPicker";
 
 const localeCollection = createListCollection({
 	items: [
@@ -245,7 +244,6 @@ export default function SettingsPage() {
 							</Field.Root>
 							<BorderRadiusPicker />
 							<WorktreeSettings />
-							<WindowOpacityPicker />
 							<Field.Root>
 								<Field.Label>{m.debugMode()}</Field.Label>
 								<Switch.Root

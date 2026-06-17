@@ -1,5 +1,4 @@
 import type { ITheme } from "@xterm/xterm";
-import { colord } from "colord";
 
 export type TerminalThemeId =
 	| "github-dark"
@@ -228,25 +227,3 @@ export const terminalThemes: Record<TerminalThemeId, ITheme> = {
 		brightWhite: "#ffffff",
 	},
 };
-
-function withAlpha(color: string | undefined, opacityPercent: number) {
-	if (!color) return color;
-
-	const alpha = Math.min(100, Math.max(0, opacityPercent)) / 100;
-	if (alpha >= 1) return color;
-
-	const parsed = colord(color);
-	if (!parsed.isValid()) return color;
-
-	return parsed.alpha(alpha).toRgbString();
-}
-
-export function withTerminalBackgroundAlpha(
-	theme: ITheme,
-	opacityPercent: number,
-): ITheme {
-	return {
-		...theme,
-		background: withAlpha(theme.background, opacityPercent),
-	};
-}
