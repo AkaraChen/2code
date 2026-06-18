@@ -99,6 +99,9 @@ vi.mock("@tauri-apps/plugin-store", () => {
 vi.mock("@/generated", () => ({
 	startDebugLog: vi.fn(),
 	stopDebugLog: vi.fn(),
+	appendFrontendProfileEvents: vi.fn(() => Promise.resolve()),
+	isPerformanceProfileEnabled: vi.fn(() => Promise.resolve(false)),
+	setPerformanceProfileEnabled: vi.fn(() => Promise.resolve(null)),
 	createPtySession: vi.fn(() => Promise.resolve("mock-session-id")),
 	writeToPty: vi.fn(() => Promise.resolve()),
 	closePtySession: vi.fn(() => Promise.resolve()),

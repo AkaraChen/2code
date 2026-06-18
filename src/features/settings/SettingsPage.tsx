@@ -24,6 +24,7 @@ import {
 } from "react-icons/fi";
 import { useSearchParams } from "react-router";
 import { useDebugStore } from "@/features/debug/debugStore";
+import { usePerformanceProfileStore } from "@/features/debug/performanceProfileStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import { TopBarSettings } from "@/features/topbar/TopBarSettings";
@@ -80,6 +81,12 @@ export default function SettingsPage() {
 	const { preference, setPreference } = use(ThemeContext);
 	const debugEnabled = useDebugStore((state) => state.enabled);
 	const setDebugEnabled = useDebugStore((state) => state.setEnabled);
+	const performanceProfileEnabled = usePerformanceProfileStore(
+		(state) => state.enabled,
+	);
+	const setPerformanceProfileEnabled = usePerformanceProfileStore(
+		(state) => state.setEnabled,
+	);
 	const locale = useLocale();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const activeTab = readSettingsTab(searchParams.get("tab"));
@@ -257,6 +264,27 @@ export default function SettingsPage() {
 									<Switch.Label>
 										<Text fontSize="sm" color="fg.muted">
 											{m.debugModeDescription()}
+										</Text>
+									</Switch.Label>
+								</Switch.Root>
+							</Field.Root>
+							<Field.Root>
+								<Field.Label>
+									{m.performanceProfile()}
+								</Field.Label>
+								<Switch.Root
+									checked={performanceProfileEnabled}
+									onCheckedChange={(e) =>
+										setPerformanceProfileEnabled(
+											!!e.checked,
+										)
+									}
+								>
+									<Switch.HiddenInput />
+									<Switch.Control />
+									<Switch.Label>
+										<Text fontSize="sm" color="fg.muted">
+											{m.performanceProfileDescription()}
 										</Text>
 									</Switch.Label>
 								</Switch.Root>

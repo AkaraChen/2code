@@ -1,4 +1,8 @@
-import { appendFrontendProfileEvents, isDevProfileEnabled } from "@/generated";
+import {
+	appendFrontendProfileEvents,
+	isPerformanceProfileEnabled,
+	setPerformanceProfileEnabled as setBackendPerformanceProfileEnabled,
+} from "@/generated";
 import type { FrontendProfileEvent } from "@/generated/types";
 
 const MAX_BUFFERED_EVENTS = 5000;
@@ -8,10 +12,12 @@ const FLUSH_INTERVAL_MS = 2000;
 let installed = false;
 let enabled = false;
 let flushing = false;
+let toggleRequestId = 0;
 let buffer: FrontendProfileEvent[] = [];
+let flushInterval: ReturnType<typeof window.setInterval> | null = null;
 
 function isEnabled() {
-	return import.meta.env.DEV && enabled;
+	return enabled;
 }
 
 function addEvent(event: FrontendProfileEvent) {
@@ -79,10 +85,8 @@ export async function flushPerformanceProfile() {
 	}
 }
 
-export async function installPerformanceProfile() {
-	if (!import.meta.env.DEV || installed) return;
-	enabled = await isDevProfileEnabled();
-	if (!enabled) return;
+function installPerformanceProfile() {
+	if (installed) return;
 	installed = true;
 
 	for (const entry of performance.getEntries()) {
@@ -107,7 +111,43 @@ export async function installPerformanceProfile() {
 	document.addEventListener("visibilitychange", () => {
 		if (document.visibilityState === "hidden") void flushPerformanceProfile();
 	});
-	window.setInterval(() => {
+}
+
+function startFlushInterval() {
+	if (flushInterval) return;
+	flushInterval = window.setInterval(() => {
 		void flushPerformanceProfile();
 	}, FLUSH_INTERVAL_MS);
+}
+
+function stopFlushInterval() {
+	if (!flushInterval) return;
+	window.clearInterval(flushInterval);
+	flushInterval = null;
+}
+
+export async function setPerformanceProfileEnabled(nextEnabled: boolean) {
+	const requestId = ++toggleRequestId;
+	if (nextEnabled) {
+		await setBackendPerformanceProfileEnabled({ enabled: true });
+		if (requestId !== toggleRequestId) return;
+		enabled = true;
+		installPerformanceProfile();
+		startFlushInterval();
+	} else {
+		await flushPerformanceProfile();
+		if (requestId !== toggleRequestId) return;
+		enabled = false;
+		stopFlushInterval();
+		await setBackendPerformanceProfileEnabled({ enabled: false });
+	}
+}
+
+export async function syncPerformanceProfileFromBackend() {
+	if (await isPerformanceProfileEnabled()) {
+		toggleRequestId++;
+		enabled = true;
+		installPerformanceProfile();
+		startFlushInterval();
+	}
 }
