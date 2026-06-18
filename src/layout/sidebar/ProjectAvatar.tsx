@@ -35,7 +35,6 @@ export function ProjectAvatar({
 		<Box
 			w="5"
 			h="5"
-			ml="-0.5"
 			borderRadius="sm"
 			overflow="hidden"
 			flexShrink={0}
