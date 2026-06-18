@@ -128,7 +128,9 @@ export function sanitizeTerminalFontFamily(
 	const primaryKey = primary.toLowerCase();
 
 	if (GENERIC_FONT_FAMILIES.has(primaryKey)) {
-		if (MONOSPACE_GENERIC_FAMILIES.has(primaryKey)) return cssValue;
+		if (MONOSPACE_GENERIC_FAMILIES.has(primaryKey)) {
+			return serializeFontFamilyList(families);
+		}
 		console.warn(
 			`[terminal] Font stack "${cssValue}" has no monospace primary family; falling back to default terminal font.`,
 		);
@@ -145,7 +147,8 @@ export function sanitizeTerminalFontFamily(
 	const hasMonoTail = families.some((f) =>
 		MONOSPACE_GENERIC_FAMILIES.has(f.toLowerCase()),
 	);
-	return hasMonoTail ? cssValue : `${cssValue}, monospace`;
+	const result = hasMonoTail ? families : [...families, "monospace"];
+	return serializeFontFamilyList(result);
 }
 
 export function buildFontFamilyCss(family: string): string {
