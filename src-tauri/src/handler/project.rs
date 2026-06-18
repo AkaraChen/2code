@@ -22,6 +22,7 @@ fn project_folder(db: &DbPool, project_id: &str) -> Result<String, AppError> {
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn create_project_from_folder(
 	name: String,
 	folder: String,
@@ -36,6 +37,7 @@ pub async fn create_project_from_folder(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn list_projects(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
@@ -48,6 +50,7 @@ pub async fn list_projects(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn update_project(
 	id: String,
 	name: Option<String>,
@@ -63,11 +66,13 @@ pub async fn update_project(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_branch(folder: String) -> Result<String, AppError> {
 	super::run_blocking(move || service::project::get_branch(&folder)).await
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_diff(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -81,6 +86,7 @@ pub async fn get_git_diff(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_diff_stats(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -94,6 +100,7 @@ pub async fn get_git_diff_stats(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_log(
 	profile_id: String,
 	limit: Option<u32>,
@@ -108,6 +115,7 @@ pub async fn get_git_log(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_commit_diff(
 	profile_id: String,
 	commit_hash: String,
@@ -122,6 +130,7 @@ pub async fn get_commit_diff(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_binary_preview(
 	profile_id: String,
 	path: String,
@@ -185,6 +194,7 @@ pub async fn get_git_binary_preview(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn commit_git_changes(
 	profile_id: String,
 	files: Vec<String>,
@@ -201,6 +211,7 @@ pub async fn commit_git_changes(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn discard_git_file_changes(
 	profile_id: String,
 	paths: Vec<String>,
@@ -215,6 +226,7 @@ pub async fn discard_git_file_changes(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_ahead_count(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -228,6 +240,7 @@ pub async fn get_git_ahead_count(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn git_push(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -241,6 +254,7 @@ pub async fn git_push(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_git_pull_request_status(
 	profile_id: String,
 	branch_name: Option<String>,
@@ -258,6 +272,7 @@ pub async fn get_git_pull_request_status(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn delete_project(
 	id: String,
 	state: State<'_, DbPool>,
@@ -271,6 +286,7 @@ pub async fn delete_project(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn create_project_group(
 	name: String,
 	state: State<'_, DbPool>,
@@ -284,6 +300,7 @@ pub async fn create_project_group(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn list_project_groups(
 	state: State<'_, DbPool>,
 ) -> Result<Vec<ProjectGroup>, AppError> {
@@ -296,6 +313,7 @@ pub async fn list_project_groups(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn assign_project_to_group(
 	project_id: String,
 	group_id: Option<String>,
@@ -310,6 +328,7 @@ pub async fn assign_project_to_group(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn update_project_sidebar_layout(
 	updates: Vec<ProjectSidebarLayoutUpdate>,
 	state: State<'_, DbPool>,
@@ -323,6 +342,7 @@ pub async fn update_project_sidebar_layout(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_project_config(
 	project_id: String,
 	state: State<'_, DbPool>,
@@ -336,6 +356,7 @@ pub async fn get_project_config(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn save_project_config(
 	project_id: String,
 	config: ProjectConfig,
@@ -350,6 +371,7 @@ pub async fn save_project_config(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_project_github_avatar(
 	project_id: String,
 	state: State<'_, DbPool>,

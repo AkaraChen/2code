@@ -7,6 +7,7 @@ use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use service::pty::PtyFlushSenders;
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn create_pty_session(
 	app: AppHandle,
 	meta: PtySessionMeta,
@@ -20,6 +21,7 @@ pub async fn create_pty_session(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn write_to_pty(
 	sessions: State<'_, PtySessionMap>,
 	session_id: String,
@@ -29,6 +31,7 @@ pub fn write_to_pty(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn resize_pty(
 	sessions: State<'_, PtySessionMap>,
 	db: State<'_, DbPool>,
@@ -45,6 +48,7 @@ pub fn resize_pty(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn close_pty_session(
 	db: State<'_, DbPool>,
 	sessions: State<'_, PtySessionMap>,
@@ -54,6 +58,7 @@ pub fn close_pty_session(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn list_project_sessions(
 	project_id: String,
 	state: State<'_, DbPool>,
@@ -67,6 +72,7 @@ pub async fn list_project_sessions(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_pty_session_history(
 	session_id: String,
 	state: State<'_, DbPool>,
@@ -80,6 +86,7 @@ pub async fn get_pty_session_history(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
@@ -93,6 +100,7 @@ pub async fn delete_pty_session_record(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn restore_pty_session(
 	app: AppHandle,
 	old_session_id: String,
@@ -107,6 +115,7 @@ pub async fn restore_pty_session(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn flush_pty_output(
 	session_id: String,
 	state: State<'_, PtyFlushSenders>,
@@ -115,6 +124,7 @@ pub fn flush_pty_output(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn clear_pty_output(
 	session_id: String,
 	db: State<'_, DbPool>,

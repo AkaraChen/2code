@@ -485,7 +485,7 @@ fn ensure_canonical_path_inside_worktree(
 ) -> Result<PathBuf, AppError> {
 	let canonical_worktree =
 		worktree_root.canonicalize().map_err(AppError::IoError)?;
-let canonical_path = path.canonicalize().map_err(|error| {
+	let canonical_path = path.canonicalize().map_err(|error| {
 		if error.kind() == std::io::ErrorKind::NotFound {
 			AppError::NotFound(format!("Path: {}", path.display()))
 		} else {
@@ -563,6 +563,7 @@ fn ensure_creatable_worktree_path(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn list_file_tree_paths(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -576,6 +577,7 @@ pub async fn list_file_tree_paths(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn list_file_tree_child_paths(
 	profile_id: String,
 	parent_path: Option<String>,
@@ -593,6 +595,7 @@ pub async fn list_file_tree_child_paths(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn rename_file_tree_path(
 	profile_id: String,
 	source_path: String,
@@ -622,6 +625,7 @@ pub async fn rename_file_tree_path(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn move_file_tree_paths(
 	profile_id: String,
 	source_paths: Vec<String>,
@@ -655,6 +659,7 @@ pub async fn move_file_tree_paths(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn delete_file_tree_paths(
 	profile_id: String,
 	paths: Vec<String>,
@@ -676,6 +681,7 @@ pub async fn delete_file_tree_paths(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn create_file_tree_path(
 	profile_id: String,
 	path: String,
@@ -804,6 +810,7 @@ fn open_path_in_default_app_impl(path: &Path) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn reveal_path_in_file_manager(
 	profile_id: String,
 	path: Option<String>,
@@ -822,6 +829,7 @@ pub async fn reveal_path_in_file_manager(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn open_path_in_default_app(
 	profile_id: String,
 	path: String,
@@ -841,6 +849,7 @@ pub async fn open_path_in_default_app(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn read_file_content(
 	profile_id: String,
 	path: String,
@@ -884,6 +893,7 @@ pub async fn read_file_content(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn write_file_content(
 	profile_id: String,
 	path: String,
@@ -916,6 +926,7 @@ pub async fn write_file_content(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_file_preview(
 	profile_id: String,
 	path: String,
@@ -994,6 +1005,7 @@ pub async fn get_file_preview(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn search_file(
 	profile_id: String,
 	query: String,
@@ -1008,6 +1020,7 @@ pub async fn search_file(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_file_tree_git_status(
 	profile_id: String,
 	state: State<'_, DbPool>,
@@ -1025,6 +1038,7 @@ pub async fn get_file_tree_git_status(
 /// within the worktree, or a list of fuzzy-matched candidates based on the
 /// filename when the exact path doesn't exist.
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn resolve_terminal_file_path(
 	profile_id: String,
 	file_path: String,

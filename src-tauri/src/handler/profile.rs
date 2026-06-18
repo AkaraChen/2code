@@ -14,6 +14,7 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn create_profile(
 	project_id: String,
 	branch_name: String,
@@ -33,6 +34,7 @@ pub async fn create_profile(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn delete_profile(
 	id: String,
 	state: State<'_, DbPool>,
@@ -43,6 +45,7 @@ pub async fn delete_profile(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn get_profile_delete_check(
 	id: String,
 	state: State<'_, DbPool>,
@@ -77,6 +80,7 @@ pub async fn get_profile_delete_check(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub async fn update_profile_notes(
 	id: String,
 	notes: String,
