@@ -24,6 +24,10 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "node:diagnostics_channel": path.resolve(
+        __dirname,
+        "./src/shared/lib/node-stubs/diagnostics-channel.ts",
+      ),
     },
   },
 
