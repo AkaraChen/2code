@@ -173,6 +173,8 @@
 	"gitCommitErrorTitle": "提交失败",
 	"debugMode": "调试模式",
 	"debugModeDescription": "在浮动面板中显示后端日志事件。",
+	"performanceProfile": "性能 Profiling",
+	"performanceProfileDescription": "持续写入前端和后端性能 trace，直到关闭此开关或退出应用。",
 	"showProjectAvatars": "显示项目头像",
 	"showProjectAvatarsDescription": "在左侧边栏中显示项目头像。",
 	"debugLog": "调试日志",

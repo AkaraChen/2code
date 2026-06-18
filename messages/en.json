@@ -173,6 +173,8 @@
 	"gitCommitErrorTitle": "Commit failed",
 	"debugMode": "Debug Mode",
 	"debugModeDescription": "Show backend log events in a floating panel.",
+	"performanceProfile": "Performance Profiling",
+	"performanceProfileDescription": "Write frontend and backend performance traces until this is turned off or the app exits.",
 	"showProjectAvatars": "Show Project Avatars",
 	"showProjectAvatarsDescription": "Display project avatars in the left sidebar.",
 	"debugLog": "Debug Log",

@@ -4,14 +4,15 @@ import * as React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import AppRoot from "./AppRoot";
-import { installPerformanceProfile, onReactRender } from "./features/debug/performanceProfile";
+import { onReactRender, syncPerformanceProfileFromBackend } from "./features/debug/performanceProfile";
 import { queryClient } from "./shared/lib/queryClient";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 import { Toaster } from "./shared/providers/Toaster";
 import { appSystem } from "./theme/system";
+import "./features/debug/performanceProfileStore";
 import "./features/watcher/fileWatcher";
 
-void installPerformanceProfile();
+void syncPerformanceProfileFromBackend();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

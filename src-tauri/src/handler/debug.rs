@@ -29,6 +29,18 @@ pub fn append_frontend_profile_events(
 }
 
 #[tauri::command]
-pub fn is_dev_profile_enabled(profile: State<'_, DevProfileState>) -> bool {
+pub fn is_performance_profile_enabled(
+	profile: State<'_, DevProfileState>,
+) -> bool {
 	profile.enabled()
+}
+
+#[tauri::command]
+pub fn set_performance_profile_enabled(
+	enabled: bool,
+	profile: State<'_, DevProfileState>,
+) -> Result<Option<String>, AppError> {
+	Ok(profile
+		.set_enabled(enabled)?
+		.map(|path| path.to_string_lossy().to_string()))
 }
