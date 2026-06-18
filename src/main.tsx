@@ -12,7 +12,9 @@ import { appSystem } from "./theme/system";
 import "./features/debug/performanceProfileStore";
 import "./features/watcher/fileWatcher";
 
-void syncPerformanceProfileFromBackend();
+void syncPerformanceProfileFromBackend().catch((error) => {
+	console.error("Failed to sync performance profiling state on startup", error);
+});
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

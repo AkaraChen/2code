@@ -1,18 +1,22 @@
 use std::fs::{self, OpenOptions};
 use std::io::{sink, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use model::error::AppError;
 use serde::Serialize;
 use tracing_chrome::TraceStyle;
+use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
 
 pub struct DevProfileState {
 	app_data_dir: PathBuf,
 	enabled: Mutex<bool>,
+	trace_enabled: Arc<AtomicBool>,
 	run_dir: Mutex<Option<PathBuf>>,
 	frontend_path: Mutex<Option<PathBuf>>,
 	_guard: Mutex<Option<tracing_chrome::FlushGuard>>,
@@ -41,15 +45,16 @@ fn initial_profile_enabled() -> bool {
 fn create_profile_run(
 	app_data_dir: &Path,
 ) -> Result<(PathBuf, PathBuf, PathBuf), AppError> {
+	let timestamp = unix_ms();
 	let run_dir = app_data_dir
 		.join("profiles")
-		.join(format!("profile-{}", unix_ms()));
+		.join(format!("profile-{timestamp}"));
 	let backend_path = run_dir.join("backend-trace.json");
 	let frontend_path = run_dir.join("frontend-perf.jsonl");
 
 	fs::create_dir_all(&run_dir).map_err(AppError::IoError)?;
 	let manifest = Manifest {
-		started_at_unix_ms: unix_ms(),
+		started_at_unix_ms: timestamp,
 		backend_trace: "backend-trace.json",
 		frontend_events: "frontend-perf.jsonl",
 	};
@@ -74,16 +79,21 @@ pub fn init(
 		.include_args(true)
 		.trace_style(TraceStyle::Async)
 		.build();
+	let trace_enabled = Arc::new(AtomicBool::new(false));
+	let trace_filter_enabled = trace_enabled.clone();
 
 	tracing_subscriber::registry()
 		.with(fmt_layer)
 		.with(channel_layer)
-		.with(chrome_layer)
+		.with(chrome_layer.with_filter(filter_fn(move |_| {
+			trace_filter_enabled.load(Ordering::Relaxed)
+		})))
 		.init();
 
 	let state = DevProfileState {
 		app_data_dir: app_data_dir.to_path_buf(),
 		enabled: Mutex::new(false),
+		trace_enabled,
 		run_dir: Mutex::new(None),
 		frontend_path: Mutex::new(None),
 		_guard: Mutex::new(Some(guard)),
@@ -128,6 +138,7 @@ impl DevProfileState {
 			let backend_file =
 				fs::File::create(&backend_path).map_err(AppError::IoError)?;
 			trace_guard.start_new(Some(Box::new(backend_file)));
+			self.trace_enabled.store(true, Ordering::Relaxed);
 			*self.run_dir.lock().map_err(|_| AppError::LockError)? =
 				Some(run_dir.clone());
 			*self.frontend_path.lock().map_err(|_| AppError::LockError)? =
@@ -140,6 +151,7 @@ impl DevProfileState {
 			);
 			Ok(Some(run_dir))
 		} else {
+			self.trace_enabled.store(false, Ordering::Relaxed);
 			trace_guard.start_new(Some(Box::new(sink())));
 			*enabled_guard = false;
 			*self.run_dir.lock().map_err(|_| AppError::LockError)? = None;
@@ -206,6 +218,7 @@ mod tests {
 		let state = DevProfileState {
 			app_data_dir: std::env::temp_dir(),
 			enabled: Mutex::new(true),
+			trace_enabled: Arc::new(AtomicBool::new(true)),
 			run_dir: Mutex::new(None),
 			frontend_path: Mutex::new(Some(path.clone())),
 			_guard: Mutex::new(None),

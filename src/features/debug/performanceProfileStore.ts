@@ -1,6 +1,4 @@
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
-import { tauriStorage } from "@/shared/lib/tauriStorage";
 import { setPerformanceProfileEnabled } from "./performanceProfile";
 
 interface PerformanceProfileStore {
@@ -8,25 +6,20 @@ interface PerformanceProfileStore {
 	setEnabled: (enabled: boolean) => void;
 }
 
+let syncQueue = Promise.resolve();
+
 function syncPerformanceProfile(enabled: boolean) {
-	void setPerformanceProfileEnabled(enabled);
+	syncQueue = syncQueue
+		.then(() => setPerformanceProfileEnabled(enabled))
+		.catch((error) => {
+			console.error("Failed to sync performance profiling state", error);
+		});
 }
 
-export const usePerformanceProfileStore = create<PerformanceProfileStore>()(
-	persist(
-		(set) => ({
-			enabled: false,
-			setEnabled: (enabled) => set({ enabled }),
-		}),
-		{
-			name: "performance-profile-settings",
-			storage: createJSONStorage(() => tauriStorage),
-			onRehydrateStorage: () => (state) => {
-				if (state?.enabled) syncPerformanceProfile(true);
-			},
-		},
-	),
-);
+export const usePerformanceProfileStore = create<PerformanceProfileStore>()((set) => ({
+	enabled: false,
+	setEnabled: (enabled) => set({ enabled }),
+}));
 
 usePerformanceProfileStore.subscribe((state, prev) => {
 	if (state.enabled !== prev.enabled) syncPerformanceProfile(state.enabled);

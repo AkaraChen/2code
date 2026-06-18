@@ -12,6 +12,7 @@ const FLUSH_INTERVAL_MS = 2000;
 let installed = false;
 let enabled = false;
 let flushing = false;
+let toggleRequestId = 0;
 let buffer: FrontendProfileEvent[] = [];
 let flushInterval: ReturnType<typeof window.setInterval> | null = null;
 
@@ -126,13 +127,16 @@ function stopFlushInterval() {
 }
 
 export async function setPerformanceProfileEnabled(nextEnabled: boolean) {
+	const requestId = ++toggleRequestId;
 	if (nextEnabled) {
 		await setBackendPerformanceProfileEnabled({ enabled: true });
+		if (requestId !== toggleRequestId) return;
 		enabled = true;
 		installPerformanceProfile();
 		startFlushInterval();
 	} else {
 		await flushPerformanceProfile();
+		if (requestId !== toggleRequestId) return;
 		enabled = false;
 		stopFlushInterval();
 		await setBackendPerformanceProfileEnabled({ enabled: false });
@@ -141,6 +145,7 @@ export async function setPerformanceProfileEnabled(nextEnabled: boolean) {
 
 export async function syncPerformanceProfileFromBackend() {
 	if (await isPerformanceProfileEnabled()) {
+		toggleRequestId++;
 		enabled = true;
 		installPerformanceProfile();
 		startFlushInterval();
