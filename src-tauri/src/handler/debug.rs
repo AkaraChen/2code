@@ -27,3 +27,8 @@ pub fn append_frontend_profile_events(
 ) -> Result<(), AppError> {
 	profile.append_jsonl(&events)
 }
+
+#[tauri::command]
+pub fn is_dev_profile_enabled(profile: State<'_, DevProfileState>) -> bool {
+	profile.enabled()
+}

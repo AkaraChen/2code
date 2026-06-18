@@ -1,16 +1,17 @@
-import { appendFrontendProfileEvents } from "@/generated";
+import { appendFrontendProfileEvents, isDevProfileEnabled } from "@/generated";
 import type { FrontendProfileEvent } from "@/generated/types";
 
 const MAX_BUFFERED_EVENTS = 5000;
-const FLUSH_THRESHOLD = 1000;
-const FLUSH_INTERVAL_MS = 10_000;
+const FLUSH_THRESHOLD = 50;
+const FLUSH_INTERVAL_MS = 2000;
 
 let installed = false;
+let enabled = false;
 let flushing = false;
 let buffer: FrontendProfileEvent[] = [];
 
 function isEnabled() {
-	return import.meta.env.DEV;
+	return import.meta.env.DEV && enabled;
 }
 
 function addEvent(event: FrontendProfileEvent) {
@@ -35,6 +36,7 @@ function addPerformanceEntry(entry: PerformanceEntry) {
 	addEvent({
 		name: entry.name,
 		entry_type: entry.entryType,
+		time_origin: performance.timeOrigin,
 		start_time: entry.startTime,
 		duration: entry.duration,
 		detail: performanceEntryDetail(entry),
@@ -52,6 +54,7 @@ export function onReactRender(
 	addEvent({
 		name: id,
 		entry_type: "react-render",
+		time_origin: performance.timeOrigin,
 		start_time: startTime,
 		duration: actualDuration,
 		detail: JSON.stringify({
@@ -76,8 +79,10 @@ export async function flushPerformanceProfile() {
 	}
 }
 
-export function installPerformanceProfile() {
-	if (!isEnabled() || installed) return;
+export async function installPerformanceProfile() {
+	if (!import.meta.env.DEV || installed) return;
+	enabled = await isDevProfileEnabled();
+	if (!enabled) return;
 	installed = true;
 
 	for (const entry of performance.getEntries()) {

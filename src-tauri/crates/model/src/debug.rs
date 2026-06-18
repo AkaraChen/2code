@@ -12,6 +12,7 @@ pub struct LogEntry {
 pub struct FrontendProfileEvent {
 	pub name: String,
 	pub entry_type: String,
+	pub time_origin: f64,
 	pub start_time: f64,
 	pub duration: f64,
 	pub detail: Option<String>,

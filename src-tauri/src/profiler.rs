@@ -6,10 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use model::error::AppError;
 use serde::Serialize;
+use tracing_chrome::TraceStyle;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 pub struct DevProfileState {
+	enabled: bool,
 	run_dir: Option<PathBuf>,
 	frontend_path: Option<PathBuf>,
 	_guard: Mutex<Option<tracing_chrome::FlushGuard>>,
@@ -50,6 +52,7 @@ pub fn init(
 			.with(channel_layer)
 			.init();
 		return DevProfileState {
+			enabled: false,
 			run_dir: None,
 			frontend_path: None,
 			_guard: Mutex::new(None),
@@ -76,6 +79,7 @@ pub fn init(
 	let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new()
 		.file(&backend_path)
 		.include_args(true)
+		.trace_style(TraceStyle::Async)
 		.build();
 
 	tracing_subscriber::registry()
@@ -91,6 +95,7 @@ pub fn init(
 	);
 
 	DevProfileState {
+		enabled: true,
 		run_dir: Some(run_dir),
 		frontend_path: Some(frontend_path),
 		_guard: Mutex::new(Some(guard)),
@@ -98,6 +103,10 @@ pub fn init(
 }
 
 impl DevProfileState {
+	pub fn enabled(&self) -> bool {
+		self.enabled
+	}
+
 	pub fn append_jsonl<T: Serialize>(
 		&self,
 		entries: &[T],
@@ -152,6 +161,7 @@ mod tests {
 		let path = std::env::temp_dir()
 			.join(format!("2code-profile-test-{}.jsonl", unix_ms()));
 		let state = DevProfileState {
+			enabled: true,
 			run_dir: None,
 			frontend_path: Some(path.clone()),
 			_guard: Mutex::new(None),

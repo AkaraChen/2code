@@ -11,7 +11,7 @@ import { Toaster } from "./shared/providers/Toaster";
 import { appSystem } from "./theme/system";
 import "./features/watcher/fileWatcher";
 
-installPerformanceProfile();
+void installPerformanceProfile();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>

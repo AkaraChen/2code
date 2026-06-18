@@ -133,6 +133,7 @@ pub fn run() {
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
 			handler::debug::append_frontend_profile_events,
+			handler::debug::is_dev_profile_enabled,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
