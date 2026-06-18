@@ -91,32 +91,6 @@ function parseFontFamilyList(cssValue: string): string[] {
 	return families;
 }
 
-const monospaceCheckCache = new Map<string, boolean>();
-
-function isFontFamilyMonospace(family: string): boolean {
-	const key = family.toLowerCase();
-	if (MONOSPACE_GENERIC_FAMILIES.has(key)) return true;
-
-	const cached = monospaceCheckCache.get(key);
-	if (cached !== undefined) return cached;
-
-	try {
-		if (typeof document === "undefined") return true;
-		const canvas = document.createElement("canvas");
-		const ctx = canvas.getContext?.("2d");
-		if (!ctx) return true;
-
-		ctx.font = `16px "${family}"`;
-		const narrow = ctx.measureText("iiiiii").width;
-		const wide = ctx.measureText("MMMMMM").width;
-		const isMono = Math.abs(narrow - wide) < 1;
-		monospaceCheckCache.set(key, isMono);
-		return isMono;
-	} catch {
-		return true;
-	}
-}
-
 export function sanitizeTerminalFontFamily(
 	cssValue: string | null | undefined,
 ): string {
@@ -133,13 +107,6 @@ export function sanitizeTerminalFontFamily(
 		}
 		console.warn(
 			`[terminal] Font stack "${cssValue}" has no monospace primary family; falling back to default terminal font.`,
-		);
-		return DEFAULT_TERMINAL_FONT_FAMILY;
-	}
-
-	if (!isFontFamilyMonospace(primary)) {
-		console.warn(
-			`[terminal] Font "${primary}" is not monospace; falling back to default terminal font.`,
 		);
 		return DEFAULT_TERMINAL_FONT_FAMILY;
 	}
