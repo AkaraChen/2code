@@ -15,6 +15,7 @@ export interface LoadAddonsResult {
 	searchAddon: SearchAddon;
 	serializeAddon: SerializeAddon;
 	progressAddon: ProgressAddon;
+	webglAddon: () => WebglAddon | null;
 	dispose: () => void;
 }
 
@@ -84,6 +85,7 @@ export function loadAddons(
 		searchAddon,
 		serializeAddon,
 		progressAddon,
+		webglAddon: () => webglAddon,
 		dispose: () => {
 			disposed = true;
 			cancelAnimationFrame(rafId);

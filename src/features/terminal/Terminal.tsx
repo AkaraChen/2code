@@ -94,6 +94,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
 	const serializeAddonRef = useRef<SerializeAddon | null>(null);
+	const webglAddonRef = useRef<(() => import("@xterm/addon-webgl").WebglAddon | null) | null>(null);
 	const isStreamReadyRef = useRef(false);
 	const pendingEventsRef = useRef<string[]>([]);
 	const [pendingLink, setPendingLink] = useState<string | null>(null);
@@ -130,6 +131,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			sanitizedFont,
 		);
 
+		// WebGL renderer caches glyphs in a texture atlas. Changing fontFamily
+		// doesn't invalidate the atlas, so the old font's glyphs keep rendering.
+		// Clear the atlas + force a full repaint so the new font is picked up.
+		const webgl = webglAddonRef.current?.();
+		if (webgl) {
+			try {
+				webgl.clearTextureAtlas();
+			} catch {}
+		}
+		term.refresh(0, Math.max(0, term.rows - 1));
+
 		// Refit immediately if visible
 		measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
 
@@ -137,7 +149,19 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		scheduleFontSettleRefit(
 			term,
 			() => termRef.current === term,
-			() => measureAndResize(term, fitAddon, term.element?.parentElement ?? null),
+			() => {
+				const changed = measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
+				// Clear atlas again after font settles — metrics may have changed
+				const w = webglAddonRef.current?.();
+				if (w) {
+					try { w.clearTextureAtlas(); } catch {}
+				}
+				term.refresh(0, Math.max(0, term.rows - 1));
+				if (changed) {
+					resizePty({ sessionId, rows: term.rows, cols: term.cols });
+				}
+				return changed;
+			},
 			() => resizePty({ sessionId, rows: term.rows, cols: term.cols }),
 		);
 	}, [fontFamily, fontSize, sessionId]);
@@ -254,6 +278,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			});
 			fitAddonRef.current = addonsResult.fitAddon;
 			serializeAddonRef.current = addonsResult.serializeAddon;
+			webglAddonRef.current = addonsResult.webglAddon;
 			cleanups.push(addonsResult.dispose);
 
 			// 3. Suppress query response sequences (CPR, focus reports, mode reports)
