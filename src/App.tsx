@@ -1,9 +1,10 @@
 import { Box, Flex } from "@chakra-ui/react";
-import { useCallback } from "react";
+import { Profiler, useCallback } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
 import DebugFloat from "./features/debug/DebugFloat";
 import { useDebugStore } from "./features/debug/debugStore";
+import { onReactRender } from "./features/debug/performanceProfile";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import SettingsPage from "./features/settings/SettingsPage";
@@ -44,7 +45,9 @@ export default function App() {
 						<SidebarError error={error} onRetry={onRetry} />
 					)}
 				>
-					<AppSidebar />
+					<Profiler id="Sidebar" onRender={onReactRender}>
+						<AppSidebar />
+					</Profiler>
 				</AsyncBoundary>
 				<Box
 					as="main"
@@ -59,21 +62,23 @@ export default function App() {
 							<PageError error={error} onRetry={onRetry} />
 						)}
 					>
-						<Routes>
-							<Route path="/" element={<HomePage />} />
-							<Route
-								path="/projects/:id/profiles/:profileId"
-								element={<ProjectDetailPage />}
-							/>
-							<Route
-								path="/settings"
-								element={<SettingsPage />}
-							/>
-							<Route
-								path="*"
-								element={<Navigate to="/" replace />}
-							/>
-						</Routes>
+						<Profiler id="Routes" onRender={onReactRender}>
+							<Routes>
+								<Route path="/" element={<HomePage />} />
+								<Route
+									path="/projects/:id/profiles/:profileId"
+									element={<ProjectDetailPage />}
+								/>
+								<Route
+									path="/settings"
+									element={<SettingsPage />}
+								/>
+								<Route
+									path="*"
+									element={<Navigate to="/" replace />}
+								/>
+							</Routes>
+						</Profiler>
 					</AsyncBoundary>
 
 					{/* Persistent terminal layer — survives route changes */}
@@ -82,7 +87,9 @@ export default function App() {
 							<PageError error={error} onRetry={onRetry} />
 						)}
 					>
-						<TerminalLayer />
+						<Profiler id="TerminalLayer" onRender={onReactRender}>
+							<TerminalLayer />
+						</Profiler>
 					</AsyncBoundary>
 				</Box>
 			</Flex>

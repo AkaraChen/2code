@@ -8,6 +8,7 @@ use model::watcher::WatchEvent;
 use crate::bridge::TauriWatchSender;
 
 #[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn watch_projects(
 	on_event: Channel<WatchEvent>,
 	state: State<'_, DbPool>,

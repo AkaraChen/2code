@@ -4,11 +4,14 @@ import * as React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import AppRoot from "./AppRoot";
+import { installPerformanceProfile, onReactRender } from "./features/debug/performanceProfile";
 import { queryClient } from "./shared/lib/queryClient";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 import { Toaster } from "./shared/providers/Toaster";
 import { appSystem } from "./theme/system";
 import "./features/watcher/fileWatcher";
+
+installPerformanceProfile();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 	<React.StrictMode>
@@ -16,7 +19,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 			<ChakraProvider value={appSystem}>
 				<ThemeProvider>
 					<BrowserRouter>
-						<AppRoot />
+						<React.Profiler id="AppRoot" onRender={onReactRender}>
+							<AppRoot />
+						</React.Profiler>
 					</BrowserRouter>
 					<Toaster />
 				</ThemeProvider>

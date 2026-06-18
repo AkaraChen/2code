@@ -1,6 +1,7 @@
 mod bridge;
 mod handler;
 mod helper;
+mod profiler;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -8,20 +9,7 @@ pub fn run() {
 	// profiles (e.g. .zshrc) are reflected in the app environment.
 	let _ = fix_path_env::fix();
 
-	// Initialize tracing subscriber with console output + channel layer
 	let (channel_layer, layer_handle) = infra::logger::ChannelLayer::new();
-	{
-		use tracing_subscriber::layer::SubscriberExt;
-		use tracing_subscriber::util::SubscriberInitExt;
-		tracing_subscriber::registry()
-			.with(
-				tracing_subscriber::fmt::layer()
-					.with_target(true)
-					.with_level(true),
-			)
-			.with(channel_layer)
-			.init();
-	}
 
 	let sessions = infra::pty::create_session_map();
 	let sessions_for_exit = sessions.clone();
@@ -46,7 +34,7 @@ pub fn run() {
 		.manage(shutdown_flag)
 		.manage(layer_handle)
 		.manage(handler::updater::PendingUpdate::default())
-		.setup(|app| {
+		.setup(move |app| {
 			use tauri::Manager;
 
 			// On Windows the native title bar would render as an opaque bar
@@ -62,6 +50,9 @@ pub fn run() {
 				.path()
 				.app_data_dir()
 				.expect("failed to resolve app data dir");
+
+			app.manage(profiler::init(&app_data_dir, channel_layer));
+
 			let pool = infra::db::init_db(&app_data_dir)
 				.expect("failed to initialize database");
 
@@ -141,6 +132,7 @@ pub fn run() {
 			handler::browser::open_url_in_browser,
 			handler::debug::start_debug_log,
 			handler::debug::stop_debug_log,
+			handler::debug::append_frontend_profile_events,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");
@@ -158,6 +150,11 @@ pub fn run() {
 
 			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 				service::pty::mark_all_closed(&db);
+			}
+			if let Some(profile) =
+				app_handle.try_state::<profiler::DevProfileState>()
+			{
+				profile.finish();
 			}
 		}
 	});
