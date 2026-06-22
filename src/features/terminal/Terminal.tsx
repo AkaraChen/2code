@@ -17,6 +17,7 @@ import {
 	resizePty,
 	writeToPty,
 } from "@/generated";
+import { toaster } from "@/shared/providers/appToaster";
 import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
@@ -224,6 +225,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			pendingEventsRef.current = [];
 			const liveOutputBuffer: string[] = [];
 			let liveOutputFrame: number | null = null;
+			let lastCopiedSelection = "";
 
 			// --- Wrapper-div pattern (SuperSet) ---
 			// xterm opens into a persistent wrapper div that can be moved
@@ -287,6 +289,29 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			// 4. Image paste fallback — send ^V for non-text clipboard payloads
 			cleanups.push(installImagePasteFallback(term, wrapper));
 
+			function copyTerminalSelection(selection: string) {
+				if (!selection || selection === lastCopiedSelection) return;
+				lastCopiedSelection = selection;
+				void writeClipboardText(selection)
+					.then(() => {
+						toaster.create({
+							title: "Text copied",
+							type: "success",
+							closable: true,
+						});
+					})
+					.catch(() => {});
+			}
+
+			const selectionDisposable = term.onSelectionChange(() => {
+				if (!term.hasSelection()) {
+					lastCopiedSelection = "";
+					return;
+				}
+				copyTerminalSelection(term.getSelection());
+			});
+			cleanups.push(() => selectionDisposable.dispose());
+
 			// 5. Combined key handler: app-specific shortcuts + kitty protocol suppression
 			const kittyHandler = createTerminalKeyEventHandler(term);
 			term.attachCustomKeyEventHandler((event) => {
@@ -322,10 +347,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 						return false;
 					}
 					if (action.type === "copy-selection-or-interrupt") {
-						const selection = term.getSelection();
-						if (selection) {
-							void writeClipboardText(selection).catch(() => {});
-						}
+						copyTerminalSelection(term.getSelection());
 						return false;
 					}
 					if (action.type === "paste-clipboard") {
