@@ -235,9 +235,11 @@ function createFileTreeChildPathsResult(
 	data: string[] | undefined,
 	isLoading: boolean,
 	error: Error | null = null,
+	dataUpdatedAt = 1,
 ): FileTreeChildPathsResult {
 	return {
 		data,
+		dataUpdatedAt,
 		error,
 		isError: error != null,
 		isLoading,
@@ -258,7 +260,7 @@ function renderPanel(
 	onOpenFile = vi.fn(),
 	options: { isOpen?: boolean; isActive?: boolean } = {},
 ) {
-	render(
+	const view = render(
 		<ChakraProvider value={appSystem}>
 			<FileTreePanel
 				profileId={profileId}
@@ -269,7 +271,7 @@ function renderPanel(
 			/>
 		</ChakraProvider>,
 	);
-	return { onOpenFile };
+	return { onOpenFile, ...view };
 }
 
 function getLastMenuItem(name: string) {
@@ -400,6 +402,51 @@ describe("fileTreePanel", () => {
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(
 				["src/", "src/index.ts"],
+				{ initialExpandedPaths: ["src/"] },
+			);
+		});
+	});
+
+	it("reloads expanded directory children when the root tree refreshes", async () => {
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(["src/"], false, null, 1),
+		);
+		loadChildPathsMock
+			.mockResolvedValueOnce(["src/index.ts"])
+			.mockResolvedValueOnce(["src/app.ts"]);
+		const { onOpenFile, rerender } = renderPanel();
+
+		fireEvent.click(screen.getByText("src"));
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith(
+				["src/", "src/index.ts"],
+				{ initialExpandedPaths: ["src/"] },
+			);
+		});
+
+		resetPathsMock.mockClear();
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult(["src/"], false, null, 2),
+		);
+		rerender(
+			<ChakraProvider value={appSystem}>
+				<FileTreePanel
+					profileId={profileId}
+					rootPath={rootPath}
+					isOpen
+					isActive
+					onOpenFile={onOpenFile}
+				/>
+			</ChakraProvider>,
+		);
+
+		await waitFor(() => {
+			expect(loadChildPathsMock).toHaveBeenCalledTimes(2);
+		});
+		expect(loadChildPathsMock).toHaveBeenLastCalledWith("src/");
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith(
+				["src/", "src/app.ts"],
 				{ initialExpandedPaths: ["src/"] },
 			);
 		});

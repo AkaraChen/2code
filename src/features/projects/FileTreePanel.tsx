@@ -528,10 +528,12 @@ export default function FileTreePanel({
 	const [loadedChildPathsState, setLoadedChildPathsState] = useState<{
 		rootPath: string;
 		rootChildPaths: readonly string[] | undefined;
+		rootChildPathsUpdatedAt: number;
 		childPathsByDirectory: ReadonlyMap<string, readonly string[]>;
 	}>(() => ({
 		rootPath,
 		rootChildPaths: undefined,
+		rootChildPathsUpdatedAt: 0,
 		childPathsByDirectory: new Map(),
 	}));
 	const rootPathRef = useRef(rootPath);
@@ -547,6 +549,8 @@ export default function FileTreePanel({
 	>(new Map());
 	const lastResetModelRef = useRef<FileTreeModel | null>(null);
 	const lastResetModelPathsRef = useRef<readonly string[] | null>(null);
+	const rootChildPathsUpdatedAtRef = useRef(0);
+	const lastRootChildPathsUpdatedAtRef = useRef(0);
 	const expandedPathSetRef = useRef<Set<string>>(new Set());
 	const loadedDirectoryChildPathsRef = useRef<
 		Map<string, readonly string[]>
@@ -574,6 +578,7 @@ export default function FileTreePanel({
 
 	const {
 		data: rootChildPaths,
+		dataUpdatedAt: rootChildPathsUpdatedAt,
 		error: treePathsError,
 		isError: isTreePathsError,
 	} = useFileTreeChildPaths(profileId, null, isOpen && isActive);
@@ -590,7 +595,8 @@ export default function FileTreePanel({
 	const revealPathInFileManager = useRevealPathInFileManager(profileId);
 	const loadedDirectoryChildPaths =
 		loadedChildPathsState.rootPath === rootPath &&
-		loadedChildPathsState.rootChildPaths === rootChildPaths
+		loadedChildPathsState.rootChildPaths === rootChildPaths &&
+		loadedChildPathsState.rootChildPathsUpdatedAt === rootChildPathsUpdatedAt
 			? loadedChildPathsState.childPathsByDirectory
 			: EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY;
 	const treePaths = useMemo(
@@ -632,6 +638,7 @@ export default function FileTreePanel({
 
 	rootPathRef.current = rootPath;
 	rootChildPathsRef.current = rootChildPaths;
+	rootChildPathsUpdatedAtRef.current = rootChildPathsUpdatedAt;
 	onOpenFileRef.current = onOpenFile;
 	filePathSetRef.current = filePathSet;
 	treePathSetRef.current = treePathSet;
@@ -644,15 +651,8 @@ export default function FileTreePanel({
 		loadingDirectoryPromisesRef.current.clear();
 		pendingCreatePathRef.current.clear();
 		lastResetModelPathsRef.current = null;
+		lastRootChildPathsUpdatedAtRef.current = 0;
 	}, [rootPath]);
-
-	useEffect(() => {
-		if (!rootChildPaths) return;
-		expandedPathSetRef.current.clear();
-		loadedDirectoryChildPathsRef.current.clear();
-		loadingDirectoryPromisesRef.current.clear();
-		lastResetModelPathsRef.current = null;
-	}, [rootPath, rootChildPaths]);
 
 	const openRelativeFile = useCallback((relativePath: string) => {
 		if (onOpenFileRef.current) {
@@ -677,11 +677,15 @@ export default function FileTreePanel({
 
 			const requestRootPath = rootPathRef.current;
 			const requestRootChildPaths = rootChildPathsRef.current;
+			const requestRootChildPathsUpdatedAt =
+				rootChildPathsUpdatedAtRef.current;
 			const loadPromise = loadFileTreeChildPaths(directoryPath)
 				.then((childPaths) => {
 					if (
 						rootPathRef.current !== requestRootPath ||
-						rootChildPathsRef.current !== requestRootChildPaths
+						rootChildPathsRef.current !== requestRootChildPaths ||
+						rootChildPathsUpdatedAtRef.current !==
+							requestRootChildPathsUpdatedAt
 					) {
 						return [];
 					}
@@ -691,7 +695,9 @@ export default function FileTreePanel({
 					);
 					setLoadedChildPathsState((current) => {
 						const next = new Map(
-							current.rootPath === requestRootPath
+							current.rootPath === requestRootPath &&
+								current.rootChildPathsUpdatedAt ===
+									requestRootChildPathsUpdatedAt
 								? current.childPathsByDirectory
 								: undefined,
 						);
@@ -699,6 +705,8 @@ export default function FileTreePanel({
 						return {
 							rootPath: requestRootPath,
 							rootChildPaths: requestRootChildPaths,
+							rootChildPathsUpdatedAt:
+								requestRootChildPathsUpdatedAt,
 							childPathsByDirectory: next,
 						};
 					});
@@ -707,7 +715,9 @@ export default function FileTreePanel({
 				.catch((error) => {
 					if (
 						rootPathRef.current !== requestRootPath ||
-						rootChildPathsRef.current !== requestRootChildPaths
+						rootChildPathsRef.current !== requestRootChildPaths ||
+						rootChildPathsUpdatedAtRef.current !==
+							requestRootChildPathsUpdatedAt
 					) {
 						return [];
 					}
@@ -727,6 +737,50 @@ export default function FileTreePanel({
 		},
 		[loadFileTreeChildPaths],
 	);
+	useEffect(() => {
+		if (
+			!rootChildPaths ||
+			rootChildPathsUpdatedAt === 0 ||
+			lastRootChildPathsUpdatedAtRef.current === rootChildPathsUpdatedAt
+		) {
+			return;
+		}
+		lastRootChildPathsUpdatedAtRef.current = rootChildPathsUpdatedAt;
+
+		const expandedPaths = [...expandedPathSetRef.current];
+		const rootChildPathSet = new Set(rootChildPaths);
+		for (const path of expandedPaths) {
+			const normalizedPath = path.replace(/\/$/, "");
+			if (!normalizedPath.includes("/") && !rootChildPathSet.has(path)) {
+				expandedPathSetRef.current.delete(path);
+			}
+		}
+
+		loadedDirectoryChildPathsRef.current.clear();
+		loadingDirectoryPromisesRef.current.clear();
+		lastResetModelPathsRef.current = null;
+
+		const expandedPathSet = new Set(expandedPathSetRef.current);
+		const reloadExpandedPath = (path: string) => {
+			void loadDirectoryChildren(path).then((childPaths) => {
+				for (const childPath of childPaths) {
+					if (childPath.endsWith("/") && expandedPathSet.has(childPath)) {
+						reloadExpandedPath(childPath);
+					}
+				}
+			});
+		};
+		for (const path of expandedPathSet) {
+			const normalizedPath = path.replace(/\/$/, "");
+			if (!normalizedPath.includes("/")) {
+				reloadExpandedPath(path);
+			}
+		}
+	}, [
+		loadDirectoryChildren,
+		rootChildPaths,
+		rootChildPathsUpdatedAt,
+	]);
 	const loadExpandedDirectoryChildren = useCallback(
 		(directoryPath: string) => {
 			void loadDirectoryChildren(directoryPath);
