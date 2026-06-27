@@ -11,7 +11,6 @@ import type {
 	ProjectWithProfiles,
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
-import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import {
 	useDeleteFileTreePaths,
 	useDeleteProject,
@@ -199,7 +198,7 @@ describe("useFileTreeGitStatus", () => {
 		getFileTreeGitStatusMock.mockReset();
 	});
 
-	it("uses a fast fallback refresh for visible file-tree status", async () => {
+	it("keeps visible file-tree git status event-driven instead of polling", async () => {
 		const queryClient = createQueryClient();
 		getFileTreeGitStatusMock.mockResolvedValue([]);
 
@@ -216,8 +215,8 @@ describe("useFileTreeGitStatus", () => {
 			queryClient,
 			queryKeys.git.status("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
-		expect(options?.staleTime).toBe(10_000);
+		expect(options?.refetchInterval).toBe(false);
+		expect(options?.staleTime).toBe(Infinity);
 	});
 });
 

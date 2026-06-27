@@ -97,24 +97,6 @@ describe("fileWatcher", () => {
 			],
 			[
 				{
-					queryKey: ["git-log"],
-					exact: false,
-				},
-			],
-			[
-				{
-					queryKey: ["git-branch"],
-					exact: false,
-				},
-			],
-			[
-				{
-					queryKey: ["git-ahead-count"],
-					exact: false,
-				},
-			],
-			[
-				{
 					queryKey: ["fs-tree"],
 					exact: false,
 				},
@@ -144,7 +126,7 @@ describe("fileWatcher", () => {
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
 		vi.advanceTimersByTime(1);
-		expect(invalidateQueriesMock).toHaveBeenCalledTimes(9);
+		expect(invalidateQueriesMock).toHaveBeenCalledTimes(6);
 	});
 
 	it("invalidates precise profile file and preview queries when event includes a path", async () => {
@@ -162,15 +144,12 @@ describe("fileWatcher", () => {
 			[{ queryKey: ["git-diff", "profile-1"] }],
 			[{ queryKey: ["git-diff-stats", "profile-1"] }],
 			[{ queryKey: ["git-status", "profile-1"] }],
-			[{ queryKey: ["git-log", "profile-1"] }],
-			[{ queryKey: ["git-ahead-count", "profile-1"] }],
 			[
 				{
 					queryKey: ["fs-tree", "profile-1"],
 					exact: false,
 				},
 			],
-			[{ queryKey: ["git-branch", "/repo"] }],
 			[{ queryKey: ["fs-file", "profile-1", "src/index.ts"] }],
 			[{ queryKey: ["fs-file-preview", "profile-1", "src/index.ts"] }],
 		]);
@@ -290,15 +269,12 @@ it("invalidates cached descendant file queries for directory events", async () =
 			[{ queryKey: ["git-diff", "profile-1"] }],
 			[{ queryKey: ["git-diff-stats", "profile-1"] }],
 			[{ queryKey: ["git-status", "profile-1"] }],
-			[{ queryKey: ["git-log", "profile-1"] }],
-			[{ queryKey: ["git-ahead-count", "profile-1"] }],
 			[
 				{
 					queryKey: ["fs-tree", "profile-1"],
 					exact: false,
 				},
 			],
-			[{ queryKey: ["git-branch", "/repo"] }],
 			[
 				{
 					queryKey: ["fs-file", "profile-1"],

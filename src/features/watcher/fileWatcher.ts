@@ -23,18 +23,6 @@ function invalidateAllProjectQueries() {
 		exact: false,
 	});
 	queryClient.invalidateQueries({
-		queryKey: [queryNamespaces["git-log"]],
-		exact: false,
-	});
-	queryClient.invalidateQueries({
-		queryKey: [queryNamespaces["git-branch"]],
-		exact: false,
-	});
-	queryClient.invalidateQueries({
-		queryKey: [queryNamespaces["git-ahead-count"]],
-		exact: false,
-	});
-	queryClient.invalidateQueries({
 		queryKey: [queryNamespaces["fs-tree"]],
 		exact: false,
 	});
@@ -103,13 +91,11 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 		? new Map(projects.map((project) => [project.id, project]))
 		: null;
 	const profileIds = new Set<string>();
-	const branchFolders = new Set<string>();
 	const fileInvalidations = new Map<string, Set<string | null>>();
 
 	for (const event of events) {
 		if (event.profile_id) {
 			profileIds.add(event.profile_id);
-			branchFolders.add(event.root_path);
 			addFileInvalidation(fileInvalidations, event.profile_id, event.path);
 			continue;
 		}
@@ -122,7 +108,6 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 
 		for (const profile of project.profiles) {
 			profileIds.add(profile.id);
-			branchFolders.add(profile.worktree_path);
 			addFileInvalidation(fileInvalidations, profile.id, null);
 		}
 	}
@@ -135,18 +120,10 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 		queryClient.invalidateQueries({
 			queryKey: queryKeys.git.status(profileId),
 		});
-		queryClient.invalidateQueries({ queryKey: queryKeys.git.log(profileId) });
-		queryClient.invalidateQueries({
-			queryKey: queryKeys.git.aheadCount(profileId),
-		});
 		queryClient.invalidateQueries({
 			queryKey: queryKeys.fs.tree(profileId),
 			exact: false,
 		});
-	}
-
-	for (const folder of branchFolders) {
-		queryClient.invalidateQueries({ queryKey: queryKeys.git.branch(folder) });
 	}
 
 	for (const [profileId, paths] of fileInvalidations) {

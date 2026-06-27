@@ -321,8 +321,8 @@ export function useFileTreeGitStatus(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.status(profileId),
 		queryFn: () => getFileTreeGitStatus({ profileId }),
 		enabled: !!profileId && enabled,
-		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
-		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
+		staleTime: Infinity,
+		refetchInterval: false,
 	});
 }
 

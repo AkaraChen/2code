@@ -170,7 +170,7 @@ index 587be6b..f9264f7 100644
 		expect(options?.refetchInterval).toBe(false);
 	});
 
-	it("uses a fast fallback refresh for visible diff stats", async () => {
+	it("keeps visible diff stats event-driven instead of polling", async () => {
 		const queryClient = createQueryClient();
 		getGitDiffStatsMock.mockResolvedValue({
 			files_changed: 1,
@@ -195,8 +195,8 @@ index 587be6b..f9264f7 100644
 			queryClient,
 			queryKeys.git.diffStats("profile-1"),
 		);
-		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
-		expect(options?.staleTime).toBe(10_000);
+		expect(options?.refetchInterval).toBe(false);
+		expect(options?.staleTime).toBe(Infinity);
 	});
 
 	it("uses a fast fallback refresh for visible ahead counts", async () => {

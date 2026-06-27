@@ -82,8 +82,8 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
-		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
-		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
+		staleTime: Infinity,
+		refetchInterval: false,
 	});
 	useRefreshOnEnable(enabled, refetch);
 
