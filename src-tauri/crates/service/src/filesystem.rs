@@ -58,7 +58,11 @@ pub fn rename_file_tree_path(
 	destination_path: &str,
 ) -> Result<(), AppError> {
 	let root = get_canonical_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::rename_file_tree_path(&root, source_path, destination_path)
+	infra::filesystem::rename_file_tree_path(
+		&root,
+		source_path,
+		destination_path,
+	)
 }
 
 pub fn move_file_tree_paths(
@@ -68,7 +72,11 @@ pub fn move_file_tree_paths(
 	target_dir_path: Option<&str>,
 ) -> Result<(), AppError> {
 	let root = get_canonical_profile_worktree_path(db, profile_id)?;
-	infra::filesystem::move_file_tree_paths(&root, source_paths, target_dir_path)
+	infra::filesystem::move_file_tree_paths(
+		&root,
+		source_paths,
+		target_dir_path,
+	)
 }
 
 pub fn delete_file_tree_paths(

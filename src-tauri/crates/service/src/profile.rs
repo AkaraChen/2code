@@ -479,17 +479,17 @@ pub fn create(
 	create_with_default_worktree_dir(conn, project_id, branch_name, None)
 }
 
-fn cleanup_profile(profile: &Profile, project_folder: &str) -> Result<(), AppError> {
+fn cleanup_profile(
+	profile: &Profile,
+	project_folder: &str,
+) -> Result<(), AppError> {
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 
 	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(
-			&cfg.teardown_script,
-			&worktree_path,
-		);
+		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
 	}
 
-let branch_name =
+	let branch_name =
 		infra::git::worktree_current_branch(&profile.worktree_path)?
 			.unwrap_or_else(|| profile.branch_name.clone());
 

@@ -228,9 +228,11 @@ pub fn get_binary_preview(
 		"working_tree" => {
 			infra::git::read_worktree_file(&profile.worktree_path, path)?
 		}
-		"head" => {
-			infra::git::read_head_file(&profile.worktree_path, cache_root, path)?
-		}
+		"head" => infra::git::read_head_file(
+			&profile.worktree_path,
+			cache_root,
+			path,
+		)?,
 		"commit" => {
 			let commit_hash = commit_hash.ok_or_else(|| {
 				AppError::GitError(

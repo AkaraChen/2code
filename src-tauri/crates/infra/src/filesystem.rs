@@ -81,8 +81,11 @@ pub fn list_file_tree_child_paths(
 	let parent_dir = parent_path
 		.as_ref()
 		.map_or_else(|| root.to_path_buf(), |path| root.join(path));
-	let parent_dir =
-		ensure_canonical_path_within_root(&canonical_root, &parent_dir, "Parent path")?;
+	let parent_dir = ensure_canonical_path_within_root(
+		&canonical_root,
+		&parent_dir,
+		"Parent path",
+	)?;
 	if !parent_dir.is_dir() {
 		return Err(AppError::NotFound(format!(
 			"Directory: {}",
@@ -262,7 +265,11 @@ pub fn delete_file_tree_paths(
 		}
 
 		let absolute_path = root.join(&path);
-		ensure_parent_within_root(&canonical_root, &absolute_path, "File tree path")?;
+		ensure_parent_within_root(
+			&canonical_root,
+			&absolute_path,
+			"File tree path",
+		)?;
 		let metadata =
 			std::fs::symlink_metadata(&absolute_path).map_err(|error| {
 				if error.kind() == std::io::ErrorKind::NotFound {
@@ -1111,26 +1118,33 @@ mod tests {
 	// (escape, absolute, .git, normal nested). These cover the security boundary.
 	#[test]
 	fn validate_rejects_parent_escape() {
-		let err = validate_file_tree_relative_path("../escape", "test path").unwrap_err();
+		let err = validate_file_tree_relative_path("../escape", "test path")
+			.unwrap_err();
 		let msg = err.to_string();
 		assert!(msg.contains("escapes worktree") || msg.contains("ParentDir"));
 	}
 
 	#[test]
 	fn validate_rejects_absolute_path() {
-		let err = validate_file_tree_relative_path("/etc/passwd", "test path").unwrap_err();
+		let err = validate_file_tree_relative_path("/etc/passwd", "test path")
+			.unwrap_err();
 		assert!(err.to_string().contains("must be relative"));
 	}
 
 	#[test]
 	fn validate_rejects_git_metadata() {
-		let err = validate_file_tree_relative_path(".git/config", "test path").unwrap_err();
+		let err = validate_file_tree_relative_path(".git/config", "test path")
+			.unwrap_err();
 		assert!(err.to_string().contains(".git"));
 	}
 
 	#[test]
 	fn validate_accepts_normal_nested_relative() {
-		let ok = validate_file_tree_relative_path("src/components/Button.tsx", "test path").unwrap();
+		let ok = validate_file_tree_relative_path(
+			"src/components/Button.tsx",
+			"test path",
+		)
+		.unwrap();
 		assert_eq!(ok, "src/components/Button.tsx");
 	}
 

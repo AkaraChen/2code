@@ -393,7 +393,7 @@ pub fn read_head_file(
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	let path = validate_repo_relative_path(path, "Preview file path")?;
-let spec = format!("HEAD:{path}");
+	let spec = format!("HEAD:{path}");
 	let Some(blob_oid) = get_git_blob_oid(folder, &spec)? else {
 		return Ok(None);
 	};
@@ -410,8 +410,13 @@ pub fn read_commit_file(
 ) -> Result<Option<String>, AppError> {
 	validate_commit_hash(commit_hash)?;
 	let path = validate_repo_relative_path(path, "Preview file path")?;
-	let cache_path =
-		preview_cache_path(cache_root, folder, "commit", Some(commit_hash), &path);
+	let cache_path = preview_cache_path(
+		cache_root,
+		folder,
+		"commit",
+		Some(commit_hash),
+		&path,
+	);
 	read_git_blob_to_cache(
 		folder,
 		&format!("{commit_hash}:{path}"),
@@ -753,7 +758,7 @@ pub fn worktree_remove(
 		.output()?;
 
 	if !output.status.success() {
-let stderr = String::from_utf8_lossy(&output.stderr);
+		let stderr = String::from_utf8_lossy(&output.stderr);
 		let normalized = stderr.to_lowercase();
 		if normalized.contains("not a working tree")
 			&& !Path::new(worktree_path).exists()
@@ -772,7 +777,9 @@ let stderr = String::from_utf8_lossy(&output.stderr);
 	Ok(())
 }
 
-pub fn worktree_current_branch(worktree_path: &str) -> Result<Option<String>, AppError> {
+pub fn worktree_current_branch(
+	worktree_path: &str,
+) -> Result<Option<String>, AppError> {
 	let output = command_without_windows_console("git")
 		.args(["branch", "--show-current"])
 		.current_dir(worktree_path)
@@ -803,7 +810,8 @@ pub fn worktree_current_branch(worktree_path: &str) -> Result<Option<String>, Ap
 		)));
 	}
 
-	let branch_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+	let branch_name =
+		String::from_utf8_lossy(&output.stdout).trim().to_string();
 	if branch_name.is_empty() {
 		return Ok(None);
 	}
@@ -821,9 +829,9 @@ pub fn branch_delete(
 		.output()?;
 
 	if !output.status.success() {
-let stderr = String::from_utf8_lossy(&output.stderr);
-	let normalized = stderr.to_lowercase();
-	if normalized.contains("branch") && normalized.contains("not found") {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		let normalized = stderr.to_lowercase();
+		if normalized.contains("branch") && normalized.contains("not found") {
 			tracing::warn!(
 				"git branch delete skipped missing branch: {branch_name}"
 			);
@@ -1411,9 +1419,8 @@ fn preview_cache_path(
 	folder.hash(&mut hasher);
 	let repo_hash = hasher.finish();
 
-	let mut cache_path = cache_root
-		.join(format!("{repo_hash:016x}"))
-		.join(source);
+	let mut cache_path =
+		cache_root.join(format!("{repo_hash:016x}")).join(source);
 
 	if let Some(commit_hash) = commit_hash {
 		cache_path = cache_path.join(commit_hash);

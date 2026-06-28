@@ -67,7 +67,7 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok(event) => {
 				let now = Instant::now();
-prune_debounce_cache(&mut last_event, now);
+				prune_debounce_cache(&mut last_event, now);
 				let event_key = watch_event_debounce_key(&event);
 				let should_send = last_event
 					.get(&event_key)
@@ -101,13 +101,15 @@ fn reconcile_watchers(
 	watchers: &mut HashMap<String, ProjectWatcher>,
 ) {
 	let targets = match db.lock() {
-		Ok(mut conn) => match repo::project::list_all_with_profiles(&mut conn) {
-			Ok(p) => p,
-			Err(e) => {
-				tracing::warn!("Watcher: failed to list projects: {e}");
-				return;
+		Ok(mut conn) => {
+			match repo::project::list_all_with_profiles(&mut conn) {
+				Ok(p) => p,
+				Err(e) => {
+					tracing::warn!("Watcher: failed to list projects: {e}");
+					return;
+				}
 			}
-		},
+		}
 		Err(_) => return,
 	};
 	let targets = watcher_targets(&targets);
@@ -174,7 +176,7 @@ fn reconcile_watchers(
 }
 
 fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
-let mut targets = Vec::new();
+	let mut targets = Vec::new();
 
 	for project in projects {
 		let mut has_project_root_profile = false;
@@ -185,7 +187,10 @@ let mut targets = Vec::new();
 			}
 
 			targets.push(WatchTarget {
-				key: format!("profile:{}:{}", profile.id, profile.worktree_path),
+				key: format!(
+					"profile:{}:{}",
+					profile.id, profile.worktree_path
+				),
 				project_id: project.id.clone(),
 				profile_id: Some(profile.id.clone()),
 				root_path: profile.worktree_path.clone(),
@@ -209,8 +214,9 @@ fn prune_debounce_cache(
 	last_event: &mut HashMap<String, Instant>,
 	now: Instant,
 ) {
-	last_event
-		.retain(|_, timestamp| now.duration_since(*timestamp) < DEBOUNCE_DURATION);
+	last_event.retain(|_, timestamp| {
+		now.duration_since(*timestamp) < DEBOUNCE_DURATION
+	});
 
 	if last_event.len() <= MAX_DEBOUNCE_KEYS {
 		return;
@@ -308,7 +314,8 @@ mod tests {
 		Profile {
 			id: id.to_string(),
 			project_id: project_id.to_string(),
-			branch_name: if is_default { "main" } else { "feature" }.to_string(),
+			branch_name: if is_default { "main" } else { "feature" }
+				.to_string(),
 			worktree_path: worktree_path.to_string(),
 			created_at: "2026-01-01T00:00:00Z".to_string(),
 			is_default,
@@ -341,7 +348,12 @@ mod tests {
 			"/repo",
 			vec![
 				profile("default-1", "project-1", "/repo", true),
-				profile("profile-1", "project-1", "/workspace/profile-1", false),
+				profile(
+					"profile-1",
+					"project-1",
+					"/workspace/profile-1",
+					false,
+				),
 			],
 		)];
 
@@ -362,7 +374,8 @@ mod tests {
 
 	#[test]
 	fn watcher_targets_keep_project_root_without_profiles() {
-		let projects = vec![project_with_profiles("project-1", "/repo", vec![])];
+		let projects =
+			vec![project_with_profiles("project-1", "/repo", vec![])];
 
 		let targets = watcher_targets(&projects);
 
@@ -433,6 +446,9 @@ mod tests {
 			Some("src/main.rs".to_string()),
 		);
 		assert_eq!(relative_event_path(root, Path::new("/repo")), None);
-		assert_eq!(relative_event_path(root, Path::new("/other/main.rs")), None);
+		assert_eq!(
+			relative_event_path(root, Path::new("/other/main.rs")),
+			None
+		);
 	}
 }
