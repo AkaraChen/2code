@@ -15,6 +15,7 @@ export default antfu({
 		ignores: [
 			"**/*.md",
 			"./src-tauri/target/**",
+			"./src/components/ui/**",
 			"./src/generated/**",
 			"./src/paraglide/**",
 			"./website/**",
