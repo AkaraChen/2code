@@ -1,12 +1,10 @@
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
-	Checkbox,
-	createListCollection,
-	Field,
-	Flex,
-	IconButton,
-	Portal,
-	Select,
-} from "@chakra-ui/react";
+	NativeSelect,
+	NativeSelectOption,
+} from "@/components/ui/native-select";
 import { FiEye } from "react-icons/fi";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import {
@@ -15,13 +13,6 @@ import {
 } from "@/features/terminal/themes";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
-
-const themeCollection = createListCollection({
-	items: terminalThemeIds.map((id) => ({
-		value: id,
-		label: terminalThemeNames[id],
-	})),
-});
 
 function ThemeSelect({
 	value,
@@ -35,53 +26,34 @@ function ThemeSelect({
 	onPreview: (id: TerminalThemeId | null) => void;
 }) {
 	return (
-		<Field.Root>
-			<Flex align="center">
-				<Field.Label mb="0">{label}</Field.Label>
-				<IconButton
+		<Field>
+			<div className="flex items-center gap-2">
+				<FieldLabel className="mb-0">{label}</FieldLabel>
+				<Button
 					aria-label={m.preview()}
-					size="2xs"
+					size="icon-xs"
 					variant="ghost"
-					ml="auto"
-					opacity={0.5}
-					_hover={{ opacity: 1 }}
+					className="ml-auto opacity-60 hover:opacity-100"
 					onClick={() => onPreview(value)}
 				>
 					<FiEye />
-				</IconButton>
-			</Flex>
-			<Select.Root
-				collection={themeCollection}
-				value={[value]}
-				onValueChange={(e) => {
-					onChange(e.value[0] as TerminalThemeId);
+				</Button>
+			</div>
+			<NativeSelect
+				value={value}
+				onChange={(event) => {
+					onChange(event.target.value as TerminalThemeId);
 					onPreview(null);
 				}}
 				size="sm"
 			>
-				<Select.HiddenSelect />
-				<Select.Control>
-					<Select.Trigger>
-						<Select.ValueText />
-					</Select.Trigger>
-					<Select.IndicatorGroup>
-						<Select.Indicator />
-					</Select.IndicatorGroup>
-				</Select.Control>
-				<Portal>
-					<Select.Positioner>
-						<Select.Content>
-							{themeCollection.items.map((item) => (
-								<Select.Item item={item} key={item.value}>
-									{item.label}
-									<Select.ItemIndicator />
-								</Select.Item>
-							))}
-						</Select.Content>
-					</Select.Positioner>
-				</Portal>
-			</Select.Root>
-		</Field.Root>
+				{terminalThemeIds.map((id) => (
+					<NativeSelectOption key={id} value={id}>
+						{terminalThemeNames[id]}
+					</NativeSelectOption>
+				))}
+			</NativeSelect>
+		</Field>
 	);
 }
 
@@ -134,17 +106,15 @@ export function TerminalThemePicker({
 					/>
 				</>
 			)}
-			<Field.Root>
-				<Checkbox.Root
-					size="sm"
-					checked={syncTerminalTheme}
-					onCheckedChange={(e) => setSyncTerminalTheme(!!e.checked)}
-				>
-					<Checkbox.HiddenInput />
-					<Checkbox.Control />
-					<Checkbox.Label>{m.syncTerminalTheme()}</Checkbox.Label>
-				</Checkbox.Root>
-			</Field.Root>
+			<Field>
+				<label className="flex items-center gap-2 text-sm">
+					<Checkbox
+						checked={syncTerminalTheme}
+						onCheckedChange={setSyncTerminalTheme}
+					/>
+					{m.syncTerminalTheme()}
+				</label>
+			</Field>
 		</>
 	);
 }

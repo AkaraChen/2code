@@ -1,4 +1,3 @@
-import { Box, HStack, Text } from "@chakra-ui/react";
 import { useDroppable } from "@dnd-kit/core";
 import {
 	horizontalListSortingStrategy,
@@ -30,28 +29,22 @@ export function AvailableControls({
 	const { setNodeRef } = useDroppable({ id: "available-area" });
 
 	return (
-		<Box>
-			<Text fontSize="sm" fontWeight="medium" mb="2">
+		<div>
+			<div className="mb-2 text-sm font-medium">
 				{m.topbarAvailable()}
-			</Text>
+			</div>
 			<SortableContext
 				items={available}
 				strategy={horizontalListSortingStrategy}
 			>
-				<HStack
+				<div
 					ref={setNodeRef}
-					gap="2"
-					minH="12"
-					p="3"
-					borderWidth="1px"
-					borderColor="border"
-					borderStyle="dashed"
-					rounded="lg"
+					className="flex min-h-12 items-center gap-2 rounded-lg border border-dashed p-3"
 				>
 					{available.length === 0 ? (
-						<Text fontSize="xs" color="fg.muted">
+						<div className="text-xs text-muted-foreground">
 							{m.topbarAllControlsActive()}
-						</Text>
+						</div>
 					) : (
 						available.map((id) => {
 							const def = controlRegistry.get(id);
@@ -61,8 +54,8 @@ export function AvailableControls({
 							);
 						})
 					)}
-				</HStack>
+				</div>
 			</SortableContext>
-		</Box>
+		</div>
 	);
 }

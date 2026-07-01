@@ -1,4 +1,11 @@
-import { Field, Skeleton, Stack, Switch, Text } from "@chakra-ui/react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import {
+	Field,
+	FieldContent,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
 import {
 	isPermissionGranted,
 	requestPermission,
@@ -26,30 +33,27 @@ export function NotificationSettings() {
 	};
 
 	return (
-		<Stack gap="6" maxW="md">
-			<Field.Root>
-				<Field.Label>{m.notificationEnabled()}</Field.Label>
-				<Switch.Root
+		<div className="flex max-w-md flex-col gap-6">
+			<Field orientation="horizontal">
+				<FieldContent>
+					<FieldLabel>{m.notificationEnabled()}</FieldLabel>
+					<FieldDescription>
+						{m.notificationEnabledDescription()}
+					</FieldDescription>
+				</FieldContent>
+				<Switch
 					checked={enabled}
-					onCheckedChange={(e) => handleToggle(!!e.checked)}
-				>
-					<Switch.HiddenInput />
-					<Switch.Control />
-					<Switch.Label>
-						<Text fontSize="sm" color="fg.muted">
-							{m.notificationEnabledDescription()}
-						</Text>
-					</Switch.Label>
-				</Switch.Root>
-			</Field.Root>
+					onCheckedChange={(checked) => void handleToggle(checked)}
+				/>
+			</Field>
 			<AsyncBoundary
-				fallback={<Skeleton height="70px" />}
+				fallback={<Skeleton className="h-[70px]" />}
 				errorFallback={({ error, onRetry }) => (
 					<InlineError error={error} height="70px" onRetry={onRetry} />
 				)}
 			>
 				<SoundPicker />
 			</AsyncBoundary>
-		</Stack>
+		</div>
 	);
 }

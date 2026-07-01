@@ -50,9 +50,10 @@ vi.mock("@/generated", async () => {
 	};
 });
 
-vi.mock("@/shared/providers/appToaster", () => ({
-	toaster: {
-		create: toasterCreateMock,
+vi.mock("sonner", () => ({
+	toast: {
+		error: toasterCreateMock,
+		success: toasterCreateMock,
 	},
 }));
 

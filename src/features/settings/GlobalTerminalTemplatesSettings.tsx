@@ -1,15 +1,7 @@
-import {
-	Box,
-	Button,
-	Flex,
-	HStack,
-	IconButton,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
+import { Button } from "@/components/ui/button";
 import {
 	commandPreview,
 	createEmptyGlobalTerminalTemplateDraft,
@@ -90,14 +82,14 @@ export function GlobalTerminalTemplatesSettings() {
 
 	return (
 		<>
-			<Stack gap="4">
-				<HStack justify="space-between" align="start">
-					<Stack gap="1">
-						<Text fontWeight="semibold">{m.globalTerminalTemplates()}</Text>
-						<Text fontSize="sm" color="fg.muted">
+			<div className="flex flex-col gap-4">
+				<div className="flex items-start justify-between gap-4">
+					<div className="flex flex-col gap-1">
+						<h2 className="font-semibold">{m.globalTerminalTemplates()}</h2>
+						<p className="text-sm text-muted-foreground">
 							{m.globalTerminalTemplatesDescription()}
-						</Text>
-					</Stack>
+						</p>
+					</div>
 					<Button
 						size="sm"
 						variant="outline"
@@ -106,67 +98,55 @@ export function GlobalTerminalTemplatesSettings() {
 					>
 						{m.addTerminalTemplate()}
 					</Button>
-				</HStack>
+				</div>
 
 				{templates.length === 0 ? (
-					<Box rounded="l3" borderWidth="1px" borderColor="border" px="4" py="3">
-						<Text fontSize="sm" color="fg.muted">
+					<div className="rounded-lg border px-4 py-3">
+						<p className="text-sm text-muted-foreground">
 							{m.noTerminalTemplates()}
-						</Text>
-					</Box>
+						</p>
+					</div>
 				) : (
-					<Stack gap="2">
+					<div className="flex flex-col gap-2">
 						{templates.map((template) => (
-							<Flex
+							<div
 								key={template.id}
-								rounded="l3"
-								borderWidth="1px"
-								borderColor="border"
-								px="4"
-								py="3"
-								align="center"
-								justify="space-between"
-								gap="4"
+								className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3"
 							>
-								<Stack gap="1" minW="0">
-									<Text fontWeight="medium" truncate>
+								<div className="flex min-w-0 flex-col gap-1">
+									<div className="truncate font-medium">
 										{template.name}
-									</Text>
-									<Text
-										fontSize="sm"
-										color="fg.muted"
-										fontFamily="mono"
-										truncate
-									>
+									</div>
+									<div className="truncate font-mono text-sm text-muted-foreground">
 										{commandPreview(template.commands.join("\n"))}
-									</Text>
-								</Stack>
-								<HStack gap="1" flexShrink="0">
-									<IconButton
+									</div>
+								</div>
+								<div className="flex shrink-0 gap-1">
+									<Button
 										variant="ghost"
-										size="sm"
+										size="icon-sm"
 										aria-label={m.editTerminalTemplate()}
 										onClick={() => openEditDialog(template.id)}
 										disabled={replaceTemplates.isPending}
 									>
 										<FiEdit2 />
-									</IconButton>
-									<IconButton
+									</Button>
+									<Button
 										variant="ghost"
-										size="sm"
-										colorPalette="red"
+										size="icon-sm"
 										aria-label={m.deleteTerminalTemplate()}
 										onClick={() => void removeTemplate(template.id)}
 										disabled={replaceTemplates.isPending}
+										className="text-destructive hover:text-destructive"
 									>
 										<FiTrash2 />
-									</IconButton>
-								</HStack>
-							</Flex>
+									</Button>
+								</div>
+							</div>
 						))}
-					</Stack>
+					</div>
 				)}
-			</Stack>
+			</div>
 
 			<TerminalTemplateDraftDialog
 				draft={draft}

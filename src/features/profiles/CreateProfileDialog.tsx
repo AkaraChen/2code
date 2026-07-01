@@ -1,13 +1,16 @@
-import {
-	Button,
-	CloseButton,
-	Dialog,
-	Field,
-	Input,
-	Portal,
-} from "@chakra-ui/react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProfile } from "./hooks";
 
@@ -47,55 +50,41 @@ export default function CreateProfileDialog({
 	});
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) handleClose();
+			onOpenChange={(open) => {
+				if (!open) handleClose();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.createProfile()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Field.Root>
-								<Field.Label>{m.branchName()}</Field.Label>
-								<Input
-									placeholder={m.branchNamePlaceholder()}
-									{...form.register("branchName")}
-									onKeyDown={(e) => {
-										if (
-											e.key === "Enter" &&
-											!createProfile.isPending
-										) {
-											handleCreate();
-										}
-									}}
-								/>
-							</Field.Root>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								disabled={createProfile.isPending}
-								loading={createProfile.isPending}
-								onClick={handleCreate}
-							>
-								{m.create()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.createProfile()}</DialogTitle>
+				</DialogHeader>
+				<Field>
+					<FieldLabel>{m.branchName()}</FieldLabel>
+					<Input
+						placeholder={m.branchNamePlaceholder()}
+						{...form.register("branchName")}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && !createProfile.isPending) {
+								handleCreate();
+							}
+						}}
+					/>
+				</Field>
+				<DialogFooter>
+					<Button variant="outline" onClick={handleClose}>
+						{m.cancel()}
+					</Button>
+					<Button
+						disabled={createProfile.isPending}
+						onClick={handleCreate}
+					>
+						{createProfile.isPending ? <Spinner /> : null}
+						{m.create()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

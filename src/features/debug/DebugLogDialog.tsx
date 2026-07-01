@@ -1,17 +1,4 @@
 import {
-	Badge,
-	Box,
-	CloseButton,
-	Dialog,
-	Flex,
-	HStack,
-	IconButton,
-	Input,
-	Portal,
-	Text,
-	VStack,
-} from "@chakra-ui/react";
-import {
 	type ChangeEvent,
 	memo,
 	useCallback,
@@ -21,6 +8,15 @@ import {
 	useState,
 } from "react";
 import { FiTrash2 } from "react-icons/fi";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type { LogEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
 import { useDebugLogStore } from "./debugLogStore";
@@ -34,41 +30,27 @@ function formatTime(timestamp: number): string {
 	return `${h}:${min}:${s}.${ms}`;
 }
 
-const levelColor: Record<string, string> = {
-	ERROR: "red",
-	WARN: "orange",
-	INFO: "blue",
+const levelVariant: Record<string, "default" | "destructive" | "secondary"> = {
+	ERROR: "destructive",
+	WARN: "secondary",
+	INFO: "default",
 };
 
 const LogRow = memo(({ entry }: { entry: LogEntry }) => {
 	return (
-		<HStack
-			gap="2"
-			px="3"
-			py="0.5"
-			fontSize="xs"
-			fontFamily="mono"
-			_hover={{ bg: "bg.subtle" }}
-			alignItems="baseline"
-		>
-			<Text color="fg.muted" flexShrink={0}>
+		<div className="flex items-baseline gap-2 px-3 py-0.5 font-mono text-xs hover:bg-muted">
+			<span className="shrink-0 text-muted-foreground">
 				{formatTime(entry.timestamp)}
-			</Text>
+			</span>
 			<Badge
-				size="xs"
-				colorPalette={levelColor[entry.level] ?? "gray"}
-				variant="subtle"
-				flexShrink={0}
+				variant={levelVariant[entry.level] ?? "secondary"}
+				className="h-4 shrink-0 px-1.5"
 			>
 				{entry.level}
 			</Badge>
-			<Text color="fg.muted" flexShrink={0}>
-				{entry.source}
-			</Text>
-			<Text flex="1" wordBreak="break-all">
-				{entry.message}
-			</Text>
-		</HStack>
+			<span className="shrink-0 text-muted-foreground">{entry.source}</span>
+			<span className="flex-1 break-all">{entry.message}</span>
+		</div>
 	);
 });
 
@@ -115,52 +97,50 @@ function DebugLogContent() {
 
 	return (
 		<>
-			<HStack px="4" pb="2" gap="2">
+			<div className="flex gap-2 px-4 pb-2">
 				<Input
-					size="sm"
 					placeholder={m.debugSearchPlaceholder()}
 					value={search}
 					onChange={handleSearchChange}
-					flex="1"
+					className="flex-1"
 				/>
-				<IconButton
+				<Button
 					aria-label={m.debugClear()}
-					size="sm"
+					size="icon"
 					variant="ghost"
 					onClick={clear}
 				>
 					<FiTrash2 />
-				</IconButton>
-			</HStack>
+				</Button>
+			</div>
 
-			<Dialog.Body p="0" flex="1" overflow="hidden">
-				<Box
+			<div className="min-h-0 flex-1 overflow-hidden">
+				<div
 					ref={scrollRef}
-					overflowY="auto"
-					h="full"
+					className="h-full overflow-y-auto"
 					onScroll={handleScroll}
 				>
-					<VStack gap="0" align="stretch">
+					<div className="flex flex-col">
 						{filtered.length === 0 ? (
-							<Flex align="center" justify="center" py="8">
-								<Text color="fg.muted" fontSize="sm">
+							<div className="flex items-center justify-center py-8">
+								<p className="text-sm text-muted-foreground">
 									{m.debugNoLogs()}
-								</Text>
-							</Flex>
+								</p>
+							</div>
 						) : (
 							filtered.map((entry) => (
 								<LogRow key={entry.timestamp} entry={entry} />
 							))
 						)}
-					</VStack>
-				</Box>
-			</Dialog.Body>
+					</div>
+				</div>
+			</div>
 
-			<Flex px="4" py="2" justify="end">
-				<Text fontSize="xs" color="fg.muted">
+			<div className="flex justify-end px-4 py-2">
+				<p className="text-xs text-muted-foreground">
 					{filtered.length} /{logs.length}
-				</Text>
-			</Flex>
+				</p>
+			</div>
 		</>
 	);
 }
@@ -170,43 +150,20 @@ export default function DebugLogDialog({
 	onClose,
 }: DebugLogDialogProps) {
 	const handleOpenChange = useCallback(
-		(e: { open: boolean }) => {
-			if (!e.open) onClose();
+		(open: boolean) => {
+			if (!open) onClose();
 		},
 		[onClose],
 	);
 
 	return (
-		<Dialog.Root
-			lazyMount
-			size="lg"
-			placement="center"
-			open={isOpen}
-			onOpenChange={handleOpenChange}
-		>
-			{isOpen ? (
-				<Portal>
-					<Dialog.Backdrop zIndex="max" />
-					<Dialog.Positioner zIndex="max">
-						<Dialog.Content
-							overflow="hidden"
-							display="flex"
-							flexDirection="column"
-							maxH="70vh"
-						>
-							<Dialog.Header py="2" px="4">
-								<Dialog.Title fontSize="sm">
-									{m.debugLog()}
-								</Dialog.Title>
-								<Dialog.CloseTrigger asChild>
-									<CloseButton size="sm" />
-								</Dialog.CloseTrigger>
-							</Dialog.Header>
-							<DebugLogContent />
-						</Dialog.Content>
-					</Dialog.Positioner>
-				</Portal>
-			) : null}
-		</Dialog.Root>
+		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+			<DialogContent className="flex max-h-[70vh] overflow-hidden sm:max-w-lg">
+				<DialogHeader className="px-0">
+					<DialogTitle>{m.debugLog()}</DialogTitle>
+				</DialogHeader>
+				<DebugLogContent />
+			</DialogContent>
+		</Dialog>
 	);
 }

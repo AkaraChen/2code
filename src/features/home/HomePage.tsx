@@ -1,9 +1,15 @@
-import { Box, Center, EmptyState, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { useEffect, useMemo } from "react";
 import { FiFolder, FiFolderPlus } from "react-icons/fi";
 import { useNavigate } from "react-router";
-import * as m from "@/paraglide/messages.js";
+import {
+	Empty,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { useProjects } from "@/features/projects/hooks";
+import * as m from "@/paraglide/messages.js";
 import { TourOnboarding } from "./TourOnboarding";
 
 export default function HomePage() {
@@ -17,7 +23,6 @@ export default function HomePage() {
 		return `/projects/${firstProject.id}/profiles/${defaultProfile.id}`;
 	}, [projects]);
 
-	// Auto-navigate to first project's default profile if projects exist
 	useEffect(() => {
 		if (firstProjectProfilePath) {
 			navigate(firstProjectProfilePath, {
@@ -27,42 +32,30 @@ export default function HomePage() {
 	}, [firstProjectProfilePath, navigate]);
 
 	return (
-		<Box h="full">
-			<HStack
+		<div className="h-full">
+			<header
 				data-tauri-drag-region
-				h="52px"
-				px="5"
-				borderBottomWidth="1px"
-				borderColor="border"
-				gap="2"
+				className="flex h-[52px] items-center gap-2 border-b px-5"
 			>
-				<Icon color="fg.muted" fontSize="sm">
-					<FiFolder />
-				</Icon>
-				<Text fontSize="sm" fontWeight="600" userSelect="none">
-					{m.home()}
-				</Text>
-			</HStack>
+				<FiFolder className="size-4 text-muted-foreground" />
+				<h1 className="select-none text-sm font-semibold">{m.home()}</h1>
+			</header>
 
-			{hasNoProjects && (
-				<Center h="calc(100% - 52px)">
-					<EmptyState.Root size="sm">
-						<EmptyState.Content>
-							<EmptyState.Indicator>
+			{hasNoProjects ? (
+				<div className="flex h-[calc(100%-52px)] items-center justify-center">
+					<Empty>
+						<EmptyHeader>
+							<EmptyMedia variant="icon">
 								<FiFolderPlus />
-							</EmptyState.Indicator>
-							<VStack textAlign="center">
-								<EmptyState.Title>{m.emptyProjectsTitle()}</EmptyState.Title>
-								<EmptyState.Description>
-									{m.emptyProjectsDesc()}
-								</EmptyState.Description>
-							</VStack>
-						</EmptyState.Content>
-					</EmptyState.Root>
-				</Center>
-			)}
+							</EmptyMedia>
+							<EmptyTitle>{m.emptyProjectsTitle()}</EmptyTitle>
+							<EmptyDescription>{m.emptyProjectsDesc()}</EmptyDescription>
+						</EmptyHeader>
+					</Empty>
+				</div>
+			) : null}
 
 			<TourOnboarding isEnabled={hasNoProjects} />
-		</Box>
+		</div>
 	);
 }

@@ -1,18 +1,14 @@
+import { use } from "react";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
-	createListCollection,
-	Field,
-	Input,
-	Portal,
-	Select,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
-import { use, useMemo } from "react";
+	NativeSelect,
+	NativeSelectOption,
+} from "@/components/ui/native-select";
 import type { AvailableShell } from "@/generated";
 import { listAvailableShells } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { createCachedPromise } from "@/shared/lib/cachedPromise";
-import { useLocale } from "@/shared/lib/locale";
 import { useTerminalSettingsStore } from "./stores/terminalSettingsStore";
 
 const CUSTOM_SHELL_VALUE = "__custom__";
@@ -23,7 +19,6 @@ const getShellsPromise = createCachedPromise<AvailableShell[]>(() =>
 
 export function ShellPicker() {
 	const shells = use(getShellsPromise());
-	const locale = useLocale();
 	const defaultShell = useTerminalSettingsStore(
 		(state) => state.defaultShell,
 	);
@@ -31,78 +26,45 @@ export function ShellPicker() {
 		(state) => state.setDefaultShell,
 	);
 
-	const shellCollection = useMemo(
-		() => {
-			void locale;
-			return createListCollection({
-				items: [
-					...shells.map((shell) => ({
-						value: shell.command,
-						label: shell.is_default
-							? `${shell.label} (${m.defaultOption()})`
-							: shell.label,
-					})),
-					{ value: CUSTOM_SHELL_VALUE, label: m.customShell() },
-				],
-			});
-		},
-		[locale, shells],
-	);
-
 	const isKnownShell = shells.some((shell) => shell.command === defaultShell);
 	const selectValue = isKnownShell ? defaultShell : CUSTOM_SHELL_VALUE;
 
 	return (
-		<Field.Root>
-			<Field.Label>{m.defaultShell()}</Field.Label>
-			<Stack gap="2">
-				<Select.Root
-					collection={shellCollection}
-					value={[selectValue]}
-					onValueChange={(event) => {
-						const value = event.value[0];
+		<Field>
+			<FieldLabel>{m.defaultShell()}</FieldLabel>
+			<div className="flex flex-col gap-2">
+				<NativeSelect
+					value={selectValue}
+					onChange={(event) => {
+						const value = event.target.value;
 						if (!value || value === CUSTOM_SHELL_VALUE) return;
 						setDefaultShell(value);
 					}}
 					size="sm"
 				>
-					<Select.HiddenSelect />
-					<Select.Control>
-						<Select.Trigger>
-							<Select.ValueText />
-						</Select.Trigger>
-						<Select.IndicatorGroup>
-							<Select.Indicator />
-						</Select.IndicatorGroup>
-					</Select.Control>
-					<Portal>
-						<Select.Positioner>
-							<Select.Content>
-								{shellCollection.items.map((item) => (
-									<Select.Item item={item} key={item.value}>
-										{item.label}
-										<Select.ItemIndicator />
-									</Select.Item>
-								))}
-							</Select.Content>
-						</Select.Positioner>
-					</Portal>
-				</Select.Root>
+					{shells.map((shell) => (
+						<NativeSelectOption key={shell.command} value={shell.command}>
+							{shell.is_default
+								? `${shell.label} (${m.defaultOption()})`
+								: shell.label}
+						</NativeSelectOption>
+					))}
+					<NativeSelectOption value={CUSTOM_SHELL_VALUE}>
+						{m.customShell()}
+					</NativeSelectOption>
+				</NativeSelect>
 
 				{selectValue === CUSTOM_SHELL_VALUE ? (
 					<Input
 						value={defaultShell}
 						onChange={(event) => setDefaultShell(event.target.value)}
 						placeholder={m.customShellPlaceholder()}
-						fontFamily="mono"
-						fontSize="sm"
+						className="font-mono"
 					/>
 				) : null}
 
-				<Text fontSize="xs" color="fg.muted">
-					{m.defaultShellDescription()}
-				</Text>
-			</Stack>
-		</Field.Root>
+				<FieldDescription>{m.defaultShellDescription()}</FieldDescription>
+			</div>
+		</Field>
 	);
 }

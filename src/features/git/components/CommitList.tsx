@@ -1,8 +1,8 @@
-import { Box, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { FiGitCommit } from "react-icons/fi";
 import { memo, useCallback } from "react";
 import type { GitCommit } from "@/generated";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
+import { cn } from "@/lib/utils";
 
 function formatRelativeTime(isoDate: string): string {
 	const now = Date.now();
@@ -46,49 +46,46 @@ const CommitListRow = memo(({
 	}, [commit, index, onCommitSelect]);
 
 	return (
-		<VStack
+		<div
 			data-index={index}
-			align="stretch"
-			px="3"
-			py="1.5"
-			bg={isActive ? "bg.emphasized" : "transparent"}
-			_hover={{
-				bg: isActive ? "bg.emphasized" : "bg.muted",
-			}}
+			className={cn(
+				"flex select-none flex-col gap-0.5 px-3 py-1.5",
+				isActive ? "bg-muted" : "hover:bg-muted/70",
+			)}
 			onClick={handleClick}
-			gap="0.5"
-			userSelect="none"
 		>
-			<Text fontSize="sm" lineClamp={1}>
+			<div className="line-clamp-1 text-sm">
 				{commit.message}
-			</Text>
-			<HStack gap="2" fontSize="xs" color="fg.muted">
-				<HStack gap="1">
-					<Icon fontSize="xs">
-						<FiGitCommit />
-					</Icon>
-					<Text fontFamily="mono">{commit.hash}</Text>
-				</HStack>
-				<Text truncate flex="1">
+			</div>
+			<div className="flex items-center gap-2 text-xs text-muted-foreground">
+				<span className="flex items-center gap-1">
+					<FiGitCommit className="size-3" />
+					<span className="font-mono">{commit.hash}</span>
+				</span>
+				<span className="min-w-0 flex-1 truncate">
 					{commit.author.name}
-				</Text>
-				<Text flexShrink={0}>{formatRelativeTime(commit.date)}</Text>
-			</HStack>
-			<HStack gap="2" fontSize="xs">
+				</span>
+				<span className="shrink-0">{formatRelativeTime(commit.date)}</span>
+			</div>
+			<div className="flex items-center gap-2 text-xs">
 				{commit.files_changed > 0 && (
-					<Text color="fg.muted">
+					<span className="text-muted-foreground">
 						{commit.files_changed}{" "}
 						{commit.files_changed === 1 ? "file" : "files"}
-					</Text>
+					</span>
 				)}
 				{commit.insertions > 0 && (
-					<Text color="green.solid">+{commit.insertions}</Text>
+					<span className="text-green-600 dark:text-green-400">
+						+{commit.insertions}
+					</span>
 				)}
 				{commit.deletions > 0 && (
-					<Text color="red.solid">-{commit.deletions}</Text>
+					<span className="text-red-600 dark:text-red-400">
+						-{commit.deletions}
+					</span>
 				)}
-			</HStack>
-		</VStack>
+			</div>
+		</div>
 	);
 });
 
@@ -101,7 +98,7 @@ export default function CommitList({
 		useScrollIntoView<HTMLDivElement>(selectedIndex);
 
 	return (
-		<Box ref={containerRef} flex="1" overflowY="auto" minH="0">
+		<div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto">
 			{commits.map((commit, index) => (
 				<CommitListRow
 					key={commit.full_hash}
@@ -111,6 +108,6 @@ export default function CommitList({
 					onCommitSelect={onCommitSelect}
 				/>
 			))}
-		</Box>
+		</div>
 	);
 }

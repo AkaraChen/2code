@@ -1,7 +1,7 @@
-import { Flex, Spinner, Text } from "@chakra-ui/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { useMemo } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import * as m from "@/paraglide/messages.js";
 import { useGitBinaryPreview } from "../hooks";
 import {
@@ -78,61 +78,35 @@ function BinaryPreviewPane({
 	isLoading: boolean;
 }) {
 	return (
-		<Flex
-			flex="1"
-			minH={{ base: "18rem", lg: "24rem" }}
-			direction="column"
-			borderWidth="1px"
-			borderColor="border.subtle"
-			borderRadius="lg"
-			overflow="hidden"
-			bg="bg.panel"
-		>
-			<Flex
-				align="center"
-				justify="space-between"
-				gap="3"
-				px="3"
-				py="2.5"
-				borderBottomWidth="1px"
-				borderColor="border.subtle"
-				bg="bg.subtle"
-			>
-				<Text
-					fontSize="xs"
-					fontWeight="semibold"
-					letterSpacing="widest"
-					textTransform="uppercase"
-					color="fg.muted"
-				>
+		<div className="flex min-h-72 flex-1 flex-col overflow-hidden rounded-lg border bg-card lg:min-h-96">
+			<div className="flex items-center justify-between gap-3 border-b bg-muted/50 px-3 py-2.5">
+				<p className="text-xs font-semibold uppercase text-muted-foreground">
 					{label}
-				</Text>
-				<Text fontSize="xs" fontFamily="mono" color="fg.muted" truncate>
+				</p>
+				<p className="truncate font-mono text-xs text-muted-foreground">
 					{path}
-				</Text>
-			</Flex>
+				</p>
+			</div>
 
-			<Flex
-				flex="1"
-				align="center"
-				justify="center"
-				p="4"
-				minH="0"
-				bgImage={[
+			<div
+				className="flex min-h-0 flex-1 items-center justify-center p-4"
+				style={{
+					backgroundImage: [
 					"linear-gradient(45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
 					"linear-gradient(-45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
 					"linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
 					"linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
-				].join(", ")}
-				bgSize="16px 16px"
-				css={{ backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0" }}
+					].join(", "),
+					backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+					backgroundSize: "16px 16px",
+				}}
 			>
 				{isLoading ? (
-					<Spinner size="sm" color="colorPalette.500" />
+					<Spinner className="size-4" />
 				) : isError ? (
-					<Text fontSize="sm" color="fg.muted" textAlign="center">
+					<p className="text-center text-sm text-muted-foreground">
 						{error instanceof Error ? error.message : String(error)}
-					</Text>
+					</p>
 				) : assetUrl ? (
 					<img
 						src={assetUrl}
@@ -142,17 +116,16 @@ function BinaryPreviewPane({
 							maxHeight: "70vh",
 							objectFit: "contain",
 							borderRadius: "0.375rem",
-							boxShadow:
-								"var(--chakra-shadows-md, 0 4px 6px rgba(0, 0, 0, 0.1))",
+							boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
 						}}
 					/>
 				) : (
-					<Text fontSize="sm" color="fg.muted">
+					<p className="text-sm text-muted-foreground">
 						{m.gitDiffImagePreviewUnavailable()}
-					</Text>
+					</p>
 				)}
-			</Flex>
-		</Flex>
+			</div>
+		</div>
 	);
 }
 
@@ -200,14 +173,7 @@ export function BinaryImageDiffPreview({
 	});
 
 	return (
-		<Flex
-			flex="1"
-			minH="0"
-			direction={{ base: "column", xl: "row" }}
-			gap="4"
-			p="4"
-			overflow="auto"
-		>
+		<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 xl:flex-row">
 			{beforePath && beforeMimeType ? (
 				<BinaryPreviewPane
 					label={m.gitDiffImagePreviewBefore()}
@@ -229,6 +195,6 @@ export function BinaryImageDiffPreview({
 					isLoading={afterPreview.isLoading}
 				/>
 			) : null}
-		</Flex>
+		</div>
 	);
 }

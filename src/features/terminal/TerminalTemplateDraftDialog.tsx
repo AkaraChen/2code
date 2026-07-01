@@ -1,15 +1,19 @@
+import { Button } from "@/components/ui/button";
 import {
-	Button,
-	CloseButton,
 	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
 	Field,
-	HStack,
-	Input,
-	Portal,
-	Stack,
-	Text,
-	Textarea,
-} from "@chakra-ui/react";
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import * as m from "@/paraglide/messages.js";
 import type { GlobalTerminalTemplateDraft } from "./templates";
 
@@ -41,104 +45,90 @@ export function TerminalTemplateDraftDialog<T extends GlobalTerminalTemplateDraf
 	const canSave = draft.name.trim().length > 0;
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			size="lg"
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
+			onOpenChange={(open) => {
+				if (!open) onClose();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>
-								{isEditing
-									? m.editTerminalTemplate()
-									: m.addTerminalTemplate()}
-							</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Stack gap="4">
-								<Field.Root required>
-									<Field.Label>{m.terminalTemplateName()}</Field.Label>
-									<Input
-										value={draft.name}
-										onChange={(e) =>
-											onChange({ ...draft, name: e.target.value })
-										}
-										placeholder={m.terminalTemplateNamePlaceholder()}
-									/>
-								</Field.Root>
+			<DialogContent className="sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle>
+						{isEditing
+							? m.editTerminalTemplate()
+							: m.addTerminalTemplate()}
+					</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-4">
+					<Field>
+						<FieldLabel>{m.terminalTemplateName()}</FieldLabel>
+						<Input
+							value={draft.name}
+							onChange={(event) =>
+								onChange({ ...draft, name: event.target.value })
+							}
+							placeholder={m.terminalTemplateNamePlaceholder()}
+						/>
+					</Field>
 
-								{showCwd ? (
-									<Field.Root>
-										<Field.Label>{m.terminalTemplateCwd()}</Field.Label>
-										<Text fontSize="xs" color="fg.muted" mb="1">
-											{m.terminalTemplateCwdDescription()}
-										</Text>
-										<Input
-											value={(draft as { cwd?: string }).cwd ?? ""}
-											onChange={(e) =>
-												onChange({ ...draft, cwd: e.target.value } as T)
-											}
-											placeholder={m.terminalTemplateCwdPlaceholder()}
-											fontFamily="mono"
-											fontSize="sm"
-										/>
-									</Field.Root>
-								) : null}
+					{showCwd ? (
+						<Field>
+							<FieldLabel>{m.terminalTemplateCwd()}</FieldLabel>
+							<FieldDescription>
+								{m.terminalTemplateCwdDescription()}
+							</FieldDescription>
+							<Input
+								value={(draft as { cwd?: string }).cwd ?? ""}
+								onChange={(event) =>
+									onChange({ ...draft, cwd: event.target.value } as T)
+								}
+								placeholder={m.terminalTemplateCwdPlaceholder()}
+								className="font-mono"
+							/>
+						</Field>
+					) : null}
 
-								<Field.Root required>
-									<Field.Label>{m.terminalTemplateCommands()}</Field.Label>
-									<Text fontSize="xs" color="fg.muted" mb="1">
-										{m.terminalTemplateCommandsDescription()}
-									</Text>
-									<Textarea
-										value={draft.commandsText}
-										onChange={(e) =>
-											onChange({ ...draft, commandsText: e.target.value })
-										}
-										placeholder={m.scriptPlaceholder()}
-										rows={8}
-										fontFamily="mono"
-										fontSize="sm"
-									/>
-								</Field.Root>
-							</Stack>
-						</Dialog.Body>
-						<Dialog.Footer justifyContent="space-between">
-							<HStack>
-								<Dialog.ActionTrigger asChild>
-									<Button variant="outline">{m.cancel()}</Button>
-								</Dialog.ActionTrigger>
-								{isEditing ? (
-									<Button
-										colorPalette="red"
-										variant="subtle"
-										onClick={onDelete}
-										loading={isPending}
-									>
-										{m.delete()}
-									</Button>
-								) : null}
-							</HStack>
+					<Field>
+						<FieldLabel>{m.terminalTemplateCommands()}</FieldLabel>
+						<FieldDescription>
+							{m.terminalTemplateCommandsDescription()}
+						</FieldDescription>
+						<Textarea
+							value={draft.commandsText}
+							onChange={(event) =>
+								onChange({
+									...draft,
+									commandsText: event.target.value,
+								})
+							}
+							placeholder={m.scriptPlaceholder()}
+							rows={8}
+							className="font-mono"
+						/>
+					</Field>
+				</div>
+				<DialogFooter className="justify-between">
+					<div className="flex gap-2">
+						<Button variant="outline" onClick={onClose}>
+							{m.cancel()}
+						</Button>
+						{isEditing ? (
 							<Button
-								onClick={onSave}
-								disabled={!canSave}
-								loading={isPending}
+								variant="destructive"
+								onClick={onDelete}
+								disabled={isPending}
 							>
-								{m.save()}
+								{isPending ? <Spinner /> : null}
+								{m.delete()}
 							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+						) : null}
+					</div>
+					<Button onClick={onSave} disabled={!canSave || isPending}>
+						{isPending ? <Spinner /> : null}
+						{m.save()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

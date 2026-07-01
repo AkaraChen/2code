@@ -48,7 +48,7 @@ just fmt               # runs 'fama'
 
 ### Frontend (`/src`)
 
-React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ChakraProvider` → `ThemeProvider` → `BrowserRouter` → `App`.
+React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ThemeProvider` → `TooltipProvider` → `BrowserRouter` → `AppRoot`, with the shadcn `Toaster` mounted inside `TooltipProvider`.
 
 **Routing** (react-router v7): `/` → HomePage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage, `*` → redirect to `/`.
 
@@ -64,7 +64,7 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 - `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
 - `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
 - `shared/lib/` — Query client config, centralized query keys, cached promise utility
-- `shared/providers/` — ThemeProvider, Toaster
+- `shared/providers/` — ThemeProvider
 - `shared/components/` — Fallbacks (PageSkeleton, PageError, SidebarSkeleton), SidebarLink. ErrorBoundary is from `react-error-boundary` package.
 - `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
 
@@ -77,8 +77,9 @@ React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryCl
 
 **UI Framework:**
 
-- Chakra UI v3 (not v2 — breaking API differences)
+- shadcn/ui primitives in `src/components/ui` (Base UI + Tailwind CSS v4)
 - `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
+- `sonner` for toast notifications
 
 ### Backend (`/src-tauri`)
 
@@ -199,7 +200,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
 - **PTY output streams raw bytes over a per-session IPC `Channel`** (not global events) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done. `find_utf8_boundary` still exists in `service::pty` (with tests) as a utility but is no longer applied anywhere on the output path
 - **Font listing and sound playback are macOS-only** (`core-text` crate, `/System/Library/Sounds`, `afplay`) — needs platform guards for cross-platform
-- **Chakra UI v3** has major breaking changes from v2 — always check v3 API when adding components
+- **UI components** should use shadcn/ui primitives from `src/components/ui`; do not add legacy UI-library APIs back
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
 - **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`

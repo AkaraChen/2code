@@ -1,6 +1,6 @@
-import { IconButton } from "@chakra-ui/react";
 import { useCallback } from "react";
 import { FiTool } from "react-icons/fi";
+import { Button } from "@/components/ui/button";
 import * as m from "@/paraglide/messages.js";
 import DebugLogDialog from "./DebugLogDialog";
 import { useDebugStore } from "./debugStore";
@@ -16,20 +16,14 @@ export default function DebugFloat() {
 
 	return (
 		<>
-			<IconButton
+			<Button
 				aria-label={m.debugLog()}
-				position="fixed"
-				bottom="4"
-				right="16"
-				zIndex="overlay"
-				rounded="full"
-				size="sm"
-				colorPalette="orange"
-				variant="solid"
+				size="icon"
+				className="fixed right-16 bottom-4 z-50 rounded-full"
 				onClick={openPanel}
 			>
 				<FiTool />
-			</IconButton>
+			</Button>
 			<DebugLogDialog
 				isOpen={panelOpen}
 				onClose={closePanel}

@@ -107,7 +107,7 @@ Cross-cutting concerns and external system integrations.
 ### Provider Stack (`src/main.tsx`)
 
 ```
-QueryClientProvider → ChakraProvider → ThemeProvider → BrowserRouter → App
+QueryClientProvider → ThemeProvider → TooltipProvider → BrowserRouter → AppRoot
 ```
 
 ### Routing (`src/App.tsx`)

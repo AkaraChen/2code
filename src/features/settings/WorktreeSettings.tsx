@@ -1,11 +1,6 @@
-import {
-	Button,
-	Field,
-	HStack,
-	IconButton,
-	Input,
-	Text,
-} from "@chakra-ui/react";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FiFolder, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
@@ -30,12 +25,10 @@ export function WorktreeSettings() {
 	};
 
 	return (
-		<Field.Root>
-			<Field.Label>{m.defaultWorktreeDir()}</Field.Label>
-			<Text fontSize="xs" color="fg.muted" mb="1">
-				{m.defaultWorktreeDirDesc()}
-			</Text>
-			<HStack align="stretch">
+		<Field>
+			<FieldLabel>{m.defaultWorktreeDir()}</FieldLabel>
+			<FieldDescription>{m.defaultWorktreeDirDesc()}</FieldDescription>
+			<div className="flex items-stretch gap-2">
 				<Input
 					value={defaultWorktreeDir}
 					onChange={(event) =>
@@ -46,21 +39,22 @@ export function WorktreeSettings() {
 				<Button
 					variant="outline"
 					onClick={handleChooseFolder}
-					flexShrink={0}
+					className="shrink-0"
 				>
 					<FiFolder />
 					{m.chooseFolder()}
 				</Button>
-				<IconButton
+				<Button
 					aria-label={m.clearDefaultWorktreeDir()}
 					variant="ghost"
+					size="icon"
 					onClick={clearDefaultWorktreeDir}
 					disabled={!defaultWorktreeDir}
-					flexShrink={0}
+					className="shrink-0"
 				>
 					<FiX />
-				</IconButton>
-			</HStack>
-		</Field.Root>
+				</Button>
+			</div>
+		</Field>
 	);
 }

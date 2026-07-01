@@ -1,4 +1,3 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import type { FileTreeOptions } from "@pierre/trees";
 import {
 	act,
@@ -14,7 +13,6 @@ import type {
 	ReactNode,
 } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appSystem } from "@/theme/system";
 import { FILE_TREE_TERMINAL_DROP_MIME } from "@/shared/lib/fileTreeTerminalDrop";
 import FileTreePanel from "./FileTreePanel";
 import {
@@ -80,9 +78,10 @@ const {
 	openDefaultAppMutateAsyncMock: vi.fn(),
 }));
 
-vi.mock("@/shared/providers/appToaster", () => ({
-	toaster: {
-		create: toasterCreateMock,
+vi.mock("sonner", () => ({
+	toast: {
+		error: toasterCreateMock,
+		success: toasterCreateMock,
 	},
 }));
 
@@ -264,7 +263,7 @@ function renderPanel(
 	options: { isOpen?: boolean; isActive?: boolean } = {},
 ) {
 	const view = render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<FileTreePanel
 				profileId={profileId}
 				rootPath={rootPath}
@@ -272,7 +271,7 @@ function renderPanel(
 				isActive={options.isActive ?? true}
 				onOpenFile={onOpenFile}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 	return { onOpenFile, ...view };
 }
@@ -432,7 +431,7 @@ describe("fileTreePanel", () => {
 			createFileTreeChildPathsResult(["src/"], false, null, 2),
 		);
 		rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<FileTreePanel
 					profileId={profileId}
 					rootPath={rootPath}
@@ -440,7 +439,7 @@ describe("fileTreePanel", () => {
 					isActive
 					onOpenFile={onOpenFile}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		await waitFor(() => {
@@ -944,9 +943,9 @@ describe("fileTreePanel", () => {
 
 		await waitFor(() => {
 			expect(toasterCreateMock).toHaveBeenCalledWith(
+				expect.any(String),
 				expect.objectContaining({
 					description: "permission denied",
-					type: "error",
 				}),
 			);
 		});

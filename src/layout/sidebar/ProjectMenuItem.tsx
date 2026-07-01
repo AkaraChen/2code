@@ -1,12 +1,3 @@
-import {
-	HStack,
-	Icon,
-	IconButton,
-	Menu,
-	Portal,
-	Text,
-	Tooltip,
-} from "@chakra-ui/react";
 import { useMemo, useState } from "react";
 import {
 	FiChevronDown,
@@ -15,6 +6,27 @@ import {
 	FiTerminal,
 } from "react-icons/fi";
 import { NavLink } from "react-router";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuGroup,
+	ContextMenuItem,
+	ContextMenuSeparator,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+	SidebarMenuAction,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	SidebarMenuSub,
+	SidebarMenuSubButton,
+	SidebarMenuSubItem,
+} from "@/components/ui/sidebar";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
@@ -24,7 +36,6 @@ import { useProfileAgentStatus } from "@/features/terminal/store";
 import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
-import { SidebarActiveIndicator } from "@/shared/components/SidebarActiveIndicator";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { ProfileList } from "./ProfileList";
 import { ProjectAvatar } from "./ProjectAvatar";
@@ -49,15 +60,11 @@ export function ProjectMenuItem({
 	);
 
 	const hasOnlyDefaultProfile = nonDefaultProfiles.length === 0;
-
 	const isDefaultActive = activeProfileId === defaultProfile?.id;
-
 	const defaultProfileUrl = defaultProfile
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
-	const defaultAgentStatus = useProfileAgentStatus(
-		defaultProfile?.id ?? "",
-	);
+	const defaultAgentStatus = useProfileAgentStatus(defaultProfile?.id ?? "");
 	const defaultProfileLabel = m.defaultProfile();
 
 	const renameDialog = useDialogState();
@@ -69,208 +76,130 @@ export function ProjectMenuItem({
 	const expanded = userExpanded ?? true;
 
 	return (
-		<>
-			<Menu.Root
-				open={menuOpen}
-				onOpenChange={(e) => setMenuOpen(e.open)}
-			>
-				<Menu.ContextTrigger asChild>
-					<HStack
-						asChild
-						className="group"
-						data-sidebar-item
-						userSelect="none"
-						align="center"
-						gap="1"
-						w="full"
-						minW="0"
-						overflow="hidden"
-						px="4"
-						py="1.5"
-						fontWeight="medium"
-						position="relative"
-						bg={
-							hasOnlyDefaultProfile && isDefaultActive
-								? "bg.subtle"
-								: "transparent"
-						}
-						_hover={{ bg: "bg.subtle" }}
-						_active={{ bg: "bg.muted" }}
-					>
-						<NavLink
-							data-project-id={project.id}
-							data-testid="project-sidebar-item"
-							to={defaultProfileUrl}
-						>
-							{hasOnlyDefaultProfile && isDefaultActive && (
-								<SidebarActiveIndicator insetInlineStart="0" />
-							)}
-							<HStack
-								gap="2"
-								align="center"
-								userSelect="none"
-								flex="1 1 auto"
-								minW="0"
-								overflow="hidden"
-							>
-								<ProjectAvatar
-									projectId={project.id}
-									projectName={project.name}
+		<SidebarMenuItem>
+			<ContextMenu open={menuOpen} onOpenChange={setMenuOpen}>
+				<ContextMenuTrigger
+					render={(
+						<SidebarMenuButton
+							render={(
+								<NavLink
+									data-project-id={project.id}
+									data-testid="project-sidebar-item"
+									to={defaultProfileUrl}
 								/>
-								<Text
-									flex="1 1 auto"
-									minW="0"
-									lineHeight="1.25rem"
-									transform="translateY(1px)"
-									truncate
-								>
-									{project.name}
-								</Text>
-								{hasOnlyDefaultProfile && defaultAgentStatus && (
-									<AgentStatusDot status={defaultAgentStatus} />
-								)}
-							</HStack>
-
-							{hasOnlyDefaultProfile ? (
-								<Tooltip.Root
-									openDelay={400}
-									positioning={{ placement: "right" }}
-								>
-									<Tooltip.Trigger asChild>
-										<IconButton
-											as="span"
-											variant="ghost"
-											size="2xs"
-											flexShrink={0}
-											opacity="0"
-											_groupHover={{ opacity: 1 }}
-											onClick={(e) => {
-												e.preventDefault();
-												e.stopPropagation();
-												createProfileDialog.onOpen();
-											}}
-										>
-											<FiPlus />
-										</IconButton>
-									</Tooltip.Trigger>
-									<Portal>
-										<Tooltip.Positioner>
-											<Tooltip.Content>
-												创建 git worktree
-											</Tooltip.Content>
-										</Tooltip.Positioner>
-									</Portal>
-								</Tooltip.Root>
-							) : (
-								<IconButton
-									as="span"
-									variant="ghost"
-									size="2xs"
-									flexShrink={0}
-									onClick={(e) => {
-										e.preventDefault();
-										e.stopPropagation();
-										setUserExpanded((prev) =>
-											prev === null ? !expanded : !prev,
-										);
-									}}
-								>
-									{expanded ? (
-										<FiChevronDown />
-									) : (
-										<FiChevronRight />
-									)}
-								</IconButton>
 							)}
-						</NavLink>
-					</HStack>
-				</Menu.ContextTrigger>
-				<Portal>
-					<Menu.Positioner>
-						<Menu.Content>
-							<ProjectGroupMenu
-								project={project}
-								projectGroups={projectGroups}
-								onCloseMenu={() => setMenuOpen(false)}
+							isActive={hasOnlyDefaultProfile && isDefaultActive}
+							data-sidebar-item
+						/>
+					)}
+				>
+					<ProjectAvatar
+						projectId={project.id}
+						projectName={project.name}
+					/>
+					<span className="min-w-0 flex-1 truncate font-medium">
+						{project.name}
+					</span>
+					{hasOnlyDefaultProfile && defaultAgentStatus && (
+						<AgentStatusDot status={defaultAgentStatus} />
+					)}
+				</ContextMenuTrigger>
+				<ContextMenuContent>
+					<ContextMenuGroup>
+						<ProjectGroupMenu
+							project={project}
+							projectGroups={projectGroups}
+							onCloseMenu={() => setMenuOpen(false)}
+						/>
+						<ContextMenuItem onClick={settingsDialog.onOpen}>
+							{m.projectSettings()}
+						</ContextMenuItem>
+						<ContextMenuItem
+							data-testid="project-menu-rename"
+							onClick={renameDialog.onOpen}
+						>
+							{m.renameProject()}
+						</ContextMenuItem>
+					</ContextMenuGroup>
+					<ContextMenuSeparator />
+					<ContextMenuItem
+						variant="destructive"
+						onClick={deleteDialog.onOpen}
+					>
+						{m.deleteProject()}
+					</ContextMenuItem>
+				</ContextMenuContent>
+			</ContextMenu>
+
+			{hasOnlyDefaultProfile ? (
+				<Tooltip>
+					<TooltipTrigger
+						render={(
+							<SidebarMenuAction
+								showOnHover
+								aria-label={m.createProfile()}
 							/>
-							<Menu.Item
-								value="settings"
-								onClick={settingsDialog.onOpen}
-							>
-								{m.projectSettings()}
-							</Menu.Item>
-							<Menu.Item
-								data-testid="project-menu-rename"
-								value="rename"
-								onClick={renameDialog.onOpen}
-							>
-								{m.renameProject()}
-							</Menu.Item>
-							<Menu.Separator />
-							<Menu.Item
-								value="delete"
-								color="fg.error"
-								_hover={{ bg: "bg.error", color: "fg.error" }}
-								onClick={deleteDialog.onOpen}
-							>
-								{m.deleteProject()}
-							</Menu.Item>
-						</Menu.Content>
-					</Menu.Positioner>
-				</Portal>
-			</Menu.Root>
+						)}
+						onClick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							createProfileDialog.onOpen();
+						}}
+						onKeyDown={(e) => {
+							if (e.key !== "Enter" && e.key !== " ") return;
+							e.preventDefault();
+							e.stopPropagation();
+							createProfileDialog.onOpen();
+						}}
+					>
+						<FiPlus />
+					</TooltipTrigger>
+					<TooltipContent side="right">
+						{m.createProfile()}
+					</TooltipContent>
+				</Tooltip>
+			) : (
+				<SidebarMenuAction
+					aria-label={m.toggleProjectGroup({ name: project.name })}
+					aria-expanded={expanded}
+					onClick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						setUserExpanded((prev) =>
+							prev === null ? !expanded : !prev,
+						);
+					}}
+				>
+					{expanded ? <FiChevronDown /> : <FiChevronRight />}
+				</SidebarMenuAction>
+			)}
 
 			{!hasOnlyDefaultProfile && expanded && (
-				<>
-					{/* Default (project root) item */}
-					<HStack
-						asChild
-						data-sidebar-item
-						gap="2"
-						align="center"
-						w="full"
-						minW="0"
-						maxW="var(--sidebar-width)"
-						overflow="hidden"
-						position="relative"
-						ps="9"
-						pe="4"
-						py="1"
-						fontSize="sm"
-						bg={isDefaultActive ? "bg.subtle" : "transparent"}
-						_hover={{ bg: "bg.subtle" }}
-						_active={{ bg: "bg.muted" }}
-					>
-						<NavLink
-							to={defaultProfileUrl}
+				<SidebarMenuSub>
+					<SidebarMenuSubItem>
+						<SidebarMenuSubButton
+							render={<NavLink to={defaultProfileUrl} />}
+							isActive={isDefaultActive}
+							data-sidebar-item
 						>
-							{isDefaultActive && (
-								<SidebarActiveIndicator insetInlineStart="0" />
-							)}
-							<Icon fontSize="xs" color="fg.muted" flexShrink={0}>
-								<FiTerminal />
-							</Icon>
+							<FiTerminal />
 							<OverflowTooltipText
 								displayValue={defaultProfileLabel}
 								tooltipValue={defaultProfileLabel}
-								fontSize="sm"
-								lineHeight="1.25rem"
-								visualOffsetY="1px"
-								flex="1 1 auto"
-								minW="0"
+								className="min-w-0 flex-1"
 							/>
 							{defaultAgentStatus && (
 								<AgentStatusDot status={defaultAgentStatus} />
 							)}
-						</NavLink>
-					</HStack>
+						</SidebarMenuSubButton>
+					</SidebarMenuSubItem>
 
 					<ProfileList
 						profiles={nonDefaultProfiles}
 						projectId={project.id}
 						activeProfileId={activeProfileId}
 					/>
-				</>
+				</SidebarMenuSub>
 			)}
 
 			<RenameProjectDialog
@@ -296,6 +225,6 @@ export function ProjectMenuItem({
 					projectId={project.id}
 				/>
 			)}
-		</>
+		</SidebarMenuItem>
 	);
 }

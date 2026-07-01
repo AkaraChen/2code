@@ -1,4 +1,3 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import {
 	act,
 	fireEvent,
@@ -7,7 +6,6 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appSystem } from "@/theme/system";
 import FileViewerPane from "./FileViewerPane";
 import {
 	useFileViewerDirtyStore,
@@ -126,14 +124,14 @@ function createVisibleRectList(): DOMRectList {
 
 function renderPane(path = filePath, isActive = true) {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<FileViewerPane
 				filePath={path}
 				profileId={profileId}
 				rootPath={rootPath}
 				isActive={isActive}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 }
 
@@ -325,13 +323,13 @@ describe("fileViewerPane", () => {
 		fireEvent.change(markdownEditor, { target: { value: markdownDraft } });
 
 		rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<FileViewerPane
 					filePath={filePath}
 					profileId={profileId}
 					rootPath={rootPath}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		const monacoEditor = await screen.findByLabelText("Monaco Editor");
@@ -359,13 +357,13 @@ describe("fileViewerPane", () => {
 		fireEvent.change(markdownEditor, { target: { value: markdownDraft } });
 
 		rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<FileViewerPane
 					filePath={filePath}
 					profileId={profileId}
 					rootPath={rootPath}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		await waitFor(() => {
@@ -377,13 +375,13 @@ describe("fileViewerPane", () => {
 		});
 
 		rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<FileViewerPane
 					filePath={markdownPath}
 					profileId={profileId}
 					rootPath={rootPath}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		expect(await screen.findByLabelText("Markdown Editor")).toHaveValue(
@@ -411,13 +409,13 @@ describe("fileViewerPane", () => {
 		fireEvent.change(monacoEditor, { target: { value: codeDraft } });
 
 		rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<FileViewerPane
 					filePath={markdownPath}
 					profileId={profileId}
 					rootPath={rootPath}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		const markdownEditor = await screen.findByLabelText("Markdown Editor");

@@ -1,4 +1,3 @@
-import { Box, Flex } from "@chakra-ui/react";
 import { useCallback, type ReactNode, useState } from "react";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import CommandPalette from "@/features/projects/CommandPalette";
@@ -34,9 +33,9 @@ export default function ProfileLayout({
 	);
 
 	return (
-		<Flex direction="column" h="full">
+		<div className="flex h-full flex-col">
 			<CommandPalette profileId={profile.id} isActive={isActive} />
-			<Box borderBottomWidth="1px" borderColor="border">
+			<div className="border-b">
 				<ProjectTopBar
 					projectId={projectId}
 					projectName={projectName}
@@ -45,8 +44,8 @@ export default function ProfileLayout({
 					isFileTreeOpen={fileTreeOpen}
 					onToggleFileTree={handleToggleFileTree}
 				/>
-			</Box>
-			<Flex flex="1" minH="0" minW="0">
+			</div>
+			<div className="flex min-h-0 min-w-0 flex-1">
 				<FileTreePanel
 					key={profile.id}
 					profileId={profile.id}
@@ -55,16 +54,16 @@ export default function ProfileLayout({
 					isActive={isActive}
 					onOpenFile={handleOpenFile}
 				/>
-				<Box
-					flex="1"
-					minH="0"
-					minW="0"
-					borderLeftWidth={fileTreeOpen ? "1px" : "0"}
-					borderColor="border"
+				<div
+					className={
+						fileTreeOpen
+							? "min-h-0 min-w-0 flex-1 border-l"
+							: "min-h-0 min-w-0 flex-1"
+					}
 				>
 					{children}
-				</Box>
-			</Flex>
-		</Flex>
+				</div>
+			</div>
+		</div>
 	);
 }

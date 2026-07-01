@@ -1,4 +1,3 @@
-import { Button, IconButton, Portal, Text, Tooltip } from "@chakra-ui/react";
 import {
 	SiCursor,
 	SiGhostty,
@@ -22,6 +21,12 @@ import {
 	useGitDiffStats,
 	useGitPullRequestStatus,
 } from "@/features/git/hooks";
+import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useGitBranch } from "@/features/projects/hooks";
 import type { GitPullRequestStatus } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -41,28 +46,26 @@ function AppButton({
 	const openApp = useOpenTopbarApp();
 
 	return (
-		<Tooltip.Root>
-			<Tooltip.Trigger asChild>
-				<IconButton
-					aria-label={label}
-					size="xs"
-					variant="subtle"
-					onClick={() =>
-						openApp.mutate({
-							appId,
-							path: profile.worktree_path,
-						})
-					}
-				>
-					<Icon size={14} />
-				</IconButton>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{label}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label={label}
+						size="icon-sm"
+						variant="secondary"
+						onClick={() =>
+							openApp.mutate({
+								appId,
+								path: profile.worktree_path,
+							})
+						}
+					/>
+				}
+			>
+				<Icon size={16} />
+			</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -182,33 +185,31 @@ export function GitDiffControl({ profile, isActive, options }: ControlProps) {
 	const stats = useGitDiffStats(profile.id, isActive && !statsPaused);
 
 	return (
-		<Tooltip.Root>
-			<Tooltip.Trigger asChild>
-				<Button
-					aria-label={m.topbarGitDiff()}
-					size="xs"
-					variant="subtle"
-					onClick={() => onOpen?.()}
-				>
-					<PiGitDiffFill size={14} />
-					{stats && (
-						<>
-							<Text as="span" color="green.400" fontSize="xs">
-								+{stats.additions}
-							</Text>
-							<Text as="span" color="red.400" fontSize="xs">
-								-{stats.deletions}
-							</Text>
-						</>
-					)}
-				</Button>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{m.topbarGitDiff()}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label={m.topbarGitDiff()}
+						size="xs"
+						variant="secondary"
+						onClick={() => onOpen?.()}
+					/>
+				}
+			>
+				<PiGitDiffFill size={16} />
+				{stats && (
+					<>
+						<span className="text-xs text-green-500">
+							+{stats.additions}
+						</span>
+						<span className="text-xs text-red-500">
+							-{stats.deletions}
+						</span>
+					</>
+				)}
+			</TooltipTrigger>
+			<TooltipContent>{m.topbarGitDiff()}</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -259,26 +260,22 @@ export function GitPullRequestStatusControl({
 	};
 
 	return (
-		<Tooltip.Root>
-			<Tooltip.Trigger asChild>
-				<Button
-					aria-label={m.topbarPrStatus()}
-					size="xs"
-					variant="subtle"
-					onClick={handleOpen}
-				>
-					<PiGitPullRequestFill size={14} />
-					<Text as="span" fontSize="xs">
-						{label}
-					</Text>
-				</Button>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{tooltip}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label={m.topbarPrStatus()}
+						size="xs"
+						variant="secondary"
+						onClick={handleOpen}
+					/>
+				}
+			>
+				<PiGitPullRequestFill size={16} />
+				<span className="text-xs">{label}</span>
+			</TooltipTrigger>
+			<TooltipContent>{tooltip}</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -293,22 +290,20 @@ export function RevealInFinderControl({ profile }: ControlProps) {
 	};
 
 	return (
-		<Tooltip.Root>
-			<Tooltip.Trigger asChild>
-				<IconButton
-					aria-label={m.revealInFinder()}
-					size="xs"
-					variant="subtle"
-					onClick={handleReveal}
-				>
-					<PiFolderOpenFill />
-				</IconButton>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{m.revealInFinder()}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label={m.revealInFinder()}
+						size="icon-sm"
+						variant="secondary"
+						onClick={handleReveal}
+					/>
+				}
+			>
+				<PiFolderOpenFill />
+			</TooltipTrigger>
+			<TooltipContent>{m.revealInFinder()}</TooltipContent>
+		</Tooltip>
 	);
 }

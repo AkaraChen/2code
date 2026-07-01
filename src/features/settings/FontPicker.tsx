@@ -1,10 +1,9 @@
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
 import {
-	Checkbox,
-	createListCollection,
-	Field,
-	Portal,
-	Select,
-} from "@chakra-ui/react";
+	NativeSelect,
+	NativeSelectOption,
+} from "@/components/ui/native-select";
 import { use, useMemo } from "react";
 import type { SystemFont } from "@/generated";
 import { listSystemFonts } from "@/generated";
@@ -34,59 +33,29 @@ export function FontPicker() {
 		[fonts, showAllFonts],
 	);
 
-	const fontCollection = useMemo(
-		() =>
-			createListCollection({
-				items: visibleFonts.map((f) => ({
-					value: f.family,
-					label: f.family,
-				})),
-			}),
-		[visibleFonts],
-	);
-
 	return (
 		<>
-			<Field.Root>
-				<Field.Label>{m.terminalFont()}</Field.Label>
-				<Select.Root
-					collection={fontCollection}
-					value={[fontFamily]}
-					onValueChange={(e) => setFontFamily(e.value[0])}
+			<Field>
+				<FieldLabel>{m.terminalFont()}</FieldLabel>
+				<NativeSelect
+					value={fontFamily}
+					onChange={(event) => setFontFamily(event.target.value)}
 					size="sm"
 				>
-					<Select.HiddenSelect />
-					<Select.Control>
-						<Select.Trigger>
-							<Select.ValueText />
-						</Select.Trigger>
-						<Select.IndicatorGroup>
-							<Select.Indicator />
-						</Select.IndicatorGroup>
-					</Select.Control>
-					<Portal>
-						<Select.Positioner>
-							<Select.Content>
-								{fontCollection.items.map((item) => (
-									<Select.Item item={item} key={item.value}>
-										{item.label}
-										<Select.ItemIndicator />
-									</Select.Item>
-								))}
-							</Select.Content>
-						</Select.Positioner>
-					</Portal>
-				</Select.Root>
-			</Field.Root>
-			<Checkbox.Root
-				size="sm"
-				checked={showAllFonts}
-				onCheckedChange={(e) => setShowAllFonts(!!e.checked)}
-			>
-				<Checkbox.HiddenInput />
-				<Checkbox.Control />
-				<Checkbox.Label>{m.showAllFonts()}</Checkbox.Label>
-			</Checkbox.Root>
+					{visibleFonts.map((font) => (
+						<NativeSelectOption key={font.family} value={font.family}>
+							{font.family}
+						</NativeSelectOption>
+					))}
+				</NativeSelect>
+			</Field>
+			<label className="flex items-center gap-2 text-sm">
+				<Checkbox
+					checked={showAllFonts}
+					onCheckedChange={setShowAllFonts}
+				/>
+				{m.showAllFonts()}
+			</label>
 		</>
 	);
 }

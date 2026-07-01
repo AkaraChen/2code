@@ -74,7 +74,7 @@ just coverage                    # llvm-cov HTML report
 - `src/generated/` or `src/paraglide/` — DO NOT EDIT (gitignored, regenerated)
 - `src-tauri/src/schema.rs` — DO NOT EDIT (Diesel generated)
 - Conditional rendering of `<Terminal>` — breaks xterm.js state
-- Chakra UI v2 API — project uses v3 (breaking changes)
+- Legacy UI-library APIs/components — removed; use shadcn/ui primitives from `src/components/ui`
 - Long-held DB mutex locks — causes deadlocks
 - Font listing / sound APIs without macOS platform guard (macOS-only)
 

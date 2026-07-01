@@ -67,8 +67,8 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 
 function syncMonoFont(fontFamily: string) {
 	document.documentElement.style.setProperty(
-		"--chakra-fonts-mono",
-		`"${fontFamily}", monospace`,
+		"--font-mono",
+		`"${fontFamily}", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace`,
 	);
 }
 

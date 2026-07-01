@@ -7,26 +7,21 @@ import {
 	size,
 } from "@floating-ui/dom";
 import type { ReferenceElement, VirtualElement } from "@floating-ui/dom";
-import {
-	Badge,
-	Box,
-	Button,
-	Flex,
-	HStack,
-	IconButton,
-	Textarea,
-	Text,
-} from "@chakra-ui/react";
 import type {
 	FileDiffMetadata,
 	FileDiffOptions,
 	SelectedLineRange,
 } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import * as m from "@/paraglide/messages.js";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import { cn } from "@/lib/utils";
 import {
 	changeBadge,
 	GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
@@ -56,26 +51,29 @@ function FileDiffHeader({
 			: file.name;
 
 	return (
-		<Flex
-			px="3"
-			py="1.5"
-			userSelect="none"
-			gap="3"
-			align="center"
-			bg="bg.panel"
-			roundedTop="md"
-		>
-			<Badge size="xs" colorPalette={badge.colorPalette} variant="subtle">
+		<div className="flex select-none items-center gap-3 bg-card px-3 py-1.5">
+			<Badge
+				variant="outline"
+				className={cn("h-4 px-1.5 font-mono text-[10px]", badge.className)}
+			>
 				{badge.label}
 			</Badge>
-			<Text fontSize="sm" fontFamily="mono" flex="1" truncate>
+			<div className="min-w-0 flex-1 truncate font-mono text-sm">
 				{displayName}
-			</Text>
-			<HStack gap="2" fontSize="xs" fontFamily="mono">
-				{additions > 0 && <Text color="green.solid">+{additions}</Text>}
-				{deletions > 0 && <Text color="red.solid">-{deletions}</Text>}
-			</HStack>
-		</Flex>
+			</div>
+			<div className="flex items-center gap-2 font-mono text-xs">
+				{additions > 0 && (
+					<span className="text-green-600 dark:text-green-400">
+						+{additions}
+					</span>
+				)}
+				{deletions > 0 && (
+					<span className="text-red-600 dark:text-red-400">
+						-{deletions}
+					</span>
+				)}
+			</div>
+		</div>
 	);
 }
 
@@ -87,36 +85,30 @@ function LargeDiffGuardrail({
 	onReveal: () => void;
 }) {
 	return (
-		<Flex align="center" justify="center" h="full" p="8">
-			<Box
+		<div className="flex h-full items-center justify-center p-8">
+			<div
 				data-testid="git-diff-large-guardrail"
-				maxW="2xl"
-				w="full"
-				borderWidth="1px"
-				borderColor="border.subtle"
-				borderRadius="lg"
-				bg="bg.subtle"
-				p="6"
+				className="w-full max-w-2xl rounded-lg border bg-muted/50 p-6"
 			>
-				<Text fontSize="sm" fontWeight="semibold">
+				<p className="text-sm font-semibold">
 					{m.gitDiffLargeGuardrailTitle()}
-				</Text>
-				<Text mt="2" fontSize="sm" color="fg.muted">
+				</p>
+				<p className="mt-2 text-sm text-muted-foreground">
 					{m.gitDiffLargeGuardrailDescription({
 						count: changedLineCount,
 						threshold: GIT_DIFF_LARGE_FILE_LINE_THRESHOLD,
 					})}
-				</Text>
+				</p>
 				<Button
-					mt="4"
+					className="mt-4"
 					size="sm"
 					onClick={onReveal}
 					data-testid="git-diff-large-guardrail-reveal"
 				>
 					{m.gitDiffLargeGuardrailReveal()}
 				</Button>
-			</Box>
-		</Flex>
+			</div>
+		</div>
 	);
 }
 
@@ -128,32 +120,14 @@ function RenamePathRow({
 	path: string;
 }) {
 	return (
-		<Flex
-			gap="4"
-			align="baseline"
-			py="2"
-			borderBottomWidth="1px"
-			borderColor="border.subtle"
-			_last={{ borderBottomWidth: "0" }}
-		>
-			<Text
-				flexShrink={0}
-				w="7rem"
-				fontSize="xs"
-				color="fg.muted"
-				textTransform="uppercase"
-			>
+		<div className="flex items-baseline gap-4 border-b py-2 last:border-b-0">
+			<div className="w-28 shrink-0 text-xs uppercase text-muted-foreground">
 				{label}
-			</Text>
-			<Text
-				minW="0"
-				fontSize="sm"
-				fontFamily="mono"
-				overflowWrap="anywhere"
-			>
+			</div>
+			<div className="min-w-0 font-mono text-sm [overflow-wrap:anywhere]">
 				{path}
-			</Text>
-		</Flex>
+			</div>
+		</div>
 	);
 }
 
@@ -161,7 +135,7 @@ function RenameOnlyDiff({ file }: { file: FileDiffMetadata }) {
 	const previousPath = file.prevName ?? file.name;
 
 	return (
-		<Box data-testid="git-rename-only-diff" p="4">
+		<div data-testid="git-rename-only-diff" className="p-4">
 			<RenamePathRow
 				label={m.gitDiffRenamePreviousPath()}
 				path={previousPath}
@@ -170,7 +144,7 @@ function RenameOnlyDiff({ file }: { file: FileDiffMetadata }) {
 				label={m.gitDiffRenameCurrentPath()}
 				path={file.name}
 			/>
-		</Box>
+		</div>
 	);
 }
 
@@ -454,49 +428,26 @@ function ActiveGitDiffFilePane({
 					onReveal={onRevealLargeDiff}
 				/>
 			) : (
-				<Box ref={diffContentRef} position="relative">
+				<div ref={diffContentRef} className="relative">
 					<FileDiff
 						fileDiff={activeFile}
 						options={interactiveOptions}
 						selectedLines={selectedLines}
 					/>
 					{canReviewDiff && selectedLines && isCommentInputOpen && (
-						<Box
+						<div
 							ref={commentComposerRef}
-							position="fixed"
-							zIndex={2}
-							pointerEvents="none"
+							className="pointer-events-none fixed z-[2]"
 						>
-							<Box
-								w="min(28rem, calc(100vw - 2rem))"
-								borderWidth="1px"
-								borderColor="border.emphasized"
-								borderRadius="lg"
-								bg="bg.panel"
-								boxShadow="xl"
-								overflow="hidden"
-								pointerEvents="auto"
-							>
-								<HStack
-									px="3"
-									py="2"
-									borderBottomWidth="1px"
-									borderColor="border.subtle"
-									justify="space-between"
-									gap="3"
-								>
-									<Text
-										fontSize="xs"
-										fontWeight="semibold"
-										color="fg.muted"
-										truncate
-									>
+							<div className="pointer-events-auto w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-lg border bg-popover shadow-xl">
+								<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+									<p className="truncate text-xs font-semibold text-muted-foreground">
 										Comment on{" "}
 										{formatReviewRange(selectedLines)}
-									</Text>
-									<IconButton
+									</p>
+									<Button
 										aria-label="Cancel review comment"
-										size="2xs"
+										size="icon-xs"
 										variant="ghost"
 										onClick={() => {
 											setCommentBody("");
@@ -505,48 +456,30 @@ function ActiveGitDiffFilePane({
 										}}
 									>
 										<FiX />
-									</IconButton>
-								</HStack>
+									</Button>
+								</div>
 								<Textarea
 									value={commentBody}
 									placeholder="Write a review comment..."
-									autoresize
-									minH="5.5rem"
-									maxH="10rem"
-									fontSize="sm"
-									borderWidth="0"
-									borderRadius="0"
-									resize="none"
-									_focusVisible={{
-										outline: "none",
-										boxShadow: "none",
-									}}
+									className="max-h-40 min-h-[5.5rem] resize-none rounded-none border-0 text-sm focus-visible:ring-0"
 									onChange={(event) =>
 										setCommentBody(event.target.value)
 									}
 								/>
-								<Flex
-									px="3"
-									py="2"
-									borderTopWidth="1px"
-									borderColor="border.subtle"
-									bg="bg.subtle"
-									justify="flex-end"
-								>
+								<div className="flex justify-end border-t bg-muted/50 px-3 py-2">
 									<Button
 										size="xs"
-										variant="solid"
 										disabled={!commentBody.trim()}
 										onClick={handleAddReviewComment}
 									>
 										<FiPlus />
 										Add to queue
 									</Button>
-								</Flex>
-							</Box>
-						</Box>
+								</div>
+							</div>
+						</div>
 					)}
-				</Box>
+				</div>
 			)}
 		</>
 	);
@@ -590,11 +523,11 @@ export default function GitDiffPane({
 	const activeFileKey = activeFile
 		? getGitDiffPaneFileKey(activeFile, contextKey)
 		: null;
-	const diffCss = useMemo(
+	const diffCss = useMemo<CSSProperties>(
 		() => ({
 			"--diffs-font-family": `"${fontFamily}", monospace`,
 			"--diffs-font-size": `${fontSize}px`,
-		}),
+		}) as CSSProperties,
 		[fontFamily, fontSize],
 	);
 	const handleRevealLargeDiff = useCallback(() => {
@@ -608,11 +541,7 @@ export default function GitDiffPane({
 	}, [activeFileKey]);
 
 	return (
-		<Box
-			flex="1"
-			overflow="auto"
-			css={diffCss}
-		>
+		<div className="flex-1 overflow-auto" style={diffCss}>
 			{activeFile && activeFileKey ? (
 				<ActiveGitDiffFilePane
 					key={activeFileKey}
@@ -624,12 +553,12 @@ export default function GitDiffPane({
 					onRevealLargeDiff={handleRevealLargeDiff}
 				/>
 			) : (
-				<Flex align="center" justify="center" h="full" p="8">
-					<Text color="fg.muted" fontSize="sm">
+				<div className="flex h-full items-center justify-center p-8">
+					<p className="text-sm text-muted-foreground">
 						{emptyMessage}
-					</Text>
-				</Flex>
+					</p>
+				</div>
 			)}
-		</Box>
+		</div>
 	);
 }

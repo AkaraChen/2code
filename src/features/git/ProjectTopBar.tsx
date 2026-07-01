@@ -1,12 +1,3 @@
-import {
-	Box,
-	Flex,
-	HStack,
-	IconButton,
-	Portal,
-	Text,
-	Tooltip,
-} from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { Dispatch } from "react";
 import {
@@ -16,11 +7,18 @@ import {
 	useReducer,
 	useState,
 } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
 	PiGearSixFill,
 	PiGitBranchFill,
 	PiSidebarSimpleFill,
 } from "react-icons/pi";
+import { cn } from "@/lib/utils";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import {
 	type GitDiffAction,
@@ -51,10 +49,10 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
 	if (!branch) return null;
 	return (
-		<HStack gap="1" userSelect="none">
+		<span className="flex select-none items-center gap-1">
 			<PiGitBranchFill />
-			<Text as="span">{branch}</Text>
-		</HStack>
+			<span>{branch}</span>
+		</span>
 	);
 }
 
@@ -163,28 +161,28 @@ export default function ProjectTopBar({
 	);
 
 	const titleContent = (
-		<HStack gap="2">
+		<div className="flex min-w-0 items-center gap-2">
 			{onToggleFileTree && (
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<IconButton
+				<Tooltip>
+					<TooltipTrigger
+						render={(
+							<Button
 							aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
 							aria-pressed={isFileTreeOpen}
-							size="xs"
+							size="icon-sm"
 							variant="ghost"
-							p="0"
-							color={isFileTreeOpen ? "fg" : "fg.muted"}
-							bg={isFileTreeOpen ? "bg.subtle" : "transparent"}
-							_hover={{
-								bg: isFileTreeOpen ? "bg.muted" : "bg.subtle",
-							}}
-							transition={
-								prefersReducedMotion
-									? undefined
-									: "background-color 0.18s cubic-bezier(0.22, 1, 0.36, 1), color 0.18s cubic-bezier(0.22, 1, 0.36, 1)"
-							}
+							className={cn(
+								"p-0",
+								isFileTreeOpen
+									? "bg-muted text-foreground hover:bg-muted"
+									: "text-muted-foreground",
+								!prefersReducedMotion &&
+									"transition-colors duration-200",
+							)}
 							onClick={onToggleFileTree}
-						>
+						/>
+						)}
+					>
 							<motion.span
 								animate={{
 									rotate: isFileTreeOpen ? 0 : 180,
@@ -199,55 +197,41 @@ export default function ProjectTopBar({
 							>
 								<PiSidebarSimpleFill />
 							</motion.span>
-						</IconButton>
-					</Tooltip.Trigger>
-					<Portal>
-						<Tooltip.Positioner>
-							<Tooltip.Content>
-								{isFileTreeOpen ? "Close file tree" : "Open file tree"} ⌘E
-							</Tooltip.Content>
-						</Tooltip.Positioner>
-					</Portal>
-				</Tooltip.Root>
+					</TooltipTrigger>
+					<TooltipContent>
+						{isFileTreeOpen ? "Close file tree" : "Open file tree"} ⌘E
+					</TooltipContent>
+				</Tooltip>
 			)}
-			<Tooltip.Root>
-				<Tooltip.Trigger asChild>
-					<Text
-						as="span"
-						fontWeight="semibold"
-						userSelect="none"
-						cursor="default"
-					>
-						{projectName}
-					</Text>
-				</Tooltip.Trigger>
-				<Portal>
-					<Tooltip.Positioner>
-						<Tooltip.Content>
-							<Text as="span" fontSize="xs">
-								{profile.worktree_path}
-							</Text>
-						</Tooltip.Content>
-					</Tooltip.Positioner>
-				</Portal>
-			</Tooltip.Root>
-			<Box color="fg.muted">
+			<Tooltip>
+				<TooltipTrigger
+					render={(
+						<span className="cursor-default select-none font-semibold" />
+					)}
+				>
+					{projectName}
+				</TooltipTrigger>
+				<TooltipContent>
+					<span className="text-xs">{profile.worktree_path}</span>
+				</TooltipContent>
+			</Tooltip>
+			<div className="text-muted-foreground">
 				{profile.is_default ? (
 					isActive ? (
 						<GitBranchLabel cwd={profile.worktree_path} />
 					) : null
 				) : (
-					<HStack gap="1" userSelect="none">
+					<span className="flex select-none items-center gap-1">
 						<PiGitBranchFill />
-						<Text as="span">{profile.branch_name}</Text>
-					</HStack>
+						<span>{profile.branch_name}</span>
+					</span>
 				)}
-			</Box>
-		</HStack>
+			</div>
+		</div>
 	);
 
 	const controlsContent = (
-		<HStack gap="2">
+		<div className="flex items-center gap-2">
 			{visibleActiveControls.map((controlId) => {
 				const def = controlRegistry.get(controlId);
 				if (!def) return null;
@@ -265,43 +249,36 @@ export default function ProjectTopBar({
 					/>
 				);
 			})}
-			<Tooltip.Root>
-				<Tooltip.Trigger asChild>
-					<IconButton
+			<Tooltip>
+				<TooltipTrigger
+					render={(
+						<Button
 						aria-label={m.projectSettings()}
-						size="xs"
-						variant="subtle"
+						size="icon-sm"
+						variant="secondary"
 						onClick={openSettingsDialog}
-					>
-						<PiGearSixFill />
-					</IconButton>
-				</Tooltip.Trigger>
-				<Portal>
-					<Tooltip.Positioner>
-						<Tooltip.Content>
-							{m.projectSettings()}
-						</Tooltip.Content>
-					</Tooltip.Positioner>
-				</Portal>
-			</Tooltip.Root>
-		</HStack>
+					/>
+					)}
+				>
+					<PiGearSixFill />
+				</TooltipTrigger>
+				<TooltipContent>{m.projectSettings()}</TooltipContent>
+			</Tooltip>
+		</div>
 	);
 
 	return (
 		<>
-			<Flex
+			<div
 				data-tauri-drag-region
-				align="flex-end"
-				justify="space-between"
-				pl="4"
-				pr={IS_WINDOWS_PLATFORM ? "118px" : "5"}
-				pb="2"
-				pt="2"
-				minH="52px"
+				className={cn(
+					"flex min-h-[44px] items-end justify-between px-4 pt-1 pb-1.5",
+					IS_WINDOWS_PLATFORM ? "pr-[118px]" : "pr-5",
+				)}
 			>
 				{titleContent}
 				{controlsContent}
-			</Flex>
+			</div>
 
 			<ProjectSettingsDialog
 				isOpen={settingsOpen}

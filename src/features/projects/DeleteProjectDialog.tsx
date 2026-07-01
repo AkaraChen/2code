@@ -1,5 +1,13 @@
-import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
 import { useMatch, useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import type { ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useDeleteProject } from "./hooks";
@@ -64,41 +72,31 @@ export default function DeleteProjectDialog({
 	};
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
+			onOpenChange={(open) => {
+				if (!open) onClose();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.deleteProject()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Text>{m.confirmDeleteProject()}</Text>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								colorPalette="red"
-								loading={deleteProject.isPending}
-								onClick={handleDelete}
-							>
-								{m.delete()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.deleteProject()}</DialogTitle>
+				</DialogHeader>
+				<p className="text-sm">{m.confirmDeleteProject()}</p>
+				<DialogFooter>
+					<Button variant="outline" onClick={onClose}>
+						{m.cancel()}
+					</Button>
+					<Button
+						variant="destructive"
+						disabled={deleteProject.isPending}
+						onClick={handleDelete}
+					>
+						{deleteProject.isPending ? <Spinner /> : null}
+						{m.delete()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

@@ -1,8 +1,6 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appSystem } from "@/theme/system";
 import { initialState } from "../gitDiffReducer";
 import GitDiffContent from "./GitDiffContent";
 
@@ -50,7 +48,7 @@ function makeFile(name: string): FileDiffMetadata {
 
 function renderContent() {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<GitDiffContent
 				profileId="profile-1"
 				worktreePath="/repo"
@@ -59,16 +57,19 @@ function renderContent() {
 				dispatch={vi.fn()}
 				options={{}}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 }
 
 async function expectIncludedStates(states: boolean[]) {
 	await waitFor(() => {
-		const checkboxes = screen.getAllByRole<HTMLInputElement>("checkbox");
+		const checkboxes = screen.getAllByRole("checkbox");
 		expect(checkboxes).toHaveLength(states.length);
 		for (const [index, checked] of states.entries()) {
-			expect(checkboxes[index].checked).toBe(checked);
+			expect(checkboxes[index]).toHaveAttribute(
+				"aria-checked",
+				checked ? "true" : "false",
+			);
 		}
 	});
 }
@@ -93,7 +94,7 @@ describe("git diff content included file reconciliation", () => {
 		await expectIncludedStates([false, true]);
 
 		view.rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<GitDiffContent
 					profileId="profile-1"
 					worktreePath="/repo"
@@ -102,7 +103,7 @@ describe("git diff content included file reconciliation", () => {
 					dispatch={vi.fn()}
 					options={{}}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 		await expectIncludedStates([false, true]);
 
@@ -112,7 +113,7 @@ describe("git diff content included file reconciliation", () => {
 			makeFile("c.ts"),
 		];
 		view.rerender(
-			<ChakraProvider value={appSystem}>
+			<>
 				<GitDiffContent
 					profileId="profile-1"
 					worktreePath="/repo"
@@ -121,7 +122,7 @@ describe("git diff content included file reconciliation", () => {
 					dispatch={vi.fn()}
 					options={{}}
 				/>
-			</ChakraProvider>,
+			</>,
 		);
 
 		await expectIncludedStates([false, true, true]);

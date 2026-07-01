@@ -1,19 +1,4 @@
-import {
-	Box,
-	createListCollection,
-	Field,
-	Flex,
-	HStack,
-	Icon,
-	Portal,
-	Select,
-	Skeleton,
-	Stack,
-	Switch,
-	Tabs,
-	Text,
-} from "@chakra-ui/react";
-import { use, useMemo, useState } from "react";
+import { use, useState, type ReactNode } from "react";
 import {
 	FiBell,
 	FiCode,
@@ -23,6 +8,24 @@ import {
 	FiTerminal,
 } from "react-icons/fi";
 import { useSearchParams } from "react-router";
+import {
+	Field,
+	FieldContent,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
+import {
+	NativeSelect,
+	NativeSelectOption,
+} from "@/components/ui/native-select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "@/components/ui/tabs";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { usePerformanceProfileStore } from "@/features/debug/performanceProfileStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
@@ -44,12 +47,10 @@ import { ShellPicker } from "./ShellPicker";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 import { WorktreeSettings } from "./WorktreeSettings";
 
-const localeCollection = createListCollection({
-	items: [
-		{ value: "en", label: "English" },
-		{ value: "zh", label: "中文" },
-	],
-});
+const localeOptions: { value: Locale; label: string }[] = [
+	{ value: "en", label: "English" },
+	{ value: "zh", label: "中文" },
+];
 
 const settingsTabs = [
 	"general",
@@ -62,7 +63,7 @@ const settingsTabs = [
 
 type SettingsTab = (typeof settingsTabs)[number];
 
-const settingsTabIcons: Record<SettingsTab, React.ReactNode> = {
+const settingsTabIcons: Record<SettingsTab, ReactNode> = {
 	general: <FiSettings />,
 	terminal: <FiTerminal />,
 	template: <FiCode />,
@@ -93,127 +94,80 @@ export default function SettingsPage() {
 	const [previewThemeId, setPreviewThemeId] =
 		useState<TerminalThemeId | null>(null);
 
-	const themeCollection = useMemo(() => {
-		void locale;
-		return createListCollection({
-			items: [
-				{ value: "system", label: m.themeSystem() },
-				{ value: "light", label: m.themeLight() },
-				{ value: "dark", label: m.themeDark() },
-			],
-		});
-	}, [locale]);
+	const themeOptions = [
+		{ value: "system", label: m.themeSystem() },
+		{ value: "light", label: m.themeLight() },
+		{ value: "dark", label: m.themeDark() },
+	] as const;
 
 	return (
-		<Box h="full">
-			<HStack
+		<div className="flex h-full flex-col">
+			<header
 				data-tauri-drag-region
-				h="52px"
-				px="5"
-				borderBottomWidth="1px"
-				borderColor="border"
-				gap="2"
+				className="flex h-[52px] shrink-0 items-center gap-2 border-b px-5"
 			>
-				<Icon color="fg.muted" fontSize="sm">
-					<FiSettings />
-				</Icon>
-				<Text fontSize="sm" fontWeight="600" userSelect="none">
-					{m.settings()}
-				</Text>
-			</HStack>
-			<Box h="calc(100% - 52px)" overflow="auto" p="5">
-				<Tabs.Root
+				<FiSettings className="size-4 text-muted-foreground" />
+				<h1 className="select-none text-sm font-semibold">{m.settings()}</h1>
+			</header>
+			<div className="min-h-0 flex-1 overflow-auto p-5">
+				<Tabs
 					value={activeTab}
-					onValueChange={(e) => {
-						const nextTab = readSettingsTab(e.value);
+					onValueChange={(value) => {
+						const nextTab = readSettingsTab(String(value));
 						setSearchParams(
 							nextTab === "general" ? {} : { tab: nextTab },
 							{ replace: true },
 						);
 					}}
-					variant="enclosed"
 				>
-					<Tabs.List
-						bg="bg.muted"
-						mb="5"
-						overflowX="auto"
-						p="1"
-						rounded="l3"
-					>
-						<Tabs.Trigger value="general">
-							{settingsTabIcons.general}
-							{m.general()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="terminal">
-							{settingsTabIcons.terminal}
-							{m.terminal()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="template">
-							{settingsTabIcons.template}
-							{m.terminalTemplates()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="notification">
-							{settingsTabIcons.notification}
-							{m.notification()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="topbar">
-							{settingsTabIcons.topbar}
-							{m.topbar()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="about">
-							{settingsTabIcons.about}
-							{m.about()}
-						</Tabs.Trigger>
-						<Tabs.Indicator rounded="l2" />
-					</Tabs.List>
-					<Tabs.Content value="general">
-						<Stack gap="6" maxW="md">
-							<Field.Root>
-								<Field.Label>{m.language()}</Field.Label>
-								<Select.Root
-									collection={localeCollection}
-									value={[locale]}
-									onValueChange={(e) =>
-										setAppLocale(e.value[0] as Locale)
+					<TabsList className="mb-5 max-w-full overflow-x-auto">
+						{settingsTabs.map((tab) => (
+							<TabsTrigger key={tab} value={tab}>
+								{settingsTabIcons[tab]}
+								{tab === "general"
+									? m.general()
+									: tab === "terminal"
+										? m.terminal()
+										: tab === "template"
+											? m.terminalTemplates()
+											: tab === "notification"
+												? m.notification()
+												: tab === "topbar"
+													? m.topbar()
+													: m.about()}
+							</TabsTrigger>
+						))}
+					</TabsList>
+
+					<TabsContent value="general">
+						<div className="flex max-w-md flex-col gap-6">
+							<Field>
+								<FieldLabel>{m.language()}</FieldLabel>
+								<NativeSelect
+									value={locale}
+									onChange={(event) =>
+										setAppLocale(event.target.value as Locale)
 									}
 									size="sm"
 								>
-									<Select.HiddenSelect />
-									<Select.Control>
-										<Select.Trigger>
-											<Select.ValueText />
-										</Select.Trigger>
-										<Select.IndicatorGroup>
-											<Select.Indicator />
-										</Select.IndicatorGroup>
-									</Select.Control>
-									<Portal>
-										<Select.Positioner>
-											<Select.Content>
-												{localeCollection.items.map(
-													(item) => (
-														<Select.Item
-															item={item}
-															key={item.value}
-														>
-															{item.label}
-															<Select.ItemIndicator />
-														</Select.Item>
-													),
-												)}
-											</Select.Content>
-										</Select.Positioner>
-									</Portal>
-								</Select.Root>
-							</Field.Root>
-							<Field.Root>
-								<Field.Label>{m.theme()}</Field.Label>
-								<Select.Root
-									collection={themeCollection}
-									value={[preference]}
-									onValueChange={(e) =>
+									{localeOptions.map((item) => (
+										<NativeSelectOption
+											key={item.value}
+											value={item.value}
+										>
+											{item.label}
+										</NativeSelectOption>
+									))}
+								</NativeSelect>
+							</Field>
+
+							<Field>
+								<FieldLabel>{m.theme()}</FieldLabel>
+								<NativeSelect
+									value={preference}
+									onChange={(event) =>
 										setPreference(
-											e.value[0] as
+											event.target.value as
 												| "system"
 												| "light"
 												| "dark",
@@ -221,122 +175,102 @@ export default function SettingsPage() {
 									}
 									size="sm"
 								>
-									<Select.HiddenSelect />
-									<Select.Control>
-										<Select.Trigger>
-											<Select.ValueText />
-										</Select.Trigger>
-										<Select.IndicatorGroup>
-											<Select.Indicator />
-										</Select.IndicatorGroup>
-									</Select.Control>
-									<Portal>
-										<Select.Positioner>
-											<Select.Content>
-												{themeCollection.items.map(
-													(item) => (
-														<Select.Item
-															item={item}
-															key={item.value}
-														>
-															{item.label}
-															<Select.ItemIndicator />
-														</Select.Item>
-													),
-												)}
-											</Select.Content>
-										</Select.Positioner>
-									</Portal>
-								</Select.Root>
-							</Field.Root>
+									{themeOptions.map((item) => (
+										<NativeSelectOption
+											key={item.value}
+											value={item.value}
+										>
+											{item.label}
+										</NativeSelectOption>
+									))}
+								</NativeSelect>
+							</Field>
+
 							<BorderRadiusPicker />
 							<WorktreeSettings />
-							<Field.Root>
-								<Field.Label>{m.debugMode()}</Field.Label>
-								<Switch.Root
+
+							<Field orientation="horizontal">
+								<FieldContent>
+									<FieldLabel>{m.debugMode()}</FieldLabel>
+									<FieldDescription>
+										{m.debugModeDescription()}
+									</FieldDescription>
+								</FieldContent>
+								<Switch
 									checked={debugEnabled}
-									onCheckedChange={(e) =>
-										setDebugEnabled(!!e.checked)
-									}
-								>
-									<Switch.HiddenInput />
-									<Switch.Control />
-									<Switch.Label>
-										<Text fontSize="sm" color="fg.muted">
-											{m.debugModeDescription()}
-										</Text>
-									</Switch.Label>
-								</Switch.Root>
-							</Field.Root>
-							<Field.Root>
-								<Field.Label>
-									{m.performanceProfile()}
-								</Field.Label>
-								<Switch.Root
-									checked={performanceProfileEnabled}
-									onCheckedChange={(e) =>
-										setPerformanceProfileEnabled(
-											!!e.checked,
-										)
-									}
-								>
-									<Switch.HiddenInput />
-									<Switch.Control />
-									<Switch.Label>
-										<Text fontSize="sm" color="fg.muted">
-											{m.performanceProfileDescription()}
-										</Text>
-									</Switch.Label>
-								</Switch.Root>
-							</Field.Root>
-							<SidebarAppearanceSettings />
-						</Stack>
-					</Tabs.Content>
-					<Tabs.Content value="terminal">
-						<Flex gap="8" align="flex-start">
-							<Stack gap="6" flex="1" minW="0" maxW="md">
-								<TerminalThemePicker
-									onPreview={setPreviewThemeId}
+									onCheckedChange={setDebugEnabled}
 								/>
+							</Field>
+
+							<Field orientation="horizontal">
+								<FieldContent>
+									<FieldLabel>{m.performanceProfile()}</FieldLabel>
+									<FieldDescription>
+										{m.performanceProfileDescription()}
+									</FieldDescription>
+								</FieldContent>
+								<Switch
+									checked={performanceProfileEnabled}
+									onCheckedChange={setPerformanceProfileEnabled}
+								/>
+							</Field>
+
+							<SidebarAppearanceSettings />
+						</div>
+					</TabsContent>
+
+					<TabsContent value="terminal">
+						<div className="flex items-start gap-8">
+							<div className="flex min-w-0 max-w-md flex-1 flex-col gap-6">
+								<TerminalThemePicker onPreview={setPreviewThemeId} />
 								<AsyncBoundary
-									fallback={<Skeleton height="70px" />}
+									fallback={<Skeleton className="h-[70px]" />}
 									errorFallback={({ error, onRetry }) => (
-										<InlineError error={error} height="70px" onRetry={onRetry} />
+										<InlineError
+											error={error}
+											height="70px"
+											onRetry={onRetry}
+										/>
 									)}
 								>
 									<ShellPicker />
 								</AsyncBoundary>
 								<AsyncBoundary
-									fallback={<Skeleton height="70px" />}
+									fallback={<Skeleton className="h-[70px]" />}
 									errorFallback={({ error, onRetry }) => (
-										<InlineError error={error} height="70px" onRetry={onRetry} />
+										<InlineError
+											error={error}
+											height="70px"
+											onRetry={onRetry}
+										/>
 									)}
 								>
 									<FontPicker />
 								</AsyncBoundary>
 								<FontSizePicker />
-							</Stack>
-							<Box flex="1" minW="0">
+							</div>
+							<div className="min-w-0 flex-1">
 								<TerminalPreview themeId={previewThemeId} />
-							</Box>
-						</Flex>
-					</Tabs.Content>
-					<Tabs.Content value="template">
-						<Stack gap="6" maxW="2xl">
+							</div>
+						</div>
+					</TabsContent>
+
+					<TabsContent value="template">
+						<div className="max-w-2xl">
 							<GlobalTerminalTemplatesSettings />
-						</Stack>
-					</Tabs.Content>
-					<Tabs.Content value="notification">
+						</div>
+					</TabsContent>
+					<TabsContent value="notification">
 						<NotificationSettings />
-					</Tabs.Content>
-					<Tabs.Content value="topbar">
+					</TabsContent>
+					<TabsContent value="topbar">
 						<TopBarSettings />
-					</Tabs.Content>
-					<Tabs.Content value="about">
+					</TabsContent>
+					<TabsContent value="about">
 						<AboutSettings />
-					</Tabs.Content>
-				</Tabs.Root>
-			</Box>
-		</Box>
+					</TabsContent>
+				</Tabs>
+			</div>
+		</div>
 	);
 }

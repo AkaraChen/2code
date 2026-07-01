@@ -1,41 +1,31 @@
-import {
-	Box,
-	Button,
-	Dialog,
-	Flex,
-	Skeleton,
-	Spinner,
-	Stack,
-	Text,
-	VStack,
-} from "@chakra-ui/react";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { type ReactNode, Suspense } from "react";
 import { ErrorBoundary } from "react-error-boundary";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import * as m from "@/paraglide/messages.js";
 import { asError } from "@/shared/lib/errors";
 
 function ErrorStack({
 	error,
 	onRetry,
-	buttonSize = "sm",
 }: {
 	error: Error;
 	onRetry: () => void;
-	buttonSize?: "2xs" | "xs" | "sm";
 }) {
 	return (
-		<VStack gap="3" textAlign="center" maxW="md" minW="0">
-			<Box color="fg.error" fontWeight="semibold">
+		<div className="flex min-w-0 max-w-md flex-col items-center gap-3 text-center">
+			<div className="font-semibold text-destructive">
 				{m.somethingWentWrong()}
-			</Box>
-			<Box fontSize="sm" color="fg.muted" wordBreak="break-word">
+			</div>
+			<div className="break-words text-sm text-muted-foreground">
 				{error.message}
-			</Box>
-			<Button size={buttonSize} onClick={onRetry}>
+			</div>
+			<Button size="sm" onClick={onRetry}>
 				{m.tryAgain()}
 			</Button>
-		</VStack>
+		</div>
 	);
 }
 
@@ -69,9 +59,9 @@ export function AsyncBoundary({
 
 export function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" }) {
 	return (
-		<Flex flex="1" align="center" justify="center">
-			<Spinner size={size} color="colorPalette.500" />
-		</Flex>
+		<div className="flex flex-1 items-center justify-center">
+			<Spinner className={size === "sm" ? "size-3.5" : "size-4"} />
+		</div>
 	);
 }
 
@@ -85,39 +75,23 @@ export function LoadingError({
 	size?: "sm" | "md";
 }) {
 	return (
-		<Flex
-			flex="1"
-			align="center"
-			justify="center"
-			p={size === "sm" ? "2" : "4"}
-		>
-			<ErrorStack
-				error={error}
-				onRetry={onRetry}
-				buttonSize={size === "sm" ? "2xs" : "sm"}
-			/>
-		</Flex>
+		<div className={size === "sm" ? "flex flex-1 items-center justify-center p-2" : "flex flex-1 items-center justify-center p-4"}>
+			<ErrorStack error={error} onRetry={onRetry} />
+		</div>
 	);
 }
 
 export function SidebarSkeleton() {
 	return (
-		<Box
-			w="250px"
-			flexShrink={0}
-			bg="bg.subtle"
-			borderRight="1px solid"
-			borderColor="border.subtle"
-			p="4"
-		>
-			<Stack gap="3">
-				<Skeleton height="6" width="full" />
-				<Skeleton height="3" width="1/2" mt="2" />
-				<Skeleton height="5" width="3/4" ms="5" />
-				<Skeleton height="5" width="3/4" ms="5" />
-				<Skeleton height="5" width="3/4" ms="5" />
-			</Stack>
-		</Box>
+		<aside className="w-[250px] shrink-0 border-r bg-muted/40 p-4">
+			<div className="flex flex-col gap-3">
+				<Skeleton className="h-6 w-full" />
+				<Skeleton className="mt-2 h-3 w-1/2" />
+				<Skeleton className="ml-5 h-5 w-3/4" />
+				<Skeleton className="ml-5 h-5 w-3/4" />
+				<Skeleton className="ml-5 h-5 w-3/4" />
+			</div>
+		</aside>
 	);
 }
 
@@ -129,28 +103,21 @@ export function SidebarError({
 	onRetry: () => void;
 }) {
 	return (
-		<Box
-			w="250px"
-			flexShrink={0}
-			bg="bg.subtle"
-			borderRight="1px solid"
-			borderColor="border.subtle"
-			p="4"
-		>
-			<ErrorStack error={error} onRetry={onRetry} buttonSize="xs" />
-		</Box>
+		<aside className="w-[250px] shrink-0 border-r bg-muted/40 p-4">
+			<ErrorStack error={error} onRetry={onRetry} />
+		</aside>
 	);
 }
 
 export function PageSkeleton() {
 	return (
-		<Box p="8">
-			<Stack gap="4" maxW="md">
-				<Skeleton height="8" width="48" />
-				<Skeleton height="4" width="full" />
-				<Skeleton height="4" width="3/4" />
-			</Stack>
-		</Box>
+		<div className="p-8">
+			<div className="flex max-w-md flex-col gap-4">
+				<Skeleton className="h-8 w-48" />
+				<Skeleton className="h-4 w-full" />
+				<Skeleton className="h-4 w-3/4" />
+			</div>
+		</div>
 	);
 }
 
@@ -162,9 +129,9 @@ export function PageError({
 	onRetry: () => void;
 }) {
 	return (
-		<Box p="8">
+		<div className="p-8">
 			<ErrorStack error={error} onRetry={onRetry} />
-		</Box>
+		</div>
 	);
 }
 
@@ -178,26 +145,22 @@ export function InlineError({
 	onRetry: () => void;
 }) {
 	return (
-		<Flex
-			h={height}
-			minH={height}
-			align="center"
-			justify="space-between"
-			gap="3"
-			px="3"
+		<div
+			className="flex items-center justify-between gap-3 px-3"
+			style={{ height, minHeight: height }}
 		>
-			<Box minW="0">
-				<Text color="fg.error" fontSize="sm" fontWeight="semibold">
+			<div className="min-w-0">
+				<div className="text-sm font-semibold text-destructive">
 					{m.somethingWentWrong()}
-				</Text>
-				<Text color="fg.muted" fontSize="xs" truncate>
+				</div>
+				<div className="truncate text-xs text-muted-foreground">
 					{error.message}
-				</Text>
-			</Box>
-			<Button size="xs" flexShrink={0} onClick={onRetry}>
+				</div>
+			</div>
+			<Button size="xs" className="shrink-0" onClick={onRetry}>
 				{m.tryAgain()}
 			</Button>
-		</Flex>
+		</div>
 	);
 }
 
@@ -211,10 +174,10 @@ export function DialogBodyError({
 	onRetry: () => void;
 }) {
 	return (
-		<Dialog.Body>
-			<Stack alignItems="center" justifyContent="center" minH={minH}>
+		<div style={{ minHeight: minH }}>
+			<div className="flex h-full items-center justify-center">
 				<ErrorStack error={error} onRetry={onRetry} />
-			</Stack>
-		</Dialog.Body>
+			</div>
+		</div>
 	);
 }

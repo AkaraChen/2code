@@ -62,12 +62,13 @@ describe("useTerminalSettingsStore", () => {
 			expect(getState().fontFamily).toBe("Fira Code");
 		});
 
-		it("syncs --chakra-fonts-mono CSS variable", () => {
+		it("syncs --font-mono CSS variable", () => {
 			getState().setFontFamily("Fira Code");
 			const val = document.documentElement.style.getPropertyValue(
-				"--chakra-fonts-mono",
+				"--font-mono",
 			);
-			expect(val).toBe('"Fira Code", monospace');
+			expect(val).toContain('"Fira Code"');
+			expect(val).toContain("ui-monospace");
 		});
 	});
 
@@ -88,11 +89,11 @@ describe("useTerminalSettingsStore", () => {
 		it("does not trigger font CSS sync", () => {
 			getState().setFontFamily("Test Font");
 			const before = document.documentElement.style.getPropertyValue(
-				"--chakra-fonts-mono",
+				"--font-mono",
 			);
 			getState().setFontSize(20);
 			const after = document.documentElement.style.getPropertyValue(
-				"--chakra-fonts-mono",
+				"--font-mono",
 			);
 			expect(after).toBe(before);
 		});
@@ -156,11 +157,12 @@ describe("useTerminalSettingsStore", () => {
 	});
 
 	describe("syncMonoFont (module-level side effect)", () => {
-		it("sets --chakra-fonts-mono on initial load with default font", () => {
+		it("sets --font-mono on initial load with default font", () => {
 			const val = document.documentElement.style.getPropertyValue(
-				"--chakra-fonts-mono",
+				"--font-mono",
 			);
-			expect(val).toBe('"JetBrains Mono", monospace');
+			expect(val).toContain('"JetBrains Mono"');
+			expect(val).toContain("ui-monospace");
 		});
 	});
 });

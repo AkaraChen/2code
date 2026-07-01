@@ -1,4 +1,3 @@
-import { Box, Image, Text } from "@chakra-ui/react";
 import { useState } from "react";
 import { useProjectAvatar } from "@/features/projects/hooks";
 import { useSidebarSettingsStore } from "@/features/settings/stores/sidebarSettingsStore";
@@ -32,31 +31,19 @@ export function ProjectAvatar({
 	const fallbackText = getProjectAvatarFallback(projectName);
 
 	return (
-		<Box
-			w="5"
-			h="5"
-			borderRadius="sm"
-			overflow="hidden"
-			flexShrink={0}
-			bg="bg.muted"
-			color="fg.muted"
-			display="grid"
-			placeItems="center"
-			fontSize="sm"
-		>
+		<span className="grid size-4 shrink-0 place-items-center overflow-hidden rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
 			{shouldShowImage ? (
-				<Image
+				<img
 					src={avatarUrl}
 					alt={projectName}
-					boxSize="full"
-					objectFit="cover"
+					className="size-full object-cover"
 					onError={() => setImageFailed(true)}
 				/>
 			) : (
-				<Text fontSize="2xs" fontWeight="medium" lineHeight="1">
+				<span className="text-[0.625rem] leading-none font-medium">
 					{fallbackText}
-				</Text>
+				</span>
 			)}
-		</Box>
+		</span>
 	);
 }

@@ -38,7 +38,7 @@ export function TerminalPreview({
 				lineHeight: 1.4,
 				padding: "12px 16px",
 				borderRadius: "8px",
-				border: "0.5px solid var(--chakra-colors-border-subtle)",
+				border: "0.5px solid var(--border)",
 				overflow: "hidden",
 			}}
 		>

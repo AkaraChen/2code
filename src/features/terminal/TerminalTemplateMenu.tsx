@@ -1,13 +1,7 @@
-import {
-	Box,
-	Button,
-	Portal,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
 import { motion, useReducedMotion } from "motion/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlus } from "react-icons/fi";
+import { Button } from "@/components/ui/button";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import * as m from "@/paraglide/messages.js";
 import { TAB_STRIP_HEIGHT } from "./TabStrip";
@@ -65,30 +59,25 @@ const TemplateMenuItem = memo(({
 			: "";
 
 	return (
-		<Button
-			size="sm"
-			variant="ghost"
-			justifyContent="flex-start"
-			alignItems="flex-start"
-			h="auto"
-			px="2"
-			py="2"
+		<button
+			type="button"
+			className="flex w-full items-start rounded-md px-2 py-2 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
 			disabled={isPending}
 			onClick={handleClick}
 		>
 			{scope === "project" ? (
-				<Stack gap="0.5" align="start" textAlign="left">
-					<Text fontSize="sm">{template.name}</Text>
+				<span className="flex min-w-0 flex-col gap-0.5">
+					<span className="truncate">{template.name}</span>
 					{cwd ? (
-						<Text fontSize="xs" color="fg.muted">
+						<span className="truncate text-xs text-muted-foreground">
 							{cwd}
-						</Text>
+						</span>
 					) : null}
-				</Stack>
+				</span>
 			) : (
-				<Text fontSize="sm">{template.name}</Text>
+				<span className="truncate">{template.name}</span>
 			)}
-		</Button>
+		</button>
 	);
 });
 
@@ -105,31 +94,24 @@ export const TerminalTemplateDropdownContent = memo(({
 		if (!showEmptyState) return null;
 
 		return (
-			<Stack gap="1" px="2" py="2">
-				<Text fontSize="sm" color="fg.muted">
+			<div className="flex flex-col gap-1 px-2 py-2">
+				<p className="text-sm text-muted-foreground">
 					{m.noTerminalTemplates()}
-				</Text>
-				<Text fontSize="xs" color="fg.subtle">
+				</p>
+				<p className="text-xs text-muted-foreground">
 					{m.noTemplatesDropdownHint()}
-				</Text>
-			</Stack>
+				</p>
+			</div>
 		);
 	}
 
 	return (
-		<Stack gap="1">
+		<div className="flex flex-col gap-1">
 			{projectTemplates.length > 0 ? (
 				<>
-					<Text
-						px="2"
-						pt="1"
-						fontSize="xs"
-						fontWeight="semibold"
-						color="fg.muted"
-						textTransform="uppercase"
-					>
+					<div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
 						{m.projectTerminalTemplates()}
-					</Text>
+					</div>
 					{projectTemplates.map((template) => (
 						<TemplateMenuItem
 							key={template.id}
@@ -143,21 +125,14 @@ export const TerminalTemplateDropdownContent = memo(({
 			) : null}
 
 			{projectTemplates.length > 0 && globalTemplates.length > 0 ? (
-				<Box h="1px" bg="border.subtle" mx="2" />
+				<div className="mx-2 h-px bg-border" />
 			) : null}
 
 			{globalTemplates.length > 0 ? (
 				<>
-					<Text
-						px="2"
-						pt="1"
-						fontSize="xs"
-						fontWeight="semibold"
-						color="fg.muted"
-						textTransform="uppercase"
-					>
+					<div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
 						{m.globalTerminalTemplates()}
-					</Text>
+					</div>
 					{globalTemplates.map((template) => (
 						<TemplateMenuItem
 							key={template.id}
@@ -169,7 +144,7 @@ export const TerminalTemplateDropdownContent = memo(({
 					))}
 				</>
 			) : null}
-		</Stack>
+		</div>
 	);
 });
 
@@ -263,54 +238,42 @@ export default function TerminalTemplateMenu({
 				style={{ display: "flex", flexShrink: 0, height: "100%" }}
 				{...buttonMotionProps}
 			>
-				<Box
+				<div
 					ref={buttonRef}
-					display="inline-flex"
-					flexShrink={0}
-					alignItems="center"
-					alignSelf="stretch"
-					h={TAB_STRIP_HEIGHT}
-					ms="2"
+					className="ms-2 inline-flex shrink-0 items-center self-stretch"
+					style={{ height: TAB_STRIP_HEIGHT }}
 					onMouseEnter={open}
 					onMouseLeave={scheduleClose}
 				>
 					<Button
-						size="2xs"
+						size="xs"
 						variant="ghost"
 						disabled={createTab.isPending}
 						onClick={handleCreateDefaultTerminal}
 					>
 						<FiPlus /> {m.newTerminal()}
 					</Button>
-				</Box>
+				</div>
 			</motion.div>
 
 			{isOpen && menuPosition ? (
-				<Portal>
-					<Box
-						position="fixed"
-						top={menuPosition.top}
-						left={menuPosition.left}
-						minW="2xs"
-						w={menuWidth}
-						rounded="l3"
-						borderWidth="1px"
-						borderColor="border.subtle"
-						bg="bg.panel"
-						boxShadow="lg"
-						p="1"
-						zIndex="dropdown"
-						onMouseEnter={open}
-						onMouseLeave={scheduleClose}
-					>
-						<TerminalTemplateDropdownContent
-							projectTemplates={projectTemplates}
-							globalTemplates={globalTemplates}
-							isPending={createTab.isPending}
-							onTemplateClick={handleTemplateClick}
-						/>
-					</Box>
-				</Portal>
+				<div
+					className="fixed z-50 min-w-56 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+					style={{
+						top: menuPosition.top,
+						left: menuPosition.left,
+						width: menuWidth,
+					}}
+					onMouseEnter={open}
+					onMouseLeave={scheduleClose}
+				>
+					<TerminalTemplateDropdownContent
+						projectTemplates={projectTemplates}
+						globalTemplates={globalTemplates}
+						isPending={createTab.isPending}
+						onTemplateClick={handleTemplateClick}
+					/>
+				</div>
 			) : null}
 		</>
 	);

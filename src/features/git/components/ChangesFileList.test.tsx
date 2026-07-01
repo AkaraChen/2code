@@ -1,10 +1,8 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as m from "@/paraglide/messages.js";
-import { appSystem } from "@/theme/system";
 import ChangesFileList from "./ChangesFileList";
 
 vi.mock("@/shared/components/OverflowTooltipText", () => ({
@@ -27,7 +25,7 @@ function renderList(props?: Partial<ComponentProps<typeof ChangesFileList>>) {
 	const onDiscardFile = vi.fn().mockResolvedValue(undefined);
 
 	render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<ChangesFileList
 				files={[file]}
 				selectedIndex={0}
@@ -40,7 +38,7 @@ function renderList(props?: Partial<ComponentProps<typeof ChangesFileList>>) {
 				onIncludeNone={vi.fn()}
 				{...props}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 
 	return { onSelect, onOpenFile, onDiscardFile };

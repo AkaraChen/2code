@@ -1,4 +1,3 @@
-import { Box, Flex } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { memo, startTransition, use, useCallback, useEffect, useMemo } from "react";
 import type { GitCommit } from "@/generated";
@@ -27,9 +26,9 @@ function VisibleBox({
 	children: React.ReactNode;
 }) {
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<div className="flex-1" style={{ display: visible ? "flex" : "none" }}>
 			{children}
-		</Box>
+		</div>
 	);
 }
 
@@ -43,7 +42,7 @@ function HistorySidebarPanel({
 	const prefersReducedMotion = useReducedMotion() ?? false;
 
 	return (
-		<Box position="relative" flex="1" minH="0" overflow="hidden">
+		<div className="relative min-h-0 flex-1 overflow-hidden">
 			<AnimatePresence initial={false}>
 				<motion.div
 					key={panelKey}
@@ -67,7 +66,7 @@ function HistorySidebarPanel({
 					{children}
 				</motion.div>
 			</AnimatePresence>
-		</Box>
+		</div>
 	);
 }
 
@@ -169,11 +168,11 @@ export const HistorySidebar = memo(() => {
 	if (commits.length === 0) {
 		return (
 			<HistorySidebarPanel panelKey="empty">
-				<Flex align="center" justify="center" flex="1" p="8">
-					<Box color="fg.muted" fontSize="sm">
+				<div className="flex flex-1 items-center justify-center p-8">
+					<p className="text-sm text-muted-foreground">
 						{m.noCommitsFound()}
-					</Box>
-				</Flex>
+					</p>
+				</div>
 			</HistorySidebarPanel>
 		);
 	}

@@ -1,8 +1,10 @@
-import { Badge, Checkbox, HStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { MouseEventHandler } from "react";
 import { memo, useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
+import { cn } from "@/lib/utils";
 import { changeBadge, getFileDisplayParts } from "../utils";
 
 interface FileListItemProps {
@@ -32,68 +34,50 @@ function FileListItemComponent({
 	const effectiveIncluded = isIncluded ?? true;
 
 	return (
-		<HStack
+		<div
 			data-testid="git-file-list-item"
-			px="3"
-			py="2"
-			bg={isActive ? "bg.emphasized" : "transparent"}
-			_hover={{ bg: isActive ? "bg.emphasized" : "bg.subtle" }}
+			className={cn(
+				"flex w-full min-w-0 select-none items-start gap-2 overflow-hidden px-3 py-2",
+				isActive ? "bg-muted" : "hover:bg-muted/70",
+				!effectiveIncluded && "opacity-70",
+			)}
 			onClick={onClick}
 			onDoubleClick={onDoubleClick}
 			onContextMenu={onContextMenu}
-			gap="2"
-			userSelect="none"
-			opacity={effectiveIncluded ? 1 : 0.72}
-			align="flex-start"
-			w="full"
-			minW="0"
-			overflow="hidden"
 		>
 			{onToggleIncluded ? (
-				<Checkbox.Root
-					mt="0.5"
-					size="sm"
+				<Checkbox
+					className="mt-0.5"
 					checked={effectiveIncluded}
 					onClick={(event) => event.stopPropagation()}
-					onCheckedChange={(event) =>
-						onToggleIncluded(!!event.checked)
-					}
-				>
-					<Checkbox.HiddenInput />
-					<Checkbox.Control />
-				</Checkbox.Root>
+					onCheckedChange={onToggleIncluded}
+				/>
 			) : null}
 
-			<HStack flex="1" gap="2" minW="0" overflow="hidden">
+			<div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
 				<OverflowTooltipText
 					displayValue={basename}
 					tooltipValue={file.name}
-					fontSize="sm"
-					fontWeight={isActive ? "medium" : "normal"}
-					flex="1 1 auto"
-					minW="0"
+					className={cn(
+						"min-w-0 flex-[1_1_auto] text-sm",
+						isActive && "font-medium",
+					)}
 				/>
 				{parentPath && (
 					<OverflowTooltipText
 						displayValue={parentPath}
 						tooltipValue={file.name}
-						fontSize="xs"
-						color="fg.muted"
-						flex="0 10 auto"
-						minW="2ch"
+						className="min-w-[2ch] flex-[0_10_auto] text-xs text-muted-foreground"
 					/>
 				)}
 				<Badge
-					size="xs"
-					colorPalette={badge.colorPalette}
-					variant="subtle"
-					marginStart="auto"
-					flexShrink={0}
+					variant="outline"
+					className={cn("ml-auto h-4 shrink-0 px-1.5 font-mono text-[10px]", badge.className)}
 				>
 					{badge.label}
 				</Badge>
-			</HStack>
-		</HStack>
+			</div>
+		</div>
 	);
 }
 

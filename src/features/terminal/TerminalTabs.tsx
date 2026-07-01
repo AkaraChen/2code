@@ -1,11 +1,3 @@
-import {
-	Box,
-	Circle,
-	Flex,
-	Portal,
-	Spinner,
-	Tooltip,
-} from "@chakra-ui/react";
 import claudeIconUrl from "@lobehub/icons-static-svg/icons/claude-color.svg";
 import clineIconUrl from "@lobehub/icons-static-svg/icons/cline.svg";
 import codexIconUrl from "@lobehub/icons-static-svg/icons/codex-color.svg";
@@ -24,6 +16,12 @@ import {
 } from "react";
 import { FiFileText, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
+import { Spinner } from "@/components/ui/spinner";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
@@ -342,7 +340,7 @@ export default function TerminalTabs({
 						!notesActive &&
 						tab.filePath === activeValue,
 					badge: dirtyFilePathSet.has(tab.filePath) ? (
-						<Circle size="2" bg="fg.muted" />
+						<span className="size-2 rounded-full bg-muted-foreground" />
 					) : undefined,
 					onClose: () => handleFileTabClose(tab.filePath, tab.title),
 				})),
@@ -363,64 +361,37 @@ export default function TerminalTabs({
 		],
 	);
 	const notesControl = useMemo(() => profile ? (
-		<Tooltip.Root>
-			<Tooltip.Trigger asChild>
-				<Box
-					as="div"
-					aria-label={m.notes()}
-					aria-pressed={notesActive}
-					role="tab"
-					aria-selected={notesActive}
-					tabIndex={notesActive ? 0 : -1}
-					flexShrink={0}
-					alignSelf="stretch"
-					h={TAB_STRIP_HEIGHT}
-					display="flex"
-					alignItems="center"
-					justifyContent="center"
-					gap="2"
-					px="3"
-					borderEndWidth="1px"
-					borderEndColor="border"
-					borderTopWidth="2px"
-					borderTopColor={notesActive ? "fg" : "transparent"}
-					color={notesActive ? "fg" : "fg.muted"}
-					bg="transparent"
-					userSelect="none"
-					transition="background-color 120ms ease, color 120ms ease"
-					css={{
-						WebkitAppearance: "none",
-						WebkitUserDrag: "none",
-						"&::before": {
-							display: "none",
-						},
-						"& *": {
-							WebkitUserDrag: "none",
-						},
-					}}
-					_hover={{ bg: "bg.subtle", color: "fg" }}
-					_active={{ bg: "bg.muted", color: "fg" }}
-					_focusVisible={{
-						outline: "2px solid",
-						outlineColor: "var(--app-focus-ring)",
-						outlineOffset: "-2px",
-					}}
-					onClick={() => setNotesActive(profileId)}
-					onKeyDown={(event) => {
-						if (event.key !== "Enter" && event.key !== " ") return;
-						event.preventDefault();
-						setNotesActive(profileId);
-					}}
-				>
-					<FiFileText size={14} />
-				</Box>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{m.notes()}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={(
+					<button
+						type="button"
+						aria-label={m.notes()}
+						aria-pressed={notesActive}
+						role="tab"
+						aria-selected={notesActive}
+						tabIndex={notesActive ? 0 : -1}
+						className={[
+							"flex shrink-0 items-center justify-center gap-2 self-stretch border-r border-t-2 bg-transparent px-3 select-none transition-colors [-webkit-appearance:none] [-webkit-user-drag:none] [&_*]:[-webkit-user-drag:none]",
+							"hover:bg-muted active:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-focus-ring)]",
+							notesActive
+								? "border-t-foreground text-foreground"
+								: "border-t-transparent text-muted-foreground hover:text-foreground",
+						].join(" ")}
+						style={{ height: TAB_STRIP_HEIGHT }}
+						onClick={() => setNotesActive(profileId)}
+						onKeyDown={(event) => {
+							if (event.key !== "Enter" && event.key !== " ") return;
+							event.preventDefault();
+							setNotesActive(profileId);
+						}}
+					/>
+				)}
+			>
+				<FiFileText size={14} />
+			</TooltipTrigger>
+			<TooltipContent>{m.notes()}</TooltipContent>
+		</Tooltip>
 	) : null, [notesActive, profile, profileId, setNotesActive]);
 
 	const trailingControls = useMemo(
@@ -435,15 +406,8 @@ export default function TerminalTabs({
 	);
 
 	return (
-		<Flex direction="column" h="full" w="full" minW="0">
-			<Box
-				overflowX="auto"
-				overflowY="hidden"
-				w="full"
-				minW="0"
-				borderBottomWidth="1px"
-				borderColor="border"
-			>
+		<div className="flex h-full w-full min-w-0 flex-col">
+			<div className="w-full min-w-0 overflow-x-auto overflow-y-hidden border-b">
 				<TabStrip
 					leadingControl={notesControl}
 					groups={tabGroups}
@@ -451,16 +415,16 @@ export default function TerminalTabs({
 					onSelect={handleTabChange}
 					trailingControls={trailingControls}
 				/>
-			</Box>
+			</div>
 
 			{/* File viewer — static content, safe to conditionally render */}
 			{fileTabActive && !notesActive && activeFilePath && (
-				<Box flex="1" minH="0" overflow="hidden">
+				<div className="min-h-0 flex-1 overflow-hidden">
 					<AsyncBoundary
 						fallback={(
-							<Flex align="center" justify="center" h="32">
-								<Spinner size="sm" />
-							</Flex>
+							<div className="flex h-32 items-center justify-center">
+								<Spinner />
+							</div>
 						)}
 						errorFallback={({ error, onRetry }) => (
 							<InlineError error={error} height="32" onRetry={onRetry} />
@@ -473,17 +437,17 @@ export default function TerminalTabs({
 							isActive={isActive}
 						/>
 					</AsyncBoundary>
-				</Box>
+				</div>
 			)}
 
 			{/* Notes editor — conditionally rendered when notes surface is active */}
 			{notesActive && profile && (
-				<Box flex="1" minH="0" overflow="hidden">
+				<div className="min-h-0 flex-1 overflow-hidden">
 					<AsyncBoundary
 						fallback={(
-							<Flex align="center" justify="center" h="32">
-								<Spinner size="sm" />
-							</Flex>
+							<div className="flex h-32 items-center justify-center">
+								<Spinner />
+							</div>
 						)}
 						errorFallback={({ error, onRetry }) => (
 							<InlineError error={error} height="32" onRetry={onRetry} />
@@ -491,24 +455,23 @@ export default function TerminalTabs({
 					>
 						<ProfileNotesEditor profile={profile} />
 					</AsyncBoundary>
-				</Box>
+				</div>
 			)}
 
 			{/* Terminal area — NEVER unmounted, hidden via CSS when file tab is active */}
-			<Box
-				flex="1"
-				minH="0"
-				position="relative"
-				display={fileTabActive || notesActive ? "none" : "block"}
+			<div
+				className="relative min-h-0 flex-1"
+				style={{ display: fileTabActive || notesActive ? "none" : "block" }}
 				ref={activeTerminalDropRef}
 			>
 				{tabs.map((tab) => (
-					<Box
+					<div
 						key={tab.id}
-						position="absolute"
-						inset="0"
-						visibility={tab.id === activeTabId ? "visible" : "hidden"}
-						pointerEvents={tab.id === activeTabId ? "auto" : "none"}
+						className="absolute inset-0"
+						style={{
+							visibility: tab.id === activeTabId ? "visible" : "hidden",
+							pointerEvents: tab.id === activeTabId ? "auto" : "none",
+						}}
 						aria-hidden={tab.id !== activeTabId}
 					>
 						<Terminal
@@ -521,10 +484,10 @@ export default function TerminalTabs({
 								!notesActive
 							}
 						/>
-					</Box>
+					</div>
 				))}
 				{tabs.length === 0 && emptyFallback}
-			</Box>
+			</div>
 
 			<AsyncBoundary
 				fallback={null}
@@ -539,6 +502,6 @@ export default function TerminalTabs({
 					onDiscard={handleDiscardFileChanges}
 				/>
 			</AsyncBoundary>
-		</Flex>
+		</div>
 	);
 }

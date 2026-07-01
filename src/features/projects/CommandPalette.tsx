@@ -1,4 +1,3 @@
-import { Box, Text } from "@chakra-ui/react";
 import { Command, useCommandState } from "cmdk";
 import {
 	type ReactNode,
@@ -43,20 +42,9 @@ function CommandPaletteEmptyState() {
 
 function CommandPaletteStatusMessage({ children }: { children: ReactNode }) {
 	return (
-		<Box
-			asChild
-			display="flex"
-			alignItems="center"
-			justifyContent="center"
-			px="4"
-			py="8"
-		>
-			<Command.Empty>
-				<Text textAlign="center" color="fg.muted">
-					{children}
-				</Text>
-			</Command.Empty>
-		</Box>
+		<Command.Empty className="flex items-center justify-center px-4 py-8">
+			<p className="text-center text-muted-foreground">{children}</p>
+		</Command.Empty>
 	);
 }
 
@@ -74,34 +62,19 @@ const CommandPaletteResultItem = memo(({
 	}, [onSelect, result]);
 
 	return (
-		<Box
-			asChild
-			userSelect="none"
-			display="flex"
-			alignItems="center"
-			gap="2"
-			minW="0"
-			px="3"
-			py="2"
-			rounded="l1"
-			css={{
-				"&[data-selected='true']": {
-					background: "var(--chakra-colors-bg-subtle)",
-				},
-			}}
+		<Command.Item
+			value={result.path}
+			onSelect={handleSelect}
+			className="flex min-w-0 select-none items-center gap-2 rounded px-3 py-2 data-[selected=true]:bg-muted"
 		>
-			<Command.Item value={result.path} onSelect={handleSelect}>
-				<FileTreeFileIcon fileName={result.name} size={16} />
-				<Box flex="1" minW="0">
-					<Text fontSize="sm" truncate>
-						{result.name}
-					</Text>
-					<Text fontSize="xs" color="fg.muted" truncate>
-						{getParentPathLabel(result)}
-					</Text>
-				</Box>
-			</Command.Item>
-		</Box>
+			<FileTreeFileIcon fileName={result.name} size={16} />
+			<div className="min-w-0 flex-1">
+				<div className="truncate text-sm">{result.name}</div>
+				<div className="truncate text-xs text-muted-foreground">
+					{getParentPathLabel(result)}
+				</div>
+			</div>
+		</Command.Item>
 	);
 });
 
@@ -203,61 +176,33 @@ export default function CommandPalette({
 			overlayClassName="project-command-palette__overlay"
 			contentClassName="project-command-palette__dialog"
 		>
-			<Box
-				px="4"
-				py="3"
-				borderBottomWidth="1px"
-				borderColor="border.subtle"
-			>
-				<Box
-					asChild
-					flex="1"
-					minW="0"
-					fontSize="md"
-					color="fg"
-					css={{
-						display: "block",
-						width: "100%",
-						background: "transparent",
-						border: "0",
-						boxShadow: "none",
-						color: "inherit",
-						appearance: "none",
-						padding: "0",
-						margin: "0",
-						"&::placeholder": {
-							color: "var(--chakra-colors-fg-muted)",
-						},
-						"&:focus": {
-							outline: "none",
-						},
-					}}
-				>
-					<Command.Input
-						ref={inputRef}
-						placeholder={m.commandPalettePlaceholder()}
-						value={search}
-						onValueChange={setSearch}
-						aria-label={m.commandPaletteTitle()}
-					/>
-				</Box>
-			</Box>
+			<div className="border-b px-4 py-3">
+				<Command.Input
+					ref={inputRef}
+					placeholder={m.commandPalettePlaceholder()}
+					value={search}
+					onValueChange={setSearch}
+					aria-label={m.commandPaletteTitle()}
+					className="block w-full bg-transparent text-base outline-none placeholder:text-muted-foreground"
+				/>
+			</div>
 
-			<Box asChild maxH="60vh" overflowY="auto" p="1">
-				<Command.List label={m.commandPaletteTitle()}>
-					{shouldShowErrorState ? (
-						<CommandPaletteStatusMessage>
-							{getErrorMessage(error)}
-						</CommandPaletteStatusMessage>
-					) : shouldShowEmptyState ? (
-						<CommandPaletteEmptyState />
-					) : null}
-					<CommandPaletteResultList
-						results={results}
-						onSelect={commitSelection}
-					/>
-				</Command.List>
-			</Box>
+			<Command.List
+				label={m.commandPaletteTitle()}
+				className="max-h-[60vh] overflow-y-auto p-1"
+			>
+				{shouldShowErrorState ? (
+					<CommandPaletteStatusMessage>
+						{getErrorMessage(error)}
+					</CommandPaletteStatusMessage>
+				) : shouldShowEmptyState ? (
+					<CommandPaletteEmptyState />
+				) : null}
+				<CommandPaletteResultList
+					results={results}
+					onSelect={commitSelection}
+				/>
+			</Command.List>
 		</Command.Dialog>
 	);
 }

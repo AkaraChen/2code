@@ -1,5 +1,8 @@
-import { HStack, Icon, Text } from "@chakra-ui/react";
 import { FiPlus } from "react-icons/fi";
+import {
+	SidebarMenuSubButton,
+	SidebarMenuSubItem,
+} from "@/components/ui/sidebar";
 import CreateProfileDialog from "@/features/profiles/CreateProfileDialog";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
@@ -27,42 +30,21 @@ export function ProfileList({
 					isActive={profile.id === activeProfileId}
 				/>
 			))}
-			<HStack
-				as="button"
-				userSelect="none"
-				align="center"
-				gap="2"
-				w="full"
-				minW="0"
-				maxW="var(--sidebar-width)"
-				overflow="hidden"
-				ps="9"
-				pe="4"
-				py="1"
-				fontSize="sm"
-				color="fg.muted"
-				_hover={{ bg: "bg.subtle", color: "fg" }}
-				_active={{ bg: "bg.muted" }}
-				onClick={createDialog.onOpen}
-			>
-				<Icon fontSize="xs" flexShrink={0}>
-					<FiPlus />
-				</Icon>
-				<Text
-					flex="0 1 auto"
-					minW="0"
-					lineHeight="1.25rem"
-					transform="translateY(1px)"
-					truncate
+			<SidebarMenuSubItem>
+				<SidebarMenuSubButton
+					render={<button type="button" />}
+					data-sidebar-item
+					onClick={createDialog.onOpen}
 				>
-					{m.createProfile()}
-				</Text>
-			</HStack>
-			<CreateProfileDialog
-				isOpen={createDialog.isOpen}
-				onClose={createDialog.onClose}
-				projectId={projectId}
-			/>
+					<FiPlus />
+					<span>{m.createProfile()}</span>
+				</SidebarMenuSubButton>
+				<CreateProfileDialog
+					isOpen={createDialog.isOpen}
+					onClose={createDialog.onClose}
+					projectId={projectId}
+				/>
+			</SidebarMenuSubItem>
 		</>
 	);
 }

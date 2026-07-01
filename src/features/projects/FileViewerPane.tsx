@@ -1,10 +1,4 @@
 import "@/shared/lib/monaco";
-import {
-	Box,
-	Flex,
-	Spinner,
-	Text,
-} from "@chakra-ui/react";
 import Editor from "@monaco-editor/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
@@ -14,6 +8,7 @@ import type {
 	OnMount,
 } from "@monaco-editor/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Spinner } from "@/components/ui/spinner";
 import MarkdownEditor from "@/features/markdown/MarkdownEditor";
 import ArchivePreviewTree from "@/features/projects/ArchivePreviewTree";
 import { isPreviewableBinaryFile } from "@/features/projects/filePreview";
@@ -96,49 +91,25 @@ function FilePreviewPane({
 	}
 
 	return (
-		<Flex h="full" minH="0" direction="column" overflow="hidden" bg="bg.panel">
-			<Flex
-				align="center"
-				justify="space-between"
-				gap="3"
-				minH="9"
-				px="3"
-				borderBottomWidth="1px"
-				borderColor="border.subtle"
-				bg="bg.subtle"
-			>
-				<Text fontSize="sm" fontWeight="medium" truncate>
+		<div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+			<div className="flex min-h-9 items-center justify-between gap-3 border-b bg-muted px-3">
+				<div className="truncate text-sm font-medium">
 					{filename}
-				</Text>
-				<Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
+				</div>
+				<div className="whitespace-nowrap text-xs text-muted-foreground">
 					{preview?.kind === "office-pdf" ? "Office Preview" : "Preview"}
-				</Text>
-			</Flex>
+				</div>
+			</div>
 
-			<Flex flex="1" minH="0" align="center" justify="center" overflow="auto">
+			<div className="flex min-h-0 flex-1 items-center justify-center overflow-auto">
 				{isLoading ? (
-					<Spinner size="sm" />
+					<Spinner />
 				) : isError ? (
-					<Text maxW="lg" px="6" color="fg.muted" fontSize="sm" textAlign="center">
+					<p className="max-w-lg px-6 text-center text-sm text-muted-foreground">
 						{error instanceof Error ? error.message : String(error)}
-					</Text>
+					</p>
 				) : assetUrl && isImage ? (
-					<Box
-						w="full"
-						h="full"
-						p="4"
-						display="flex"
-						alignItems="center"
-						justifyContent="center"
-						bgImage={[
-							"linear-gradient(45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
-							"linear-gradient(-45deg, rgba(127, 127, 127, 0.08) 25%, transparent 25%)",
-							"linear-gradient(45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
-							"linear-gradient(-45deg, transparent 75%, rgba(127, 127, 127, 0.08) 75%)",
-						].join(", ")}
-						bgSize="16px 16px"
-						css={{ backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0" }}
-					>
+					<div className="grid h-full w-full place-items-center bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] p-4 [background-image:linear-gradient(45deg,rgba(127,127,127,.08)_25%,transparent_25%),linear-gradient(-45deg,rgba(127,127,127,.08)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(127,127,127,.08)_75%),linear-gradient(-45deg,transparent_75%,rgba(127,127,127,.08)_75%)]">
 						<img
 							src={assetUrl}
 							alt={filename}
@@ -148,7 +119,7 @@ function FilePreviewPane({
 								objectFit: "contain",
 							}}
 						/>
-					</Box>
+					</div>
 				) : assetUrl && isPdf ? (
 					<iframe
 						src={assetUrl}
@@ -161,12 +132,12 @@ function FilePreviewPane({
 						}}
 					/>
 				) : (
-					<Text color="fg.muted" fontSize="sm">
+					<p className="text-sm text-muted-foreground">
 						Preview unavailable
-					</Text>
+					</p>
 				)}
-			</Flex>
-		</Flex>
+			</div>
+		</div>
 	);
 }
 
@@ -413,7 +384,7 @@ export default function FileViewerPane({
 
 	if (fileMeta.previewableBinaryFile) {
 		return (
-			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+			<div ref={paneRef} className="h-full min-h-0 overflow-hidden">
 				<FilePreviewPane
 					filePath={filePath}
 					preview={previewQuery.data}
@@ -421,25 +392,25 @@ export default function FileViewerPane({
 					isError={previewQuery.isError}
 					isLoading={previewQuery.isLoading}
 				/>
-			</Box>
+			</div>
 		);
 	}
 
 	if (isLoading && !hasLoadedFile) {
 		return (
-			<Flex align="center" justify="center" h="32">
-				<Spinner size="sm" />
-			</Flex>
+			<div className="flex h-32 items-center justify-center">
+				<Spinner />
+			</div>
 		);
 	}
 
 	if (isError && !hasLoadedFile) {
 		return (
-			<Flex align="center" justify="center" h="32" px="6">
-				<Text color="fg.muted" fontSize="sm" textAlign="center">
+			<div className="flex h-32 items-center justify-center px-6">
+				<p className="text-center text-sm text-muted-foreground">
 					{error instanceof Error ? error.message : String(error)}
-				</Text>
-			</Flex>
+				</p>
+			</div>
 		);
 	}
 
@@ -447,7 +418,7 @@ export default function FileViewerPane({
 
 	if (fileMeta.markdownFile) {
 		return (
-			<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+			<div ref={paneRef} className="h-full min-h-0 overflow-hidden">
 				<MarkdownEditor
 					editorKey={filePath}
 					initialMarkdown={editorValue}
@@ -455,12 +426,12 @@ export default function FileViewerPane({
 					onRequestSave={handleSave}
 					saveStatus={isSaving ? "saving" : "idle"}
 				/>
-			</Box>
+			</div>
 		);
 	}
 
 	return (
-		<Box ref={paneRef} h="full" minH="0" overflow="hidden">
+		<div ref={paneRef} className="h-full min-h-0 overflow-hidden">
 			<Editor
 				height="100%"
 				path={filePath}
@@ -472,11 +443,11 @@ export default function FileViewerPane({
 				onChange={handleEditorChange}
 				onMount={handleEditorMount}
 				loading={(
-					<Flex align="center" justify="center" h="full">
-						<Spinner size="sm" />
-					</Flex>
+					<div className="flex h-full items-center justify-center">
+						<Spinner />
+					</div>
 				)}
 			/>
-		</Box>
+		</div>
 	);
 }

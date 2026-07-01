@@ -1,4 +1,3 @@
-import { Button, Stack, Text } from "@chakra-ui/react";
 import {
 	closestCenter,
 	DndContext,
@@ -11,6 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import * as m from "@/paraglide/messages.js";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { AvailableControls } from "./AvailableControls";
@@ -135,25 +135,25 @@ export function TopBarSettings() {
 
 	if (isPending) {
 		return (
-			<Text fontSize="sm" color="fg.muted">
+			<p className="text-sm text-muted-foreground">
 				{m.topbarDetectingApps()}
-			</Text>
+			</p>
 		);
 	}
 
 	if (isError) {
 		return (
-			<Text fontSize="sm" color="fg.muted">
+			<p className="text-sm text-muted-foreground">
 				{getErrorMessage(error)}
-			</Text>
+			</p>
 		);
 	}
 
 	return (
-		<Stack gap="6" maxW="2xl">
-			<Text fontSize="sm" color="fg.muted">
+		<div className="flex max-w-2xl flex-col gap-6">
+			<p className="text-sm text-muted-foreground">
 				{m.topbarDragHint()}
-			</Text>
+			</p>
 			<DndContext
 				sensors={sensors}
 				collisionDetection={closestCenter}
@@ -174,11 +174,11 @@ export function TopBarSettings() {
 			<Button
 				variant="outline"
 				size="sm"
-				alignSelf="flex-start"
+				className="self-start"
 				onClick={resetToDefaults}
 			>
 				{m.topbarResetDefaults()}
 			</Button>
-		</Stack>
+		</div>
 	);
 }

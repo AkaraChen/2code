@@ -1,9 +1,7 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FileSearchResult } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { appSystem } from "@/theme/system";
 import { useFileViewerTabsStore } from "./fileViewerTabsStore";
 import CommandPalette from "./CommandPalette";
 import { useFileSearch } from "./hooks";
@@ -35,21 +33,21 @@ function createFileSearchResult(
 
 function renderPalette() {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<CommandPalette profileId="profile-1" isActive />
-		</ChakraProvider>,
+		</>,
 	);
 }
 
 function renderPaletteWithKeydownSink() {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<CommandPalette profileId="profile-1" isActive />
 			<textarea
 				aria-label="editor"
 				onKeyDown={(event) => event.stopPropagation()}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 }
 

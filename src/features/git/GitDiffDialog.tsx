@@ -1,7 +1,7 @@
-import { Dialog, Portal } from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import type { Dispatch } from "react";
 import { useCallback, useMemo } from "react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTerminalThemeId } from "@/features/terminal/hooks";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import {
@@ -72,50 +72,45 @@ export default function GitDiffDialog({
 		[state.viewMode, termThemeId],
 	);
 	const handleOpenChange = useCallback(
-		(event: { open: boolean }) => {
-			if (!event.open) onClose();
+		(open: boolean) => {
+			if (!open) onClose();
 		},
 		[onClose],
 	);
 
 	return (
-		<Dialog.Root
-			lazyMount
-			size="cover"
-			placement="center"
+		<Dialog
 			open={isOpen}
 			onOpenChange={handleOpenChange}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content overflow="hidden" display="flex" flexDirection="column">
-						<GitDiffHeader
-							branchName={branchName}
-							viewMode={state.viewMode}
-							dispatch={dispatch}
-						/>
+			<DialogContent
+				showCloseButton={false}
+				className="flex h-[min(82dvh,56rem)] w-[min(88rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+			>
+				<GitDiffHeader
+					branchName={branchName}
+					viewMode={state.viewMode}
+					dispatch={dispatch}
+				/>
 
-						<Dialog.Body p="0" flex="1" overflow="hidden" display="flex">
-							<AsyncBoundary
-								fallback={<LoadingSpinner />}
-								errorFallback={({ error, onRetry }) => (
-									<LoadingError error={error} onRetry={onRetry} />
-								)}
-							>
-								<GitDiffContent
-									profileId={profileId}
-									worktreePath={worktreePath}
-									onClose={onClose}
-									state={state}
-									dispatch={dispatch}
-									options={options}
-								/>
-							</AsyncBoundary>
-						</Dialog.Body>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+				<div className="flex min-h-0 flex-1 overflow-hidden">
+					<AsyncBoundary
+						fallback={<LoadingSpinner />}
+						errorFallback={({ error, onRetry }) => (
+							<LoadingError error={error} onRetry={onRetry} />
+						)}
+					>
+						<GitDiffContent
+							profileId={profileId}
+							worktreePath={worktreePath}
+							onClose={onClose}
+							state={state}
+							dispatch={dispatch}
+							options={options}
+						/>
+					</AsyncBoundary>
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

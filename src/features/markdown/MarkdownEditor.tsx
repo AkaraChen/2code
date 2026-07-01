@@ -2,18 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageDescription, LanguageSupport, StreamLanguage } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
 import {
-	Badge,
-	Box,
-	Flex,
-	HStack,
-	IconButton,
-	Input,
-	Menu,
-	Portal,
-	Separator,
-	Tooltip,
-} from "@chakra-ui/react";
-import {
 	Milkdown,
 	MilkdownProvider,
 	useEditor,
@@ -85,6 +73,22 @@ import {
 } from "react-icons/fi";
 import { basicSetup } from "codemirror";
 import type { Ctx } from "@milkdown/kit/ctx";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import * as m from "@/paraglide/messages.js";
 
 interface MarkdownEditorProps {
@@ -518,27 +522,23 @@ function NotesToolbarButton({
 	onRun: () => void;
 }) {
 	return (
-		<Tooltip.Root openDelay={300}>
-			<Tooltip.Trigger asChild>
-				<IconButton
-					aria-label={label}
-					size="xs"
-					variant="ghost"
-					color={isActive ? "fg" : "fg.muted"}
-					bg={isActive ? "bg.muted" : "transparent"}
-					rounded="l2"
-					onMouseDown={(event) => event.preventDefault()}
-					onClick={onRun}
-				>
-					{children}
-				</IconButton>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{label}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						aria-label={label}
+						size="icon-xs"
+						variant="ghost"
+						className={isActive ? "bg-muted text-foreground" : "text-muted-foreground"}
+						onMouseDown={(event) => event.preventDefault()}
+						onClick={onRun}
+					/>
+				}
+			>
+				{children}
+			</TooltipTrigger>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
 	);
 }
 
@@ -546,25 +546,25 @@ function SaveStatusIndicator({ status }: { status: MarkdownEditorSaveStatus }) {
 	const content = useMemo(() => {
 		switch (status) {
 			case "saving":
-				return { icon: <FiSave />, label: m.notesSaving(), colorPalette: "gray" };
+				return { icon: <FiSave />, label: m.notesSaving(), variant: "secondary" as const };
 			case "saved":
-				return { icon: <FiCheck />, label: m.notesSaved(), colorPalette: "green" };
+				return { icon: <FiCheck />, label: m.notesSaved(), variant: "default" as const };
 			case "failed":
-				return { icon: <FiAlertCircle />, label: m.notesSaveFailedShort(), colorPalette: "red" };
+				return { icon: <FiAlertCircle />, label: m.notesSaveFailedShort(), variant: "destructive" as const };
 			default:
 				return null;
 		}
 	}, [status]);
 
-	if (!content) return <Box flex="1" />;
+	if (!content) return <div className="flex-1" />;
 
 	return (
-		<Flex flex="1" justify="end" minW="20">
-			<Badge size="sm" variant="subtle" colorPalette={content.colorPalette}>
+		<div className="flex min-w-20 flex-1 justify-end">
+			<Badge variant={content.variant}>
 				{content.icon}
 				{content.label}
 			</Badge>
-		</Flex>
+		</div>
 	);
 }
 
@@ -607,97 +607,77 @@ function MarkdownToolbar({
 	}, [runCommand]);
 
 	return (
-		<Flex
-			align="center"
-			gap="1"
-			px="2"
-			py="1"
-			borderBottomWidth="1px"
-			borderColor="border"
-			bg="bg.panel"
-			overflowX="auto"
-			flexShrink={0}
-		>
-			<HStack gap="1" flexShrink={0}>
-				<Menu.Root>
-					<Menu.Trigger asChild>
-						<IconButton
-							aria-label={m.notesCommandMenu()}
-							size="xs"
-							variant="ghost"
-							color="fg.muted"
-							rounded="l2"
-							onMouseDown={(event) => event.preventDefault()}
+		<div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b bg-background px-2 py-1">
+			<div className="flex shrink-0 gap-1">
+				<DropdownMenu>
+					<DropdownMenuTrigger
+						render={
+							<Button
+								aria-label={m.notesCommandMenu()}
+								size="icon-xs"
+								variant="ghost"
+								className="text-muted-foreground"
+								onMouseDown={(event) => event.preventDefault()}
+							/>
+						}
+					>
+						<FiMenu />
+					</DropdownMenuTrigger>
+					<DropdownMenuContent className="min-w-44">
+						<DropdownMenuItem
+							onClick={() => runCommand(turnIntoTextCommand)}
 						>
-							<FiMenu />
-						</IconButton>
-					</Menu.Trigger>
-					<Portal>
-						<Menu.Positioner>
-							<Menu.Content minW="44">
-								<Menu.Item
-									value="paragraph"
-									onClick={() => runCommand(turnIntoTextCommand)}
-								>
-									<FiType />
-									{m.notesFormatParagraph()}
-								</Menu.Item>
-								<Menu.Item
-									value="heading-1"
-									onClick={() => runCommand(wrapInHeadingCommand, 1)}
-								>
-									<FiHash />
-									{m.notesFormatHeading1()}
-								</Menu.Item>
-								<Menu.Item
-									value="heading-2"
-									onClick={() => runCommand(wrapInHeadingCommand, 2)}
-								>
-									<FiHash />
-									{m.notesFormatHeading2()}
-								</Menu.Item>
-								<Menu.Item
-									value="heading-3"
-									onClick={() => runCommand(wrapInHeadingCommand, 3)}
-								>
-									<FiHash />
-									{m.notesFormatHeading3()}
-								</Menu.Item>
-								<Menu.Separator />
-								<Menu.Item
-									value="blockquote"
-									onClick={() => runCommand(wrapInBlockquoteCommand)}
-								>
-									<FiCornerDownRight />
-									{m.notesFormatQuote()}
-								</Menu.Item>
-								<Menu.Item
-									value="code-block"
-									onClick={() => runCommand(createCodeBlockCommand)}
-								>
-									<FiCodepen />
-									{m.notesFormatCodeBlock()}
-								</Menu.Item>
-								<Menu.Item
-									value="table"
-									onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
-								>
-									<FiTable />
-									{m.notesInsertTable()}
-								</Menu.Item>
-								<Menu.Item value="divider" onClick={() => runCommand(insertHrCommand)}>
-									<FiMinus />
-									{m.notesInsertDivider()}
-								</Menu.Item>
-							</Menu.Content>
-						</Menu.Positioner>
-					</Portal>
-				</Menu.Root>
-			</HStack>
+							<FiType />
+							{m.notesFormatParagraph()}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => runCommand(wrapInHeadingCommand, 1)}
+						>
+							<FiHash />
+							{m.notesFormatHeading1()}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => runCommand(wrapInHeadingCommand, 2)}
+						>
+							<FiHash />
+							{m.notesFormatHeading2()}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => runCommand(wrapInHeadingCommand, 3)}
+						>
+							<FiHash />
+							{m.notesFormatHeading3()}
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							onClick={() => runCommand(wrapInBlockquoteCommand)}
+						>
+							<FiCornerDownRight />
+							{m.notesFormatQuote()}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => runCommand(createCodeBlockCommand)}
+						>
+							<FiCodepen />
+							{m.notesFormatCodeBlock()}
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
+						>
+							<FiTable />
+							{m.notesInsertTable()}
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => runCommand(insertHrCommand)}>
+							<FiMinus />
+							{m.notesInsertDivider()}
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
 
-			<Separator orientation="vertical" h="5" mx="1" />
+			<Separator orientation="vertical" className="mx-1 h-5" />
 
-			<HStack gap="0.5">
+			<div className="flex gap-0.5">
 				<NotesToolbarButton
 					label={`${m.notesFormatBold()}  ⌘B`}
 					isActive={toolbarState.bold}
@@ -724,9 +704,9 @@ function MarkdownToolbar({
 					isActive={toolbarState.strike}
 					onRun={() => runCommand(toggleStrikethroughCommand)}
 				>
-					<Box as="span" textDecoration="line-through" fontWeight="semibold">
+					<span className="font-semibold line-through">
 						S
-					</Box>
+					</span>
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={m.notesFormatLink()}
@@ -735,11 +715,11 @@ function MarkdownToolbar({
 				>
 					<FiLink />
 				</NotesToolbarButton>
-			</HStack>
+			</div>
 
-			<Separator orientation="vertical" h="5" mx="1" />
+			<Separator orientation="vertical" className="mx-1 h-5" />
 
-			<HStack gap="0.5">
+			<div className="flex gap-0.5">
 				<NotesToolbarButton
 					label={m.notesFormatBulletList()}
 					isActive={toolbarState.block === "bullet-list"}
@@ -752,9 +732,9 @@ function MarkdownToolbar({
 					isActive={toolbarState.block === "ordered-list"}
 					onRun={() => runCommand(wrapInOrderedListCommand)}
 				>
-					<Box as="span" fontSize="xs" fontWeight="semibold">
+					<span className="text-xs font-semibold">
 						1.
-					</Box>
+					</span>
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={m.notesFormatQuote()}
@@ -763,64 +743,59 @@ function MarkdownToolbar({
 				>
 					<FiCornerDownRight />
 				</NotesToolbarButton>
-			</HStack>
+			</div>
 
-			<Separator orientation="vertical" h="5" mx="1" />
+			<Separator orientation="vertical" className="mx-1 h-5" />
 
-			<Menu.Root>
-				<Menu.Trigger asChild>
-					<IconButton
-						aria-label={m.notesTableMenu()}
-						size="xs"
-						variant="ghost"
-						color="fg.muted"
-						rounded="l2"
-						onMouseDown={(event) => event.preventDefault()}
+			<DropdownMenu>
+				<DropdownMenuTrigger
+					render={
+						<Button
+							aria-label={m.notesTableMenu()}
+							size="icon-xs"
+							variant="ghost"
+							className="text-muted-foreground"
+							onMouseDown={(event) => event.preventDefault()}
+						/>
+					}
+				>
+					<FiTable />
+				</DropdownMenuTrigger>
+				<DropdownMenuContent className="min-w-44">
+					<DropdownMenuItem
+						onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
 					>
 						<FiTable />
-					</IconButton>
-				</Menu.Trigger>
-				<Portal>
-					<Menu.Positioner>
-						<Menu.Content minW="44">
-							<Menu.Item
-								value="insert-table"
-								onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
-							>
-								<FiTable />
-								{m.notesInsertTable()}
-							</Menu.Item>
-							<Menu.Separator />
-							<Menu.Item value="add-row" onClick={() => runCommand(addRowAfterCommand)}>
-								<FiPlus />
-								{m.notesTableAddRow()}
-							</Menu.Item>
-							<Menu.Item value="add-column" onClick={() => runCommand(addColAfterCommand)}>
-								<FiColumns />
-								{m.notesTableAddColumn()}
-							</Menu.Item>
-							<Menu.Item value="add-row-before" onClick={() => runCommand(addRowBeforeCommand)}>
-								<FiPlus />
-								{m.notesTableAddRowBefore()}
-							</Menu.Item>
-							<Menu.Item value="add-column-before" onClick={() => runCommand(addColBeforeCommand)}>
-								<FiColumns />
-								{m.notesTableAddColumnBefore()}
-							</Menu.Item>
-							<Menu.Separator />
-							<Menu.Item value="delete-cells" onClick={() => runCommand(deleteSelectedCellsCommand)}>
-								<FiTrash2 />
-								{m.notesTableDeleteCells()}
-							</Menu.Item>
-						</Menu.Content>
-					</Menu.Positioner>
-				</Portal>
-			</Menu.Root>
+						{m.notesInsertTable()}
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem onClick={() => runCommand(addRowAfterCommand)}>
+						<FiPlus />
+						{m.notesTableAddRow()}
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => runCommand(addColAfterCommand)}>
+						<FiColumns />
+						{m.notesTableAddColumn()}
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => runCommand(addRowBeforeCommand)}>
+						<FiPlus />
+						{m.notesTableAddRowBefore()}
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => runCommand(addColBeforeCommand)}>
+						<FiColumns />
+						{m.notesTableAddColumnBefore()}
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem onClick={() => runCommand(deleteSelectedCellsCommand)}>
+						<FiTrash2 />
+						{m.notesTableDeleteCells()}
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 
 			{linkOpen && (
-				<HStack gap="1" flexShrink={0} minW="56">
+				<div className="flex min-w-56 shrink-0 gap-1">
 					<Input
-						size="xs"
 						value={linkHref}
 						placeholder="https://"
 						onChange={(event) => setLinkHref(event.target.value)}
@@ -829,29 +804,29 @@ function MarkdownToolbar({
 							if (event.key === "Escape") setLinkOpen(false);
 						}}
 					/>
-					<IconButton
+					<Button
 						aria-label={m.notesApplyLink()}
-						size="xs"
+						size="icon-xs"
 						variant="ghost"
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={applyLink}
 					>
 						<FiCheck />
-					</IconButton>
-					<IconButton
+					</Button>
+					<Button
 						aria-label={m.notesRemoveLink()}
-						size="xs"
+						size="icon-xs"
 						variant="ghost"
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={removeLink}
 					>
 						<FiX />
-					</IconButton>
-				</HStack>
+					</Button>
+				</div>
 			)}
 
 			<SaveStatusIndicator status={status} />
-		</Flex>
+		</div>
 	);
 }
 
@@ -1018,25 +993,25 @@ function MilkdownEditor({
 	);
 
 	return (
-		<Flex ref={paneRef} direction="column" h="full" minH="0">
+		<div ref={paneRef} className="flex h-full min-h-0 flex-col">
 			<MarkdownToolbar
 				editor={editor.get()}
 				status={saveStatus}
 				toolbarState={toolbarState}
 			/>
-			<Box flex="1" minH="0" overflowY="auto" p="4">
+			<div className="min-h-0 flex-1 overflow-y-auto p-4">
 				<Milkdown />
-			</Box>
-		</Flex>
+			</div>
+		</div>
 	);
 }
 
 export default function MarkdownEditor(props: MarkdownEditorProps) {
 	return (
-		<Box h="full" overflow="hidden" className="milkdown-wrapper">
+		<div className="milkdown-wrapper h-full overflow-hidden">
 			<MilkdownProvider>
 				<MilkdownEditor {...props} />
 			</MilkdownProvider>
-		</Box>
+		</div>
 	);
 }

@@ -10,7 +10,7 @@
 
 | Layer          | Technology                                 |
 | -------------- | ------------------------------------------ |
-| Frontend       | React 19, TypeScript, Vite 7, Chakra UI v3 |
+| Frontend       | React 19, TypeScript, Vite 8, shadcn/ui    |
 | State (client) | Zustand 5 + immer                          |
 | State (server) | TanStack Query 5                           |
 | Routing        | react-router v7                            |

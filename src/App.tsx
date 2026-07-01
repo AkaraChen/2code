@@ -1,4 +1,3 @@
-import { Box, Flex } from "@chakra-ui/react";
 import { Profiler, useCallback } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { useKey } from "rooks";
@@ -36,9 +35,9 @@ export default function App() {
 	useKey("D", handleDebugShortcut);
 
 	return (
-		<Flex direction="column" h="full" bg="bg" color="fg">
+		<div className="flex h-full flex-col bg-background text-foreground">
 			<StartupUpdateCheck />
-			<Flex flex="1" minH="0">
+			<div className="flex min-h-0 flex-1">
 				<AsyncBoundary
 					fallback={<SidebarSkeleton />}
 					errorFallback={({ error, onRetry }) => (
@@ -49,13 +48,7 @@ export default function App() {
 						<AppSidebar />
 					</Profiler>
 				</AsyncBoundary>
-				<Box
-					as="main"
-					flex="1"
-					overflowY="auto"
-					position="relative"
-					bg="bg.panel"
-				>
+				<main className="relative flex-1 overflow-y-auto bg-card">
 					<AsyncBoundary
 						fallback={<PageSkeleton />}
 						errorFallback={({ error, onRetry }) => (
@@ -91,10 +84,10 @@ export default function App() {
 							<TerminalLayer />
 						</Profiler>
 					</AsyncBoundary>
-				</Box>
-			</Flex>
+				</main>
+			</div>
 			<DebugFloat />
 			{IS_WINDOWS_PLATFORM && <WindowControls />}
-		</Flex>
+		</div>
 	);
 }

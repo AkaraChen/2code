@@ -1,23 +1,19 @@
-import {
-	Box,
-	Button,
-	CloseButton,
-	Code,
-	Dialog,
-	Field,
-	Flex,
-	HStack,
-	Icon,
-	Input,
-	Portal,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useForm, useWatch } from "react-hook-form";
 import { FiEdit2, FiFolder } from "react-icons/fi";
 import { useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import * as m from "@/paraglide/messages.js";
 import { useCreateProject } from "./hooks";
 
@@ -90,126 +86,78 @@ export default function CreateProjectDialog({
 	});
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) handleClose();
+			onOpenChange={(open) => {
+				if (!open) handleClose();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.createProject()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Stack gap="5">
-								{!folder ? (
-									<Box
-										as="button"
-										onClick={handleChooseFolder}
-										borderWidth="thin"
-										borderStyle="dashed"
-										borderColor="border.emphasized"
-										rounded="lg"
-										px="4"
-										py="6"
-										transition="colors"
-										_hover={{
-											bg: "bg.subtle",
-										}}
-									>
-										<Flex
-											direction="column"
-											align="center"
-											gap="2"
-										>
-											<Icon
-												fontSize="2xl"
-												color="fg.muted"
-											>
-												<FiFolder />
-											</Icon>
-											<Text
-												fontSize="sm"
-												color="fg.muted"
-											>
-												{m.chooseFolder()}
-											</Text>
-										</Flex>
-									</Box>
-								) : (
-									<Box>
-										<HStack
-											justify="space-between"
-											mb="1.5"
-										>
-											<Text
-												fontSize="xs"
-												fontWeight="medium"
-												color="fg.muted"
-											>
-												{m.folder()}
-											</Text>
-											<Button
-												variant="outline"
-												size="xs"
-												onClick={handleChooseFolder}
-											>
-												<FiEdit2 />
-												{m.chooseFolder()}
-											</Button>
-										</HStack>
-										<Code
-											variant="surface"
-											size="sm"
-											display="block"
-											px="3"
-											py="2"
-											rounded="md"
-											truncate
-										>
-											{folder}
-										</Code>
-									</Box>
-								)}
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.createProject()}</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-5">
+					{!folder ? (
+						<button
+							type="button"
+							className="rounded-lg border border-dashed px-4 py-6 transition-colors hover:bg-muted"
+							onClick={handleChooseFolder}
+						>
+							<div className="flex flex-col items-center gap-2">
+								<FiFolder className="size-6 text-muted-foreground" />
+								<span className="text-sm text-muted-foreground">
+									{m.chooseFolder()}
+								</span>
+							</div>
+						</button>
+					) : (
+						<div>
+							<div className="mb-1.5 flex items-center justify-between gap-3">
+								<div className="text-xs font-medium text-muted-foreground">
+									{m.folder()}
+								</div>
+								<Button
+									variant="outline"
+									size="xs"
+									onClick={handleChooseFolder}
+								>
+									<FiEdit2 />
+									{m.chooseFolder()}
+								</Button>
+							</div>
+							<code className="block truncate rounded-md border bg-muted px-3 py-2 text-sm">
+								{folder}
+							</code>
+						</div>
+					)}
 
-								<Field.Root>
-									<Field.Label>{m.projectName()}</Field.Label>
-									<Input
-										placeholder={m.projectNamePlaceholderFolder()}
-										{...form.register("name")}
-										onKeyDown={(e) => {
-											if (e.key === "Enter")
-												handleCreate();
-										}}
-									/>
-									<Text fontSize="xs" color="fg.muted">
-										{getProjectNameHint(folder, name)}
-									</Text>
-								</Field.Root>
-							</Stack>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								onClick={handleCreate}
-								disabled={!folder || createProject.isPending}
-								loading={createProject.isPending}
-							>
-								{m.create()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+					<Field>
+						<FieldLabel>{m.projectName()}</FieldLabel>
+						<Input
+							placeholder={m.projectNamePlaceholderFolder()}
+							{...form.register("name")}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") handleCreate();
+							}}
+						/>
+						<FieldDescription>
+							{getProjectNameHint(folder, name)}
+						</FieldDescription>
+					</Field>
+				</div>
+				<DialogFooter>
+					<Button variant="outline" onClick={handleClose}>
+						{m.cancel()}
+					</Button>
+					<Button
+						onClick={handleCreate}
+						disabled={!folder || createProject.isPending}
+					>
+						{createProject.isPending ? <Spinner /> : null}
+						{m.create()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

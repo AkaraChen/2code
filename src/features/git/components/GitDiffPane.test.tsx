@@ -1,4 +1,3 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import type {
 	FileDiffMetadata,
 	FileDiffOptions,
@@ -6,7 +5,6 @@ import type {
 } from "@pierre/diffs";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { appSystem } from "@/theme/system";
 import { GIT_DIFF_LARGE_FILE_LINE_THRESHOLD } from "../utils";
 import GitDiffPane from "./GitDiffPane";
 
@@ -72,22 +70,22 @@ function makeDiffFile(
 
 function renderPane(activeFile: FileDiffMetadata) {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<GitDiffPane activeFile={activeFile} options={{}} emptyMessage="empty" />
-		</ChakraProvider>,
+		</>,
 	);
 }
 
 function renderReviewPane(activeFile: FileDiffMetadata) {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<>
 			<GitDiffPane
 				activeFile={activeFile}
 				options={{}}
 				emptyMessage="empty"
 				onAddReviewComment={vi.fn()}
 			/>
-		</ChakraProvider>,
+		</>,
 	);
 }
 

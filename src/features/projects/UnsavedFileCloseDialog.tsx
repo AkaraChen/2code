@@ -1,4 +1,11 @@
-import { Button, CloseButton, Dialog, Portal, Text } from "@chakra-ui/react";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import * as m from "@/paraglide/messages.js";
 
 interface UnsavedFileCloseDialogProps {
@@ -15,37 +22,28 @@ export default function UnsavedFileCloseDialog({
 	onDiscard,
 }: UnsavedFileCloseDialogProps) {
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) onCancel();
+			onOpenChange={(open) => {
+				if (!open) onCancel();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.closeUnsavedFileTitle()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Text>{m.closeUnsavedFileDescription({ file: fileName })}</Text>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button colorPalette="red" onClick={onDiscard}>
-								{m.discardChanges()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.closeUnsavedFileTitle()}</DialogTitle>
+				</DialogHeader>
+				<p className="text-sm">
+					{m.closeUnsavedFileDescription({ file: fileName })}
+				</p>
+				<DialogFooter>
+					<Button variant="outline" onClick={onCancel}>
+						{m.cancel()}
+					</Button>
+					<Button variant="destructive" onClick={onDiscard}>
+						{m.discardChanges()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

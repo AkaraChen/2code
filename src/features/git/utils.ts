@@ -32,13 +32,28 @@ const previewableImageMimeTypes: Record<string, string> = {
 
 export const changeBadge: Record<
 	string,
-	{ label: string; colorPalette: string }
+	{ label: string; className: string }
 > = {
-	new: { label: "A", colorPalette: "green" },
-	deleted: { label: "D", colorPalette: "red" },
-	change: { label: "M", colorPalette: "blue" },
-	"rename-pure": { label: "R", colorPalette: "yellow" },
-	"rename-changed": { label: "R", colorPalette: "yellow" },
+	new: {
+		label: "A",
+		className: "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400",
+	},
+	deleted: {
+		label: "D",
+		className: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400",
+	},
+	change: {
+		label: "M",
+		className: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400",
+	},
+	"rename-pure": {
+		label: "R",
+		className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+	},
+	"rename-changed": {
+		label: "R",
+		className: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+	},
 };
 
 export function getFileDisplayParts(fileName: string) {

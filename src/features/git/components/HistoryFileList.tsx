@@ -1,7 +1,7 @@
-import { Box, Flex, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FiArrowLeft } from "react-icons/fi";
 import { memo, useCallback } from "react";
+import { Button } from "@/components/ui/button";
 import type { GitCommit } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
@@ -23,24 +23,24 @@ function CommitHeader({
 	onBack: () => void;
 }) {
 	return (
-		<HStack px="2" py="1" gap="1">
-			<IconButton
-				size="xs"
+		<div className="flex items-center gap-1 px-2 py-1">
+			<Button
+				size="icon-xs"
 				variant="ghost"
 				aria-label={m.backToCommitList()}
 				onClick={onBack}
 			>
 				<FiArrowLeft />
-			</IconButton>
-			<VStack align="start" gap="0" flex="1" minW="0">
-				<Text fontSize="sm" fontWeight="medium" lineClamp={1}>
+			</Button>
+			<div className="flex min-w-0 flex-1 flex-col">
+				<div className="line-clamp-1 text-sm font-medium">
 					{commit.message}
-				</Text>
-				<Text fontSize="xs" color="fg.muted" fontFamily="mono">
+				</div>
+				<div className="font-mono text-xs text-muted-foreground">
 					{commit.hash}
-				</Text>
-			</VStack>
-		</HStack>
+				</div>
+			</div>
+		</div>
 	);
 }
 
@@ -82,26 +82,20 @@ export default function HistoryFileList({
 	const { ref: listRef } = useScrollIntoView<HTMLDivElement>(selectedIndex);
 
 	return (
-		<Flex direction="column" flex="1" minH="0" overflow="hidden">
+		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 			<CommitHeader commit={commit} onBack={onBack} />
 			{files.length === 0 ? (
-				<Flex align="center" justify="center" flex="1" p="8">
-					<Text color="fg.muted" fontSize="sm">
+				<div className="flex flex-1 items-center justify-center p-8">
+					<p className="text-sm text-muted-foreground">
 						{m.noFileChanges()}
-					</Text>
-				</Flex>
+					</p>
+				</div>
 			) : (
 				<>
-					<Text
-						px="3"
-						py="1"
-						fontSize="xs"
-						color="fg.muted"
-						flexShrink={0}
-					>
+					<p className="shrink-0 px-3 py-1 text-xs text-muted-foreground">
 						{m.changedFiles({ count: files.length })}
-					</Text>
-					<Box ref={listRef} flex="1" overflowY="auto" minH="0">
+					</p>
+					<div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
 						{files.map((file, i) => (
 							<HistoryFileListRow
 								key={file.name}
@@ -111,9 +105,9 @@ export default function HistoryFileList({
 								onFileSelect={onFileSelect}
 							/>
 						))}
-					</Box>
+					</div>
 				</>
 			)}
-		</Flex>
+		</div>
 	);
 }

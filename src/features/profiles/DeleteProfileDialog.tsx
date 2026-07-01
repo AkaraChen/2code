@@ -1,15 +1,18 @@
+import { useMatch, useNavigate } from "react-router";
 import {
 	Alert,
-	Button,
-	CloseButton,
+	AlertDescription,
+	AlertTitle,
+} from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
 	Dialog,
-	HStack,
-	Portal,
-	Spinner,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
-import { useMatch, useNavigate } from "react-router";
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import type { GitDiffStats } from "@/generated";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
@@ -94,78 +97,57 @@ export default function DeleteProfileDialog({
 		.join(" ");
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={isOpen}
-			onOpenChange={(e) => {
-				if (!e.open) onClose();
+			onOpenChange={(open) => {
+				if (!open) onClose();
 			}}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.deleteProfile()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Stack gap="3">
-								<Text>{m.confirmDeleteProfile()}</Text>
-								{deleteCheck.isChecking && (
-									<HStack gap="2" color="fg.muted" fontSize="sm">
-										<Spinner size="xs" />
-										<Text>{m.deleteProfileCheckingGitStatus()}</Text>
-									</HStack>
-								)}
-								{!deleteCheck.isChecking && deleteCheck.hasRisk && (
-									<Alert.Root status="warning" variant="surface">
-										<Alert.Indicator />
-										<Alert.Content>
-											<Alert.Title>
-												{m.deleteProfileGitWarningTitle()}
-											</Alert.Title>
-											<Alert.Description>
-												{warningDescription}
-											</Alert.Description>
-										</Alert.Content>
-									</Alert.Root>
-								)}
-								{!deleteCheck.isChecking && deleteCheck.isError && (
-									<Alert.Root status="warning" variant="subtle">
-										<Alert.Indicator />
-										<Alert.Content>
-											<Alert.Title>
-												{m.deleteProfileGitCheckFailedTitle()}
-											</Alert.Title>
-											<Alert.Description>
-												{m.deleteProfileGitCheckFailedDescription()}
-											</Alert.Description>
-										</Alert.Content>
-									</Alert.Root>
-								)}
-							</Stack>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<Button
-								colorPalette="red"
-								disabled={deleteCheck.isFetching}
-								loading={deleteProfile.isPending}
-								onClick={handleDelete}
-							>
-								{deleteCheck.hasRisk
-									? m.deleteProfileAnyway()
-									: m.delete()}
-							</Button>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.deleteProfile()}</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-3">
+					<p className="text-sm">{m.confirmDeleteProfile()}</p>
+					{deleteCheck.isChecking ? (
+						<div className="flex items-center gap-2 text-sm text-muted-foreground">
+							<Spinner />
+							<span>{m.deleteProfileCheckingGitStatus()}</span>
+						</div>
+					) : null}
+					{!deleteCheck.isChecking && deleteCheck.hasRisk ? (
+						<Alert>
+							<AlertTitle>{m.deleteProfileGitWarningTitle()}</AlertTitle>
+							<AlertDescription>{warningDescription}</AlertDescription>
+						</Alert>
+					) : null}
+					{!deleteCheck.isChecking && deleteCheck.isError ? (
+						<Alert>
+							<AlertTitle>
+								{m.deleteProfileGitCheckFailedTitle()}
+							</AlertTitle>
+							<AlertDescription>
+								{m.deleteProfileGitCheckFailedDescription()}
+							</AlertDescription>
+						</Alert>
+					) : null}
+				</div>
+				<DialogFooter>
+					<Button variant="outline" onClick={onClose}>
+						{m.cancel()}
+					</Button>
+					<Button
+						variant="destructive"
+						disabled={deleteCheck.isFetching || deleteProfile.isPending}
+						onClick={handleDelete}
+					>
+						{deleteProfile.isPending ? <Spinner /> : null}
+						{deleteCheck.hasRisk
+							? m.deleteProfileAnyway()
+							: m.delete()}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

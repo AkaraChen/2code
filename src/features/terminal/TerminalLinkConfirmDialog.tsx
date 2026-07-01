@@ -1,16 +1,20 @@
-import {
-	Button,
-	CloseButton,
-	Dialog,
-	HStack,
-	IconButton,
-	Menu,
-	Portal,
-	Text,
-} from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback } from "react";
 import { FiChevronDown } from "react-icons/fi";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { BrowserApp } from "@/generated";
 import { listInstalledBrowsers, openUrlInBrowser } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
@@ -36,13 +40,12 @@ const BrowserMenuItem = memo(({
 	}, [browser.id, onOpen]);
 
 	return (
-		<Menu.Item
+		<DropdownMenuItem
 			key={browser.id}
-			value={browser.id}
 			onClick={handleClick}
 		>
 			{browser.name}
-		</Menu.Item>
+		</DropdownMenuItem>
 	);
 });
 
@@ -64,78 +67,65 @@ export function TerminalLinkConfirmDialog({
 		onClose();
 	}, [link, onClose]);
 	const handleOpenChange = useCallback(
-		(event: { open: boolean }) => {
-			if (!event.open) onClose();
+		(open: boolean) => {
+			if (!open) onClose();
 		},
 		[onClose],
 	);
 
 	return (
-		<Dialog.Root
-			lazyMount
+		<Dialog
 			open={!!link}
 			onOpenChange={handleOpenChange}
 		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content>
-						<Dialog.Header>
-							<Dialog.Title>{m.terminalOpenLink()}</Dialog.Title>
-						</Dialog.Header>
-						<Dialog.Body>
-							<Text>{m.terminalOpenLinkConfirmDescription()}</Text>
-							<Text mt="4" fontSize="sm" color="fg.muted" fontFamily="mono">
-								{m.terminalOpenLinkUrlLabel()}
-							</Text>
-							<Text mt="1" fontSize="sm" fontFamily="mono" wordBreak="break-all">
-								{link}
-							</Text>
-						</Dialog.Body>
-						<Dialog.Footer>
-							<Dialog.ActionTrigger asChild>
-								<Button variant="outline">{m.cancel()}</Button>
-							</Dialog.ActionTrigger>
-							<HStack gap="0">
-								<Button
-									borderRightRadius="0"
-									onClick={onOpenDefault}
-								>
-									{m.browserOpenDefault()}
-								</Button>
-								<Menu.Root>
-									<Menu.Trigger asChild>
-										<IconButton
-											borderLeftRadius="0"
-											ml="-1px"
-											aria-label={m.browserOpenWith()}
-											disabled={browsers.length === 0}
-										>
-											<FiChevronDown />
-										</IconButton>
-									</Menu.Trigger>
-									<Portal>
-										<Menu.Positioner>
-											<Menu.Content minW="52">
-												{browsers.map((browser) => (
-													<BrowserMenuItem
-														key={browser.id}
-														browser={browser}
-														onOpen={openWithBrowser}
-													/>
-												))}
-											</Menu.Content>
-										</Menu.Positioner>
-									</Portal>
-								</Menu.Root>
-							</HStack>
-						</Dialog.Footer>
-						<Dialog.CloseTrigger asChild>
-							<CloseButton size="sm" />
-						</Dialog.CloseTrigger>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{m.terminalOpenLink()}</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-1">
+					<p className="text-sm">{m.terminalOpenLinkConfirmDescription()}</p>
+					<p className="mt-3 font-mono text-sm text-muted-foreground">
+						{m.terminalOpenLinkUrlLabel()}
+					</p>
+					<p className="break-all font-mono text-sm">{link}</p>
+				</div>
+				<DialogFooter>
+					<Button variant="outline" onClick={onClose}>
+						{m.cancel()}
+					</Button>
+					<div className="flex">
+						<Button
+							className="rounded-r-none"
+							onClick={onOpenDefault}
+						>
+							{m.browserOpenDefault()}
+						</Button>
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								render={
+									<Button
+										className="-ml-px rounded-l-none"
+										size="icon"
+										aria-label={m.browserOpenWith()}
+										disabled={browsers.length === 0}
+									/>
+								}
+							>
+								<FiChevronDown />
+							</DropdownMenuTrigger>
+							<DropdownMenuContent className="min-w-52">
+								{browsers.map((browser) => (
+									<BrowserMenuItem
+										key={browser.id}
+										browser={browser}
+										onOpen={openWithBrowser}
+									/>
+								))}
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</div>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

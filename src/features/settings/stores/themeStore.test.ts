@@ -22,42 +22,48 @@ describe("bORDER_RADIUS_MAP", () => {
 		}
 	});
 
-	it("each entry has l1, l2, l3 string values", () => {
+	it("each entry has shadcn radius token string values", () => {
 		for (const entry of Object.values(BORDER_RADIUS_MAP)) {
-			expect(typeof entry.l1).toBe("string");
-			expect(typeof entry.l2).toBe("string");
-			expect(typeof entry.l3).toBe("string");
+			expect(typeof entry.sm).toBe("string");
+			expect(typeof entry.md).toBe("string");
+			expect(typeof entry.lg).toBe("string");
+			expect(typeof entry.xl).toBe("string");
 		}
 	});
 
 	it("'none' maps all levels to '0'", () => {
 		expect(BORDER_RADIUS_MAP.none).toEqual({
-			l1: "0",
-			l2: "0",
-			l3: "0",
+			sm: "0",
+			md: "0",
+			lg: "0",
+			xl: "0",
 		});
 	});
 
 	it("maps non-none values to restrained native-style radii", () => {
 		expect(BORDER_RADIUS_MAP.sm).toEqual({
-			l1: "4px",
-			l2: "5px",
-			l3: "6px",
+			sm: "4px",
+			md: "5px",
+			lg: "6px",
+			xl: "8px",
 		});
 		expect(BORDER_RADIUS_MAP.md).toEqual({
-			l1: "5px",
-			l2: "6px",
-			l3: "8px",
+			sm: "5px",
+			md: "6px",
+			lg: "8px",
+			xl: "10px",
 		});
 		expect(BORDER_RADIUS_MAP.lg).toEqual({
-			l1: "6px",
-			l2: "8px",
-			l3: "10px",
+			sm: "6px",
+			md: "8px",
+			lg: "10px",
+			xl: "12px",
 		});
 		expect(BORDER_RADIUS_MAP.xl).toEqual({
-			l1: "8px",
-			l2: "10px",
-			l3: "12px",
+			sm: "8px",
+			md: "10px",
+			lg: "12px",
+			xl: "14px",
 		});
 	});
 });
@@ -80,25 +86,31 @@ describe("useThemeStore", () => {
 		it("syncs CSS variables on document.documentElement", () => {
 			getState().setBorderRadius("lg");
 			const style = document.documentElement.style;
-			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("6px");
-			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("8px");
-			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("10px");
+			expect(style.getPropertyValue("--radius")).toBe("10px");
+			expect(style.getPropertyValue("--radius-sm")).toBe("6px");
+			expect(style.getPropertyValue("--radius-md")).toBe("8px");
+			expect(style.getPropertyValue("--radius-lg")).toBe("10px");
+			expect(style.getPropertyValue("--radius-xl")).toBe("12px");
 		});
 
 		it("syncs CSS variables for 'none'", () => {
 			getState().setBorderRadius("none");
 			const style = document.documentElement.style;
-			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("0");
-			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("0");
+			expect(style.getPropertyValue("--radius")).toBe("0");
+			expect(style.getPropertyValue("--radius-sm")).toBe("0");
+			expect(style.getPropertyValue("--radius-md")).toBe("0");
+			expect(style.getPropertyValue("--radius-lg")).toBe("0");
+			expect(style.getPropertyValue("--radius-xl")).toBe("0");
 		});
 
 		it("syncs CSS variables for 'xl'", () => {
 			getState().setBorderRadius("xl");
 			const style = document.documentElement.style;
-			expect(style.getPropertyValue("--chakra-radii-l1")).toBe("8px");
-			expect(style.getPropertyValue("--chakra-radii-l2")).toBe("10px");
-			expect(style.getPropertyValue("--chakra-radii-l3")).toBe("12px");
+			expect(style.getPropertyValue("--radius")).toBe("12px");
+			expect(style.getPropertyValue("--radius-sm")).toBe("8px");
+			expect(style.getPropertyValue("--radius-md")).toBe("10px");
+			expect(style.getPropertyValue("--radius-lg")).toBe("12px");
+			expect(style.getPropertyValue("--radius-xl")).toBe("14px");
 		});
 	});
 });

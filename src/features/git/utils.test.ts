@@ -16,36 +16,29 @@ import {
 } from "./utils";
 
 describe("changeBadge", () => {
-	it("maps 'new' to label 'A' with green palette", () => {
-		expect(changeBadge.new).toEqual({ label: "A", colorPalette: "green" });
+	it("maps 'new' to label 'A'", () => {
+		expect(changeBadge.new.label).toBe("A");
+		expect(changeBadge.new.className).toContain("green");
 	});
 
-	it("maps 'deleted' to label 'D' with red palette", () => {
-		expect(changeBadge.deleted).toEqual({
-			label: "D",
-			colorPalette: "red",
-		});
+	it("maps 'deleted' to label 'D'", () => {
+		expect(changeBadge.deleted.label).toBe("D");
+		expect(changeBadge.deleted.className).toContain("red");
 	});
 
-	it("maps 'change' to label 'M' with blue palette", () => {
-		expect(changeBadge.change).toEqual({
-			label: "M",
-			colorPalette: "blue",
-		});
+	it("maps 'change' to label 'M'", () => {
+		expect(changeBadge.change.label).toBe("M");
+		expect(changeBadge.change.className).toContain("blue");
 	});
 
-	it("maps 'rename-pure' to label 'R' with yellow palette", () => {
-		expect(changeBadge["rename-pure"]).toEqual({
-			label: "R",
-			colorPalette: "yellow",
-		});
+	it("maps 'rename-pure' to label 'R'", () => {
+		expect(changeBadge["rename-pure"].label).toBe("R");
+		expect(changeBadge["rename-pure"].className).toContain("amber");
 	});
 
-	it("maps 'rename-changed' to label 'R' with yellow palette", () => {
-		expect(changeBadge["rename-changed"]).toEqual({
-			label: "R",
-			colorPalette: "yellow",
-		});
+	it("maps 'rename-changed' to label 'R'", () => {
+		expect(changeBadge["rename-changed"].label).toBe("R");
+		expect(changeBadge["rename-changed"].className).toContain("amber");
 	});
 
 	it("returns undefined for unknown change type", () => {

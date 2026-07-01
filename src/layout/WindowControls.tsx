@@ -1,4 +1,3 @@
-import { Box, HStack } from "@chakra-ui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import {
@@ -8,8 +7,6 @@ import {
 	VscChromeRestore,
 } from "react-icons/vsc";
 
-const BUTTON_WIDTH = "36px";
-const BUTTON_HEIGHT = "28px";
 const ICON_SIZE = 12;
 
 type ControlKind = "minimize" | "maximize" | "close";
@@ -47,32 +44,19 @@ function ControlButton({
 	onClick,
 	isMaximized = false,
 }: ControlButtonProps) {
-	const hoverBg =
-		kind === "close" ? "#c42b1c" : "rgba(127, 127, 127, 0.18)";
-	const hoverColor = kind === "close" ? "white" : undefined;
-	const activeBg =
-		kind === "close" ? "#b32717" : "rgba(127, 127, 127, 0.28)";
-
 	return (
-		<Box
-			as="button"
+		<button
+			type="button"
 			aria-label={label}
 			onClick={onClick}
-			w={BUTTON_WIDTH}
-			h={BUTTON_HEIGHT}
-			display="grid"
-			placeItems="center"
-			bg="transparent"
-			color="fg.muted"
-			borderRadius="0"
-			transition="background-color 0.08s ease, color 0.08s ease"
-			_hover={{ bg: hoverBg, color: hoverColor }}
-			_active={{ bg: activeBg }}
-			_focusVisible={{ outline: "none", bg: hoverBg, color: hoverColor }}
-			css={{ WebkitAppRegion: "no-drag" }}
+			className={
+				kind === "close"
+					? "grid h-7 w-9 place-items-center text-muted-foreground transition-colors [-webkit-app-region:no-drag] hover:bg-[#c42b1c] hover:text-white active:bg-[#b32717] focus-visible:bg-[#c42b1c] focus-visible:text-white focus-visible:outline-none"
+					: "grid h-7 w-9 place-items-center text-muted-foreground transition-colors [-webkit-app-region:no-drag] hover:bg-muted active:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+			}
 		>
 			<ControlIcon kind={kind} isMaximized={isMaximized} />
-		</Box>
+		</button>
 	);
 }
 
@@ -109,13 +93,8 @@ export default function WindowControls() {
 	};
 
 	return (
-		<HStack
-			gap="0"
-			position="fixed"
-			top="0"
-			right="0"
-			zIndex="banner"
-			h={BUTTON_HEIGHT}
+		<div
+			className="fixed top-0 right-0 flex h-7"
 			data-window-controls
 		>
 			<ControlButton
@@ -130,6 +109,6 @@ export default function WindowControls() {
 				isMaximized={isMaximized}
 			/>
 			<ControlButton kind="close" label="Close" onClick={handleClose} />
-		</HStack>
+		</div>
 	);
 }

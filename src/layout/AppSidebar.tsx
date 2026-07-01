@@ -1,4 +1,3 @@
-import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
 import {
 	closestCenter,
 	DndContext,
@@ -15,18 +14,27 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGroup } from "motion/react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { matchPath, useLocation } from "react-router";
-import {
-	FiCheck,
-	FiEdit3,
-	FiFolder,
-	FiHome,
-	FiPlus,
-	FiSettings,
-	FiStar,
-} from "react-icons/fi";
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FiCheck, FiEdit3, FiFolder, FiHome, FiPlus, FiSettings, FiStar } from "react-icons/fi";
 import { PiDotsSixVerticalBold } from "react-icons/pi";
+import { matchPath, useLocation } from "react-router";
+import { toast } from "sonner";
+import {
+	Sidebar,
+	SidebarContent,
+	SidebarFooter,
+	SidebarGroup,
+	SidebarGroupAction,
+	SidebarGroupContent,
+	SidebarGroupLabel,
+	SidebarHeader,
+	SidebarMenu,
+	SidebarMenuAction,
+	SidebarMenuBadge,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	SidebarProvider,
+} from "@/components/ui/sidebar";
 import CreateProjectDialog from "@/features/projects/CreateProjectDialog";
 import {
 	useProjectGroups,
@@ -34,14 +42,14 @@ import {
 	useUpdateProjectSidebarLayout,
 } from "@/features/projects/hooks";
 import type { ProjectWithProfiles } from "@/generated";
+import { cn } from "@/lib/utils";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { isMacPlatform } from "@/shared/lib/platform";
-import { toaster } from "@/shared/providers/appToaster";
-import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectAvatar } from "./sidebar/ProjectAvatar";
+import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 import {
 	buildSidebarLayout,
@@ -101,9 +109,7 @@ function removeGroupFromState(
 	};
 }
 
-function getProjectContainer(
-	project: ProjectWithProfiles,
-): SidebarContainerId {
+function getProjectContainer(project: ProjectWithProfiles): SidebarContainerId {
 	if (project.pinned_order != null) return "pinned";
 	if (project.group_id) return `group:${project.group_id}`;
 	return "top-level";
@@ -159,30 +165,20 @@ function SidebarDropZone({
 	id,
 	label,
 	compact,
-}: {
-	id: string;
-	label: string;
-	compact?: boolean;
-}) {
+}: { id: string; label: string; compact?: boolean }) {
 	const { isOver, setNodeRef } = useDroppable({ id });
+
 	return (
-		<Box
+		<div
 			ref={setNodeRef}
-			mx="3"
-			my={compact ? "1" : "2"}
-			px="3"
-			py={compact ? "1" : "2"}
-			borderWidth="1px"
-			borderStyle="dashed"
-			borderColor={isOver ? "border.emphasized" : "border.subtle"}
-			bg={isOver ? "bg.muted" : "transparent"}
-			color="fg.subtle"
-			fontSize="xs"
-			borderRadius="md"
-			textAlign="center"
+			className={cn(
+				"mx-3 rounded-md border border-dashed px-3 text-center text-xs text-muted-foreground",
+				compact ? "my-1 py-1" : "my-2 py-2",
+				isOver ? "border-foreground/30 bg-muted" : "border-border",
+			)}
 		>
 			{label}
-		</Box>
+		</div>
 	);
 }
 
@@ -207,63 +203,51 @@ function SortableProjectRow({
 	} = useSortable({ id: projectEntryId(project.id), disabled });
 
 	return (
-		<HStack
+		<SidebarMenuItem
 			ref={setNodeRef}
 			style={{
 				transform: CSS.Transform.toString(transform),
 				transition,
 				opacity: isDragging ? 0.45 : 1,
 			}}
-			{...attributes}
-			data-sidebar-item
-			tabIndex={0}
-			gap="2"
-			align="center"
-			w="full"
-			minW="0"
-			px="4"
-			py="1.5"
-			userSelect="none"
-			bg={isDragging ? "bg.subtle" : "transparent"}
-			_hover={{ bg: "bg.subtle" }}
 		>
-			<Box
-				{...listeners}
-				w="5"
-				h="5"
-				display="grid"
-				placeItems="center"
-				color="fg.subtle"
-				cursor={disabled ? "default" : "grab"}
-				flexShrink={0}
+			<SidebarMenuButton
+				{...attributes}
+				data-sidebar-item
+				className={cn(isDragging && "bg-sidebar-accent")}
 			>
-				<PiDotsSixVerticalBold />
-			</Box>
-			<ProjectAvatar projectId={project.id} projectName={project.name} />
-			<Text flex="1 1 auto" minW="0" truncate lineHeight="1.25rem">
-				{project.name}
-			</Text>
-			<IconButton
+				<span
+					{...listeners}
+					className={cn(
+						"grid shrink-0 place-items-center text-muted-foreground",
+						disabled ? "cursor-default" : "cursor-grab",
+					)}
+				>
+					<PiDotsSixVerticalBold />
+				</span>
+				<ProjectAvatar projectId={project.id} projectName={project.name} />
+				<span>{project.name}</span>
+			</SidebarMenuButton>
+			<SidebarMenuAction
 				aria-label={isPinned ? m.unpinProject() : m.pinProject()}
-				variant={isPinned ? "solid" : "ghost"}
-				colorPalette={isPinned ? "yellow" : undefined}
-				size="2xs"
-				flexShrink={0}
 				disabled={disabled}
+				aria-pressed={isPinned}
 				onClick={() => onTogglePinned(project)}
 			>
 				<FiStar />
-			</IconButton>
-		</HStack>
+			</SidebarMenuAction>
+		</SidebarMenuItem>
 	);
 }
 
 function SortableGroupRow({
 	entry,
 	disabled,
+	children,
 }: {
 	entry: Extract<SidebarTopEntry, { kind: "group" }>;
 	disabled?: boolean;
+	children?: React.ReactNode;
 }) {
 	const {
 		attributes,
@@ -275,59 +259,43 @@ function SortableGroupRow({
 	} = useSortable({ id: entry.id, disabled });
 
 	return (
-		<HStack
+		<SidebarMenuItem
 			ref={setNodeRef}
 			style={{
 				transform: CSS.Transform.toString(transform),
 				transition,
 				opacity: isDragging ? 0.45 : 1,
 			}}
-			{...attributes}
-			data-sidebar-item
-			tabIndex={0}
-			gap="2"
-			align="center"
-			w="full"
-			minW="0"
-			px="4"
-			py="1.5"
-			color="fg.muted"
-			fontSize="xs"
-			fontWeight="semibold"
-			textTransform="uppercase"
-			userSelect="none"
-			bg={isDragging ? "bg.subtle" : "transparent"}
-			_hover={{ bg: "bg.subtle" }}
 		>
-			<Box
-				{...listeners}
-				w="5"
-				h="5"
-				display="grid"
-				placeItems="center"
-				color="fg.subtle"
-				cursor={disabled ? "default" : "grab"}
-				flexShrink={0}
+			<SidebarMenuButton
+				{...attributes}
+				data-sidebar-item
+				className={cn(isDragging && "bg-sidebar-accent")}
 			>
-				<PiDotsSixVerticalBold />
-			</Box>
-			<Icon fontSize="sm" flexShrink={0}>
+				<span
+					{...listeners}
+					className={cn(
+						"grid shrink-0 place-items-center text-muted-foreground",
+						disabled ? "cursor-default" : "cursor-grab",
+					)}
+				>
+					<PiDotsSixVerticalBold />
+				</span>
 				<FiFolder />
-			</Icon>
-			<Text flex="1 1 auto" minW="0" truncate>
-				{entry.group.name}
-			</Text>
-			<Text color="fg.subtle">{entry.projects.length}</Text>
-		</HStack>
-		);
-	}
+				<span>{entry.group.name}</span>
+			</SidebarMenuButton>
+			<SidebarMenuBadge>{entry.projects.length}</SidebarMenuBadge>
+			{children}
+		</SidebarMenuItem>
+	);
+}
 
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
 	const { data: projectGroups } = useProjectGroups();
 	const location = useLocation();
 	const createDialog = useDialogState();
-	const navRef = useRef<HTMLElement>(null);
+	const navRef = useRef<HTMLDivElement>(null);
 	const isLayoutSaveInFlightRef = useRef(false);
 	const [isSidebarLayoutSaving, setIsSidebarLayoutSaving] = useState(false);
 	const updateSidebarLayout = useUpdateProjectSidebarLayout();
@@ -365,12 +333,9 @@ export default function AppSidebar() {
 			try {
 				await updateSidebarLayout.mutateAsync(updates);
 			} catch (error) {
-				toaster.create({
-					title: m.sidebarOrderUpdateFailed(),
+				toast.error(m.sidebarOrderUpdateFailed(), {
 					description:
 						error instanceof Error ? error.message : String(error),
-					type: "error",
-					closable: true,
 				});
 			} finally {
 				isLayoutSaveInFlightRef.current = false;
@@ -490,16 +455,14 @@ export default function AppSidebar() {
 			document.activeElement as HTMLElement,
 		);
 
-		let nextIndex: number;
-		if (e.key === "ArrowDown") {
-			nextIndex =
-				currentIndex === -1 ? 0 : (currentIndex + 1) % items.length;
-		} else {
-			nextIndex =
-				currentIndex === -1
+		const nextIndex =
+			e.key === "ArrowDown"
+				? currentIndex === -1
+					? 0
+					: (currentIndex + 1) % items.length
+				: currentIndex === -1
 					? items.length - 1
 					: (currentIndex - 1 + items.length) % items.length;
-		}
 
 		items[nextIndex]?.focus();
 		e.preventDefault();
@@ -507,384 +470,301 @@ export default function AppSidebar() {
 
 	return (
 		<>
-			<Box
-				as="nav"
-				ref={navRef}
-				aria-label={m.sideNavLabel()}
-				w="var(--sidebar-width)"
-				h="full"
-				minH="0"
-				flexShrink={0}
-				position="relative"
-				bg="bg"
-				borderRightWidth="1px"
-				borderColor="border.muted"
-				onKeyDown={handleKeyDown}
+			<SidebarProvider
+				className="h-full min-h-0 w-auto shrink-0"
+				style={
+					{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties
+				}
 			>
-				<LayoutGroup id="app-sidebar">
-					<Flex direction="column" h="full" minH="0" w="full">
-						<Flex
+				<Sidebar
+					ref={navRef}
+					role="navigation"
+					aria-label={m.sideNavLabel()}
+					collapsible="none"
+					className="relative min-h-0 shrink-0 border-r"
+					onKeyDown={handleKeyDown}
+				>
+					<LayoutGroup id="app-sidebar">
+						<SidebarHeader
 							data-tauri-drag-region
-							h={IS_MAC_PLATFORM ? "66px" : "48px"}
-							flexShrink={0}
-							align="center"
-							justify="start"
-							paddingInline="4"
-							pt={IS_MAC_PLATFORM ? "5" : "2"}
-						>
-							<Text
-								fontWeight="600"
-								color="fg"
-								fontSize="sm"
-								userSelect="none"
-								pointerEvents="none"
-								whiteSpace="nowrap"
-							>
-								2Code
-							</Text>
-						</Flex>
-						<Box
-							flex="1"
-							minH="0"
-							overflowY="auto"
-							overflowX="hidden"
-							css={{ scrollbarGutter: "stable" }}
-						>
-							<Flex
-								direction="column"
-								minH="full"
-								w="full"
-								minW="0"
-								css={{
-									"& > *": {
-										flexShrink: 0,
-									},
-								}}
-							>
-							{projects.length === 0 && (
-								<SidebarLink
-									to="/"
-									icon={<FiHome />}
-									style={{ marginBottom: 20 }}
-								>
-									{m.home()}
-								</SidebarLink>
+							className={cn(
+								"shrink-0",
+								IS_MAC_PLATFORM ? "pt-7" : "pt-2",
 							)}
-
-							<HStack
-								px="4"
-								pt="2"
-								pb="2"
-								align="center"
-								gap="1"
-								w="full"
-								minW="0"
-								userSelect="none"
-							>
-								<HStack gap="2" flex="1 1 auto" minW="0">
-									<Box
-										w="5"
-										h="5"
-										ml="-0.5"
-										display="grid"
-										placeItems="center"
-										flexShrink={0}
-										aria-hidden="true"
+						>
+							<SidebarMenu>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										size="lg"
+										className="pointer-events-none"
 									>
-										<Icon
-											fontSize="sm"
-											color="fg.muted"
-											flexShrink={0}
-										>
-											<FiFolder />
-										</Icon>
-									</Box>
-									<Text
-										fontSize="xs"
-										fontWeight="semibold"
-										lineHeight="1rem"
-										transform="translateY(1px)"
-										color="fg.muted"
-										textTransform="uppercase"
-										letterSpacing="wider"
-										truncate
-									>
-										{m.projects()}
-									</Text>
-								</HStack>
-								<IconButton
-									aria-label={
-										isReorderMode
-											? m.doneEditingProjectOrder()
-											: m.editProjectOrder()
-									}
-									variant={isReorderMode ? "solid" : "ghost"}
-									size="2xs"
-									flexShrink={0}
-									disabled={isSidebarLayoutSaving}
-									onClick={toggleReorderMode}
-								>
-									{isReorderMode ? <FiCheck /> : <FiEdit3 />}
-								</IconButton>
-								<IconButton
-									id="add-project-button"
-									aria-label={m.newProject()}
-									variant="ghost"
-									size="2xs"
-									flexShrink={0}
-									onClick={createDialog.onOpen}
-								>
-									<FiPlus />
-								</IconButton>
-							</HStack>
+										<span className="font-semibold">2Code</span>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
+							</SidebarMenu>
+						</SidebarHeader>
+						<SidebarContent className="overflow-x-hidden [scrollbar-gutter:stable]">
+							{projects.length === 0 && (
+								<SidebarGroup>
+									<SidebarGroupContent>
+										<SidebarMenu>
+											<SidebarLink to="/" icon={<FiHome />}>
+												{m.home()}
+											</SidebarLink>
+										</SidebarMenu>
+									</SidebarGroupContent>
+								</SidebarGroup>
+							)}
 
 							{isReorderMode ? (
-								<DndContext
-									sensors={sensors}
-									collisionDetection={closestCenter}
-									onDragEnd={handleDragEnd}
-								>
-									<Text
-										px="4"
-										pt="1"
-										pb="1"
-										fontSize="xs"
-										color="fg.subtle"
-									>
-										{m.pinnedProjects()}
-									</Text>
-									<SortableContext
-										items={sidebarLayout.pinnedProjects.map(
-											(project) =>
-												projectEntryId(project.id),
-										)}
-										strategy={verticalListSortingStrategy}
-									>
-										{sidebarLayout.pinnedProjects.map(
-											(project) => (
-												<SortableProjectRow
-													key={project.id}
-													project={project}
-													isPinned
-													onTogglePinned={
-														handleTogglePinned
-													}
-													disabled={
-														isSidebarLayoutSaving
+								<>
+									<SidebarGroup>
+										<SidebarGroupLabel>
+											{m.pinnedProjects()}
+										</SidebarGroupLabel>
+										<SidebarGroupContent>
+											<DndContext
+												sensors={sensors}
+												collisionDetection={closestCenter}
+												onDragEnd={handleDragEnd}
+											>
+												<SidebarMenu>
+													<SortableContext
+														items={sidebarLayout.pinnedProjects.map(
+															(project) =>
+																projectEntryId(project.id),
+														)}
+														strategy={verticalListSortingStrategy}
+													>
+														{sidebarLayout.pinnedProjects.map(
+															(project) => (
+																<SortableProjectRow
+																	key={project.id}
+																	project={project}
+																	isPinned
+																	onTogglePinned={
+																		handleTogglePinned
+																	}
+																	disabled={
+																		isSidebarLayoutSaving
+																	}
+																/>
+															),
+														)}
+													</SortableContext>
+												</SidebarMenu>
+												<SidebarDropZone
+													id={PINNED_DROP_ID}
+													label={m.dropHereToPin()}
+													compact={
+														sidebarLayout.pinnedProjects
+															.length > 0
 													}
 												/>
-											),
-										)}
-									</SortableContext>
-									<SidebarDropZone
-										id={PINNED_DROP_ID}
-										label={m.dropHereToPin()}
-										compact={
-											sidebarLayout.pinnedProjects
-												.length > 0
-										}
-									/>
+											</DndContext>
+										</SidebarGroupContent>
+									</SidebarGroup>
 
-									<Text
-										px="4"
-										pt="2"
-										pb="1"
-										fontSize="xs"
-										color="fg.subtle"
-									>
-										{m.sidebarProjectsSection()}
-									</Text>
-									<SortableContext
-										items={sidebarLayout.topEntries.map(
-											(entry) => entry.id,
-										)}
-										strategy={verticalListSortingStrategy}
-									>
-										{sidebarLayout.topEntries.map(
-											(entry) =>
-												entry.kind === "group" ? (
-													<Box key={entry.id}>
-														<SortableGroupRow
-															entry={entry}
-															disabled={
-																isSidebarLayoutSaving
-															}
-														/>
-														<Box ps="4">
-															<SortableContext
-																items={entry.projects.map(
-																	(project) =>
-																		projectEntryId(
-																			project.id,
-																		),
-																)}
-																strategy={
-																	verticalListSortingStrategy
-																}
-															>
-																{entry.projects.map(
-																	(
-																		project,
-																	) => (
-																		<SortableProjectRow
-																			key={
-																				project.id
+									<SidebarGroup>
+										<SidebarGroupLabel>
+											<span>{m.sidebarProjectsSection()}</span>
+											<SidebarGroupAction
+												aria-label={m.doneEditingProjectOrder()}
+												aria-pressed={isReorderMode}
+												disabled={isSidebarLayoutSaving}
+												className="right-9 bg-sidebar-accent text-sidebar-accent-foreground"
+												onClick={toggleReorderMode}
+											>
+												<FiCheck />
+											</SidebarGroupAction>
+											<SidebarGroupAction
+												id="add-project-button"
+												aria-label={m.newProject()}
+												onClick={createDialog.onOpen}
+											>
+												<FiPlus />
+											</SidebarGroupAction>
+										</SidebarGroupLabel>
+										<SidebarGroupContent>
+											<DndContext
+												sensors={sensors}
+												collisionDetection={closestCenter}
+												onDragEnd={handleDragEnd}
+											>
+												<SidebarMenu>
+													<SortableContext
+														items={sidebarLayout.topEntries.map(
+															(entry) => entry.id,
+														)}
+														strategy={verticalListSortingStrategy}
+													>
+														{sidebarLayout.topEntries.map((entry) =>
+															entry.kind === "group" ? (
+																<SortableGroupRow
+																	key={entry.id}
+																	entry={entry}
+																	disabled={
+																		isSidebarLayoutSaving
+																	}
+																>
+																	<SidebarMenu className="pl-4">
+																		<SortableContext
+																			items={entry.projects.map(
+																				(project) =>
+																					projectEntryId(
+																						project.id,
+																					),
+																			)}
+																			strategy={
+																				verticalListSortingStrategy
 																			}
-																			project={
-																				project
-																			}
-																			isPinned={
-																				false
-																			}
-																			onTogglePinned={
-																				handleTogglePinned
-																			}
-																			disabled={
-																				isSidebarLayoutSaving
-																			}
-																		/>
-																	),
-																)}
-															</SortableContext>
-															<SidebarDropZone
-																id={groupDropId(
-																	entry.group
-																		.id,
-																)}
-																label={m.dropProjectIntoFolder()}
-																compact
-															/>
-														</Box>
-													</Box>
-												) : (
-													<SortableProjectRow
-														key={entry.id}
-														project={entry.project}
-														isPinned={false}
-														onTogglePinned={
-															handleTogglePinned
-														}
-														disabled={
-															isSidebarLayoutSaving
-														}
-													/>
-												),
-										)}
-									</SortableContext>
-									<SidebarDropZone
-										id={TOP_LEVEL_DROP_ID}
-										label={m.dropHereToUnpinOrMoveOut()}
-									/>
-								</DndContext>
+																		>
+																			{entry.projects.map(
+																				(project) => (
+																					<SortableProjectRow
+																						key={project.id}
+																						project={project}
+																						isPinned={false}
+																						onTogglePinned={
+																							handleTogglePinned
+																						}
+																						disabled={
+																							isSidebarLayoutSaving
+																						}
+																					/>
+																				),
+																			)}
+																		</SortableContext>
+																	</SidebarMenu>
+																	<SidebarDropZone
+																		id={groupDropId(
+																			entry.group.id,
+																		)}
+																		label={m.dropProjectIntoFolder()}
+																		compact
+																	/>
+																</SortableGroupRow>
+															) : (
+																<SortableProjectRow
+																	key={entry.id}
+																	project={entry.project}
+																	isPinned={false}
+																	onTogglePinned={
+																		handleTogglePinned
+																	}
+																	disabled={
+																		isSidebarLayoutSaving
+																	}
+																/>
+															),
+														)}
+													</SortableContext>
+												</SidebarMenu>
+												<SidebarDropZone
+													id={TOP_LEVEL_DROP_ID}
+													label={m.dropHereToUnpinOrMoveOut()}
+												/>
+											</DndContext>
+										</SidebarGroupContent>
+									</SidebarGroup>
+								</>
 							) : (
 								<>
-									{sidebarLayout.pinnedProjects.length > 0 && (
-										<>
-											<Text
-												px="4"
-												pt="1"
-												pb="1"
-												fontSize="xs"
-												color="fg.subtle"
-												textTransform="uppercase"
-												fontWeight="semibold"
-											>
-												{m.pinnedProjects()}
-											</Text>
-											{sidebarLayout.pinnedProjects.map(
-												(project) => (
-													<ProjectMenuItem
-														key={project.id}
-														project={project}
-														projectGroups={
-															projectGroups
-														}
-														activeProfileId={
-															activeProfileId
-														}
-													/>
-												),
-											)}
-										</>
-									)}
-									{sidebarLayout.topEntries.map((entry) =>
-										entry.kind === "group" ? (
-											<ProjectGroupSection
-												key={entry.group.id}
-												group={entry.group}
-												projectGroups={projectGroups}
-												projects={entry.projects}
-												activeProfileId={
-													activeProfileId
-												}
-											/>
-										) : (
-											<ProjectMenuItem
-												key={entry.project.id}
-												project={entry.project}
-												projectGroups={projectGroups}
-												activeProfileId={
-													activeProfileId
-												}
-											/>
-										),
-									)}
-								</>
-							)}
-							</Flex>
-						</Box>
-						<Box flexShrink={0} pb="3">
-							<SidebarLink to="/settings" icon={<FiSettings />}>
-								{m.settings()}
-							</SidebarLink>
-						</Box>
-					</Flex>
-				</LayoutGroup>
-				<Box
-					role="separator"
-					aria-label="Resize sidebar"
-					aria-orientation="vertical"
-					aria-valuemin={APP_SIDEBAR_MIN_WIDTH}
-					aria-valuemax={APP_SIDEBAR_MAX_WIDTH}
-					aria-valuenow={sidebarWidth}
-					tabIndex={0}
-					position="absolute"
-					top="0"
-					right="-4px"
-					bottom="0"
-					w="8px"
-					cursor="col-resize"
-					zIndex={1}
-					onPointerDown={resize.handlePointerDown}
-					onKeyDown={resize.handleKeyDown}
-					_before={{
-						content: '""',
-						position: "absolute",
-						top: 0,
-						bottom: 0,
-						left: "50%",
-						transform: "translateX(-50%)",
-						width: "1px",
-						bg: resize.isDragging
-							? "border.emphasized"
-							: "transparent",
-						transition: "background-color 0.16s ease",
-					}}
-					_hover={{
-						_before: {
-							bg: "border.subtle",
-						},
-					}}
-					_focusVisible={{
-						outline: "2px solid",
-						outlineColor: "var(--app-focus-ring)",
-						outlineOffset: "-2px",
-						_before: {
-							bg: "border.emphasized",
-						},
-					}}
-				/>
-			</Box>
+										{sidebarLayout.pinnedProjects.length > 0 && (
+											<SidebarGroup>
+												<SidebarGroupLabel>
+													{m.pinnedProjects()}
+												</SidebarGroupLabel>
+												<SidebarGroupContent>
+													<SidebarMenu>
+														{sidebarLayout.pinnedProjects.map(
+															(project) => (
+																<ProjectMenuItem
+																	key={project.id}
+																	project={project}
+																	projectGroups={projectGroups}
+																	activeProfileId={activeProfileId}
+																/>
+															),
+														)}
+													</SidebarMenu>
+												</SidebarGroupContent>
+											</SidebarGroup>
+										)}
+
+										<SidebarGroup>
+											<SidebarGroupLabel>
+												<span>{m.sidebarProjectsSection()}</span>
+												<SidebarGroupAction
+													aria-label={m.editProjectOrder()}
+													aria-pressed={isReorderMode}
+													disabled={isSidebarLayoutSaving}
+													className="right-9"
+													onClick={toggleReorderMode}
+												>
+													<FiEdit3 />
+												</SidebarGroupAction>
+												<SidebarGroupAction
+													id="add-project-button"
+													aria-label={m.newProject()}
+													onClick={createDialog.onOpen}
+												>
+													<FiPlus />
+												</SidebarGroupAction>
+											</SidebarGroupLabel>
+											<SidebarGroupContent>
+												<SidebarMenu>
+													{sidebarLayout.topEntries.map((entry) =>
+														entry.kind === "group" ? (
+															<ProjectGroupSection
+																key={entry.group.id}
+																group={entry.group}
+																projectGroups={projectGroups}
+																projects={entry.projects}
+																activeProfileId={activeProfileId}
+															/>
+														) : (
+															<ProjectMenuItem
+																key={entry.project.id}
+																project={entry.project}
+																projectGroups={projectGroups}
+																activeProfileId={activeProfileId}
+															/>
+														),
+													)}
+												</SidebarMenu>
+											</SidebarGroupContent>
+										</SidebarGroup>
+									</>
+								)}
+						</SidebarContent>
+						<SidebarFooter className="shrink-0">
+							<SidebarMenu>
+								<SidebarLink to="/settings" icon={<FiSettings />}>
+									{m.settings()}
+								</SidebarLink>
+							</SidebarMenu>
+						</SidebarFooter>
+					</LayoutGroup>
+					<div
+						role="separator"
+						aria-label="Resize sidebar"
+						aria-orientation="vertical"
+						aria-valuemin={APP_SIDEBAR_MIN_WIDTH}
+						aria-valuemax={APP_SIDEBAR_MAX_WIDTH}
+						aria-valuenow={sidebarWidth}
+						tabIndex={0}
+						className={cn(
+							"absolute top-0 right-[-4px] bottom-0 w-2 cursor-col-resize before:absolute before:top-0 before:bottom-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:transition-colors hover:before:bg-border focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--app-focus-ring) focus-visible:before:bg-border",
+							resize.isDragging
+								? "before:bg-foreground/30"
+								: "before:bg-transparent",
+						)}
+						onPointerDown={resize.handlePointerDown}
+						onKeyDown={resize.handleKeyDown}
+					/>
+				</Sidebar>
+			</SidebarProvider>
 			<CreateProjectDialog
 				isOpen={createDialog.isOpen}
 				onClose={createDialog.onClose}

@@ -1,4 +1,10 @@
-import { Field, Switch, Text } from "@chakra-ui/react";
+import { Switch } from "@/components/ui/switch";
+import {
+	Field,
+	FieldContent,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
 import * as m from "@/paraglide/messages.js";
 import { useSidebarSettingsStore } from "./stores/sidebarSettingsStore";
 
@@ -11,22 +17,17 @@ export function SidebarAppearanceSettings() {
 	);
 
 	return (
-		<Field.Root>
-			<Field.Label>{m.showProjectAvatars()}</Field.Label>
-			<Switch.Root
+		<Field orientation="horizontal">
+			<FieldContent>
+				<FieldLabel>{m.showProjectAvatars()}</FieldLabel>
+				<FieldDescription>
+					{m.showProjectAvatarsDescription()}
+				</FieldDescription>
+			</FieldContent>
+			<Switch
 				checked={showProjectAvatars}
-				onCheckedChange={(e) =>
-					setShowProjectAvatars(!!e.checked)
-				}
-			>
-				<Switch.HiddenInput />
-				<Switch.Control />
-				<Switch.Label>
-					<Text fontSize="sm" color="fg.muted">
-						{m.showProjectAvatarsDescription()}
-					</Text>
-				</Switch.Label>
-			</Switch.Root>
-		</Field.Root>
+				onCheckedChange={setShowProjectAvatars}
+			/>
+		</Field>
 	);
 }

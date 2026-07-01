@@ -2,9 +2,9 @@ import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import {
-	readText as readClipboardText,
-	writeText as writeClipboardText,
-} from "@tauri-apps/plugin-clipboard-manager";
+  readText as readClipboardText,
+  writeText as writeClipboardText } from
+"@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-shell";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as XTerm } from "@xterm/xterm";
@@ -12,15 +12,15 @@ import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
-	attachPtyOutput,
-	clearPtyOutput,
-	detachPtyOutput,
-	flushPtyOutput,
-	getPtySessionHistory,
-	resizePty,
-	writeToPty,
-} from "@/generated";
-import { toaster } from "@/shared/providers/appToaster";
+  attachPtyOutput,
+  clearPtyOutput,
+  detachPtyOutput,
+  flushPtyOutput,
+  getPtySessionHistory,
+  resizePty,
+  writeToPty } from
+"@/generated";import { toast } from "sonner";
+
 import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
@@ -30,18 +30,18 @@ import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import {
-	applyTerminalFontFamilyCssVariable,
-	buildFontFamilyCss,
-	createResizeScheduler,
-	createTerminalKeyEventHandler,
-	getTerminalParkingContainer,
-	installImagePasteFallback,
-	loadAddons,
-	measureAndResize,
-	scheduleFontSettleRefit,
-	suppressQueryResponses,
-	TitleDebouncer,
-} from "./lib";
+  applyTerminalFontFamilyCssVariable,
+  buildFontFamilyCss,
+  createResizeScheduler,
+  createTerminalKeyEventHandler,
+  getTerminalParkingContainer,
+  installImagePasteFallback,
+  loadAddons,
+  measureAndResize,
+  scheduleFontSettleRefit,
+  suppressQueryResponses,
+  TitleDebouncer } from
+"./lib";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
@@ -51,536 +51,536 @@ const DIMS_STORAGE_PREFIX = "terminal-dims:";
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 
-function loadSavedDimensions(sessionId: string): { cols: number; rows: number } | null {
-	try {
-		const raw = localStorage.getItem(`${DIMS_STORAGE_PREFIX}${sessionId}`);
-		if (!raw) return null;
-		const parsed = JSON.parse(raw);
-		if (typeof parsed.cols === "number" && typeof parsed.rows === "number") {
-			return parsed;
-		}
-		return null;
-	} catch {
-		return null;
-	}
+function loadSavedDimensions(sessionId: string): {cols: number;rows: number;} | null {
+  try {
+    const raw = localStorage.getItem(`${DIMS_STORAGE_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.cols === "number" && typeof parsed.rows === "number") {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function persistDimensions(sessionId: string, cols: number, rows: number): void {
-	try {
-		localStorage.setItem(
-			`${DIMS_STORAGE_PREFIX}${sessionId}`,
-			JSON.stringify({ cols, rows }),
-		);
-	} catch {}
+  try {
+    localStorage.setItem(
+      `${DIMS_STORAGE_PREFIX}${sessionId}`,
+      JSON.stringify({ cols, rows })
+    );
+  } catch {}
 }
 
 function persistBuffer(sessionId: string, serializeAddon: SerializeAddon): void {
-	try {
-		const data = serializeAddon.serialize({ scrollback: SERIALIZE_SCROLLBACK });
-		localStorage.setItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`, data);
-	} catch {}
+  try {
+    const data = serializeAddon.serialize({ scrollback: SERIALIZE_SCROLLBACK });
+    localStorage.setItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`, data);
+  } catch {}
 }
 
 function restoreBuffer(sessionId: string, terminal: XTerm): void {
-	try {
-		const data = localStorage.getItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
-		if (data) terminal.write(data);
-	} catch {}
+  try {
+    const data = localStorage.getItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
+    if (data) terminal.write(data);
+  } catch {}
 }
 
 interface TerminalProps {
-	profileId: string;
-	sessionId: string;
-	isActive: boolean;
+  profileId: string;
+  sessionId: string;
+  isActive: boolean;
 }
 
 export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
-	const termRef = useRef<XTerm | null>(null);
-	const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
-	const serializeAddonRef = useRef<SerializeAddon | null>(null);
-	const isStreamReadyRef = useRef(false);
-	const pendingEventsRef = useRef<Uint8Array[]>([]);
-	const [pendingLink, setPendingLink] = useState<string | null>(null);
-	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
-	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
-	const increaseFontSize = useTerminalSettingsStore(
-		(s) => s.increaseFontSize,
-	);
-	const decreaseFontSize = useTerminalSettingsStore(
-		(s) => s.decreaseFontSize,
-	);
-	const theme = useTerminalTheme();
+  const termRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
+  const serializeAddonRef = useRef<SerializeAddon | null>(null);
+  const isStreamReadyRef = useRef(false);
+  const pendingEventsRef = useRef<Uint8Array[]>([]);
+  const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
+  const fontSize = useTerminalSettingsStore((s) => s.fontSize);
+  const increaseFontSize = useTerminalSettingsStore(
+    (s) => s.increaseFontSize
+  );
+  const decreaseFontSize = useTerminalSettingsStore(
+    (s) => s.decreaseFontSize
+  );
+  const theme = useTerminalTheme();
 
-	const initFontFamilyRef = useRef(fontFamily);
-	const initFontSizeRef = useRef(fontSize);
-	const initThemeRef = useRef(theme);
+  const initFontFamilyRef = useRef(fontFamily);
+  const initFontSizeRef = useRef(fontSize);
+  const initThemeRef = useRef(theme);
 
-	useEffect(() => {
-		if (termRef.current) {
-			termRef.current.options.theme = theme;
-		}
-	}, [theme]);
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = theme;
+    }
+  }, [theme]);
 
-	useEffect(() => {
-		const term = termRef.current;
-		const fitAddon = fitAddonRef.current;
-		if (!term || !fitAddon) return;
+  useEffect(() => {
+    const term = termRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!term || !fitAddon) return;
 
-		const sanitizedFont = buildFontFamilyCss(fontFamily);
-		term.options.fontFamily = sanitizedFont;
-		term.options.fontSize = fontSize;
-		applyTerminalFontFamilyCssVariable(
-			(term as unknown as { _wrapper?: HTMLElement })._wrapper ?? term.element ?? document.body,
-			sanitizedFont,
-		);
+    const sanitizedFont = buildFontFamilyCss(fontFamily);
+    term.options.fontFamily = sanitizedFont;
+    term.options.fontSize = fontSize;
+    applyTerminalFontFamilyCssVariable(
+      (term as unknown as {_wrapper?: HTMLElement;})._wrapper ?? term.element ?? document.body,
+      sanitizedFont
+    );
 
-		// The DOM renderer repaints glyphs directly; a full refresh is enough to
-		// pick up the new font (no texture atlas to invalidate).
-		term.refresh(0, Math.max(0, term.rows - 1));
+    // The DOM renderer repaints glyphs directly; a full refresh is enough to
+    // pick up the new font (no texture atlas to invalidate).
+    term.refresh(0, Math.max(0, term.rows - 1));
 
-		// Refit immediately if visible
-		measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
+    // Refit immediately if visible
+    measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
 
-		// Schedule a second refit once the font finishes loading
-		scheduleFontSettleRefit(
-			term,
-			() => termRef.current === term,
-			() => {
-				const changed = measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
-				// Repaint after font settles — metrics may have changed
-				term.refresh(0, Math.max(0, term.rows - 1));
-				if (changed) {
-					resizePty({ sessionId, rows: term.rows, cols: term.cols });
-				}
-				return changed;
-			},
-			() => resizePty({ sessionId, rows: term.rows, cols: term.cols }),
-		);
-	}, [fontFamily, fontSize, sessionId]);
+    // Schedule a second refit once the font finishes loading
+    scheduleFontSettleRefit(
+      term,
+      () => termRef.current === term,
+      () => {
+        const changed = measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
+        // Repaint after font settles — metrics may have changed
+        term.refresh(0, Math.max(0, term.rows - 1));
+        if (changed) {
+          resizePty({ sessionId, rows: term.rows, cols: term.cols });
+        }
+        return changed;
+      },
+      () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+    );
+  }, [fontFamily, fontSize, sessionId]);
 
-	useEffect(() => {
-		if (!isActive || !termRef.current) return;
-		const focusFrame = window.requestAnimationFrame(() => {
-			termRef.current?.focus();
-		});
-		return () => {
-			window.cancelAnimationFrame(focusFrame);
-		};
-	}, [isActive]);
+  useEffect(() => {
+    if (!isActive || !termRef.current) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      termRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+    };
+  }, [isActive]);
 
-	const shellStyle = useMemo(
-		() => ({
-			display: "flex",
-			width: "100%",
-			height: "100%",
-			padding: "8px 0 0 8px",
-			background: theme.background,
-			border: "0.5px solid var(--chakra-colors-border-subtle)",
-			boxSizing: "border-box" as const,
-			overflow: "hidden",
-		}),
-		[theme.background],
-	);
+  const shellStyle = useMemo(
+    () => ({
+      display: "flex",
+      width: "100%",
+      height: "100%",
+      padding: "8px 0 0 8px",
+      background: theme.background,
+      border: "0.5px solid var(--border)",
+      boxSizing: "border-box" as const,
+      overflow: "hidden"
+    }),
+    [theme.background]
+  );
 
-	const closePendingLinkDialog = useCallback(() => {
-		setPendingLink(null);
-	}, []);
+  const closePendingLinkDialog = useCallback(() => {
+    setPendingLink(null);
+  }, []);
 
-	const openPendingLinkExternally = useCallback(() => {
-		const uri = pendingLink;
-		if (!uri) return;
-		setPendingLink(null);
-		void open(uri);
-	}, [pendingLink]);
+  const openPendingLinkExternally = useCallback(() => {
+    const uri = pendingLink;
+    if (!uri) return;
+    setPendingLink(null);
+    void open(uri);
+  }, [pendingLink]);
 
-	const handleTerminalLinkOpen = useCallback(
-		(event: MouseEvent, uri: string) => {
-			if (shouldBypassTerminalLinkConfirm(event)) {
-				void open(uri);
-				return;
-			}
-			setPendingLink(uri);
-		},
-		[],
-	);
+  const handleTerminalLinkOpen = useCallback(
+    (event: MouseEvent, uri: string) => {
+      if (shouldBypassTerminalLinkConfirm(event)) {
+        void open(uri);
+        return;
+      }
+      setPendingLink(uri);
+    },
+    []
+  );
 
-	// Stable ref callback — only re-runs when profileId/sessionId changes
-	const terminalRef = useCallback(
-		(container: HTMLDivElement | null) => {
-			if (!container) return;
-			const unlisteners: UnlistenFn[] = [];
-			const cleanups: (() => void)[] = [];
+  // Stable ref callback — only re-runs when profileId/sessionId changes
+  const terminalRef = useCallback(
+    (container: HTMLDivElement | null) => {
+      if (!container) return;
+      const unlisteners: UnlistenFn[] = [];
+      const cleanups: (() => void)[] = [];
 
-			let disposed = false;
-			isStreamReadyRef.current = false;
-			pendingEventsRef.current = [];
-			const liveOutputBuffer: Uint8Array[] = [];
-			let liveOutputFrame: number | null = null;
-			let lastCopiedSelection = "";
+      let disposed = false;
+      isStreamReadyRef.current = false;
+      pendingEventsRef.current = [];
+      const liveOutputBuffer: Uint8Array[] = [];
+      let liveOutputFrame: number | null = null;
+      let lastCopiedSelection = "";
 
-			// --- Wrapper-div pattern (SuperSet) ---
-			// xterm opens into a persistent wrapper div that can be moved
-			// between DOM containers without disposing the terminal.
-			const wrapper = document.createElement("div");
-			wrapper.style.width = "100%";
-			wrapper.style.height = "100%";
+      // --- Wrapper-div pattern (SuperSet) ---
+      // xterm opens into a persistent wrapper div that can be moved
+      // between DOM containers without disposing the terminal.
+      const wrapper = document.createElement("div");
+      wrapper.style.width = "100%";
+      wrapper.style.height = "100%";
 
-			const savedDims = loadSavedDimensions(sessionId);
-			const cols = savedDims?.cols ?? DEFAULT_COLS;
-			const rows = savedDims?.rows ?? DEFAULT_ROWS;
+      const savedDims = loadSavedDimensions(sessionId);
+      const cols = savedDims?.cols ?? DEFAULT_COLS;
+      const rows = savedDims?.rows ?? DEFAULT_ROWS;
 
-			const sanitizedFont = buildFontFamilyCss(initFontFamilyRef.current);
-			applyTerminalFontFamilyCssVariable(wrapper, sanitizedFont);
+      const sanitizedFont = buildFontFamilyCss(initFontFamilyRef.current);
+      applyTerminalFontFamilyCssVariable(wrapper, sanitizedFont);
 
-			// 1. Create xterm (sync) with SuperSet-aligned options
-			const term = new XTerm({
-				cols,
-				rows,
-				fontFamily: sanitizedFont,
-				fontSize: initFontSizeRef.current,
-				theme: initThemeRef.current,
-				allowProposedApi: true,
-				cursorBlink: true,
-				cursorStyle: "bar",
-				cursorWidth: 4,
-				cursorInactiveStyle: "outline",
-				macOptionIsMeta: false,
-				screenReaderMode: false,
-				scrollback: TERMINAL_SCROLLBACK,
-				vtExtensions: { kittyKeyboard: true },
-				scrollbar: { showScrollbar: false },
-				linkHandler: {
-					activate: handleTerminalLinkOpen,
-				},
-				windowOptions: {
-					getCellSizePixels: true,
-					getWinSizeChars: true,
-					getWinSizePixels: true,
-				},
-			});
+      // 1. Create xterm (sync) with SuperSet-aligned options
+      const term = new XTerm({
+        cols,
+        rows,
+        fontFamily: sanitizedFont,
+        fontSize: initFontSizeRef.current,
+        theme: initThemeRef.current,
+        allowProposedApi: true,
+        cursorBlink: true,
+        cursorStyle: "bar",
+        cursorWidth: 4,
+        cursorInactiveStyle: "outline",
+        macOptionIsMeta: false,
+        screenReaderMode: false,
+        scrollback: TERMINAL_SCROLLBACK,
+        vtExtensions: { kittyKeyboard: true },
+        scrollbar: { showScrollbar: false },
+        linkHandler: {
+          activate: handleTerminalLinkOpen
+        },
+        windowOptions: {
+          getCellSizePixels: true,
+          getWinSizeChars: true,
+          getWinSizePixels: true
+        }
+      });
 
-			// Open into wrapper, then attach wrapper to container
-			term.open(wrapper);
-			container.appendChild(wrapper);
-			termRef.current = term;
+      // Open into wrapper, then attach wrapper to container
+      term.open(wrapper);
+      container.appendChild(wrapper);
+      termRef.current = term;
 
-			// 2. Load all addons via lib (Unicode11 + Serialize + Search +
-			//    Clipboard + Image + Ligatures + Progress + WebLinks). Rendering
-			//    uses xterm.js's built-in DOM renderer (no GPU addon).
-			const addonsResult = loadAddons(term, {
-				onWebLinkActivate: handleTerminalLinkOpen,
-			});
-			fitAddonRef.current = addonsResult.fitAddon;
-			serializeAddonRef.current = addonsResult.serializeAddon;
-			cleanups.push(addonsResult.dispose);
+      // 2. Load all addons via lib (Unicode11 + Serialize + Search +
+      //    Clipboard + Image + Ligatures + Progress + WebLinks). Rendering
+      //    uses xterm.js's built-in DOM renderer (no GPU addon).
+      const addonsResult = loadAddons(term, {
+        onWebLinkActivate: handleTerminalLinkOpen
+      });
+      fitAddonRef.current = addonsResult.fitAddon;
+      serializeAddonRef.current = addonsResult.serializeAddon;
+      cleanups.push(addonsResult.dispose);
 
-			// 3. Suppress query response sequences (CPR, focus reports, mode reports)
-			cleanups.push(suppressQueryResponses(term));
+      // 3. Suppress query response sequences (CPR, focus reports, mode reports)
+      cleanups.push(suppressQueryResponses(term));
 
-			// 4. Image paste fallback — send ^V for non-text clipboard payloads
-			cleanups.push(installImagePasteFallback(term, wrapper));
+      // 4. Image paste fallback — send ^V for non-text clipboard payloads
+      cleanups.push(installImagePasteFallback(term, wrapper));
 
-			function copyTerminalSelection(selection: string) {
-				if (!selection || selection === lastCopiedSelection) return;
-				lastCopiedSelection = selection;
-				void writeClipboardText(selection)
-					.then(() => {
-						toaster.create({
-							title: "Text copied",
-							type: "success",
-							closable: true,
-						});
-					})
-					.catch(() => {});
-			}
+      function copyTerminalSelection(selection: string) {
+        if (!selection || selection === lastCopiedSelection) return;
+        lastCopiedSelection = selection;
+        void writeClipboardText(selection).
+        then(() => {
+          toast.success(
+            "Text copied");
 
-			const selectionDisposable = term.onSelectionChange(() => {
-				if (!term.hasSelection()) {
-					lastCopiedSelection = "";
-					return;
-				}
-				copyTerminalSelection(term.getSelection());
-			});
-			cleanups.push(() => selectionDisposable.dispose());
 
-			// 5. Combined key handler: app-specific shortcuts + kitty protocol suppression
-			const kittyHandler = createTerminalKeyEventHandler(term);
-			term.attachCustomKeyEventHandler((event) => {
-				// 5a. App-specific shortcuts first (font size, clear, copy/paste, sequences)
-				const action = getTerminalShortcutAction(event);
-				if (action) {
-					// Ctrl+C with no selection: pass through so xterm sends ^C (SIGINT)
-					if (
-						action.type === "copy-selection-or-interrupt"
-						&& !term.hasSelection()
-					) {
-						return true;
-					}
 
-					event.preventDefault();
-					event.stopPropagation();
+        }).
+        catch(() => {});
+      }
 
-					if (action.type === "increase-font-size") {
-						increaseFontSize();
-						return false;
-					}
-					if (action.type === "decrease-font-size") {
-						decreaseFontSize();
-						return false;
-					}
-					if (action.type === "clear-screen") {
-						term.clear();
-						void clearPtyOutput({ sessionId })
-							.catch(() => {})
-							.finally(() => {
-								void writeToPty({ sessionId, data: "\x0C" });
-							});
-						return false;
-					}
-					if (action.type === "copy-selection-or-interrupt") {
-						copyTerminalSelection(term.getSelection());
-						return false;
-					}
-					if (action.type === "paste-clipboard") {
-						void readClipboardText()
-							.then((text) => {
-								if (text) {
-									void writeToPty({ sessionId, data: text });
-								}
-							})
-							.catch(() => {});
-						return false;
-					}
-					void writeToPty({ sessionId, data: action.sequence });
-					return false;
-				}
+      const selectionDisposable = term.onSelectionChange(() => {
+        if (!term.hasSelection()) {
+          lastCopiedSelection = "";
+          return;
+        }
+        copyTerminalSelection(term.getSelection());
+      });
+      cleanups.push(() => selectionDisposable.dispose());
 
-				// 5b. Delegate to kitty protocol handler (line edit, clipboard bubble, select-all)
-				return kittyHandler(event);
-			});
-			cleanups.push(() => term.attachCustomKeyEventHandler(() => true));
+      // 5. Combined key handler: app-specific shortcuts + kitty protocol suppression
+      const kittyHandler = createTerminalKeyEventHandler(term);
+      term.attachCustomKeyEventHandler((event) => {
+        // 5a. App-specific shortcuts first (font size, clear, copy/paste, sequences)
+        const action = getTerminalShortcutAction(event);
+        if (action) {
+          // Ctrl+C with no selection: pass through so xterm sends ^C (SIGINT)
+          if (
+          action.type === "copy-selection-or-interrupt" &&
+          !term.hasSelection())
+          {
+            return true;
+          }
 
-			// 6. Register file-path link provider
-			const fileLinkProvider = new FileLinkProvider({ profileId });
-			fileLinkProvider.setTerminal(term);
-			const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
-			cleanups.push(() => fileLinkDisposable.dispose());
+          event.preventDefault();
+          event.stopPropagation();
 
-			// 7. Restore buffer from localStorage (cold restart scrollback)
-			restoreBuffer(sessionId, term);
+          if (action.type === "increase-font-size") {
+            increaseFontSize();
+            return false;
+          }
+          if (action.type === "decrease-font-size") {
+            decreaseFontSize();
+            return false;
+          }
+          if (action.type === "clear-screen") {
+            term.clear();
+            void clearPtyOutput({ sessionId }).
+            catch(() => {}).
+            finally(() => {
+              void writeToPty({ sessionId, data: "\x0C" });
+            });
+            return false;
+          }
+          if (action.type === "copy-selection-or-interrupt") {
+            copyTerminalSelection(term.getSelection());
+            return false;
+          }
+          if (action.type === "paste-clipboard") {
+            void readClipboardText().
+            then((text) => {
+              if (text) {
+                void writeToPty({ sessionId, data: text });
+              }
+            }).
+            catch(() => {});
+            return false;
+          }
+          void writeToPty({ sessionId, data: action.sequence });
+          return false;
+        }
 
-			// 8. Initial fit + resize PTY
-			addonsResult.fitAddon.fit();
-			measureAndResize(term, addonsResult.fitAddon, container);
-			resizePty({ sessionId, rows: term.rows, cols: term.cols });
+        // 5b. Delegate to kitty protocol handler (line edit, clipboard bubble, select-all)
+        return kittyHandler(event);
+      });
+      cleanups.push(() => term.attachCustomKeyEventHandler(() => true));
 
-			// 9. Font-settle refit — xterm measured cell width at open() time
-			//    using whatever font was loaded; refit once the configured font settles.
-			scheduleFontSettleRefit(
-				term,
-				() => termRef.current === term && !disposed,
-				() => {
-					const changed = measureAndResize(term, addonsResult.fitAddon, container);
-					if (changed) {
-						resizePty({ sessionId, rows: term.rows, cols: term.cols });
-					}
-					return changed;
-				},
-				() => resizePty({ sessionId, rows: term.rows, cols: term.cols }),
-			);
+      // 6. Register file-path link provider
+      const fileLinkProvider = new FileLinkProvider({ profileId });
+      fileLinkProvider.setTerminal(term);
+      const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
+      cleanups.push(() => fileLinkDisposable.dispose());
 
-			// 10. Debounced resize scheduler (75ms) with scroll position preservation
-			const scheduler = createResizeScheduler(
-				term,
-				addonsResult.fitAddon,
-				() => container,
-				() => resizePty({ sessionId, rows: term.rows, cols: term.cols }),
-			);
-			const resizeObserver = new ResizeObserver(scheduler.observe);
-			resizeObserver.observe(container);
-			cleanups.push(() => {
-				scheduler.dispose();
-				resizeObserver.disconnect();
-			});
+      // 7. Restore buffer from localStorage (cold restart scrollback)
+      restoreBuffer(sessionId, term);
 
-			// 11. Title debouncer (75ms coalesce, matches ghostty)
-			const titleDebouncer = new TitleDebouncer();
-			cleanups.push(() => titleDebouncer.dispose());
-			const titleDisposable = term.onTitleChange((title) => {
-				titleDebouncer.set(title);
-			});
-			cleanups.push(() => titleDisposable.dispose());
-			titleDebouncer.subscribe(() => {
-				const title = titleDebouncer.value;
-				if (title) {
-					useTerminalStore
-						.getState()
-						.updateTabTitle(profileId, sessionId, title);
-				}
-			});
+      // 8. Initial fit + resize PTY
+      addonsResult.fitAddon.fit();
+      measureAndResize(term, addonsResult.fitAddon, container);
+      resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
-			function flushLiveOutputBuffer() {
-				liveOutputFrame = null;
-				if (liveOutputBuffer.length === 0 || disposed) return;
-				const output = concatBytes(liveOutputBuffer);
-				liveOutputBuffer.length = 0;
-				term.write(output);
-			}
+      // 9. Font-settle refit — xterm measured cell width at open() time
+      //    using whatever font was loaded; refit once the configured font settles.
+      scheduleFontSettleRefit(
+        term,
+        () => termRef.current === term && !disposed,
+        () => {
+          const changed = measureAndResize(term, addonsResult.fitAddon, container);
+          if (changed) {
+            resizePty({ sessionId, rows: term.rows, cols: term.cols });
+          }
+          return changed;
+        },
+        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+      );
 
-			function writeLiveOutput(output: Uint8Array) {
-				if (output.length === 0 || disposed) return;
-				liveOutputBuffer.push(output);
-				if (liveOutputFrame !== null) return;
-				liveOutputFrame = window.requestAnimationFrame(flushLiveOutputBuffer);
-			}
+      // 10. Debounced resize scheduler (75ms) with scroll position preservation
+      const scheduler = createResizeScheduler(
+        term,
+        addonsResult.fitAddon,
+        () => container,
+        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+      );
+      const resizeObserver = new ResizeObserver(scheduler.observe);
+      resizeObserver.observe(container);
+      cleanups.push(() => {
+        scheduler.dispose();
+        resizeObserver.disconnect();
+      });
 
-			function flushPendingEventsAfterHistory(history: Uint8Array) {
-				const pending = concatBytes(pendingEventsRef.current);
-				// Bytes emitted between attach and the history read overlap the tail
-				// of the history; drop the double-covered prefix so it isn't written
-				// twice.
-				const overlap = getSuffixPrefixOverlapLengthBytes(history, pending);
-				const remaining = pending.subarray(overlap);
-				pendingEventsRef.current = [];
-				isStreamReadyRef.current = true;
-				if (remaining.length > 0) {
-					writeLiveOutput(remaining);
-				}
-			}
+      // 11. Title debouncer (75ms coalesce, matches ghostty)
+      const titleDebouncer = new TitleDebouncer();
+      cleanups.push(() => titleDebouncer.dispose());
+      const titleDisposable = term.onTitleChange((title) => {
+        titleDebouncer.set(title);
+      });
+      cleanups.push(() => titleDisposable.dispose());
+      titleDebouncer.subscribe(() => {
+        const title = titleDebouncer.value;
+        if (title) {
+          useTerminalStore.
+          getState().
+          updateTabTitle(profileId, sessionId, title);
+        }
+      });
 
-			function replayInitialHistory(history: Uint8Array) {
-				if (disposed) return;
-				if (history.length === 0) {
-					flushPendingEventsAfterHistory(history);
-					return;
-				}
-				term.write(history, () => {
-					flushPendingEventsAfterHistory(history);
-				});
-			}
+      function flushLiveOutputBuffer() {
+        liveOutputFrame = null;
+        if (liveOutputBuffer.length === 0 || disposed) return;
+        const output = concatBytes(liveOutputBuffer);
+        liveOutputBuffer.length = 0;
+        term.write(output);
+      }
 
-			// 12. Register PTY output channel + exit listener, then replay history.
-			//
-			// Output streams as raw binary frames over a per-session `Channel`
-			// (no JSON serialization) — xterm.js decodes UTF-8 across writes, so
-			// we write the bytes as-is. Exit stays a low-volume global event.
-			async function setupListenersAndReplayHistory() {
-				const outputChannel = new Channel<ArrayBuffer>();
-				outputChannel.onmessage = (payload) => {
-					const bytes = new Uint8Array(payload);
-					if (!isStreamReadyRef.current) {
-						pendingEventsRef.current.push(bytes);
-						return;
-					}
-					writeLiveOutput(bytes);
-				};
-				await attachPtyOutput({ sessionId, onOutput: outputChannel });
-				const unlistenExit = await listen(
-					`pty-exit-${sessionId}`,
-					() => {
-						writeLiveOutput(
-							new TextEncoder().encode(
-								"\r\n\x1B[90m[Process exited]\x1B[0m\r\n",
-							),
-						);
-					},
-				);
-				if (disposed) {
-					void detachPtyOutput({ sessionId }).catch(() => {});
-					unlistenExit();
-					return;
-				}
-				unlisteners.push(unlistenExit);
-				const restoredHistory = sessionHistory.get(sessionId);
-				if (restoredHistory) {
-					sessionHistory.delete(sessionId);
-					replayInitialHistory(restoredHistory);
-					return;
-				}
-				try {
-					const history = await getPtySessionHistory({ sessionId });
-					replayInitialHistory(new Uint8Array(history));
-				} catch (error) {
-					consola.warn(
-						`[pty-terminal] failed to load initial history for session ${sessionId}`,
-						error,
-					);
-					flushPendingEventsAfterHistory(new Uint8Array(0));
-				}
-			}
-			void setupListenersAndReplayHistory();
+      function writeLiveOutput(output: Uint8Array) {
+        if (output.length === 0 || disposed) return;
+        liveOutputBuffer.push(output);
+        if (liveOutputFrame !== null) return;
+        liveOutputFrame = window.requestAnimationFrame(flushLiveOutputBuffer);
+      }
 
-			// 13. Sync handlers
-			term.onData((data) => {
-				writeToPty({ sessionId, data });
-			});
-			term.onResize(({ rows, cols }) => {
-				resizePty({ sessionId, rows, cols });
-			});
+      function flushPendingEventsAfterHistory(history: Uint8Array) {
+        const pending = concatBytes(pendingEventsRef.current);
+        // Bytes emitted between attach and the history read overlap the tail
+        // of the history; drop the double-covered prefix so it isn't written
+        // twice.
+        const overlap = getSuffixPrefixOverlapLengthBytes(history, pending);
+        const remaining = pending.subarray(overlap);
+        pendingEventsRef.current = [];
+        isStreamReadyRef.current = true;
+        if (remaining.length > 0) {
+          writeLiveOutput(remaining);
+        }
+      }
 
-			// 14. React 19 ref cleanup
-			return () => {
-				disposed = true;
+      function replayInitialHistory(history: Uint8Array) {
+        if (disposed) return;
+        if (history.length === 0) {
+          flushPendingEventsAfterHistory(history);
+          return;
+        }
+        term.write(history, () => {
+          flushPendingEventsAfterHistory(history);
+        });
+      }
 
-				// Stop backend delivery over the output channel (persistence continues)
-				void detachPtyOutput({ sessionId }).catch(() => {});
+      // 12. Register PTY output channel + exit listener, then replay history.
+      //
+      // Output streams as raw binary frames over a per-session `Channel`
+      // (no JSON serialization) — xterm.js decodes UTF-8 across writes, so
+      // we write the bytes as-is. Exit stays a low-volume global event.
+      async function setupListenersAndReplayHistory() {
+        const outputChannel = new Channel<ArrayBuffer>();
+        outputChannel.onmessage = (payload) => {
+          const bytes = new Uint8Array(payload);
+          if (!isStreamReadyRef.current) {
+            pendingEventsRef.current.push(bytes);
+            return;
+          }
+          writeLiveOutput(bytes);
+        };
+        await attachPtyOutput({ sessionId, onOutput: outputChannel });
+        const unlistenExit = await listen(
+          `pty-exit-${sessionId}`,
+          () => {
+            writeLiveOutput(
+              new TextEncoder().encode(
+                "\r\n\x1B[90m[Process exited]\x1B[0m\r\n"
+              )
+            );
+          }
+        );
+        if (disposed) {
+          void detachPtyOutput({ sessionId }).catch(() => {});
+          unlistenExit();
+          return;
+        }
+        unlisteners.push(unlistenExit);
+        const restoredHistory = sessionHistory.get(sessionId);
+        if (restoredHistory) {
+          sessionHistory.delete(sessionId);
+          replayInitialHistory(restoredHistory);
+          return;
+        }
+        try {
+          const history = await getPtySessionHistory({ sessionId });
+          replayInitialHistory(new Uint8Array(history));
+        } catch (error) {
+          consola.warn(
+            `[pty-terminal] failed to load initial history for session ${sessionId}`,
+            error
+          );
+          flushPendingEventsAfterHistory(new Uint8Array(0));
+        }
+      }
+      void setupListenersAndReplayHistory();
 
-				// Flush buffered PTY output to DB before teardown (best-effort)
-				flushPtyOutput({ sessionId }).catch(() => {});
+      // 13. Sync handlers
+      term.onData((data) => {
+        writeToPty({ sessionId, data });
+      });
+      term.onResize(({ rows, cols }) => {
+        resizePty({ sessionId, rows, cols });
+      });
 
-				// Persist buffer + dimensions for cold restart
-				if (serializeAddonRef.current) {
-					persistBuffer(sessionId, serializeAddonRef.current);
-				}
-				persistDimensions(sessionId, term.cols, term.rows);
+      // 14. React 19 ref cleanup
+      return () => {
+        disposed = true;
 
-				// Reset stream state
-				isStreamReadyRef.current = false;
-				pendingEventsRef.current = [];
-				liveOutputBuffer.length = 0;
-				if (liveOutputFrame !== null) {
-					window.cancelAnimationFrame(liveOutputFrame);
-					liveOutputFrame = null;
-				}
+        // Stop backend delivery over the output channel (persistence continues)
+        void detachPtyOutput({ sessionId }).catch(() => {});
 
-				for (const unlisten of unlisteners) {
-					unlisten();
-				}
-				for (const cleanup of cleanups) {
-					cleanup();
-				}
+        // Flush buffered PTY output to DB before teardown (best-effort)
+        flushPtyOutput({ sessionId }).catch(() => {});
 
-				// Park wrapper instead of removing — xterm survives React unmount
-				getTerminalParkingContainer().appendChild(wrapper);
+        // Persist buffer + dimensions for cold restart
+        if (serializeAddonRef.current) {
+          persistBuffer(sessionId, serializeAddonRef.current);
+        }
+        persistDimensions(sessionId, term.cols, term.rows);
 
-				termRef.current = null;
-				fitAddonRef.current = null;
-				serializeAddonRef.current = null;
-			};
-		},
-		[
-			decreaseFontSize,
-			handleTerminalLinkOpen,
-			increaseFontSize,
-			profileId,
-			sessionId,
-		],
-	);
+        // Reset stream state
+        isStreamReadyRef.current = false;
+        pendingEventsRef.current = [];
+        liveOutputBuffer.length = 0;
+        if (liveOutputFrame !== null) {
+          window.cancelAnimationFrame(liveOutputFrame);
+          liveOutputFrame = null;
+        }
 
-	return (
-		<>
+        for (const unlisten of unlisteners) {
+          unlisten();
+        }
+        for (const cleanup of cleanups) {
+          cleanup();
+        }
+
+        // Park wrapper instead of removing — xterm survives React unmount
+        getTerminalParkingContainer().appendChild(wrapper);
+
+        termRef.current = null;
+        fitAddonRef.current = null;
+        serializeAddonRef.current = null;
+      };
+    },
+    [
+    decreaseFontSize,
+    handleTerminalLinkOpen,
+    increaseFontSize,
+    profileId,
+    sessionId]
+
+  );
+
+  return (
+    <>
 			<div style={shellStyle}>
 				<div
-					ref={terminalRef}
-					style={{ flex: 1, minWidth: 0, minHeight: 0 }}
-				/>
+          ref={terminalRef}
+          style={{ flex: 1, minWidth: 0, minHeight: 0 }} />
+        
 			</div>
 
 			<TerminalLinkConfirmDialog
-				link={pendingLink}
-				onClose={closePendingLinkDialog}
-				onOpenDefault={openPendingLinkExternally}
-			/>
-		</>
-	);
+        link={pendingLink}
+        onClose={closePendingLinkDialog}
+        onOpenDefault={openPendingLinkExternally} />
+      
+		</>);
+
 }

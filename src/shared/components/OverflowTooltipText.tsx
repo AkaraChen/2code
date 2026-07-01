@@ -1,26 +1,24 @@
-import { Portal, Text, Tooltip } from "@chakra-ui/react";
 import { measureNaturalWidth, prepareWithSegments } from "@chenglou/pretext";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface MeasuredTextSnapshot {
 	availableWidth: number;
 	font: string;
 }
 
-const TOOLTIP_POSITIONING = { placement: "top-start" } as const;
+const TOOLTIP_POSITIONING = { side: "top", align: "start" } as const;
 
 interface OverflowTooltipTextProps {
 	displayValue: string;
 	tooltipValue: string;
-	minW?: string;
-	maxW?: string;
-	flex?: string | number;
-	w?: string;
-	fontSize: "xs" | "sm";
-	fontWeight?: "normal" | "medium";
-	lineHeight?: string;
-	visualOffsetY?: string;
-	color?: string;
+	className?: string;
+	tooltipClassName?: string;
 }
 
 function buildCanvasFont(style: CSSStyleDeclaration) {
@@ -33,22 +31,15 @@ function buildCanvasFont(style: CSSStyleDeclaration) {
 function OverflowTooltipText({
 	displayValue,
 	tooltipValue,
-	minW,
-	maxW,
-	flex,
-	w,
-	fontSize,
-	fontWeight,
-	lineHeight,
-	visualOffsetY,
-	color,
+	className,
+	tooltipClassName,
 }: OverflowTooltipTextProps) {
 	const observerRef = useRef<ResizeObserver | null>(null);
 	const [snapshot, setSnapshot] = useState<MeasuredTextSnapshot>({
 		availableWidth: 0,
 		font: "",
 	});
-	const textRef = useCallback((element: HTMLParagraphElement | null) => {
+	const textRef = useCallback((element: HTMLSpanElement | null) => {
 		observerRef.current?.disconnect();
 		observerRef.current = null;
 
@@ -91,44 +82,27 @@ function OverflowTooltipText({
 		snapshot.availableWidth > 0 && naturalWidth - snapshot.availableWidth > 0.5;
 
 	return (
-		<Tooltip.Root
+		<Tooltip
 			disabled={!isOverflowing}
-			openDelay={300}
-			positioning={TOOLTIP_POSITIONING}
 		>
-			<Tooltip.Trigger asChild>
-				<Text
-					ref={textRef}
-					fontSize={fontSize}
-					fontWeight={fontWeight}
-					lineHeight={lineHeight}
-					transform={
-						visualOffsetY
-							? `translateY(${visualOffsetY})`
-							: undefined
-					}
-					color={color}
-					minW={minW}
-					maxW={maxW ?? "full"}
-					flex={flex}
-					w={w}
-					truncate
-				>
-					{displayValue}
-				</Text>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content
-						maxW="min(480px, calc(100vw - 32px))"
-						whiteSpace="normal"
-						wordBreak="break-all"
-					>
-						{tooltipValue}
-					</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+			<TooltipTrigger
+				render={(
+					<span
+						ref={textRef}
+						className={cn("min-w-0 truncate", className)}
+					/>
+				)}
+			>
+				{displayValue}
+			</TooltipTrigger>
+			<TooltipContent
+				align={TOOLTIP_POSITIONING.align}
+				side={TOOLTIP_POSITIONING.side}
+				className={cn("max-w-[min(480px,calc(100vw-32px))] break-all whitespace-normal", tooltipClassName)}
+			>
+				{tooltipValue}
+			</TooltipContent>
+		</Tooltip>
 	);
 }
 

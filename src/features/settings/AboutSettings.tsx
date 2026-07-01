@@ -1,26 +1,26 @@
-import {
-	Badge,
-	Box,
-	Button,
-	Field,
-	HStack,
-	Separator,
-	Stack,
-	Switch,
-	Text,
-} from "@chakra-ui/react";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { FiDownload, FiRefreshCw } from "react-icons/fi";
-import * as m from "@/paraglide/messages.js";
-import { toaster } from "@/shared/providers/appToaster";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Field,
+	FieldContent,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import {
 	checkForUpdate,
 	downloadAndInstallUpdate,
 	useUpdaterStore,
 } from "@/features/updater/store";
 import { useUpdaterSettingsStore } from "@/features/updater/settingsStore";
+import * as m from "@/paraglide/messages.js";
 import { useLocale } from "@/shared/lib/locale";
 import { formatReleaseDate } from "./releaseDate";
 
@@ -40,9 +40,7 @@ export function AboutSettings() {
 	);
 
 	useEffect(() => {
-		if (!isTauri()) {
-			return;
-		}
+		if (!isTauri()) return;
 
 		void getVersion()
 			.then(setAppVersion)
@@ -55,27 +53,25 @@ export function AboutSettings() {
 				force: true,
 				throwOnError: true,
 			});
-			toaster.create({
-				type: nextUpdate ? "info" : "success",
-				title: nextUpdate
+			toast(
+				nextUpdate
 					? m.updateAvailableTitle({ version: nextUpdate.version })
 					: m.updateNotAvailableTitle(),
-				description: nextUpdate
-					? m.updateAvailableDescription({
-							currentVersion: nextUpdate.currentVersion,
-							version: nextUpdate.version,
-						})
-					: m.updateNotAvailableDescription(),
-				closable: true,
-			});
-		}
-		catch (checkError) {
-			toaster.create({
-				type: "error",
-				title: m.updateCheckFailedTitle(),
+				{
+					description: nextUpdate
+						? m.updateAvailableDescription({
+								currentVersion: nextUpdate.currentVersion,
+								version: nextUpdate.version,
+							})
+						: m.updateNotAvailableDescription(),
+				},
+			);
+		} catch (checkError) {
+			toast.error(m.updateCheckFailedTitle(), {
 				description:
-					checkError instanceof Error ? checkError.message : String(checkError),
-				closable: true,
+					checkError instanceof Error
+						? checkError.message
+						: String(checkError),
 			});
 		}
 	};
@@ -83,16 +79,12 @@ export function AboutSettings() {
 	const installUpdate = async () => {
 		try {
 			await downloadAndInstallUpdate();
-		}
-		catch (installError) {
-			toaster.create({
-				type: "error",
-				title: m.updateInstallFailedTitle(),
+		} catch (installError) {
+			toast.error(m.updateInstallFailedTitle(), {
 				description:
 					installError instanceof Error
 						? installError.message
 						: String(installError),
-				closable: true,
 			});
 		}
 	};
@@ -104,93 +96,86 @@ export function AboutSettings() {
 	const showInstallUpdate = !!update && (canInstall || isDownloading);
 
 	return (
-		<Stack gap="6" maxW="2xl">
-			<Stack gap="2">
-				<HStack gap="3" align="baseline" wrap="wrap">
-					<Text fontSize="2xl" fontWeight="semibold">
-						2code
-					</Text>
-					<Badge variant="subtle">
+		<div className="flex max-w-2xl flex-col gap-6">
+			<section className="flex flex-col gap-2">
+				<div className="flex flex-wrap items-baseline gap-3">
+					<h2 className="text-2xl font-semibold">2code</h2>
+					<Badge variant="secondary">
 						{appVersion
 							? m.currentVersion({ version: appVersion })
 							: m.fileTreeLoading()}
 					</Badge>
-				</HStack>
-				<Text color="fg.muted">{m.aboutAppDescription()}</Text>
-			</Stack>
+				</div>
+				<p className="text-sm text-muted-foreground">
+					{m.aboutAppDescription()}
+				</p>
+			</section>
 
 			<Separator />
 
-			<Stack gap="3">
-				<Text fontWeight="medium">{m.update()}</Text>
-				<Field.Root>
-					<Field.Label>{m.acceptBetaUpdates()}</Field.Label>
-					<Switch.Root
+			<section className="flex flex-col gap-3">
+				<h3 className="font-medium">{m.update()}</h3>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel>{m.acceptBetaUpdates()}</FieldLabel>
+						<FieldDescription>
+							{m.acceptBetaUpdatesDescription()}
+						</FieldDescription>
+					</FieldContent>
+					<Switch
 						checked={acceptBetaUpdates}
-						onCheckedChange={(e) => setAcceptBetaUpdates(!!e.checked)}
-					>
-						<Switch.HiddenInput />
-						<Switch.Control />
-						<Switch.Label>
-							<Text fontSize="sm" color="fg.muted">
-								{m.acceptBetaUpdatesDescription()}
-							</Text>
-						</Switch.Label>
-					</Switch.Root>
-				</Field.Root>
-				<Box>
+						onCheckedChange={setAcceptBetaUpdates}
+					/>
+				</Field>
+				<div>
 					{update ? (
-						<Stack gap="1">
-							<Text fontSize="sm">
+						<div className="flex flex-col gap-1">
+							<p className="text-sm">
 								{m.updateAvailableDescription({
 									currentVersion: update.currentVersion,
 									version: update.version,
 								})}
-							</Text>
-							{releaseDate && (
-								<Text fontSize="sm" color="fg.muted">
+							</p>
+							{releaseDate ? (
+								<p className="text-sm text-muted-foreground">
 									{m.updateReleasedAt({ date: releaseDate })}
-								</Text>
-							)}
-						</Stack>
+								</p>
+							) : null}
+						</div>
 					) : (
-						<Text fontSize="sm" color="fg.muted">
+						<p className="text-sm text-muted-foreground">
 							{status === "notAvailable"
 								? m.updateNotAvailableDescription()
 								: m.updateIdleDescription()}
-						</Text>
+						</p>
 					)}
-					{status === "error" && error && (
-						<Text mt="2" fontSize="sm" color="red.fg">
-							{error}
-						</Text>
-					)}
-				</Box>
+					{status === "error" && error ? (
+						<p className="mt-2 text-sm text-destructive">{error}</p>
+					) : null}
+				</div>
 
-				<HStack gap="3" wrap="wrap">
+				<div className="flex flex-wrap gap-3">
 					<Button
 						size="sm"
 						variant="outline"
-						loading={isChecking}
-						disabled={isDownloading}
+						disabled={isChecking || isDownloading}
 						onClick={checkUpdate}
 					>
-						<FiRefreshCw />
+						{isChecking ? <Spinner /> : <FiRefreshCw />}
 						{m.checkForUpdates()}
 					</Button>
-					{showInstallUpdate && (
+					{showInstallUpdate ? (
 						<Button
 							size="sm"
-							disabled={!canInstall}
-							loading={isDownloading}
+							disabled={!canInstall || isDownloading}
 							onClick={installUpdate}
 						>
-							<FiDownload />
+							{isDownloading ? <Spinner /> : <FiDownload />}
 							{m.installUpdate({ version: update.version })}
 						</Button>
-					)}
-				</HStack>
-			</Stack>
-		</Stack>
+					) : null}
+				</div>
+			</section>
+		</div>
 	);
 }

@@ -1,10 +1,10 @@
-import { Box, CloseButton, HStack } from "@chakra-ui/react";
 import { AnimatePresence, motion } from "motion/react";
 import type {
 	KeyboardEvent,
 	ReactNode,
 	RefCallback,
 } from "react";
+import { RiCloseLine } from "@remixicon/react";
 
 const TAB_MIN_WIDTH = "140px";
 export const TAB_STRIP_HEIGHT = "32px";
@@ -56,71 +56,45 @@ function TabButton({
 	}
 
 	return (
-		<Box
-			as="div"
+		<div
 			role="tab"
 			aria-selected={isSelected}
 			tabIndex={isSelected ? 0 : -1}
-			flexShrink={0}
-			minW={TAB_MIN_WIDTH}
-			h="full"
-			display="flex"
-			alignItems="center"
-			gap="2"
-			py="1"
-			px="3"
-			textStyle="sm"
-			fontWeight="medium"
-			bg="transparent"
-			color={isSelected ? "fg" : "fg.muted"}
-			borderTopWidth="2px"
-			borderTopColor={isSelected ? "fg" : "transparent"}
-			borderEndWidth="1px"
-			borderEndColor="border"
-			userSelect="none"
-			transition="background-color 120ms ease, color 120ms ease"
-			css={{
-				WebkitUserDrag: "none",
-				"&::before": {
-					display: "none",
-				},
-				"& *": {
-					WebkitUserDrag: "none",
-				},
-			}}
-			_hover={{ bg: "bg.subtle", color: "fg" }}
-			_active={{ bg: "bg.muted", color: "fg" }}
-			_focusVisible={{
-				outline: "2px solid",
-				outlineColor: "var(--app-focus-ring)",
-				outlineOffset: "-2px",
-			}}
+			className={[
+				"flex h-full shrink-0 items-center gap-2 border-r border-t-2 bg-transparent px-3 py-1 text-sm font-medium select-none transition-colors [-webkit-user-drag:none] [&_*]:[-webkit-user-drag:none]",
+				"hover:bg-muted active:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-focus-ring)]",
+				isSelected
+					? "border-t-foreground text-foreground"
+					: "border-t-transparent text-muted-foreground hover:text-foreground",
+			].join(" ")}
+			style={{ minWidth: TAB_MIN_WIDTH }}
 			draggable={false}
 			ref={elementRef}
 			onClick={selectTab}
 			onKeyDown={handleKeyDown}
 		>
 			{icon}
-			<HStack gap="2" flex="1" minW="0">
-				<Box as="span" minW="0" flex="1" flexShrink={1}>
+			<span className="flex min-w-0 flex-1 items-center gap-2">
+				<span className="min-w-0 flex-1 shrink truncate">
 					{displayTitle}
-				</Box>
+				</span>
 				{badge}
 				{onClose ? (
-					<CloseButton
-						as="span"
+					<button
+						type="button"
 						role="button"
-						size="2xs"
-						flexShrink={0}
+						className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={(event) => {
 							event.stopPropagation();
 							onClose();
 						}}
-					/>
+					>
+						<RiCloseLine className="size-3" />
+					</button>
 				) : null}
-			</HStack>
-		</Box>
+			</span>
+		</div>
 	);
 }
 
@@ -144,7 +118,7 @@ function TabMotionItem({
 			}}
 			{...motionProps}
 		>
-			<Box display="flex" flexShrink={0} minW="0" h="full">
+			<div className="flex h-full min-w-0 shrink-0">
 				<TabButton
 					value={item.value}
 					icon={item.icon}
@@ -156,7 +130,7 @@ function TabMotionItem({
 					onClose={item.onClose}
 					onSelect={onSelect}
 				/>
-			</Box>
+			</div>
 		</motion.div>
 	);
 }
@@ -177,14 +151,11 @@ export function TabStrip({
 	const visibleGroups = groups.filter((group) => group.items.length > 0);
 
 	return (
-		<Box
+		<div
 			role="tablist"
 			aria-orientation="horizontal"
-			display="flex"
-			w="full"
-			h={TAB_STRIP_HEIGHT}
-			minW="max-content"
-			alignItems="stretch"
+			className="flex w-full min-w-max items-stretch"
+			style={{ height: TAB_STRIP_HEIGHT }}
 		>
 			{leadingControl}
 			<AnimatePresence initial={false}>
@@ -200,6 +171,6 @@ export function TabStrip({
 				)}
 			</AnimatePresence>
 			{trailingControls}
-		</Box>
+		</div>
 	);
 }

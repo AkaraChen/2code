@@ -1,4 +1,3 @@
-import { Box, Flex } from "@chakra-ui/react";
 import { memo, use, useCallback, useMemo } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import * as m from "@/paraglide/messages.js";
@@ -22,9 +21,9 @@ function VisibleBox({
 	children: React.ReactNode;
 }) {
 	return (
-		<Box flex="1" display={visible ? "flex" : "none"}>
+		<div className="flex-1" style={{ display: visible ? "flex" : "none" }}>
 			{children}
-		</Box>
+		</div>
 	);
 }
 
@@ -72,13 +71,13 @@ export const ChangesSidebar = memo(({
 	);
 
 	return (
-		<Flex direction="column" flex="1" minH="0" overflow="hidden">
+		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 			{changesFiles.length === 0 ? (
-				<Flex align="center" justify="center" flex="1" minH="0" p="8">
-					<Box color="fg.muted" fontSize="sm">
+				<div className="flex min-h-0 flex-1 items-center justify-center p-8">
+					<p className="text-sm text-muted-foreground">
 						{m.noChangesDetected()}
-					</Box>
-				</Flex>
+					</p>
+				</div>
 			) : (
 				<ChangesFileList
 					files={changesFiles}
@@ -105,7 +104,7 @@ export const ChangesSidebar = memo(({
 				onSubmit={onCommit}
 				onPush={onPush}
 			/>
-		</Flex>
+		</div>
 	);
 });
 

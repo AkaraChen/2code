@@ -1,8 +1,7 @@
-import { ChakraProvider } from "@chakra-ui/react";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
-import { appSystem } from "@/theme/system";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { SidebarLink } from "./SidebarLink";
 
 function renderLink(
@@ -10,7 +9,7 @@ function renderLink(
 	props?: Partial<React.ComponentProps<typeof SidebarLink>>,
 ) {
 	return render(
-		<ChakraProvider value={appSystem}>
+		<SidebarProvider>
 			<MemoryRouter initialEntries={[pathname]}>
 				<SidebarLink
 					to="/settings"
@@ -20,57 +19,49 @@ function renderLink(
 					Settings
 				</SidebarLink>
 			</MemoryRouter>
-		</ChakraProvider>,
+		</SidebarProvider>,
 	);
 }
 
 describe("sidebarLink", () => {
-	it("renders the active indicator when the current route matches the link", () => {
-		const { container } = renderLink("/settings");
+	it("marks the menu button active when the current route matches the link", () => {
+		renderLink("/settings");
 
-		expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
-			"href",
-			"/settings",
-		);
-		expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
+		const link = screen.getByRole("link", { name: /settings/i });
+
+		expect(link).toHaveAttribute("href", "/settings");
+		expect(link).toHaveAttribute("data-sidebar", "menu-button");
+		expect(link).toHaveAttribute("data-active");
+		expect(link).toHaveAttribute(
 			"aria-current",
 			"page",
 		);
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
-			2,
-		);
 	});
 
-	it("omits the active indicator when the route does not match", () => {
-		const { container } = renderLink("/projects");
+	it("does not mark the menu button active when the route does not match", () => {
+		renderLink("/projects");
 
-		expect(
-			screen.getByRole("link", { name: /settings/i }),
-		).toBeInTheDocument();
-		expect(
-			screen.getByRole("link", { name: /settings/i }),
-		).not.toHaveAttribute("aria-current");
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
-			1,
-		);
+		const link = screen.getByRole("link", { name: /settings/i });
+
+		expect(link).toHaveAttribute("data-sidebar", "menu-button");
+		expect(link).not.toHaveAttribute("data-active");
+		expect(link).not.toHaveAttribute("aria-current");
 	});
 
 	it("supports custom route patterns for nested sections", () => {
-		const { container } = renderLink("/projects/p1/settings", {
+		renderLink("/projects/p1/settings", {
 			to: "/projects/p1",
 			pattern: "/projects/:projectId/*",
 		});
 
-		expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
-			"href",
-			"/projects/p1",
-		);
-		expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
+		const link = screen.getByRole("link", { name: /settings/i });
+
+		expect(link).toHaveAttribute("href", "/projects/p1");
+		expect(link).toHaveAttribute("data-sidebar", "menu-button");
+		expect(link).toHaveAttribute("data-active");
+		expect(link).toHaveAttribute(
 			"aria-current",
 			"page",
-		);
-		expect(container.querySelectorAll('[aria-hidden="true"]').length).toBe(
-			2,
 		);
 	});
 });

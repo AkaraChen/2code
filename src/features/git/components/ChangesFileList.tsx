@@ -1,14 +1,8 @@
-import {
-	Box,
-	Button,
-	HStack,
-	Portal,
-	Stack,
-	Text,
-} from "@chakra-ui/react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { Button } from "@/components/ui/button";
 import * as m from "@/paraglide/messages.js";
 import { useScrollIntoView } from "@/shared/hooks/useScrollIntoView";
 import { FileListItem } from "./FileListItem";
@@ -169,21 +163,12 @@ function ChangesFileList({
 
 	return (
 		<>
-			<Box ref={containerRef} flex="1" overflowY="auto" minH="0">
-				<HStack
-					position="sticky"
-					top="0"
-					zIndex="1"
-					justify="space-between"
-					px="3"
-					py="2.5"
-					borderBottomWidth="1px"
-					borderColor="border.subtle"
-				>
-					<Text fontSize="xs" color="fg.muted">
+			<div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto">
+				<div className="sticky top-0 z-[1] flex items-center justify-between border-b bg-background/95 px-3 py-2.5 backdrop-blur">
+					<p className="text-xs text-muted-foreground">
 						{m.changedFiles({ count: files.length })}
-					</Text>
-					<HStack gap="1">
+					</p>
+					<div className="flex items-center gap-1">
 						<Button
 							size="xs"
 							variant="ghost"
@@ -200,8 +185,8 @@ function ChangesFileList({
 						>
 							{m.gitCommitIncludeNone()}
 						</Button>
-					</HStack>
-				</HStack>
+					</div>
+				</div>
 				{files.map((file, i) => (
 					<ChangesFileListRow
 						key={file.name}
@@ -215,42 +200,34 @@ function ChangesFileList({
 						onOpenContextMenu={openContextMenu}
 					/>
 				))}
-			</Box>
+			</div>
 
-			{contextMenu ? (
-				<Portal>
-					<Box
+			{contextMenu
+				? createPortal(
+					<div
 						ref={contextMenuRef}
-						position="fixed"
-						top={contextMenu.top}
-						left={contextMenu.left}
-						w={`${CONTEXT_MENU_WIDTH}px`}
-						rounded="l2"
-						borderWidth="1px"
-						borderColor="border.subtle"
-						bg="bg.panel"
-						boxShadow="lg"
-						p="1"
-						zIndex="dropdown"
+						className="fixed z-50 w-[200px] rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
+						style={{
+							top: contextMenu.top,
+							left: contextMenu.left,
+						}}
 						onContextMenu={(event) => event.preventDefault()}
 					>
-						<Stack gap="1">
-							<Button
-								size="sm"
-								variant="ghost"
-								justifyContent="flex-start"
-								colorPalette="red"
-								onClick={() => {
-									void onDiscardFile(contextMenu.file);
-									setContextMenu(null);
-								}}
-							>
-								{m.gitDiscardFileAction()}
-							</Button>
-						</Stack>
-					</Box>
-				</Portal>
-			) : null}
+						<Button
+							size="sm"
+							variant="destructive"
+							className="w-full justify-start"
+							onClick={() => {
+								void onDiscardFile(contextMenu.file);
+								setContextMenu(null);
+							}}
+						>
+							{m.gitDiscardFileAction()}
+						</Button>
+					</div>,
+					document.body,
+				)
+				: null}
 		</>
 	);
 }

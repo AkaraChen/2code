@@ -122,9 +122,10 @@ vi.mock("@/generated", () => ({
 	writeToPty: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("@/shared/providers/appToaster", () => ({
-	toaster: {
-		create: toasterCreateMock,
+vi.mock("sonner", () => ({
+	toast: {
+		error: toasterCreateMock,
+		success: toasterCreateMock,
 	},
 }));
 
@@ -207,11 +208,7 @@ describe("terminal select to copy", () => {
 		await waitFor(() => {
 			expect(writeClipboardTextMock).toHaveBeenCalledWith("selected text");
 		});
-		expect(toasterCreateMock).toHaveBeenCalledWith({
-			title: "Text copied",
-			type: "success",
-			closable: true,
-		});
+		expect(toasterCreateMock).toHaveBeenCalledWith("Text copied");
 	});
 
 	it("does not copy empty selection", () => {

@@ -1,4 +1,5 @@
-import { Field, SegmentGroup } from "@chakra-ui/react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Field, FieldLabel } from "@/components/ui/field";
 import * as m from "@/paraglide/messages.js";
 import type { BorderRadius } from "./stores/themeStore";
 import { useThemeStore } from "./stores/themeStore";
@@ -16,21 +17,22 @@ export function BorderRadiusPicker() {
 	const setBorderRadius = useThemeStore((s) => s.setBorderRadius);
 
 	return (
-		<Field.Root>
-			<Field.Label>{m.borderRadius()}</Field.Label>
-			<SegmentGroup.Root
+		<Field>
+			<FieldLabel>{m.borderRadius()}</FieldLabel>
+			<ToggleGroup
 				size="sm"
-				value={borderRadius}
-				onValueChange={(e) => setBorderRadius(e.value as BorderRadius)}
+				value={[borderRadius]}
+				onValueChange={(value) => {
+					const next = value[value.length - 1];
+					if (next) setBorderRadius(next as BorderRadius);
+				}}
 			>
-				<SegmentGroup.Indicator />
-				<SegmentGroup.Items
-					items={items.map((i) => ({
-						value: i.value,
-						label: i.label(),
-					}))}
-				/>
-			</SegmentGroup.Root>
-		</Field.Root>
+				{items.map((item) => (
+					<ToggleGroupItem key={item.value} value={item.value}>
+						{item.label()}
+					</ToggleGroupItem>
+				))}
+			</ToggleGroup>
+		</Field>
 	);
 }

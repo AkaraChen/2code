@@ -1,6 +1,11 @@
-import { Box, HStack, Icon, Text } from "@chakra-ui/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
+import {
+	SidebarMenuBadge,
+	SidebarMenuButton,
+	SidebarMenuItem,
+	SidebarMenuSub,
+} from "@/components/ui/sidebar";
 import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import { useAppSidebarStore } from "../sidebarStore";
@@ -37,26 +42,12 @@ export function ProjectGroupSection({
 	};
 
 	return (
-		<>
-			<HStack
+		<SidebarMenuItem>
+			<SidebarMenuButton
+				type="button"
 				data-sidebar-item
-				role="button"
-				tabIndex={0}
 				aria-expanded={!collapsed}
 				aria-label={m.toggleProjectGroup({ name: group.name })}
-				gap="1"
-				align="center"
-				w="full"
-				minW="0"
-				px="4"
-				py="1.5"
-				color="fg.muted"
-				fontSize="xs"
-				fontWeight="semibold"
-				textTransform="uppercase"
-				userSelect="none"
-				_hover={{ bg: "bg.subtle" }}
-				_active={{ bg: "bg.muted" }}
 				onClick={handleToggle}
 				onKeyDown={(e) => {
 					if (e.key !== "Enter" && e.key !== " ") return;
@@ -64,41 +55,10 @@ export function ProjectGroupSection({
 					handleToggle();
 				}}
 			>
-				<HStack gap="2" align="center" flex="1 1 auto" minW="0">
-					<Box
-						w="5"
-						h="5"
-						ml="-0.5"
-						display="grid"
-						placeItems="center"
-						flexShrink={0}
-						aria-hidden="true"
-					>
-						<Icon fontSize="sm">
-							{collapsed ? <FiChevronRight /> : <FiChevronDown />}
-						</Icon>
-					</Box>
-					<Text
-						flex="1 1 auto"
-						minW="0"
-						lineHeight="1rem"
-						transform="translateY(1px)"
-						truncate
-					>
-						{group.name}
-					</Text>
-				</HStack>
-				<Box
-					w="6"
-					h="6"
-					display="grid"
-					placeItems="center"
-					flexShrink={0}
-					color="fg.subtle"
-				>
-					{projects.length}
-				</Box>
-			</HStack>
+				{collapsed ? <FiChevronRight /> : <FiChevronDown />}
+				<span>{group.name}</span>
+			</SidebarMenuButton>
+			<SidebarMenuBadge>{projects.length}</SidebarMenuBadge>
 			<AnimatePresence initial={false}>
 				{!collapsed && (
 					<motion.div
@@ -121,17 +81,19 @@ export function ProjectGroupSection({
 						}
 						style={{ overflow: "hidden" }}
 					>
-						{projects.map((project) => (
-							<ProjectMenuItem
-								key={project.id}
-								activeProfileId={activeProfileId}
-								project={project}
-								projectGroups={projectGroups}
-							/>
-						))}
+						<SidebarMenuSub className="mx-0 translate-x-0 gap-0 border-l-0 px-0 py-0">
+							{projects.map((project) => (
+								<ProjectMenuItem
+									key={project.id}
+									activeProfileId={activeProfileId}
+									project={project}
+									projectGroups={projectGroups}
+								/>
+							))}
+						</SidebarMenuSub>
 					</motion.div>
 				)}
 			</AnimatePresence>
-		</>
+		</SidebarMenuItem>
 	);
 }

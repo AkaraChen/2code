@@ -1,4 +1,3 @@
-import { Circle } from "@chakra-ui/react";
 import type { AgentStatus } from "./store";
 
 interface AgentStatusDotProps {
@@ -7,13 +6,13 @@ interface AgentStatusDotProps {
 
 export function AgentStatusDot({ status }: AgentStatusDotProps) {
 	return (
-		<Circle
+		<span
 			aria-hidden="true"
-			size="2"
-			bg={status === "waiting" ? "yellow.400" : "green.500"}
-			alignSelf="center"
-			flexShrink={0}
-			className={status === "running" ? "agent-status-dot--running" : undefined}
+			className={[
+				"self-center size-2 shrink-0 rounded-full",
+				status === "waiting" ? "bg-yellow-400" : "bg-green-500",
+				status === "running" ? "agent-status-dot--running" : "",
+			].join(" ")}
 		/>
 	);
 }

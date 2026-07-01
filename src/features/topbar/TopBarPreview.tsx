@@ -1,4 +1,3 @@
-import { Box, Flex, HStack, Text } from "@chakra-ui/react";
 import {
 	SortableContext,
 	horizontalListSortingStrategy,
@@ -18,46 +17,30 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 	const { setNodeRef } = useDroppable({ id: "preview-area" });
 
 	return (
-		<Box>
-			<Text fontSize="sm" fontWeight="medium" mb="2">
+		<div>
+			<div className="mb-2 text-sm font-medium">
 				{m.topbarPreview()}
-			</Text>
-			<Box
-				borderWidth="1px"
-				borderColor="border"
-				rounded="lg"
-				overflow="hidden"
-			>
-				<Flex
-					align="center"
-					justify="space-between"
-					px="4"
-					py="3"
-					bg="bg.subtle"
-				>
-					<HStack gap="2">
-					<Text
-						as="span"
-						fontWeight="semibold"
-						fontSize="sm"
-						userSelect="none"
-					>
-						My Project
-					</Text>
-					<HStack gap="1" color="fg.muted" fontSize="sm" userSelect="none">
-						<PiGitBranchFill />
-						<Text as="span">main</Text>
-					</HStack>
-					</HStack>
+			</div>
+			<div className="overflow-hidden rounded-lg border">
+				<div className="flex items-center justify-between bg-muted px-4 py-3">
+					<div className="flex items-center gap-2">
+						<span className="select-none text-sm font-semibold">
+							My Project
+						</span>
+						<span className="flex select-none items-center gap-1 text-sm text-muted-foreground">
+							<PiGitBranchFill />
+							<span>main</span>
+						</span>
+					</div>
 					<SortableContext
 						items={activeControls}
 						strategy={horizontalListSortingStrategy}
 					>
-						<HStack ref={setNodeRef} gap="2" minH="9" minW="40">
+						<div ref={setNodeRef} className="flex min-h-9 min-w-40 items-center gap-2">
 							{activeControls.length === 0 ? (
-								<Text fontSize="xs" color="fg.muted">
+								<span className="text-xs text-muted-foreground">
 									{m.topbarNoControls()}
-								</Text>
+								</span>
 							) : (
 								activeControls.map((id) => {
 									const def = controlRegistry.get(id);
@@ -70,10 +53,10 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 									);
 								})
 							)}
-						</HStack>
+						</div>
 					</SortableContext>
-				</Flex>
-			</Box>
-		</Box>
+				</div>
+			</div>
+		</div>
 	);
 }

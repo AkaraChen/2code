@@ -1,25 +1,20 @@
-import {
-	Badge,
-	Box,
-	Button,
-	CloseButton,
-	Dialog,
-	Flex,
-	HStack,
-	IconButton,
-	Portal,
-	Text,
-	Textarea,
-} from "@chakra-ui/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import type { CSSProperties, ChangeEvent } from "react";
 import { memo, useCallback, useMemo } from "react";
-import type { ChangeEvent } from "react";
 import { FiCopy, FiTrash2 } from "react-icons/fi";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
-import { toaster } from "@/shared/providers/appToaster";
-import { SECONDARY_BUTTON_VARIANT } from "@/theme/buttonVariants";
 import {
 	type DiffReviewComment,
 	formatReviewCommentsForAgent,
@@ -57,7 +52,7 @@ const ReviewQueueCommentCard = memo(({
 		() => ({
 			"--diffs-font-family": `"${fontFamily}", monospace`,
 			"--diffs-font-size": `${fontSize}px`,
-		}),
+		}) as CSSProperties,
 		[fontFamily, fontSize],
 	);
 	const handleDelete = useCallback(() => {
@@ -71,64 +66,37 @@ const ReviewQueueCommentCard = memo(({
 	);
 
 	return (
-		<Box
-			borderWidth="1px"
-			borderColor="border.subtle"
-			borderRadius="md"
-			overflow="hidden"
-		>
-			<HStack
-				align="start"
-				gap="3"
-				px="3"
-				py="2.5"
-				bg="bg.subtle"
-				borderBottomWidth="1px"
-				borderColor="border.subtle"
-			>
-				<Box flex="1" minW="0">
-					<Text
-						fontSize="sm"
-						fontFamily="mono"
-						fontWeight="semibold"
-						truncate
-					>
+		<div className="overflow-hidden rounded-lg border">
+			<div className="flex items-start gap-3 border-b bg-muted/50 px-3 py-2.5">
+				<div className="min-w-0 flex-1">
+					<p className="truncate font-mono text-sm font-semibold">
 						{comment.displayName}
-					</Text>
-					<HStack mt="1" gap="2">
+					</p>
+					<div className="mt-1 flex items-center gap-2">
 						<Badge
-							size="xs"
-							variant="subtle"
-							colorPalette="blue"
-							fontFamily="mono"
+							variant="outline"
+							className="border-blue-500/30 bg-blue-500/10 font-mono text-blue-700 dark:text-blue-400"
 						>
 							{formatReviewRange(comment.range)}
 						</Badge>
-						<Text fontSize="xs" color="fg.muted">
+						<span className="text-xs text-muted-foreground">
 							Selected diff
-						</Text>
-					</HStack>
-				</Box>
-				<IconButton
+						</span>
+					</div>
+				</div>
+				<Button
 					aria-label="Delete review comment"
-					size="xs"
-					variant="ghost"
-					colorPalette="red"
-					flexShrink={0}
+					size="icon-xs"
+					variant="destructive"
+					className="shrink-0"
 					onClick={handleDelete}
 				>
 					<FiTrash2 />
-				</IconButton>
-			</HStack>
-			<Box
-				mx="3"
-				mt="3"
-				maxH="8rem"
-				overflow="auto"
-				borderWidth="1px"
-				borderColor="border.subtle"
-				borderRadius="md"
-				css={diffCss}
+				</Button>
+			</div>
+			<div
+				className="mx-3 mt-3 max-h-32 overflow-auto rounded-md border"
+				style={diffCss}
 			>
 				<FileDiff
 					fileDiff={comment.fileDiff}
@@ -136,27 +104,16 @@ const ReviewQueueCommentCard = memo(({
 					selectedLines={comment.range}
 					disableWorkerPool
 				/>
-			</Box>
-			<Text
-				px="3"
-				pt="3"
-				fontSize="xs"
-				fontWeight="semibold"
-				color="fg.muted"
-			>
+			</div>
+			<p className="px-3 pt-3 text-xs font-semibold text-muted-foreground">
 				Comment
-			</Text>
+			</p>
 			<Textarea
-				mx="3"
-				mt="1.5"
-				mb="3"
-				w="calc(100% - 1.5rem)"
+				className="mx-3 mb-3 mt-1.5 min-h-20 w-[calc(100%-1.5rem)]"
 				value={comment.body}
-				autoresize
-				minH="5rem"
 				onChange={handleBodyChange}
 			/>
-		</Box>
+		</div>
 	);
 });
 
@@ -180,86 +137,63 @@ export default function GitReviewQueueDialog({
 		}),
 		[options],
 	);
-
+	const handleOpenChange = useCallback(
+		(open: boolean) => {
+			if (!open) onClose();
+		},
+		[onClose],
+	);
 	const handleCopyAll = useCallback(async () => {
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
-		toaster.create({
-			title: "Review comments copied",
-			type: "success",
-			closable: true,
-		});
+		toast.success("Review comments copied");
 	}, [comments]);
-
 	const handleCopyAndClearAll = useCallback(async () => {
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
 		onClear();
 		onClose();
-		toaster.create({
-			title: "Review comments copied and cleared",
-			type: "success",
-			closable: true,
-		});
+		toast.success("Review comments copied and cleared");
 	}, [comments, onClear, onClose]);
-	const handleOpenChange = useCallback(
-		(event: { open: boolean }) => {
-			if (!event.open) onClose();
-		},
-		[onClose],
-	);
 
 	return (
-		<Dialog.Root
-			open={isOpen}
-			size="xl"
-			onOpenChange={handleOpenChange}
-		>
-			<Portal>
-				<Dialog.Backdrop />
-				<Dialog.Positioner>
-					<Dialog.Content maxH="80vh">
-						<Dialog.Header>
-							<Dialog.Title>Review Queue</Dialog.Title>
-							<Dialog.CloseTrigger asChild>
-								<CloseButton size="sm" />
-							</Dialog.CloseTrigger>
-						</Dialog.Header>
-						<Dialog.Body overflow="auto">
-							<Flex direction="column" gap="3">
-								{comments.map((comment) => (
-									<ReviewQueueCommentCard
-										key={comment.id}
-										comment={comment}
-										fontFamily={fontFamily}
-										fontSize={fontSize}
-										options={reviewDiffOptions}
-										onDelete={onDelete}
-										onUpdate={onUpdate}
-									/>
-								))}
-							</Flex>
-						</Dialog.Body>
-						<Dialog.Footer gap="2">
-							<Button
-								variant={SECONDARY_BUTTON_VARIANT}
-								onClick={handleCopyAll}
-								disabled={comments.length === 0}
-							>
-								<FiCopy />
-								Copy
-							</Button>
-							<Button
-								variant="solid"
-								colorPalette="red"
-								onClick={handleCopyAndClearAll}
-								disabled={comments.length === 0}
-							>
-								<FiCopy />
-								Copy and clear all
-							</Button>
-						</Dialog.Footer>
-					</Dialog.Content>
-				</Dialog.Positioner>
-			</Portal>
-		</Dialog.Root>
+		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+			<DialogContent className="flex max-h-[80vh] w-[min(56rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+				<DialogHeader className="border-b p-4">
+					<DialogTitle>Review Queue</DialogTitle>
+				</DialogHeader>
+				<div className="min-h-0 flex-1 overflow-auto p-4">
+					<div className="flex flex-col gap-3">
+						{comments.map((comment) => (
+							<ReviewQueueCommentCard
+								key={comment.id}
+								comment={comment}
+								fontFamily={fontFamily}
+								fontSize={fontSize}
+								options={reviewDiffOptions}
+								onDelete={onDelete}
+								onUpdate={onUpdate}
+							/>
+						))}
+					</div>
+				</div>
+				<div className="flex justify-end gap-2 border-t bg-muted/50 p-4">
+					<Button
+						variant="outline"
+						onClick={handleCopyAll}
+						disabled={comments.length === 0}
+					>
+						<FiCopy />
+						Copy
+					</Button>
+					<Button
+						variant="destructive"
+						onClick={handleCopyAndClearAll}
+						disabled={comments.length === 0}
+					>
+						<FiCopy />
+						Copy and clear all
+					</Button>
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

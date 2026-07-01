@@ -2,7 +2,6 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
-import { ChakraProvider } from "@chakra-ui/react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { Mock } from "vitest";
@@ -16,7 +15,6 @@ import {
 	writeFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
 import { writeToPty } from "@/generated";
-import { appSystem } from "@/theme/system";
 import TerminalTabs from "./TerminalTabs";
 import { useTerminalStore } from "./store";
 
@@ -56,7 +54,7 @@ function createWrapper() {
 
 	return ({ children }: { children: ReactNode }) => (
 		<QueryClientProvider client={queryClient}>
-			<ChakraProvider value={appSystem}>{children}</ChakraProvider>
+			<>{children}</>
 		</QueryClientProvider>
 	);
 }

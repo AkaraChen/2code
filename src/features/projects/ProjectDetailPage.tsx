@@ -1,18 +1,23 @@
-import {
-	Button,
-	Center,
-	EmptyState,
-	HStack,
-	Menu,
-	Portal,
-	VStack,
-} from "@chakra-ui/react";
 import { useMemo } from "react";
 import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
+import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import ProfileLayout from "@/features/projects/ProfileLayout";
 import { useProject, useProjectProfiles } from "@/features/projects/hooks";
-import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalStore } from "@/features/terminal/store";
 import { TerminalTemplateDropdownContent } from "@/features/terminal/TerminalTemplateMenu";
 import { useTerminalTemplateActions } from "@/features/terminal/terminalTemplateActions";
@@ -69,70 +74,65 @@ export default function ProjectDetailPage() {
 
 	const shouldRenderEmptyState = !hasTabs && !hasFileTabs && !notesActive;
 	const emptyTerminalState = (
-		<Center h="full">
-			<EmptyState.Root size="sm">
-				<EmptyState.Content>
-					<EmptyState.Indicator>
+		<div className="flex h-full items-center justify-center">
+			<Empty>
+				<EmptyHeader>
+					<EmptyMedia variant="icon">
 						<FiTerminal />
-					</EmptyState.Indicator>
-					<VStack textAlign="center">
-						<EmptyState.Title>
-							{m.noTerminalsOpen()}
-						</EmptyState.Title>
-						<EmptyState.Description>
-							{m.noTerminalsOpenDescription()}
-						</EmptyState.Description>
-					</VStack>
-					<HStack gap="0">
+					</EmptyMedia>
+					<EmptyTitle>{m.noTerminalsOpen()}</EmptyTitle>
+					<EmptyDescription>
+						{m.noTerminalsOpenDescription()}
+					</EmptyDescription>
+				</EmptyHeader>
+				<EmptyContent>
+					<div className="flex">
 						<Button
 							disabled={createTab.isPending}
-							borderEndRadius={hasTemplates ? "0" : undefined}
+							className={hasTemplates ? "rounded-r-none" : undefined}
 							onClick={terminalTemplateActions.createDefaultTerminal}
 						>
 							<FiPlus />
 							{m.newTerminal()}
 						</Button>
-						{hasTemplates && (
-							<Menu.Root>
-								<Menu.Trigger asChild>
-									<Button
-										disabled={createTab.isPending}
-										borderStartRadius="0"
-										borderStartWidth="1px"
-										px="2"
-										aria-label="Choose template"
-									>
-										<FiChevronDown />
-									</Button>
-								</Menu.Trigger>
-								<Portal>
-									<Menu.Positioner>
-										<Menu.Content minW="56" p="1">
-											<TerminalTemplateDropdownContent
-												projectTemplates={
-													terminalTemplateActions.projectTemplates
-												}
-												globalTemplates={
-													terminalTemplateActions.globalTemplates
-												}
-												isPending={
-													terminalTemplateActions.createTab.isPending
-												}
-												showEmptyState={false}
-												onTemplateClick={(template, scope) => {
-													void terminalTemplateActions
-														.createTemplateTerminal(template, scope);
-												}}
-											/>
-										</Menu.Content>
-									</Menu.Positioner>
-								</Portal>
-							</Menu.Root>
-						)}
-					</HStack>
-				</EmptyState.Content>
-			</EmptyState.Root>
-		</Center>
+						{hasTemplates ? (
+							<DropdownMenu>
+								<DropdownMenuTrigger
+									render={
+										<Button
+											disabled={createTab.isPending}
+											className="-ml-px rounded-l-none"
+											size="icon"
+											aria-label="Choose template"
+										/>
+									}
+								>
+									<FiChevronDown />
+								</DropdownMenuTrigger>
+								<DropdownMenuContent className="min-w-56 p-1">
+									<TerminalTemplateDropdownContent
+										projectTemplates={
+											terminalTemplateActions.projectTemplates
+										}
+										globalTemplates={
+											terminalTemplateActions.globalTemplates
+										}
+										isPending={
+											terminalTemplateActions.createTab.isPending
+										}
+										showEmptyState={false}
+										onTemplateClick={(template, scope) => {
+											void terminalTemplateActions
+												.createTemplateTerminal(template, scope);
+										}}
+									/>
+								</DropdownMenuContent>
+							</DropdownMenu>
+						) : null}
+					</div>
+				</EmptyContent>
+			</Empty>
+		</div>
 	);
 
 	return (

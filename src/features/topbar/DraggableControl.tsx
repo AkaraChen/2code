@@ -1,7 +1,11 @@
-import { Box, HStack, Icon, Portal, Tooltip } from "@chakra-ui/react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { PiDotsSixVerticalBold } from "react-icons/pi";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ControlDefinition } from "./types";
 
 const DRAG_ICON_SIZE = 16;
@@ -31,35 +35,28 @@ export function DraggableControl({
 	};
 
 	return (
-		<Tooltip.Root openDelay={300}>
-			<Tooltip.Trigger asChild>
-				<Box
-					ref={setNodeRef}
-					style={style}
-					{...attributes}
-					{...listeners}
-					bg="bg.muted"
-					rounded="md"
-					p="2"
-					cursor={isOverlay ? "grabbing" : "grab"}
-					borderWidth="1px"
-					borderColor={isDragging ? "border.emphasized" : "border"}
-					_hover={{ borderColor: "border.emphasized" }}
-					userSelect="none"
-				>
-					<HStack gap="1.5">
-						<Icon color="fg.muted" fontSize="sm">
-							<PiDotsSixVerticalBold />
-						</Icon>
-						<definition.icon size={DRAG_ICON_SIZE} />
-					</HStack>
-				</Box>
-			</Tooltip.Trigger>
-			<Portal>
-				<Tooltip.Positioner>
-					<Tooltip.Content>{definition.label()}</Tooltip.Content>
-				</Tooltip.Positioner>
-			</Portal>
-		</Tooltip.Root>
+		<Tooltip>
+			<TooltipTrigger
+				render={(
+					<div
+						ref={setNodeRef}
+						style={style}
+						{...attributes}
+						{...listeners}
+						className={[
+							"rounded-md border bg-muted p-2 select-none hover:border-foreground/40",
+							isOverlay ? "cursor-grabbing" : "cursor-grab",
+							isDragging ? "border-foreground/40" : "border-border",
+						].join(" ")}
+					/>
+				)}
+			>
+				<div className="flex items-center gap-1.5">
+					<PiDotsSixVerticalBold className="size-4 text-muted-foreground" />
+					<definition.icon size={DRAG_ICON_SIZE} />
+				</div>
+			</TooltipTrigger>
+			<TooltipContent>{definition.label()}</TooltipContent>
+		</Tooltip>
 	);
 }
