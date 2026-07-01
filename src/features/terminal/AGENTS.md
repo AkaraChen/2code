@@ -35,11 +35,11 @@ PTY terminal management with xterm.js. The most complex frontend feature.
 |------|----------|
 | Tab state shape | `store.ts` — `profiles[profileId].tabs`, `activeTabId`, `counter` |
 | xterm instance creation | `Terminal.tsx` lines ~145–297 (ref callback) |
-| PTY output streaming | `src-tauri/crates/infra/src/pty.rs` |
+| PTY output streaming | `Channel<ArrayBuffer>` + `attach_pty_output` in `Terminal.tsx`; backend send in `bridge.rs` / `service::pty::read_pty_output` |
 | Scrollback restore | `Terminal.tsx` + `src-tauri/crates/service/src/pty.rs` |
 | Shell env vars for helper | `infra/shell_init.rs` (`_2CODE_HELPER_URL`, `_2CODE_SESSION_ID`) |
 
 ## ANTI-PATTERNS
 - Conditional rendering of `<Terminal>` — breaks xterm state (use CSS only)
 - `useTerminalStore(…)` in mutations — use `useTerminalStore.getState()` instead
-- Removing `find_utf8_boundary` call in PTY output — breaks multibyte characters
+- Reintroducing per-chunk UTF-8 decoding on the live output path — output now streams as raw bytes to xterm.js, which decodes UTF-8 across writes; decoding chunks yourself re-breaks multibyte characters at chunk boundaries

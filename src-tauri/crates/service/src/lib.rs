@@ -9,8 +9,12 @@ pub mod watcher;
 /// Trait for emitting PTY events to the frontend.
 /// Implemented by the app layer (Tauri bridge).
 pub trait PtyEventEmitter: Send + Sync + 'static {
-	/// Emit terminal output text. Returns false if the channel is closed.
-	fn emit_output(&self, session_id: &str, text: &str) -> bool;
+	/// Emit raw terminal output bytes to the frontend for the given session.
+	/// The bytes are the unmodified PTY read chunk; the receiver (xterm.js) is
+	/// responsible for UTF-8 decoding across chunk boundaries. Returns false if
+	/// the read loop should stop (currently always true — a missing or closed
+	/// frontend sink never halts persistence).
+	fn emit_output(&self, session_id: &str, bytes: &[u8]) -> bool;
 	/// Emit session exit signal.
 	fn emit_exit(&self, session_id: &str);
 }

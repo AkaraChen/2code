@@ -52,7 +52,6 @@
         "@xterm/addon-serialize": "0.15.0-beta.287",
         "@xterm/addon-unicode11": "0.10.0-beta.287",
         "@xterm/addon-web-links": "0.13.0-beta.287",
-        "@xterm/addon-webgl": "0.20.0-beta.286",
         "@xterm/xterm": "6.1.0-beta.287",
         "cmdk": "^1.1.1",
         "codemirror": "^6.0.2",
@@ -901,8 +900,6 @@
     "@xterm/addon-unicode11": ["@xterm/addon-unicode11@0.10.0-beta.287", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.287" } }, "sha512-79JP5qtNh/+emyqW/1TPcFtPrmMIUgypCcx2g6Eo/vQrZF6YNaQrKkJTovMg2RoxbbRy72Oe1SZcpU2b37hzrw=="],
 
     "@xterm/addon-web-links": ["@xterm/addon-web-links@0.13.0-beta.287", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.287" } }, "sha512-1+5+zWtIGBOygy4yB9is0V9PwEZSz2NsRzQyNqGb+7hnTW2PXqvUCjq6GLvyUflHQw8VQ7jXtUuFE+ETVzcx+A=="],
-
-    "@xterm/addon-webgl": ["@xterm/addon-webgl@0.20.0-beta.286", "", { "peerDependencies": { "@xterm/xterm": "^6.1.0-beta.287" } }, "sha512-Nvk9Jic7OCXtL1lS1/Ryurkpd2VElO7PCBOf+DEB3ODs9yU+F31sJwQD+LIdZ6GAJ+Atp7LuWHjSNhRv/xSY0w=="],
 
     "@xterm/xterm": ["@xterm/xterm@6.1.0-beta.287", "", {}, "sha512-3aOHVlxlRVb3tOHI4b/z2O/OsRnqpW5u0qq8OqpqbwLVTbUhThmQ7mBKaehGdbsmcCCBTP1cBwhG0qcvuOjowA=="],
 

@@ -1,4 +1,4 @@
-export { loadAddons, type LoadAddonsResult, type WebglAddon } from "./addons";
+export { loadAddons, type LoadAddonsResult } from "./addons";
 export {
 	DEFAULT_TERMINAL_FONT_FAMILIES,
 	DEFAULT_TERMINAL_FONT_FAMILY,

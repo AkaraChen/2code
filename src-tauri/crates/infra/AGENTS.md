@@ -7,7 +7,7 @@ Cross-cutting infrastructure. All I/O, OS interaction, and external process mana
 | File | Role |
 |------|------|
 | `db.rs` | SQLite init + WAL pragma + `embed_migrations!()` auto-run on startup |
-| `pty.rs` | PTY session lifecycle: spawn shell, 4KB read loop, UTF-8 boundary detection |
+| `pty.rs` | PTY session lifecycle: spawn shell, 4KB read loop (live output delivery + persistence live in `service::pty`) |
 | `pty_log.rs` | Per-session output storage as `{app_data_dir}/pty_logs/{session_id}.log` files (append/read/clear/remove + startup orphan GC). No byte cap. |
 | `git.rs` | Git command execution via `std::process::Command` |
 | `shell_init.rs` | ZDOTDIR-based shell init injection — sets `_2CODE_HELPER`, `_2CODE_HELPER_URL`, `_2CODE_SESSION_ID` env vars |
@@ -18,7 +18,7 @@ Cross-cutting infrastructure. All I/O, OS interaction, and external process mana
 | `watcher.rs` | `notify` crate file system watcher → emits `watch-event` Tauri events |
 
 ## KEY NOTES
-- **`find_utf8_boundary`** in `pty.rs` — DO NOT remove; prevents splitting multibyte chars when flushing 4KB chunks
+- **PTY live output** streams raw bytes over a per-session IPC `Channel` (see `service::pty::read_pty_output` + app-layer `bridge.rs`); xterm.js decodes UTF-8 across writes, so no boundary splitting happens on the output path. (`find_utf8_boundary` lives in `service::pty`, not here, and is now unused on the live path.)
 - **`helper.rs`** runs an Axum server in a background thread; port stored in env var passed to PTY shells
 - **`slug.rs`** is well-tested; handles CJK → pinyin romanization (don't simplify)
 - **`db.rs`** uses WAL journal mode + `foreign_keys=ON` — don't change pragmas without testing

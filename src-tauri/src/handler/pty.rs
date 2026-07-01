@@ -1,5 +1,7 @@
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, State};
 
+use crate::bridge::PtyOutputSinks;
 use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
@@ -113,6 +115,35 @@ pub async fn restore_pty_session(
 		service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
 	})
 	.await
+}
+
+/// Register a raw-byte output channel for a live session. The terminal calls
+/// this on mount; subsequent PTY output for `session_id` streams as binary
+/// frames over `on_output`. Output produced before attach is recovered from the
+/// persisted log via `get_pty_session_history` (same seam as the old event API).
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn attach_pty_output(
+	session_id: String,
+	on_output: Channel<InvokeResponseBody>,
+	sinks: State<'_, PtyOutputSinks>,
+) -> Result<(), AppError> {
+	let mut map = sinks.lock().map_err(|_| AppError::LockError)?;
+	map.insert(session_id, on_output);
+	Ok(())
+}
+
+/// Remove a session's output channel (terminal teardown). Persistence is
+/// unaffected — only frontend delivery stops.
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn detach_pty_output(
+	session_id: String,
+	sinks: State<'_, PtyOutputSinks>,
+) -> Result<(), AppError> {
+	let mut map = sinks.lock().map_err(|_| AppError::LockError)?;
+	map.remove(&session_id);
+	Ok(())
 }
 
 #[tauri::command]

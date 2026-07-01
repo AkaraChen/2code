@@ -1,3 +1,4 @@
+import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -11,7 +12,9 @@ import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
+	attachPtyOutput,
 	clearPtyOutput,
+	detachPtyOutput,
 	flushPtyOutput,
 	getPtySessionHistory,
 	resizePty,
@@ -23,7 +26,7 @@ import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
 import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
-import { getSuffixPrefixOverlapLength } from "./overlap";
+import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import {
@@ -95,9 +98,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
 	const serializeAddonRef = useRef<SerializeAddon | null>(null);
-	const webglAddonRef = useRef<(() => import("@xterm/addon-webgl").WebglAddon | null) | null>(null);
 	const isStreamReadyRef = useRef(false);
-	const pendingEventsRef = useRef<string[]>([]);
+	const pendingEventsRef = useRef<Uint8Array[]>([]);
 	const [pendingLink, setPendingLink] = useState<string | null>(null);
 	const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
 	const fontSize = useTerminalSettingsStore((s) => s.fontSize);
@@ -132,15 +134,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			sanitizedFont,
 		);
 
-		// WebGL renderer caches glyphs in a texture atlas. Changing fontFamily
-		// doesn't invalidate the atlas, so the old font's glyphs keep rendering.
-		// Clear the atlas + force a full repaint so the new font is picked up.
-		const webgl = webglAddonRef.current?.();
-		if (webgl) {
-			try {
-				webgl.clearTextureAtlas();
-			} catch {}
-		}
+		// The DOM renderer repaints glyphs directly; a full refresh is enough to
+		// pick up the new font (no texture atlas to invalidate).
 		term.refresh(0, Math.max(0, term.rows - 1));
 
 		// Refit immediately if visible
@@ -152,11 +147,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			() => termRef.current === term,
 			() => {
 				const changed = measureAndResize(term, fitAddon, term.element?.parentElement ?? null);
-				// Clear atlas again after font settles — metrics may have changed
-				const w = webglAddonRef.current?.();
-				if (w) {
-					try { w.clearTextureAtlas(); } catch {}
-				}
+				// Repaint after font settles — metrics may have changed
 				term.refresh(0, Math.max(0, term.rows - 1));
 				if (changed) {
 					resizePty({ sessionId, rows: term.rows, cols: term.cols });
@@ -223,7 +214,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			let disposed = false;
 			isStreamReadyRef.current = false;
 			pendingEventsRef.current = [];
-			const liveOutputBuffer: string[] = [];
+			const liveOutputBuffer: Uint8Array[] = [];
 			let liveOutputFrame: number | null = null;
 			let lastCopiedSelection = "";
 
@@ -273,14 +264,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			container.appendChild(wrapper);
 			termRef.current = term;
 
-			// 2. Load all addons via lib (WebGL + degradation memory + Unicode11 +
-			//    Serialize + Search + Clipboard + Image + Ligatures + Progress + WebLinks)
+			// 2. Load all addons via lib (Unicode11 + Serialize + Search +
+			//    Clipboard + Image + Ligatures + Progress + WebLinks). Rendering
+			//    uses xterm.js's built-in DOM renderer (no GPU addon).
 			const addonsResult = loadAddons(term, {
 				onWebLinkActivate: handleTerminalLinkOpen,
 			});
 			fitAddonRef.current = addonsResult.fitAddon;
 			serializeAddonRef.current = addonsResult.serializeAddon;
-			webglAddonRef.current = addonsResult.webglAddon;
 			cleanups.push(addonsResult.dispose);
 
 			// 3. Suppress query response sequences (CPR, focus reports, mode reports)
@@ -431,65 +422,75 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			function flushLiveOutputBuffer() {
 				liveOutputFrame = null;
 				if (liveOutputBuffer.length === 0 || disposed) return;
-				const output = liveOutputBuffer.join("");
+				const output = concatBytes(liveOutputBuffer);
 				liveOutputBuffer.length = 0;
 				term.write(output);
 			}
 
-			function writeLiveOutput(output: string) {
-				if (!output || disposed) return;
+			function writeLiveOutput(output: Uint8Array) {
+				if (output.length === 0 || disposed) return;
 				liveOutputBuffer.push(output);
 				if (liveOutputFrame !== null) return;
 				liveOutputFrame = window.requestAnimationFrame(flushLiveOutputBuffer);
 			}
 
-			function flushPendingEventsAfterHistory(historyText: string) {
-				const pendingText = pendingEventsRef.current.join("");
-				const overlap = getSuffixPrefixOverlapLength(historyText, pendingText);
-				const remainingPendingText = pendingText.slice(overlap);
+			function flushPendingEventsAfterHistory(history: Uint8Array) {
+				const pending = concatBytes(pendingEventsRef.current);
+				// Bytes emitted between attach and the history read overlap the tail
+				// of the history; drop the double-covered prefix so it isn't written
+				// twice.
+				const overlap = getSuffixPrefixOverlapLengthBytes(history, pending);
+				const remaining = pending.subarray(overlap);
 				pendingEventsRef.current = [];
 				isStreamReadyRef.current = true;
-				if (remainingPendingText.length > 0) {
-					writeLiveOutput(remainingPendingText);
+				if (remaining.length > 0) {
+					writeLiveOutput(remaining);
 				}
 			}
 
 			function replayInitialHistory(history: Uint8Array) {
 				if (disposed) return;
 				if (history.length === 0) {
-					flushPendingEventsAfterHistory("");
+					flushPendingEventsAfterHistory(history);
 					return;
 				}
-				const historyText = new TextDecoder().decode(history);
 				term.write(history, () => {
-					flushPendingEventsAfterHistory(historyText);
+					flushPendingEventsAfterHistory(history);
 				});
 			}
 
-			// 12. Register Tauri event listeners + replay history
+			// 12. Register PTY output channel + exit listener, then replay history.
+			//
+			// Output streams as raw binary frames over a per-session `Channel`
+			// (no JSON serialization) — xterm.js decodes UTF-8 across writes, so
+			// we write the bytes as-is. Exit stays a low-volume global event.
 			async function setupListenersAndReplayHistory() {
-				const unlistenOutput = await listen<string>(
-					`pty-output-${sessionId}`,
-					(event) => {
-						if (!isStreamReadyRef.current) {
-							pendingEventsRef.current.push(event.payload);
-							return;
-						}
-						writeLiveOutput(event.payload);
-					},
-				);
+				const outputChannel = new Channel<ArrayBuffer>();
+				outputChannel.onmessage = (payload) => {
+					const bytes = new Uint8Array(payload);
+					if (!isStreamReadyRef.current) {
+						pendingEventsRef.current.push(bytes);
+						return;
+					}
+					writeLiveOutput(bytes);
+				};
+				await attachPtyOutput({ sessionId, onOutput: outputChannel });
 				const unlistenExit = await listen(
 					`pty-exit-${sessionId}`,
 					() => {
-						writeLiveOutput("\r\n\x1B[90m[Process exited]\x1B[0m\r\n");
+						writeLiveOutput(
+							new TextEncoder().encode(
+								"\r\n\x1B[90m[Process exited]\x1B[0m\r\n",
+							),
+						);
 					},
 				);
 				if (disposed) {
-					unlistenOutput();
+					void detachPtyOutput({ sessionId }).catch(() => {});
 					unlistenExit();
 					return;
 				}
-				unlisteners.push(unlistenOutput, unlistenExit);
+				unlisteners.push(unlistenExit);
 				const restoredHistory = sessionHistory.get(sessionId);
 				if (restoredHistory) {
 					sessionHistory.delete(sessionId);
@@ -504,7 +505,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 						`[pty-terminal] failed to load initial history for session ${sessionId}`,
 						error,
 					);
-					flushPendingEventsAfterHistory("");
+					flushPendingEventsAfterHistory(new Uint8Array(0));
 				}
 			}
 			void setupListenersAndReplayHistory();
@@ -520,6 +521,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			// 14. React 19 ref cleanup
 			return () => {
 				disposed = true;
+
+				// Stop backend delivery over the output channel (persistence continues)
+				void detachPtyOutput({ sessionId }).catch(() => {});
 
 				// Flush buffered PTY output to DB before teardown (best-effort)
 				flushPtyOutput({ sessionId }).catch(() => {});

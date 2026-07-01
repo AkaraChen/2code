@@ -108,6 +108,8 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 }));
 
 vi.mock("@/generated", () => ({
+	attachPtyOutput: vi.fn(() => Promise.resolve()),
+	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	clearPtyOutput: vi.fn(() => Promise.resolve()),
 	flushPtyOutput: vi.fn(() => Promise.resolve()),
 	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
@@ -153,7 +155,6 @@ vi.mock("./lib", () => ({
 	loadAddons: () => ({
 		fitAddon: { fit: vi.fn() },
 		serializeAddon: { serialize: vi.fn(() => "") },
-		webglAddon: () => null,
 		dispose: vi.fn(),
 	}),
 	measureAndResize: vi.fn(() => false),

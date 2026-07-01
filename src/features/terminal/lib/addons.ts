@@ -6,7 +6,6 @@ import { ProgressAddon } from "@xterm/addon-progress";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import type { Terminal as XTerm } from "@xterm/xterm";
 
@@ -15,14 +14,8 @@ export interface LoadAddonsResult {
 	searchAddon: SearchAddon;
 	serializeAddon: SerializeAddon;
 	progressAddon: ProgressAddon;
-	webglAddon: () => WebglAddon | null;
 	dispose: () => void;
 }
-
-// Once WebGL fails, skip it for all subsequent terminals (VS Code pattern).
-let suggestedRendererType: "webgl" | "dom" | undefined;
-
-export type { WebglAddon };
 
 export function loadAddons(
 	terminal: XTerm,
@@ -30,9 +23,6 @@ export function loadAddons(
 		onWebLinkActivate?: (event: MouseEvent, uri: string) => void;
 	} = {},
 ): LoadAddonsResult {
-	let disposed = false;
-	let webglAddon: WebglAddon | null = null;
-
 	const fitAddon = new FitAddon();
 	const searchAddon = new SearchAddon();
 	const serializeAddon = new SerializeAddon();
@@ -61,38 +51,14 @@ export function loadAddons(
 	terminal.loadAddon(unicode11);
 	terminal.unicode.activeVersion = "11";
 
-	// Defer WebGL to rAF to avoid racing xterm's post-open viewport sync.
-	const rafId = requestAnimationFrame(() => {
-		if (disposed || suggestedRendererType === "dom") return;
-
-		try {
-			webglAddon = new WebglAddon();
-			webglAddon.onContextLoss(() => {
-				webglAddon?.dispose();
-				webglAddon = null;
-				suggestedRendererType = "dom";
-				terminal.refresh(0, terminal.rows - 1);
-			});
-			terminal.loadAddon(webglAddon);
-		} catch {
-			suggestedRendererType = "dom";
-			webglAddon = null;
-		}
-	});
-
+	// No GPU renderer addon is loaded, so xterm.js uses its built-in DOM
+	// renderer. It repaints glyphs directly, so font changes need no atlas
+	// invalidation — a plain `term.refresh()` suffices.
 	return {
 		fitAddon,
 		searchAddon,
 		serializeAddon,
 		progressAddon,
-		webglAddon: () => webglAddon,
-		dispose: () => {
-			disposed = true;
-			cancelAnimationFrame(rafId);
-			try {
-				webglAddon?.dispose();
-			} catch {}
-			webglAddon = null;
-		},
+		dispose: () => {},
 	};
 }

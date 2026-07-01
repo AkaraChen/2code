@@ -557,7 +557,6 @@ fn read_pty_output(
 	flush_senders: PtyFlushSenders,
 ) {
 	let mut buf = [0u8; 4096];
-	let mut utf8_remainder: Vec<u8> = Vec::new();
 
 	// Decouple persistence into a separate thread via channel
 	let (tx, rx) = mpsc::channel::<PersistMsg>();
@@ -592,28 +591,13 @@ fn read_pty_output(
 					let _ = tx.send(PersistMsg::Data(raw.to_vec()));
 				}
 
-				// Prepend any leftover bytes from incomplete UTF-8 sequence
-				let combined;
-				let to_decode: &[u8] = if utf8_remainder.is_empty() {
-					raw
-				} else {
-					utf8_remainder.extend_from_slice(raw);
-					combined = std::mem::take(&mut utf8_remainder);
-					&combined
-				};
-
-				// Split at valid UTF-8 boundary
-				let boundary = find_utf8_boundary(to_decode);
-				if boundary > 0 {
-					let text = String::from_utf8_lossy(&to_decode[..boundary]);
-					if !emitter.emit_output(&session_id, text.as_ref()) {
-						break;
-					}
-				}
-
-				// Save trailing incomplete bytes for next iteration
-				if boundary < to_decode.len() {
-					utf8_remainder.extend_from_slice(&to_decode[boundary..]);
+				// Stream the raw chunk to the frontend as-is. xterm.js buffers
+				// incomplete multi-byte UTF-8 sequences across writes, so no
+				// boundary splitting is needed here (unlike the old JSON-string
+				// path). A missing sink (no terminal attached yet) is fine —
+				// those bytes are recovered from the persisted log on restore.
+				if !emitter.emit_output(&session_id, raw) {
+					break;
 				}
 			}
 			Err(_) => break,
