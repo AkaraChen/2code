@@ -19,6 +19,7 @@ import {
 	useCallback,
 	useEffect,
 	useMemo,
+	useReducer,
 	useRef,
 	useState,
 } from "react";
@@ -35,20 +36,14 @@ import {
 	writeFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
 import { toaster } from "@/shared/providers/appToaster";
-import FileViewerDialog from "./FileViewerDialog";
 import { toFileTreeGitStatus } from "./fileTreeGitStatus";
 import { compareFileTreePaths } from "./fileTreeSort";
 import {
-	FILE_TREE_PANEL_MAX_WIDTH,
-	FILE_TREE_PANEL_MIN_WIDTH,
-	useFileTreeStore,
-} from "./fileTreeStore";
-import {
 	useCreateFileTreePath,
 	useDeleteFileTreePaths,
+	useFileTreeExpandedChildPaths,
 	useFileTreeChildPaths,
 	useFileTreeGitStatus,
-	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
 	useOpenPathInDefaultApp,
 	useRenameFileTreePath,
@@ -65,6 +60,10 @@ const FILE_TREE_CONTENT_TRANSITION = {
 	duration: 0.18,
 	ease: [0.22, 1, 0.36, 1],
 } as const;
+const FILE_TREE_PANEL_MIN_WIDTH = 180;
+const FILE_TREE_PANEL_MAX_WIDTH = 560;
+const DEFAULT_FILE_TREE_PANEL_WIDTH = 208;
+const FILE_TREE_PANEL_STORAGE_KEY = "file-tree-panel";
 const TRAILING_PATH_SEPARATOR_RE = /[\\/]+$/;
 const FILE_TREE_CREATE_NAMES = {
 	directory: "New Folder",
@@ -94,13 +93,8 @@ interface FileTreePanelProps {
 	rootPath: string;
 	isOpen: boolean;
 	isActive?: boolean;
-	onOpenFile?: (filePath: string) => void;
+	onOpenFile: (filePath: string) => void;
 }
-
-const EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY = new Map<
-	string,
-	readonly string[]
->();
 
 function getTreeItemPathFromComposedPath(composedPath: readonly EventTarget[]) {
 	for (const target of composedPath) {
@@ -121,8 +115,72 @@ function toAbsolutePath(rootPath: string, relativePath: string) {
 	return `${normalizedRoot}/${relativePath}`;
 }
 
+function clampFileTreePanelWidth(width: number) {
+	return Math.min(
+		FILE_TREE_PANEL_MAX_WIDTH,
+		Math.max(FILE_TREE_PANEL_MIN_WIDTH, width),
+	);
+}
+
+function sanitizeFileTreePanelWidth(width: unknown) {
+	return typeof width === "number" && Number.isFinite(width)
+		? clampFileTreePanelWidth(width)
+		: DEFAULT_FILE_TREE_PANEL_WIDTH;
+}
+
+function readStoredFileTreePanelWidth() {
+	if (typeof window === "undefined") return DEFAULT_FILE_TREE_PANEL_WIDTH;
+	try {
+		const raw = window.localStorage.getItem(FILE_TREE_PANEL_STORAGE_KEY);
+		if (!raw) return DEFAULT_FILE_TREE_PANEL_WIDTH;
+		const parsed = JSON.parse(raw) as {
+			panelWidth?: unknown;
+			state?: { panelWidth?: unknown };
+		};
+		return sanitizeFileTreePanelWidth(
+			parsed.state?.panelWidth ?? parsed.panelWidth,
+		);
+	} catch {
+		return DEFAULT_FILE_TREE_PANEL_WIDTH;
+	}
+}
+
+function writeStoredFileTreePanelWidth(width: number) {
+	try {
+		window.localStorage.setItem(
+			FILE_TREE_PANEL_STORAGE_KEY,
+			JSON.stringify({ state: { panelWidth: width }, version: 2 }),
+		);
+	} catch {
+		// Ignore restricted storage; resizing should still work in-memory.
+	}
+}
+
+function useFileTreePanelWidth() {
+	const [panelWidth, setPanelWidth] = useState(
+		readStoredFileTreePanelWidth,
+	);
+	const updatePanelWidth = useCallback((width: number) => {
+		const nextWidth = clampFileTreePanelWidth(width);
+		setPanelWidth(nextWidth);
+		writeStoredFileTreePanelWidth(nextWidth);
+	}, []);
+	return [panelWidth, updatePanelWidth] as const;
+}
+
 function toPathCollisionKey(path: string) {
 	return path.replace(TRAILING_PATH_SEPARATOR_RE, "");
+}
+
+function toDirectoryPath(path: string) {
+	return `${path.replace(TRAILING_PATH_SEPARATOR_RE, "")}/`;
+}
+
+function isSameOrDescendantPath(path: string, parentPath: string) {
+	return (
+		path === parentPath ||
+		path.startsWith(toDirectoryPath(parentPath))
+	);
 }
 
 function getParentDirectoryPath(path: string) {
@@ -161,11 +219,12 @@ function uniqueCreatePath(
 function buildModelPaths(
 	treePaths: readonly string[] | undefined,
 	gitStatus: readonly GitStatusEntry[],
+	draftPath: string | null,
 ) {
 	const paths: string[] = [];
 	const seenPaths = new Set<string>();
 	const seenPathCollisionKeys = new Set<string>();
-	for (const path of treePaths ?? []) {
+	for (const path of [...(treePaths ?? []), ...(draftPath ? [draftPath] : [])]) {
 		paths.push(path);
 		seenPaths.add(path);
 		seenPathCollisionKeys.add(toPathCollisionKey(path));
@@ -216,6 +275,69 @@ interface RootContextMenuState {
 	y: number;
 }
 
+type FileTreeCreateDraft = {
+	kind: "directory" | "file";
+	path: string;
+} | null;
+
+interface FileTreeUiState {
+	draftCreate: FileTreeCreateDraft;
+	expandedPaths: readonly string[];
+	rootContextMenu: RootContextMenuState | null;
+	selectedPaths: readonly string[];
+}
+
+type FileTreeUiAction =
+	| { type: "closeRootContextMenu" }
+	| { type: "collapse"; path: string }
+	| { type: "expand"; path: string }
+	| { type: "openRootContextMenu"; position: RootContextMenuState }
+	| { type: "select"; paths: readonly string[] }
+	| { type: "setDraftCreate"; draftCreate: FileTreeCreateDraft };
+
+const FILE_TREE_UI_INITIAL_STATE: FileTreeUiState = {
+	draftCreate: null,
+	expandedPaths: [],
+	rootContextMenu: null,
+	selectedPaths: [],
+};
+
+function fileTreeUiReducer(
+	state: FileTreeUiState,
+	action: FileTreeUiAction,
+): FileTreeUiState {
+	switch (action.type) {
+		case "closeRootContextMenu":
+			return state.rootContextMenu
+				? { ...state, rootContextMenu: null }
+				: state;
+		case "collapse": {
+			const directoryPath = toDirectoryPath(action.path);
+			const expandedPaths = state.expandedPaths.filter(
+				(path) => !isSameOrDescendantPath(path, directoryPath),
+			);
+			return expandedPaths.length === state.expandedPaths.length
+				? state
+				: { ...state, expandedPaths };
+		}
+		case "expand": {
+			const directoryPath = toDirectoryPath(action.path);
+			return state.expandedPaths.includes(directoryPath)
+				? state
+				: {
+						...state,
+						expandedPaths: [...state.expandedPaths, directoryPath],
+					};
+		}
+		case "openRootContextMenu":
+			return { ...state, rootContextMenu: action.position };
+		case "select":
+			return { ...state, selectedPaths: [...action.paths] };
+		case "setDraftCreate":
+			return { ...state, draftCreate: action.draftCreate };
+	}
+}
+
 function getMenuPositioning(anchor: RootContextMenuState) {
 	return {
 		fitViewport: true,
@@ -232,6 +354,19 @@ function getMenuPositioning(anchor: RootContextMenuState) {
 		slide: true,
 		strategy: "fixed" as const,
 	};
+}
+
+function resetFileTreeModel(
+	model: FileTreeModel | null,
+	paths: readonly string[],
+	expandedPaths: readonly string[],
+) {
+	if (!model) return;
+	if (expandedPaths.length > 0) {
+		model.resetPaths(paths, { initialExpandedPaths: expandedPaths });
+	} else {
+		model.resetPaths(paths);
+	}
 }
 
 interface FileTreeRootContextMenuProps {
@@ -521,43 +656,21 @@ export default function FileTreePanel({
 	isActive = true,
 	onOpenFile,
 }: FileTreePanelProps) {
-	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
-	const [rootContextMenu, setRootContextMenu] =
-		useState<RootContextMenuState | null>(null);
-	const [selectedPaths, setSelectedPaths] = useState<readonly string[]>([]);
-	const [loadedChildPathsState, setLoadedChildPathsState] = useState<{
-		rootPath: string;
-		rootChildPaths: readonly string[] | undefined;
-		rootChildPathsUpdatedAt: number;
-		childPathsByDirectory: ReadonlyMap<string, readonly string[]>;
-	}>(() => ({
-		rootPath,
-		rootChildPaths: undefined,
-		rootChildPathsUpdatedAt: 0,
-		childPathsByDirectory: new Map(),
-	}));
+	const [
+		{ draftCreate, expandedPaths, rootContextMenu, selectedPaths },
+		dispatchFileTreeUi,
+	] = useReducer(fileTreeUiReducer, FILE_TREE_UI_INITIAL_STATE);
 	const rootPathRef = useRef(rootPath);
-	const rootChildPathsRef = useRef<readonly string[] | undefined>(undefined);
 	const onOpenFileRef = useRef(onOpenFile);
 	const filePathSetRef = useRef<ReadonlySet<string>>(new Set());
 	const treePathSetRef = useRef<ReadonlySet<string>>(new Set());
 	const modelPathsRef = useRef<readonly string[]>([]);
 	const gitStatusRef = useRef<readonly GitStatusEntry[]>([]);
 	const modelRef = useRef<FileTreeModel | null>(null);
-	const pendingCreatePathRef = useRef<
-		Map<string, { kind: "directory" | "file" }>
-	>(new Map());
+	const draftCreateRef = useRef(draftCreate);
 	const lastResetModelRef = useRef<FileTreeModel | null>(null);
 	const lastResetModelPathsRef = useRef<readonly string[] | null>(null);
-	const rootChildPathsUpdatedAtRef = useRef(0);
-	const lastRootChildPathsUpdatedAtRef = useRef(0);
-	const expandedPathSetRef = useRef<Set<string>>(new Set());
-	const loadedDirectoryChildPathsRef = useRef<
-		Map<string, readonly string[]>
-	>(new Map());
-	const loadingDirectoryPromisesRef = useRef<
-		Map<string, Promise<readonly string[]>>
-	>(new Map());
+	const lastResetExpandedPathsRef = useRef<readonly string[] | null>(null);
 	const skipNextSelectionOpenRef = useRef(false);
 	const skipNextClickOpenRef = useRef(false);
 	const skipNextClickOpenUntilRef = useRef(0);
@@ -566,8 +679,7 @@ export default function FileTreePanel({
 	const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
 	const moveFileTreePathsRef = useRef((_event: FileTreeDropResult) => {});
 	const prefersReducedMotion = useReducedMotion() ?? false;
-	const panelWidth = useFileTreeStore((s) => s.panelWidth);
-	const setPanelWidth = useFileTreeStore((s) => s.setPanelWidth);
+	const [panelWidth, setPanelWidth] = useFileTreePanelWidth();
 	const resize = useHorizontalResize({
 		value: panelWidth,
 		min: FILE_TREE_PANEL_MIN_WIDTH,
@@ -578,7 +690,6 @@ export default function FileTreePanel({
 
 	const {
 		data: rootChildPaths,
-		dataUpdatedAt: rootChildPathsUpdatedAt,
 		error: treePathsError,
 		isError: isTreePathsError,
 	} = useFileTreeChildPaths(profileId, null, isOpen && isActive);
@@ -586,36 +697,34 @@ export default function FileTreePanel({
 		profileId,
 		isOpen && isActive,
 	);
-	const loadFileTreeChildPaths = useLoadFileTreeChildPaths(profileId);
+	const expandedChildPathResults = useFileTreeExpandedChildPaths(
+		profileId,
+		expandedPaths,
+		isOpen && isActive,
+	);
 	const createFileTreePath = useCreateFileTreePath(profileId);
 	const renameFileTreePath = useRenameFileTreePath(profileId);
 	const moveFileTreePaths = useMoveFileTreePaths(profileId);
 	const deleteFileTreePaths = useDeleteFileTreePaths(profileId);
 	const openPathInDefaultApp = useOpenPathInDefaultApp(profileId);
 	const revealPathInFileManager = useRevealPathInFileManager(profileId);
-	const loadedDirectoryChildPaths =
-		loadedChildPathsState.rootPath === rootPath &&
-		loadedChildPathsState.rootChildPaths === rootChildPaths &&
-		loadedChildPathsState.rootChildPathsUpdatedAt === rootChildPathsUpdatedAt
-			? loadedChildPathsState.childPathsByDirectory
-			: EMPTY_LOADED_CHILD_PATHS_BY_DIRECTORY;
 	const treePaths = useMemo(
 		() => {
 			const paths = rootChildPaths ? [...rootChildPaths] : [];
-			for (const childPaths of loadedDirectoryChildPaths.values()) {
-				paths.push(...childPaths);
+			for (const result of expandedChildPathResults) {
+				if (result.data) paths.push(...result.data);
 			}
 			return paths;
 		},
-		[loadedDirectoryChildPaths, rootChildPaths],
+		[expandedChildPathResults, rootChildPaths],
 	);
 	const gitStatus = useMemo(
 		() => toFileTreeGitStatus(gitStatusEntries),
 		[gitStatusEntries],
 	);
 	const modelPaths = useMemo(
-		() => buildModelPaths(treePaths, gitStatus),
-		[gitStatus, treePaths],
+		() => buildModelPaths(treePaths, gitStatus, draftCreate?.path ?? null),
+		[draftCreate?.path, gitStatus, treePaths],
 	);
 	const existingPathSet = useMemo(
 		() => buildExistingPathSet(treePaths, gitStatus),
@@ -637,178 +746,40 @@ export default function FileTreePanel({
 	const deletablePathSet = existingPathSet;
 
 	rootPathRef.current = rootPath;
-	rootChildPathsRef.current = rootChildPaths;
-	rootChildPathsUpdatedAtRef.current = rootChildPathsUpdatedAt;
 	onOpenFileRef.current = onOpenFile;
 	filePathSetRef.current = filePathSet;
 	treePathSetRef.current = treePathSet;
 	modelPathsRef.current = modelPaths;
 	gitStatusRef.current = gitStatus;
-
-	useEffect(() => {
-		expandedPathSetRef.current.clear();
-		loadedDirectoryChildPathsRef.current.clear();
-		loadingDirectoryPromisesRef.current.clear();
-		pendingCreatePathRef.current.clear();
-		lastResetModelPathsRef.current = null;
-		lastRootChildPathsUpdatedAtRef.current = 0;
-	}, [rootPath]);
+	draftCreateRef.current = draftCreate;
 
 	const openRelativeFile = useCallback((relativePath: string) => {
-		if (onOpenFileRef.current) {
-			onOpenFileRef.current(relativePath);
-		} else {
-			setOpenFilePath(relativePath);
-		}
+		onOpenFileRef.current(relativePath);
 	}, []);
 
-	const loadDirectoryChildren = useCallback(
-		(directoryPath: string) => {
-			if (loadedDirectoryChildPathsRef.current.has(directoryPath)) {
-				return Promise.resolve(
-					loadedDirectoryChildPathsRef.current.get(directoryPath) ?? [],
-				);
-			}
-			const pendingLoad =
-				loadingDirectoryPromisesRef.current.get(directoryPath);
-			if (pendingLoad) {
-				return pendingLoad;
-			}
-
-			const requestRootPath = rootPathRef.current;
-			const requestRootChildPaths = rootChildPathsRef.current;
-			const requestRootChildPathsUpdatedAt =
-				rootChildPathsUpdatedAtRef.current;
-			const loadPromise = loadFileTreeChildPaths(directoryPath)
-				.then((childPaths) => {
-					if (
-						rootPathRef.current !== requestRootPath ||
-						rootChildPathsRef.current !== requestRootChildPaths ||
-						rootChildPathsUpdatedAtRef.current !==
-							requestRootChildPathsUpdatedAt
-					) {
-						return [];
-					}
-					loadedDirectoryChildPathsRef.current.set(
-						directoryPath,
-						childPaths,
-					);
-					setLoadedChildPathsState((current) => {
-						const next = new Map(
-							current.rootPath === requestRootPath &&
-								current.rootChildPathsUpdatedAt ===
-									requestRootChildPathsUpdatedAt
-								? current.childPathsByDirectory
-								: undefined,
-						);
-						next.set(directoryPath, childPaths);
-						return {
-							rootPath: requestRootPath,
-							rootChildPaths: requestRootChildPaths,
-							rootChildPathsUpdatedAt:
-								requestRootChildPathsUpdatedAt,
-							childPathsByDirectory: next,
-						};
-					});
-					return childPaths;
-				})
-				.catch((error) => {
-					if (
-						rootPathRef.current !== requestRootPath ||
-						rootChildPathsRef.current !== requestRootChildPaths ||
-						rootChildPathsUpdatedAtRef.current !==
-							requestRootChildPathsUpdatedAt
-					) {
-						return [];
-					}
-					toaster.create({
-						title: m.somethingWentWrong(),
-						description: getErrorMessage(error),
-						type: "error",
-						closable: true,
-					});
-					return [];
-				})
-				.finally(() => {
-					loadingDirectoryPromisesRef.current.delete(directoryPath);
-				});
-			loadingDirectoryPromisesRef.current.set(directoryPath, loadPromise);
-			return loadPromise;
-		},
-		[loadFileTreeChildPaths],
-	);
-	useEffect(() => {
-		if (
-			!rootChildPaths ||
-			rootChildPathsUpdatedAt === 0 ||
-			lastRootChildPathsUpdatedAtRef.current === rootChildPathsUpdatedAt
-		) {
-			return;
-		}
-		lastRootChildPathsUpdatedAtRef.current = rootChildPathsUpdatedAt;
-
-		const expandedPaths = [...expandedPathSetRef.current];
-		const rootChildPathSet = new Set(rootChildPaths);
-		for (const path of expandedPaths) {
-			const normalizedPath = path.replace(/\/$/, "");
-			if (!normalizedPath.includes("/") && !rootChildPathSet.has(path)) {
-				expandedPathSetRef.current.delete(path);
-			}
-		}
-
-		loadedDirectoryChildPathsRef.current.clear();
-		loadingDirectoryPromisesRef.current.clear();
-		lastResetModelPathsRef.current = null;
-
-		const expandedPathSet = new Set(expandedPathSetRef.current);
-		const reloadExpandedPath = (path: string) => {
-			void loadDirectoryChildren(path).then((childPaths) => {
-				for (const childPath of childPaths) {
-					if (childPath.endsWith("/") && expandedPathSet.has(childPath)) {
-						reloadExpandedPath(childPath);
-					}
-				}
-			});
-		};
-		for (const path of expandedPathSet) {
-			const normalizedPath = path.replace(/\/$/, "");
-			if (!normalizedPath.includes("/")) {
-				reloadExpandedPath(path);
-			}
-		}
-	}, [
-		loadDirectoryChildren,
-		rootChildPaths,
-		rootChildPathsUpdatedAt,
-	]);
-	const loadExpandedDirectoryChildren = useCallback(
-		(directoryPath: string) => {
-			void loadDirectoryChildren(directoryPath);
-		},
-		[loadDirectoryChildren],
-	);
-
+	const expandDirectoryPath = useCallback((path: string) => {
+		dispatchFileTreeUi({ type: "expand", path });
+	}, []);
+	const collapseDirectoryPath = useCallback((path: string) => {
+		dispatchFileTreeUi({ type: "collapse", path });
+	}, []);
 	restoreModelRef.current = () => {
-		const expandedPaths = [...expandedPathSetRef.current];
-		if (expandedPaths.length > 0) {
-			modelRef.current?.resetPaths(modelPathsRef.current, {
-				initialExpandedPaths: expandedPaths,
-			});
-		} else {
-			modelRef.current?.resetPaths(modelPathsRef.current);
-		}
+		resetFileTreeModel(modelRef.current, modelPathsRef.current, expandedPaths);
 		modelRef.current?.setGitStatus(gitStatusRef.current);
 	};
 	renameFileTreePathRef.current = (event) => {
-		const pendingCreate = pendingCreatePathRef.current.get(
-			event.sourcePath,
-		);
-		if (pendingCreate) {
-			pendingCreatePathRef.current.delete(event.sourcePath);
+		const draft = draftCreateRef.current;
+		if (draft?.path === event.sourcePath) {
 			void createFileTreePath
 				.mutateAsync({
-					kind: pendingCreate.kind,
+					kind: draft.kind,
 					path: event.destinationPath,
+				})
+				.then(() => {
+					dispatchFileTreeUi({
+						type: "setDraftCreate",
+						draftCreate: null,
+					});
 				})
 				.catch((error) => {
 					toaster.create({
@@ -816,6 +787,10 @@ export default function FileTreePanel({
 						description: getErrorMessage(error),
 						type: "error",
 						closable: true,
+					});
+					dispatchFileTreeUi({
+						type: "setDraftCreate",
+						draftCreate: null,
 					});
 					restoreModelRef.current();
 				});
@@ -874,7 +849,7 @@ export default function FileTreePanel({
 		icons: "complete",
 		initialExpansion: "closed",
 		onSelectionChange: (selectedPaths) => {
-			setSelectedPaths([...selectedPaths]);
+			dispatchFileTreeUi({ type: "select", paths: selectedPaths });
 			if (skipNextSelectionOpenRef.current) {
 				skipNextSelectionOpenRef.current = false;
 				return;
@@ -888,7 +863,7 @@ export default function FileTreePanel({
 		paths: [],
 		renaming: {
 			canRename: (item) =>
-				pendingCreatePathRef.current.has(item.path) ||
+				draftCreateRef.current?.path === item.path ||
 				hasTreePath(treePathSetRef.current, item.path),
 			onError: () => {
 				restoreModelRef.current();
@@ -904,22 +879,17 @@ export default function FileTreePanel({
 	useEffect(() => {
 		if (
 			lastResetModelRef.current === model &&
-			lastResetModelPathsRef.current === modelPaths
+			lastResetModelPathsRef.current === modelPaths &&
+			lastResetExpandedPathsRef.current === expandedPaths
 		) {
 			return;
 		}
 
-		const expandedPaths = [...expandedPathSetRef.current];
-		if (expandedPaths.length > 0) {
-			model.resetPaths(modelPaths, {
-				initialExpandedPaths: expandedPaths,
-			});
-		} else {
-			model.resetPaths(modelPaths);
-		}
+		resetFileTreeModel(model, modelPaths, expandedPaths);
 		lastResetModelRef.current = model;
 		lastResetModelPathsRef.current = modelPaths;
-	}, [model, modelPaths]);
+		lastResetExpandedPathsRef.current = expandedPaths;
+	}, [expandedPaths, model, modelPaths]);
 
 	useEffect(() => {
 		model.setGitStatus(gitStatus);
@@ -927,7 +897,7 @@ export default function FileTreePanel({
 
 	const handleTreeClick = useCallback(
 		(event: MouseEvent<HTMLElement>) => {
-			setRootContextMenu(null);
+			dispatchFileTreeUi({ type: "closeRootContextMenu" });
 			if (skipNextClickOpenRef.current) {
 				const shouldSkipClick = Date.now() <= skipNextClickOpenUntilRef.current;
 				skipNextClickOpenRef.current = false;
@@ -949,14 +919,13 @@ export default function FileTreePanel({
 			const item = itemPath ? model.getItem(itemPath) : null;
 			if (item?.isDirectory() && "isExpanded" in item) {
 				if (item.isExpanded()) {
-					expandedPathSetRef.current.add(item.getPath());
-					loadExpandedDirectoryChildren(item.getPath());
+					expandDirectoryPath(item.getPath());
 				} else {
-					expandedPathSetRef.current.delete(item.getPath());
+					collapseDirectoryPath(item.getPath());
 				}
 			}
 		},
-		[loadExpandedDirectoryChildren, model, openRelativeFile],
+		[collapseDirectoryPath, expandDirectoryPath, model, openRelativeFile],
 	);
 
 	const handleTreeKeyUp = useCallback(
@@ -964,13 +933,12 @@ export default function FileTreePanel({
 			const item = model.getFocusedItem();
 			if (!item?.isDirectory() || !("isExpanded" in item)) return;
 			if (item.isExpanded()) {
-				expandedPathSetRef.current.add(item.getPath());
-				loadExpandedDirectoryChildren(item.getPath());
+				expandDirectoryPath(item.getPath());
 			} else {
-				expandedPathSetRef.current.delete(item.getPath());
+				collapseDirectoryPath(item.getPath());
 			}
 		},
-		[loadExpandedDirectoryChildren, model],
+		[collapseDirectoryPath, expandDirectoryPath, model],
 	);
 
 	const handleTreeMouseDown = useCallback(
@@ -993,10 +961,13 @@ export default function FileTreePanel({
 				kind,
 				treePathSetRef.current,
 			);
-			pendingCreatePathRef.current.set(createPath, { kind });
+			dispatchFileTreeUi({
+				type: "setDraftCreate",
+				draftCreate: { kind, path: createPath },
+			});
 			model.add(createPath);
 			if (parentPath) {
-				expandedPathSetRef.current.add(parentPath);
+				expandDirectoryPath(parentPath);
 				const parentItem = model.getItem(parentPath);
 				if (parentItem?.isDirectory()) {
 					(parentItem as FileTreeDirectoryHandle).expand();
@@ -1004,7 +975,7 @@ export default function FileTreePanel({
 			}
 			model.startRenaming(createPath, { removeIfCanceled: true });
 		},
-		[model],
+		[expandDirectoryPath, model],
 	);
 	const handleTreeContextMenu = useCallback(
 		(event: MouseEvent<HTMLElement>) => {
@@ -1016,14 +987,17 @@ export default function FileTreePanel({
 				return;
 			}
 			if (getTreeItemPath(event)) {
-				setRootContextMenu(null);
+				dispatchFileTreeUi({ type: "closeRootContextMenu" });
 				return;
 			}
 
 			event.preventDefault();
-			setRootContextMenu({
-				x: event.clientX,
-				y: event.clientY,
+			dispatchFileTreeUi({
+				type: "openRootContextMenu",
+				position: {
+					x: event.clientX,
+					y: event.clientY,
+				},
 			});
 		},
 		[],
@@ -1094,7 +1068,7 @@ export default function FileTreePanel({
 		}
 	}, []);
 	const closeRootContextMenu = useCallback(() => {
-		setRootContextMenu(null);
+		dispatchFileTreeUi({ type: "closeRootContextMenu" });
 	}, []);
 	const handleDeletePaths = useCallback(
 		async (paths: readonly string[]) => {
@@ -1329,15 +1303,6 @@ export default function FileTreePanel({
 					</motion.div>
 				</Box>
 			</Box>
-
-			{openFilePath && (
-				<FileViewerDialog
-					profileId={profileId}
-					rootPath={rootPath}
-					filePath={openFilePath}
-					onClose={() => setOpenFilePath(null)}
-				/>
-			)}
 		</>
 	);
 }

@@ -162,10 +162,10 @@ describe("queryKeys", () => {
 	});
 
 	describe("filesystem", () => {
-		it("tree() includes the folder path", () => {
-			expect(queryKeys.fs.tree("/tmp/worktree")).toEqual([
+		it("treeChildrenPrefix() includes the profile", () => {
+			expect(queryKeys.fs.treeChildrenPrefix("profile-1")).toEqual([
 				"fs-tree",
-				"/tmp/worktree",
+				"profile-1",
 			]);
 		});
 

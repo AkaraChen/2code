@@ -121,7 +121,7 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 			queryKey: queryKeys.git.status(profileId),
 		});
 		queryClient.invalidateQueries({
-			queryKey: queryKeys.fs.tree(profileId),
+			queryKey: queryKeys.fs.treeChildrenPrefix(profileId),
 			exact: false,
 		});
 	}

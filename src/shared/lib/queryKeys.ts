@@ -81,7 +81,8 @@ export const queryKeys = {
 			["fs-file-preview", profileId, path] as const,
 		search: (profileId: string, query: string) =>
 			["fs-search", profileId, query] as const,
-		tree: (profileId: string) => ["fs-tree", profileId] as const,
+		treeChildrenPrefix: (profileId: string) =>
+			["fs-tree", profileId] as const,
 		treeChildren: (profileId: string, parentPath: string | null) =>
 			["fs-tree", profileId, parentPath] as const,
 	},

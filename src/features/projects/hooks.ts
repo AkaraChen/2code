@@ -1,10 +1,13 @@
 import {
+	type QueryKey,
+	type QueryClient,
 	useMutation,
 	useQuery,
 	useQueryClient,
+	useQueries,
 	useSuspenseQuery,
 } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import {
 	getCachedProjectAvatar,
 	setCachedProjectAvatar,
@@ -43,6 +46,8 @@ import {
 } from "@/generated";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
+
+const FILE_TREE_STALE_TIME_MS = 5000;
 
 interface UseProjectAvatarOptions {
 	enabled?: boolean;
@@ -299,21 +304,89 @@ export function useFileTreeChildPaths(
 		queryKey: queryKeys.fs.treeChildren(profileId, parentPath),
 		queryFn: () => listFileTreeChildPaths({ profileId, parentPath }),
 		enabled: !!profileId && enabled,
-		staleTime: 5000,
+		staleTime: FILE_TREE_STALE_TIME_MS,
 	});
 }
 
-export function useLoadFileTreeChildPaths(profileId: string) {
-	const queryClient = useQueryClient();
-	return useCallback(
-		(parentPath: string) =>
-			queryClient.fetchQuery({
-				queryKey: queryKeys.fs.treeChildren(profileId, parentPath),
-				queryFn: () => listFileTreeChildPaths({ profileId, parentPath }),
-				staleTime: 5000,
-			}),
-		[queryClient, profileId],
+export function useFileTreeExpandedChildPaths(
+	profileId: string,
+	parentPaths: readonly string[],
+	enabled = true,
+) {
+	return useQueries({
+		queries: parentPaths.map((parentPath) => ({
+			queryKey: queryKeys.fs.treeChildren(profileId, parentPath),
+			queryFn: () => listFileTreeChildPaths({ profileId, parentPath }),
+			enabled: !!profileId && enabled,
+			staleTime: FILE_TREE_STALE_TIME_MS,
+		})),
+	});
+}
+
+function invalidateProfileQueries(
+	queryClient: QueryClient,
+	queryKeys: readonly QueryKey[],
+) {
+	return Promise.all(
+		queryKeys.map((queryKey) =>
+			queryClient.invalidateQueries({ queryKey }),
+		),
 	);
+}
+
+function fileTreeStatusQueryKeys(profileId: string): QueryKey[] {
+	return [
+		queryKeys.fs.treeChildrenPrefix(profileId),
+		queryKeys.git.status(profileId),
+		queryKeys.git.diff(profileId),
+		queryKeys.git.diffStats(profileId),
+	];
+}
+
+function fileTreeFileQueryKeys(profileId: string): QueryKey[] {
+	return [
+		[queryNamespaces["fs-file"], profileId],
+		[queryNamespaces["fs-file-preview"], profileId],
+		[queryNamespaces["fs-search"], profileId],
+	];
+}
+
+function profileWorkspaceQueryKeys(profileId: string): QueryKey[] {
+	return [
+		...fileTreeStatusQueryKeys(profileId),
+		...fileTreeFileQueryKeys(profileId),
+		queryKeys.git.log(profileId),
+		queryKeys.git.aheadCount(profileId),
+		[queryNamespaces["git-binary-preview"], profileId],
+		[queryNamespaces["git-commit-diff"], profileId],
+		[queryNamespaces["git-pull-request-status"], profileId],
+	];
+}
+
+export async function refreshProfileWorkspaceCaches(
+	queryClient: QueryClient,
+	profileId: string,
+) {
+	await invalidateProfileQueries(
+		queryClient,
+		profileWorkspaceQueryKeys(profileId),
+	);
+
+	await queryClient.refetchQueries({
+		queryKey: queryKeys.fs.treeChildrenPrefix(profileId),
+		type: "active",
+	});
+}
+
+function settleFileTreeMutation(
+	queryClient: QueryClient,
+	profileId: string,
+	error: unknown,
+	queryKeys: readonly QueryKey[],
+) {
+	return error
+		? refreshProfileWorkspaceCaches(queryClient, profileId)
+		: invalidateProfileQueries(queryClient, queryKeys);
 }
 
 export function useFileTreeGitStatus(profileId: string, enabled = true) {
@@ -341,22 +414,13 @@ export function useRenameFileTreePath(profileId: string) {
 				sourcePath,
 				destinationPath,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: (_data, error) =>
+			settleFileTreeMutation(
+				queryClient,
+				profileId,
+				error,
+				fileTreeStatusQueryKeys(profileId),
+			),
 	});
 }
 
@@ -375,22 +439,13 @@ export function useMoveFileTreePaths(profileId: string) {
 				sourcePaths,
 				targetDirPath,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: (_data, error) =>
+			settleFileTreeMutation(
+				queryClient,
+				profileId,
+				error,
+				fileTreeStatusQueryKeys(profileId),
+			),
 	});
 }
 
@@ -402,31 +457,16 @@ export function useDeleteFileTreePaths(profileId: string) {
 				profileId,
 				paths,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-file"], profileId],
-				}),
-				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-file-preview"], profileId],
-				}),
-				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-search"], profileId],
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: (_data, error) =>
+			settleFileTreeMutation(
+				queryClient,
+				profileId,
+				error,
+				[
+					...fileTreeStatusQueryKeys(profileId),
+					...fileTreeFileQueryKeys(profileId),
+				],
+			),
 	});
 }
 
@@ -445,25 +485,16 @@ export function useCreateFileTreePath(profileId: string) {
 				path,
 				kind,
 			}),
-		onSettled: async () => {
-			await Promise.all([
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.fs.tree(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["fs-search"], profileId],
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.status(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diff(profileId),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: queryKeys.git.diffStats(profileId),
-				}),
-			]);
-		},
+		onSettled: (_data, error) =>
+			settleFileTreeMutation(
+				queryClient,
+				profileId,
+				error,
+				[
+					...fileTreeStatusQueryKeys(profileId),
+					[queryNamespaces["fs-search"], profileId],
+				],
+			),
 	});
 }
 

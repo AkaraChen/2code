@@ -526,56 +526,6 @@ fn resolve_existing_worktree_path_or_root(
 	resolve_existing_worktree_path(worktree_root, path, "File tree path")
 }
 
-fn ensure_creatable_worktree_path(
-	worktree_root: &Path,
-	path: &str,
-	label: &str,
-) -> Result<(), AppError> {
-	let relative_path = validate_worktree_relative_path(path, label)?;
-	let candidate = worktree_root.join(&relative_path);
-	if candidate.exists() {
-		ensure_canonical_path_inside_worktree(worktree_root, &candidate)?;
-		return Ok(());
-	}
-
-	let canonical_worktree =
-		worktree_root.canonicalize().map_err(AppError::IoError)?;
-	let Some(parent) = Path::new(&relative_path).parent() else {
-		return Ok(());
-	};
-
-	let mut current = worktree_root.to_path_buf();
-	for component in parent.components() {
-		let std::path::Component::Normal(segment) = component else {
-			continue;
-		};
-		current.push(segment);
-		if current.exists() {
-			let canonical_current =
-				current.canonicalize().map_err(AppError::IoError)?;
-			if !canonical_current.starts_with(&canonical_worktree) {
-				return Err(path_outside_workspace_error());
-			}
-		}
-	}
-
-	Ok(())
-}
-
-#[tauri::command]
-#[tracing::instrument(skip_all)]
-pub async fn list_file_tree_paths(
-	profile_id: String,
-	state: State<'_, DbPool>,
-) -> Result<Vec<String>, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		infra::filesystem::list_file_tree_paths(&worktree_root)
-	})
-	.await
-}
-
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn list_file_tree_child_paths(
@@ -585,9 +535,9 @@ pub async fn list_file_tree_child_paths(
 ) -> Result<Vec<String>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		infra::filesystem::list_file_tree_child_paths(
-			&worktree_root,
+		service::filesystem::list_file_tree_child_paths(
+			&db,
+			&profile_id,
 			parent_path.as_deref(),
 		)
 	})
@@ -604,19 +554,9 @@ pub async fn rename_file_tree_path(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		resolve_existing_worktree_path(
-			&worktree_root,
-			&source_path,
-			"Source path",
-		)?;
-		ensure_creatable_worktree_path(
-			&worktree_root,
-			&destination_path,
-			"Destination path",
-		)?;
-		infra::filesystem::rename_file_tree_path(
-			&worktree_root,
+		service::filesystem::rename_file_tree_path(
+			&db,
+			&profile_id,
 			&source_path,
 			&destination_path,
 		)
@@ -634,23 +574,9 @@ pub async fn move_file_tree_paths(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		for source_path in &source_paths {
-			resolve_existing_worktree_path(
-				&worktree_root,
-				source_path,
-				"Source path",
-			)?;
-		}
-		if let Some(target_dir_path) = target_dir_path.as_deref() {
-			resolve_existing_worktree_path(
-				&worktree_root,
-				target_dir_path,
-				"Target directory",
-			)?;
-		}
-		infra::filesystem::move_file_tree_paths(
-			&worktree_root,
+		service::filesystem::move_file_tree_paths(
+			&db,
+			&profile_id,
 			&source_paths,
 			target_dir_path.as_deref(),
 		)
@@ -667,15 +593,7 @@ pub async fn delete_file_tree_paths(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		for path in &paths {
-			resolve_existing_worktree_path(
-				&worktree_root,
-				path,
-				"File tree path",
-			)?;
-		}
-		infra::filesystem::delete_file_tree_paths(&worktree_root, &paths)
+		service::filesystem::delete_file_tree_paths(&db, &profile_id, &paths)
 	})
 	.await
 }
@@ -690,13 +608,12 @@ pub async fn create_file_tree_path(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_root = profile_worktree_root(&db, &profile_id)?;
-		ensure_creatable_worktree_path(
-			&worktree_root,
+		service::filesystem::create_file_tree_path(
+			&db,
+			&profile_id,
 			&path,
-			"File tree path",
-		)?;
-		infra::filesystem::create_file_tree_path(&worktree_root, &path, &kind)
+			&kind,
+		)
 	})
 	.await
 }
@@ -1013,8 +930,8 @@ pub async fn search_file(
 ) -> Result<Vec<FileSearchResult>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::filesystem::search_files(Path::new(&worktree_path), &query)
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::filesystem::search_file(conn, &profile_id, &query)
 	})
 	.await
 }
@@ -1027,8 +944,8 @@ pub async fn get_file_tree_git_status(
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::status(&worktree_path)
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		service::filesystem::get_file_tree_git_status(conn, &profile_id)
 	})
 	.await
 }
@@ -1241,27 +1158,6 @@ mod tests {
 		let result = resolve_existing_worktree_path(
 			&worktree,
 			"link/secret.txt",
-			"File",
-		);
-
-		assert!(matches!(result, Err(AppError::IoError(_))));
-		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
-	}
-
-	#[cfg(unix)]
-	#[test]
-	fn ensure_creatable_worktree_path_rejects_symlink_parent_escape() {
-		let temp_dir = temp_worktree();
-		let worktree = temp_dir.join("worktree");
-		let outside = temp_dir.join("outside");
-		std::fs::create_dir_all(&worktree).expect("create worktree");
-		std::fs::create_dir_all(&outside).expect("create outside");
-		std::os::unix::fs::symlink(&outside, worktree.join("link"))
-			.expect("create symlink");
-
-		let result = ensure_creatable_worktree_path(
-			&worktree,
-			"link/created.txt",
 			"File",
 		);
 

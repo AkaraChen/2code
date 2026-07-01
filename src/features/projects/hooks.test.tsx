@@ -169,7 +169,7 @@ describe("useDeleteFileTreePaths", () => {
 			paths: ["src/index.ts"],
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
-			queryKey: queryKeys.fs.tree("profile-1"),
+			queryKey: queryKeys.fs.treeChildrenPrefix("profile-1"),
 		});
 		expect(invalidateQueriesSpy).toHaveBeenCalledWith({
 			queryKey: [queryNamespaces["fs-file"], "profile-1"],

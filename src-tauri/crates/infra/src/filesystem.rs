@@ -15,59 +15,6 @@ struct ScoredFileMatch {
 	score: u32,
 }
 
-pub fn list_file_tree_paths(root: &Path) -> Result<Vec<String>, AppError> {
-	if !root.is_dir() {
-		return Err(AppError::NotFound(format!(
-			"Directory: {}",
-			root.display()
-		)));
-	}
-
-	let mut paths = Vec::new();
-	let mut walker = WalkBuilder::new(root);
-	walker.hidden(true);
-	// The file tree is a filesystem browser. Git ignore rules should affect
-	// search results and git status, not whether a user can expand/open files.
-	walker.ignore(false);
-	walker.git_ignore(false);
-	walker.git_global(false);
-	walker.git_exclude(false);
-	walker.parents(true);
-	walker.follow_links(false);
-	walker.filter_entry(|entry| !is_git_metadata_name(entry.file_name()));
-
-	for entry in walker.build() {
-		let entry = entry.map_err(|error| {
-			AppError::IoError(std::io::Error::other(error.to_string()))
-		})?;
-		let path = entry.path();
-		if path == root {
-			continue;
-		}
-
-		let Some(file_type) = entry.file_type() else {
-			continue;
-		};
-		if !file_type.is_dir() && !file_type.is_file() {
-			continue;
-		}
-
-		let relative_path = path.strip_prefix(root).unwrap_or(path);
-		let mut relative_path = normalize_relative_path(relative_path);
-		if relative_path.is_empty() {
-			continue;
-		}
-		if file_type.is_dir() {
-			relative_path.push('/');
-		}
-		paths.push(relative_path);
-	}
-
-	sort_file_tree_paths(&mut paths);
-
-	Ok(paths)
-}
-
 pub fn list_file_tree_child_paths(
 	root: &Path,
 	parent_path: Option<&str>,
@@ -860,28 +807,6 @@ mod tests {
 	}
 
 	#[test]
-	fn lists_file_tree_paths_as_relative_paths() {
-		let temp_dir = tempfile::tempdir().expect("temp dir");
-		let root = temp_dir.path();
-		std::fs::create_dir_all(root.join("src/empty")).expect("create dirs");
-		std::fs::write(root.join("src/main.rs"), "fn main() {}")
-			.expect("write file");
-		std::fs::write(root.join(".env"), "SECRET=value")
-			.expect("write hidden file");
-
-		let paths = list_file_tree_paths(root).expect("list tree paths");
-
-		assert_eq!(
-			paths,
-			vec![
-				"src/".to_string(),
-				"src/empty/".to_string(),
-				"src/main.rs".to_string(),
-			]
-		);
-	}
-
-	#[test]
 	fn creates_file_tree_file_with_parent_directories() {
 		let temp_dir = tempfile::tempdir().expect("temp dir");
 		let root = temp_dir.path();
@@ -912,27 +837,6 @@ mod tests {
 			.expect_err("git metadata path should fail");
 
 		assert!(error.to_string().contains(".git"));
-	}
-
-	#[test]
-	fn lists_file_tree_paths_including_gitignored_paths() {
-		let temp_dir = tempfile::tempdir().expect("temp dir");
-		let root = temp_dir.path();
-		std::fs::write(root.join(".gitignore"), "node_modules/\nignored.log\n")
-			.expect("write gitignore");
-		std::fs::create_dir_all(root.join("node_modules/pkg"))
-			.expect("create ignored dirs");
-		std::fs::write(root.join("node_modules/pkg/index.ts"), "ignored")
-			.expect("write ignored nested file");
-		std::fs::write(root.join("ignored.log"), "ignored")
-			.expect("write ignored file");
-
-		let paths = list_file_tree_paths(root).expect("list tree paths");
-
-		assert!(paths.contains(&"ignored.log".to_string()));
-		assert!(paths.contains(&"node_modules/".to_string()));
-		assert!(paths.contains(&"node_modules/pkg/".to_string()));
-		assert!(paths.contains(&"node_modules/pkg/index.ts".to_string()));
 	}
 
 	#[test]

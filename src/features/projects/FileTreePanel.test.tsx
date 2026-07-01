@@ -20,9 +20,9 @@ import FileTreePanel from "./FileTreePanel";
 import {
 	useCreateFileTreePath,
 	useDeleteFileTreePaths,
+	useFileTreeExpandedChildPaths,
 	useFileTreeChildPaths,
 	useFileTreeGitStatus,
-	useLoadFileTreeChildPaths,
 	useMoveFileTreePaths,
 	useOpenPathInDefaultApp,
 	useRenameFileTreePath,
@@ -44,7 +44,7 @@ const {
 	resetPathsMock,
 	setGitStatusMock,
 	startRenamingMock,
-	loadChildPathsMock,
+	expandedChildPathsRef,
 	toasterCreateMock,
 	useFileTreeOptionsRef,
 	openDefaultAppMutateAsyncMock,
@@ -70,7 +70,9 @@ const {
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
 	startRenamingMock: vi.fn(),
-	loadChildPathsMock: vi.fn(),
+	expandedChildPathsRef: {
+		current: new Map<string, readonly string[]>(),
+	},
 	toasterCreateMock: vi.fn(),
 	useFileTreeOptionsRef: {
 		current: null as null | FileTreeOptions,
@@ -211,17 +213,18 @@ vi.mock("@pierre/trees/react", () => ({
 vi.mock("./hooks", () => ({
 	useCreateFileTreePath: vi.fn(),
 	useDeleteFileTreePaths: vi.fn(),
+	useFileTreeExpandedChildPaths: vi.fn(
+		(_profileId: string, parentPaths: readonly string[]) =>
+			parentPaths.map((parentPath) => ({
+				data: expandedChildPathsRef.current.get(parentPath),
+			})),
+	),
 	useFileTreeChildPaths: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
-	useLoadFileTreeChildPaths: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
 	useOpenPathInDefaultApp: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
 	useRevealPathInFileManager: vi.fn(),
-}));
-
-vi.mock("./FileViewerDialog", () => ({
-	default: () => null,
 }));
 
 const rootPath = "/root";
@@ -330,8 +333,7 @@ describe("fileTreePanel", () => {
 		resetPathsMock.mockReset();
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
-		loadChildPathsMock.mockReset();
-		loadChildPathsMock.mockResolvedValue([]);
+		expandedChildPathsRef.current.clear();
 		openDefaultAppMutateAsyncMock.mockReset();
 		openDefaultAppMutateAsyncMock.mockResolvedValue(undefined);
 		getFocusedItemMock.mockReset();
@@ -341,9 +343,7 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(treePaths, false),
 		);
-		vi.mocked(useLoadFileTreeChildPaths).mockReturnValue(
-			loadChildPathsMock,
-		);
+		vi.mocked(useFileTreeExpandedChildPaths).mockClear();
 		vi.mocked(useFileTreeGitStatus).mockReturnValue(
 			createFileTreeGitStatusResult([], false),
 		);
@@ -391,13 +391,17 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(["src/"], false),
 		);
-		loadChildPathsMock.mockResolvedValue(["src/index.ts"]);
+		expandedChildPathsRef.current.set("src/", ["src/index.ts"]);
 
 		renderPanel();
 		fireEvent.click(screen.getByText("src"));
 
 		await waitFor(() => {
-			expect(loadChildPathsMock).toHaveBeenCalledWith("src/");
+			expect(useFileTreeExpandedChildPaths).toHaveBeenLastCalledWith(
+				profileId,
+				["src/"],
+				true,
+			);
 		});
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(
@@ -411,9 +415,7 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(["src/"], false, null, 1),
 		);
-		loadChildPathsMock
-			.mockResolvedValueOnce(["src/index.ts"])
-			.mockResolvedValueOnce(["src/app.ts"]);
+		expandedChildPathsRef.current.set("src/", ["src/index.ts"]);
 		const { onOpenFile, rerender } = renderPanel();
 
 		fireEvent.click(screen.getByText("src"));
@@ -425,6 +427,7 @@ describe("fileTreePanel", () => {
 		});
 
 		resetPathsMock.mockClear();
+		expandedChildPathsRef.current.set("src/", ["src/app.ts"]);
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(["src/"], false, null, 2),
 		);
@@ -441,10 +444,6 @@ describe("fileTreePanel", () => {
 		);
 
 		await waitFor(() => {
-			expect(loadChildPathsMock).toHaveBeenCalledTimes(2);
-		});
-		expect(loadChildPathsMock).toHaveBeenLastCalledWith("src/");
-		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(
 				["src/", "src/app.ts"],
 				{ initialExpandedPaths: ["src/"] },
@@ -456,25 +455,21 @@ describe("fileTreePanel", () => {
 		vi.mocked(useFileTreeChildPaths).mockReturnValue(
 			createFileTreeChildPathsResult(["src/"], false),
 		);
-		loadChildPathsMock.mockImplementation((path: string) => {
-			if (path === "src/") {
-				return Promise.resolve(["src/components/"]);
-			}
-			if (path === "src/components/") {
-				return Promise.resolve(["src/components/Button.tsx"]);
-			}
-			return Promise.resolve([]);
-		});
+		expandedChildPathsRef.current.set("src/", ["src/components/"]);
+		expandedChildPathsRef.current.set("src/components/", [
+			"src/components/Button.tsx",
+		]);
 
 		renderPanel();
 		fireEvent.click(screen.getByText("src"));
 
 		await waitFor(() => {
-			expect(loadChildPathsMock).toHaveBeenCalledWith("src/");
+			expect(useFileTreeExpandedChildPaths).toHaveBeenLastCalledWith(
+				profileId,
+				["src/"],
+				true,
+			);
 		});
-		expect(loadChildPathsMock).not.toHaveBeenCalledWith(
-			"src/components/",
-		);
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(
 				["src/", "src/components/"],
