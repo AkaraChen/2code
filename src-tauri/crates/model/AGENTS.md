@@ -9,7 +9,7 @@ All data types: Diesel ORM models, DTOs, and domain types. No logic — pure dat
 | `schema.rs` | Auto-generated Diesel schema — DO NOT EDIT manually |
 | `project.rs` | `Project` (Queryable), `NewProject` (Insertable), `UpdateProject` (AsChangeset) |
 | `profile.rs` | `Profile`, `NewProfile`, `UpdateProfile` |
-| `pty.rs` | `PtySessionRecord` (Queryable), `NewPtySession`, `PtyOutputChunk` |
+| `pty.rs` | `PtySessionRecord` (Queryable), `NewPtySessionRecord` (Insertable), + DTOs (`PtySessionMeta`, `PtyConfig`, `RestoreResult`) |
 | `notification.rs` | `NotificationEntry`, `NotificationState` (shared with sidecar) |
 | `watcher.rs` | `WatchEvent` DTO |
 | `debug.rs` | `LogEntry` type |

@@ -7,7 +7,8 @@ Cross-cutting infrastructure. All I/O, OS interaction, and external process mana
 | File | Role |
 |------|------|
 | `db.rs` | SQLite init + WAL pragma + `embed_migrations!()` auto-run on startup |
-| `pty.rs` | PTY session lifecycle: spawn shell, 4KB read loop, UTF-8 boundary detection, 1MB cap with oldest-chunk pruning |
+| `pty.rs` | PTY session lifecycle: spawn shell, 4KB read loop, UTF-8 boundary detection |
+| `pty_log.rs` | Per-session output storage as `{app_data_dir}/pty_logs/{session_id}.log` files (append/read/clear/remove + startup orphan GC). No byte cap. |
 | `git.rs` | Git command execution via `std::process::Command` |
 | `shell_init.rs` | ZDOTDIR-based shell init injection — sets `_2CODE_HELPER`, `_2CODE_HELPER_URL`, `_2CODE_SESSION_ID` env vars |
 | `helper.rs` | Axum HTTP server (sidecar endpoint) — `/notify` plays sound, `/status` emits `pty-agent-status` |
@@ -25,7 +26,8 @@ Cross-cutting infrastructure. All I/O, OS interaction, and external process mana
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| PTY output chunk size | `pty.rs` — 4KB read, 32KB flush buffer, 1MB cap |
+| PTY output read/flush sizes | `pty.rs` — 4KB read; `service::pty` — 32KB flush buffer |
+| PTY output file storage | `pty_log.rs` — one append-only file per session, no cap |
 | Shell env injection | `shell_init.rs` |
 | Git command details | `git.rs` |
 | Notification flow | `helper.rs` → service layer |

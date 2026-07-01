@@ -4,7 +4,7 @@ use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
-use service::pty::PtyFlushSenders;
+use service::pty::{PtyFlushSenders, PtyLogDir};
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -75,12 +75,11 @@ pub async fn list_project_sessions(
 #[tracing::instrument(skip_all)]
 pub async fn get_pty_session_history(
 	session_id: String,
-	state: State<'_, DbPool>,
+	log_dir: State<'_, PtyLogDir>,
 ) -> Result<Vec<u8>, AppError> {
-	let db = state.inner().clone();
+	let dir = log_dir.0.clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::pty::get_history(conn, &session_id)
+		Ok(service::pty::get_history(&dir, &session_id))
 	})
 	.await
 }
@@ -90,11 +89,13 @@ pub async fn get_pty_session_history(
 pub async fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
+	log_dir: State<'_, PtyLogDir>,
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
+	let dir = log_dir.0.clone();
 	super::run_blocking(move || {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::pty::delete_session(conn, &session_id)
+		service::pty::delete_session(conn, &dir, &session_id)
 	})
 	.await
 }
@@ -127,8 +128,8 @@ pub fn flush_pty_output(
 #[tracing::instrument(skip_all)]
 pub fn clear_pty_output(
 	session_id: String,
-	db: State<'_, DbPool>,
+	log_dir: State<'_, PtyLogDir>,
 	state: State<'_, PtyFlushSenders>,
 ) -> Result<(), AppError> {
-	service::pty::clear_output(db.inner(), state.inner(), &session_id)
+	service::pty::clear_output(&log_dir.0, state.inner(), &session_id)
 }

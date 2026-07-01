@@ -35,13 +35,6 @@ diesel::table! {
 }
 
 diesel::table! {
-	pty_session_output (session_id) {
-		session_id -> Text,
-		data -> Binary,
-	}
-}
-
-diesel::table! {
 	pty_sessions (id) {
 		id -> Text,
 		profile_id -> Text,
@@ -57,13 +50,11 @@ diesel::table! {
 
 diesel::joinable!(profiles -> projects (project_id));
 diesel::joinable!(projects -> project_groups (group_id));
-diesel::joinable!(pty_session_output -> pty_sessions (session_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	profiles,
 	project_groups,
 	projects,
-	pty_session_output,
 	pty_sessions,
 );

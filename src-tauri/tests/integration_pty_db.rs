@@ -1,12 +1,31 @@
 mod common;
 
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use common::{cleanup, create_project_with_git_repo, setup_db};
 use infra::db::DbPool;
+use infra::pty_log::{self, SessionLog};
 use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
 use repo::pty;
 use service::pty::{create_flush_senders, PtyContext};
+
+/// A unique, empty temp directory to stand in for the per-session log store.
+fn tmp_log_dir(tag: &str) -> PathBuf {
+	let dir = std::env::temp_dir()
+		.join(format!("pty-db-test-{}-{tag}", std::process::id()));
+	let _ = std::fs::remove_dir_all(&dir);
+	std::fs::create_dir_all(&dir).unwrap();
+	dir
+}
+
+/// Append raw output to a session's log file (what the persist thread does).
+fn write_output(dir: &Path, session_id: &str, data: &[u8]) {
+	SessionLog::open(dir, session_id)
+		.unwrap()
+		.append(data)
+		.unwrap();
+}
 
 struct TestPtyEmitter;
 
@@ -196,72 +215,45 @@ fn list_sessions_excludes_other_projects() {
 
 #[test]
 fn history_starts_empty() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
-
-	insert_session(&mut conn, "s-empty", &default_profile.id, "bash");
-
-	let history = service::pty::get_history(&mut conn, "s-empty").unwrap();
-	assert!(history.is_empty());
-
-	cleanup(&dir);
+	let logs = tmp_log_dir("history-starts-empty");
+	// A session that never produced output reads as empty.
+	assert!(service::pty::get_history(&logs, "s-empty").is_empty());
 }
 
 #[test]
 fn append_and_read_history() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("append-and-read");
+	write_output(&logs, "s-append", b"hello world");
 
-	insert_session(&mut conn, "s-append", &default_profile.id, "bash");
-
-	pty::append_output(&mut conn, "s-append", b"hello world").unwrap();
-
-	let history = service::pty::get_history(&mut conn, "s-append").unwrap();
+	let history = service::pty::get_history(&logs, "s-append");
 	assert_eq!(history, b"hello world");
-
-	cleanup(&dir);
 }
 
 #[test]
 fn clear_output_resets_history() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("clear-resets");
+	let senders = create_flush_senders();
 
-	insert_session(&mut conn, "s-clear", &default_profile.id, "bash");
-	pty::append_output(&mut conn, "s-clear", b"some data").unwrap();
-	pty::clear_output(&mut conn, "s-clear");
+	write_output(&logs, "s-clear", b"some data");
+	// No live persist thread → clear_output falls back to truncating the file.
+	service::pty::clear_output(&logs, &senders, "s-clear").unwrap();
 
-	let history = service::pty::get_history(&mut conn, "s-clear").unwrap();
-	assert!(history.is_empty());
-
-	cleanup(&dir);
+	assert!(service::pty::get_history(&logs, "s-clear").is_empty());
 }
 
 #[test]
-fn output_capped_at_1mb() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
+fn large_output_is_not_capped() {
+	let logs = tmp_log_dir("no-cap");
 
-	insert_session(&mut conn, "s-cap", &default_profile.id, "bash");
+	// Write 1.5MB — files have no size cap (scrollback is bounded by vt100
+	// sanitize on restore, not by trimming bytes here).
+	let chunk = vec![b'X'; 512 * 1024];
+	write_output(&logs, "s-big", &chunk);
+	write_output(&logs, "s-big", &chunk);
+	write_output(&logs, "s-big", &chunk);
 
-	// Write 1.5MB of data
-	let chunk = vec![b'X'; 512 * 1024]; // 512KB
-	pty::append_output(&mut conn, "s-cap", &chunk).unwrap();
-	pty::append_output(&mut conn, "s-cap", &chunk).unwrap();
-	pty::append_output(&mut conn, "s-cap", &chunk).unwrap();
-
-	let history = service::pty::get_history(&mut conn, "s-cap").unwrap();
-	assert!(
-		history.len() <= 1048576,
-		"expected <= 1MB, got {} bytes",
-		history.len()
-	);
-
-	cleanup(&dir);
+	let history = service::pty::get_history(&logs, "s-big");
+	assert_eq!(history.len(), 3 * 512 * 1024);
 }
 
 // ============================================================
@@ -269,62 +261,35 @@ fn output_capped_at_1mb() {
 // ============================================================
 
 #[test]
-fn history_nonexistent_session_returns_error() {
-	let mut conn = setup_db();
-	let result = service::pty::get_history(&mut conn, "nonexistent-session");
-	assert!(result.is_err());
+fn history_nonexistent_session_returns_empty() {
+	let logs = tmp_log_dir("history-nonexistent");
+	assert!(service::pty::get_history(&logs, "nonexistent-session").is_empty());
 }
 
 #[test]
 fn append_empty_data() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
-
-	insert_session(&mut conn, "s-empty-append", &default_profile.id, "bash");
-	let result = pty::append_output(&mut conn, "s-empty-append", &[]);
-	assert!(result.is_ok());
-
-	let history =
-		service::pty::get_history(&mut conn, "s-empty-append").unwrap();
-	assert!(history.is_empty());
-
-	cleanup(&dir);
+	let logs = tmp_log_dir("append-empty");
+	write_output(&logs, "s-empty-append", &[]);
+	assert!(service::pty::get_history(&logs, "s-empty-append").is_empty());
 }
 
 #[test]
 fn append_binary_data() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
-
-	insert_session(&mut conn, "s-binary", &default_profile.id, "bash");
-
+	let logs = tmp_log_dir("append-binary");
 	let data: Vec<u8> = (0..=255).collect();
-	pty::append_output(&mut conn, "s-binary", &data).unwrap();
+	write_output(&logs, "s-binary", &data);
 
-	let history = service::pty::get_history(&mut conn, "s-binary").unwrap();
-	assert_eq!(history, data);
-
-	cleanup(&dir);
+	assert_eq!(service::pty::get_history(&logs, "s-binary"), data);
 }
 
 #[test]
 fn multiple_appends_concatenated_correctly() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("multi-append");
+	write_output(&logs, "s-multi", b"AAA");
+	write_output(&logs, "s-multi", b"BBB");
+	write_output(&logs, "s-multi", b"CCC");
 
-	insert_session(&mut conn, "s-multi", &default_profile.id, "bash");
-
-	pty::append_output(&mut conn, "s-multi", b"AAA").unwrap();
-	pty::append_output(&mut conn, "s-multi", b"BBB").unwrap();
-	pty::append_output(&mut conn, "s-multi", b"CCC").unwrap();
-
-	let history = service::pty::get_history(&mut conn, "s-multi").unwrap();
-	assert_eq!(history, b"AAABBBCCC");
-
-	cleanup(&dir);
+	assert_eq!(service::pty::get_history(&logs, "s-multi"), b"AAABBBCCC");
 }
 
 // ============================================================
@@ -443,12 +408,14 @@ fn create_session_executes_startup_commands() {
 	let read_threads = infra::pty::create_thread_tracker();
 	let flush_senders = create_flush_senders();
 	let emitter = Arc::new(TestPtyEmitter);
+	let logs = tmp_log_dir("startup-commands");
 	let ctx = PtyContext {
 		db: db.clone(),
 		sessions: sessions.clone(),
 		flush_senders: flush_senders.clone(),
 		read_threads: read_threads.clone(),
 		emitter,
+		output_dir: logs.clone(),
 		helper_url: None,
 		helper_bin: None,
 	};
@@ -473,10 +440,7 @@ fn create_session_executes_startup_commands() {
 	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 
-	let history = {
-		let mut db_conn = db.lock().unwrap();
-		service::pty::get_history(&mut db_conn, &session_id).unwrap()
-	};
+	let history = service::pty::get_history(&logs, &session_id);
 	let history_text = String::from_utf8_lossy(&history);
 	assert!(
 		history_text.contains("tmpl-ok"),
@@ -495,19 +459,20 @@ fn delete_removes_session_and_output() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("delete-removes");
 
 	insert_session(&mut conn, "s-del", &default_profile.id, "bash");
-	pty::append_output(&mut conn, "s-del", b"data").unwrap();
+	write_output(&logs, "s-del", b"data");
 
-	service::pty::delete_session(&mut conn, "s-del").unwrap();
+	service::pty::delete_session(&mut conn, &logs, "s-del").unwrap();
 
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert!(sessions.is_empty());
 
-	// History should also be gone
-	let result = service::pty::get_history(&mut conn, "s-del");
-	assert!(result.is_err());
+	// Output file should also be gone.
+	assert!(service::pty::get_history(&logs, "s-del").is_empty());
+	assert!(!pty_log::session_path(&logs, "s-del").exists());
 
 	cleanup(&dir);
 }
@@ -517,18 +482,18 @@ fn close_then_delete_flow() {
 	let mut conn = setup_db();
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("close-then-delete");
 
 	insert_session(&mut conn, "s-flow", &default_profile.id, "bash");
-	pty::append_output(&mut conn, "s-flow", b"output data").unwrap();
+	write_output(&logs, "s-flow", b"output data");
 
 	// Frontend: close_pty_session marks it closed
 	pty::mark_closed(&mut conn, "s-flow");
 
 	// Frontend: delete_pty_session_record removes it
-	service::pty::delete_session(&mut conn, "s-flow").unwrap();
+	service::pty::delete_session(&mut conn, &logs, "s-flow").unwrap();
 
-	let result = service::pty::get_history(&mut conn, "s-flow");
-	assert!(result.is_err());
+	assert!(service::pty::get_history(&logs, "s-flow").is_empty());
 
 	cleanup(&dir);
 }
@@ -538,47 +503,51 @@ fn restoration_flow_db_side() {
 	let mut conn = setup_db();
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
+	let logs = tmp_log_dir("restoration-flow");
 
 	// 1. Old session with history
 	insert_session(&mut conn, "s-old", &default_profile.id, "bash");
-	pty::append_output(&mut conn, "s-old", b"old terminal output").unwrap();
+	write_output(&logs, "s-old", b"old terminal output");
 
 	// 2. Read history from old session
-	let history = service::pty::get_history(&mut conn, "s-old").unwrap();
+	let history = service::pty::get_history(&logs, "s-old");
 	assert_eq!(history, b"old terminal output");
 
 	// 3. Create new session (simulating PTY restoration)
 	insert_session(&mut conn, "s-new", &default_profile.id, "bash");
 
-	// 4. Delete old session
-	service::pty::delete_session(&mut conn, "s-old").unwrap();
+	// 4. Delete old session (row + log file)
+	service::pty::delete_session(&mut conn, &logs, "s-old").unwrap();
 
-	// 5. Old session gone, new session exists
-	let old_result = service::pty::get_history(&mut conn, "s-old");
-	assert!(old_result.is_err());
-
-	let new_history = service::pty::get_history(&mut conn, "s-new").unwrap();
-	assert!(new_history.is_empty()); // new session starts fresh
+	// 5. Old session gone, new session exists and starts fresh
+	assert!(service::pty::get_history(&logs, "s-old").is_empty());
+	assert!(service::pty::get_history(&logs, "s-new").is_empty());
 
 	cleanup(&dir);
 }
 
 // ============================================================
-// Repo Edge Cases
+// Edge Cases
 // ============================================================
 
 #[test]
 fn delete_nonexistent_session_succeeds() {
 	let mut conn = setup_db();
+	let logs = tmp_log_dir("delete-nonexistent");
 	// Deleting a session that doesn't exist should return Ok (0 rows affected)
-	let result =
-		service::pty::delete_session(&mut conn, "nonexistent-session-id");
+	let result = service::pty::delete_session(
+		&mut conn,
+		&logs,
+		"nonexistent-session-id",
+	);
 	assert!(result.is_ok());
 }
 
 #[test]
 fn clear_output_nonexistent_session_no_panic() {
-	let mut conn = setup_db();
-	// Clearing output for a non-existent session should not panic
-	pty::clear_output(&mut conn, "nonexistent-session-id");
+	let logs = tmp_log_dir("clear-nonexistent");
+	let senders = create_flush_senders();
+	// Clearing output for a non-existent session should not panic or error.
+	service::pty::clear_output(&logs, &senders, "nonexistent-session-id")
+		.unwrap();
 }

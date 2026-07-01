@@ -1,8 +1,8 @@
 use diesel::prelude::*;
 
 use model::error::AppError;
-use model::pty::{NewPtySessionOutput, NewPtySessionRecord, PtySessionRecord};
-use model::schema::{profiles, pty_session_output, pty_sessions};
+use model::pty::{NewPtySessionRecord, PtySessionRecord};
+use model::schema::{profiles, pty_sessions};
 
 pub fn insert_session(
 	conn: &mut SqliteConnection,
@@ -13,17 +13,17 @@ pub fn insert_session(
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
-	// Create companion output row with empty BLOB
-	let output = NewPtySessionOutput {
-		session_id: record.id,
-		data: &[],
-	};
-	diesel::insert_into(pty_session_output::table)
-		.values(&output)
-		.execute(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
 	Ok(())
+}
+
+/// All known session ids. Used on startup to garbage-collect orphaned log files.
+pub fn all_session_ids(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<String>, AppError> {
+	pty_sessions::table
+		.select(pty_sessions::id)
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
 pub fn list_by_project(
@@ -90,56 +90,6 @@ pub fn mark_all_open_closed(conn: &mut SqliteConnection) {
 	}
 }
 
-/// Append data to the session's output BLOB and trim to 1MB cap.
-pub fn append_output(
-	conn: &mut SqliteConnection,
-	session_id: &str,
-	data: &[u8],
-) -> Result<(), AppError> {
-	diesel::sql_query(
-		"UPDATE pty_session_output SET data = data || ? WHERE session_id = ?",
-	)
-	.bind::<diesel::sql_types::Binary, _>(data)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	// Trim to last 1MB if needed (SUBSTR with negative offset = last N bytes)
-	diesel::sql_query(
-		"UPDATE pty_session_output \
-		 SET data = SUBSTR(data, -1048576) \
-		 WHERE session_id = ? AND LENGTH(data) > 1048576",
-	)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn)
-	.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	Ok(())
-}
-
-/// Clear persisted output for a session (reset BLOB to empty).
-pub fn clear_output(conn: &mut SqliteConnection, session_id: &str) {
-	let _ = diesel::sql_query(
-		"UPDATE pty_session_output SET data = X'' WHERE session_id = ?",
-	)
-	.bind::<diesel::sql_types::Text, _>(session_id)
-	.execute(conn);
-}
-
-pub fn get_session_history(
-	conn: &mut SqliteConnection,
-	session_id: &str,
-) -> Result<Vec<u8>, AppError> {
-	let data: Vec<u8> = pty_session_output::table
-		.filter(pty_session_output::session_id.eq(session_id))
-		.select(pty_session_output::data)
-		.first(conn)
-		.map_err(|e| AppError::DbError(e.to_string()))?;
-
-	tracing::info!(target: "pty", %session_id, total_bytes = data.len(), "repo: loaded history");
-	Ok(data)
-}
-
 pub fn delete_session(
 	conn: &mut SqliteConnection,
 	session_id: &str,
@@ -190,7 +140,7 @@ mod tests {
 	}
 
 	#[test]
-	fn insert_session_creates_a_history_row_and_lists_by_project() {
+	fn insert_session_lists_by_project() {
 		let mut conn = setup_db();
 		let profile_id = setup_profile(&mut conn);
 
@@ -201,47 +151,31 @@ mod tests {
 			list_by_project(&mut conn, "proj-1").expect("list sessions");
 		assert_eq!(sessions.len(), 1);
 		assert_eq!(sessions[0].id, "session-1");
-		assert_eq!(
-			get_session_history(&mut conn, "session-1").expect("history"),
-			Vec::<u8>::new(),
-		);
 	}
 
 	#[test]
-	fn append_output_trims_history_to_the_last_megabyte_and_can_be_cleared() {
+	fn all_session_ids_returns_every_session() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session 1");
+		insert_session(&mut conn, &session_record("session-2", &profile_id))
+			.expect("insert session 2");
+
+		let mut ids = all_session_ids(&mut conn).expect("all ids");
+		ids.sort();
+		assert_eq!(ids, vec!["session-1", "session-2"]);
+	}
+
+	#[test]
+	fn delete_session_removes_the_session() {
 		let mut conn = setup_db();
 		let profile_id = setup_profile(&mut conn);
 		insert_session(&mut conn, &session_record("session-1", &profile_id))
 			.expect("insert session");
-
-		append_output(&mut conn, "session-1", &vec![b'a'; 1_048_576])
-			.expect("append first chunk");
-		append_output(&mut conn, "session-1", b"tail").expect("append tail");
-
-		let history =
-			get_session_history(&mut conn, "session-1").expect("history");
-		assert_eq!(history.len(), 1_048_576);
-		assert!(history.ends_with(b"tail"));
-		assert_eq!(history[0], b'a');
-
-		clear_output(&mut conn, "session-1");
-		assert!(get_session_history(&mut conn, "session-1")
-			.expect("cleared history")
-			.is_empty(),);
-	}
-
-	#[test]
-	fn delete_session_removes_the_session_and_its_history() {
-		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session");
-		append_output(&mut conn, "session-1", b"hello")
-			.expect("append history");
 
 		delete_session(&mut conn, "session-1").expect("delete session");
 
 		assert!(list_by_project(&mut conn, "proj-1").unwrap().is_empty());
-		assert!(get_session_history(&mut conn, "session-1").is_err());
 	}
 }

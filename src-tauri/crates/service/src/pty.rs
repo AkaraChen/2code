@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -8,6 +9,7 @@ use diesel::SqliteConnection;
 
 use infra::db::DbPool;
 use infra::pty::{self as session, PtyReadThreads, PtySessionMap};
+use infra::pty_log::{self, SessionLog};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
@@ -29,6 +31,11 @@ pub fn create_flush_senders() -> PtyFlushSenders {
 	Arc::new(Mutex::new(HashMap::new()))
 }
 
+/// Managed state holding the directory where per-session output logs live.
+/// Set up once on startup from `infra::pty_log::logs_dir(app_data_dir)`.
+#[derive(Clone)]
+pub struct PtyLogDir(pub PathBuf);
+
 fn project_folder_for_profile(
 	db: &DbPool,
 	profile_id: &str,
@@ -45,6 +52,7 @@ pub struct PtyContext {
 	pub flush_senders: PtyFlushSenders,
 	pub read_threads: PtyReadThreads,
 	pub emitter: Arc<dyn PtyEventEmitter>,
+	pub output_dir: PathBuf,
 	pub helper_url: Option<String>,
 	pub helper_bin: Option<String>,
 }
@@ -320,8 +328,9 @@ pub fn create_session(
 	let emitter = ctx.emitter.clone();
 	let db = ctx.db.clone();
 	let flush_senders = ctx.flush_senders.clone();
+	let output_dir = ctx.output_dir.clone();
 	let handle = std::thread::spawn(move || {
-		read_pty_output(emitter, id, reader, db, flush_senders);
+		read_pty_output(emitter, id, reader, db, output_dir, flush_senders);
 	});
 
 	// Track the thread handle so it can be joined on app exit
@@ -390,18 +399,34 @@ pub fn list_project_sessions(
 	repo::pty::list_by_project(conn, project_id)
 }
 
-pub fn get_history(
-	conn: &mut SqliteConnection,
-	session_id: &str,
-) -> Result<Vec<u8>, AppError> {
-	repo::pty::get_session_history(conn, session_id)
+/// Read a session's full output history from its log file.
+/// A session that never produced output (or an unknown id) reads as empty.
+pub fn get_history(output_dir: &Path, session_id: &str) -> Vec<u8> {
+	let data = pty_log::read_all(output_dir, session_id);
+	tracing::info!(target: "pty", %session_id, total_bytes = data.len(), "loaded history from file");
+	data
 }
 
+/// Delete a session's DB metadata row and its output log file.
 pub fn delete_session(
 	conn: &mut SqliteConnection,
+	output_dir: &Path,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	repo::pty::delete_session(conn, session_id)
+	repo::pty::delete_session(conn, session_id)?;
+	pty_log::remove(output_dir, session_id);
+	Ok(())
+}
+
+/// Remove any output log files that no longer have a matching session row.
+/// Reaps leftovers from unclean shutdowns and profile/project cascade deletes.
+pub fn gc_orphan_logs(db: &DbPool, output_dir: &Path) {
+	let Ok(mut conn) = db.lock() else { return };
+	let Ok(ids) = repo::pty::all_session_ids(&mut conn) else {
+		return;
+	};
+	let live: HashSet<String> = ids.into_iter().collect();
+	pty_log::gc_orphans(output_dir, &live);
 }
 
 /// Mark all open sessions (NULL closed_at) as closed. Called on startup for orphans
@@ -419,11 +444,8 @@ pub fn restore_session(
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
 ) -> Result<RestoreResult, AppError> {
-	// 1. Read raw history (acquire lock → read → release)
-	let raw_history = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
-		repo::pty::get_session_history(conn, old_session_id)?
-	};
+	// 1. Read raw history from the old session's log file (no DB lock needed)
+	let raw_history = pty_log::read_all(&ctx.output_dir, old_session_id);
 	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), "restore: loaded raw history");
 
 	// 2. Sanitize through vt100 virtual terminal emulator
@@ -434,11 +456,12 @@ pub fn restore_session(
 	let new_session_id = create_session(ctx, meta, config)?;
 	tracing::info!(target: "pty", %old_session_id, %new_session_id, "restore: new session created");
 
-	// 4. Delete old record (re-acquire lock — only after new session succeeds)
+	// 4. Delete old record + log file (only after new session succeeds)
 	{
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		repo::pty::delete_session(conn, old_session_id)?;
 	}
+	pty_log::remove(&ctx.output_dir, old_session_id);
 
 	Ok(RestoreResult {
 		new_session_id,
@@ -460,10 +483,12 @@ pub fn flush_output(
 }
 
 pub fn clear_output(
-	db: &DbPool,
+	output_dir: &Path,
 	senders: &PtyFlushSenders,
 	session_id: &str,
 ) -> Result<(), AppError> {
+	// If a live persistence thread owns the session, let it clear (keeps its
+	// in-memory buffer and the file consistent). Otherwise truncate directly.
 	let sent_clear = {
 		let map = senders.lock().map_err(|_| AppError::LockError)?;
 		map.get(session_id)
@@ -474,8 +499,7 @@ pub fn clear_output(
 		return Ok(());
 	}
 
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::pty::clear_output(conn, session_id);
+	let _ = pty_log::clear(output_dir, session_id);
 	Ok(())
 }
 
@@ -529,6 +553,7 @@ fn read_pty_output(
 	session_id: String,
 	mut reader: Box<dyn Read + Send>,
 	db: DbPool,
+	output_dir: PathBuf,
 	flush_senders: PtyFlushSenders,
 ) {
 	let mut buf = [0u8; 4096];
@@ -536,10 +561,10 @@ fn read_pty_output(
 
 	// Decouple persistence into a separate thread via channel
 	let (tx, rx) = mpsc::channel::<PersistMsg>();
-	let persist_db = db.clone();
+	let persist_dir = output_dir.clone();
 	let persist_id = session_id.clone();
 	let persist_thread = std::thread::spawn(move || {
-		persist_pty_output(rx, persist_db, &persist_id);
+		persist_pty_output(rx, &persist_dir, &persist_id);
 	});
 
 	// Store a clone of the sender so the frontend can trigger flushes
@@ -614,15 +639,18 @@ fn read_pty_output(
 	emitter.emit_exit(&session_id);
 }
 
-fn flush_pending_output(db: &DbPool, session_id: &str, pending: &mut Vec<u8>) {
+fn flush_pending_output(
+	log: &mut SessionLog,
+	session_id: &str,
+	pending: &mut Vec<u8>,
+) {
 	if pending.is_empty() {
 		return;
 	}
 
 	let data = std::mem::take(pending);
-	let Ok(mut conn) = db.lock() else { return };
 	let n = data.len();
-	match repo::pty::append_output(&mut conn, session_id, &data) {
+	match log.append(&data) {
 		Ok(()) => {
 			tracing::trace!(target: "pty", %session_id, n, "persist: appended");
 		}
@@ -639,12 +667,22 @@ fn flush_pending_output(db: &DbPool, session_id: &str, pending: &mut Vec<u8>) {
 	}
 }
 
-/// Persistence thread: buffers raw PTY bytes and writes them to DB in batches.
+/// Persistence thread: buffers raw PTY bytes and appends them to the session's
+/// log file in batches. Owns the file handle for the session's lifetime.
 fn persist_pty_output(
 	rx: mpsc::Receiver<PersistMsg>,
-	db: DbPool,
+	output_dir: &Path,
 	session_id: &str,
 ) {
+	let mut log = match SessionLog::open(output_dir, session_id) {
+		Ok(log) => log,
+		Err(e) => {
+			// Can't persist — drain the channel so the read thread never blocks.
+			tracing::warn!(target: "pty", %session_id, error = %e, "persist: failed to open log file");
+			while rx.recv().is_ok() {}
+			return;
+		}
+	};
 	let mut pending = Vec::new();
 
 	loop {
@@ -652,11 +690,11 @@ fn persist_pty_output(
 			Ok(PersistMsg::Data(data)) => {
 				pending.extend_from_slice(&data);
 				if pending.len() >= PERSIST_BATCH_BYTES {
-					flush_pending_output(&db, session_id, &mut pending);
+					flush_pending_output(&mut log, session_id, &mut pending);
 				}
 			}
 			Ok(PersistMsg::Flush) => {
-				flush_pending_output(&db, session_id, &mut pending);
+				flush_pending_output(&mut log, session_id, &mut pending);
 			}
 			Ok(PersistMsg::Clear) => {
 				pending.clear();
@@ -665,12 +703,12 @@ fn persist_pty_output(
 					%session_id,
 					"persist: clear scrollback"
 				);
-				if let Ok(mut conn) = db.lock() {
-					repo::pty::clear_output(&mut conn, session_id);
+				if let Err(e) = log.clear() {
+					tracing::warn!(target: "pty", %session_id, error = %e, "persist: failed to clear log");
 				}
 			}
 			Err(mpsc::RecvTimeoutError::Timeout) => {
-				flush_pending_output(&db, session_id, &mut pending);
+				flush_pending_output(&mut log, session_id, &mut pending);
 			}
 			Err(mpsc::RecvTimeoutError::Disconnected) => {
 				break;
@@ -678,7 +716,7 @@ fn persist_pty_output(
 		}
 	}
 
-	flush_pending_output(&db, session_id, &mut pending);
+	flush_pending_output(&mut log, session_id, &mut pending);
 	tracing::info!(target: "pty", %session_id, "persist: thread exiting");
 }
 
@@ -1220,15 +1258,22 @@ mod tests {
 		repo::pty::insert_session(&mut conn, &record).unwrap();
 	}
 
+	fn test_log_dir(tag: &str) -> PathBuf {
+		let dir = std::env::temp_dir()
+			.join(format!("pty-persist-test-{}-{tag}", std::process::id()));
+		let _ = std::fs::remove_dir_all(&dir);
+		std::fs::create_dir_all(&dir).unwrap();
+		dir
+	}
+
 	#[test]
-	fn persist_pty_output_writes_data_to_db() {
-		let db = setup_test_db();
-		insert_test_project_and_session(&db, "s-persist-data");
+	fn persist_pty_output_writes_data_to_file() {
+		let dir = test_log_dir("data");
 
 		let (tx, rx) = mpsc::channel();
-		let persist_db = db.clone();
+		let persist_dir = dir.clone();
 		let handle = std::thread::spawn(move || {
-			persist_pty_output(rx, persist_db, "s-persist-data");
+			persist_pty_output(rx, &persist_dir, "s-persist-data");
 		});
 
 		tx.send(PersistMsg::Data(b"hello persist".to_vec()))
@@ -1236,22 +1281,17 @@ mod tests {
 		drop(tx);
 		handle.join().unwrap();
 
-		let mut conn = db.lock().unwrap();
-		let history =
-			repo::pty::get_session_history(&mut conn, "s-persist-data")
-				.unwrap();
-		assert_eq!(history, b"hello persist");
+		assert_eq!(pty_log::read_all(&dir, "s-persist-data"), b"hello persist");
 	}
 
 	#[test]
 	fn persist_pty_output_clear_resets_output() {
-		let db = setup_test_db();
-		insert_test_project_and_session(&db, "s-persist-clear");
+		let dir = test_log_dir("clear");
 
 		let (tx, rx) = mpsc::channel();
-		let persist_db = db.clone();
+		let persist_dir = dir.clone();
 		let handle = std::thread::spawn(move || {
-			persist_pty_output(rx, persist_db, "s-persist-clear");
+			persist_pty_output(rx, &persist_dir, "s-persist-clear");
 		});
 
 		tx.send(PersistMsg::Data(b"some data".to_vec())).unwrap();
@@ -1259,22 +1299,17 @@ mod tests {
 		drop(tx);
 		handle.join().unwrap();
 
-		let mut conn = db.lock().unwrap();
-		let history =
-			repo::pty::get_session_history(&mut conn, "s-persist-clear")
-				.unwrap();
-		assert!(history.is_empty());
+		assert!(pty_log::read_all(&dir, "s-persist-clear").is_empty());
 	}
 
 	#[test]
-	fn persist_pty_output_flush_is_noop() {
-		let db = setup_test_db();
-		insert_test_project_and_session(&db, "s-persist-flush");
+	fn persist_pty_output_flush_writes_immediately() {
+		let dir = test_log_dir("flush");
 
 		let (tx, rx) = mpsc::channel();
-		let persist_db = db.clone();
+		let persist_dir = dir.clone();
 		let handle = std::thread::spawn(move || {
-			persist_pty_output(rx, persist_db, "s-persist-flush");
+			persist_pty_output(rx, &persist_dir, "s-persist-flush");
 		});
 
 		tx.send(PersistMsg::Data(b"data before flush".to_vec()))
@@ -1283,11 +1318,10 @@ mod tests {
 		drop(tx);
 		handle.join().unwrap();
 
-		let mut conn = db.lock().unwrap();
-		let history =
-			repo::pty::get_session_history(&mut conn, "s-persist-flush")
-				.unwrap();
-		assert_eq!(history, b"data before flush");
+		assert_eq!(
+			pty_log::read_all(&dir, "s-persist-flush"),
+			b"data before flush"
+		);
 	}
 
 	#[test]

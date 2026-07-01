@@ -6,7 +6,7 @@ use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::notification::{AgentStatus, AgentStatusEvent};
 use model::watcher::WatchEvent;
-use service::pty::{PtyContext, PtyFlushSenders};
+use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
 use service::{PtyEventEmitter, WatchEventSender};
 
 /// Tauri implementation of the PtyEventEmitter trait.
@@ -48,6 +48,7 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 		flush_senders: app.state::<PtyFlushSenders>().inner().clone(),
 		read_threads: app.state::<PtyReadThreads>().inner().clone(),
 		emitter: Arc::new(TauriPtyEmitter(app.clone())),
+		output_dir: app.state::<PtyLogDir>().0.clone(),
 		helper_url: app
 			.try_state::<crate::helper::HelperState>()
 			.map(|s| format!("http://127.0.0.1:{}", s.port)),

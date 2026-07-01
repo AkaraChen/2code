@@ -286,9 +286,10 @@ fn delete_cascades_to_profiles_and_sessions() {
 	let list = service::project::list(&mut conn).unwrap();
 	assert!(list.is_empty());
 
-	// Session history should also be gone (FK cascade)
-	let history_result = service::pty::get_history(&mut conn, "sess-1");
-	assert!(history_result.is_err());
+	// Session row should be gone via FK cascade. (Its output log file, if any,
+	// is a separate concern reaped by the startup orphan-log GC.)
+	let remaining = repo::pty::all_session_ids(&mut conn).unwrap();
+	assert!(!remaining.contains(&"sess-1".to_string()));
 
 	cleanup(&dir);
 }

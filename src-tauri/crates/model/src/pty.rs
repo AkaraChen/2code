@@ -1,4 +1,4 @@
-use crate::schema::{pty_session_output, pty_sessions};
+use crate::schema::pty_sessions;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -27,13 +27,6 @@ pub struct NewPtySessionRecord<'a> {
 	pub cwd: &'a str,
 	pub cols: i32,
 	pub rows: i32,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = pty_session_output)]
-pub struct NewPtySessionOutput<'a> {
-	pub session_id: &'a str,
-	pub data: &'a [u8],
 }
 
 #[derive(Deserialize)]

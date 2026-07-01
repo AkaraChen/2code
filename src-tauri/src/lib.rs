@@ -60,6 +60,12 @@ pub fn run() {
 			service::pty::mark_all_closed(&pool);
 			tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
 
+			// Reap output log files with no matching session row (crash
+			// leftovers + profile/project cascade-delete orphans).
+			let log_dir = infra::pty_log::logs_dir(&app_data_dir);
+			service::pty::gc_orphan_logs(&pool, &log_dir);
+			app.manage(service::pty::PtyLogDir(log_dir));
+
 			app.manage(pool);
 
 			// Start helper HTTP server (for CLI sidecar communication)

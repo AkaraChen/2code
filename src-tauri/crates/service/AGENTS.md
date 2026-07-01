@@ -8,7 +8,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 |------|------|
 | `project.rs` | Create/update/delete projects; folder validation; config loading via infra |
 | `profile.rs` | Create profile → git worktree add → run setup_script; delete → teardown_script → worktree remove |
-| `pty.rs` | PTY session create/close/restore; session cleanup (`mark_all_open_sessions_closed`); output chunk management |
+| `pty.rs` | PTY session create/close/restore; session cleanup (`mark_all_closed`); output persistence to per-session files (`infra::pty_log`) + orphan-log GC (`gc_orphan_logs`) |
 | `watcher.rs` | File system watcher setup and event routing |
 | `debug.rs` | Debug log session management |
 | `lib.rs` | Re-exports |
@@ -25,7 +25,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 
 **PTY cleanup**: `mark_all_open_sessions_closed()` runs on both startup (orphan cleanup) and graceful shutdown.
 
-**PTY persistence architecture**: `PersistMsg` enum (`Data`, `Flush`, `Clear`) — background thread per session batches 32KB chunks, flushes every 250ms. `PtyFlushSenders` allows async flush from frontend.
+**PTY persistence architecture**: `PersistMsg` enum (`Data`, `Flush`, `Clear`) — a per-session persistence thread owns a `pty_log::SessionLog` (append-only file handle) and batches 32KB, flushing every 250ms. `Clear` truncates the file (`ESC[3J`). No DB lock on this hot path. `PtyFlushSenders` allows async flush from frontend.
 
 **Scrollback restore**: `strip_alternative_screen()` strips alternate screen buffer content (vim/tmux) by parsing VT100 escape sequences (`ESC [ ? 1047m`) before replaying history. Caps at 10KB to prevent bloat.
 
