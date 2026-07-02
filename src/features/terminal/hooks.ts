@@ -9,6 +9,7 @@ import {
 	deletePtySessionRecord,
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
+import { removeTerminalStorage } from "./lib";
 import { useTerminalStore } from "./store";
 import { DEFAULT_TERMINAL_SHELL } from "./templates";
 import type { TerminalThemeId } from "./themes";
@@ -75,6 +76,7 @@ export function useCloseTerminalTab() {
 				terminalProfile.tabs[0]?.id === sessionId;
 
 			useTerminalStore.getState().closeTab(profileId, sessionId);
+			removeTerminalStorage(sessionId);
 
 			if (isLastTab) {
 				const fileProfile = useFileViewerTabsStore.getState().profiles[profileId];

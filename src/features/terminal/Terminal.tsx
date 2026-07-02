@@ -44,6 +44,8 @@ import {
   buildFontFamilyCss,
   createResizeScheduler,
   createTerminalKeyEventHandler,
+  BUFFER_STORAGE_PREFIX,
+  DIMS_STORAGE_PREFIX,
   getTerminalParkingContainer,
   installImagePasteFallback,
   loadAddons,
@@ -56,8 +58,6 @@ import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
 const SERIALIZE_SCROLLBACK = 1000;
-const BUFFER_STORAGE_PREFIX = "terminal-buffer:";
-const DIMS_STORAGE_PREFIX = "terminal-dims:";
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 const AGENT_DETECTION_INTERVAL_MS = 250;
@@ -612,7 +612,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       });
 
       // 13. Sync handlers
-      term.onData((data) => {
+      const dataDisposable = term.onData((data) => {
         writeToPty({ sessionId, data }).catch((error) => {
           consola.warn(
             `[pty-terminal] failed to write input for session ${sessionId}`,
@@ -620,9 +620,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           );
         });
       });
-      term.onResize(({ rows, cols }) => {
+      const resizeDisposable = term.onResize(({ rows, cols }) => {
         resizePty({ sessionId, rows, cols });
       });
+      cleanups.push(() => dataDisposable.dispose());
+      cleanups.push(() => resizeDisposable.dispose());
 
       // 14. React 19 ref cleanup
       return () => {
@@ -633,11 +635,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         // Flush buffered PTY output to DB before teardown (best-effort)
         flushPtyOutput({ sessionId }).catch(() => {});
 
-        // Persist buffer + dimensions for cold restart
-        if (serializeAddonRef.current) {
-          persistBuffer(sessionId, serializeAddonRef.current);
+        const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
+          (profile) => profile.tabs.some((tab) => tab.id === sessionId)
+        );
+
+        if (stillOpen) {
+          // Persist buffer + dimensions for cold restart or live remount.
+          if (serializeAddonRef.current) {
+            persistBuffer(sessionId, serializeAddonRef.current);
+          }
+          persistDimensions(sessionId, term.cols, term.rows);
         }
-        persistDimensions(sessionId, term.cols, term.rows);
 
         // Reset stream state
         isStreamReadyRef.current = false;
@@ -659,8 +667,15 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           cleanup();
         }
 
-        // Park wrapper instead of removing — xterm survives React unmount
-        getTerminalParkingContainer().appendChild(wrapper);
+        if (stillOpen) {
+          // Park wrapper instead of removing — xterm survives React unmount
+          getTerminalParkingContainer().appendChild(wrapper);
+        } else if (typeof term.dispose === "function") {
+          term.dispose();
+          wrapper.remove();
+        } else {
+          wrapper.remove();
+        }
 
         termRef.current = null;
         fitAddonRef.current = null;

@@ -28,4 +28,10 @@ export {
 	type ResizeScheduler,
 } from "./resizeScheduler";
 export { suppressQueryResponses } from "./suppressQueryResponses";
+export {
+	BUFFER_STORAGE_PREFIX,
+	DIMS_STORAGE_PREFIX,
+	removeTerminalStorage,
+	sweepTerminalStorage,
+} from "./terminalStorage";
 export { TitleDebouncer } from "./titleDebounce";

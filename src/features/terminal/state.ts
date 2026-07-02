@@ -8,6 +8,7 @@ import {
 } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
+import { removeTerminalStorage, sweepTerminalStorage } from "./lib";
 import { useTerminalStore } from "./store";
 
 /**
@@ -62,36 +63,48 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	);
 
 	const allSessions = projectSessions.flatMap(({ sessions }) => sessions);
-	if (allSessions.length === 0) return;
+	if (allSessions.length > 0) {
+		await mapWithLimit(allSessions, 3, async (session) => {
+			try {
+				const result = await restorePtySession({
+					oldSessionId: session.id,
+					meta: { profileId: session.profile_id, title: session.title },
+					config: {
+						shell: session.shell,
+						cwd: session.cwd,
+						rows: session.rows,
+						cols: session.cols,
+						startupCommands: [],
+					},
+				});
 
-	await mapWithLimit(allSessions, 3, async (session) => {
-		try {
-			const result = await restorePtySession({
-				oldSessionId: session.id,
-				meta: { profileId: session.profile_id, title: session.title },
-				config: {
-					shell: session.shell,
-					cwd: session.cwd,
-					rows: session.rows,
-					cols: session.cols,
-					startupCommands: [],
-				},
-			});
+				removeTerminalStorage(session.id);
 
-			if (result.history.length > 0) {
-				sessionHistory.set(
-					result.newSessionId,
-					new Uint8Array(result.history),
-				);
+				if (result.history.length > 0) {
+					sessionHistory.set(
+						result.newSessionId,
+						new Uint8Array(result.history),
+					);
+				}
+
+				useTerminalStore
+					.getState()
+					.addTab(session.profile_id, result.newSessionId, session.title);
+			} catch (e) {
+				consola.error(`[pty-restore] failed: ${session.id}`, e);
 			}
+		});
+	}
 
-			useTerminalStore
-				.getState()
-				.addTab(session.profile_id, result.newSessionId, session.title);
-		} catch (e) {
-			consola.error(`[pty-restore] failed: ${session.id}`, e);
-		}
-	});
+	const liveSessionIds = new Set(
+		Object.values(useTerminalStore.getState().profiles).flatMap((profile) =>
+			profile.tabs.map((tab) => tab.id)
+		),
+	);
+	const removed = sweepTerminalStorage(liveSessionIds);
+	if (removed > 0) {
+		consola.debug(`[pty-restore] swept ${removed} stale terminal storage keys`);
+	}
 }
 
 export async function mapWithLimit<T>(
