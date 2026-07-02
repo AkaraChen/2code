@@ -12,6 +12,7 @@ import {
 	getCachedProjectAvatar,
 	setCachedProjectAvatar,
 } from "@/features/projects/projectAvatarCache";
+import { useTerminalStore } from "@/features/terminal/store";
 import type {
 	ProjectConfig,
 	ProjectGroup,
@@ -278,6 +279,12 @@ export function useDeleteProject(options?: {
 				queryClient.getQueryData<ProjectWithProfiles[]>(
 					queryKeys.projects.all,
 				) ?? [];
+			const deletedProject = projectsBeforeDelete.find(
+				(project) => project.id === id,
+			);
+			deletedProject?.profiles.forEach((profile) => {
+				useTerminalStore.getState().removeProfile(profile.id);
+			});
 			queryClient.setQueryData<ProjectWithProfiles[]>(
 				queryKeys.projects.all,
 				(projects) => projects?.filter((project) => project.id !== id),

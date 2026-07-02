@@ -193,6 +193,25 @@ describe("useTerminalStore", () => {
 			expect(getState().profiles.p1).toBeUndefined();
 		});
 
+		it("removes tab statuses and completions for only that profile", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().addTab("p1", "s2", "T2");
+			getState().addTab("p2", "s3", "T3");
+			useTerminalStore.setState({
+				agentStatuses: { s1: "waiting", s3: "running" },
+				agentCompletions: { s2: "completed", s3: "completed" },
+			});
+
+			getState().removeProfile("p1");
+
+			expect(getState().profiles.p1).toBeUndefined();
+			expect(getState().profiles.p2).toBeDefined();
+			expect(getState().agentStatuses.s1).toBeUndefined();
+			expect(getState().agentCompletions.s2).toBeUndefined();
+			expect(getState().agentStatuses.s3).toBe("running");
+			expect(getState().agentCompletions.s3).toBe("completed");
+		});
+
 		it("no-ops when profile does not exist", () => {
 			expect(() =>
 				getState().removeProfile("nonexistent"),

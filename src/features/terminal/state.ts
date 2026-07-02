@@ -31,9 +31,26 @@ function createRestorationPipeline(): Promise<void> {
 		});
 
 		let restored = false;
+		let released = false;
+		let shouldRelease = false;
+		let unsubscribe: (() => void) | null = null;
 
-		observer.subscribe((result) => {
+		const releaseObserver = () => {
+			if (released) return;
+			if (!unsubscribe) {
+				shouldRelease = true;
+				return;
+			}
+			released = true;
+			unsubscribe();
+			observer.destroy();
+		};
+
+		unsubscribe = observer.subscribe((result) => {
 			if (!result.data) return;
+			if (restored) return;
+
+			restored = true;
 
 			// Stale profile cleanup
 			const validIds = new Set(
@@ -42,15 +59,20 @@ function createRestorationPipeline(): Promise<void> {
 			useTerminalStore.getState().removeStaleProfiles(validIds);
 
 			// One-shot restoration
-			if (!restored) {
-				restored = true;
-				if (result.data.length === 0) {
+			if (result.data.length === 0) {
+				releaseObserver();
+				resolve();
+			} else {
+				restoreTerminals(result.data).finally(() => {
+					releaseObserver();
 					resolve();
-				} else {
-					restoreTerminals(result.data).finally(resolve);
-				}
+				});
 			}
 		});
+
+		if (shouldRelease) {
+			releaseObserver();
+		}
 	});
 }
 

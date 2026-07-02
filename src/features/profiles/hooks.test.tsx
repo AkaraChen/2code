@@ -6,7 +6,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
-import { useCreateProfile, useProfileDeleteCheck } from "./hooks";
+import { useTerminalStore } from "@/features/terminal/store";
+import type { ProjectWithProfiles } from "@/generated";
+import { queryKeys } from "@/shared/lib/queryKeys";
+import { useCreateProfile, useDeleteProfile, useProfileDeleteCheck } from "./hooks";
 
 const {
 	createProfileMock,
@@ -30,15 +33,21 @@ vi.mock("@/generated", async () => {
 	};
 });
 
-function createWrapper() {
-	const queryClient = new QueryClient({
+function createQueryClient() {
+	return new QueryClient({
 		defaultOptions: {
 			queries: {
 				retry: false,
 			},
 		},
 	});
+}
 
+function createWrapper() {
+	return createWrapperWithClient(createQueryClient());
+}
+
+function createWrapperWithClient(queryClient: QueryClient) {
 	return ({ children }: { children: ReactNode }) => (
 		<QueryClientProvider client={queryClient}>
 			{children}
@@ -52,6 +61,12 @@ describe("profile hooks", () => {
 		deleteProfileMock.mockReset();
 		getProfileDeleteCheckMock.mockReset();
 		useWorktreeSettingsStore.setState({ defaultWorktreeDir: "" });
+		useTerminalStore.setState({
+			profiles: {},
+			agentStatuses: {},
+			agentCompletions: {},
+			sessionProfileIds: {},
+		});
 		localStorage.clear();
 	});
 
@@ -177,5 +192,71 @@ describe("profile hooks", () => {
 		});
 
 		expect(getProfileDeleteCheckMock).not.toHaveBeenCalled();
+	});
+
+	it("removes terminal tabs for the deleted profile only", async () => {
+		const queryClient = createQueryClient();
+		const projects: ProjectWithProfiles[] = [
+			{
+				id: "project-1",
+				name: "Project 1",
+				folder: "/projects/one",
+				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 1000,
+				profiles: [
+					{
+						id: "profile-1",
+						project_id: "project-1",
+						branch_name: "main",
+						worktree_path: "/projects/one",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: true,
+						notes: "",
+					},
+					{
+						id: "profile-2",
+						project_id: "project-1",
+						branch_name: "feature",
+						worktree_path: "/projects/one-feature",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: false,
+						notes: "",
+					},
+				],
+			},
+		];
+		queryClient.setQueryData(queryKeys.projects.all, projects);
+		const terminalStore = useTerminalStore.getState();
+		terminalStore.addTab("profile-1", "session-1", "Shell 1");
+		terminalStore.addTab("profile-2", "session-2", "Shell 2");
+		useTerminalStore.setState({
+			agentStatuses: {
+				"session-1": "waiting",
+				"session-2": "running",
+			},
+		});
+		deleteProfileMock.mockResolvedValue(undefined);
+
+		const { result } = renderHook(() => useDeleteProfile(), {
+			wrapper: createWrapperWithClient(queryClient),
+		});
+
+		await act(async () => {
+			await result.current.mutateAsync({
+				id: "profile-1",
+				projectId: "project-1",
+			});
+		});
+
+		const state = useTerminalStore.getState();
+		expect(state.profiles["profile-1"]).toBeUndefined();
+		expect(state.profiles["profile-2"]).toBeDefined();
+		expect(state.agentStatuses["session-1"]).toBeUndefined();
+		expect(state.agentStatuses["session-2"]).toBe("running");
+		expect(
+			queryClient
+				.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all)?.[0]
+				.profiles.map((profile) => profile.id),
+		).toEqual(["profile-2"]);
 	});
 });

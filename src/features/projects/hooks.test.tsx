@@ -10,6 +10,7 @@ import type {
 	ProjectSidebarLayoutUpdate,
 	ProjectWithProfiles,
 } from "@/generated";
+import { useTerminalStore } from "@/features/terminal/store";
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 import {
 	useDeleteFileTreePaths,
@@ -89,6 +90,12 @@ function getRuntimeQueryOptions(
 describe("useDeleteProject", () => {
 	beforeEach(() => {
 		deleteProjectMock.mockReset();
+		useTerminalStore.setState({
+			profiles: {},
+			agentStatuses: {},
+			agentCompletions: {},
+			sessionProfileIds: {},
+		});
 	});
 
 	it("runs success callback before invalidating dependent caches", async () => {
@@ -142,6 +149,85 @@ describe("useDeleteProject", () => {
 		});
 		expect(events).toEqual(["success", "invalidate", "invalidate"]);
 		invalidateQueriesSpy.mockRestore();
+	});
+
+	it("removes terminal profiles owned by the deleted project", async () => {
+		const queryClient = createQueryClient();
+		const projects: ProjectWithProfiles[] = [
+			{
+				id: "project-1",
+				name: "Project 1",
+				folder: "/projects/one",
+				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 1000,
+				profiles: [
+					{
+						id: "profile-1",
+						project_id: "project-1",
+						branch_name: "main",
+						worktree_path: "/projects/one",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: true,
+						notes: "",
+					},
+					{
+						id: "profile-2",
+						project_id: "project-1",
+						branch_name: "feature",
+						worktree_path: "/projects/one-feature",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: false,
+						notes: "",
+					},
+				],
+			},
+			{
+				id: "project-2",
+				name: "Project 2",
+				folder: "/projects/two",
+				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 2000,
+				profiles: [
+					{
+						id: "profile-3",
+						project_id: "project-2",
+						branch_name: "main",
+						worktree_path: "/projects/two",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: true,
+						notes: "",
+					},
+				],
+			},
+		];
+		queryClient.setQueryData(queryKeys.projects.all, projects);
+		const terminalStore = useTerminalStore.getState();
+		terminalStore.addTab("profile-1", "session-1", "Shell 1");
+		terminalStore.addTab("profile-2", "session-2", "Shell 2");
+		terminalStore.addTab("profile-3", "session-3", "Shell 3");
+		useTerminalStore.setState({
+			agentStatuses: {
+				"session-1": "waiting",
+				"session-3": "running",
+			},
+		});
+		deleteProjectMock.mockResolvedValue(undefined);
+
+		const { result } = renderHook(
+			() => useDeleteProject(),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.mutateAsync("project-1");
+		});
+
+		const state = useTerminalStore.getState();
+		expect(state.profiles["profile-1"]).toBeUndefined();
+		expect(state.profiles["profile-2"]).toBeUndefined();
+		expect(state.profiles["profile-3"]).toBeDefined();
+		expect(state.agentStatuses["session-1"]).toBeUndefined();
+		expect(state.agentStatuses["session-3"]).toBe("running");
 	});
 });
 
