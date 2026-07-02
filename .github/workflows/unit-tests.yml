@@ -30,6 +30,9 @@ jobs:
       - name: Run node tooling typecheck
         run: ./node_modules/.bin/tsc -p tsconfig.node.json --noEmit
 
+      - name: Run app typecheck
+        run: bun run typecheck
+
       - name: Run Vitest
         run: bun run test
 
@@ -96,20 +99,6 @@ jobs:
           cache-bin: false
           workspaces: |
             src-tauri -> target
-
-      - name: Build helper sidecar for tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
-          BIN_SUFFIX=""
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            BIN_SUFFIX=".exe"
-          fi
-          cargo build --manifest-path src-tauri/Cargo.toml -p twocode-helper
-          mkdir -p src-tauri/binaries
-          cp -f "src-tauri/target/debug/2code-helper${BIN_SUFFIX}" "src-tauri/binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
-          chmod +x "src-tauri/binaries/2code-helper-${TARGET_TRIPLE}${BIN_SUFFIX}"
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml

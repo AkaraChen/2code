@@ -6,6 +6,7 @@
     "dev": "vite",
     "paraglide:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
     "build": "bun run paraglide:compile && tsc && vite build",
+    "typecheck": "bun run paraglide:compile && tsc -p tsconfig.json --noEmit",
     "tauri:before-build": "bun ./scripts/tauri-before.mjs build",
     "tauri:before-dev": "bun ./scripts/tauri-before.mjs dev",
     "typegen": "rm -rf src/generated && cargo tauri-typegen generate && node ./scripts/fix-tauri-generated.mjs",

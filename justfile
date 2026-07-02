@@ -15,6 +15,12 @@ test-all:
     bun run test
     just test-rust
 
+verify:
+    bun run lint:check
+    bun run typecheck
+    bun run test
+    just test-rust
+
 coverage:
     cd src-tauri && cargo llvm-cov --lib --tests --html --output-dir coverage/
 
