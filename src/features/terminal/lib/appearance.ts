@@ -1,13 +1,4 @@
-import type { ITheme } from "@xterm/xterm";
-
-export interface TerminalAppearance {
-	theme: ITheme;
-	background: string;
-	fontFamily: string;
-	fontSize: number;
-}
-
-export const TERMINAL_FONT_FAMILY_CSS_VARIABLE =
+const TERMINAL_FONT_FAMILY_CSS_VARIABLE =
 	"--terminal-font-family";
 
 export function applyTerminalFontFamilyCssVariable(
@@ -43,7 +34,7 @@ function serializeFontFamilyList(families: string[]): string {
 		.join(", ");
 }
 
-export const DEFAULT_TERMINAL_FONT_FAMILIES = [
+const DEFAULT_TERMINAL_FONT_FAMILIES = [
 	"JetBrains Mono",
 	"JetBrainsMono Nerd Font",
 	"MesloLGM Nerd Font",
@@ -59,11 +50,9 @@ export const DEFAULT_TERMINAL_FONT_FAMILIES = [
 	"monospace",
 ] as const;
 
-export const DEFAULT_TERMINAL_FONT_FAMILY = serializeFontFamilyList([
+const DEFAULT_TERMINAL_FONT_FAMILY = serializeFontFamilyList([
 	...DEFAULT_TERMINAL_FONT_FAMILIES,
 ]);
-
-export const DEFAULT_TERMINAL_FONT_SIZE = 13;
 
 const MONOSPACE_GENERIC_FAMILIES = new Set(["monospace", "ui-monospace"]);
 
@@ -91,7 +80,7 @@ function parseFontFamilyList(cssValue: string): string[] {
 	return families;
 }
 
-export function sanitizeTerminalFontFamily(
+function sanitizeTerminalFontFamily(
 	cssValue: string | null | undefined,
 ): string {
 	if (!cssValue || !cssValue.trim()) return DEFAULT_TERMINAL_FONT_FAMILY;

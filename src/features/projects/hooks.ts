@@ -370,7 +370,7 @@ function profileWorkspaceQueryKeys(profileId: string): QueryKey[] {
 	];
 }
 
-export async function refreshProfileWorkspaceCaches(
+async function refreshProfileWorkspaceCaches(
 	queryClient: QueryClient,
 	profileId: string,
 ) {

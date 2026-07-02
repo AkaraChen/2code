@@ -12,12 +12,12 @@ import {
 	gitBinaryPreviewSources,
 } from "../utils";
 
-export interface GitPreviewContextWorkingTree {
+interface GitPreviewContextWorkingTree {
 	kind: "working-tree";
 	profileId: string;
 }
 
-export interface GitPreviewContextCommit {
+interface GitPreviewContextCommit {
 	kind: "commit";
 	profileId: string;
 	commitHash: string;

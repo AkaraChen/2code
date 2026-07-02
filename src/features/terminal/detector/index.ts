@@ -1,5 +1,4 @@
 export {
-	AgentStatusDetector,
 	createAgentStatusDetector,
 	detectAgentStatus,
 	readTerminalDetectionScreen,
@@ -7,10 +6,5 @@ export {
 export type {
 	AgentDetectionResult,
 	AgentId,
-	AgentSemanticState,
 	DetectionInput,
-	Gate,
-	Manifest,
-	RegionName,
-	Rule,
 } from "./types";

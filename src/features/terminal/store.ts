@@ -8,7 +8,7 @@ interface TerminalTab {
 }
 
 export type AgentStatus = "running" | "waiting";
-export type AgentStatusUpdate = AgentStatus | "idle";
+type AgentStatusUpdate = AgentStatus | "idle";
 export type AgentCompletionNotification = "completed";
 
 interface ProjectTerminalState {

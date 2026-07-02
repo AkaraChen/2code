@@ -57,6 +57,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - Rust stable toolchain
 - Tauri 2 development prerequisites
 - `just` for development helper commands
+- `fama` on `PATH` for `just fmt` TypeScript formatting
 
 ### Install dependencies
 

@@ -17,14 +17,14 @@ import type { Terminal as XTerm } from "@xterm/xterm";
  * wrap.
  */
 
-export function isNonTextPaste(event: ClipboardEvent): boolean {
+function isNonTextPaste(event: ClipboardEvent): boolean {
 	const data = event.clipboardData;
 	if (!data) return false;
 	if (data.getData("text/plain")) return false;
 	return (data.files?.length ?? 0) > 0;
 }
 
-export function handleImagePasteFallback(
+function handleImagePasteFallback(
 	event: ClipboardEvent,
 	terminal: XTerm,
 ): void {

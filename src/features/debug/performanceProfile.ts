@@ -71,7 +71,7 @@ export function onReactRender(
 	});
 }
 
-export async function flushPerformanceProfile() {
+async function flushPerformanceProfile() {
 	if (!isEnabled() || flushing || buffer.length === 0) return;
 	flushing = true;
 	const events = buffer;

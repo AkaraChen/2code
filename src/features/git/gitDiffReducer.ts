@@ -3,7 +3,7 @@ import { produce } from "immer";
 import { createContext } from "react";
 import type { GitCommit } from "@/generated";
 
-export type Tab = "changes" | "history";
+type Tab = "changes" | "history";
 export type GitDiffViewMode = NonNullable<FileDiffOptions<unknown>["diffStyle"]>;
 
 export interface GitDiffState {

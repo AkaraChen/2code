@@ -21,14 +21,14 @@ export const staticControlIds = [
 ] as const;
 
 export type LaunchAppControlId = (typeof launchAppControlIds)[number];
-export type StaticControlId = (typeof staticControlIds)[number];
+type StaticControlId = (typeof staticControlIds)[number];
 export type ControlId = LaunchAppControlId | StaticControlId;
 
 export function isLaunchAppControlId(id: string): id is LaunchAppControlId {
 	return launchAppControlIds.includes(id as LaunchAppControlId);
 }
 
-export interface ControlOptionField {
+interface ControlOptionField {
 	key: string;
 	label: () => string;
 	type: "text" | "number" | "select";

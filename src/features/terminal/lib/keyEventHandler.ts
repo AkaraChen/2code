@@ -128,16 +128,3 @@ export function createTerminalKeyEventHandler(
 		return true;
 	};
 }
-
-export function installTerminalKeyEventHandler(
-	terminal: XTerm,
-	options: TerminalKeyEventHandlerOptions = {},
-): () => void {
-	terminal.attachCustomKeyEventHandler(
-		createTerminalKeyEventHandler(terminal, options),
-	);
-
-	return () => {
-		terminal.attachCustomKeyEventHandler(() => true);
-	};
-}

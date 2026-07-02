@@ -14,14 +14,14 @@ export type SidebarContainerId =
 	| "top-level"
 	| `group:${string}`;
 
-export interface SidebarGroupEntry {
+interface SidebarGroupEntry {
 	id: SidebarEntryId;
 	kind: "group";
 	group: ProjectGroup;
 	projects: ProjectWithProfiles[];
 }
 
-export interface SidebarProjectEntry {
+interface SidebarProjectEntry {
 	id: SidebarEntryId;
 	kind: "project";
 	project: ProjectWithProfiles;
