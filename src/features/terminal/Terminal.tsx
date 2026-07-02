@@ -6,6 +6,7 @@ import {
   writeText as writeClipboardText } from
 "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-shell";
+import type { SearchAddon } from "@xterm/addon-search";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
@@ -39,6 +40,7 @@ import {
 import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore, type AgentStatus } from "./store";
+import { TerminalSearchBar } from "./TerminalSearchBar";
 import {
   applyTerminalFontFamilyCssVariable,
   buildFontFamilyCss,
@@ -114,11 +116,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const isStreamReadyRef = useRef(false);
   const pendingEventsRef = useRef<Uint8Array[]>([]);
   const isActiveRef = useRef(isActive);
   const runAgentDetectionNowRef = useRef<(() => void) | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
   const fontSize = useTerminalSettingsStore((s) => s.fontSize);
   const increaseFontSize = useTerminalSettingsStore(
@@ -192,6 +196,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const shellStyle = useMemo(
     () => ({
       display: "flex",
+      position: "relative" as const,
       width: "100%",
       height: "100%",
       padding: "8px 0 0 8px",
@@ -391,6 +396,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       });
       fitAddonRef.current = addonsResult.fitAddon;
       serializeAddonRef.current = addonsResult.serializeAddon;
+      searchAddonRef.current = addonsResult.searchAddon;
       cleanups.push(addonsResult.dispose);
 
       // 3. Suppress query response sequences (CPR, focus reports, mode reports)
@@ -454,6 +460,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             finally(() => {
               void writeToPty({ sessionId, data: "\x0C" });
             });
+            return false;
+          }
+          if (action.type === "open-search") {
+            setSearchOpen(true);
             return false;
           }
           if (action.type === "copy-selection-or-interrupt") {
@@ -724,6 +734,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         termRef.current = null;
         fitAddonRef.current = null;
         serializeAddonRef.current = null;
+        searchAddonRef.current = null;
       };
     },
     [
@@ -741,6 +752,15 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				<div
           ref={terminalRef}
           style={{ flex: 1, minWidth: 0, minHeight: 0 }} />
+				{searchOpen && searchAddonRef.current && (
+					<TerminalSearchBar
+						searchAddon={searchAddonRef.current}
+						onClose={() => {
+							setSearchOpen(false);
+							termRef.current?.focus();
+						}}
+					/>
+				)}
         
 			</div>
 

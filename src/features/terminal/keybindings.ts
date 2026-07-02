@@ -14,7 +14,8 @@ type TerminalShortcutAction =
 	| { type: "decrease-font-size" }
 	| { type: "clear-screen" }
 	| { type: "copy-selection-or-interrupt" }
-	| { type: "paste-clipboard" };
+	| { type: "paste-clipboard" }
+	| { type: "open-search" };
 
 function isMacPlatform(platform: string) {
 	return platform.toUpperCase().includes("MAC");
@@ -61,6 +62,9 @@ export function getTerminalShortcutAction(
 	}
 
 	if (isPlainMetaShortcut(event, platform)) {
+		if (!event.shiftKey && event.key.toLowerCase() === "f") {
+			return { type: "open-search" };
+		}
 		if (
 			event.code === "Equal"
 			|| event.key === "="
@@ -75,6 +79,17 @@ export function getTerminalShortcutAction(
 		) {
 			return { type: "decrease-font-size" };
 		}
+	}
+
+	if (
+		event.ctrlKey
+		&& !event.metaKey
+		&& !event.altKey
+		&& event.shiftKey
+		&& !isMacPlatform(platform)
+		&& event.key.toLowerCase() === "f"
+	) {
+		return { type: "open-search" };
 	}
 
 	if (

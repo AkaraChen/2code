@@ -119,6 +119,24 @@ describe("getTerminalShortcutAction", () => {
 		).toEqual({ type: "decrease-font-size" });
 	});
 
+	it("maps Cmd+F to terminal search on macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ metaKey: true, key: "f" }),
+				"MacIntel",
+			),
+		).toEqual({ type: "open-search" });
+	});
+
+	it("maps Ctrl+Shift+F to terminal search on non-macOS", () => {
+		expect(
+			getTerminalShortcutAction(
+				makeEvent({ ctrlKey: true, shiftKey: true, key: "f" }),
+				"Win32",
+			),
+		).toEqual({ type: "open-search" });
+	});
+
 	it("does not map font size shortcuts on non-macOS platforms", () => {
 		expect(
 			getTerminalShortcutAction(
