@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use infra::db::DbPool;
 use model::error::AppError;
@@ -36,11 +36,11 @@ pub async fn create_profile(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn delete_profile(
+	app: AppHandle,
 	id: String,
-	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || service::profile::delete_with_db(&db, &id))
+	let ctx = crate::bridge::build_pty_context(&app);
+	super::run_blocking(move || service::profile::delete_with_context(&ctx, &id))
 		.await
 }
 

@@ -2,8 +2,10 @@ mod common;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use common::{cleanup, create_project_with_git_repo, setup_db};
+use diesel::RunQueryDsl;
 use infra::db::DbPool;
 use infra::pty_log::{self, SessionLog};
 use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
@@ -78,6 +80,48 @@ fn pty_context(
 	};
 
 	(ctx, sessions, read_threads, logs)
+}
+
+fn wait_for_flush_sender(ctx: &PtyContext, session_id: &str) {
+	for _ in 0..50 {
+		if ctx
+			.flush_senders
+			.lock()
+			.unwrap()
+			.contains_key(session_id)
+		{
+			return;
+		}
+		std::thread::sleep(Duration::from_millis(20));
+	}
+	panic!("flush sender was not registered for session {session_id}");
+}
+
+fn pty_config(cwd: String) -> PtyConfig {
+	PtyConfig {
+		shell: test_shell(),
+		cwd,
+		rows: 24,
+		cols: 80,
+		startup_commands: Vec::new(),
+	}
+}
+
+fn create_live_session(
+	ctx: &PtyContext,
+	profile_id: &str,
+	cwd: &str,
+	title: &str,
+) -> String {
+	service::pty::create_session(
+		ctx,
+		&PtySessionMeta {
+			profile_id: profile_id.to_string(),
+			title: title.to_string(),
+		},
+		&pty_config(cwd.to_string()),
+	)
+	.unwrap()
 }
 
 /// Helper: insert a session record for a given profile.
@@ -475,6 +519,36 @@ fn create_session_executes_startup_commands() {
 	cleanup(&dir);
 }
 
+#[test]
+fn create_session_cleans_up_live_process_when_db_insert_fails() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	diesel::sql_query("DROP TABLE pty_sessions")
+		.execute(&mut conn)
+		.unwrap();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "create-failure-cleanup");
+
+	let result = service::pty::create_session(
+		&ctx,
+		&PtySessionMeta {
+			profile_id: default_profile.id.clone(),
+			title: "Broken".to_string(),
+		},
+		&pty_config(default_profile.worktree_path.clone()),
+	);
+
+	assert!(result.is_err());
+	assert!(sessions.lock().unwrap().is_empty());
+
+	infra::pty::close_all_sessions(&sessions);
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
 // ============================================================
 // Session Delete & Frontend Flows
 // ============================================================
@@ -649,6 +723,115 @@ fn restore_session_with_empty_history_still_swaps_records() {
 			.any(|session| session.id == result.new_session_id));
 	}
 
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn delete_profile_closes_live_session_and_removes_log() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let profile =
+		service::profile::create(&mut conn, &project.id, "live-profile")
+			.unwrap();
+	let profile_id = profile.id.clone();
+	let worktree_path = profile.worktree_path.clone();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "delete-profile-live");
+	let session_id =
+		create_live_session(&ctx, &profile_id, &worktree_path, "Profile live");
+	wait_for_flush_sender(&ctx, &session_id);
+	write_output(&logs, &session_id, b"profile output");
+
+	service::profile::delete_with_context(&ctx, &profile_id).unwrap();
+
+	assert!(!sessions.lock().unwrap().contains_key(&session_id));
+	assert!(!pty_log::session_path(&logs, &session_id).exists());
+
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn delete_project_closes_live_session_and_removes_log() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let project_id = project.id.clone();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "delete-project-live");
+	let session_id = create_live_session(
+		&ctx,
+		&default_profile.id,
+		&default_profile.worktree_path,
+		"Project live",
+	);
+	wait_for_flush_sender(&ctx, &session_id);
+	write_output(&logs, &session_id, b"project output");
+
+	service::project::delete_with_context(&ctx, &project_id).unwrap();
+
+	assert!(!sessions.lock().unwrap().contains_key(&session_id));
+	assert!(!pty_log::session_path(&logs, &session_id).exists());
+
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn restore_session_closes_live_old_session() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "restore-live-old");
+
+	let old_session_id = create_live_session(
+		&ctx,
+		&default_profile.id,
+		&default_profile.worktree_path,
+		"Old live",
+	);
+	wait_for_flush_sender(&ctx, &old_session_id);
+	write_output(&logs, &old_session_id, b"live old history\r\n");
+
+	let result = service::pty::restore_session(
+		&ctx,
+		&old_session_id,
+		&PtySessionMeta {
+			profile_id: default_profile.id.clone(),
+			title: "Restored live".to_string(),
+		},
+		&pty_config(default_profile.worktree_path.clone()),
+	)
+	.unwrap();
+
+	assert_ne!(result.new_session_id, old_session_id);
+	assert!(!sessions.lock().unwrap().contains_key(&old_session_id));
+	assert!(!pty_log::session_path(&logs, &old_session_id).exists());
+	let history_text = String::from_utf8_lossy(&result.history);
+	assert!(history_text.contains("live old history"));
+
+	{
+		let mut conn = ctx.db.lock().unwrap();
+		let sessions =
+			service::pty::list_project_sessions(&mut conn, &project.id)
+				.unwrap();
+		assert!(!sessions
+			.iter()
+			.any(|session| session.id == old_session_id));
+		assert!(sessions
+			.iter()
+			.any(|session| session.id == result.new_session_id));
+	}
+
+	infra::pty::close_all_sessions(&sessions);
+	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);
 	cleanup(&logs);
 }

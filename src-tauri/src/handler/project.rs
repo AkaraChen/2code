@@ -276,14 +276,11 @@ pub async fn get_git_pull_request_status(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn delete_project(
+	app: AppHandle,
 	id: String,
-	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::delete(conn, &id)
-	})
+	let ctx = crate::bridge::build_pty_context(&app);
+	super::run_blocking(move || service::project::delete_with_context(&ctx, &id))
 	.await
 }
 

@@ -304,7 +304,7 @@ pub fn create_session(
 	)?;
 
 	// Insert session record into database
-	{
+	let insert_result = (|| {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let new_record = NewPtySessionRecord {
 			id: &session_id,
@@ -315,7 +315,11 @@ pub fn create_session(
 			cols: config.cols as i32,
 			rows: config.rows as i32,
 		};
-		repo::pty::insert_session(conn, &new_record)?;
+		repo::pty::insert_session(conn, &new_record)
+	})();
+	if let Err(err) = insert_result {
+		let _ = session::close_session(&ctx.sessions, &session_id);
+		return Err(err);
 	}
 
 	tracing::info!(target: "pty", %session_id, profile_id = %meta.profile_id, "session created");
@@ -332,6 +336,7 @@ pub fn create_session(
 
 	// Track the thread handle so it can be joined on app exit
 	if let Ok(mut guard) = ctx.read_threads.lock() {
+		guard.retain(|handle| !handle.is_finished());
 		guard.push(handle);
 	}
 
@@ -356,6 +361,32 @@ pub fn create_session(
 	}
 
 	Ok(session_id)
+}
+
+pub fn close_session_full(
+	sessions: &PtySessionMap,
+	flush_senders: &PtyFlushSenders,
+	output_dir: &Path,
+	session_id: &str,
+) -> Result<(), AppError> {
+	session::close_session(sessions, session_id)?;
+	if let Ok(mut map) = flush_senders.lock() {
+		map.remove(session_id);
+	}
+	pty_log::remove(output_dir, session_id);
+	Ok(())
+}
+
+fn close_live_session_preserving_log(
+	sessions: &PtySessionMap,
+	flush_senders: &PtyFlushSenders,
+	session_id: &str,
+) -> Result<(), AppError> {
+	session::close_session(sessions, session_id)?;
+	if let Ok(mut map) = flush_senders.lock() {
+		map.remove(session_id);
+	}
+	Ok(())
 }
 
 fn build_startup_commands(commands: &[String], windows: bool) -> String {
@@ -441,6 +472,19 @@ pub fn restore_session(
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
 ) -> Result<RestoreResult, AppError> {
+	let old_session_is_live = {
+		let sessions = ctx.sessions.lock().map_err(|_| AppError::LockError)?;
+		sessions.contains_key(old_session_id)
+	};
+	if old_session_is_live {
+		let _ = flush_output(&ctx.flush_senders, old_session_id);
+		close_live_session_preserving_log(
+			&ctx.sessions,
+			&ctx.flush_senders,
+			old_session_id,
+		)?;
+	}
+
 	// 1. Read raw history from the old session's log file (no DB lock needed)
 	let raw_history = pty_log::read_all(&ctx.output_dir, old_session_id);
 	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), "restore: loaded raw history");

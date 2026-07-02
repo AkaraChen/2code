@@ -10,6 +10,8 @@ use model::project::{
 };
 use model::project_group::ProjectGroup;
 
+use crate::pty::PtyContext;
+
 pub fn create_from_folder(
 	conn: &mut SqliteConnection,
 	name: &str,
@@ -53,6 +55,38 @@ pub fn update(
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let project = repo::project::find_by_id(conn, id)?;
+	repo::project::delete(conn, id)?;
+	cleanup_empty_group(conn, project.group_id)?;
+	Ok(())
+}
+
+pub fn delete_with_context(
+	ctx: &PtyContext,
+	id: &str,
+) -> Result<(), AppError> {
+	let (project, session_ids) = {
+		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		let project = repo::project::find_by_id(conn, id)?;
+		let session_ids = repo::pty::list_by_project(conn, id)?
+			.into_iter()
+			.map(|session| session.id)
+			.collect::<Vec<_>>();
+		(project, session_ids)
+	};
+
+	for session_id in &session_ids {
+		crate::pty::close_session_full(
+			&ctx.sessions,
+			&ctx.flush_senders,
+			&ctx.output_dir,
+			session_id,
+		)?;
+	}
+
+	let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+	for session_id in &session_ids {
+		repo::pty::mark_closed(conn, session_id);
+	}
 	repo::project::delete(conn, id)?;
 	cleanup_empty_group(conn, project.group_id)?;
 	Ok(())

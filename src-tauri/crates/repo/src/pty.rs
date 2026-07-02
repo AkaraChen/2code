@@ -50,6 +50,17 @@ pub fn list_by_project(
 	Ok(sessions)
 }
 
+pub fn list_ids_by_profile(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<Vec<String>, AppError> {
+	pty_sessions::table
+		.filter(pty_sessions::profile_id.eq(profile_id))
+		.select(pty_sessions::id)
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 pub fn update_dimensions(
 	conn: &mut SqliteConnection,
 	session_id: &str,
@@ -163,6 +174,34 @@ mod tests {
 			.expect("insert session 2");
 
 		let mut ids = all_session_ids(&mut conn).expect("all ids");
+		ids.sort();
+		assert_eq!(ids, vec!["session-1", "session-2"]);
+	}
+
+	#[test]
+	fn list_ids_by_profile_returns_only_matching_profile_sessions() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+		project::insert(&mut conn, "proj-2", "Project 2", "/tmp/project-2")
+			.expect("insert second project");
+		profile::insert_default(
+			&mut conn,
+			"profile-2",
+			"proj-2",
+			"main",
+			"/tmp/project-2",
+		)
+		.expect("insert second profile");
+
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session 1");
+		insert_session(&mut conn, &session_record("session-2", &profile_id))
+			.expect("insert session 2");
+		insert_session(&mut conn, &session_record("session-3", "profile-2"))
+			.expect("insert other profile session");
+
+		let mut ids =
+			list_ids_by_profile(&mut conn, &profile_id).expect("list ids");
 		ids.sort();
 		assert_eq!(ids, vec!["session-1", "session-2"]);
 	}

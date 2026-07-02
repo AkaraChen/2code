@@ -288,6 +288,7 @@ pub fn close_session(
 	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
 	if let Some(mut session) = map.remove(session_id) {
 		let _ = session.child.kill();
+		let _ = session.child.wait();
 	}
 	Ok(())
 }
@@ -296,6 +297,7 @@ pub fn close_all_sessions(sessions: &PtySessionMap) {
 	if let Ok(mut map) = sessions.lock() {
 		for (_, mut session) in map.drain() {
 			let _ = session.child.kill();
+			let _ = session.child.wait();
 		}
 	}
 }
