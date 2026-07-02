@@ -1128,6 +1128,7 @@ export default function FileTreePanel({
             style={{
               display: "flex",
               flexDirection: "column",
+              height: "100%",
               minWidth: 0,
               overflow: "visible",
               position: "relative",
