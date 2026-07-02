@@ -110,7 +110,9 @@ describe("tauri smoke", () => {
 	it("launches the desktop shell and renders a non-empty main layout", async function () {
 		this.timeout(60_000);
 
-		const nav = await waitForElement("nav[aria-label]");
+		const nav = await waitForElement(
+			"nav[aria-label], [role='navigation'][aria-label]",
+		);
 		const main = await waitForElement("main");
 		const addProjectButton = await waitForElement("#add-project-button");
 
