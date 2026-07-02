@@ -141,6 +141,19 @@ fn list_installed_browsers_macos() -> Vec<BrowserApp> {
 		.collect()
 }
 
+fn validate_browser_url(url: &str) -> Result<(), AppError> {
+	let parsed = url::Url::parse(url)
+		.map_err(|_| AppError::NotFound(format!("Invalid URL: {url}")))?;
+	if matches!(parsed.scheme(), "http" | "https") {
+		return Ok(());
+	}
+
+	Err(AppError::NotFound(format!(
+		"Refusing to open non-http(s) URL scheme: {}",
+		parsed.scheme()
+	)))
+}
+
 #[cfg(target_os = "macos")]
 fn open_url_in_browser_macos(
 	browser_id: &str,
@@ -195,6 +208,8 @@ pub async fn open_url_in_browser(
 	browser_id: String,
 	url: String,
 ) -> Result<(), AppError> {
+	validate_browser_url(&url)?;
+
 	#[cfg(target_os = "macos")]
 	{
 		super::run_blocking(move || {
@@ -223,6 +238,23 @@ mod tests {
 		let ids = KNOWN_BROWSERS.iter().map(|spec| spec.id);
 		let unique = ids.collect::<HashSet<_>>();
 		assert_eq!(unique.len(), KNOWN_BROWSERS.len());
+	}
+
+	#[test]
+	fn browser_url_accepts_http_and_https() {
+		assert!(validate_browser_url("https://example.com").is_ok());
+		assert!(validate_browser_url("http://example.com").is_ok());
+	}
+
+	#[test]
+	fn browser_url_rejects_non_http_schemes() {
+		assert!(validate_browser_url("file:///etc/hosts").is_err());
+		assert!(validate_browser_url("javascript:alert(1)").is_err());
+	}
+
+	#[test]
+	fn browser_url_rejects_invalid_url() {
+		assert!(validate_browser_url("not a url").is_err());
 	}
 
 	#[cfg(target_os = "macos")]

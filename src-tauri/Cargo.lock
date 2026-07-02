@@ -596,6 +596,7 @@ dependencies = [
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",
+ "url",
  "uuid",
  "zip 8.6.0",
 ]

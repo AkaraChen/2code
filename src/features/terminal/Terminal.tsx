@@ -32,7 +32,10 @@ import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
-import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
+import {
+  isAllowedTerminalLinkScheme,
+  shouldBypassTerminalLinkConfirm,
+} from "./linkOpening";
 import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
 import { sessionHistory } from "./state";
 import { useTerminalStore, type AgentStatus } from "./store";
@@ -202,7 +205,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
   const handleTerminalLinkOpen = useCallback(
     (event: MouseEvent, uri: string) => {
-      if (shouldBypassTerminalLinkConfirm(event)) {
+      if (
+        shouldBypassTerminalLinkConfirm(event) &&
+        isAllowedTerminalLinkScheme(uri)
+      ) {
         void open(uri);
         return;
       }
