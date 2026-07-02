@@ -133,7 +133,7 @@ QueryClientProvider → ThemeProvider → TooltipProvider → BrowserRouter → 
 
 ### Terminal Architecture
 
-Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`) renders as a persistent absolute-positioned overlay. Tab switches use CSS `display: none` to preserve xterm.js state. Each terminal instance wraps xterm.js and communicates with the backend via Tauri events (`pty-output-{id}`, `pty-exit-{id}`).
+Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`) renders as a persistent absolute-positioned overlay. Tab switches use CSS `display: none` to preserve xterm.js state. Each terminal instance wraps xterm.js and receives live PTY output over a per-session Tauri channel (`Channel<ArrayBuffer>`); session exit remains a Tauri event (`pty-exit-{id}`).
 
 ## Workspace Crates
 

@@ -84,6 +84,9 @@ describe("terminal hooks", () => {
 		useTerminalStore
 			.getState()
 			.addTab("profile-1", "existing-session", "Terminal 1");
+		useFileViewerTabsStore
+			.getState()
+			.openFile("profile-1", "/repo/src/main.tsx");
 
 		const { result } = renderHook(() => useCreateTerminalTab(), {
 			wrapper: createWrapper(),
@@ -120,6 +123,9 @@ describe("terminal hooks", () => {
 				title: "Terminal 2",
 			},
 		]);
+		expect(
+			useFileViewerTabsStore.getState().profiles["profile-1"].fileTabActive,
+		).toBe(false);
 	});
 
 	it("closes the last terminal tab and re-activates the current file tab when one exists", async () => {

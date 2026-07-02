@@ -30,7 +30,7 @@ fn write_output(dir: &Path, session_id: &str, data: &[u8]) {
 struct TestPtyEmitter;
 
 impl service::PtyEventEmitter for TestPtyEmitter {
-	fn emit_output(&self, _session_id: &str, _text: &str) -> bool {
+	fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
 		true
 	}
 

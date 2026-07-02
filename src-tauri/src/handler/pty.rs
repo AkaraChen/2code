@@ -1,7 +1,7 @@
-use tauri::ipc::{Channel, InvokeResponseBody};
-use tauri::{AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, State};
+use tokio::sync::mpsc;
 
-use crate::bridge::PtyOutputSinks;
+use crate::bridge::{PtyOutputReceiver, PtyOutputReceivers, PtyOutputSink, PtyOutputSinks};
 use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
@@ -117,32 +117,93 @@ pub async fn restore_pty_session(
 	.await
 }
 
-/// Register a raw-byte output channel for a live session. The terminal calls
-/// this on mount; subsequent PTY output for `session_id` streams as binary
-/// frames over `on_output`. Output produced before attach is recovered from the
-/// persisted log via `get_pty_session_history` (same seam as the old event API).
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn attach_pty_output(
 	session_id: String,
-	on_output: Channel<InvokeResponseBody>,
+	stream_id: String,
 	sinks: State<'_, PtyOutputSinks>,
+	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
-	let mut map = sinks.lock().map_err(|_| AppError::LockError)?;
-	map.insert(session_id, on_output);
+	let (sender, receiver) = mpsc::unbounded_channel();
+	{
+		let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
+		sinks.insert(
+			session_id.clone(),
+			PtyOutputSink {
+				stream_id: stream_id.clone(),
+				sender,
+			},
+		);
+	}
+	{
+		let mut receivers = receivers.lock().map_err(|_| AppError::LockError)?;
+		receivers.insert(
+			session_id,
+			PtyOutputReceiver {
+				stream_id,
+				receiver,
+			},
+		);
+	}
+
 	Ok(())
 }
 
-/// Remove a session's output channel (terminal teardown). Persistence is
-/// unaffected — only frontend delivery stops.
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn stream_pty_output(
+	session_id: String,
+	stream_id: String,
+	on_output: Channel<&[u8]>,
+	receivers: State<'_, PtyOutputReceivers>,
+) -> Result<(), AppError> {
+	let receiver = {
+		let mut receivers = receivers.lock().map_err(|_| AppError::LockError)?;
+		let Some(receiver) = receivers.get(&session_id) else {
+			return Ok(());
+		};
+		if receiver.stream_id != stream_id {
+			return Ok(());
+		}
+		receivers.remove(&session_id).map(|receiver| receiver.receiver)
+	};
+	let Some(mut receiver) = receiver else {
+		return Ok(());
+	};
+
+	while let Some(chunk) = receiver.recv().await {
+		if on_output.send(chunk.as_slice()).is_err() {
+			break;
+		}
+	}
+	Ok(())
+}
+
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn detach_pty_output(
 	session_id: String,
+	stream_id: String,
 	sinks: State<'_, PtyOutputSinks>,
+	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
-	let mut map = sinks.lock().map_err(|_| AppError::LockError)?;
-	map.remove(&session_id);
+	let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
+	if sinks
+		.get(&session_id)
+		.is_some_and(|sink| sink.stream_id == stream_id)
+	{
+		sinks.remove(&session_id);
+	}
+	drop(sinks);
+
+	let mut receivers = receivers.lock().map_err(|_| AppError::LockError)?;
+	if receivers
+		.get(&session_id)
+		.is_some_and(|receiver| receiver.stream_id == stream_id)
+	{
+		receivers.remove(&session_id);
+	}
 	Ok(())
 }
 

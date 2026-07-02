@@ -18,6 +18,7 @@ import {
   flushPtyOutput,
   getPtySessionHistory,
   resizePty,
+  streamPtyOutput,
   writeToPty } from
 "@/generated";import { toast } from "sonner";
 
@@ -217,6 +218,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const liveOutputBuffer: Uint8Array[] = [];
       let liveOutputFrame: number | null = null;
       let lastCopiedSelection = "";
+      const streamId = crypto.randomUUID();
 
       // --- Wrapper-div pattern (SuperSet) ---
       // xterm opens into a persistent wrapper div that can be moved
@@ -436,9 +438,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
       function flushPendingEventsAfterHistory(history: Uint8Array) {
         const pending = concatBytes(pendingEventsRef.current);
-        // Bytes emitted between attach and the history read overlap the tail
-        // of the history; drop the double-covered prefix so it isn't written
-        // twice.
         const overlap = getSuffixPrefixOverlapLengthBytes(history, pending);
         const remaining = pending.subarray(overlap);
         pendingEventsRef.current = [];
@@ -460,10 +459,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       }
 
       // 12. Register PTY output channel + exit listener, then replay history.
-      //
-      // Output streams as raw binary frames over a per-session `Channel`
-      // (no JSON serialization) — xterm.js decodes UTF-8 across writes, so
-      // we write the bytes as-is. Exit stays a low-volume global event.
       async function setupListenersAndReplayHistory() {
         const outputChannel = new Channel<ArrayBuffer>();
         outputChannel.onmessage = (payload) => {
@@ -474,7 +469,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           }
           writeLiveOutput(bytes);
         };
-        await attachPtyOutput({ sessionId, onOutput: outputChannel });
+        await attachPtyOutput({ sessionId, streamId });
+        if (disposed) {
+          void detachPtyOutput({ sessionId, streamId }).catch(() => {});
+          return;
+        }
+        void streamPtyOutput({ sessionId, streamId, onOutput: outputChannel }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to stream output for session ${sessionId}`,
+            error
+          );
+        });
         const unlistenExit = await listen(
           `pty-exit-${sessionId}`,
           () => {
@@ -486,7 +491,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           }
         );
         if (disposed) {
-          void detachPtyOutput({ sessionId }).catch(() => {});
+          void detachPtyOutput({ sessionId, streamId }).catch(() => {});
           unlistenExit();
           return;
         }
@@ -498,6 +503,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           return;
         }
         try {
+          await flushPtyOutput({ sessionId });
           const history = await getPtySessionHistory({ sessionId });
           replayInitialHistory(new Uint8Array(history));
         } catch (error) {
@@ -508,11 +514,21 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           flushPendingEventsAfterHistory(new Uint8Array(0));
         }
       }
-      void setupListenersAndReplayHistory();
+      void setupListenersAndReplayHistory().catch((error) => {
+        consola.warn(
+          `[pty-terminal] setup failed for session ${sessionId}`,
+          error
+        );
+      });
 
       // 13. Sync handlers
       term.onData((data) => {
-        writeToPty({ sessionId, data });
+        writeToPty({ sessionId, data }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to write input for session ${sessionId}`,
+            error
+          );
+        });
       });
       term.onResize(({ rows, cols }) => {
         resizePty({ sessionId, rows, cols });
@@ -522,8 +538,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       return () => {
         disposed = true;
 
-        // Stop backend delivery over the output channel (persistence continues)
-        void detachPtyOutput({ sessionId }).catch(() => {});
+        void detachPtyOutput({ sessionId, streamId }).catch(() => {});
 
         // Flush buffered PTY output to DB before teardown (best-effort)
         flushPtyOutput({ sessionId }).catch(() => {});

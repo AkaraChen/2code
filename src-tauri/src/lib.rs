@@ -17,6 +17,7 @@ pub fn run() {
 	let read_threads_for_exit = read_threads.clone();
 	let flush_senders = service::pty::create_flush_senders();
 	let output_sinks = bridge::create_output_sinks();
+	let output_receivers = bridge::create_output_receivers();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
 
@@ -33,6 +34,7 @@ pub fn run() {
 		.manage(read_threads)
 		.manage(flush_senders)
 		.manage(output_sinks)
+		.manage(output_receivers)
 		.manage(shutdown_flag)
 		.manage(layer_handle)
 		.manage(handler::updater::PendingUpdate::default())
@@ -88,6 +90,7 @@ pub fn run() {
 			handler::pty::clear_pty_output,
 			handler::pty::restore_pty_session,
 			handler::pty::attach_pty_output,
+			handler::pty::stream_pty_output,
 			handler::pty::detach_pty_output,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,

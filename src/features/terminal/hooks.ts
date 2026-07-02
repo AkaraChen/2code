@@ -50,6 +50,7 @@ export function useCreateTerminalTab() {
 		},
 		onSuccess: ({ profileId, sessionId, title }) => {
 			useTerminalStore.getState().addTab(profileId, sessionId, title);
+			useFileViewerTabsStore.getState().setTerminalActive(profileId);
 		},
 	});
 }

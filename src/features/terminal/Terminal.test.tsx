@@ -109,8 +109,8 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 
 vi.mock("@/generated", () => ({
 	attachPtyOutput: vi.fn(() => Promise.resolve()),
-	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	clearPtyOutput: vi.fn(() => Promise.resolve()),
+	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	flushPtyOutput: vi.fn(() => Promise.resolve()),
 	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
@@ -119,6 +119,7 @@ vi.mock("@/generated", () => ({
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
 	),
+	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
 }));
 

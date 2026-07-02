@@ -62,17 +62,17 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 | `start_debug_log` | —          | —       | Start streaming tracing logs to frontend |
 | `stop_debug_log`  | —          | —       | Stop streaming tracing logs              |
 
-## Tauri Events
+## Tauri Channels And Events
 
-Events emitted from backend to frontend via `app.emit()`.
+PTY output uses `attach_pty_output(sessionId, streamId)` to register the active sink, then `stream_pty_output` to pump raw `&[u8]` chunks over a Tauri IPC channel. `detach_pty_output` requires the same `streamId`, so stale frontend cleanup cannot remove a newer stream for the same session. Low-volume signals still use `app.emit()`.
 
-| Event             | Payload               | Source                           | Description                            |
-| ----------------- | --------------------- | -------------------------------- | -------------------------------------- |
-| `pty-output-{id}` | `string` (UTF-8 text) | `service/pty.rs` reader thread   | Terminal output for a specific session |
-| `pty-exit-{id}`   | `()`                  | `service/pty.rs` reader thread   | Session exited (EOF or error)          |
-| `pty-notify`      | `string` (session ID) | `infra/helper.rs` notify handler | Notification triggered from shell      |
-| `watch-event`     | `WatchEvent`          | `infra/watcher.rs`               | File system change detected            |
-| `debug-log`       | `LogEntry`            | `infra/logger.rs`                | Tracing log entry for debug panel      |
+| Name             | Payload      | Source                         | Description                            |
+| ---------------- | ------------ | ------------------------------ | -------------------------------------- |
+| PTY output channel | `ArrayBuffer` | `service/pty.rs` reader thread | Terminal output for a specific session |
+| `pty-exit-{id}`  | `()`         | `service/pty.rs` reader thread | Session exited (EOF or error)          |
+| `pty-notify`     | `string`     | `infra/helper.rs` notify handler | Notification triggered from shell      |
+| `watch-event`    | `WatchEvent` | `infra/watcher.rs`             | File system change detected            |
+| `debug-log`      | `LogEntry`   | `infra/logger.rs`              | Tracing log entry for debug panel      |
 
 ## Sidecar HTTP API (`infra/helper.rs`)
 

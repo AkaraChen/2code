@@ -59,14 +59,12 @@ sequenceDiagram
 
     loop Every 4KB read
         PTY->>RT: Raw bytes
-        RT->>RT: UTF-8 boundary detection
-        RT->>FE: emit("pty-output-{id}", text)
+        RT->>FE: Channel<ArrayBuffer> output
         RT->>PT: mpsc channel (raw bytes)
     end
 
     loop Buffer >= 32KB
-        PT->>DB: Insert output chunk
-        PT->>PT: Prune if > 1MB total
+        PT->>DB: Append output chunk
     end
 
     PTY->>RT: EOF / Error

@@ -20,7 +20,7 @@ use crate::PtyEventEmitter;
 
 pub enum PersistMsg {
 	Data(Vec<u8>),
-	Flush,
+	Flush(mpsc::Sender<()>),
 	Clear,
 }
 
@@ -60,6 +60,7 @@ pub struct PtyContext {
 const VT100_SCROLLBACK: usize = 10000;
 const PERSIST_BATCH_BYTES: usize = 32 * 1024;
 const PERSIST_FLUSH_INTERVAL: Duration = Duration::from_millis(250);
+const PERSIST_FLUSH_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AltScreenTransition {
@@ -475,9 +476,16 @@ pub fn flush_output(
 	senders: &PtyFlushSenders,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	let map = senders.lock().map_err(|_| AppError::LockError)?;
-	if let Some(tx) = map.get(session_id) {
-		let _ = tx.send(PersistMsg::Flush);
+	let sender = {
+		let map = senders.lock().map_err(|_| AppError::LockError)?;
+		map.get(session_id).cloned()
+	};
+
+	if let Some(tx) = sender {
+		let (done_tx, done_rx) = mpsc::channel();
+		if tx.send(PersistMsg::Flush(done_tx)).is_ok() {
+			let _ = done_rx.recv_timeout(PERSIST_FLUSH_TIMEOUT);
+		}
 	}
 	Ok(())
 }
@@ -591,11 +599,6 @@ fn read_pty_output(
 					let _ = tx.send(PersistMsg::Data(raw.to_vec()));
 				}
 
-				// Stream the raw chunk to the frontend as-is. xterm.js buffers
-				// incomplete multi-byte UTF-8 sequences across writes, so no
-				// boundary splitting is needed here (unlike the old JSON-string
-				// path). A missing sink (no terminal attached yet) is fine —
-				// those bytes are recovered from the persisted log on restore.
 				if !emitter.emit_output(&session_id, raw) {
 					break;
 				}
@@ -663,7 +666,11 @@ fn persist_pty_output(
 		Err(e) => {
 			// Can't persist — drain the channel so the read thread never blocks.
 			tracing::warn!(target: "pty", %session_id, error = %e, "persist: failed to open log file");
-			while rx.recv().is_ok() {}
+			while let Ok(msg) = rx.recv() {
+				if let PersistMsg::Flush(done) = msg {
+					let _ = done.send(());
+				}
+			}
 			return;
 		}
 	};
@@ -677,8 +684,9 @@ fn persist_pty_output(
 					flush_pending_output(&mut log, session_id, &mut pending);
 				}
 			}
-			Ok(PersistMsg::Flush) => {
+			Ok(PersistMsg::Flush(done)) => {
 				flush_pending_output(&mut log, session_id, &mut pending);
+				let _ = done.send(());
 			}
 			Ok(PersistMsg::Clear) => {
 				pending.clear();
@@ -1298,7 +1306,9 @@ mod tests {
 
 		tx.send(PersistMsg::Data(b"data before flush".to_vec()))
 			.unwrap();
-		tx.send(PersistMsg::Flush).unwrap();
+		let (done_tx, done_rx) = mpsc::channel();
+		tx.send(PersistMsg::Flush(done_tx)).unwrap();
+		done_rx.recv().unwrap();
 		drop(tx);
 		handle.join().unwrap();
 
