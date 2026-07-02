@@ -148,9 +148,11 @@ pub async fn get_git_binary_preview(
 	super::run_blocking(move || {
 		let worktree_path = profile_worktree_path(&db, &profile_id)?;
 		let file_path = match source.as_str() {
-			"working_tree" => {
-				infra::git::read_worktree_file(&worktree_path, &path)?
-			}
+			"working_tree" => infra::git::read_worktree_file(
+				&worktree_path,
+				&cache_root,
+				&path,
+			)?,
 			"head" => {
 				infra::git::read_head_file(&worktree_path, &cache_root, &path)?
 			}

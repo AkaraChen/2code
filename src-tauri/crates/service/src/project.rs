@@ -225,9 +225,11 @@ pub fn get_binary_preview(
 ) -> Result<Option<GitBinaryPreview>, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	let file_path = match source {
-		"working_tree" => {
-			infra::git::read_worktree_file(&profile.worktree_path, path)?
-		}
+		"working_tree" => infra::git::read_worktree_file(
+			&profile.worktree_path,
+			cache_root,
+			path,
+		)?,
 		"head" => infra::git::read_head_file(
 			&profile.worktree_path,
 			cache_root,

@@ -363,6 +363,7 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 
 pub fn read_worktree_file(
 	folder: &str,
+	cache_root: &Path,
 	path: &str,
 ) -> Result<Option<String>, AppError> {
 	let path = validate_repo_relative_path(path, "Preview file path")?;
@@ -384,7 +385,40 @@ pub fn read_worktree_file(
 		)));
 	}
 
-	Ok(Some(file_path.to_string_lossy().to_string()))
+	let modified = metadata
+		.modified()
+		.ok()
+		.and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+		.map(|duration| (duration.as_secs(), duration.subsec_nanos()))
+		.unwrap_or_default();
+	let mut hasher = DefaultHasher::new();
+	file_path.hash(&mut hasher);
+	metadata.len().hash(&mut hasher);
+	modified.hash(&mut hasher);
+	let cache_key = format!("{:016x}", hasher.finish());
+	let cache_path = preview_cache_path(
+		cache_root,
+		folder,
+		"working-tree",
+		Some(&cache_key),
+		&path,
+	);
+
+	if std::fs::metadata(&cache_path)
+		.is_ok_and(|cached| cached.is_file() && cached.len() == metadata.len())
+	{
+		return Ok(Some(cache_path.to_string_lossy().to_string()));
+	}
+
+	let bytes = std::fs::read(&file_path)?;
+	if bytes.len() as u64 != metadata.len() {
+		return Err(AppError::GitError(format!(
+			"Preview file size changed while reading: {path}"
+		)));
+	}
+	write_preview_cache_file(&cache_path, &bytes)?;
+
+	Ok(Some(cache_path.to_string_lossy().to_string()))
 }
 
 pub fn read_head_file(
@@ -1930,15 +1964,19 @@ mod tests {
 		)
 		.unwrap()
 		.unwrap();
-		let worktree_preview =
-			read_worktree_file(dir.to_string_lossy().as_ref(), "image.bin")
-				.unwrap()
-				.unwrap();
+		let worktree_preview = read_worktree_file(
+			dir.to_string_lossy().as_ref(),
+			cache_dir.path(),
+			"image.bin",
+		)
+		.unwrap()
+		.unwrap();
 
 		assert_ne!(head_preview, dir.join("image.bin").to_string_lossy());
+		assert_ne!(worktree_preview, dir.join("image.bin").to_string_lossy());
 		assert!(Path::new(&head_preview).starts_with(cache_dir.path()));
+		assert!(Path::new(&worktree_preview).starts_with(cache_dir.path()));
 		assert_eq!(std::fs::read(head_preview).unwrap(), initial);
-		assert_eq!(worktree_preview, dir.join("image.bin").to_string_lossy());
 		assert_eq!(std::fs::read(worktree_preview).unwrap(), modified);
 
 		std::fs::remove_dir_all(dir).unwrap();

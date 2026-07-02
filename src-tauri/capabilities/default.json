@@ -25,39 +25,34 @@
 			"identifier": "shell:allow-execute",
 			"allow": [
 				{
-					"name": "github",
-					"cmd": "github",
-					"args": true
-				},
-				{
-					"name": "code",
-					"cmd": "code",
-					"args": true
-				},
-				{
-					"name": "windsurf",
-					"cmd": "windsurf",
-					"args": true
-				},
-				{
-					"name": "cursor",
-					"cmd": "cursor",
-					"args": true
-				},
-				{
 					"name": "open",
 					"cmd": "open",
-					"args": true
+					"args": [
+						{
+							"validator": "^-R$"
+						},
+						{
+							"validator": "^[^-].+"
+						}
+					]
 				},
 				{
 					"name": "explorer",
 					"cmd": "explorer",
-					"args": true
+					"args": [
+						{
+							"validator": "^[^-].+"
+						}
+					]
 				},
 				{
 					"name": "xdg-open",
 					"cmd": "xdg-open",
-					"args": true
+					"args": [
+						{
+							"validator": "^[^-].+"
+						}
+					]
 				}
 			]
 		}

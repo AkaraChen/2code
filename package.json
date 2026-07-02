@@ -130,6 +130,7 @@
   },
   "overrides": {
     "@shikijs/themes": "4.0.2",
+    "dompurify": "3.4.11",
     "flatted": "3.4.2",
     "kysely": "0.29.2",
     "picomatch": "4.0.4",

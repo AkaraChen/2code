@@ -5,11 +5,10 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$HOME/**",
           "$APPCACHE/**"
         ]
       },
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https://avatars.githubusercontent.com https://github.com; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 ws://localhost:1420 ws://localhost:1421; worker-src 'self' blob:; frame-src 'self' asset: http://asset.localhost"
     },
     "windows": [
       {

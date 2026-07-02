@@ -105,6 +105,43 @@ fn ensure_previewable_file(path: &Path) -> Result<std::fs::Metadata, AppError> {
 	std::fs::metadata(path).map_err(AppError::IoError)
 }
 
+fn cache_preview_file(
+	cache_root: &Path,
+	path: &Path,
+	metadata: &std::fs::Metadata,
+) -> Result<PathBuf, AppError> {
+	let file_name = path.file_name().ok_or_else(|| {
+		AppError::IoError(std::io::Error::other(
+			"Preview file has no file name",
+		))
+	})?;
+	let modified = metadata
+		.modified()
+		.ok()
+		.and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+		.map(|duration| (duration.as_secs(), duration.subsec_nanos()))
+		.unwrap_or_default();
+	let mut hasher = DefaultHasher::new();
+	path.hash(&mut hasher);
+	metadata.len().hash(&mut hasher);
+	modified.hash(&mut hasher);
+
+	let cache_path = cache_root
+		.join(format!("{:016x}", hasher.finish()))
+		.join(file_name);
+	if std::fs::metadata(&cache_path)
+		.is_ok_and(|cached| cached.is_file() && cached.len() == metadata.len())
+	{
+		return Ok(cache_path);
+	}
+
+	if let Some(parent) = cache_path.parent() {
+		std::fs::create_dir_all(parent)?;
+	}
+	std::fs::copy(path, &cache_path)?;
+	Ok(cache_path)
+}
+
 fn normalize_archive_entry_path(path: &str, is_dir: bool) -> Option<String> {
 	let normalized = path
 		.replace('\\', "/")
@@ -851,11 +888,12 @@ pub async fn get_file_preview(
 	state: State<'_, DbPool>,
 ) -> Result<FilePreview, AppError> {
 	let db = state.inner().clone();
-	let cache_root = app
+	let app_cache_root = app
 		.path()
 		.app_cache_dir()
-		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?
-		.join("office-preview");
+		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?;
+	let file_cache_root = app_cache_root.join("file-preview");
+	let office_cache_root = app_cache_root.join("office-preview");
 
 	super::run_blocking(move || {
 		let worktree_root = profile_worktree_root(&db, &profile_id)?;
@@ -866,9 +904,14 @@ pub async fn get_file_preview(
 			file_path.canonicalize().map_err(AppError::IoError)?;
 
 		if let Some(mime_type) = previewable_image_mime_type(&canonical_path) {
+			let cached_path = cache_preview_file(
+				&file_cache_root,
+				&canonical_path,
+				&metadata,
+			)?;
 			return Ok(FilePreview {
 				kind: "image".to_string(),
-				file_path: canonical_path.to_string_lossy().into_owned(),
+				file_path: cached_path.to_string_lossy().into_owned(),
 				mime_type: mime_type.to_string(),
 				source_path: None,
 				archive_entries: None,
@@ -876,9 +919,14 @@ pub async fn get_file_preview(
 		}
 
 		if is_pdf_file(&canonical_path) {
+			let cached_path = cache_preview_file(
+				&file_cache_root,
+				&canonical_path,
+				&metadata,
+			)?;
 			return Ok(FilePreview {
 				kind: "pdf".to_string(),
-				file_path: canonical_path.to_string_lossy().into_owned(),
+				file_path: cached_path.to_string_lossy().into_owned(),
 				mime_type: "application/pdf".to_string(),
 				source_path: None,
 				archive_entries: None,
@@ -900,7 +948,7 @@ pub async fn get_file_preview(
 		if is_office_file(&canonical_path) {
 			let pdf_path = convert_office_file_to_pdf(
 				&canonical_path,
-				&cache_root,
+				&office_cache_root,
 				&metadata,
 			)?;
 			return Ok(FilePreview {
