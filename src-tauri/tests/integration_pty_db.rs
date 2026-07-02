@@ -53,6 +53,33 @@ fn startup_commands() -> Vec<String> {
 	}
 }
 
+fn pty_context(
+	conn: diesel::SqliteConnection,
+	tag: &str,
+) -> (
+	PtyContext,
+	infra::pty::PtySessionMap,
+	infra::pty::PtyReadThreads,
+	PathBuf,
+) {
+	let db: DbPool = Arc::new(Mutex::new(conn));
+	let sessions = infra::pty::create_session_map();
+	let read_threads = infra::pty::create_thread_tracker();
+	let flush_senders = create_flush_senders();
+	let emitter = Arc::new(TestPtyEmitter);
+	let logs = tmp_log_dir(tag);
+	let ctx = PtyContext {
+		db,
+		sessions: sessions.clone(),
+		flush_senders,
+		read_threads: read_threads.clone(),
+		emitter,
+		output_dir: logs.clone(),
+	};
+
+	(ctx, sessions, read_threads, logs)
+}
+
 /// Helper: insert a session record for a given profile.
 fn insert_session(
 	conn: &mut diesel::SqliteConnection,
@@ -522,6 +549,108 @@ fn restoration_flow_db_side() {
 	assert!(service::pty::get_history(&logs, "s-new").is_empty());
 
 	cleanup(&dir);
+}
+
+#[test]
+fn restore_session_creates_new_deletes_old_and_returns_history() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	insert_session(&mut conn, "s-restore-old", &default_profile.id, "bash");
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "restore-session");
+	write_output(&logs, "s-restore-old", b"hello from history\r\n");
+
+	let result = service::pty::restore_session(
+		&ctx,
+		"s-restore-old",
+		&PtySessionMeta {
+			profile_id: default_profile.id.clone(),
+			title: "Restored".to_string(),
+		},
+		&PtyConfig {
+			shell: test_shell(),
+			cwd: default_profile.worktree_path.clone(),
+			rows: 24,
+			cols: 80,
+			startup_commands: Vec::new(),
+		},
+	)
+	.unwrap();
+
+	infra::pty::close_all_sessions(&sessions);
+	infra::pty::join_all_read_threads(&read_threads);
+
+	assert_ne!(result.new_session_id, "s-restore-old");
+	let history_text = String::from_utf8_lossy(&result.history);
+	assert!(history_text.contains("hello from history"));
+	assert!(!pty_log::session_path(&logs, "s-restore-old").exists());
+
+	{
+		let mut conn = ctx.db.lock().unwrap();
+		let sessions =
+			service::pty::list_project_sessions(&mut conn, &project.id)
+				.unwrap();
+		assert!(!sessions.iter().any(|session| session.id == "s-restore-old"));
+		assert!(sessions
+			.iter()
+			.any(|session| session.id == result.new_session_id));
+	}
+
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn restore_session_with_empty_history_still_swaps_records() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	insert_session(&mut conn, "s-restore-empty", &default_profile.id, "bash");
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "restore-empty-session");
+
+	let result = service::pty::restore_session(
+		&ctx,
+		"s-restore-empty",
+		&PtySessionMeta {
+			profile_id: default_profile.id.clone(),
+			title: "Restored empty".to_string(),
+		},
+		&PtyConfig {
+			shell: test_shell(),
+			cwd: default_profile.worktree_path.clone(),
+			rows: 24,
+			cols: 80,
+			startup_commands: Vec::new(),
+		},
+	)
+	.unwrap();
+
+	infra::pty::close_all_sessions(&sessions);
+	infra::pty::join_all_read_threads(&read_threads);
+
+	assert_ne!(result.new_session_id, "s-restore-empty");
+	assert!(result.history.is_empty());
+	assert!(!pty_log::session_path(&logs, "s-restore-empty").exists());
+
+	{
+		let mut conn = ctx.db.lock().unwrap();
+		let sessions =
+			service::pty::list_project_sessions(&mut conn, &project.id)
+				.unwrap();
+		assert!(!sessions
+			.iter()
+			.any(|session| session.id == "s-restore-empty"));
+		assert!(sessions
+			.iter()
+			.any(|session| session.id == result.new_session_id));
+	}
+
+	cleanup(&dir);
+	cleanup(&logs);
 }
 
 // ============================================================

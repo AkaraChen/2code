@@ -1,5 +1,7 @@
 mod common;
 
+use std::path::Path;
+
 use diesel::prelude::*;
 use infra::no_window::command_without_windows_console;
 
@@ -19,6 +21,35 @@ fn create_project_named(
 		.expect("create project from folder");
 
 	(project, dir)
+}
+
+fn shell_quote(value: &str) -> String {
+	if cfg!(windows) {
+		format!("'{}'", value.replace('\'', "''"))
+	} else {
+		format!("'{}'", value.replace('\'', "'\\''"))
+	}
+}
+
+fn touch_script(path: &Path) -> String {
+	let path = shell_quote(&path.to_string_lossy());
+	if cfg!(windows) {
+		format!("New-Item -ItemType File -Path {path} -Force")
+	} else {
+		format!("touch {path}")
+	}
+}
+
+fn write_project_config(
+	dir: &Path,
+	setup_script: Vec<String>,
+	teardown_script: Vec<String>,
+) {
+	let config = serde_json::json!({
+		"setup_script": setup_script,
+		"teardown_script": teardown_script,
+	});
+	std::fs::write(dir.join("2code.json"), config.to_string()).unwrap();
 }
 
 // ============================================================
@@ -462,6 +493,24 @@ fn create_profile_returns_correct_shape() {
 }
 
 #[test]
+fn create_profile_runs_setup_script() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let marker_name = Path::new("setup-ran.marker");
+	write_project_config(&dir, vec![touch_script(marker_name)], Vec::new());
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "setup-script")
+			.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	assert!(worktree_path.join(marker_name).exists());
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+	cleanup(&dir);
+}
+
+#[test]
 fn create_profile_uses_project_worktree_dir_relative_to_project() {
 	let mut conn = setup_db();
 	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
@@ -846,6 +895,45 @@ fn delete_profile_keeps_row_when_cleanup_fails() {
 		.execute(&mut conn)
 		.expect("restore project folder");
 	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_runs_teardown_script() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	let marker = dir.join("teardown-ran.marker");
+	write_project_config(&dir, Vec::new(), vec![touch_script(&marker)]);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "teardown-script")
+			.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	assert!(marker.exists());
+	assert!(!worktree_path.exists());
+
+	cleanup(&dir);
+}
+
+#[test]
+fn delete_profile_ignores_failing_teardown_script() {
+	let mut conn = setup_db();
+	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
+	write_project_config(&dir, Vec::new(), vec!["exit 1".to_string()]);
+
+	let profile =
+		service::profile::create(&mut conn, &project.id, "teardown-fails")
+			.unwrap();
+	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
+
+	service::profile::delete(&mut conn, &profile.id).unwrap();
+
+	assert!(!worktree_path.exists());
+	assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_err());
 
 	cleanup(&dir);
 }
