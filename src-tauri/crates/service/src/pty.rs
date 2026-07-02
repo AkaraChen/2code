@@ -564,36 +564,23 @@ fn find_last_pattern(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 
 const CLEAR_SCROLLBACK_SEQ: &[u8] = b"\x1b[3J";
 
-/// Find the byte position up to which the data forms complete UTF-8 sequences.
-/// Any trailing incomplete multi-byte sequence is excluded from the boundary.
-pub fn find_utf8_boundary(bytes: &[u8]) -> usize {
-	let len = bytes.len();
-	if len == 0 {
-		return 0;
-	}
+fn scan_clear_scrollback(carry: &mut Vec<u8>, raw: &[u8]) -> Option<usize> {
+	let previous_carry_len = carry.len();
+	let mut combined = Vec::with_capacity(previous_carry_len + raw.len());
+	combined.extend_from_slice(carry);
+	combined.extend_from_slice(raw);
 
-	// Look at the last 1-3 bytes to find a potential incomplete sequence.
-	for i in 1..=std::cmp::min(3, len) {
-		let b = bytes[len - i];
-		// Skip continuation bytes (10xxxxxx)
-		if b & 0xC0 == 0x80 {
-			continue;
-		}
-		// Found a leading byte — determine expected sequence length
-		let seq_len = if b & 0x80 == 0 {
-			1
-		} else if b & 0xE0 == 0xC0 {
-			2
-		} else if b & 0xF0 == 0xE0 {
-			3
-		} else if b & 0xF8 == 0xF0 {
-			4
-		} else {
-			1 // Invalid leading byte, treat as single
-		};
-		return if i < seq_len { len - i } else { len };
-	}
-	len
+	let match_pos = find_last_pattern(&combined, CLEAR_SCROLLBACK_SEQ);
+
+	carry.clear();
+	let carry_len = (CLEAR_SCROLLBACK_SEQ.len() - 1).min(combined.len());
+	carry.extend_from_slice(&combined[combined.len() - carry_len..]);
+
+	match_pos.map(|pos| {
+		(pos + CLEAR_SCROLLBACK_SEQ.len())
+			.saturating_sub(previous_carry_len)
+			.min(raw.len())
+	})
 }
 
 fn read_pty_output(
@@ -605,6 +592,8 @@ fn read_pty_output(
 	flush_senders: PtyFlushSenders,
 ) {
 	let mut buf = [0u8; 4096];
+	let mut clear_scrollback_carry =
+		Vec::with_capacity(CLEAR_SCROLLBACK_SEQ.len() - 1);
 
 	// Decouple persistence into a separate thread via channel
 	let (tx, rx) = mpsc::channel::<PersistMsg>();
@@ -627,9 +616,9 @@ fn read_pty_output(
 				let raw = &buf[..n];
 
 				// Detect clear-scrollback sequence and notify persistence thread
-				if let Some(pos) = find_last_pattern(raw, CLEAR_SCROLLBACK_SEQ)
+				if let Some(after) =
+					scan_clear_scrollback(&mut clear_scrollback_carry, raw)
 				{
-					let after = pos + CLEAR_SCROLLBACK_SEQ.len();
 					let _ = tx.send(PersistMsg::Clear);
 					if after < n {
 						let _ =
@@ -758,13 +747,6 @@ mod tests {
 
 	use super::*;
 
-	// --- Empty / pure-ASCII ---
-
-	#[test]
-	fn boundary_empty() {
-		assert_eq!(find_utf8_boundary(&[]), 0);
-	}
-
 	#[test]
 	fn builds_startup_commands_for_unix() {
 		assert_eq!(
@@ -826,114 +808,6 @@ mod tests {
 		);
 	}
 
-	#[test]
-	fn boundary_single_ascii() {
-		assert_eq!(find_utf8_boundary(b"A"), 1);
-	}
-
-	#[test]
-	fn boundary_all_ascii() {
-		assert_eq!(find_utf8_boundary(b"Hello, world!"), 13);
-	}
-
-	// --- Complete multi-byte sequences ---
-
-	#[test]
-	fn boundary_complete_2byte() {
-		let bytes = "é".as_bytes();
-		assert_eq!(find_utf8_boundary(bytes), bytes.len());
-	}
-
-	#[test]
-	fn boundary_complete_3byte() {
-		let bytes = "中".as_bytes();
-		assert_eq!(find_utf8_boundary(bytes), bytes.len());
-	}
-
-	#[test]
-	fn boundary_complete_4byte() {
-		let bytes = "😀".as_bytes();
-		assert_eq!(find_utf8_boundary(bytes), bytes.len());
-	}
-
-	// --- Incomplete sequences (leader only) ---
-
-	#[test]
-	fn boundary_incomplete_2byte_leader_only() {
-		assert_eq!(find_utf8_boundary(&[0xC3]), 0);
-	}
-
-	#[test]
-	fn boundary_incomplete_3byte_leader_only() {
-		assert_eq!(find_utf8_boundary(&[0xE4]), 0);
-	}
-
-	#[test]
-	fn boundary_incomplete_4byte_leader_only() {
-		assert_eq!(find_utf8_boundary(&[0xF0]), 0);
-	}
-
-	// --- Incomplete sequences (leader + partial continuations) ---
-
-	#[test]
-	fn boundary_incomplete_3byte_one_continuation() {
-		assert_eq!(find_utf8_boundary(&[0xE4, 0xB8]), 0);
-	}
-
-	#[test]
-	fn boundary_incomplete_4byte_one_continuation() {
-		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F]), 0);
-	}
-
-	#[test]
-	fn boundary_incomplete_4byte_two_continuations() {
-		assert_eq!(find_utf8_boundary(&[0xF0, 0x9F, 0x98]), 0);
-	}
-
-	// --- Mixed ASCII + incomplete trailing sequence ---
-
-	#[test]
-	fn boundary_ascii_then_incomplete_2byte() {
-		let bytes = &[b'H', b'i', 0xC3];
-		assert_eq!(find_utf8_boundary(bytes), 2);
-	}
-
-	#[test]
-	fn boundary_ascii_then_incomplete_3byte() {
-		let bytes = &[b'A', b'B', 0xE4, 0xB8];
-		assert_eq!(find_utf8_boundary(bytes), 2);
-	}
-
-	#[test]
-	fn boundary_ascii_then_incomplete_4byte() {
-		let bytes = &[b'X', 0xF0, 0x9F, 0x98];
-		assert_eq!(find_utf8_boundary(bytes), 1);
-	}
-
-	#[test]
-	fn boundary_multibyte_then_incomplete() {
-		let mut bytes = "中".as_bytes().to_vec();
-		bytes.push(0xC3);
-		assert_eq!(find_utf8_boundary(&bytes), 3);
-	}
-
-	// --- Edge cases ---
-
-	#[test]
-	fn boundary_only_continuation_bytes() {
-		assert_eq!(find_utf8_boundary(&[0x80, 0x80, 0x80]), 3);
-	}
-
-	#[test]
-	fn boundary_invalid_leading_byte_0xff() {
-		assert_eq!(find_utf8_boundary(&[0xFF]), 1);
-	}
-
-	#[test]
-	fn boundary_single_2byte_leader() {
-		assert_eq!(find_utf8_boundary(&[0xC0]), 0);
-	}
-
 	// --- find_last_pattern ---
 
 	#[test]
@@ -983,6 +857,54 @@ mod tests {
 		assert_eq!(
 			find_last_pattern(CLEAR_SCROLLBACK_SEQ, CLEAR_SCROLLBACK_SEQ),
 			Some(0)
+		);
+	}
+
+	#[test]
+	fn scan_clear_scrollback_finds_sequence_inside_chunk() {
+		let mut carry = Vec::new();
+		assert_eq!(
+			scan_clear_scrollback(&mut carry, b"before\x1b[3Jafter"),
+			Some(10)
+		);
+		assert_eq!(carry, b"ter");
+	}
+
+	#[test]
+	fn scan_clear_scrollback_finds_sequence_split_after_escape() {
+		let mut carry = Vec::new();
+		assert_eq!(scan_clear_scrollback(&mut carry, b"\x1b"), None);
+		assert_eq!(scan_clear_scrollback(&mut carry, b"[3Jafter"), Some(3));
+	}
+
+	#[test]
+	fn scan_clear_scrollback_finds_sequence_split_after_bracket() {
+		let mut carry = Vec::new();
+		assert_eq!(scan_clear_scrollback(&mut carry, b"\x1b["), None);
+		assert_eq!(scan_clear_scrollback(&mut carry, b"3Jafter"), Some(2));
+	}
+
+	#[test]
+	fn scan_clear_scrollback_finds_sequence_split_before_final_byte() {
+		let mut carry = Vec::new();
+		assert_eq!(scan_clear_scrollback(&mut carry, b"\x1b[3"), None);
+		assert_eq!(scan_clear_scrollback(&mut carry, b"Jafter"), Some(1));
+	}
+
+	#[test]
+	fn scan_clear_scrollback_keeps_short_detection_carry_without_match() {
+		let mut carry = Vec::new();
+		assert_eq!(scan_clear_scrollback(&mut carry, b"abcdef"), None);
+		assert_eq!(carry, b"def");
+		assert!(carry.len() < CLEAR_SCROLLBACK_SEQ.len());
+	}
+
+	#[test]
+	fn scan_clear_scrollback_uses_last_sequence_in_chunk() {
+		let mut carry = Vec::new();
+		assert_eq!(
+			scan_clear_scrollback(&mut carry, b"\x1b[3Jfoo\x1b[3Jbar"),
+			Some(11)
 		);
 	}
 

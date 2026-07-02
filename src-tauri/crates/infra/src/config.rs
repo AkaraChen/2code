@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -36,7 +37,12 @@ pub fn write_project_config(
 			format!("Failed to serialize 2code.json: {e}"),
 		))
 	})?;
-	std::fs::write(&config_path, content)?;
+	let mut temporary = tempfile::NamedTempFile::new_in(project_folder)?;
+	temporary.write_all(content.as_bytes())?;
+	temporary.flush()?;
+	temporary
+		.persist(&config_path)
+		.map_err(|error| AppError::IoError(error.error))?;
 	Ok(())
 }
 
@@ -221,5 +227,24 @@ mod tests {
 
 		let loaded = load_project_config(dir.path().to_str().unwrap()).unwrap();
 		assert_eq!(loaded, config);
+	}
+
+	#[test]
+	fn write_config_overwrites_existing() {
+		let dir = TempDir::new().unwrap();
+		let first = ProjectConfig {
+			setup_script: vec!["first".to_string()],
+			..ProjectConfig::default()
+		};
+		let second = ProjectConfig {
+			setup_script: vec!["second".to_string()],
+			..ProjectConfig::default()
+		};
+
+		write_project_config(dir.path().to_str().unwrap(), &first).unwrap();
+		write_project_config(dir.path().to_str().unwrap(), &second).unwrap();
+
+		let loaded = load_project_config(dir.path().to_str().unwrap()).unwrap();
+		assert_eq!(loaded, second);
 	}
 }

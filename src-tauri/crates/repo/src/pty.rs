@@ -67,22 +67,44 @@ pub fn update_dimensions(
 	cols: u16,
 	rows: u16,
 ) {
-	let _ = diesel::update(
+	match diesel::update(
 		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
 	)
 	.set((
 		pty_sessions::cols.eq(cols as i32),
 		pty_sessions::rows.eq(rows as i32),
 	))
-	.execute(conn);
+	.execute(conn)
+	{
+		Ok(_) => {}
+		Err(e) => {
+			tracing::warn!(
+				target: "pty",
+				%session_id,
+				error = %e,
+				"repo: failed to update dimensions"
+			);
+		}
+	}
 }
 
 pub fn mark_closed(conn: &mut SqliteConnection, session_id: &str) {
-	let _ = diesel::update(
+	match diesel::update(
 		pty_sessions::table.filter(pty_sessions::id.eq(session_id)),
 	)
 	.set(pty_sessions::closed_at.eq(diesel::dsl::now))
-	.execute(conn);
+	.execute(conn)
+	{
+		Ok(_) => {}
+		Err(e) => {
+			tracing::warn!(
+				target: "pty",
+				%session_id,
+				error = %e,
+				"repo: failed to mark session closed"
+			);
+		}
+	}
 }
 
 pub fn mark_all_open_closed(conn: &mut SqliteConnection) {
