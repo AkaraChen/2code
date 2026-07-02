@@ -28,6 +28,7 @@ import {
   createAgentStatusDetector,
   readTerminalDetectionScreen } from
 "./detector";
+import { isRenderedProfileHot } from "./activationStore";
 import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
@@ -98,6 +99,12 @@ function restoreBuffer(sessionId: string, terminal: XTerm): void {
     const data = localStorage.getItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
     if (data) terminal.write(data);
   } catch {}
+}
+
+function isSessionOpen(sessionId: string): boolean {
+  return Object.values(useTerminalStore.getState().profiles).some(
+    (profile) => profile.tabs.some((tab) => tab.id === sessionId)
+  );
 }
 
 interface TerminalProps {
@@ -460,8 +467,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
       cleanups.push(() => fileLinkDisposable.dispose());
 
-      // 7. Restore buffer from localStorage (cold restart scrollback)
-      restoreBuffer(sessionId, term);
+      // 7. Restore local buffer only for sessions without live history replay.
+      // Open tabs use backend PTY history as the authoritative source.
+      if (!isSessionOpen(sessionId)) {
+        restoreBuffer(sessionId, term);
+      }
 
       // 8. Initial fit + resize PTY
       addonsResult.fitAddon.fit();
@@ -651,9 +661,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         // Flush buffered PTY output to DB before teardown (best-effort)
         flushPtyOutput({ sessionId }).catch(() => {});
 
-        const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
-          (profile) => profile.tabs.some((tab) => tab.id === sessionId)
-        );
+        const stillOpen = isSessionOpen(sessionId);
+        const shouldPark = stillOpen && isRenderedProfileHot(profileId);
 
         if (stillOpen) {
           // Persist buffer + dimensions for cold restart or live remount.
@@ -686,7 +695,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           cleanup();
         }
 
-        if (stillOpen) {
+        if (shouldPark) {
           // Park wrapper instead of removing — xterm survives React unmount
           getTerminalParkingContainer().appendChild(wrapper);
         } else if (typeof term.dispose === "function") {

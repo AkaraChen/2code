@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { use, useCallback, useMemo } from "react";
+import { use, useCallback, useMemo, useRef } from "react";
 import { matchPath, useLocation } from "react-router";
 import { useKey } from "rooks";
 import ProfileLayout from "@/features/projects/ProfileLayout";
@@ -8,6 +8,13 @@ import type { Profile, ProjectWithProfiles } from "@/generated";
 import { listProjects } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { restorationPromise } from "./state";
+import {
+	getTerminalLastActivatedAt,
+	HOT_PROFILE_LIMIT,
+	markTerminalProfileActivated,
+	selectHotProfileIds,
+	setRenderedHotProfileIds,
+} from "./activationStore";
 import { useCloseTerminalTab, useCreateTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
 import { TerminalFileLinkPickerDialog } from "./TerminalFileLinkPickerDialog";
@@ -25,6 +32,7 @@ export default function TerminalLayer() {
 	const activeProfileIds = useActiveProfileIds();
 	const { mutate: createTerminalTab } = useCreateTerminalTab();
 	const { mutate: closeTerminalTab } = useCloseTerminalTab();
+	const lastMarkedProfileIdRef = useRef<string | null>(null);
 
 	// Build profile lookup map
 	const profileMap = useMemo(() => {
@@ -51,6 +59,33 @@ export default function TerminalLayer() {
 			matchPath("/projects/:id/profiles/:profileId", location.pathname)
 				?.params.profileId ?? null,
 		[location.pathname],
+	);
+
+	if (
+		activeProfileId &&
+		lastMarkedProfileIdRef.current !== activeProfileId
+	) {
+		markTerminalProfileActivated(activeProfileId);
+		lastMarkedProfileIdRef.current = activeProfileId;
+	}
+
+	const lastActivatedAt = getTerminalLastActivatedAt();
+
+	const hotProfileIds = useMemo(
+		() =>
+			selectHotProfileIds(
+				activeProfileIds,
+				activeProfileId,
+				lastActivatedAt,
+				HOT_PROFILE_LIMIT,
+			),
+		[activeProfileId, activeProfileIds, lastActivatedAt],
+	);
+	setRenderedHotProfileIds(hotProfileIds);
+
+	const hotProfileIdSet = useMemo(
+		() => new Set(hotProfileIds),
+		[hotProfileIds],
 	);
 
 	const handleCreateTerminalShortcut = useCallback((e: KeyboardEvent) => {
@@ -82,6 +117,7 @@ export default function TerminalLayer() {
 	return (
 		<>
 			{activeProfileIds.map((profileId) => {
+				if (!hotProfileIdSet.has(profileId)) return null;
 				const profile = profileMap.get(profileId);
 				if (!profile) return null;
 				const project = projectMap.get(profile.project_id);

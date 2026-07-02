@@ -7,6 +7,7 @@ import { Suspense, type ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
+import { useTerminalActivationStore } from "./activationStore";
 import { useTerminalStore } from "./store";
 import TerminalLayer from "./TerminalLayer";
 
@@ -60,6 +61,18 @@ vi.mock("./TerminalFileLinkPickerDialog", () => ({
 	TerminalFileLinkPickerDialog: () => null,
 }));
 
+function createProfile(id: string, branchName = id) {
+	return {
+		id,
+		project_id: "project-1",
+		branch_name: branchName,
+		worktree_path: `/repo/${id}`,
+		created_at: "2026-01-01 00:00:00",
+		is_default: id === "profile-1",
+		notes: "",
+	};
+}
+
 function createWrapper(route: string) {
 	const queryClient = new QueryClient({
 		defaultOptions: {
@@ -92,24 +105,8 @@ describe("terminalLayer", () => {
 				pinned_at: null,
 				pinned_order: null,
 				profiles: [
-					{
-						id: "profile-1",
-						project_id: "project-1",
-						branch_name: "main",
-						worktree_path: "/repo",
-						created_at: "2026-01-01 00:00:00",
-						is_default: true,
-						notes: "",
-					},
-					{
-						id: "profile-2",
-						project_id: "project-1",
-						branch_name: "feature",
-						worktree_path: "/repo-feature",
-						created_at: "2026-01-01 00:00:00",
-						is_default: false,
-						notes: "",
-					},
+					createProfile("profile-1", "main"),
+					createProfile("profile-2", "feature"),
 				],
 			},
 		]);
@@ -120,9 +117,10 @@ describe("terminalLayer", () => {
 			sessionProfileIds: {},
 		});
 		useFileViewerTabsStore.setState({ profiles: {} });
+		useTerminalActivationStore.getState().reset();
 	});
 
-	it("marks only the routed profile layout active while keeping other layouts mounted", async () => {
+	it("marks only the routed profile layout active while keeping hot layouts mounted", async () => {
 		useTerminalStore.getState().addTab("profile-1", "session-1", "Terminal 1");
 		useTerminalStore.getState().addTab("profile-2", "session-2", "Terminal 2");
 
@@ -139,6 +137,57 @@ describe("terminalLayer", () => {
 					{ profileId: "profile-2", isActive: true },
 				]),
 			);
+		});
+	});
+
+	it("renders only hot profile layouts when profile count exceeds the limit", async () => {
+		listProjectsMock.mockResolvedValue([
+			{
+				id: "project-1",
+				name: "Project",
+				folder: "/repo",
+				created_at: "2026-01-01 00:00:00",
+				group_id: null,
+				sort_order: 0,
+				pinned_at: null,
+				pinned_order: null,
+				profiles: [
+					createProfile("profile-1"),
+					createProfile("profile-2"),
+					createProfile("profile-3"),
+					createProfile("profile-4"),
+					createProfile("profile-5"),
+				],
+			},
+		]);
+		for (let index = 1; index <= 5; index += 1) {
+			useTerminalStore
+				.getState()
+				.addTab(`profile-${index}`, `session-${index}`, `Terminal ${index}`);
+		}
+		useTerminalActivationStore.setState({
+			lastActivatedAt: {
+				"profile-1": 10,
+				"profile-2": 20,
+				"profile-3": 30,
+				"profile-4": 40,
+				"profile-5": 1,
+			},
+		});
+
+		await act(async () => {
+			render(<TerminalLayer />, {
+				wrapper: createWrapper("/projects/project-1/profiles/profile-5"),
+			});
+		});
+
+		await waitFor(() => {
+			expect(profileLayoutProps.map(({ profileId }) => profileId)).toEqual([
+				"profile-2",
+				"profile-3",
+				"profile-4",
+				"profile-5",
+			]);
 		});
 	});
 });
