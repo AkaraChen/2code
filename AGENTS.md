@@ -83,6 +83,6 @@ just coverage                    # llvm-cov HTML report
 - CI: `.github/workflows/tauri-smoke.yml` — smoke test on `ubuntu-24.04` using `xvfb-run` (virtual display) + `webkit2gtk-driver` + Tauri driver. Not a full test suite.
 - E2E: `e2e-tests/` uses Mocha + Selenium WebDriver via Tauri driver (not Playwright/Cypress)
 - Frontend uses Vitest (`npm test` = `vitest run`); test files colocated as `*.test.ts` — Zustand store tests use `resetStore()` helper pattern
-- ESLint uses `@antfu/eslint-config` with React — no `.eslintrc` file, config is in `package.json` or similar
+- ESLint uses `@antfu/eslint-config` with React flat config — configuration lives in `eslint.config.js` at the repo root
 - `openspec/` dir at root is OpenSpec workflow tooling — not application code
 - `src-tauri/src/bridge.rs` — trait impls (`TauriPtyEmitter`, `TauriWatchSender`) that decouple service layer from Tauri

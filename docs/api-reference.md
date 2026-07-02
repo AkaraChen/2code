@@ -26,8 +26,8 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 | `resize_pty`                | `session_id: string, rows: u16, cols: u16` | —                     | Resize PTY terminal                                |
 | `close_pty_session`         | `session_id: string`                       | —                     | Close PTY session and mark closed in DB            |
 | `list_project_sessions`     | `project_id: string`                       | `PtySessionRecord[]`  | List all sessions for a project (including closed) |
-| `get_pty_session_history`   | `session_id: string`                       | `Vec<u8>`             | Get concatenated output chunks for session         |
-| `delete_pty_session_record` | `session_id: string`                       | —                     | Delete session record and its output chunks        |
+| `get_pty_session_history`   | `session_id: string`                       | `Vec<u8>`             | Get session output history from its log file       |
+| `delete_pty_session_record` | `session_id: string`                       | —                     | Delete session record and its output log           |
 
 ### Profile Commands (`handler/profile.rs`)
 

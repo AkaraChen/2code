@@ -194,7 +194,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 
 - **Database is single-connection** (`Arc<Mutex<SqliteConnection>>`), not a pool — avoid long-held locks
 - **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
-- **PTY output sends `&[u8]` over a per-session IPC `Channel`** (not global events; frontend receives `ArrayBuffer`) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done. `find_utf8_boundary` still exists in `service::pty` (with tests) as a utility but is no longer applied anywhere on the output path
+- **PTY output sends `&[u8]` over a per-session IPC `Channel`** (not global events; frontend receives `ArrayBuffer`) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done
 - **Font listing and sound playback are macOS-only** (`core-text` crate, `/System/Library/Sounds`, `afplay`) — needs platform guards for cross-platform
 - **UI components** should use shadcn/ui primitives from `src/components/ui`; do not add legacy UI-library APIs back
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify

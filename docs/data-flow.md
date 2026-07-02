@@ -37,15 +37,12 @@ sequenceDiagram
 2. Handler delegates to `service::pty::create_session()`
 3. Service loads project config (`2code.json`) for init scripts
 4. Service prepares ZDOTDIR temp directory with shell init script
-5. Service reads helper HTTP server state (port + sidecar path)
-6. `infra::pty::create_session()` spawns PTY with env vars:
+5. `infra::pty::create_session()` spawns PTY with env vars:
    - `TERM=xterm-256color`
-   - `_2CODE_HELPER_URL=http://127.0.0.1:{port}`
-   - `_2CODE_HELPER={sidecar_path}`
    - `_2CODE_SESSION_ID={session_id}`
    - `ZDOTDIR={init_dir}` (for shell init injection)
-7. Session record inserted into `pty_sessions` table
-8. Background reader thread spawned for output streaming
+6. Session metadata inserted into the `pty_sessions` table
+7. Background reader thread spawned for live output and persistence
 
 ### Output Streaming
 
@@ -55,6 +52,7 @@ sequenceDiagram
     participant RT as Reader Thread
     participant PT as Persist Thread
     participant FE as Frontend (xterm.js)
+    participant LF as pty_logs/{id}.log
     participant DB as SQLite
 
     loop Every 4KB read
@@ -64,12 +62,12 @@ sequenceDiagram
     end
 
     loop Buffer >= 32KB
-        PT->>DB: Append output chunk
+        PT->>LF: Append raw bytes
     end
 
     PTY->>RT: EOF / Error
     RT->>PT: Drop channel (signal flush)
-    PT->>DB: Flush remaining buffer
+    PT->>LF: Flush remaining bytes
     RT->>DB: Mark session closed
     RT->>FE: emit("pty-exit-{id}")
 ```
@@ -77,10 +75,12 @@ sequenceDiagram
 Key details:
 
 - Reader thread reads 4KB chunks from PTY
-- UTF-8 boundary detection (`find_utf8_boundary`) prevents partial character output to frontend
-- Persistence runs on a separate thread via mpsc channel (non-blocking)
-- 32KB flush threshold for DB writes
-- 1MB cap per session with oldest-chunk pruning
+- Live output is sent as raw `&[u8]` over a per-session `Channel<ArrayBuffer>`; xterm.js decodes UTF-8 across writes
+- Persistence runs on a separate thread via mpsc channel, so file writes do not block live output delivery
+- Persistence flushes raw bytes to `pty_logs/{session_id}.log` after 32KB batches, on the 250ms interval, on explicit flush, and at EOF
+- PTY output bytes never touch SQLite; the database stores session metadata and closed-state only
+- There is no byte cap. Logs live for one session, are removed on restore/close/delete, and orphan logs are reaped on startup by `service::pty::gc_orphan_logs`
+- Restored scrollback is bounded by the vt100 `sanitize_history` path at 10k lines
 
 ### Session Restoration (App Startup)
 
@@ -102,50 +102,46 @@ sequenceDiagram
     end
 
     loop For each old session
-        Store->>BE: createPtySession(same metadata)
-        BE-->>Store: newSessionId
-        Store->>Store: addTab(profileId, newSessionId, title, restoreFrom=oldId)
+        Store->>BE: restorePtySession(oldSessionId, meta, config)
+        BE-->>Store: {newSessionId, history}
+        Store->>Store: sessionHistory.set(newSessionId, history)
+        Store->>Store: addTab(profileId, newSessionId, title)
     end
 
-    Note over Store: Terminal component fetches history from old session,<br/>writes to xterm, then deletes old record
+    Note over Store: Terminal component consumes sessionHistory once,<br/>writes it to xterm, then clears the map entry
 ```
 
-This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/store.ts`.
+This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/state.ts`.
 
 ## Notification Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant Shell as User Shell
-    participant CLI as 2code-helper
-    participant HTTP as Axum Server
-    participant Store as Tauri Plugin Store
-    participant App as Tauri App
-    participant FE as Frontend Store
+    participant PTY as PTY Output
+    participant Term as Terminal.tsx
+    participant Detector as Agent Detector
+    participant Store as Terminal Store
+    participant Settings as Notification Store
+    participant BE as playSystemSound
 
-    Shell->>CLI: $_2CODE_HELPER notify
-    CLI->>CLI: Read $_2CODE_HELPER_URL, $_2CODE_SESSION_ID
-    CLI->>HTTP: GET /notify?session_id={sid}
-    HTTP->>Store: Read notification-settings
-    Store-->>HTTP: {enabled, sound}
+    PTY->>Term: Raw bytes / OSC title / OSC progress
+    Term->>Detector: detect(screen, oscTitle, oscProgress)
+    Detector-->>Term: running / waiting / idle
+    Term->>Store: setAgentStatus(sessionId, status)
 
-    alt Notifications enabled
-        HTTP->>HTTP: afplay /System/Library/Sounds/{sound}.aiff
-        HTTP->>App: app.emit("pty-notify", session_id)
-        HTTP-->>CLI: {played: true}
-        App->>FE: listen("pty-notify")
-        FE->>FE: markNotified(sessionId)
-        Note over FE: Green dot on terminal tab + sidebar profile
-    else Notifications disabled
-        HTTP-->>CLI: {played: false}
-        CLI->>CLI: exit(1)
+    alt status becomes waiting
+        Term->>Settings: read enabled + sound
+        Settings-->>Term: notification preferences
+        Term->>BE: playSystemSound(sound)
+        Store-->>Store: waiting dot remains visible until status changes
     end
 ```
 
 Clearing notifications:
 
-- `setActiveTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
-- `closeTab(profileId, tabId)` → `notifiedTabs.delete(tabId)`
+- `setAgentStatus(sessionId, "idle")` after a running state creates a completion marker
+- `dismissAgentCompletion(sessionId)` clears the marker
+- `closeTab(profileId, tabId)` removes status and completion state for the closed tab
 
 ## Git Operations & Context ID Resolution
 
