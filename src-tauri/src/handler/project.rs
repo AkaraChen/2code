@@ -3,8 +3,9 @@ use tauri::{AppHandle, Manager, State};
 use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
-	ProjectConfig, ProjectSidebarLayoutUpdate, ProjectWithProfiles,
+	GitBinaryPreview, GitCommit, GitDiffSnapshot, GitDiffStats,
+	GitPullRequestStatus, Project, ProjectConfig, ProjectSidebarLayoutUpdate,
+	ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
 
@@ -81,6 +82,20 @@ pub async fn get_git_diff(
 	super::run_blocking(move || {
 		let worktree_path = profile_worktree_path(&db, &profile_id)?;
 		infra::git::diff(&worktree_path)
+	})
+	.await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn get_git_diff_snapshot(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<GitDiffSnapshot, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::diff_snapshot(&worktree_path)
 	})
 	.await
 }
@@ -280,7 +295,9 @@ pub async fn delete_project(
 	id: String,
 ) -> Result<(), AppError> {
 	let ctx = crate::bridge::build_pty_context(&app);
-	super::run_blocking(move || service::project::delete_with_context(&ctx, &id))
+	super::run_blocking(move || {
+		service::project::delete_with_context(&ctx, &id)
+	})
 	.await
 }
 

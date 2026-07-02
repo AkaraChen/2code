@@ -9,7 +9,7 @@ use crate::no_window::command_without_windows_console;
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
 use model::project::{
-	GitAuthor, GitCommit, GitDiffStats, GitPullRequestStatus,
+	GitAuthor, GitCommit, GitDiffSnapshot, GitDiffStats, GitPullRequestStatus,
 };
 
 #[derive(serde::Deserialize)]
@@ -154,115 +154,133 @@ pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 /// Uses a temporary index file seeded from the repo's current index so tracked
 /// files that are now ignored still remain tracked in the temporary view.
 pub fn diff(folder: &str) -> Result<String, AppError> {
-	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
-
-	// Stage all changes into the temporary index without mutating the real one.
-	let add_output = command_without_windows_console("git")
-		.args(["add", "-A"])
-		.current_dir(folder)
-		.env("GIT_INDEX_FILE", &tmp_index)
-		.output()?;
-
-	if !add_output.status.success() {
-		return Err(AppError::GitError(
-			String::from_utf8_lossy(&add_output.stderr)
-				.trim()
-				.to_string(),
-		));
-	}
-
-	// Diff the temporary index (everything staged) against HEAD
-	let diff_output = command_without_windows_console("git")
-		.args([
-			"diff",
-			"--no-color",
-			"--src-prefix=a/",
-			"--dst-prefix=b/",
-			"--cached",
-			"HEAD",
-		])
-		.current_dir(folder)
-		.env("GIT_INDEX_FILE", &tmp_index)
-		.output()?;
-
-	if !diff_output.status.success() {
-		let stderr = String::from_utf8_lossy(&diff_output.stderr)
-			.trim()
-			.to_string();
-		let no_head_patterns = [
-			"does not have any commits",
-			"bad revision 'HEAD'",
-			"invalid revision 'HEAD'",
-			"unknown revision",
-		];
-		if no_head_patterns.iter().any(|p| stderr.contains(p)) {
-			return Ok(String::new());
-		}
-		return Err(AppError::GitError(stderr));
-	}
-
-	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
+	Ok(diff_snapshot(folder)?.diff)
 }
 
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
-	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
+	Ok(diff_snapshot(folder)?.stats)
+}
 
-	let add_output = command_without_windows_console("git")
-		.args(["add", "-A"])
-		.current_dir(folder)
-		.env("GIT_INDEX_FILE", &tmp_index)
-		.output()?;
-
-	if !add_output.status.success() {
-		return Err(AppError::GitError(
-			String::from_utf8_lossy(&add_output.stderr)
-				.trim()
-				.to_string(),
-		));
+pub fn diff_snapshot(folder: &str) -> Result<GitDiffSnapshot, AppError> {
+	if !has_any_changes(folder)? {
+		return Ok(GitDiffSnapshot::default());
 	}
 
-	let diff_output = command_without_windows_console("git")
-		.args([
-			"diff",
-			"--no-color",
-			"--src-prefix=a/",
-			"--dst-prefix=b/",
-			"--cached",
-			"--shortstat",
-			"HEAD",
-		])
-		.current_dir(folder)
-		.env("GIT_INDEX_FILE", &tmp_index)
-		.output()?;
+	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
-	if !diff_output.status.success() {
+	stage_all_changes(folder, &tmp_index)?;
+
+	let diff_output = run_cached_diff(folder, &tmp_index, false)?;
+	let diff = if diff_output.status.success() {
+		String::from_utf8_lossy(&diff_output.stdout).to_string()
+	} else {
 		let stderr = String::from_utf8_lossy(&diff_output.stderr)
 			.trim()
 			.to_string();
-		let no_head_patterns = [
-			"does not have any commits",
-			"bad revision 'HEAD'",
-			"invalid revision 'HEAD'",
-			"unknown revision",
-		];
-		if no_head_patterns.iter().any(|p| stderr.contains(p)) {
-			return Ok(GitDiffStats::default());
+		if is_no_head_error(&stderr) {
+			String::new()
+		} else {
+			return Err(AppError::GitError(stderr));
 		}
-		return Err(AppError::GitError(stderr));
+	};
+
+	let stats_output = run_cached_diff(folder, &tmp_index, true)?;
+	let stats = if stats_output.status.success() {
+		parse_diff_stats(&stats_output.stdout)
+	} else {
+		let stderr = String::from_utf8_lossy(&stats_output.stderr)
+			.trim()
+			.to_string();
+		if is_no_head_error(&stderr) {
+			GitDiffStats::default()
+		} else {
+			return Err(AppError::GitError(stderr));
+		}
+	};
+
+	Ok(GitDiffSnapshot { diff, stats })
+}
+
+fn has_any_changes(folder: &str) -> Result<bool, AppError> {
+	let output = command_without_windows_console("git")
+		.args(["status", "--porcelain", "--untracked-files=all"])
+		.current_dir(folder)
+		.output()?;
+
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
 	}
 
-	let stdout = String::from_utf8_lossy(&diff_output.stdout);
+	Ok(!output.stdout.is_empty())
+}
+
+fn stage_all_changes(folder: &str, tmp_index: &Path) -> Result<(), AppError> {
+	let output = command_without_windows_console("git")
+		.args(["add", "-A"])
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", tmp_index)
+		.output()?;
+
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+
+	Ok(())
+}
+
+fn run_cached_diff(
+	folder: &str,
+	tmp_index: &Path,
+	shortstat: bool,
+) -> Result<std::process::Output, AppError> {
+	let mut args = vec![
+		"diff",
+		"--no-color",
+		"--src-prefix=a/",
+		"--dst-prefix=b/",
+		"--cached",
+	];
+	if shortstat {
+		args.push("--shortstat");
+	}
+	args.push("HEAD");
+
+	Ok(command_without_windows_console("git")
+		.args(args)
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", tmp_index)
+		.output()?)
+}
+
+fn is_no_head_error(stderr: &str) -> bool {
+	let no_head_patterns = [
+		"does not have any commits",
+		"bad revision 'HEAD'",
+		"invalid revision 'HEAD'",
+		"unknown revision",
+	];
+	no_head_patterns
+		.iter()
+		.any(|pattern| stderr.contains(pattern))
+}
+
+fn parse_diff_stats(stdout: &[u8]) -> GitDiffStats {
+	let stdout = String::from_utf8_lossy(stdout);
 	let (files_changed, insertions, deletions) = stdout
 		.lines()
 		.find(|line| line.contains("file"))
 		.map(parse_shortstat)
 		.unwrap_or((0, 0, 0));
 
-	Ok(GitDiffStats {
+	GitDiffStats {
 		files_changed,
 		insertions,
 		deletions,
-	})
+	}
 }
 
 fn create_temp_index_from_repo(

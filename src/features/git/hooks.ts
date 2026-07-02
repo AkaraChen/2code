@@ -11,8 +11,7 @@ import {
 	getCommitDiff,
 	getGitBinaryPreview,
 	getGitAheadCount,
-	getGitDiff,
-	getGitDiffStats,
+	getGitDiffSnapshot,
 	getGitLog,
 	getGitPullRequestStatus,
 	gitPush,
@@ -21,7 +20,6 @@ import type { GitDiffStats } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import { parseDiffFiles } from "./patchFiles";
-import { getDiffStatsFromFiles } from "./utils";
 import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_DIFF_SNAPSHOT_STALE_MS = 30_000;
@@ -42,7 +40,8 @@ function useRefreshOnEnable(enabled: boolean, refetch: () => Promise<unknown>) {
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
-		queryFn: () => getGitDiff({ profileId }),
+		queryFn: () => getGitDiffSnapshot({ profileId }),
+		select: (snapshot) => snapshot.diff,
 		staleTime: GIT_DIFF_SNAPSHOT_STALE_MS,
 		refetchOnMount: "always",
 		refetchInterval: GIT_LIGHT_REFRESH_INTERVAL_MS,
@@ -79,11 +78,13 @@ function useCommitDiff(profileId: string, commitHash: string) {
 
 export function useGitDiffStats(profileId: string, enabled = true) {
 	const { data, refetch } = useQuery({
-		queryKey: queryKeys.git.diffStats(profileId),
-		queryFn: () => getGitDiffStats({ profileId }),
+		queryKey: queryKeys.git.diff(profileId),
+		queryFn: () => getGitDiffSnapshot({ profileId }),
+		select: (snapshot) => snapshot.stats,
 		enabled,
-		staleTime: Infinity,
-		refetchInterval: false,
+		staleTime: GIT_DIFF_SNAPSHOT_STALE_MS,
+		refetchOnMount: "always",
+		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 	useRefreshOnEnable(enabled, refetch);
 
@@ -208,18 +209,8 @@ export function useDiscardGitFileChanges(profileId: string) {
 }
 
 export function useGitDiffFiles(profileId: string) {
-	const queryClient = useQueryClient();
 	const { data: diff } = useGitDiff(profileId);
-	const files = useMemo(() => parseDiffFiles(diff), [diff]);
-
-	useEffect(() => {
-		queryClient.setQueryData(
-			queryKeys.git.diffStats(profileId),
-			getDiffStatsFromFiles(files),
-		);
-	}, [files, profileId, queryClient]);
-
-	return files;
+	return useMemo(() => parseDiffFiles(diff), [diff]);
 }
 
 export function useCommitDiffFiles(profileId: string, commitHash: string) {

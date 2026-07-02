@@ -6,6 +6,16 @@ use common::{
 };
 use infra::no_window::command_without_windows_console;
 
+fn git_status_porcelain(dir: &std::path::Path) -> String {
+	let output = command_without_windows_console("git")
+		.args(["status", "--porcelain", "--untracked-files=all"])
+		.current_dir(dir)
+		.output()
+		.unwrap();
+	assert!(output.status.success());
+	String::from_utf8_lossy(&output.stdout).to_string()
+}
+
 // ============================================================
 // Git Diff (basic)
 // ============================================================
@@ -77,6 +87,30 @@ fn diff_includes_untracked_files() {
 }
 
 #[test]
+fn diff_snapshot_includes_untracked_files() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("untracked.txt"), "untracked content\n").unwrap();
+
+	let snapshot =
+		infra::git::diff_snapshot(&default_profile.worktree_path).unwrap();
+	assert!(
+		snapshot.diff.contains("untracked.txt"),
+		"snapshot diff should include untracked file"
+	);
+	assert!(
+		snapshot.diff.contains("untracked content"),
+		"snapshot diff should include untracked content"
+	);
+	assert_eq!(snapshot.stats.files_changed, 1);
+	assert_eq!(snapshot.stats.insertions, 1);
+
+	cleanup(&dir);
+}
+
+#[test]
 fn diff_nonexistent_profile_returns_error() {
 	let mut conn = setup_db();
 	let result = service::project::get_diff(&mut conn, "nonexistent-profile");
@@ -122,6 +156,22 @@ fn diff_no_changes_returns_empty_string() {
 }
 
 #[test]
+fn diff_snapshot_clean_repo_returns_empty_snapshot() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	let snapshot =
+		infra::git::diff_snapshot(&default_profile.worktree_path).unwrap();
+	assert_eq!(snapshot.diff, "");
+	assert_eq!(snapshot.stats.files_changed, 0);
+	assert_eq!(snapshot.stats.insertions, 0);
+	assert_eq!(snapshot.stats.deletions, 0);
+
+	cleanup(&dir);
+}
+
+#[test]
 fn diff_deleted_file() {
 	let mut conn = setup_db();
 	let (_project, default_profile, dir) =
@@ -137,6 +187,65 @@ fn diff_deleted_file() {
 		diff.contains("deleted file") || diff.contains("--- a/README.md"),
 		"diff should indicate deletion"
 	);
+
+	cleanup(&dir);
+}
+
+#[test]
+fn diff_snapshot_matches_diff_and_stats_wrappers() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	add_commit(&dir, "tracked.txt", "old\n", "Add tracked file");
+	std::fs::write(dir.join("README.md"), "# Updated\n").unwrap();
+	std::fs::write(dir.join("tracked.txt"), "old\nnew line\n").unwrap();
+	std::fs::write(dir.join("new.txt"), "brand new\n").unwrap();
+	command_without_windows_console("git")
+		.args(["add", "README.md"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+
+	let snapshot =
+		infra::git::diff_snapshot(&default_profile.worktree_path).unwrap();
+	let diff = infra::git::diff(&default_profile.worktree_path).unwrap();
+	let stats = infra::git::diff_stats(&default_profile.worktree_path).unwrap();
+
+	assert_eq!(snapshot.diff, diff);
+	assert_eq!(snapshot.stats, stats);
+	assert!(snapshot.diff.contains("README.md"));
+	assert!(snapshot.diff.contains("tracked.txt"));
+	assert!(snapshot.diff.contains("new.txt"));
+	assert_eq!(snapshot.stats.files_changed, 3);
+
+	cleanup(&dir);
+}
+
+#[test]
+fn diff_snapshot_does_not_mutate_real_index() {
+	let mut conn = setup_db();
+	let (_project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+
+	std::fs::write(dir.join("staged.txt"), "staged content\n").unwrap();
+	command_without_windows_console("git")
+		.args(["add", "staged.txt"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	std::fs::write(dir.join("untracked.txt"), "untracked content\n").unwrap();
+
+	let before = git_status_porcelain(&dir);
+	let snapshot =
+		infra::git::diff_snapshot(&default_profile.worktree_path).unwrap();
+	let after = git_status_porcelain(&dir);
+
+	assert!(snapshot.diff.contains("staged.txt"));
+	assert!(snapshot.diff.contains("untracked.txt"));
+	assert_eq!(after, before);
+	assert!(after.contains("A  staged.txt"));
+	assert!(after.contains("?? untracked.txt"));
 
 	cleanup(&dir);
 }

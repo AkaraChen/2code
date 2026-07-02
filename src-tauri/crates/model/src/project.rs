@@ -105,6 +105,12 @@ pub struct GitDiffStats {
 	pub deletions: u32,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct GitDiffSnapshot {
+	pub diff: String,
+	pub stats: GitDiffStats,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GitBinaryPreview {
 	pub file_path: String,

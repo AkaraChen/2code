@@ -97,6 +97,7 @@ pub fn run() {
 			handler::project::update_project_sidebar_layout,
 			handler::project::get_git_branch,
 			handler::project::get_git_diff,
+			handler::project::get_git_diff_snapshot,
 			handler::project::get_git_diff_stats,
 			handler::project::get_git_log,
 			handler::project::get_commit_diff,
