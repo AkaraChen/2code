@@ -61,6 +61,7 @@ const SERIALIZE_SCROLLBACK = 1000;
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 const AGENT_DETECTION_INTERVAL_MS = 250;
+const HIDDEN_DETECTION_MULTIPLIER = 8;
 
 function loadSavedDimensions(sessionId: string): {cols: number;rows: number;} | null {
   try {
@@ -111,6 +112,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const isStreamReadyRef = useRef(false);
   const pendingEventsRef = useRef<Uint8Array[]>([]);
+  const isActiveRef = useRef(isActive);
+  const runAgentDetectionNowRef = useRef<(() => void) | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const fontFamily = useTerminalSettingsStore((s) => s.fontFamily);
   const fontSize = useTerminalSettingsStore((s) => s.fontSize);
@@ -125,6 +128,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const initFontFamilyRef = useRef(fontFamily);
   const initFontSizeRef = useRef(fontSize);
   const initThemeRef = useRef(theme);
+
+  isActiveRef.current = isActive;
 
   useEffect(() => {
     if (termRef.current) {
@@ -171,6 +176,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
   useEffect(() => {
     if (!isActive || !termRef.current) return;
+    runAgentDetectionNowRef.current?.();
     const focusFrame = window.requestAnimationFrame(() => {
       termRef.current?.focus();
     });
@@ -239,6 +245,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       let latestProgress = "0;0";
       let publishedAgentStatus: AgentStatus | null =
         useTerminalStore.getState().agentStatuses[sessionId] ?? null;
+      let lastLoggedAgentStatus: string | null = null;
       let term: XTerm;
 
       function playWaitingSound() {
@@ -273,17 +280,21 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           oscTitle: latestTitle,
           oscProgress: latestProgress
         });
-        consola.info("[2code-agent-status] check", {
-          sessionId,
-          status: result.status,
-          agentId: result.agentId,
-          ruleId: result.ruleId,
-          state: result.state,
-          oscTitle: latestTitle,
-          oscProgress: latestProgress
-        });
+        const logSignature = `${result.status}|${result.agentId ?? ""}|${result.ruleId ?? ""}`;
+        if (logSignature !== lastLoggedAgentStatus) {
+          lastLoggedAgentStatus = logSignature;
+          consola.debug("[2code-agent-status] check", {
+            sessionId,
+            status: result.status,
+            agentId: result.agentId,
+            ruleId: result.ruleId,
+            state: result.state
+          });
+        }
         publishAgentStatus(result.status);
       }
+
+      runAgentDetectionNowRef.current = runAgentDetectionNow;
 
       function scheduleAgentDetection() {
         if (disposed) return;
@@ -294,7 +305,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         hasPendingAgentDetection = false;
         if (agentDetectionTimer !== null) return;
         const elapsed = performance.now() - lastAgentDetectionAt;
-        const delay = Math.max(0, AGENT_DETECTION_INTERVAL_MS - elapsed);
+        const interval = isActiveRef.current ?
+          AGENT_DETECTION_INTERVAL_MS :
+          AGENT_DETECTION_INTERVAL_MS * HIDDEN_DETECTION_MULTIPLIER;
+        const delay = Math.max(0, interval - elapsed);
         agentDetectionTimer = window.setTimeout(runAgentDetectionNow, delay);
       }
 
@@ -658,6 +672,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         if (agentDetectionTimer !== null) {
           window.clearTimeout(agentDetectionTimer);
           agentDetectionTimer = null;
+        }
+        if (runAgentDetectionNowRef.current === runAgentDetectionNow) {
+          runAgentDetectionNowRef.current = null;
         }
 
         for (const unlisten of unlisteners) {
