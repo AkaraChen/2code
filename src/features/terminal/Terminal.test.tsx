@@ -1,6 +1,9 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getPtySessionHistory } from "@/generated";
 import { Terminal } from "./Terminal";
+import { useTerminalStore } from "./store";
 
 const {
 	readClipboardTextMock,
@@ -11,6 +14,7 @@ const {
 } = vi.hoisted(() => {
 	interface MockTerminalInstance {
 		fireSelectionChange: () => void;
+		fireTitleChange: (title: string) => void;
 		setSelection: (selection: string) => void;
 	}
 
@@ -24,8 +28,15 @@ const {
 		rows: number;
 		element: HTMLElement | null = null;
 		options: Record<string, unknown>;
+		buffer = {
+			active: {
+				length: 0,
+				getLine: () => undefined,
+			},
+		};
 		private selection = "";
 		private selectionListeners: Array<() => void> = [];
+		private titleListeners: Array<(title: string) => void> = [];
 
 		constructor(options: { cols: number; rows: number }) {
 			this.cols = options.cols;
@@ -61,12 +72,17 @@ const {
 			for (const listener of this.selectionListeners) listener();
 		}
 
+		fireTitleChange(title: string) {
+			for (const listener of this.titleListeners) listener(title);
+		}
+
 		onSelectionChange(listener: () => void) {
 			this.selectionListeners.push(listener);
 			return { dispose: vi.fn() };
 		}
 
-		onTitleChange() {
+		onTitleChange(listener: (title: string) => void) {
+			this.titleListeners.push(listener);
 			return { dispose: vi.fn() };
 		}
 
@@ -115,6 +131,7 @@ vi.mock("@/generated", () => ({
 	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
+	playSystemSound: vi.fn(() => Promise.resolve()),
 	resizePty: vi.fn(() => Promise.resolve()),
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
@@ -156,6 +173,10 @@ vi.mock("./lib", () => ({
 	installImagePasteFallback: () => vi.fn(),
 	loadAddons: () => ({
 		fitAddon: { fit: vi.fn() },
+		progressAddon: {
+			onChange: vi.fn(() => ({ dispose: vi.fn() })),
+			progress: { state: 0, value: 0 },
+		},
 		serializeAddon: { serialize: vi.fn(() => "") },
 		dispose: vi.fn(),
 	}),
@@ -164,10 +185,15 @@ vi.mock("./lib", () => ({
 	suppressQueryResponses: () => vi.fn(),
 	TitleDebouncer: class {
 		value = "";
+		private listeners: Array<() => void> = [];
 		set(value: string) {
 			this.value = value;
+			for (const listener of this.listeners) listener();
 		}
-		subscribe() {}
+		subscribe(listener: () => void) {
+			this.listeners.push(listener);
+			return () => {};
+		}
 		dispose() {}
 	},
 }));
@@ -178,12 +204,21 @@ function renderTerminal() {
 }
 
 describe("terminal select to copy", () => {
+	const getPtySessionHistoryMock = getPtySessionHistory as unknown as Mock;
+
 	beforeEach(() => {
 		terminalInstances.length = 0;
 		writeClipboardTextMock.mockReset();
 		writeClipboardTextMock.mockResolvedValue(undefined);
 		readClipboardTextMock.mockReset();
 		toasterCreateMock.mockReset();
+		getPtySessionHistoryMock.mockClear();
+		useTerminalStore.setState({
+			profiles: {},
+			agentStatuses: {},
+			agentCompletions: {},
+			sessionProfileIds: {},
+		});
 		localStorage.clear();
 	});
 
@@ -237,5 +272,41 @@ describe("terminal select to copy", () => {
 
 		expect(writeClipboardTextMock).toHaveBeenCalledTimes(1);
 		expect(toasterCreateMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("publishes waiting status from an action-required title", async () => {
+		const terminal = renderTerminal();
+
+		await waitFor(() => {
+			expect(getPtySessionHistoryMock).toHaveBeenCalled();
+		});
+		terminal.fireTitleChange("Action Required");
+
+		await waitFor(() => {
+			expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+				"waiting",
+			);
+		});
+	});
+
+	it("keeps pending agent detection until the stream is ready", async () => {
+		let resolveHistory: (value: number[]) => void = () => {};
+		getPtySessionHistoryMock.mockReturnValueOnce(
+			new Promise<number[]>((resolve) => {
+				resolveHistory = resolve;
+			}),
+		);
+		const terminal = renderTerminal();
+
+		terminal.fireTitleChange("Action Required");
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBeUndefined();
+
+		resolveHistory([]);
+
+		await waitFor(() => {
+			expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+				"waiting",
+			);
+		});
 	});
 });

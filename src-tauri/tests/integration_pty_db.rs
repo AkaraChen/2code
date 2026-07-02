@@ -416,8 +416,6 @@ fn create_session_executes_startup_commands() {
 		read_threads: read_threads.clone(),
 		emitter,
 		output_dir: logs.clone(),
-		helper_url: None,
-		helper_bin: None,
 	};
 
 	let session_id = service::pty::create_session(

@@ -34,7 +34,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - **Git visibility**: review diffs, staged changes, history, and shipping state without leaving the workstation.
 - **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
 - **Project management**: organize local code projects and launch focused workspaces quickly.
-- **PTY notifications**: receive terminal-side notifications through the bundled helper pipeline.
+- **Agent status awareness**: detect running/waiting agent state from terminal output, titles, and progress sequences.
 - **Localized UI**: i18n message sources live in `messages/` and are generated into the frontend.
 
 ## Tech Stack
@@ -56,7 +56,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - Bun
 - Rust stable toolchain
 - Tauri 2 development prerequisites
-- `just` for helper commands
+- `just` for development helper commands
 
 ### Install dependencies
 
@@ -91,8 +91,6 @@ bun tauri build
 | `bun tauri build` | Build the production desktop app |
 | `cd src-tauri && cargo test` | Run Rust tests |
 | `cargo tauri-typegen generate` | Regenerate frontend IPC bindings after Rust command changes |
-| `just build-helper` | Build the PTY helper sidecar in release mode |
-| `just build-helper-dev` | Build the PTY helper sidecar in debug mode |
 | `just fmt` | Format TypeScript and Rust |
 | `just coverage` | Generate Rust coverage report |
 
@@ -108,11 +106,10 @@ bun tauri build
 │   └── paraglide/              # Generated i18n messages
 ├── src-tauri/
 │   ├── src/handler/            # Tauri command entry points
-│   ├── crates/infra/           # DB, PTY, Git, watcher, helper infrastructure
+│   ├── crates/infra/           # DB, PTY, Git, watcher infrastructure
 │   ├── crates/service/         # Business logic
 │   ├── crates/repo/            # Diesel repositories
 │   ├── crates/model/           # DTOs, Diesel models, error types
-│   ├── bins/2code-helper/      # PTY notification helper sidecar
 │   └── migrations/             # Embedded Diesel migrations
 ├── messages/                   # i18n source messages
 └── justfile                    # Development helper commands

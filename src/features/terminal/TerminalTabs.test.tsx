@@ -103,7 +103,7 @@ function createFileTreeDrop(paths: string[]) {
 }
 
 function renderTerminalTabs(options: { isActive?: boolean } = {}) {
-	render(
+	return render(
 		<TerminalTabs
 			projectId="project-1"
 			profileId={profileId}
@@ -119,6 +119,7 @@ describe("terminalTabs file tree drops", () => {
 		useTerminalStore.setState({
 			profiles: {},
 			agentStatuses: {},
+			agentCompletions: {},
 			sessionProfileIds: {},
 		});
 		useFileViewerTabsStore.setState({ profiles: {} });
@@ -175,5 +176,50 @@ describe("terminalTabs file tree drops", () => {
 			"data-active",
 			"false",
 		);
+	});
+
+	it("renders running status as a breathing dot without label text", () => {
+		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
+		useTerminalStore.getState().setAgentStatus("session-1", "running");
+
+		const { container } = renderTerminalTabs();
+
+		const dot = container.querySelector('[data-agent-status="running"]');
+		expect(dot).toBeInTheDocument();
+		expect(dot).toHaveClass("agent-status-dot--running");
+		expect(screen.queryByText("Working")).not.toBeInTheDocument();
+	});
+
+	it("renders waiting status as a yellow dot without label text", () => {
+		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
+		useTerminalStore.getState().setAgentStatus("session-1", "waiting");
+
+		const { container } = renderTerminalTabs();
+
+		const dot = container.querySelector('[data-agent-status="waiting"]');
+		expect(dot).toBeInTheDocument();
+		expect(dot).toHaveClass("bg-yellow-400");
+		expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
+	});
+
+	it("renders a dismissable completion notification after running becomes idle", async () => {
+		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
+		useTerminalStore.getState().setAgentStatus("session-1", "running");
+		useTerminalStore.getState().setAgentStatus("session-1", "idle");
+
+		const { container } = renderTerminalTabs();
+
+		const dot = container.querySelector('[data-agent-status="completed"]');
+		expect(dot).toBeInTheDocument();
+		expect(dot).toHaveClass("bg-green-500");
+
+		fireEvent.click(screen.getByLabelText("Dismiss completion notification"));
+
+		await waitFor(() => {
+			expect(
+				container.querySelector('[data-agent-status="completed"]'),
+			).not.toBeInTheDocument();
+		});
+		expect(useTerminalStore.getState().agentCompletions["session-1"]).toBeUndefined();
 	});
 });

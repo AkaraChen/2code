@@ -4,10 +4,7 @@ const replacements = [
 	{
 		path: new URL("../src/generated/types.ts", import.meta.url),
 		pairs: [
-			[
-				"export interface AgentStatusEvent {\n",
-				"export type AgentStatus = \"running\" | \"waiting\" | \"idle\";\n\nexport interface AgentStatusEvent {\n",
-			],
+			["onOutput: Channel<unknown>;", "onOutput: Channel<ArrayBuffer>;"],
 		],
 	},
 	{
@@ -17,16 +14,6 @@ const replacements = [
 				"import { invoke, Channel } from '@tauri-apps/api/core';",
 				"import { invoke } from '@tauri-apps/api/core';",
 			],
-		],
-	},
-	{
-		path: new URL("../src/generated/events.ts", import.meta.url),
-		pairs: [
-			[
-				"import { listen, type UnlistenFn, type Event } from '@tauri-apps/api/event';",
-				"import { listen, type UnlistenFn } from '@tauri-apps/api/event';",
-			],
-			["types.session_id", "unknown"],
 		],
 	},
 ];

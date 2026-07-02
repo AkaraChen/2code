@@ -6,7 +6,6 @@ use tokio::sync::mpsc;
 
 use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
-use model::notification::{AgentStatus, AgentStatusEvent};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
 use service::{PtyEventEmitter, WatchEventSender};
@@ -66,13 +65,6 @@ impl PtyEventEmitter for TauriPtyEmitter {
 			receivers.remove(session_id);
 		}
 		let _ = self.app.emit(&format!("pty-exit-{session_id}"), ());
-		let _ = self.app.emit(
-			"pty-agent-status",
-			AgentStatusEvent {
-				session_id: session_id.to_string(),
-				status: AgentStatus::Idle,
-			},
-		);
 	}
 }
 
@@ -98,11 +90,5 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 			receivers: app.state::<PtyOutputReceivers>().inner().clone(),
 		}),
 		output_dir: app.state::<PtyLogDir>().0.clone(),
-		helper_url: app
-			.try_state::<crate::helper::HelperState>()
-			.map(|s| format!("http://127.0.0.1:{}", s.port)),
-		helper_bin: app
-			.try_state::<crate::helper::HelperState>()
-			.map(|s| s.sidecar_path.to_string_lossy().to_string()),
 	}
 }

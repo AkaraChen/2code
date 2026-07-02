@@ -54,6 +54,7 @@ function resetStores() {
 	useTerminalStore.setState({
 		profiles: {},
 		agentStatuses: {},
+		agentCompletions: {},
 		sessionProfileIds: {},
 	});
 	useFileViewerTabsStore.setState({ profiles: {} });

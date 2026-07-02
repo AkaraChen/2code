@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/sidebar";
 import DeleteProfileDialog from "@/features/profiles/DeleteProfileDialog";
 import { AgentStatusDot } from "@/features/terminal/AgentStatusDot";
-import { useProfileAgentStatus } from "@/features/terminal/store";
+import {
+	useProfileAgentCompletion,
+	useProfileAgentStatus,
+} from "@/features/terminal/store";
 import type { Profile } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
@@ -30,6 +33,8 @@ export function ProfileItem({
 }) {
 	const deleteDialog = useDialogState();
 	const agentStatus = useProfileAgentStatus(profile.id);
+	const agentCompletion = useProfileAgentCompletion(profile.id);
+	const agentIndicator = agentStatus ?? agentCompletion;
 
 	return (
 		<SidebarMenuSubItem>
@@ -53,7 +58,7 @@ export function ProfileItem({
 						tooltipValue={profile.branch_name}
 						className="min-w-0 flex-1"
 					/>
-					{agentStatus && <AgentStatusDot status={agentStatus} />}
+					{agentIndicator && <AgentStatusDot status={agentIndicator} />}
 				</ContextMenuTrigger>
 				<ContextMenuContent>
 					<ContextMenuGroup>

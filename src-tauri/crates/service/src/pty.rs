@@ -53,8 +53,6 @@ pub struct PtyContext {
 	pub read_threads: PtyReadThreads,
 	pub emitter: Arc<dyn PtyEventEmitter>,
 	pub output_dir: PathBuf,
-	pub helper_url: Option<String>,
-	pub helper_bin: Option<String>,
 }
 
 const VT100_SCROLLBACK: usize = 10000;
@@ -302,8 +300,6 @@ pub fn create_session(
 			rows: config.rows,
 			cols: config.cols,
 			injection: &injection,
-			helper_url: ctx.helper_url.as_deref(),
-			helper_bin: ctx.helper_bin.as_deref(),
 		},
 	)?;
 

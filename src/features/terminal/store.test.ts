@@ -1,9 +1,9 @@
 import { renderHook, act } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listen } from "@tauri-apps/api/event";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
 	useTerminalStore,
 	useTerminalProfileIds,
+	useProfileAgentCompletion,
 	useProfileAgentStatus,
 	useProfileHasNotification,
 } from "./store";
@@ -12,6 +12,7 @@ function resetStore() {
 	useTerminalStore.setState({
 		profiles: {},
 		agentStatuses: {},
+		agentCompletions: {},
 		sessionProfileIds: {},
 	});
 	window.history.pushState({}, "", "/");
@@ -276,6 +277,25 @@ describe("useTerminalStore", () => {
 			getState().setAgentStatus("s1", "idle");
 			expect(getState().agentStatuses.s1).toBeUndefined();
 		});
+
+		it("creates a completion notification when running becomes idle", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			expect(getState().agentCompletions.s1).toBe("completed");
+		});
+
+		it("does not create a completion notification when waiting becomes idle", () => {
+			getState().setAgentStatus("s1", "waiting");
+			getState().setAgentStatus("s1", "idle");
+			expect(getState().agentCompletions.s1).toBeUndefined();
+		});
+
+		it("clears a completion notification when the agent runs again", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			getState().setAgentStatus("s1", "running");
+			expect(getState().agentCompletions.s1).toBeUndefined();
+		});
 	});
 
 	describe("clearAgentStatus", () => {
@@ -289,6 +309,15 @@ describe("useTerminalStore", () => {
 			expect(() =>
 				getState().clearAgentStatus("nonexistent"),
 			).not.toThrow();
+		});
+	});
+
+	describe("dismissAgentCompletion", () => {
+		it("removes a session completion notification", () => {
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			getState().dismissAgentCompletion("s1");
+			expect(getState().agentCompletions.s1).toBeUndefined();
 		});
 	});
 
@@ -324,8 +353,10 @@ describe("useTerminalStore", () => {
 		it("clears agent status even when closing the last tab (profile deleted)", () => {
 			getState().addTab("p1", "s1", "T1");
 			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
 			getState().closeTab("p1", "s1");
 			expect(getState().agentStatuses.s1).toBeUndefined();
+			expect(getState().agentCompletions.s1).toBeUndefined();
 			expect(getState().profiles.p1).toBeUndefined();
 		});
 	});
@@ -469,6 +500,16 @@ describe("useTerminalStore", () => {
 			);
 			expect(result.current).toBe(false);
 		});
+
+		it("returns true when profile has a completion notification", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			const { result } = renderHook(() =>
+				useProfileHasNotification("p1"),
+			);
+			expect(result.current).toBe(true);
+		});
 	});
 
 	describe("useProfileAgentStatus", () => {
@@ -495,37 +536,19 @@ describe("useTerminalStore", () => {
 		});
 	});
 
-	describe("pty-agent-status listener", () => {
-		it("updates status when pty-agent-status event fires", () => {
-			// The listen mock was called at module load time
-			const listenMock = vi.mocked(listen);
-			expect(listenMock).toHaveBeenCalledWith(
-				"pty-agent-status",
-				expect.any(Function),
-			);
-
-			// Extract the callback that was registered
-			const callback = listenMock.mock.calls.find(
-				(call) => call[0] === "pty-agent-status",
-			)?.[1] as (event: {
-				payload: { sessionId: string; status: "running" };
-			}) => void;
-			expect(callback).toBeDefined();
-
-			callback({ payload: { sessionId: "session-xyz", status: "running" } });
-			expect(getState().agentStatuses["session-xyz"]).toBe("running");
+	describe("useProfileAgentCompletion", () => {
+		it("returns completed when any profile tab has a completion notification", () => {
+			getState().addTab("p1", "s1", "T1");
+			getState().setAgentStatus("s1", "running");
+			getState().setAgentStatus("s1", "idle");
+			const { result } = renderHook(() => useProfileAgentCompletion("p1"));
+			expect(result.current).toBe("completed");
 		});
 
-		it("clears status when an idle event fires with snake_case payload", () => {
-			const listenMock = vi.mocked(listen);
-			const callback = listenMock.mock.calls.find(
-				(call) => call[0] === "pty-agent-status",
-			)?.[1] as (event: {
-				payload: { session_id: string; status: "idle" };
-			}) => void;
-			getState().setAgentStatus("session-xyz", "waiting");
-			callback({ payload: { session_id: "session-xyz", status: "idle" } });
-			expect(getState().agentStatuses["session-xyz"]).toBeUndefined();
+		it("returns null when profile has no completion notification", () => {
+			getState().addTab("p1", "s1", "T1");
+			const { result } = renderHook(() => useProfileAgentCompletion("p1"));
+			expect(result.current).toBeNull();
 		});
 	});
 

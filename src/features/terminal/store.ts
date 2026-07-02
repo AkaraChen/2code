@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
 import { create as createMutative, type Draft } from "mutative";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
@@ -9,13 +8,8 @@ interface TerminalTab {
 }
 
 export type AgentStatus = "running" | "waiting";
-type AgentStatusEventStatus = AgentStatus | "idle";
-
-interface AgentStatusEvent {
-	sessionId?: string;
-	session_id?: string;
-	status?: AgentStatusEventStatus;
-}
+export type AgentStatusUpdate = AgentStatus | "idle";
+export type AgentCompletionNotification = "completed";
 
 interface ProjectTerminalState {
 	tabs: TerminalTab[];
@@ -51,6 +45,7 @@ function refreshSessionProfileId(
 interface TerminalStore {
 	profiles: Record<string, ProjectTerminalState>;
 	agentStatuses: Record<string, AgentStatus>;
+	agentCompletions: Record<string, AgentCompletionNotification>;
 	sessionProfileIds: Record<string, string>;
 	addTab: (profileId: string, sessionId: string, title: string) => void;
 	closeTab: (profileId: string, tabId: string) => void;
@@ -58,8 +53,9 @@ interface TerminalStore {
 	removeProfile: (profileId: string) => void;
 	updateTabTitle: (profileId: string, tabId: string, title: string) => void;
 	removeStaleProfiles: (validIds: Set<string>) => void;
-	setAgentStatus: (sessionId: string, status: AgentStatusEventStatus) => void;
+	setAgentStatus: (sessionId: string, status: AgentStatusUpdate) => void;
 	clearAgentStatus: (sessionId: string) => void;
+	dismissAgentCompletion: (sessionId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>()((set) => {
@@ -70,6 +66,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 	return {
 		profiles: {},
 		agentStatuses: {},
+		agentCompletions: {},
 		sessionProfileIds: {},
 
 		addTab(profileId, sessionId, title) {
@@ -96,6 +93,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 				const wasActiveTab = tabId === profile.activeTabId;
 
 				delete state.agentStatuses[tabId];
+				delete state.agentCompletions[tabId];
 
 				const idx = profile.tabs.findIndex((t) => t.id === tabId);
 				profile.tabs = profile.tabs.filter((t) => t.id !== tabId);
@@ -126,6 +124,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 				const profile = state.profiles[profileId];
 				profile?.tabs.forEach((tab) => {
 					delete state.agentStatuses[tab.id];
+					delete state.agentCompletions[tab.id];
 				});
 				delete state.profiles[profileId];
 				profile?.tabs.forEach((tab) =>
@@ -149,6 +148,7 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 					if (!validIds.has(id)) {
 						state.profiles[id].tabs.forEach((tab) => {
 							delete state.agentStatuses[tab.id];
+							delete state.agentCompletions[tab.id];
 						});
 						const removedSessionIds = state.profiles[id].tabs.map(
 							(tab) => tab.id,
@@ -165,10 +165,16 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 		setAgentStatus(sessionId, status) {
 			mutate((state) => {
 				if (status === "idle") {
+					if (state.agentStatuses[sessionId] === "running") {
+						state.agentCompletions[sessionId] = "completed";
+					}
+					if (!state.agentStatuses[sessionId]) return;
 					delete state.agentStatuses[sessionId];
 					return;
 				}
 
+				delete state.agentCompletions[sessionId];
+				if (state.agentStatuses[sessionId] === status) return;
 				state.agentStatuses[sessionId] = status;
 			});
 		},
@@ -176,6 +182,12 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 		clearAgentStatus(sessionId) {
 			mutate((state) => {
 				delete state.agentStatuses[sessionId];
+			});
+		},
+
+		dismissAgentCompletion(sessionId) {
+			mutate((state) => {
+				delete state.agentCompletions[sessionId];
 			});
 		},
 	};
@@ -203,6 +215,18 @@ function getProfileAgentStatus(
 	return hasRunning ? "running" : null;
 }
 
+function getProfileAgentCompletion(
+	state: Pick<TerminalStore, "profiles" | "agentCompletions">,
+	profileId: string,
+): AgentCompletionNotification | null {
+	const profile = state.profiles[profileId];
+	if (!profile) return null;
+
+	return profile.tabs.some((tab) => state.agentCompletions[tab.id])
+		? "completed"
+		: null;
+}
+
 /** The highest-priority agent status among a profile's terminal tabs. */
 export function useProfileAgentStatus(profileId: string): AgentStatus | null {
 	return useTerminalStore((s) => {
@@ -210,15 +234,18 @@ export function useProfileAgentStatus(profileId: string): AgentStatus | null {
 	});
 }
 
-/** Whether a profile has any active agent status. */
-export function useProfileHasNotification(profileId: string): boolean {
-	return useTerminalStore((s) => getProfileAgentStatus(s, profileId) !== null);
+/** Whether any tab in a profile has a dismissed-on-click completion notification. */
+export function useProfileAgentCompletion(profileId: string): AgentCompletionNotification | null {
+	return useTerminalStore((s) => {
+		return getProfileAgentCompletion(s, profileId);
+	});
 }
 
-// Module-level listener for agent status events from the backend
-listen<AgentStatusEvent>("pty-agent-status", (event) => {
-	const sessionId = event.payload.sessionId ?? event.payload.session_id;
-	const status = event.payload.status;
-	if (!sessionId || !status) return;
-	useTerminalStore.getState().setAgentStatus(sessionId, status);
-});
+/** Whether a profile has any active agent status. */
+export function useProfileHasNotification(profileId: string): boolean {
+	return useTerminalStore(
+		(s) =>
+			getProfileAgentStatus(s, profileId) !== null
+			|| getProfileAgentCompletion(s, profileId) !== null,
+	);
+}

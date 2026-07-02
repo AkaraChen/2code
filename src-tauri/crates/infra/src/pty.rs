@@ -28,8 +28,6 @@ pub struct CreateSessionOptions<'a> {
 	pub rows: u16,
 	pub cols: u16,
 	pub injection: &'a ShellInjection,
-	pub helper_url: Option<&'a str>,
-	pub helper_bin: Option<&'a str>,
 }
 
 pub fn create_session_map() -> PtySessionMap {
@@ -77,15 +75,6 @@ pub fn create_session(
 	cmd.env("TERM", "xterm-256color");
 	cmd.env("TERM_PROGRAM", "vscode"); // Makes VS Code's shell integration scripts work
 	cmd.env("VSCODE_INJECTION", "1"); // Tells scripts they were injected (not manually installed)
-
-	// Inject helper env vars for CLI sidecar communication
-	if let Some(url) = options.helper_url {
-		cmd.env("_2CODE_HELPER_URL", url);
-	}
-	if let Some(bin) = options.helper_bin {
-		cmd.env("_2CODE_HELPER", bin);
-	}
-	cmd.env("_2CODE_SESSION_ID", options.session_id);
 
 	// Apply shell-specific env vars
 	if let ShellInjection::Zsh {

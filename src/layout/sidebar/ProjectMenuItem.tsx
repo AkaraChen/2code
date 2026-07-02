@@ -32,7 +32,10 @@ import DeleteProjectDialog from "@/features/projects/DeleteProjectDialog";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
 import RenameProjectDialog from "@/features/projects/RenameProjectDialog";
 import { AgentStatusDot } from "@/features/terminal/AgentStatusDot";
-import { useProfileAgentStatus } from "@/features/terminal/store";
+import {
+	useProfileAgentCompletion,
+	useProfileAgentStatus,
+} from "@/features/terminal/store";
 import type { ProjectGroup, ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
@@ -65,6 +68,8 @@ export function ProjectMenuItem({
 		? `/projects/${project.id}/profiles/${defaultProfile.id}`
 		: `/projects/${project.id}`;
 	const defaultAgentStatus = useProfileAgentStatus(defaultProfile?.id ?? "");
+	const defaultAgentCompletion = useProfileAgentCompletion(defaultProfile?.id ?? "");
+	const defaultAgentIndicator = defaultAgentStatus ?? defaultAgentCompletion;
 	const defaultProfileLabel = m.defaultProfile();
 
 	const renameDialog = useDialogState();
@@ -100,8 +105,8 @@ export function ProjectMenuItem({
 					<span className="min-w-0 flex-1 truncate font-medium">
 						{project.name}
 					</span>
-					{hasOnlyDefaultProfile && defaultAgentStatus && (
-						<AgentStatusDot status={defaultAgentStatus} />
+					{hasOnlyDefaultProfile && defaultAgentIndicator && (
+						<AgentStatusDot status={defaultAgentIndicator} />
 					)}
 				</ContextMenuTrigger>
 				<ContextMenuContent>
@@ -188,8 +193,8 @@ export function ProjectMenuItem({
 								tooltipValue={defaultProfileLabel}
 								className="min-w-0 flex-1"
 							/>
-							{defaultAgentStatus && (
-								<AgentStatusDot status={defaultAgentStatus} />
+							{defaultAgentIndicator && (
+								<AgentStatusDot status={defaultAgentIndicator} />
 							)}
 						</SidebarMenuSubButton>
 					</SidebarMenuSubItem>

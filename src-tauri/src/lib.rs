@@ -1,6 +1,5 @@
 mod bridge;
 mod handler;
-mod helper;
 mod profiler;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -71,10 +70,6 @@ pub fn run() {
 			app.manage(service::pty::PtyLogDir(log_dir));
 
 			app.manage(pool);
-
-			// Start helper HTTP server (for CLI sidecar communication)
-			let helper = helper::start(app.handle());
-			app.manage(helper);
 
 			Ok(())
 		})

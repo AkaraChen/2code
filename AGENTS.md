@@ -16,14 +16,13 @@ Tauri 2 desktop app for managing code projects with integrated PTY terminals. Re
 │   └── paraglide/              # AUTO-GENERATED i18n messages (DO NOT EDIT, gitignored)
 ├── src-tauri/
 │   ├── src/handler/            # #[tauri::command] entry points (8 files)
-│   ├── crates/infra/src/       # DB, PTY, git, shell init, watcher, logger, slug, helper
+│   ├── crates/infra/src/       # DB, PTY, git, shell init, watcher, logger, slug
 │   ├── crates/service/src/     # Business logic: project, profile, pty, watcher
 │   ├── crates/repo/src/        # Diesel CRUD: project, profile, pty
 │   ├── crates/model/src/       # DTOs, Diesel models, error types
-│   ├── bins/2code-helper/src/  # CLI sidecar for PTY notifications
 │   └── migrations/             # Diesel SQL migrations (embedded at compile time)
 ├── messages/                   # i18n source: en.json zh.json
-└── justfile                    # Build helpers: build-helper, coverage, fmt
+└── justfile                    # Build helpers: coverage, fmt
 ```
 
 ## WHERE TO LOOK
@@ -39,7 +38,7 @@ Tauri 2 desktop app for managing code projects with integrated PTY terminals. Re
 | Git operations | `src-tauri/crates/infra/src/git.rs` + `src-tauri/src/handler/debug.rs` |
 | Context ID resolution | `crates/repo/src/project.rs::resolve_context_folder` (polymorphic project/profile) |
 | Worktree profiles | `crates/service/src/profile.rs` — creates `~/.2code/workspace/{id}` |
-| Notification pipeline | `infra/helper.rs` → Axum server → `pty-notify` Tauri event → terminalStore |
+| Agent status detection | `src/features/terminal/detector/` → `Terminal.tsx` → terminalStore |
 | i18n messages | `messages/en.json` + `messages/zh.json` → `import * as m from "@/paraglide/messages.js"` |
 | Shell init injection | `infra/shell_init.rs` (ZDOTDIR-based) |
 
@@ -50,8 +49,6 @@ bun run dev                      # frontend only
 bun tauri build                  # production build
 cd src-tauri && cargo test       # Rust tests
 cargo tauri-typegen generate     # regenerate src/generated/ after Rust command changes
-just build-helper                # compile CLI sidecar (release)
-just build-helper-dev            # compile CLI sidecar (debug)
 just fmt                         # format TS + Rust
 just coverage                    # llvm-cov HTML report
 ```
@@ -88,4 +85,4 @@ just coverage                    # llvm-cov HTML report
 - Frontend uses Vitest (`npm test` = `vitest run`); test files colocated as `*.test.ts` — Zustand store tests use `resetStore()` helper pattern
 - ESLint uses `@antfu/eslint-config` with React — no `.eslintrc` file, config is in `package.json` or similar
 - `openspec/` dir at root is OpenSpec workflow tooling — not application code
-- `src-tauri/src/bridge.rs` — trait impls (`TauriPtyEmitter`, `TauriWatchSender`) that decouple service layer from Tauri; `helper.rs` manages sidecar port/path state
+- `src-tauri/src/bridge.rs` — trait impls (`TauriPtyEmitter`, `TauriWatchSender`) that decouple service layer from Tauri

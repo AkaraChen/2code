@@ -53,23 +53,6 @@ pub fn play_sound_name(name: &str) -> Result<(), String> {
 	}
 }
 
-pub fn try_play_system_sound(name: &str) -> bool {
-	if name.is_empty() {
-		return false;
-	}
-
-	#[cfg(any(target_os = "macos", target_os = "linux"))]
-	{
-		play_sound_name(name).is_ok()
-	}
-
-	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-	{
-		let _ = name;
-		false
-	}
-}
-
 #[cfg(target_os = "macos")]
 fn list_macos_sounds() -> Vec<String> {
 	use std::fs;
@@ -334,6 +317,5 @@ mod tests {
 	fn unsupported_platform_sound_commands_are_noops() {
 		assert!(list_system_sounds().is_empty());
 		assert!(play_system_sound("anything".into()).is_ok());
-		assert!(!try_play_system_sound("anything"));
 	}
 }

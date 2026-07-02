@@ -2,7 +2,6 @@ pub mod browser;
 pub mod debug;
 pub mod error;
 pub mod filesystem;
-pub mod notification;
 pub mod profile;
 pub mod project;
 pub mod project_group;

@@ -36,10 +36,6 @@ cd src-tauri && cargo test test_name   # single test
 # Regenerate TypeScript bindings from Rust commands
 cargo tauri-typegen generate
 
-# Build CLI sidecar (release / dev)
-just build-helper
-just build-helper-dev
-
 # Format code
 just fmt               # runs 'fama'
 ```
@@ -90,7 +86,7 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
 2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
 3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `pty_log.rs` (per-session output stored as `{app_data_dir}/pty_logs/{session_id}.log` files), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `helper.rs` (sidecar HTTP server for CLI notifications), `shell_init.rs` (ZDOTDIR-based shell init injection).
+4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `pty_log.rs` (per-session output stored as `{app_data_dir}/pty_logs/{session_id}.log` files), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `shell_init.rs` (ZDOTDIR-based shell init injection).
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
@@ -100,9 +96,9 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 
 **PTY output streaming:** Background thread reads 4KB chunks → sends raw PTY chunks to the active output sink registered by `attach_pty_output(sessionId, streamId)`. `stream_pty_output` owns a `tauri::ipc::Channel<&[u8]>` and sends each chunk with `on_output.send(chunk.as_slice())`; `detach_pty_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session. `Terminal.tsx` receives `ArrayBuffer` and writes `new Uint8Array(payload)` to xterm. Output produced before attach is recovered from the persisted log via `get_pty_session_history` (same seam the old global-event API had). Bytes are sent as-is — xterm.js decodes UTF-8 across writes, so no backend boundary splitting is needed. Session exit is still a low-volume global event (`pty-exit-{id}`). A separate persistence thread via mpsc channel with 32KB flush buffer appends raw bytes to the session's `pty_logs/{session_id}.log` file (see `infra::pty_log`). No byte cap — a log lives only for one session (removed on restore/close/delete) and scrollback is bounded on restore by the vt100 emulator (`sanitize_history`, 10k lines). Orphan logs are reaped on startup by `service::pty::gc_orphan_logs`.
 
-**Workspace crates:** `shared/` (types shared between main app and sidecar: `NotifyResponse`, `NotificationEntry`, `NotificationState`), `2code-helper/` (CLI sidecar binary).
+**Workspace crates:** `model/`, `repo/`, `service/`, and `infra/`.
 
-**CLI sidecar & notification pipeline:** The `2code-helper` binary is a small CLI that PTY shells invoke (via `$_2CODE_HELPER notify`) to trigger notifications. Flow: PTY env vars (`_2CODE_HELPER_URL`, `_2CODE_HELPER`, `_2CODE_SESSION_ID`) → sidecar sends HTTP GET `/notify?session_id=<sid>` → Axum server in `infra/helper.rs` plays sound + emits `pty-notify` Tauri event → frontend `terminalStore.markNotified(sessionId)` → green dot on terminal tab + sidebar profile. Focusing the tab clears the dot. Sidecar is bundled via `externalBin` in `tauri.conf.json`.
+**Agent status detection:** `Terminal.tsx` detects coding-agent state from xterm screen text, OSC title, and OSC progress after live output writes. Rules live in `src/features/terminal/detector/rules/`, one manifest per agent. The detector publishes `running|waiting|idle` to `terminalStore`; waiting status can play the configured system sound via the generated `playSystemSound` Tauri command.
 
 ### IPC Pattern (Frontend ↔ Backend)
 

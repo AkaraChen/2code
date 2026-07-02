@@ -127,24 +127,30 @@ export default function TerminalTabs({
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
-	// Scope to this profile's tabs only — avoids re-rendering on unrelated PTY notifications
-	const agentStatusEntries = useTerminalStore(
-		useShallow((state) => {
-			const profile = state.profiles[profileId];
-			if (!profile) return [] as [string, "running" | "waiting"][];
-			return profile.tabs
-				.map((tab): [string, "running" | "waiting" | undefined] => [
-					tab.id,
-					state.agentStatuses[tab.id],
-				])
-				.filter((entry): entry is [string, "running" | "waiting"] =>
-					Boolean(entry[1]),
-				);
-		}),
+	const agentStatuses = useTerminalStore((state) => state.agentStatuses);
+	const agentCompletions = useTerminalStore((state) => state.agentCompletions);
+	const dismissAgentCompletion = useTerminalStore(
+		(state) => state.dismissAgentCompletion,
 	);
 	const agentStatusByTabId = useMemo(
-		() => new Map(agentStatusEntries),
-		[agentStatusEntries],
+		() => {
+			const entries = tabs.flatMap((tab) => {
+				const status = agentStatuses[tab.id];
+				return status ? [[tab.id, status] as const] : [];
+			});
+			return new Map(entries);
+		},
+		[agentStatuses, tabs],
+	);
+	const agentCompletionByTabId = useMemo(
+		() => {
+			const entries = tabs.flatMap((tab) => {
+				const status = agentCompletions[tab.id];
+				return status ? [[tab.id, status] as const] : [];
+			});
+			return new Map(entries);
+		},
+		[agentCompletions, tabs],
 	);
 	const setActiveTab = useTerminalStore((state) => state.setActiveTab);
 
@@ -312,9 +318,26 @@ export default function TerminalTabs({
 					elementRef: createTerminalDropRef(tab),
 					isSelected:
 						!fileTabActive && !notesActive && tab.id === activeValue,
-					badge: agentStatusByTabId.has(tab.id) ? (
-						<AgentStatusDot status={agentStatusByTabId.get(tab.id)!} />
-					) : undefined,
+					badge: (() => {
+						const status = agentStatusByTabId.get(tab.id);
+						if (status) return <AgentStatusDot status={status} />;
+						const completion = agentCompletionByTabId.get(tab.id);
+						if (!completion) return undefined;
+						return (
+							<button
+								type="button"
+								aria-label="Dismiss completion notification"
+								className="grid size-4 shrink-0 place-items-center rounded-sm"
+								onPointerDown={(event) => event.stopPropagation()}
+								onClick={(event) => {
+									event.stopPropagation();
+									dismissAgentCompletion(tab.id);
+								}}
+							>
+								<AgentStatusDot status={completion} />
+							</button>
+						);
+					})(),
 					onClose: () =>
 						closeTerminalTab({
 							profileId,
@@ -356,6 +379,8 @@ export default function TerminalTabs({
 			handleFileTabClose,
 			notesActive,
 			agentStatusByTabId,
+			agentCompletionByTabId,
+			dismissAgentCompletion,
 			profileId,
 			tabs,
 		],

@@ -3,7 +3,7 @@
 **Generated:** 2026-04-09 | **Commit:** 93661da
 
 ## OVERVIEW
-Rust Cargo workspace. Tauri 2 application binary + 4 domain crates + 1 sidecar binary. Layered architecture: handler → service → repo → infra.
+Rust Cargo workspace. Tauri 2 application binary + 4 domain crates. Layered architecture: handler → service → repo → infra.
 
 ## STRUCTURE
 ```
@@ -12,15 +12,12 @@ src-tauri/
 │   ├── lib.rs          # App setup: register commands, plugins, managed state
 │   ├── main.rs         # Binary entry (DO NOT REMOVE windows_subsystem attribute)
 │   ├── bridge.rs       # Trait impls (TauriPtyEmitter, TauriWatchSender) — decouples service from Tauri
-│   ├── helper.rs       # Sidecar port/path state management
 │   └── handler/        # #[tauri::command] entry points — 8 files, thin delegation only
 ├── crates/
-│   ├── infra/          # DB, PTY, git, shell init, watcher, logger, slug, helper (Axum)
+│   ├── infra/          # DB, PTY, git, shell init, watcher, logger, slug
 │   ├── service/        # Business logic: project, profile, pty, watcher, debug
 │   ├── repo/           # Diesel CRUD: project, profile, pty
 │   └── model/          # Diesel models, DTOs, error types, schema
-├── bins/
-│   └── 2code-helper/   # CLI sidecar — PTY notification endpoint
 ├── migrations/         # Diesel SQL migrations (embedded via embed_migrations!())
 ├── tests/              # Integration tests: git, project, pty_db (4 files)
 └── capabilities/       # Tauri plugin permission definitions

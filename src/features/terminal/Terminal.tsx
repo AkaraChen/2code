@@ -10,6 +10,7 @@ import type { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNotificationStore } from "@/features/settings/stores/notificationStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
   attachPtyOutput,
@@ -17,11 +18,16 @@ import {
   detachPtyOutput,
   flushPtyOutput,
   getPtySessionHistory,
+  playSystemSound,
   resizePty,
   streamPtyOutput,
   writeToPty } from
 "@/generated";import { toast } from "sonner";
 
+import {
+  createAgentStatusDetector,
+  readTerminalDetectionScreen } from
+"./detector";
 import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
@@ -29,7 +35,7 @@ import { getTerminalShortcutAction } from "./keybindings";
 import { shouldBypassTerminalLinkConfirm } from "./linkOpening";
 import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
 import { sessionHistory } from "./state";
-import { useTerminalStore } from "./store";
+import { useTerminalStore, type AgentStatus } from "./store";
 import {
   applyTerminalFontFamilyCssVariable,
   buildFontFamilyCss,
@@ -51,6 +57,7 @@ const BUFFER_STORAGE_PREFIX = "terminal-buffer:";
 const DIMS_STORAGE_PREFIX = "terminal-dims:";
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
+const AGENT_DETECTION_INTERVAL_MS = 250;
 
 function loadSavedDimensions(sessionId: string): {cols: number;rows: number;} | null {
   try {
@@ -217,8 +224,74 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       pendingEventsRef.current = [];
       const liveOutputBuffer: Uint8Array[] = [];
       let liveOutputFrame: number | null = null;
+      let agentDetectionTimer: number | null = null;
+      let hasPendingAgentDetection = false;
+      let lastAgentDetectionAt = 0;
       let lastCopiedSelection = "";
       const streamId = crypto.randomUUID();
+      const agentDetector = createAgentStatusDetector();
+      let latestTitle: string | null = null;
+      let latestProgress = "0;0";
+      let publishedAgentStatus: AgentStatus | null =
+        useTerminalStore.getState().agentStatuses[sessionId] ?? null;
+      let term: XTerm;
+
+      function playWaitingSound() {
+        const { enabled, sound } = useNotificationStore.getState();
+        if (!enabled || !sound) return;
+        void playSystemSound({ name: sound }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to play agent notification sound for session ${sessionId}`,
+            error
+          );
+        });
+      }
+
+      function publishAgentStatus(status: AgentStatus | null) {
+        if (publishedAgentStatus === status) return;
+        const previousStatus = publishedAgentStatus;
+        publishedAgentStatus = status;
+        useTerminalStore.
+        getState().
+        setAgentStatus(sessionId, status ?? "idle");
+        if (status === "waiting" && previousStatus !== "waiting") {
+          playWaitingSound();
+        }
+      }
+
+      function runAgentDetectionNow() {
+        agentDetectionTimer = null;
+        if (disposed || !isStreamReadyRef.current) return;
+        lastAgentDetectionAt = performance.now();
+        const result = agentDetector.detect({
+          screen: readTerminalDetectionScreen(term),
+          oscTitle: latestTitle,
+          oscProgress: latestProgress
+        });
+        consola.info("[2code-agent-status] check", {
+          sessionId,
+          status: result.status,
+          agentId: result.agentId,
+          ruleId: result.ruleId,
+          state: result.state,
+          oscTitle: latestTitle,
+          oscProgress: latestProgress
+        });
+        publishAgentStatus(result.status);
+      }
+
+      function scheduleAgentDetection() {
+        if (disposed) return;
+        if (!isStreamReadyRef.current) {
+          hasPendingAgentDetection = true;
+          return;
+        }
+        hasPendingAgentDetection = false;
+        if (agentDetectionTimer !== null) return;
+        const elapsed = performance.now() - lastAgentDetectionAt;
+        const delay = Math.max(0, AGENT_DETECTION_INTERVAL_MS - elapsed);
+        agentDetectionTimer = window.setTimeout(runAgentDetectionNow, delay);
+      }
 
       // --- Wrapper-div pattern (SuperSet) ---
       // xterm opens into a persistent wrapper div that can be moved
@@ -235,7 +308,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       applyTerminalFontFamilyCssVariable(wrapper, sanitizedFont);
 
       // 1. Create xterm (sync) with SuperSet-aligned options
-      const term = new XTerm({
+      term = new XTerm({
         cols,
         rows,
         fontFamily: sanitizedFont,
@@ -414,19 +487,27 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       cleanups.push(() => titleDisposable.dispose());
       titleDebouncer.subscribe(() => {
         const title = titleDebouncer.value;
+        latestTitle = title;
         if (title) {
           useTerminalStore.
           getState().
           updateTabTitle(profileId, sessionId, title);
         }
+        scheduleAgentDetection();
       });
+      const progressDisposable = addonsResult.progressAddon.onChange((progress) => {
+        latestProgress = `${progress.state};${progress.value}`;
+        scheduleAgentDetection();
+      });
+      latestProgress = `${addonsResult.progressAddon.progress.state};${addonsResult.progressAddon.progress.value}`;
+      cleanups.push(() => progressDisposable.dispose());
 
       function flushLiveOutputBuffer() {
         liveOutputFrame = null;
         if (liveOutputBuffer.length === 0 || disposed) return;
         const output = concatBytes(liveOutputBuffer);
         liveOutputBuffer.length = 0;
-        term.write(output);
+        term.write(output, scheduleAgentDetection);
       }
 
       function writeLiveOutput(output: Uint8Array) {
@@ -442,6 +523,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         const remaining = pending.subarray(overlap);
         pendingEventsRef.current = [];
         isStreamReadyRef.current = true;
+        if (hasPendingAgentDetection) {
+          scheduleAgentDetection();
+        }
         if (remaining.length > 0) {
           writeLiveOutput(remaining);
         }
@@ -483,6 +567,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         const unlistenExit = await listen(
           `pty-exit-${sessionId}`,
           () => {
+            publishAgentStatus(null);
             writeLiveOutput(
               new TextEncoder().encode(
                 "\r\n\x1B[90m[Process exited]\x1B[0m\r\n"
@@ -556,6 +641,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         if (liveOutputFrame !== null) {
           window.cancelAnimationFrame(liveOutputFrame);
           liveOutputFrame = null;
+        }
+        if (agentDetectionTimer !== null) {
+          window.clearTimeout(agentDetectionTimer);
+          agentDetectionTimer = null;
         }
 
         for (const unlisten of unlisteners) {
