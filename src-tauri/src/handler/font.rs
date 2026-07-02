@@ -50,7 +50,7 @@ fn load_system_fonts() -> Vec<SystemFont> {
 	fonts_from_family_map(families)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn load_system_fonts() -> Vec<SystemFont> {
 	let mut db = fontdb::Database::new();
 	db.load_system_fonts();
@@ -71,11 +71,6 @@ fn load_system_fonts() -> Vec<SystemFont> {
 	}
 
 	fonts_from_family_map(families)
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn load_system_fonts() -> Vec<SystemFont> {
-	Vec::new()
 }
 
 fn cached_system_fonts() -> Vec<SystemFont> {

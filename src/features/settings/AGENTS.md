@@ -7,10 +7,10 @@ App settings page with three persisted Zustand stores (terminal, theme, notifica
 | File | Role |
 |------|------|
 | `SettingsPage.tsx` | Settings route component |
-| `FontPicker.tsx` | System font selector (macOS only via `listSystemFonts`) |
+| `FontPicker.tsx` | System font selector (macOS via `core-text`, Linux/Windows via `fontdb`) |
 | `FontSizePicker.tsx` | Font size stepper |
 | `TerminalThemePicker.tsx` | Terminal color scheme selector |
-| `SoundPicker.tsx` | Notification sound selector (macOS only) |
+| `SoundPicker.tsx` | Notification sound selector (macOS/Linux/Windows platform sources) |
 | `BorderRadiusPicker.tsx` | UI corner radius setting |
 | `NotificationSettings.tsx` | PTY notification on/off toggles |
 | `stores/terminalSettingsStore.ts` | Font family, font size, terminal theme — localStorage persist |
@@ -24,7 +24,7 @@ App settings page with three persisted Zustand stores (terminal, theme, notifica
 
 **All three stores use `persist` middleware** (localStorage). Shape must be versioned if you add fields — use Zustand's `version` + `migrate` options to avoid stale localStorage breaking the app.
 
-**macOS-only APIs**: `FontPicker` calls `listSystemFonts`, `SoundPicker` calls `listSystemSounds` — both are macOS-only Tauri commands. Wrap with platform guard before enabling cross-platform.
+**Platform-backed APIs**: `FontPicker` calls `listSystemFonts`, `SoundPicker` calls `listSystemSounds` — both are Tauri commands with macOS, Linux, and Windows backend arms. Keep empty-list UI graceful because platform sound/font sources can still be unavailable.
 
 **Stores are independent**: `terminalSettingsStore` feeds `Terminal.tsx` directly; `themeStore` feeds `ThemeProvider`; `notificationStore` feeds the notification dot logic.
 
@@ -33,4 +33,4 @@ App settings page with three persisted Zustand stores (terminal, theme, notifica
 |------|----------|
 | Read font/size in terminal | `stores/terminalSettingsStore.ts` |
 | Theme provider integration | `src/shared/providers/ThemeProvider.tsx` |
-| Sound playback backend | `src-tauri/crates/infra/src/` + `handler/sound.rs` |
+| Sound playback backend | `src-tauri/src/handler/sound.rs` |

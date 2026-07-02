@@ -1,5 +1,9 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldLabel } from "@/components/ui/field";
+import {
+	Field,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
 import {
 	NativeSelect,
 	NativeSelectOption,
@@ -32,26 +36,40 @@ export function FontPicker() {
 		() => (showAllFonts ? fonts : fonts.filter((f) => f.is_mono)),
 		[fonts, showAllFonts],
 	);
+	const hasFonts = fonts.length > 0;
 
 	return (
 		<>
 			<Field>
 				<FieldLabel>{m.terminalFont()}</FieldLabel>
 				<NativeSelect
-					value={fontFamily}
+					value={hasFonts ? fontFamily : ""}
 					onChange={(event) => setFontFamily(event.target.value)}
+					disabled={!hasFonts}
 					size="sm"
 				>
-					{visibleFonts.map((font) => (
-						<NativeSelectOption key={font.family} value={font.family}>
-							{font.family}
+					{hasFonts ? (
+						visibleFonts.map((font) => (
+							<NativeSelectOption key={font.family} value={font.family}>
+								{font.family}
+							</NativeSelectOption>
+						))
+					) : (
+						<NativeSelectOption value="">
+							{m.fontPickerUnavailable()}
 						</NativeSelectOption>
-					))}
+					)}
 				</NativeSelect>
+				{!hasFonts && (
+					<FieldDescription>
+						{m.fontPickerUnavailableDescription()}
+					</FieldDescription>
+				)}
 			</Field>
 			<label className="flex items-center gap-2 text-sm">
 				<Checkbox
 					checked={showAllFonts}
+					disabled={!hasFonts}
 					onCheckedChange={setShowAllFonts}
 				/>
 				{m.showAllFonts()}

@@ -108,12 +108,12 @@ export const resources = {
           production: {
             question: 'Is 2code production-ready today?',
             answer:
-              'It is still evolving. macOS is the primary target today, with experimental Windows and Linux support now available for testing.',
+              'It is still evolving. macOS is the primary target today, with experimental Windows and Linux support available for testing; some Windows system customization is still being verified.',
           },
           platforms: {
             question: 'What platforms does it support?',
             answer:
-              'macOS is the most mature build. Windows and Linux support is experimental and improving.',
+              'macOS is the most mature build. Windows and Linux support is experimental and improving, with Windows system customization still being verified.',
           },
         },
         cta: 'Try the latest build and see how 2code fits your terminal workflow.',
@@ -222,12 +222,12 @@ export const resources = {
           production: {
             question: '现在可以作为主力工具使用吗？',
             answer:
-              '可以。macOS 版本最成熟，Windows 和 Linux 目前是实验支持。',
+              '可以。macOS 版本最成熟，Windows 和 Linux 目前是实验支持，其中 Windows 的部分系统自定义能力仍在验证。',
           },
           platforms: {
             question: '支持哪些平台？',
             answer:
-              '支持 macOS，并已提供实验性质的 Windows 和 Linux 支持。',
+              '支持 macOS，并已提供实验性质的 Windows 和 Linux 支持；Windows 的部分系统自定义能力仍在验证。',
           },
         },
         cta: '下载最新版本，看看 2code 是否适合你的终端工作流。',

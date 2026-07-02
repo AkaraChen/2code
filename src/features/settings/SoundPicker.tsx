@@ -1,5 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import {
+	Field,
+	FieldDescription,
+	FieldLabel,
+} from "@/components/ui/field";
 import {
 	NativeSelect,
 	NativeSelectOption,
@@ -20,6 +24,7 @@ export function SoundPicker() {
 	const enabled = useNotificationStore((state) => state.enabled);
 	const sound = useNotificationStore((state) => state.sound);
 	const setSound = useNotificationStore((state) => state.setSound);
+	const hasSounds = sounds.length > 0;
 
 	return (
 		<Field>
@@ -30,7 +35,7 @@ export function SoundPicker() {
 					size="icon-xs"
 					variant="ghost"
 					className="ml-auto opacity-60 hover:opacity-100"
-					disabled={!enabled || !sound}
+					disabled={!enabled || !sound || !hasSounds}
 					onClick={() => {
 						if (sound) playSystemSound({ name: sound });
 					}}
@@ -39,20 +44,33 @@ export function SoundPicker() {
 				</Button>
 			</div>
 			<NativeSelect
-				value={sound}
+				value={hasSounds ? sound : ""}
 				onChange={(event) => setSound(event.target.value)}
-				disabled={!enabled}
+				disabled={!enabled || !hasSounds}
 				size="sm"
 			>
-				<NativeSelectOption value="">
-					{m.notificationSoundNone()}
-				</NativeSelectOption>
-				{sounds.map((item) => (
-					<NativeSelectOption key={item} value={item}>
-						{item}
+				{hasSounds ? (
+					<>
+						<NativeSelectOption value="">
+							{m.notificationSoundNone()}
+						</NativeSelectOption>
+						{sounds.map((item) => (
+							<NativeSelectOption key={item} value={item}>
+								{item}
+							</NativeSelectOption>
+						))}
+					</>
+				) : (
+					<NativeSelectOption value="">
+						{m.soundPickerUnavailable()}
 					</NativeSelectOption>
-				))}
+				)}
 			</NativeSelect>
+			{!hasSounds && (
+				<FieldDescription>
+					{m.soundPickerUnavailableDescription()}
+				</FieldDescription>
+			)}
 		</Field>
 	);
 }

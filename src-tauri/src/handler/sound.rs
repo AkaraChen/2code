@@ -6,6 +6,9 @@ const SOUNDS_DIR: &str = "/System/Library/Sounds";
 #[cfg(target_os = "linux")]
 const LINUX_SOUND_EXTENSIONS: &[&str] = &["oga", "ogg", "wav", "aiff", "aif"];
 
+#[cfg(target_os = "windows")]
+const DEFAULT_WINDOWS_DIR: &str = r"C:\Windows";
+
 static SYSTEM_SOUNDS: OnceLock<Vec<String>> = OnceLock::new();
 
 #[tauri::command]
@@ -24,7 +27,16 @@ fn load_system_sounds() -> Vec<String> {
 		list_linux_sounds()
 	}
 
-	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+	#[cfg(target_os = "windows")]
+	{
+		list_windows_sounds()
+	}
+
+	#[cfg(not(any(
+		target_os = "macos",
+		target_os = "linux",
+		target_os = "windows"
+	)))]
 	{
 		Vec::new()
 	}
@@ -46,11 +58,27 @@ pub fn play_sound_name(name: &str) -> Result<(), String> {
 		play_linux_sound(name)
 	}
 
-	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+	#[cfg(target_os = "windows")]
+	{
+		play_windows_sound(name)
+	}
+
+	#[cfg(not(any(
+		target_os = "macos",
+		target_os = "linux",
+		target_os = "windows"
+	)))]
 	{
 		let _ = name;
 		Ok(())
 	}
+}
+
+fn is_valid_sound_name(name: &str) -> bool {
+	!name.is_empty()
+		&& !name.contains("..")
+		&& !name.contains('/')
+		&& !name.contains('\\')
 }
 
 #[cfg(target_os = "macos")]
@@ -76,6 +104,10 @@ fn list_macos_sounds() -> Vec<String> {
 fn play_macos_sound(name: &str) -> Result<(), String> {
 	use std::path::Path;
 	use std::process::Command;
+
+	if !is_valid_sound_name(name) {
+		return Err(format!("Sound not found: {name}"));
+	}
 
 	let path = Path::new(SOUNDS_DIR).join(format!("{name}.aiff"));
 	if !path.exists() {
@@ -177,7 +209,7 @@ fn collect_linux_sounds(
 
 #[cfg(target_os = "linux")]
 fn find_linux_sound_file(name: &str) -> Option<std::path::PathBuf> {
-	if name.is_empty() || name.contains('/') || name.contains('\\') {
+	if !is_valid_sound_name(name) {
 		return None;
 	}
 
@@ -249,9 +281,110 @@ fn spawn_player(program: &str, args: &[&str]) -> Result<(), String> {
 	Ok(())
 }
 
+#[cfg(target_os = "windows")]
+fn list_windows_sounds() -> Vec<String> {
+	use std::collections::BTreeSet;
+
+	let mut sounds = BTreeSet::new();
+	collect_windows_sounds(&windows_sounds_dir(), &mut sounds);
+	sounds.into_iter().collect()
+}
+
+#[cfg(target_os = "windows")]
+fn play_windows_sound(name: &str) -> Result<(), String> {
+	let path = find_windows_sound_file(name)
+		.ok_or_else(|| format!("Sound not found: {name}"))?;
+	spawn_windows_sound(&path)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_sounds_dir() -> std::path::PathBuf {
+	windows_sounds_dir_from_windir(std::env::var_os("WINDIR"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_sounds_dir_from_windir(
+	windir: Option<std::ffi::OsString>,
+) -> std::path::PathBuf {
+	std::path::PathBuf::from(
+		windir.unwrap_or_else(|| std::ffi::OsString::from(DEFAULT_WINDOWS_DIR)),
+	)
+	.join("Media")
+}
+
+#[cfg(target_os = "windows")]
+fn collect_windows_sounds(
+	dir: &std::path::Path,
+	sounds: &mut std::collections::BTreeSet<String>,
+) {
+	let Ok(entries) = std::fs::read_dir(dir) else {
+		return;
+	};
+
+	for entry in entries.flatten() {
+		let path = entry.path();
+		if !is_windows_sound_file(&path) {
+			continue;
+		}
+
+		if let Some(name) = path.file_stem().and_then(|name| name.to_str()) {
+			sounds.insert(name.to_string());
+		}
+	}
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_sound_file(name: &str) -> Option<std::path::PathBuf> {
+	if !is_valid_sound_name(name) {
+		return None;
+	}
+
+	let path = windows_sounds_dir().join(format!("{name}.wav"));
+	path.is_file().then_some(path)
+}
+
+#[cfg(target_os = "windows")]
+fn is_windows_sound_file(path: &std::path::Path) -> bool {
+	path.extension()
+		.and_then(|extension| extension.to_str())
+		.map(|extension| extension.eq_ignore_ascii_case("wav"))
+		.unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_windows_sound(path: &std::path::Path) -> Result<(), String> {
+	std::process::Command::new("powershell")
+		.arg("-NoProfile")
+		.arg("-Command")
+		.arg("$player = New-Object Media.SoundPlayer $args[0]; $player.PlaySync()")
+		.arg(path)
+		.spawn()
+		.map_err(|e| format!("Failed to play sound: {e}"))?;
+	Ok(())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn sound_name_validation_rejects_path_like_values() {
+		for name in ["", "..", "../Glass", "Glass/../Ping", r"Glass\Ping"] {
+			assert!(!is_valid_sound_name(name));
+		}
+		assert!(is_valid_sound_name("Glass"));
+	}
+
+	#[cfg(any(
+		target_os = "macos",
+		target_os = "linux",
+		target_os = "windows"
+	))]
+	#[test]
+	fn play_path_like_sound_name_returns_error() {
+		let err = play_sound_name("../Glass").unwrap_err();
+		assert!(err.contains("Sound not found"));
+	}
 
 	#[cfg(target_os = "macos")]
 	#[test]
@@ -312,7 +445,34 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+	#[cfg(target_os = "windows")]
+	#[test]
+	fn windows_sound_names_are_sorted_and_extensionless() {
+		let sounds = list_system_sounds();
+
+		for pair in sounds.windows(2) {
+			assert!(
+				pair[0] <= pair[1],
+				"not sorted: {} > {}",
+				pair[0],
+				pair[1]
+			);
+		}
+
+		for name in &sounds {
+			assert!(
+				!name.contains('.'),
+				"sound name includes extension: {name}"
+			);
+			assert!(is_valid_sound_name(name));
+		}
+	}
+
+	#[cfg(not(any(
+		target_os = "macos",
+		target_os = "linux",
+		target_os = "windows"
+	)))]
 	#[test]
 	fn unsupported_platform_sound_commands_are_noops() {
 		assert!(list_system_sounds().is_empty());

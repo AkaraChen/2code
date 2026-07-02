@@ -195,7 +195,7 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Database is single-connection** (`Arc<Mutex<SqliteConnection>>`), not a pool — avoid long-held locks
 - **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
 - **PTY output sends `&[u8]` over a per-session IPC `Channel`** (not global events; frontend receives `ArrayBuffer`) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done
-- **Font listing and sound playback are macOS-only** (`core-text` crate, `/System/Library/Sounds`, `afplay`) — needs platform guards for cross-platform
+- **Font listing and sound playback are platform-backed**: macOS uses `core-text` + `/System/Library/Sounds` + `afplay`; Linux uses `fontdb` + XDG sound dirs + desktop audio players; Windows uses `fontdb` + `C:\Windows\Media` + PowerShell `Media.SoundPlayer`.
 - **UI components** should use shadcn/ui primitives from `src/components/ui`; do not add legacy UI-library APIs back
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`

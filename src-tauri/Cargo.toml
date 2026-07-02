@@ -49,7 +49,7 @@ tauri-plugin-process = "2"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "22"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(not(target_os = "macos"))'.dependencies]
 fontdb = "0.23"
 
 [target.'cfg(target_os = "windows")'.dependencies]
