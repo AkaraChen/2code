@@ -2,9 +2,18 @@ import { create as createMutative, type Draft } from "mutative";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
-interface TerminalTab {
+export interface PendingTerminalRestore {
+	oldSessionId: string;
+	shell: string;
+	cwd: string;
+	rows: number;
+	cols: number;
+}
+
+export interface TerminalTab {
 	id: string;
 	title: string;
+	restore?: PendingTerminalRestore;
 }
 
 export type AgentStatus = "running" | "waiting";
@@ -48,6 +57,17 @@ interface TerminalStore {
 	agentCompletions: Record<string, AgentCompletionNotification>;
 	sessionProfileIds: Record<string, string>;
 	addTab: (profileId: string, sessionId: string, title: string) => void;
+	addRestoringTab: (
+		profileId: string,
+		sessionId: string,
+		title: string,
+		restore: PendingTerminalRestore,
+	) => void;
+	finishRestoringTab: (
+		profileId: string,
+		oldSessionId: string,
+		newSessionId: string,
+	) => void;
 	closeTab: (profileId: string, tabId: string) => void;
 	setActiveTab: (profileId: string, tabId: string) => void;
 	removeProfile: (profileId: string) => void;
@@ -83,6 +103,47 @@ export const useTerminalStore = create<TerminalStore>()((set) => {
 					counter: existing.counter + 1,
 				};
 				state.sessionProfileIds[sessionId] ??= profileId;
+			});
+		},
+
+		addRestoringTab(profileId, sessionId, title, restore) {
+			mutate((state) => {
+				const existing = state.profiles[profileId] ?? {
+					tabs: [],
+					activeTabId: null,
+					counter: 0,
+				};
+				if (existing.tabs.some((tab) => tab.id === sessionId)) return;
+				const tab: TerminalTab = {
+					id: sessionId,
+					title,
+					restore,
+				};
+				state.profiles[profileId] = {
+					tabs: [...existing.tabs, tab],
+					activeTabId: tab.id,
+					counter: existing.counter + 1,
+				};
+				state.sessionProfileIds[sessionId] ??= profileId;
+			});
+		},
+
+		finishRestoringTab(profileId, oldSessionId, newSessionId) {
+			mutate((state) => {
+				const profile = state.profiles[profileId];
+				if (!profile) return;
+				const tab = profile.tabs.find((item) => item.id === oldSessionId);
+				if (!tab?.restore) return;
+
+				tab.id = newSessionId;
+				delete tab.restore;
+				if (profile.activeTabId === oldSessionId) {
+					profile.activeTabId = newSessionId;
+				}
+				delete state.agentStatuses[oldSessionId];
+				delete state.agentCompletions[oldSessionId];
+				delete state.sessionProfileIds[oldSessionId];
+				state.sessionProfileIds[newSessionId] = profileId;
 			});
 		},
 

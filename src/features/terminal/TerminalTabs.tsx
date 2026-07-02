@@ -9,6 +9,8 @@ import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
 import { RiCloseLine } from "@remixicon/react";
 import {
 	lazy,
+	Suspense,
+	use,
 	useCallback,
 	useMemo,
 	useRef,
@@ -46,7 +48,8 @@ import {
 import * as m from "@/paraglide/messages.js";
 import { AgentStatusDot } from "./AgentStatusDot";
 import { useCloseTerminalTab } from "./hooks";
-import { useTerminalStore } from "./store";
+import { restorePendingTerminalTab } from "./restoration";
+import { useTerminalStore, type TerminalTab } from "./store";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
@@ -79,6 +82,22 @@ const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "opencode", iconUrl: opencodeIconUrl },
 	{ keyword: "qoder", iconUrl: qoderIconUrl },
 ];
+
+function PendingTerminalRestore({
+	profileId,
+	tab,
+}: {
+	profileId: string;
+	tab: TerminalTab;
+}) {
+	use(restorePendingTerminalTab(profileId, tab));
+
+	return (
+		<div className="flex h-full items-center justify-center">
+			<Spinner />
+		</div>
+	);
+}
 
 function getTerminalTabIcon(title: string) {
 	const lowerTitle = title.toLowerCase();
@@ -321,7 +340,7 @@ export default function TerminalTabs({
 
 	const activeTerminalDropRef = useMemo(
 		() =>
-			activeTerminalTab
+			activeTerminalTab && !activeTerminalTab.restore
 				? createTerminalDropRef(activeTerminalTab)
 				: undefined,
 		[activeTerminalTab, createTerminalDropRef],
@@ -335,13 +354,16 @@ export default function TerminalTabs({
 		terminalDropRefFactoryRef.current = createTerminalDropRef;
 		terminalDropRefCacheRef.current.clear();
 	}
-	const terminalTabIds = new Set(tabs.map((tab) => tab.id));
+	const terminalTabIds = new Set(
+		tabs.filter((tab) => !tab.restore).map((tab) => tab.id),
+	);
 	for (const tabId of terminalDropRefCacheRef.current.keys()) {
 		if (!terminalTabIds.has(tabId)) {
 			terminalDropRefCacheRef.current.delete(tabId);
 		}
 	}
 	for (const tab of tabs) {
+		if (tab.restore) continue;
 		if (!terminalDropRefCacheRef.current.has(tab.id)) {
 			terminalDropRefCacheRef.current.set(
 				tab.id,
@@ -514,16 +536,36 @@ export default function TerminalTabs({
 						}}
 						aria-hidden={tab.id !== activeTabId}
 					>
-						<Terminal
-							profileId={profileId}
-							sessionId={tab.id}
-							isActive={
-								isActive &&
-								tab.id === activeTabId &&
-								!fileTabActive &&
-								!notesActive
-							}
-						/>
+						{tab.restore ? (
+							isActive &&
+							tab.id === activeTabId &&
+							!fileTabActive &&
+							!notesActive ? (
+								<Suspense
+									fallback={(
+										<div className="flex h-full items-center justify-center">
+											<Spinner />
+										</div>
+									)}
+								>
+									<PendingTerminalRestore
+										profileId={profileId}
+										tab={tab}
+									/>
+								</Suspense>
+							) : null
+						) : (
+							<Terminal
+								profileId={profileId}
+								sessionId={tab.id}
+								isActive={
+									isActive &&
+									tab.id === activeTabId &&
+									!fileTabActive &&
+									!notesActive
+								}
+							/>
+						)}
 					</div>
 				))}
 				{tabs.length === 0 && emptyFallback}

@@ -1,21 +1,11 @@
 import { QueryObserver } from "@tanstack/react-query";
 import consola from "consola";
 import type { ProjectWithProfiles } from "@/generated";
-import {
-	listProjectSessions,
-	listProjects,
-	restorePtySession,
-} from "@/generated";
+import { listProjectSessions, listProjects } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { removeTerminalStorage, sweepTerminalStorage } from "./lib";
+import { sweepTerminalStorage } from "./lib";
 import { useTerminalStore } from "./store";
-
-/**
- * Transient scrollback data for restored sessions.
- * Written during restoration, consumed once by Terminal.tsx on mount, then deleted.
- */
-export const sessionHistory = new Map<string, Uint8Array>();
 
 /**
  * Module-level restoration promise.
@@ -63,7 +53,7 @@ function createRestorationPipeline(): Promise<void> {
 				releaseObserver();
 				resolve();
 			} else {
-				restoreTerminals(result.data).finally(() => {
+				loadRestorableTerminals(result.data).finally(() => {
 					releaseObserver();
 					resolve();
 				});
@@ -76,46 +66,27 @@ function createRestorationPipeline(): Promise<void> {
 	});
 }
 
-async function restoreTerminals(projects: ProjectWithProfiles[]) {
+async function loadRestorableTerminals(projects: ProjectWithProfiles[]) {
 	const projectSessions = await Promise.all(
-		projects.map(async (p) => ({
-			project: p,
-			sessions: await listProjectSessions({ projectId: p.id }),
-		})),
+		projects.map((p) => listProjectSessions({ projectId: p.id })),
 	);
 
-	const allSessions = projectSessions.flatMap(({ sessions }) => sessions);
+	const allSessions = projectSessions.flat();
 	if (allSessions.length > 0) {
-		await mapWithLimit(allSessions, 3, async (session) => {
-			try {
-				const result = await restorePtySession({
+		for (const session of allSessions) {
+			useTerminalStore.getState().addRestoringTab(
+				session.profile_id,
+				session.id,
+				session.title,
+				{
 					oldSessionId: session.id,
-					meta: { profileId: session.profile_id, title: session.title },
-					config: {
-						shell: session.shell,
-						cwd: session.cwd,
-						rows: session.rows,
-						cols: session.cols,
-						startupCommands: [],
-					},
-				});
-
-				removeTerminalStorage(session.id);
-
-				if (result.history.length > 0) {
-					sessionHistory.set(
-						result.newSessionId,
-						new Uint8Array(result.history),
-					);
-				}
-
-				useTerminalStore
-					.getState()
-					.addTab(session.profile_id, result.newSessionId, session.title);
-			} catch (e) {
-				consola.error(`[pty-restore] failed: ${session.id}`, e);
-			}
-		});
+					shell: session.shell,
+					cwd: session.cwd,
+					rows: session.rows,
+					cols: session.cols,
+				},
+			);
+		}
 	}
 
 	const liveSessionIds = new Set(
@@ -127,20 +98,4 @@ async function restoreTerminals(projects: ProjectWithProfiles[]) {
 	if (removed > 0) {
 		consola.debug(`[pty-restore] swept ${removed} stale terminal storage keys`);
 	}
-}
-
-export async function mapWithLimit<T>(
-	items: T[],
-	limit: number,
-	fn: (item: T) => Promise<void>,
-) {
-	const executing = new Set<Promise<void>>();
-	for (const item of items) {
-		const p = fn(item).then(() => {
-			executing.delete(p);
-		});
-		executing.add(p);
-		if (executing.size >= limit) await Promise.race(executing);
-	}
-	await Promise.all(executing);
 }

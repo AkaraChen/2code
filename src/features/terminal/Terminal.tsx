@@ -38,7 +38,7 @@ import {
   shouldBypassTerminalLinkConfirm,
 } from "./linkOpening";
 import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
-import { sessionHistory } from "./state";
+import { sessionHistory } from "./restoration";
 import { useTerminalStore, type AgentStatus } from "./store";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import {

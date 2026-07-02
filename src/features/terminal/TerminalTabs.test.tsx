@@ -18,6 +18,10 @@ import { writeToPty } from "@/generated";
 import TerminalTabs from "./TerminalTabs";
 import { useTerminalStore } from "./store";
 
+const { restorePendingTerminalTabMock } = vi.hoisted(() => ({
+	restorePendingTerminalTabMock: vi.fn(),
+}));
+
 vi.mock("./Terminal", () => ({
 	Terminal: ({
 		sessionId,
@@ -31,6 +35,10 @@ vi.mock("./Terminal", () => ({
 			data-testid={`terminal-${sessionId}`}
 		/>
 	),
+}));
+
+vi.mock("./restoration", () => ({
+	restorePendingTerminalTab: restorePendingTerminalTabMock,
 }));
 
 vi.mock("./TerminalTemplateMenu", () => ({
@@ -130,6 +138,8 @@ describe("terminalTabs file tree drops", () => {
 		});
 		writeToPtyMock.mockClear();
 		writeToPtyMock.mockResolvedValue(undefined);
+		restorePendingTerminalTabMock.mockReset();
+		restorePendingTerminalTabMock.mockReturnValue(new Promise(() => {}));
 	});
 
 	it("activates the dropped terminal tab and writes dropped paths to its PTY", async () => {
@@ -176,6 +186,46 @@ describe("terminalTabs file tree drops", () => {
 			"data-active",
 			"false",
 		);
+	});
+
+	it("restores an active pending tab without mounting a terminal for the old session", () => {
+		useTerminalStore.getState().addRestoringTab(
+			profileId,
+			"old-session",
+			"Terminal 1",
+			{
+				oldSessionId: "old-session",
+				shell: "/bin/zsh",
+				cwd: "/root",
+				rows: 24,
+				cols: 80,
+			},
+		);
+
+		renderTerminalTabs();
+
+		expect(restorePendingTerminalTabMock).toHaveBeenCalledTimes(1);
+		expect(screen.queryByTestId("terminal-old-session")).not.toBeInTheDocument();
+	});
+
+	it("does not restore pending tabs while the profile is hidden", () => {
+		useTerminalStore.getState().addRestoringTab(
+			profileId,
+			"old-session",
+			"Terminal 1",
+			{
+				oldSessionId: "old-session",
+				shell: "/bin/zsh",
+				cwd: "/root",
+				rows: 24,
+				cols: 80,
+			},
+		);
+
+		renderTerminalTabs({ isActive: false });
+
+		expect(restorePendingTerminalTabMock).not.toHaveBeenCalled();
+		expect(screen.queryByTestId("terminal-old-session")).not.toBeInTheDocument();
 	});
 
 	it("renders running status as a breathing dot without label text", () => {
