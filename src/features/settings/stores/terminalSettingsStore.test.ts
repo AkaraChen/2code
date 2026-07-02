@@ -165,4 +165,32 @@ describe("useTerminalSettingsStore", () => {
 			expect(val).toContain("ui-monospace");
 		});
 	});
+
+	it("preserves version 0 persisted settings during migration", async () => {
+		localStorage.setItem(
+			"font-settings",
+			JSON.stringify({
+				state: {
+					fontFamily: "Fira Code",
+					fontSize: 16,
+					defaultShell: "/bin/zsh",
+					showAllFonts: true,
+					darkTerminalTheme: "dracula",
+					lightTerminalTheme: "one-light",
+					syncTerminalTheme: true,
+				},
+				version: 0,
+			}),
+		);
+
+		await useTerminalSettingsStore.persist.rehydrate();
+
+		expect(getState().fontFamily).toBe("Fira Code");
+		expect(getState().fontSize).toBe(16);
+		expect(getState().defaultShell).toBe("/bin/zsh");
+		expect(getState().showAllFonts).toBe(true);
+		expect(getState().darkTerminalTheme).toBe("dracula");
+		expect(getState().lightTerminalTheme).toBe("one-light");
+		expect(getState().syncTerminalTheme).toBe(true);
+	});
 });

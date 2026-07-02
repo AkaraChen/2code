@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { tauriStorage } from "@/shared/lib/tauriStorage";
 import { useNotificationStore } from "./notificationStore";
 
-function resetStore() {
+async function resetStore() {
 	useNotificationStore.setState({ enabled: false, sound: "Ping" });
+	await tauriStorage.removeItem("notification-settings");
 }
 
 function getState() {
@@ -40,5 +42,20 @@ describe("useNotificationStore", () => {
 			getState().setSound("Boop");
 			expect(getState().sound).toBe("Boop");
 		});
+	});
+
+	it("preserves version 0 persisted notification settings during migration", async () => {
+		await tauriStorage.setItem(
+			"notification-settings",
+			JSON.stringify({
+				state: { enabled: true, sound: "Glass" },
+				version: 0,
+			}),
+		);
+
+		await useNotificationStore.persist.rehydrate();
+
+		expect(getState().enabled).toBe(true);
+		expect(getState().sound).toBe("Glass");
 	});
 });

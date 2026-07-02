@@ -20,34 +20,38 @@ export const queryNamespaces = {
 	"fs-file-preview": "fs-file-preview",
 	"fs-search": "fs-search",
 	"fs-tree": "fs-tree",
-};
+} as const;
 
 export const queryKeys = {
 	projects: {
 		all: ["projects"] as const,
 	},
 	projectGroups: {
-		all: ["project-groups"] as const,
+		all: [queryNamespaces["project-groups"]] as const,
 	},
 	projectAvatar: (projectId: string) =>
-		["project-avatar", projectId] as const,
+		[queryNamespaces["project-avatar"], projectId] as const,
 	projectConfig: (projectId: string) =>
-		["project-config", projectId] as const,
+		[queryNamespaces["project-config"], projectId] as const,
 	topbar: {
-		apps: ["topbar-apps"] as const,
+		apps: [queryNamespaces["topbar-apps"]] as const,
 	},
 	browser: {
-		installed: ["browser-apps"] as const,
+		installed: [queryNamespaces["browser-apps"]] as const,
 	},
 	git: {
-		branch: (folder: string) => ["git-branch", folder] as const,
-		diff: (profileId: string) => ["git-diff", profileId] as const,
+		branch: (folder: string) =>
+			[queryNamespaces["git-branch"], folder] as const,
+		diff: (profileId: string) =>
+			[queryNamespaces["git-diff"], profileId] as const,
 		diffStats: (profileId: string) =>
-			["git-diff-stats", profileId] as const,
-		status: (profileId: string) => ["git-status", profileId] as const,
-		log: (profileId: string) => ["git-log", profileId] as const,
+			[queryNamespaces["git-diff-stats"], profileId] as const,
+		status: (profileId: string) =>
+			[queryNamespaces["git-status"], profileId] as const,
+		log: (profileId: string) =>
+			[queryNamespaces["git-log"], profileId] as const,
 		commitDiff: (profileId: string, hash: string) =>
-			["git-commit-diff", profileId, hash] as const,
+			[queryNamespaces["git-commit-diff"], profileId, hash] as const,
 		binaryPreview: (
 			profileId: string,
 			path: string,
@@ -56,7 +60,7 @@ export const queryKeys = {
 			revision?: string,
 		) =>
 			[
-				"git-binary-preview",
+				queryNamespaces["git-binary-preview"],
 				profileId,
 				path,
 				source,
@@ -64,26 +68,30 @@ export const queryKeys = {
 				revision ?? null,
 			] as const,
 		aheadCount: (profileId: string) =>
-			["git-ahead-count", profileId] as const,
+			[queryNamespaces["git-ahead-count"], profileId] as const,
 		pullRequestStatus: (profileId: string, branchName: string | null) =>
-			["git-pull-request-status", profileId, branchName] as const,
+			[
+				queryNamespaces["git-pull-request-status"],
+				profileId,
+				branchName,
+			] as const,
 	},
 	profile: {
 		deleteCheck: (profileId: string) =>
-			["profile-delete-check", profileId] as const,
+			[queryNamespaces["profile-delete-check"], profileId] as const,
 		notes: (profileId: string) =>
-			["profile-notes", profileId] as const,
+			[queryNamespaces["profile-notes"], profileId] as const,
 	},
 	fs: {
 		file: (profileId: string, path: string) =>
-			["fs-file", profileId, path] as const,
+			[queryNamespaces["fs-file"], profileId, path] as const,
 		filePreview: (profileId: string, path: string) =>
-			["fs-file-preview", profileId, path] as const,
+			[queryNamespaces["fs-file-preview"], profileId, path] as const,
 		search: (profileId: string, query: string) =>
-			["fs-search", profileId, query] as const,
+			[queryNamespaces["fs-search"], profileId, query] as const,
 		treeChildrenPrefix: (profileId: string) =>
-			["fs-tree", profileId] as const,
+			[queryNamespaces["fs-tree"], profileId] as const,
 		treeChildren: (profileId: string, parentPath: string | null) =>
-			["fs-tree", profileId, parentPath] as const,
+			[queryNamespaces["fs-tree"], profileId, parentPath] as const,
 	},
 };

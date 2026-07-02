@@ -9,8 +9,19 @@ interface NotificationStore {
 	setSound: (v: string) => void;
 }
 
+type PersistedNotificationSettings = Pick<
+	NotificationStore,
+	"enabled" | "sound"
+>;
+
+function migrateNotificationSettings(
+	persistedState: unknown,
+): PersistedNotificationSettings {
+	return persistedState as PersistedNotificationSettings;
+}
+
 export const useNotificationStore = create<NotificationStore>()(
-	persist(
+	persist<NotificationStore, [], [], PersistedNotificationSettings>(
 		(set) => ({
 			enabled: false,
 			sound: "Ping",
@@ -20,6 +31,8 @@ export const useNotificationStore = create<NotificationStore>()(
 		{
 			name: "notification-settings",
 			storage: createJSONStorage(() => tauriStorage),
+			version: 1,
+			migrate: migrateNotificationSettings,
 		},
 	),
 );

@@ -113,4 +113,18 @@ describe("useThemeStore", () => {
 			expect(style.getPropertyValue("--radius-xl")).toBe("14px");
 		});
 	});
+
+	it("preserves version 0 persisted theme settings during migration", async () => {
+		localStorage.setItem(
+			"theme-settings",
+			JSON.stringify({
+				state: { borderRadius: "xl" },
+				version: 0,
+			}),
+		);
+
+		await useThemeStore.persist.rehydrate();
+
+		expect(getState().borderRadius).toBe("xl");
+	});
 });

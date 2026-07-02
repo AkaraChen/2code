@@ -26,6 +26,23 @@ interface TerminalSettingsStore {
 	setSyncTerminalTheme: (sync: boolean) => void;
 }
 
+type PersistedTerminalSettings = Pick<
+	TerminalSettingsStore,
+	| "fontFamily"
+	| "fontSize"
+	| "defaultShell"
+	| "showAllFonts"
+	| "darkTerminalTheme"
+	| "lightTerminalTheme"
+	| "syncTerminalTheme"
+>;
+
+function migrateTerminalSettings(
+	persistedState: unknown,
+): PersistedTerminalSettings {
+	return persistedState as PersistedTerminalSettings;
+}
+
 function clampTerminalFontSize(size: number) {
 	if (!Number.isFinite(size)) return DEFAULT_TERMINAL_FONT_SIZE;
 	return Math.min(
@@ -35,7 +52,7 @@ function clampTerminalFontSize(size: number) {
 }
 
 export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
-	persist(
+	persist<TerminalSettingsStore, [], [], PersistedTerminalSettings>(
 		(set) => ({
 			fontFamily: "JetBrains Mono",
 			fontSize: DEFAULT_TERMINAL_FONT_SIZE,
@@ -61,7 +78,11 @@ export const useTerminalSettingsStore = create<TerminalSettingsStore>()(
 			setLightTerminalTheme: (id) => set({ lightTerminalTheme: id }),
 			setSyncTerminalTheme: (sync) => set({ syncTerminalTheme: sync }),
 		}),
-		{ name: "font-settings" },
+		{
+			name: "font-settings",
+			version: 1,
+			migrate: migrateTerminalSettings,
+		},
 	),
 );
 

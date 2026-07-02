@@ -8,6 +8,12 @@ interface ThemeStore {
 	setBorderRadius: (radius: BorderRadius) => void;
 }
 
+type PersistedThemeSettings = Pick<ThemeStore, "borderRadius">;
+
+function migrateThemeSettings(persistedState: unknown): PersistedThemeSettings {
+	return persistedState as PersistedThemeSettings;
+}
+
 export const BORDER_RADIUS_MAP: Record<
 	BorderRadius,
 	{ sm: string; md: string; lg: string; xl: string }
@@ -20,12 +26,16 @@ export const BORDER_RADIUS_MAP: Record<
 };
 
 export const useThemeStore = create<ThemeStore>()(
-	persist(
+	persist<ThemeStore, [], [], PersistedThemeSettings>(
 		(set) => ({
 			borderRadius: "sm",
 			setBorderRadius: (radius) => set({ borderRadius: radius }),
 		}),
-		{ name: "theme-settings" },
+		{
+			name: "theme-settings",
+			version: 1,
+			migrate: migrateThemeSettings,
+		},
 	),
 );
 

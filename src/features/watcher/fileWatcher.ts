@@ -1,4 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
+import consola from "consola";
 import { watchProjects } from "@/generated";
 import type { ProjectWithProfiles, WatchEvent } from "@/generated/types";
 import { queryClient } from "@/shared/lib/queryClient";
@@ -141,7 +142,7 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 
 		for (const path of paths) {
 			if (path == null) continue;
-const normalizedPath = normalizeFilePath(path);
+			const normalizedPath = normalizeFilePath(path);
 			queryClient.invalidateQueries({
 				queryKey: queryKeys.fs.file(profileId, normalizedPath),
 			});
@@ -178,4 +179,6 @@ channel.onmessage = (event) => {
 	}, INVALIDATION_DEBOUNCE_MS);
 };
 
-watchProjects({ onEvent: channel });
+watchProjects({ onEvent: channel }).catch((error) => {
+	consola.error("[file-watcher] failed to start project watcher", error);
+});

@@ -327,5 +327,8 @@
 	"notesCodeBlockCopy": "Copy",
 	"notesCodeBlockPreviewLoading": "Loading preview...",
 	"notesCodeBlockEdit": "Edit",
-	"notesCodeBlockHidePreview": "Hide preview"
+	"notesCodeBlockHidePreview": "Hide preview",
+	"reviewCommentsCopied": "Review comments copied",
+	"reviewCommentsCopiedAndCleared": "Review comments copied and cleared",
+	"reviewQueue": "Review Queue"
 }

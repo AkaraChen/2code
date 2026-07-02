@@ -1,17 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+	consolaErrorMock,
 	getQueryCacheMock,
 	getQueryDataMock,
 	invalidateQueriesMock,
 	queryCacheFindAllMock,
 	watchProjectsMock,
 } = vi.hoisted(() => ({
+	consolaErrorMock: vi.fn(),
 	getQueryCacheMock: vi.fn(),
 	getQueryDataMock: vi.fn(),
 	invalidateQueriesMock: vi.fn(),
 	queryCacheFindAllMock: vi.fn(),
 	watchProjectsMock: vi.fn(),
+}));
+
+vi.mock("consola", () => ({
+	default: {
+		error: consolaErrorMock,
+	},
 }));
 
 vi.mock("@/generated", () => ({
@@ -54,6 +62,8 @@ describe("fileWatcher", () => {
 		getQueryDataMock.mockReset();
 		invalidateQueriesMock.mockClear();
 		watchProjectsMock.mockClear();
+		watchProjectsMock.mockResolvedValue(undefined);
+		consolaErrorMock.mockClear();
 	});
 
 	afterEach(() => {
@@ -65,6 +75,19 @@ describe("fileWatcher", () => {
 
 		expect(watchProjectsMock).toHaveBeenCalledTimes(1);
 		expect(channel.onmessage).toBeTypeOf("function");
+	});
+
+	it("logs watcher startup failures", async () => {
+		const error = new Error("watch failed");
+		watchProjectsMock.mockRejectedValueOnce(error);
+
+		await loadWatcher();
+		await Promise.resolve();
+
+		expect(consolaErrorMock).toHaveBeenCalledWith(
+			"[file-watcher] failed to start project watcher",
+			error,
+		);
 	});
 
 	it("debounces bursts of file events into a single invalidation batch", async () => {

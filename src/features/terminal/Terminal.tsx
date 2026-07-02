@@ -586,6 +586,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         const unlistenExit = await listen(
           `pty-exit-${sessionId}`,
           () => {
+            latestTitle = null;
+            latestProgress = "0;0";
             publishAgentStatus(null);
             writeLiveOutput(
               new TextEncoder().encode(

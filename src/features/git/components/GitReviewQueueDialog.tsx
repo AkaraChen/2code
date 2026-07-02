@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
+import * as m from "@/paraglide/messages.js";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import {
 	type DiffReviewComment,
@@ -145,20 +146,20 @@ export default function GitReviewQueueDialog({
 	);
 	const handleCopyAll = useCallback(async () => {
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
-		toast.success("Review comments copied");
+		toast.success(m.reviewCommentsCopied());
 	}, [comments]);
 	const handleCopyAndClearAll = useCallback(async () => {
 		await copyTextToClipboard(formatReviewCommentsForAgent(comments));
 		onClear();
 		onClose();
-		toast.success("Review comments copied and cleared");
+		toast.success(m.reviewCommentsCopiedAndCleared());
 	}, [comments, onClear, onClose]);
 
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="flex max-h-[80vh] w-[min(56rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
 				<DialogHeader className="border-b p-4">
-					<DialogTitle>Review Queue</DialogTitle>
+					<DialogTitle>{m.reviewQueue()}</DialogTitle>
 				</DialogHeader>
 				<div className="min-h-0 flex-1 overflow-auto p-4">
 					<div className="flex flex-col gap-3">

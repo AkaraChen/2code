@@ -11,6 +11,7 @@ import {
 	lazy,
 	useCallback,
 	useMemo,
+	useRef,
 	useState,
 	type ReactNode,
 } from "react";
@@ -326,6 +327,30 @@ export default function TerminalTabs({
 		[activeTerminalTab, createTerminalDropRef],
 	);
 
+	const terminalDropRefCacheRef = useRef(
+		new Map<string, (node: HTMLElement | null) => void>(),
+	);
+	const terminalDropRefFactoryRef = useRef(createTerminalDropRef);
+	if (terminalDropRefFactoryRef.current !== createTerminalDropRef) {
+		terminalDropRefFactoryRef.current = createTerminalDropRef;
+		terminalDropRefCacheRef.current.clear();
+	}
+	const terminalTabIds = new Set(tabs.map((tab) => tab.id));
+	for (const tabId of terminalDropRefCacheRef.current.keys()) {
+		if (!terminalTabIds.has(tabId)) {
+			terminalDropRefCacheRef.current.delete(tabId);
+		}
+	}
+	for (const tab of tabs) {
+		if (!terminalDropRefCacheRef.current.has(tab.id)) {
+			terminalDropRefCacheRef.current.set(
+				tab.id,
+				createTerminalDropRef({ id: tab.id }),
+			);
+		}
+	}
+	const terminalDropRefs = terminalDropRefCacheRef.current;
+
 	const trailingControls = useMemo(
 		() => (
 			<TerminalTemplateMenu
@@ -373,7 +398,7 @@ export default function TerminalTabs({
 								value={tab.id}
 								nativeButton={false}
 								render={<div />}
-								ref={createTerminalDropRef(tab)}
+								ref={terminalDropRefs.get(tab.id)}
 								className={TAB_TRIGGER_LAYOUT_CLASS}
 							>
 								{getTerminalTabIcon(tab.title)}

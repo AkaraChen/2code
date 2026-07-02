@@ -327,5 +327,8 @@
 	"notesCodeBlockCopy": "复制",
 	"notesCodeBlockPreviewLoading": "正在加载预览...",
 	"notesCodeBlockEdit": "编辑",
-	"notesCodeBlockHidePreview": "隐藏预览"
+	"notesCodeBlockHidePreview": "隐藏预览",
+	"reviewCommentsCopied": "评论已复制",
+	"reviewCommentsCopiedAndCleared": "评论已复制并清空",
+	"reviewQueue": "审查队列"
 }
