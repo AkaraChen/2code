@@ -54,6 +54,10 @@ import {
   suppressQueryResponses,
   TitleDebouncer } from
 "./lib";
+import {
+  sendAgentWaitingNotification,
+  shouldNotifyAgentWaiting,
+} from "./lib/agentNotification";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
@@ -259,7 +263,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         });
       }
 
-      function publishAgentStatus(status: AgentStatus | null) {
+      function getCurrentTabTitle() {
+        const tab = useTerminalStore.
+        getState().
+        profiles[profileId]?.tabs.find((tab) => tab.id === sessionId);
+        return tab?.title || latestTitle || sessionId;
+      }
+
+      function publishAgentStatus(
+        status: AgentStatus | null,
+        agentId: string | null
+      ) {
         if (publishedAgentStatus === status) return;
         const previousStatus = publishedAgentStatus;
         publishedAgentStatus = status;
@@ -268,6 +282,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         setAgentStatus(sessionId, status ?? "idle");
         if (status === "waiting" && previousStatus !== "waiting") {
           playWaitingSound();
+          if (shouldNotifyAgentWaiting({
+            status,
+            previousStatus,
+            notificationsEnabled: useNotificationStore.getState().enabled,
+            windowFocused: document.hasFocus()
+          })) {
+            void sendAgentWaitingNotification({
+              agentId,
+              tabTitle: getCurrentTabTitle()
+            });
+          }
         }
       }
 
@@ -291,7 +316,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             state: result.state
           });
         }
-        publishAgentStatus(result.status);
+        publishAgentStatus(result.status, result.agentId);
       }
 
       runAgentDetectionNowRef.current = runAgentDetectionNow;
@@ -588,7 +613,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           () => {
             latestTitle = null;
             latestProgress = "0;0";
-            publishAgentStatus(null);
+            publishAgentStatus(null, null);
             writeLiveOutput(
               new TextEncoder().encode(
                 "\r\n\x1B[90m[Process exited]\x1B[0m\r\n"
