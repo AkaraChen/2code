@@ -6,10 +6,13 @@ Cross-cutting infrastructure. All I/O, OS interaction, and external process mana
 ## FILES
 | File | Role |
 |------|------|
+| `archive.rs` | Archive preview entry listing for zip/tar/gzip files |
 | `db.rs` | SQLite init + WAL pragma + `embed_migrations!()` auto-run on startup |
+| `filesystem.rs` | File-tree operations, worktree path validation, fuzzy file resolution |
 | `pty.rs` | PTY session lifecycle: spawn shell, 4KB read loop (live output delivery + persistence live in `service::pty`) |
 | `pty_log.rs` | Per-session output storage as `{app_data_dir}/pty_logs/{session_id}.log` files (append/read/clear/remove + startup orphan GC). No byte cap. |
 | `git.rs` | Git command execution via `std::process::Command` |
+| `office.rs` | File preview helpers and LibreOffice office→PDF conversion |
 | `shell_init.rs` | ZDOTDIR-based shell init injection for VS Code shell integration and project init scripts |
 | `config.rs` | Load `2code.json` from project root + execute `setup_script`/`teardown_script` via `sh -c` |
 | `logger.rs` | Debug log capture + `start_debug_log`/`stop_debug_log` implementation |

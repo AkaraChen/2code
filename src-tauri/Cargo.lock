@@ -570,7 +570,6 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "fix-path-env",
- "flate2",
  "fontdb",
  "infra",
  "libsqlite3-sys",
@@ -581,7 +580,6 @@ dependencies = [
  "serde",
  "serde_json",
  "service",
- "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
@@ -598,7 +596,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
- "zip 8.6.0",
 ]
 
 [[package]]
@@ -2281,6 +2278,7 @@ version = "0.1.0"
 dependencies = [
  "diesel",
  "diesel_migrations",
+ "flate2",
  "ignore",
  "model",
  "notify",
@@ -2289,10 +2287,12 @@ dependencies = [
  "serde",
  "serde_json",
  "slug",
+ "tar",
  "tempfile",
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zip 8.6.0",
 ]
 
 [[package]]

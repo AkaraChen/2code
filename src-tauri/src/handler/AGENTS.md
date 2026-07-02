@@ -7,6 +7,7 @@ Tauri IPC entry points. Thin delegation layer — no business logic here.
 | File | Commands |
 |------|----------|
 | `debug.rs` | `start_debug_log`, `stop_debug_log` |
+| `filesystem.rs` | File tree operations, file content read/write, previews, terminal file resolution |
 | `font.rs` | `list_system_fonts` (macOS only) |
 | `mod.rs` | `tauri::generate_handler![]` registration |
 | `profile.rs` | `create_profile`, `delete_profile` |

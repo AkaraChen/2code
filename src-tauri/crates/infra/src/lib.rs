@@ -1,9 +1,11 @@
+pub mod archive;
 pub mod config;
 pub mod db;
 pub mod filesystem;
 pub mod git;
 pub mod logger;
 pub mod no_window;
+pub mod office;
 pub mod pty;
 pub mod pty_log;
 pub mod shell_init;

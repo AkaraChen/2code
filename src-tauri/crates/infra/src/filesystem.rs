@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use ignore::WalkBuilder;
 
 use model::error::AppError;
-use model::filesystem::FileSearchResult;
+use model::filesystem::{FileSearchResult, ResolvedFilePath};
 
 const MAX_SEARCH_RESULTS: usize = 60;
 
@@ -554,6 +554,315 @@ pub fn validate_file_tree_relative_path(
 	Ok(segments.join("/"))
 }
 
+fn path_outside_workspace_error() -> AppError {
+	AppError::IoError(std::io::Error::new(
+		std::io::ErrorKind::InvalidInput,
+		"Path is outside the workspace",
+	))
+}
+
+pub fn validate_worktree_relative_path(
+	path: &str,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	if path.is_empty() {
+		return Err(invalid_input(format!("{label} cannot be empty")));
+	}
+	if path.contains('\0') {
+		return Err(invalid_input(format!(
+			"{label} contains invalid characters"
+		)));
+	}
+
+	let without_trailing_separator =
+		path.trim_end_matches(['/', '\\']).to_string();
+	if without_trailing_separator.is_empty() {
+		return Err(invalid_input(format!("{label} cannot be root")));
+	}
+
+	let parsed = Path::new(&without_trailing_separator);
+	if parsed.is_absolute() {
+		return Err(invalid_input(format!("{label} must be relative: {path}")));
+	}
+
+	let mut relative_path = PathBuf::new();
+	for component in parsed.components() {
+		match component {
+			Component::CurDir => {}
+			Component::Normal(value) => {
+				if value == ".git" {
+					return Err(invalid_input(format!(
+						"{label} cannot target .git metadata"
+					)));
+				}
+				relative_path.push(value);
+			}
+			Component::ParentDir
+			| Component::RootDir
+			| Component::Prefix(_) => {
+				return Err(invalid_input(format!(
+					"{label} escapes worktree: {path}"
+				)));
+			}
+		}
+	}
+
+	if relative_path.as_os_str().is_empty() {
+		return Err(invalid_input(format!("{label} cannot be empty")));
+	}
+
+	Ok(relative_path)
+}
+
+pub fn ensure_canonical_path_inside_worktree(
+	worktree_root: &Path,
+	path: &Path,
+) -> Result<PathBuf, AppError> {
+	let canonical_worktree =
+		worktree_root.canonicalize().map_err(AppError::IoError)?;
+	let canonical_path = path.canonicalize().map_err(|error| {
+		if error.kind() == std::io::ErrorKind::NotFound {
+			AppError::NotFound(format!("Path: {}", path.display()))
+		} else {
+			AppError::IoError(error)
+		}
+	})?;
+
+	if !canonical_path.starts_with(&canonical_worktree) {
+		return Err(path_outside_workspace_error());
+	}
+
+	Ok(canonical_path)
+}
+
+pub fn resolve_existing_worktree_path(
+	worktree_root: &Path,
+	path: &str,
+	label: &str,
+) -> Result<PathBuf, AppError> {
+	let relative_path = validate_worktree_relative_path(path, label)?;
+	ensure_canonical_path_inside_worktree(
+		worktree_root,
+		&worktree_root.join(relative_path),
+	)
+}
+
+pub fn resolve_existing_worktree_path_or_root(
+	worktree_root: &Path,
+	path: Option<&str>,
+) -> Result<PathBuf, AppError> {
+	let Some(path) = path else {
+		return worktree_root.canonicalize().map_err(AppError::IoError);
+	};
+	if path.is_empty() {
+		return worktree_root.canonicalize().map_err(AppError::IoError);
+	}
+
+	resolve_existing_worktree_path(worktree_root, path, "File tree path")
+}
+
+/// Resolves a (possibly relative) file path against the profile's worktree.
+/// Returns either an exact match (canonical absolute path) if the file exists
+/// within the worktree, or a list of fuzzy-matched candidates based on the
+/// filename when the exact path doesn't exist.
+pub fn resolve_file_path_in_worktree(
+	worktree_path: &Path,
+	file_path: &str,
+) -> Result<ResolvedFilePath, AppError> {
+	let requested_path = Path::new(file_path);
+	let resolved = if requested_path.is_absolute() {
+		requested_path.to_path_buf()
+	} else {
+		let clean = file_path.strip_prefix("./").unwrap_or(file_path);
+		worktree_path.join(clean)
+	};
+
+	if resolved.is_file() {
+		let canonical_resolved =
+			resolved.canonicalize().map_err(AppError::IoError)?;
+		let canonical_worktree =
+			worktree_path.canonicalize().map_err(AppError::IoError)?;
+
+		if !canonical_resolved.starts_with(&canonical_worktree) {
+			return Err(AppError::IoError(std::io::Error::other(
+				"Path is outside the workspace",
+			)));
+		}
+
+		return Ok(ResolvedFilePath::Exact {
+			path: canonical_resolved.to_string_lossy().into_owned(),
+		});
+	}
+
+	let filename = requested_path
+		.file_name()
+		.map(|value| value.to_string_lossy().into_owned())
+		.unwrap_or_else(|| file_path.to_string());
+	let candidates = search_files(worktree_path, &filename)?;
+
+	Ok(ResolvedFilePath::Fuzzy { candidates })
+}
+
+pub fn reveal_path_in_file_manager(path: &Path) -> Result<(), AppError> {
+	if !path.exists() {
+		return Err(AppError::NotFound(format!("Path: {}", path.display())));
+	}
+
+	#[cfg(target_os = "macos")]
+	{
+		let status = crate::no_window::command_without_windows_console("open")
+			.arg("-R")
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in Finder: {status}"
+		))))
+	}
+
+	#[cfg(target_os = "windows")]
+	{
+		let status =
+			crate::no_window::command_without_windows_console("explorer")
+				.arg(format!("/select,{}", path.display()))
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in File Explorer: {status}"
+		))));
+	}
+
+	#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+	{
+		let target = if path.is_dir() {
+			path.to_path_buf()
+		} else {
+			path.parent()
+				.map(Path::to_path_buf)
+				.unwrap_or_else(|| path.to_path_buf())
+		};
+		let status =
+			crate::no_window::command_without_windows_console("xdg-open")
+				.arg(&target)
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to reveal path in file manager: {status}"
+		))))
+	}
+}
+
+pub fn open_path_in_default_app(path: &Path) -> Result<(), AppError> {
+	if !path.exists() {
+		return Err(AppError::NotFound(format!("Path: {}", path.display())));
+	}
+
+	#[cfg(target_os = "macos")]
+	{
+		let status = crate::no_window::command_without_windows_console("open")
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))))
+	}
+
+	#[cfg(target_os = "windows")]
+	{
+		let status = crate::no_window::command_without_windows_console("cmd")
+			.args(["/C", "start", ""])
+			.arg(path)
+			.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		return Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))));
+	}
+
+	#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+	{
+		let status =
+			crate::no_window::command_without_windows_console("xdg-open")
+				.arg(path)
+				.status()?;
+		if status.success() {
+			return Ok(());
+		}
+
+		Err(AppError::IoError(std::io::Error::other(format!(
+			"Failed to open path in default app: {status}"
+		))))
+	}
+}
+
+pub fn read_file_content(
+	file_path: &Path,
+	display_path: &str,
+) -> Result<String, AppError> {
+	if !file_path.exists() {
+		return Err(AppError::NotFound(format!("File: {display_path}")));
+	}
+	if file_path.is_dir() {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Path is a directory",
+		)));
+	}
+
+	let metadata = std::fs::metadata(file_path)?;
+	if metadata.len() > 1_000_000 {
+		return Err(AppError::IoError(std::io::Error::other(
+			"File too large (> 1MB)",
+		)));
+	}
+
+	let bytes = std::fs::read(file_path)?;
+	if bytes.contains(&0) {
+		return Err(AppError::IoError(std::io::Error::other("Binary file")));
+	}
+
+	String::from_utf8(bytes)
+		.map_err(|_| AppError::IoError(std::io::Error::other("Invalid UTF-8")))
+}
+
+pub fn write_file_content(
+	file_path: &Path,
+	display_path: &str,
+	content: &str,
+) -> Result<(), AppError> {
+	if !file_path.exists() {
+		return Err(AppError::NotFound(format!("File: {display_path}")));
+	}
+	if file_path.is_dir() {
+		return Err(AppError::IoError(std::io::Error::other(
+			"Path is a directory",
+		)));
+	}
+	if content.len() > 1_000_000 {
+		return Err(AppError::IoError(std::io::Error::other(
+			"File too large (> 1MB)",
+		)));
+	}
+
+	std::fs::write(file_path, content)?;
+	Ok(())
+}
+
 fn destination_for_move(
 	target_dir: &Path,
 	source: &Path,
@@ -651,6 +960,7 @@ fn subsequence_score(query_chars: &[char], candidate: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use uuid::Uuid;
 
 	fn make_scored_file_match(index: usize) -> ScoredFileMatch {
 		ScoredFileMatch {
@@ -696,6 +1006,13 @@ mod tests {
 
 	fn sort_file_tree_paths_without_cached_key(paths: &mut [String]) {
 		paths.sort_by_key(|path| path.to_lowercase());
+	}
+
+	fn temp_worktree() -> std::path::PathBuf {
+		let path = std::env::temp_dir()
+			.join(format!("2code-filesystem-test-{}", Uuid::new_v4()));
+		std::fs::create_dir_all(&path).expect("create temp worktree");
+		path
 	}
 
 	#[test]
@@ -1056,5 +1373,149 @@ mod tests {
 	fn validate_accepts_directory_with_trailing_slash() {
 		let ok = validate_file_tree_relative_path("src/", "test path").unwrap();
 		assert_eq!(ok, "src");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_returns_canonical_path() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("src/main.rs");
+		std::fs::create_dir_all(file_path.parent().expect("parent"))
+			.expect("create parent");
+		std::fs::write(&file_path, "fn main() {}").expect("write file");
+
+		let result =
+			resolve_existing_worktree_path(&worktree, "src/main.rs", "File")
+				.unwrap();
+
+		assert_eq!(result, file_path.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_preserves_whitespace() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("  spaced name .txt  ");
+		std::fs::write(&file_path, "content").expect("write file");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"  spaced name .txt  ",
+			"File",
+		)
+		.unwrap();
+
+		assert_eq!(result, file_path.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_or_root_accepts_empty_path() {
+		let worktree = temp_worktree();
+
+		let result =
+			resolve_existing_worktree_path_or_root(&worktree, Some(""))
+				.unwrap();
+
+		assert_eq!(result, worktree.canonicalize().unwrap());
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_existing_worktree_path_rejects_escape_inputs() {
+		let worktree = temp_worktree();
+		std::fs::write(worktree.join("main.rs"), "fn main() {}")
+			.expect("write file");
+
+		let parent_result =
+			resolve_existing_worktree_path(&worktree, "../main.rs", "File");
+		let absolute_result = resolve_existing_worktree_path(
+			&worktree,
+			worktree.join("main.rs").to_string_lossy().as_ref(),
+			"File",
+		);
+		let git_result =
+			resolve_existing_worktree_path(&worktree, ".git/config", "File");
+
+		assert!(matches!(parent_result, Err(AppError::IoError(_))));
+		assert!(matches!(absolute_result, Err(AppError::IoError(_))));
+		assert!(matches!(git_result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn resolve_existing_worktree_path_rejects_symlink_escape() {
+		let temp_dir = temp_worktree();
+		let worktree = temp_dir.join("worktree");
+		let outside = temp_dir.join("outside");
+		std::fs::create_dir_all(&worktree).expect("create worktree");
+		std::fs::create_dir_all(&outside).expect("create outside");
+		std::fs::write(outside.join("secret.txt"), "secret")
+			.expect("write outside file");
+		std::os::unix::fs::symlink(&outside, worktree.join("link"))
+			.expect("create symlink");
+
+		let result = resolve_existing_worktree_path(
+			&worktree,
+			"link/secret.txt",
+			"File",
+		);
+
+		assert!(matches!(result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+	}
+
+	#[test]
+	fn resolve_file_path_in_worktree_returns_exact_file_match() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("src/main.rs");
+		std::fs::create_dir_all(file_path.parent().expect("parent"))
+			.expect("create parent");
+		std::fs::write(&file_path, "fn main() {}").expect("write file");
+
+		let result =
+			resolve_file_path_in_worktree(&worktree, "src/main.rs").unwrap();
+
+		assert!(matches!(
+			result,
+			ResolvedFilePath::Exact { path } if path == file_path.canonicalize().unwrap().to_string_lossy()
+		));
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_file_path_in_worktree_returns_fuzzy_candidates_when_missing() {
+		let worktree = temp_worktree();
+		let file_path = worktree.join("src/main.rs");
+		std::fs::create_dir_all(file_path.parent().expect("parent"))
+			.expect("create parent");
+		std::fs::write(&file_path, "fn main() {}").expect("write file");
+
+		let result =
+			resolve_file_path_in_worktree(&worktree, "missing/main.rs")
+				.unwrap();
+
+		assert!(matches!(
+			result,
+			ResolvedFilePath::Fuzzy { candidates } if candidates.iter().any(|candidate| candidate.relative_path == "src/main.rs")
+		));
+		std::fs::remove_dir_all(worktree).expect("cleanup temp worktree");
+	}
+
+	#[test]
+	fn resolve_file_path_in_worktree_rejects_exact_match_outside_worktree() {
+		let temp_dir = temp_worktree();
+		let worktree = temp_dir.join("worktree");
+		let outside = temp_dir.join("outside.rs");
+		std::fs::create_dir_all(&worktree).expect("create worktree");
+		std::fs::write(&outside, "fn main() {}").expect("write outside");
+
+		let result = resolve_file_path_in_worktree(
+			&worktree,
+			outside.to_string_lossy().as_ref(),
+		);
+
+		assert!(matches!(result, Err(AppError::IoError(_))));
+		std::fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
 	}
 }

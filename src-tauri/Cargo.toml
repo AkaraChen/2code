@@ -46,10 +46,6 @@ tracing-subscriber = { version = "0.3", features = [ "env-filter" ] }
 tokio = { version = "1", features = [ "sync" ] }
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 tauri-plugin-process = "2"
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
-tar = "0.4.46"
-flate2 = "1.1.9"
-
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "22"
 

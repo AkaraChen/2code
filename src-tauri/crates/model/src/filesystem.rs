@@ -13,6 +13,22 @@ pub struct FileTreeGitStatusEntry {
 	pub status: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct ArchivePreviewEntry {
+	pub path: String,
+	pub kind: String,
+	pub size: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FilePreview {
+	pub kind: String,
+	pub file_path: String,
+	pub mime_type: String,
+	pub source_path: Option<String>,
+	pub archive_entries: Option<Vec<ArchivePreviewEntry>>,
+}
+
 /// Result of resolving a terminal file path.
 /// Either an exact match (file found at the expected path) or a list of
 /// fuzzy-matched candidates when the exact path doesn't exist.

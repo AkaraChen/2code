@@ -17,6 +17,9 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ignore = "0.4"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+tar = "0.4.46"
+flate2 = "1.1.9"
 
 [dev-dependencies]
 uuid = { version = "1", features = ["v4"] }

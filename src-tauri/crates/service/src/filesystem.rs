@@ -1,8 +1,11 @@
-use diesel::SqliteConnection;
+use std::path::Path;
 
+use diesel::SqliteConnection;
 use infra::db::DbPool;
 use model::error::AppError;
-use model::filesystem::{FileSearchResult, FileTreeGitStatusEntry};
+use model::filesystem::{
+	FilePreview, FileSearchResult, FileTreeGitStatusEntry, ResolvedFilePath,
+};
 
 pub fn search_file(
 	conn: &mut SqliteConnection,
@@ -96,6 +99,151 @@ pub fn create_file_tree_path(
 ) -> Result<(), AppError> {
 	let root = get_canonical_profile_worktree_path(db, profile_id)?;
 	infra::filesystem::create_file_tree_path(&root, path, kind)
+}
+
+pub fn reveal_path_in_file_manager(
+	db: &DbPool,
+	profile_id: &str,
+	path: Option<&str>,
+) -> Result<(), AppError> {
+	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let path = infra::filesystem::resolve_existing_worktree_path_or_root(
+		&worktree_root,
+		path,
+	)?;
+	infra::filesystem::reveal_path_in_file_manager(&path)
+}
+
+pub fn open_path_in_default_app(
+	db: &DbPool,
+	profile_id: &str,
+	path: &str,
+) -> Result<(), AppError> {
+	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let path = infra::filesystem::resolve_existing_worktree_path(
+		&worktree_root,
+		path,
+		"File tree path",
+	)?;
+	infra::filesystem::open_path_in_default_app(&path)
+}
+
+pub fn read_file_content(
+	db: &DbPool,
+	profile_id: &str,
+	path: &str,
+) -> Result<String, AppError> {
+	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let file_path = infra::filesystem::resolve_existing_worktree_path(
+		&worktree_root,
+		path,
+		"File path",
+	)?;
+	infra::filesystem::read_file_content(&file_path, path)
+}
+
+pub fn write_file_content(
+	db: &DbPool,
+	profile_id: &str,
+	path: &str,
+	content: &str,
+) -> Result<(), AppError> {
+	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let file_path = infra::filesystem::resolve_existing_worktree_path(
+		&worktree_root,
+		path,
+		"File path",
+	)?;
+	infra::filesystem::write_file_content(&file_path, path, content)
+}
+
+pub fn get_file_preview(
+	db: &DbPool,
+	profile_id: &str,
+	path: &str,
+	file_cache_root: &Path,
+	office_cache_root: &Path,
+) -> Result<FilePreview, AppError> {
+	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let file_path = infra::filesystem::resolve_existing_worktree_path(
+		&worktree_root,
+		path,
+		"File path",
+	)?;
+	let metadata = infra::office::ensure_previewable_file(&file_path)?;
+	let canonical_path = file_path.canonicalize().map_err(AppError::IoError)?;
+
+	if let Some(mime_type) =
+		infra::office::previewable_image_mime_type(&canonical_path)
+	{
+		let cached_path = infra::office::cache_preview_file(
+			file_cache_root,
+			&canonical_path,
+			&metadata,
+		)?;
+		return Ok(FilePreview {
+			kind: "image".to_string(),
+			file_path: cached_path.to_string_lossy().into_owned(),
+			mime_type: mime_type.to_string(),
+			source_path: None,
+			archive_entries: None,
+		});
+	}
+
+	if infra::office::is_pdf_file(&canonical_path) {
+		let cached_path = infra::office::cache_preview_file(
+			file_cache_root,
+			&canonical_path,
+			&metadata,
+		)?;
+		return Ok(FilePreview {
+			kind: "pdf".to_string(),
+			file_path: cached_path.to_string_lossy().into_owned(),
+			mime_type: "application/pdf".to_string(),
+			source_path: None,
+			archive_entries: None,
+		});
+	}
+
+	if infra::archive::is_archive_file(&canonical_path) {
+		let archive_entries =
+			infra::archive::list_archive_entries(&canonical_path, &metadata)?;
+		return Ok(FilePreview {
+			kind: "archive".to_string(),
+			file_path: canonical_path.to_string_lossy().into_owned(),
+			mime_type: "application/x-archive".to_string(),
+			source_path: None,
+			archive_entries: Some(archive_entries),
+		});
+	}
+
+	if infra::office::is_office_file(&canonical_path) {
+		let pdf_path = infra::office::convert_office_file_to_pdf(
+			&canonical_path,
+			office_cache_root,
+			&metadata,
+		)?;
+		return Ok(FilePreview {
+			kind: "office-pdf".to_string(),
+			file_path: pdf_path.to_string_lossy().into_owned(),
+			mime_type: "application/pdf".to_string(),
+			source_path: Some(canonical_path.to_string_lossy().into_owned()),
+			archive_entries: None,
+		});
+	}
+
+	Err(AppError::IoError(std::io::Error::other(
+		"File type is not previewable",
+	)))
+}
+
+pub fn resolve_terminal_file_path(
+	db: &DbPool,
+	profile_id: &str,
+	file_path: &str,
+) -> Result<ResolvedFilePath, AppError> {
+	let worktree = get_profile_worktree_path(db, profile_id)?;
+	infra::filesystem::resolve_file_path_in_worktree(&worktree, file_path)
 }
 
 #[cfg(test)]
