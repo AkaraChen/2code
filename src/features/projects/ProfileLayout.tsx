@@ -54,13 +54,7 @@ export default function ProfileLayout({
 					isActive={isActive}
 					onOpenFile={handleOpenFile}
 				/>
-				<div
-					className={
-						fileTreeOpen
-							? "min-h-0 min-w-0 flex-1 border-l"
-							: "min-h-0 min-w-0 flex-1"
-					}
-				>
+				<div className="min-h-0 min-w-0 flex-1">
 					{children}
 				</div>
 			</div>

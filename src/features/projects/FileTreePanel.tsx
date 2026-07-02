@@ -1155,7 +1155,7 @@ export default function FileTreePanel({
                   }}>
                   
 									<div
-                    className="relative min-h-0 min-w-0 flex-1 px-1.5 py-1"
+                    className="relative min-h-0 min-w-0 flex-1 border-r px-1.5 py-1"
                     onContextMenu={handleTreeContextMenu}>
                     
 										<FileTree

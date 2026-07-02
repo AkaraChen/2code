@@ -1,21 +1,24 @@
-import { motion, useReducedMotion } from "motion/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { FiPlus } from "react-icons/fi";
-import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { TabsTrigger } from "@/components/ui/tabs";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import * as m from "@/paraglide/messages.js";
-import { TAB_STRIP_HEIGHT } from "./TabStrip";
 import { useTerminalTemplateActions } from "./terminalTemplateActions";
 import type {
 	GlobalTerminalTemplate,
 	ProjectTerminalTemplate,
 } from "./templates";
 
-const BUTTON_MOTION_PROPS = {
-	layout: "position" as const,
-	transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
-} as const;
-const REDUCED_MOTION_PROPS = {};
+const NEW_TERMINAL_TAB_VALUE = "__new-terminal__";
 
 interface TerminalTemplateMenuProps {
 	profileId: string;
@@ -59,9 +62,8 @@ const TemplateMenuItem = memo(({
 			: "";
 
 	return (
-		<button
-			type="button"
-			className="flex w-full items-start rounded-md px-2 py-2 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+		<DropdownMenuItem
+			className="items-start py-2"
 			disabled={isPending}
 			onClick={handleClick}
 		>
@@ -77,7 +79,7 @@ const TemplateMenuItem = memo(({
 			) : (
 				<span className="truncate">{template.name}</span>
 			)}
-		</button>
+		</DropdownMenuItem>
 	);
 });
 
@@ -106,12 +108,12 @@ export const TerminalTemplateDropdownContent = memo(({
 	}
 
 	return (
-		<div className="flex flex-col gap-1">
+		<>
 			{projectTemplates.length > 0 ? (
-				<>
-					<div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+				<DropdownMenuGroup>
+					<DropdownMenuLabel>
 						{m.projectTerminalTemplates()}
-					</div>
+					</DropdownMenuLabel>
 					{projectTemplates.map((template) => (
 						<TemplateMenuItem
 							key={template.id}
@@ -121,18 +123,18 @@ export const TerminalTemplateDropdownContent = memo(({
 							onTemplateClick={onTemplateClick}
 						/>
 					))}
-				</>
+				</DropdownMenuGroup>
 			) : null}
 
 			{projectTemplates.length > 0 && globalTemplates.length > 0 ? (
-				<div className="mx-2 h-px bg-border" />
+				<DropdownMenuSeparator />
 			) : null}
 
 			{globalTemplates.length > 0 ? (
-				<>
-					<div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+				<DropdownMenuGroup>
+					<DropdownMenuLabel>
 						{m.globalTerminalTemplates()}
-					</div>
+					</DropdownMenuLabel>
 					{globalTemplates.map((template) => (
 						<TemplateMenuItem
 							key={template.id}
@@ -142,9 +144,9 @@ export const TerminalTemplateDropdownContent = memo(({
 							onTemplateClick={onTemplateClick}
 						/>
 					))}
-				</>
+				</DropdownMenuGroup>
 			) : null}
-		</div>
+		</>
 	);
 });
 
@@ -154,7 +156,6 @@ export default function TerminalTemplateMenu({
 	projectId,
 }: TerminalTemplateMenuProps) {
 	const setTerminalActive = useFileViewerTabsStore((s) => s.setTerminalActive);
-	const prefersReducedMotion = useReducedMotion();
 	const handleCreated = useCallback(() => {
 		setTerminalActive(profileId);
 	}, [profileId, setTerminalActive]);
@@ -172,43 +173,6 @@ export default function TerminalTemplateMenu({
 	});
 
 	const [isOpen, setIsOpen] = useState(false);
-	const [menuPosition, setMenuPosition] = useState<{
-		top: number;
-		left: number;
-		width: number;
-	} | null>(null);
-	const buttonRef = useRef<HTMLDivElement | null>(null);
-	const closeTimerRef = useRef<number | null>(null);
-
-	const buttonMotionProps = prefersReducedMotion
-		? REDUCED_MOTION_PROPS
-		: BUTTON_MOTION_PROPS;
-
-	const clearCloseTimer = useCallback(() => {
-		if (closeTimerRef.current !== null) {
-			window.clearTimeout(closeTimerRef.current);
-			closeTimerRef.current = null;
-		}
-	}, []);
-
-	const open = useCallback(() => {
-		const rect = buttonRef.current?.getBoundingClientRect();
-		if (!rect) return;
-		clearCloseTimer();
-		setMenuPosition({ top: rect.bottom + 8, left: rect.left, width: rect.width });
-		setIsOpen(true);
-	}, [clearCloseTimer]);
-
-	const scheduleClose = useCallback(() => {
-		clearCloseTimer();
-		closeTimerRef.current = window.setTimeout(() => {
-			setIsOpen(false);
-		}, 120);
-	}, [clearCloseTimer]);
-
-	useEffect(() => {
-		return () => clearCloseTimer();
-	}, [clearCloseTimer]);
 
 	const handleTemplateClick = useCallback(
 		async (
@@ -221,60 +185,52 @@ export default function TerminalTemplateMenu({
 		[createTemplateTerminal],
 	);
 	const handleCreateDefaultTerminal = useCallback(() => {
+		if (createTab.isPending) return;
 		setIsOpen(false);
 		createDefaultTerminal();
-	}, [createDefaultTerminal]);
-	const menuWidth = useMemo(
-		() =>
-			menuPosition
-				? `${Math.max(menuPosition.width + 32, 200)}px`
-				: "200px",
-		[menuPosition],
-	);
+	}, [createDefaultTerminal, createTab.isPending]);
 
 	return (
-		<>
-			<motion.div
-				style={{ display: "flex", flexShrink: 0, height: "100%" }}
-				{...buttonMotionProps}
-			>
-				<div
-					ref={buttonRef}
-					className="ms-2 inline-flex shrink-0 items-center self-stretch"
-					style={{ height: TAB_STRIP_HEIGHT }}
-					onMouseEnter={open}
-					onMouseLeave={scheduleClose}
-				>
-					<Button
-						size="xs"
-						variant="ghost"
-						disabled={createTab.isPending}
-						onClick={handleCreateDefaultTerminal}
-					>
-						<FiPlus /> {m.newTerminal()}
-					</Button>
-				</div>
-			</motion.div>
-
-			{isOpen && menuPosition ? (
-				<div
-					className="fixed z-50 min-w-56 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
-					style={{
-						top: menuPosition.top,
-						left: menuPosition.left,
-						width: menuWidth,
-					}}
-					onMouseEnter={open}
-					onMouseLeave={scheduleClose}
-				>
-					<TerminalTemplateDropdownContent
-						projectTemplates={projectTemplates}
-						globalTemplates={globalTemplates}
-						isPending={createTab.isPending}
-						onTemplateClick={handleTemplateClick}
+		<DropdownMenu
+			open={isOpen}
+			onOpenChange={(open) => setIsOpen(open)}
+			modal={false}
+		>
+			<DropdownMenuTrigger
+				openOnHover
+				delay={0}
+				closeDelay={120}
+				render={(
+					<TabsTrigger
+						value={NEW_TERMINAL_TAB_VALUE}
+						aria-disabled={createTab.isPending}
+						className="ms-2 max-w-56 flex-none justify-start"
+						onPointerDown={(event) => event.preventBaseUIHandler()}
+						onClick={(event) => {
+							event.preventBaseUIHandler();
+							event.preventDefault();
+							handleCreateDefaultTerminal();
+						}}
+						onKeyDown={(event) => {
+							if (event.key !== "Enter" && event.key !== " ") return;
+							event.preventBaseUIHandler();
+							event.preventDefault();
+							handleCreateDefaultTerminal();
+						}}
 					/>
-				</div>
-			) : null}
-		</>
+				)}
+			>
+				<FiPlus />
+				<span>{m.newTerminal()}</span>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent sideOffset={8}>
+				<TerminalTemplateDropdownContent
+					projectTemplates={projectTemplates}
+					globalTemplates={globalTemplates}
+					isPending={createTab.isPending}
+					onTemplateClick={handleTemplateClick}
+				/>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }

@@ -183,7 +183,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       height: "100%",
       padding: "8px 0 0 8px",
       background: theme.background,
-      border: "0.5px solid var(--border)",
       boxSizing: "border-box" as const,
       overflow: "hidden"
     }),

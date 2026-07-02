@@ -6,7 +6,7 @@ import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
 import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
-import { useReducedMotion } from "motion/react";
+import { RiCloseLine } from "@remixicon/react";
 import {
 	lazy,
 	useCallback,
@@ -17,6 +17,11 @@ import {
 import { FiFileText, FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import { Spinner } from "@/components/ui/spinner";
+import {
+	Tabs,
+	TabsList,
+	TabsTrigger,
+} from "@/components/ui/tabs";
 import {
 	Tooltip,
 	TooltipContent,
@@ -41,7 +46,6 @@ import * as m from "@/paraglide/messages.js";
 import { AgentStatusDot } from "./AgentStatusDot";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
-import { TAB_STRIP_HEIGHT, TabStrip, type TabStripGroup } from "./TabStrip";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
@@ -62,14 +66,8 @@ const EMPTY_FILE_PROFILE = {
 	notesActive: false,
 };
 const EMPTY_DIRTY_FILE_PATHS: string[] = [];
-const TAB_ANIMATION = {
-	duration: 0.18,
-	ease: [0.22, 1, 0.36, 1],
-} as const;
-const TAB_EXIT_ANIMATION = {
-	duration: 0.14,
-	ease: [0.4, 0, 1, 1],
-} as const;
+const NOTES_TAB_VALUE = "__profile-notes__";
+const TAB_TRIGGER_LAYOUT_CLASS = "max-w-56 flex-none justify-start";
 const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "claude", iconUrl: claudeIconUrl },
 	{ keyword: "codex", iconUrl: codexIconUrl },
@@ -80,13 +78,6 @@ const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "opencode", iconUrl: opencodeIconUrl },
 	{ keyword: "qoder", iconUrl: qoderIconUrl },
 ];
-const FULL_TAB_MOTION_PROPS = {
-	initial: { opacity: 0, scale: 0.92, y: 6 },
-	animate: { opacity: 1, scale: 1, y: 0 },
-	exit: { opacity: 0, scale: 0.88, y: -6, width: 0 },
-	transition: { default: TAB_ANIMATION, opacity: TAB_EXIT_ANIMATION },
-} as const;
-const REDUCED_TAB_MOTION_PROPS = {};
 
 function getTerminalTabIcon(title: string) {
 	const lowerTitle = title.toLowerCase();
@@ -104,6 +95,29 @@ function getTerminalTabIcon(title: string) {
 			src={match.iconUrl}
 			style={{ width: 14, height: 14, flexShrink: 0 }}
 		/>
+	);
+}
+
+function TabCloseButton({
+	title,
+	onClose,
+}: {
+	title: string;
+	onClose: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			aria-label={`Close ${title}`}
+			className="grid size-4 shrink-0 place-items-center border-0 bg-transparent p-0"
+			onPointerDown={(event) => event.stopPropagation()}
+			onClick={(event) => {
+				event.stopPropagation();
+				onClose();
+			}}
+		>
+			<RiCloseLine className="size-3" />
+		</button>
 	);
 }
 
@@ -175,19 +189,25 @@ export default function TerminalTabs({
 	);
 
 	const { mutate: closeTerminalTab } = useCloseTerminalTab();
-	const prefersReducedMotion = useReducedMotion();
 	const [pendingCloseFile, setPendingCloseFile] = useState<{
 		filePath: string;
 		title: string;
 	} | null>(null);
 
-	// Unified active tab value: file path when a file tab is active, or session ID.
-	const activeValue = fileTabActive ? (activeFilePath ?? "") : (activeTabId ?? "");
-	const tabMotionProps = prefersReducedMotion
-		? REDUCED_TAB_MOTION_PROPS
-		: FULL_TAB_MOTION_PROPS;
+	const activeValue = notesActive
+		? NOTES_TAB_VALUE
+		: fileTabActive
+			? activeFilePath
+			: activeTabId;
 
-	const handleTabChange = useCallback((value: string) => {
+	const handleTabChange = useCallback((value: string | null) => {
+		if (!value) return;
+
+		if (value === NOTES_TAB_VALUE) {
+			setNotesActive(profileId);
+			return;
+		}
+
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
 			setFileActive(profileId, value);
@@ -204,6 +224,7 @@ export default function TerminalTabs({
 		profileId,
 		setActiveTab,
 		setFileActive,
+		setNotesActive,
 		setTerminalActive,
 		tabs,
 	]);
@@ -245,7 +266,7 @@ export default function TerminalTabs({
 	const createTerminalDropRef = useCallback((tab: { id: string }) => {
 		let cleanup: (() => void) | null = null;
 
-		return (node: HTMLDivElement | null) => {
+		return (node: HTMLElement | null) => {
 			cleanup?.();
 			cleanup = null;
 			if (!node) return;
@@ -305,120 +326,6 @@ export default function TerminalTabs({
 		[activeTerminalTab, createTerminalDropRef],
 	);
 
-	const tabGroups = useMemo<TabStripGroup[]>(
-		() => [
-			{
-				id: "terminal",
-				items: tabs.map((tab) => ({
-					key: tab.id,
-					value: tab.id,
-					icon: getTerminalTabIcon(tab.title),
-					title: tab.title,
-					maxTitleLength: 10,
-					elementRef: createTerminalDropRef(tab),
-					isSelected:
-						!fileTabActive && !notesActive && tab.id === activeValue,
-					badge: (() => {
-						const status = agentStatusByTabId.get(tab.id);
-						if (status) return <AgentStatusDot status={status} />;
-						const completion = agentCompletionByTabId.get(tab.id);
-						if (!completion) return undefined;
-						return (
-							<button
-								type="button"
-								aria-label="Dismiss completion notification"
-								className="grid size-4 shrink-0 place-items-center rounded-sm"
-								onPointerDown={(event) => event.stopPropagation()}
-								onClick={(event) => {
-									event.stopPropagation();
-									dismissAgentCompletion(tab.id);
-								}}
-							>
-								<AgentStatusDot status={completion} />
-							</button>
-						);
-					})(),
-					onClose: () =>
-						closeTerminalTab({
-							profileId,
-							sessionId: tab.id,
-						}),
-				})),
-			},
-			{
-				id: "file",
-				items: fileTabs.map((tab) => ({
-					key: tab.filePath,
-					value: tab.filePath,
-					icon: (
-						<FileTreeFileIcon
-							fileName={tab.title}
-							size={14}
-						/>
-					),
-					title: tab.title,
-					maxTitleLength: 14,
-					isSelected:
-						fileTabActive &&
-						!notesActive &&
-						tab.filePath === activeValue,
-					badge: dirtyFilePathSet.has(tab.filePath) ? (
-						<span className="size-2 rounded-full bg-muted-foreground" />
-					) : undefined,
-					onClose: () => handleFileTabClose(tab.filePath, tab.title),
-				})),
-			},
-		],
-		[
-			activeValue,
-			closeTerminalTab,
-			createTerminalDropRef,
-			dirtyFilePathSet,
-			fileTabActive,
-			fileTabs,
-			handleFileTabClose,
-			notesActive,
-			agentStatusByTabId,
-			agentCompletionByTabId,
-			dismissAgentCompletion,
-			profileId,
-			tabs,
-		],
-	);
-	const notesControl = useMemo(() => profile ? (
-		<Tooltip>
-			<TooltipTrigger
-				render={(
-					<button
-						type="button"
-						aria-label={m.notes()}
-						aria-pressed={notesActive}
-						role="tab"
-						aria-selected={notesActive}
-						tabIndex={notesActive ? 0 : -1}
-						className={[
-							"flex shrink-0 items-center justify-center gap-2 self-stretch border-r border-t-2 bg-transparent px-3 select-none transition-colors [-webkit-appearance:none] [-webkit-user-drag:none] [&_*]:[-webkit-user-drag:none]",
-							"hover:bg-muted active:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-focus-ring)]",
-							notesActive
-								? "border-t-foreground text-foreground"
-								: "border-t-transparent text-muted-foreground hover:text-foreground",
-						].join(" ")}
-						style={{ height: TAB_STRIP_HEIGHT }}
-						onClick={() => setNotesActive(profileId)}
-						onKeyDown={(event) => {
-							if (event.key !== "Enter" && event.key !== " ") return;
-							event.preventDefault();
-							setNotesActive(profileId);
-						}}
-					/>
-				)}
-			>
-				<FiFileText size={14} />
-			</TooltipTrigger>
-			<TooltipContent>{m.notes()}</TooltipContent>
-		</Tooltip>
-	) : null, [notesActive, profile, profileId, setNotesActive]);
-
 	const trailingControls = useMemo(
 		() => (
 			<TerminalTemplateMenu
@@ -431,15 +338,98 @@ export default function TerminalTabs({
 	);
 
 	return (
-		<div className="flex h-full w-full min-w-0 flex-col">
-			<div className="w-full min-w-0 overflow-x-auto overflow-y-hidden border-b">
-				<TabStrip
-					leadingControl={notesControl}
-					groups={tabGroups}
-					motionProps={tabMotionProps}
-					onSelect={handleTabChange}
-					trailingControls={trailingControls}
-				/>
+		<Tabs
+			value={activeValue}
+			onValueChange={handleTabChange}
+			className="flex h-full w-full min-w-0 flex-col gap-0"
+		>
+			<div className="flex w-full min-w-0 items-center overflow-x-auto overflow-y-hidden px-2 py-1">
+				<TabsList className="w-max flex-none">
+					{profile ? (
+						<Tooltip>
+							<TooltipTrigger
+								render={(
+									<TabsTrigger
+										value={NOTES_TAB_VALUE}
+										aria-label={m.notes()}
+										className="max-w-56 flex-none justify-start"
+									/>
+								)}
+							>
+								<FiFileText size={14} />
+								<span>{m.notes()}</span>
+							</TooltipTrigger>
+							<TooltipContent>{m.notes()}</TooltipContent>
+						</Tooltip>
+					) : null}
+
+					{tabs.map((tab) => {
+						const status = agentStatusByTabId.get(tab.id);
+						const completion = agentCompletionByTabId.get(tab.id);
+
+						return (
+							<TabsTrigger
+								key={tab.id}
+								value={tab.id}
+								nativeButton={false}
+								render={<div />}
+								ref={createTerminalDropRef(tab)}
+								className={TAB_TRIGGER_LAYOUT_CLASS}
+							>
+								{getTerminalTabIcon(tab.title)}
+								<span className="min-w-0 flex-1 truncate">
+									{tab.title}
+								</span>
+								{status ? <AgentStatusDot status={status} /> : null}
+								{!status && completion ? (
+									<button
+										type="button"
+										aria-label="Dismiss completion notification"
+										className="grid size-4 shrink-0 place-items-center rounded-sm"
+										onPointerDown={(event) => event.stopPropagation()}
+										onClick={(event) => {
+											event.stopPropagation();
+											dismissAgentCompletion(tab.id);
+										}}
+									>
+										<AgentStatusDot status={completion} />
+									</button>
+								) : null}
+								<TabCloseButton
+									title={tab.title}
+									onClose={() =>
+										closeTerminalTab({
+											profileId,
+											sessionId: tab.id,
+										})}
+								/>
+							</TabsTrigger>
+						);
+					})}
+
+					{fileTabs.map((tab) => (
+						<TabsTrigger
+							key={tab.filePath}
+							value={tab.filePath}
+							nativeButton={false}
+							render={<div />}
+							className={TAB_TRIGGER_LAYOUT_CLASS}
+						>
+							<FileTreeFileIcon fileName={tab.title} size={14} />
+							<span className="min-w-0 flex-1 truncate">
+								{tab.title}
+							</span>
+							{dirtyFilePathSet.has(tab.filePath) ? (
+								<span className="size-2 rounded-full bg-muted-foreground" />
+							) : null}
+							<TabCloseButton
+								title={tab.title}
+								onClose={() => handleFileTabClose(tab.filePath, tab.title)}
+							/>
+						</TabsTrigger>
+					))}
+					{trailingControls}
+				</TabsList>
 			</div>
 
 			{/* File viewer — static content, safe to conditionally render */}
@@ -527,6 +517,6 @@ export default function TerminalTabs({
 					onDiscard={handleDiscardFileChanges}
 				/>
 			</AsyncBoundary>
-		</div>
+		</Tabs>
 	);
 }

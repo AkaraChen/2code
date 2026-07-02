@@ -169,7 +169,7 @@ export default function ProjectTopBar({
 							<Button
 							aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
 							aria-pressed={isFileTreeOpen}
-							size="icon-sm"
+							size="icon"
 							variant="ghost"
 							className={cn(
 								"p-0",
@@ -254,7 +254,7 @@ export default function ProjectTopBar({
 					render={(
 						<Button
 						aria-label={m.projectSettings()}
-						size="icon-sm"
+						size="icon"
 						variant="secondary"
 						onClick={openSettingsDialog}
 					/>
