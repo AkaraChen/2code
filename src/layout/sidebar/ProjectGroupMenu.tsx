@@ -1,5 +1,5 @@
+import { CheckIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { FiCheck, FiPlus, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import {
 	ContextMenuGroup,
@@ -110,7 +110,7 @@ export function ProjectGroupMenu({
 										void handleAssign(group.id);
 									}}
 								>
-									<FiCheck className={isCurrent ? "" : "opacity-0"} />
+									<CheckIcon className={isCurrent ? "" : "opacity-0"} />
 									<span className="min-w-0 flex-1 truncate">
 										{group.name}
 									</span>
@@ -130,7 +130,7 @@ export function ProjectGroupMenu({
 								void handleAssign(null);
 							}}
 						>
-							<FiX />
+							<XIcon />
 							{m.removeFromProjectGroup()}
 						</ContextMenuItem>
 					</>
@@ -168,7 +168,7 @@ export function ProjectGroupMenu({
 						disabled={isPending}
 						onClick={() => setIsCreating(true)}
 					>
-						<FiPlus />
+						<PlusIcon />
 						{m.createProjectGroup()}
 					</ContextMenuItem>
 				)}

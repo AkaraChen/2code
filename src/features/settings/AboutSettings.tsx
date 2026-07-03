@@ -1,7 +1,7 @@
+import { ArrowClockwiseIcon, DownloadSimpleIcon } from "@phosphor-icons/react";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import { FiDownload, FiRefreshCw } from "react-icons/fi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -161,7 +161,7 @@ export function AboutSettings() {
 						disabled={isChecking || isDownloading}
 						onClick={checkUpdate}
 					>
-						{isChecking ? <Spinner /> : <FiRefreshCw />}
+						{isChecking ? <Spinner /> : <ArrowClockwiseIcon />}
 						{m.checkForUpdates()}
 					</Button>
 					{showInstallUpdate ? (
@@ -170,7 +170,7 @@ export function AboutSettings() {
 							disabled={!canInstall || isDownloading}
 							onClick={installUpdate}
 						>
-							{isDownloading ? <Spinner /> : <FiDownload />}
+							{isDownloading ? <Spinner /> : <DownloadSimpleIcon />}
 							{m.installUpdate({ version: update.version })}
 						</Button>
 					) : null}

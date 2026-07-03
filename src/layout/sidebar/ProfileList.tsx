@@ -1,4 +1,4 @@
-import { FiPlus } from "react-icons/fi";
+import { PlusIcon } from "@phosphor-icons/react";
 import {
 	SidebarMenuSubButton,
 	SidebarMenuSubItem,
@@ -36,7 +36,7 @@ export function ProfileList({
 					data-sidebar-item
 					onClick={createDialog.onOpen}
 				>
-					<FiPlus />
+					<PlusIcon />
 					<span>{m.createProfile()}</span>
 				</SidebarMenuSubButton>
 				<CreateProfileDialog

@@ -1,3 +1,4 @@
+import { EyeIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -5,7 +6,6 @@ import {
 	NativeSelect,
 	NativeSelectOption,
 } from "@/components/ui/native-select";
-import { FiEye } from "react-icons/fi";
 import type { TerminalThemeId } from "@/features/terminal/themes";
 import {
 	terminalThemeIds,
@@ -36,7 +36,7 @@ function ThemeSelect({
 					className="ml-auto opacity-60 hover:opacity-100"
 					onClick={() => onPreview(value)}
 				>
-					<FiEye />
+					<EyeIcon />
 				</Button>
 			</div>
 			<NativeSelect

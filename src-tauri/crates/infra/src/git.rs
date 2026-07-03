@@ -691,7 +691,9 @@ fn branches_used_by_other_worktrees(folder: &str) -> HashSet<String> {
 		} else if let Some(branch_ref) = line.strip_prefix("branch ") {
 			let is_own = current_path.as_deref() == Some(own_toplevel.as_str());
 			if !is_own {
-				if let Some(name) = branch_ref.trim().strip_prefix("refs/heads/") {
+				if let Some(name) =
+					branch_ref.trim().strip_prefix("refs/heads/")
+				{
 					used.insert(name.to_string());
 				}
 			}
@@ -772,7 +774,10 @@ pub fn list_branches(folder: &str) -> Result<Vec<GitBranchInfo>, AppError> {
 	Ok(branches)
 }
 
-pub fn checkout_branch(folder: &str, branch_name: &str) -> Result<(), AppError> {
+pub fn checkout_branch(
+	folder: &str,
+	branch_name: &str,
+) -> Result<(), AppError> {
 	let output = command_without_windows_console("git")
 		.args(["checkout", branch_name])
 		.current_dir(folder)

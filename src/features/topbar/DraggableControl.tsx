@@ -1,6 +1,6 @@
+import { DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PiDotsSixVerticalBold } from "react-icons/pi";
 import {
 	Tooltip,
 	TooltipContent,
@@ -52,7 +52,7 @@ export function DraggableControl({
 				)}
 			>
 				<div className="flex items-center gap-1.5">
-					<PiDotsSixVerticalBold className="size-4 text-muted-foreground" />
+					<DotsSixVerticalIcon className="size-4 text-muted-foreground" />
 					<definition.icon size={DRAG_ICON_SIZE} />
 				</div>
 			</TooltipTrigger>

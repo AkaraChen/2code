@@ -8,8 +8,9 @@ Customizable project top bar with a draggable control registry. Users add/remove
 |------|------|
 | `registry.ts` | Control registry — maps control IDs to React components |
 | `types.ts` | `TopBarControl`, `TopBarConfig`, `ControlId` types |
-| `controls.tsx` | Built-in control components (branch display, git diff trigger, etc.) |
-| `store.ts` | Zustand store: `enabledControls: ControlId[]`, layout persistence |
+| `controls.tsx` | Built-in control components: GitHub Desktop, generic `editor`/`terminal` launchers, PR status |
+| `appLabels.ts` | Launch-app id → display-label map (shared by controls + settings selects) |
+| `store.ts` | Zustand store: `activeControls: ControlId[]`, `editorApp`/`terminalApp` choices, layout persistence |
 | `store.test.ts` | Unit tests for store logic |
 | `DraggableControl.tsx` | Drag-and-drop wrapper for reordering controls |
 | `AvailableControls.tsx` | Settings panel listing all registered controls |
@@ -19,6 +20,8 @@ Customizable project top bar with a draggable control registry. Users add/remove
 ## KEY PATTERNS
 
 **Registry pattern**: Controls are registered in `registry.ts` as a map. Adding a new control = add entry to registry + create component in `controls.tsx`. The store only stores `ControlId[]` (serializable), not component refs.
+
+**Generic editor/terminal controls**: There is one `editor` and one `terminal` control (phosphor icons). Which app they launch (`vscode`, `cursor`, `ghostty`, …) is a persisted store choice (`editorApp`/`terminalApp`) configured via selects in `TopBarSettings.tsx`; backend app ids in `handler/topbar.rs` are unchanged.
 
 **Separate from `git` feature**: Despite showing branch/diff info, `topbar` is independent — it _uses_ git hooks from `features/git/` but has its own store and settings.
 

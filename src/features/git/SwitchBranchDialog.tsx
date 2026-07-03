@@ -1,5 +1,5 @@
+import { GitBranchIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
-import { PiGitBranchFill } from "react-icons/pi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,7 +46,7 @@ function BranchRow({
 			)}
 			onClick={() => onCheckout(branch.name)}
 		>
-			<PiGitBranchFill className="size-3.5 shrink-0 text-muted-foreground" />
+			<GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
 			<span
 				className={cn(
 					"min-w-0 flex-1 truncate text-sm",

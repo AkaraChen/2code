@@ -1,117 +1,54 @@
 import {
-	SiCursor,
-	SiGhostty,
-	SiGithub,
-	SiIterm2,
-	SiSublimetext,
-	SiWarp,
-	SiWindsurf,
-	SiZedindustries,
-} from "@icons-pack/react-simple-icons";
-import { PiGitPullRequestFill, PiTerminalWindowFill } from "react-icons/pi";
-import { VscVscode } from "react-icons/vsc";
+	CodeIcon,
+	GithubLogoIcon,
+	GitPullRequestIcon,
+	TerminalWindowIcon,
+} from "@phosphor-icons/react";
 import * as m from "@/paraglide/messages.js";
 import {
-	CursorControl,
-	GhosttyControl,
-	GitPullRequestStatusControl,
+	EditorControl,
 	GithubDesktopControl,
-	Iterm2Control,
-	KittyControl,
-	SublimeTextControl,
-	VscodeControl,
-	WarpControl,
-	WindsurfControl,
-	ZedControl,
+	GitPullRequestStatusControl,
+	TerminalControl,
 } from "./controls";
-import type { ControlDefinition, ControlId, LaunchAppControlId } from "./types";
+import {
+	type ControlDefinition,
+	type ControlId,
+	editorAppIds,
+	type LaunchAppId,
+	terminalAppIds,
+} from "./types";
 
 const definitions: ControlDefinition[] = [
 	{
 		id: "github-desktop",
 		kind: "app",
 		label: () => m.topbarGithubDesktop(),
-		icon: SiGithub,
+		icon: GithubLogoIcon,
 		optionFields: [],
 		component: GithubDesktopControl,
 	},
 	{
-		id: "vscode",
+		id: "editor",
 		kind: "app",
-		label: () => m.topbarVscode(),
-		icon: VscVscode,
+		label: () => m.topbarEditor(),
+		icon: CodeIcon,
 		optionFields: [],
-		component: VscodeControl,
+		component: EditorControl,
 	},
 	{
-		id: "windsurf",
+		id: "terminal",
 		kind: "app",
-		label: () => m.topbarWindsurf(),
-		icon: SiWindsurf,
+		label: () => m.topbarTerminal(),
+		icon: TerminalWindowIcon,
 		optionFields: [],
-		component: WindsurfControl,
-	},
-	{
-		id: "cursor",
-		kind: "app",
-		label: () => m.topbarCursor(),
-		icon: SiCursor,
-		optionFields: [],
-		component: CursorControl,
-	},
-	{
-		id: "zed",
-		kind: "app",
-		label: () => m.topbarZed(),
-		icon: SiZedindustries,
-		optionFields: [],
-		component: ZedControl,
-	},
-	{
-		id: "sublime-text",
-		kind: "app",
-		label: () => m.topbarSublimeText(),
-		icon: SiSublimetext,
-		optionFields: [],
-		component: SublimeTextControl,
-	},
-	{
-		id: "ghostty",
-		kind: "app",
-		label: () => m.topbarGhostty(),
-		icon: SiGhostty,
-		optionFields: [],
-		component: GhosttyControl,
-	},
-	{
-		id: "iterm2",
-		kind: "app",
-		label: () => m.topbarIterm2(),
-		icon: SiIterm2,
-		optionFields: [],
-		component: Iterm2Control,
-	},
-	{
-		id: "kitty",
-		kind: "app",
-		label: () => m.topbarKitty(),
-		icon: PiTerminalWindowFill,
-		optionFields: [],
-		component: KittyControl,
-	},
-	{
-		id: "warp",
-		kind: "app",
-		label: () => m.topbarWarp(),
-		icon: SiWarp,
-		optionFields: [],
-		component: WarpControl,
+		component: TerminalControl,
 	},
 	{
 		id: "pr-status",
 		kind: "static",
 		label: () => m.topbarPrStatus(),
-		icon: PiGitPullRequestFill,
+		icon: GitPullRequestIcon,
 		optionFields: [],
 		component: GitPullRequestStatusControl,
 	},
@@ -124,14 +61,22 @@ export const controlRegistry = new Map<ControlId, ControlDefinition>(
 export const allControlIds: ControlId[] = definitions.map((d) => d.id);
 
 export function getSupportedControlIds(
-	supportedAppIds: readonly LaunchAppControlId[],
+	supportedAppIds: readonly LaunchAppId[],
 ) {
-	const supportedAppIdSet = new Set(supportedAppIds);
+	const supported = new Set<LaunchAppId>(supportedAppIds);
+	const isControlSupported = (id: ControlId) => {
+		switch (id) {
+			case "github-desktop":
+				return supported.has("github-desktop");
+			case "editor":
+				return editorAppIds.some((app) => supported.has(app));
+			case "terminal":
+				return terminalAppIds.some((app) => supported.has(app));
+			default:
+				return true;
+		}
+	};
 	return definitions
-		.filter(
-			(def) =>
-				def.kind === "static" ||
-				supportedAppIdSet.has(def.id as LaunchAppControlId),
-		)
+		.filter((def) => isControlSupported(def.id))
 		.map((def) => def.id);
 }

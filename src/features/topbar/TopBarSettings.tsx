@@ -11,20 +11,33 @@ import {
 import { arrayMove } from "@dnd-kit/sortable";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+	NativeSelect,
+	NativeSelectOption,
+} from "@/components/ui/native-select";
 import * as m from "@/paraglide/messages.js";
 import { getErrorMessage } from "@/shared/lib/errors";
+import { launchAppLabels } from "./appLabels";
 import { AvailableControls } from "./AvailableControls";
 import { DraggableControl } from "./DraggableControl";
 import { useSupportedTopbarAppIds } from "./hooks";
 import { controlRegistry, getSupportedControlIds } from "./registry";
 import { useTopBarStore } from "./store";
 import { TopBarPreview } from "./TopBarPreview";
-import type { ControlId } from "./types";
+import {
+	type ControlId,
+	isEditorAppId,
+	isTerminalAppId,
+} from "./types";
 
 export function TopBarSettings() {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const setActiveControls = useTopBarStore((s) => s.setActiveControls);
 	const resetToDefaults = useTopBarStore((s) => s.resetToDefaults);
+	const editorApp = useTopBarStore((s) => s.editorApp);
+	const setEditorApp = useTopBarStore((s) => s.setEditorApp);
+	const terminalApp = useTopBarStore((s) => s.terminalApp);
+	const setTerminalApp = useTopBarStore((s) => s.setTerminalApp);
 	const [activeId, setActiveId] = useState<ControlId | null>(null);
 	const {
 		data: supportedAppIds = [],
@@ -36,6 +49,14 @@ export function TopBarSettings() {
 
 	const supportedControlIds = useMemo(
 		() => getSupportedControlIds(supportedAppIds),
+		[supportedAppIds],
+	);
+	const installedEditorApps = useMemo(
+		() => supportedAppIds.filter(isEditorAppId),
+		[supportedAppIds],
+	);
+	const installedTerminalApps = useMemo(
+		() => supportedAppIds.filter(isTerminalAppId),
 		[supportedAppIds],
 	);
 	const supportedControlIdSet = useMemo(
@@ -171,6 +192,58 @@ export function TopBarSettings() {
 					) : null}
 				</DragOverlay>
 			</DndContext>
+			<div className="flex flex-col gap-3">
+				{installedEditorApps.length > 0 && (
+					<label className="flex items-center justify-between gap-4">
+						<span className="text-sm font-medium">
+							{m.topbarEditorApp()}
+						</span>
+						<NativeSelect
+							size="sm"
+							value={
+								installedEditorApps.includes(editorApp)
+									? editorApp
+									: installedEditorApps[0]
+							}
+							onChange={(e) => {
+								const value = e.target.value;
+								if (isEditorAppId(value)) setEditorApp(value);
+							}}
+						>
+							{installedEditorApps.map((id) => (
+								<NativeSelectOption key={id} value={id}>
+									{launchAppLabels[id]()}
+								</NativeSelectOption>
+							))}
+						</NativeSelect>
+					</label>
+				)}
+				{installedTerminalApps.length > 0 && (
+					<label className="flex items-center justify-between gap-4">
+						<span className="text-sm font-medium">
+							{m.topbarTerminalApp()}
+						</span>
+						<NativeSelect
+							size="sm"
+							value={
+								installedTerminalApps.includes(terminalApp)
+									? terminalApp
+									: installedTerminalApps[0]
+							}
+							onChange={(e) => {
+								const value = e.target.value;
+								if (isTerminalAppId(value)) setTerminalApp(value);
+							}}
+						>
+							{installedTerminalApps.map((id) => (
+								<NativeSelectOption key={id} value={id}>
+									{launchAppLabels[id]()}
+								</NativeSelectOption>
+							))}
+						</NativeSelect>
+					</label>
+				)}
+			</div>
 			<Button
 				variant="outline"
 				size="sm"

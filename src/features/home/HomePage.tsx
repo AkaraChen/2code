@@ -1,5 +1,5 @@
+import { FolderIcon, FolderPlusIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo } from "react";
-import { FiFolder, FiFolderPlus } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import {
 	Empty,
@@ -37,7 +37,7 @@ export default function HomePage() {
 				data-tauri-drag-region
 				className="flex h-[52px] items-center gap-2 border-b px-5"
 			>
-				<FiFolder className="size-4 text-muted-foreground" />
+				<FolderIcon className="size-4 text-muted-foreground" />
 				<h1 className="select-none text-sm font-semibold">{m.home()}</h1>
 			</header>
 
@@ -46,7 +46,7 @@ export default function HomePage() {
 					<Empty>
 						<EmptyHeader>
 							<EmptyMedia variant="icon">
-								<FiFolderPlus />
+								<FolderPlusIcon />
 							</EmptyMedia>
 							<EmptyTitle>{m.emptyProjectsTitle()}</EmptyTitle>
 							<EmptyDescription>{m.emptyProjectsDesc()}</EmptyDescription>

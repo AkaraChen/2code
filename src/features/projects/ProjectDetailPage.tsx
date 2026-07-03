@@ -1,5 +1,5 @@
+import { CaretDownIcon, PlusIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { useMemo } from "react";
-import { FiChevronDown, FiPlus, FiTerminal } from "react-icons/fi";
 import { Navigate, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,7 +75,7 @@ export default function ProjectDetailPage() {
 			<Empty>
 				<EmptyHeader>
 					<EmptyMedia variant="icon">
-						<FiTerminal />
+						<TerminalWindowIcon />
 					</EmptyMedia>
 					<EmptyTitle>{m.noTerminalsOpen()}</EmptyTitle>
 					<EmptyDescription>
@@ -89,7 +89,7 @@ export default function ProjectDetailPage() {
 							className={hasTemplates ? "rounded-r-none" : undefined}
 							onClick={terminalTemplateActions.createDefaultTerminal}
 						>
-							<FiPlus />
+							<PlusIcon />
 							{m.newTerminal()}
 						</Button>
 						{hasTemplates ? (
@@ -104,7 +104,7 @@ export default function ProjectDetailPage() {
 										/>
 									}
 								>
-									<FiChevronDown />
+									<CaretDownIcon />
 								</DropdownMenuTrigger>
 								<DropdownMenuContent className="min-w-56 p-1">
 									<TerminalTemplateDropdownContent

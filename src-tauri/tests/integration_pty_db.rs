@@ -84,12 +84,7 @@ fn pty_context(
 
 fn wait_for_flush_sender(ctx: &PtyContext, session_id: &str) {
 	for _ in 0..50 {
-		if ctx
-			.flush_senders
-			.lock()
-			.unwrap()
-			.contains_key(session_id)
-		{
+		if ctx.flush_senders.lock().unwrap().contains_key(session_id) {
 			return;
 		}
 		std::thread::sleep(Duration::from_millis(20));
@@ -822,9 +817,7 @@ fn restore_session_closes_live_old_session() {
 		let sessions =
 			service::pty::list_project_sessions(&mut conn, &project.id)
 				.unwrap();
-		assert!(!sessions
-			.iter()
-			.any(|session| session.id == old_session_id));
+		assert!(!sessions.iter().any(|session| session.id == old_session_id));
 		assert!(sessions
 			.iter()
 			.any(|session| session.id == result.new_session_id));

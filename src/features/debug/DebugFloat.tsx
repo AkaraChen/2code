@@ -1,5 +1,5 @@
+import { WrenchIcon } from "@phosphor-icons/react";
 import { useCallback } from "react";
-import { FiTool } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import * as m from "@/paraglide/messages.js";
 import DebugLogDialog from "./DebugLogDialog";
@@ -22,7 +22,7 @@ export default function DebugFloat() {
 				className="fixed right-16 bottom-4 z-50 rounded-full"
 				onClick={openPanel}
 			>
-				<FiTool />
+				<WrenchIcon />
 			</Button>
 			<DebugLogDialog
 				isOpen={panelOpen}

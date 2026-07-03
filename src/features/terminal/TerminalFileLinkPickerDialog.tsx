@@ -1,5 +1,5 @@
+import { FileTextIcon } from "@phosphor-icons/react";
 import { memo, useCallback } from "react";
-import { FiFileText } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import {
 	Dialog,
@@ -40,7 +40,7 @@ const CandidateRow = memo(({
 					{candidate.relative_path}
 				</div>
 			</div>
-			<FiFileText aria-hidden="true" className="size-3.5 shrink-0" />
+			<FileTextIcon aria-hidden="true" className="size-3.5 shrink-0" />
 		</button>
 	);
 });

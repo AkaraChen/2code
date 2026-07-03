@@ -1,11 +1,6 @@
+import { CopySimpleIcon, MinusIcon, SquareIcon, XIcon } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
-import {
-	VscChromeClose,
-	VscChromeMaximize,
-	VscChromeMinimize,
-	VscChromeRestore,
-} from "react-icons/vsc";
 
 const ICON_SIZE = 12;
 
@@ -26,16 +21,16 @@ function ControlIcon({
 	isMaximized: boolean;
 }) {
 	if (kind === "minimize") {
-		return <VscChromeMinimize size={ICON_SIZE} />;
+		return <MinusIcon size={ICON_SIZE} />;
 	}
 	if (kind === "maximize") {
 		return isMaximized ? (
-			<VscChromeRestore size={ICON_SIZE} />
+			<CopySimpleIcon size={ICON_SIZE} />
 		) : (
-			<VscChromeMaximize size={ICON_SIZE} />
+			<SquareIcon size={ICON_SIZE} />
 		);
 	}
-	return <VscChromeClose size={ICON_SIZE} />;
+	return <XIcon size={ICON_SIZE} />;
 }
 
 function ControlButton({

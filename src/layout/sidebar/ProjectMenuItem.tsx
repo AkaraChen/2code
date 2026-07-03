@@ -1,10 +1,5 @@
+import { CaretDownIcon, CaretRightIcon, PlusIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
-import {
-	FiChevronDown,
-	FiChevronRight,
-	FiPlus,
-	FiTerminal,
-} from "react-icons/fi";
 import { NavLink } from "react-router";
 import {
 	ContextMenu,
@@ -153,7 +148,7 @@ export function ProjectMenuItem({
 							createProfileDialog.onOpen();
 						}}
 					>
-						<FiPlus className="hidden group-hover/project-item:block group-focus-within/project-item:block" />
+						<PlusIcon className="hidden group-hover/project-item:block group-focus-within/project-item:block" />
 						{defaultAgentIndicator && (
 							<AgentStatusDot
 								status={defaultAgentIndicator}
@@ -177,7 +172,7 @@ export function ProjectMenuItem({
 						);
 					}}
 				>
-					{expanded ? <FiChevronDown /> : <FiChevronRight />}
+					{expanded ? <CaretDownIcon /> : <CaretRightIcon />}
 				</SidebarMenuAction>
 			)}
 
@@ -189,7 +184,7 @@ export function ProjectMenuItem({
 							isActive={isDefaultActive}
 							data-sidebar-item
 						>
-							<FiTerminal />
+							<TerminalWindowIcon />
 							<OverflowTooltipText
 								displayValue={defaultProfileLabel}
 								tooltipValue={defaultProfileLabel}

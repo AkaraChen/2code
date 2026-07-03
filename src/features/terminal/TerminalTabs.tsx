@@ -1,3 +1,4 @@
+import { TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
 import claudeIconUrl from "@lobehub/icons-static-svg/icons/claude-color.svg";
 import clineIconUrl from "@lobehub/icons-static-svg/icons/cline.svg";
 import codexIconUrl from "@lobehub/icons-static-svg/icons/codex-color.svg";
@@ -6,7 +7,6 @@ import kimiIconUrl from "@lobehub/icons-static-svg/icons/kimi-color.svg";
 import openClawIconUrl from "@lobehub/icons-static-svg/icons/openclaw-color.svg";
 import opencodeIconUrl from "@lobehub/icons-static-svg/icons/opencode.svg";
 import qoderIconUrl from "@lobehub/icons-static-svg/icons/qoder-color.svg";
-import { RiCloseLine } from "@remixicon/react";
 import {
 	lazy,
 	Suspense,
@@ -17,7 +17,6 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -96,7 +95,7 @@ function getTerminalTabIcon(title: string) {
 		lowerTitle.includes(keyword),
 	);
 
-	if (!match) return <FiTerminal size={14} />;
+	if (!match) return <TerminalWindowIcon size={14} />;
 
 	return (
 		<img
@@ -127,7 +126,7 @@ function TabCloseButton({
 				onClose();
 			}}
 		>
-			<RiCloseLine className="size-3" />
+			<XIcon className="size-3" />
 		</button>
 	);
 }

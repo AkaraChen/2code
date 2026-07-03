@@ -1,7 +1,7 @@
+import { ArrowsOutSimpleIcon } from "@phosphor-icons/react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { PiArrowsOutSimple } from "react-icons/pi";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -175,7 +175,7 @@ function ChangesFileList({
 	return (
 		<>
 			<div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto">
-				<div className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-background/95 px-3 py-2.5 backdrop-blur">
+				<div className="sticky top-0 z-[1] flex items-center gap-2 border-b px-3 py-2.5 backdrop-blur">
 					<Checkbox
 						aria-label={m.gitCommitIncludeAll()}
 						checked={files.length > 0 && includedCount === files.length}
@@ -194,7 +194,7 @@ function ChangesFileList({
 							className="ml-auto size-6 p-0 text-muted-foreground"
 							onClick={onMaximize}
 						>
-							<PiArrowsOutSimple />
+							<ArrowsOutSimpleIcon />
 						</Button>
 					) : null}
 				</div>

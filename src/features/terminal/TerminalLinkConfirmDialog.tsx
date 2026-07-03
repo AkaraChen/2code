@@ -1,6 +1,6 @@
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback } from "react";
-import { FiChevronDown } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -111,7 +111,7 @@ export function TerminalLinkConfirmDialog({
 									/>
 								}
 							>
-								<FiChevronDown />
+								<CaretDownIcon />
 							</DropdownMenuTrigger>
 							<DropdownMenuContent className="min-w-52">
 								{browsers.map((browser) => (

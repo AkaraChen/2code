@@ -1,3 +1,4 @@
+import { TrashIcon } from "@phosphor-icons/react";
 import {
 	type ChangeEvent,
 	memo,
@@ -7,7 +8,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { FiTrash2 } from "react-icons/fi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,7 +110,7 @@ function DebugLogContent() {
 					variant="ghost"
 					onClick={clear}
 				>
-					<FiTrash2 />
+					<TrashIcon />
 				</Button>
 			</div>
 

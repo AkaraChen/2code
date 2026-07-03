@@ -513,10 +513,7 @@ pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	repo::profile::delete_record(conn, id)
 }
 
-pub fn delete_with_context(
-	ctx: &PtyContext,
-	id: &str,
-) -> Result<(), AppError> {
+pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder, session_ids) = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let (profile, project_folder) =

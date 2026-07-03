@@ -40,8 +40,10 @@ pub async fn delete_profile(
 	id: String,
 ) -> Result<(), AppError> {
 	let ctx = crate::bridge::build_pty_context(&app);
-	super::run_blocking(move || service::profile::delete_with_context(&ctx, &id))
-		.await
+	super::run_blocking(move || {
+		service::profile::delete_with_context(&ctx, &id)
+	})
+	.await
 }
 
 #[tauri::command]

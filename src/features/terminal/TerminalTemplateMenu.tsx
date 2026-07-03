@@ -1,5 +1,5 @@
+import { PlusIcon } from "@phosphor-icons/react";
 import { memo, useCallback, useState } from "react";
-import { FiPlus } from "react-icons/fi";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -220,7 +220,7 @@ export default function TerminalTemplateMenu({
 					/>
 				)}
 			>
-				<FiPlus />
+				<PlusIcon />
 				<span>{m.newTerminal()}</span>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent sideOffset={8}>

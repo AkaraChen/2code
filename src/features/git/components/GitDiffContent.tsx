@@ -1,3 +1,4 @@
+import { ChatTextIcon } from "@phosphor-icons/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
@@ -8,7 +9,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { FiMessageSquare } from "react-icons/fi";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -522,7 +522,7 @@ export default function GitDiffContent({
 						size="sm"
 						onClick={handleOpenReviewQueue}
 					>
-						<FiMessageSquare />
+						<ChatTextIcon />
 						<span className="text-sm font-medium">Review Queue</span>
 						<span className="min-w-5 rounded-full bg-primary-foreground/20 px-1.5 text-center text-xs font-semibold leading-5">
 							{reviewComments.length}

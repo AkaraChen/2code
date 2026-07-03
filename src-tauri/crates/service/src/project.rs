@@ -60,10 +60,7 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
-pub fn delete_with_context(
-	ctx: &PtyContext,
-	id: &str,
-) -> Result<(), AppError> {
+pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
 	let (project, session_ids) = {
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let project = repo::project::find_by_id(conn, id)?;

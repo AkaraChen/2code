@@ -1,3 +1,4 @@
+import { CheckIcon, DotsSixVerticalIcon, FolderIcon, GearSixIcon, HouseIcon, PencilSimpleLineIcon, PlusIcon, StarIcon } from "@phosphor-icons/react";
 import {
 	closestCenter,
 	DndContext,
@@ -15,8 +16,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
-import { FiCheck, FiEdit3, FiFolder, FiHome, FiPlus, FiSettings, FiStar } from "react-icons/fi";
-import { PiDotsSixVerticalBold } from "react-icons/pi";
 import { matchPath, useLocation } from "react-router";
 import { toast } from "sonner";
 import {
@@ -223,7 +222,7 @@ function SortableProjectRow({
 						disabled ? "cursor-default" : "cursor-grab",
 					)}
 				>
-					<PiDotsSixVerticalBold />
+					<DotsSixVerticalIcon />
 				</span>
 				<ProjectAvatar projectId={project.id} projectName={project.name} />
 				<span>{project.name}</span>
@@ -234,7 +233,7 @@ function SortableProjectRow({
 				aria-pressed={isPinned}
 				onClick={() => onTogglePinned(project)}
 			>
-				<FiStar />
+				<StarIcon />
 			</SidebarMenuAction>
 		</SidebarMenuItem>
 	);
@@ -279,9 +278,9 @@ function SortableGroupRow({
 						disabled ? "cursor-default" : "cursor-grab",
 					)}
 				>
-					<PiDotsSixVerticalBold />
+					<DotsSixVerticalIcon />
 				</span>
-				<FiFolder />
+				<FolderIcon />
 				<span>{entry.group.name}</span>
 			</SidebarMenuButton>
 			<SidebarMenuBadge>{entry.projects.length}</SidebarMenuBadge>
@@ -508,7 +507,7 @@ export default function AppSidebar() {
 								<SidebarGroup>
 									<SidebarGroupContent>
 										<SidebarMenu>
-											<SidebarLink to="/" icon={<FiHome />}>
+											<SidebarLink to="/" icon={<HouseIcon />}>
 												{m.home()}
 											</SidebarLink>
 										</SidebarMenu>
@@ -575,14 +574,14 @@ export default function AppSidebar() {
 												className="right-9 bg-sidebar-accent text-sidebar-accent-foreground"
 												onClick={toggleReorderMode}
 											>
-												<FiCheck />
+												<CheckIcon />
 											</SidebarGroupAction>
 											<SidebarGroupAction
 												id="add-project-button"
 												aria-label={m.newProject()}
 												onClick={createDialog.onOpen}
 											>
-												<FiPlus />
+												<PlusIcon />
 											</SidebarGroupAction>
 										</SidebarGroupLabel>
 										<SidebarGroupContent>
@@ -702,14 +701,14 @@ export default function AppSidebar() {
 													className="right-9"
 													onClick={toggleReorderMode}
 												>
-													<FiEdit3 />
+													<PencilSimpleLineIcon />
 												</SidebarGroupAction>
 												<SidebarGroupAction
 													id="add-project-button"
 													aria-label={m.newProject()}
 													onClick={createDialog.onOpen}
 												>
-													<FiPlus />
+													<PlusIcon />
 												</SidebarGroupAction>
 											</SidebarGroupLabel>
 											<SidebarGroupContent>
@@ -740,7 +739,7 @@ export default function AppSidebar() {
 						</SidebarContent>
 						<SidebarFooter className="shrink-0">
 							<SidebarMenu>
-								<SidebarLink to="/settings" icon={<FiSettings />}>
+								<SidebarLink to="/settings" icon={<GearSixIcon />}>
 									{m.settings()}
 								</SidebarLink>
 							</SidebarMenu>

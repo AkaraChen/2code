@@ -1,5 +1,5 @@
+import { UploadSimpleIcon } from "@phosphor-icons/react";
 import { useId } from "react";
-import { FiUpload } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -115,7 +115,7 @@ export default function CommitComposer({
 									{aheadCount}
 								</span>
 							)}
-							{isPushing ? <Spinner className="size-3" /> : <FiUpload />}
+							{isPushing ? <Spinner className="size-3" /> : <UploadSimpleIcon />}
 							{m.gitPushButton()}
 						</Button>
 					) : (

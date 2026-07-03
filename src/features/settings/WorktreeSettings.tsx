@@ -1,8 +1,8 @@
+import { FolderIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FiFolder, FiX } from "react-icons/fi";
 import * as m from "@/paraglide/messages.js";
 import { useWorktreeSettingsStore } from "./stores/worktreeSettingsStore";
 
@@ -41,7 +41,7 @@ export function WorktreeSettings() {
 					onClick={handleChooseFolder}
 					className="shrink-0"
 				>
-					<FiFolder />
+					<FolderIcon />
 					{m.chooseFolder()}
 				</Button>
 				<Button
@@ -52,7 +52,7 @@ export function WorktreeSettings() {
 					disabled={!defaultWorktreeDir}
 					className="shrink-0"
 				>
-					<FiX />
+					<XIcon />
 				</Button>
 			</div>
 		</Field>

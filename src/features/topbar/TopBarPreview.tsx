@@ -1,9 +1,9 @@
+import { GitBranchIcon } from "@phosphor-icons/react";
 import {
 	SortableContext,
 	horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { PiGitBranchFill } from "react-icons/pi";
 import * as m from "@/paraglide/messages.js";
 import { controlRegistry } from "./registry";
 import { DraggableControl } from "./DraggableControl";
@@ -28,7 +28,7 @@ export function TopBarPreview({ activeControls }: TopBarPreviewProps) {
 							My Project
 						</span>
 						<span className="flex select-none items-center gap-1 text-sm text-muted-foreground">
-							<PiGitBranchFill />
+							<GitBranchIcon />
 							<span>main</span>
 						</span>
 					</div>

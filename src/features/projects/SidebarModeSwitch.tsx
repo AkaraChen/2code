@@ -1,8 +1,4 @@
-import {
-	PiFolderSimpleFill,
-	PiGitBranchFill,
-	PiNoteFill,
-} from "react-icons/pi";
+import { FolderSimpleIcon, GitBranchIcon, NoteIcon } from "@phosphor-icons/react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	Tooltip,
@@ -15,9 +11,9 @@ import * as m from "@/paraglide/messages.js";
 export type ProfileSidebarMode = "files" | "git" | "notes";
 
 const MODE_ITEMS = [
-	{ value: "files", icon: PiFolderSimpleFill, label: m.sidebarFilesTab },
-	{ value: "git", icon: PiGitBranchFill, label: m.sidebarGitTab },
-	{ value: "notes", icon: PiNoteFill, label: m.notes },
+	{ value: "files", icon: FolderSimpleIcon, label: m.sidebarFilesTab },
+	{ value: "git", icon: GitBranchIcon, label: m.sidebarGitTab },
+	{ value: "notes", icon: NoteIcon, label: m.notes },
 ] as const;
 
 interface SidebarModeSwitchProps {

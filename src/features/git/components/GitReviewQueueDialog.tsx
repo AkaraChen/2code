@@ -1,8 +1,8 @@
+import { CopyIcon, TrashIcon } from "@phosphor-icons/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import type { CSSProperties, ChangeEvent } from "react";
 import { memo, useCallback, useMemo } from "react";
-import { FiCopy, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,7 +92,7 @@ const ReviewQueueCommentCard = memo(({
 					className="shrink-0"
 					onClick={handleDelete}
 				>
-					<FiTrash2 />
+					<TrashIcon />
 				</Button>
 			</div>
 			<div
@@ -182,7 +182,7 @@ export default function GitReviewQueueDialog({
 						onClick={handleCopyAll}
 						disabled={comments.length === 0}
 					>
-						<FiCopy />
+						<CopyIcon />
 						Copy
 					</Button>
 					<Button
@@ -190,7 +190,7 @@ export default function GitReviewQueueDialog({
 						onClick={handleCopyAndClearAll}
 						disabled={comments.length === 0}
 					>
-						<FiCopy />
+						<CopyIcon />
 						Copy and clear all
 					</Button>
 				</div>

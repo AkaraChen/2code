@@ -1,9 +1,9 @@
+import { SpinnerGapIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils"
-import { RiLoaderLine } from "@remixicon/react"
 
-function Spinner({ className, ...props }: React.ComponentProps<typeof RiLoaderLine>) {
+function Spinner({ className, ...props }: React.ComponentProps<typeof SpinnerGapIcon>) {
   return (
-    <RiLoaderLine data-slot="spinner" role="status" aria-label="Loading" className={cn("size-4 animate-spin", className)} {...props} />
+    <SpinnerGapIcon data-slot="spinner" role="status" aria-label="Loading" className={cn("size-4 animate-spin", className)} {...props} />
   )
 }
 

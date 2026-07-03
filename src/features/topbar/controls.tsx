@@ -1,17 +1,12 @@
 import {
-	SiCursor,
-	SiGhostty,
-	SiGithub,
-	SiIterm2,
-	SiSublimetext,
-	SiWarp,
-	SiWindsurf,
-	SiZedindustries,
-} from "@icons-pack/react-simple-icons";
+	CodeIcon,
+	GithubLogoIcon,
+	GitPullRequestIcon,
+	TerminalWindowIcon,
+} from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
-import { PiGitPullRequestFill, PiTerminalWindowFill } from "react-icons/pi";
-import { VscVscode } from "react-icons/vsc";
+import { useMemo } from "react";
 import { useGitPullRequestStatus } from "@/features/git/hooks";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +17,15 @@ import {
 import { useGitBranch } from "@/features/projects/hooks";
 import type { GitPullRequestStatus } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { useOpenTopbarApp } from "./hooks";
-import type { ControlProps, LaunchAppControlId } from "./types";
+import { launchAppLabels } from "./appLabels";
+import { useOpenTopbarApp, useSupportedTopbarAppIds } from "./hooks";
+import { useTopBarStore } from "./store";
+import {
+	type ControlProps,
+	editorAppIds,
+	type LaunchAppId,
+	terminalAppIds,
+} from "./types";
 
 function AppButton({
 	label,
@@ -32,7 +34,7 @@ function AppButton({
 	profile,
 }: ControlProps & {
 	label: string;
-	appId: LaunchAppControlId;
+	appId: LaunchAppId;
 	icon: ComponentType<{ size?: number | string }>;
 }) {
 	const openApp = useOpenTopbarApp();
@@ -61,112 +63,55 @@ function AppButton({
 	);
 }
 
+function useConfiguredApp(
+	preferredApp: LaunchAppId,
+	categoryAppIds: readonly LaunchAppId[],
+) {
+	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
+	return useMemo(() => {
+		const supported = new Set(supportedAppIds);
+		if (supported.has(preferredApp)) return preferredApp;
+		return categoryAppIds.find((id) => supported.has(id)) ?? null;
+	}, [categoryAppIds, preferredApp, supportedAppIds]);
+}
+
 export function GithubDesktopControl(props: ControlProps) {
 	return (
 		<AppButton
 			{...props}
 			label={m.topbarGithubDesktop()}
 			appId="github-desktop"
-			icon={SiGithub}
+			icon={GithubLogoIcon}
 		/>
 	);
 }
 
-export function VscodeControl(props: ControlProps) {
+export function EditorControl(props: ControlProps) {
+	const editorApp = useTopBarStore((s) => s.editorApp);
+	const appId = useConfiguredApp(editorApp, editorAppIds);
+	if (!appId) return null;
+
 	return (
 		<AppButton
 			{...props}
-			label={m.topbarVscode()}
-			appId="vscode"
-			icon={VscVscode}
+			label={`${m.topbarEditor()} · ${launchAppLabels[appId]()}`}
+			appId={appId}
+			icon={CodeIcon}
 		/>
 	);
 }
 
-export function WindsurfControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarWindsurf()}
-			appId="windsurf"
-			icon={SiWindsurf}
-		/>
-	);
-}
+export function TerminalControl(props: ControlProps) {
+	const terminalApp = useTopBarStore((s) => s.terminalApp);
+	const appId = useConfiguredApp(terminalApp, terminalAppIds);
+	if (!appId) return null;
 
-export function CursorControl(props: ControlProps) {
 	return (
 		<AppButton
 			{...props}
-			label={m.topbarCursor()}
-			appId="cursor"
-			icon={SiCursor}
-		/>
-	);
-}
-
-export function ZedControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarZed()}
-			appId="zed"
-			icon={SiZedindustries}
-		/>
-	);
-}
-
-export function SublimeTextControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarSublimeText()}
-			appId="sublime-text"
-			icon={SiSublimetext}
-		/>
-	);
-}
-
-export function GhosttyControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarGhostty()}
-			appId="ghostty"
-			icon={SiGhostty}
-		/>
-	);
-}
-
-export function Iterm2Control(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarIterm2()}
-			appId="iterm2"
-			icon={SiIterm2}
-		/>
-	);
-}
-
-export function KittyControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarKitty()}
-			appId="kitty"
-			icon={PiTerminalWindowFill}
-		/>
-	);
-}
-
-export function WarpControl(props: ControlProps) {
-	return (
-		<AppButton
-			{...props}
-			label={m.topbarWarp()}
-			appId="warp"
-			icon={SiWarp}
+			label={`${m.topbarTerminal()} · ${launchAppLabels[appId]()}`}
+			appId={appId}
+			icon={TerminalWindowIcon}
 		/>
 	);
 }
@@ -229,7 +174,7 @@ export function GitPullRequestStatusControl({
 					/>
 				}
 			>
-				<PiGitPullRequestFill size={16} />
+				<GitPullRequestIcon size={16} />
 				<span className="text-xs">{label}</span>
 			</TooltipTrigger>
 			<TooltipContent>{tooltip}</TooltipContent>

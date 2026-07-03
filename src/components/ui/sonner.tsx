@@ -1,8 +1,8 @@
+import { CheckCircleIcon, InfoIcon, SpinnerGapIcon, WarningCircleIcon, XCircleIcon } from "@phosphor-icons/react";
 "use client"
 
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { RiCheckboxCircleLine, RiInformationLine, RiErrorWarningLine, RiCloseCircleLine, RiLoaderLine } from "@remixicon/react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
@@ -13,19 +13,19 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       icons={{
         success: (
-          <RiCheckboxCircleLine className="size-4" />
+          <CheckCircleIcon className="size-4" />
         ),
         info: (
-          <RiInformationLine className="size-4" />
+          <InfoIcon className="size-4" />
         ),
         warning: (
-          <RiErrorWarningLine className="size-4" />
+          <WarningCircleIcon className="size-4" />
         ),
         error: (
-          <RiCloseCircleLine className="size-4" />
+          <XCircleIcon className="size-4" />
         ),
         loading: (
-          <RiLoaderLine className="size-4 animate-spin" />
+          <SpinnerGapIcon className="size-4 animate-spin" />
         ),
       }}
       style={

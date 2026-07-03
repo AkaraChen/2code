@@ -1,7 +1,9 @@
 use tauri::{ipc::Channel, AppHandle, State};
 use tokio::sync::mpsc;
 
-use crate::bridge::{PtyOutputReceiver, PtyOutputReceivers, PtyOutputSink, PtyOutputSinks};
+use crate::bridge::{
+	PtyOutputReceiver, PtyOutputReceivers, PtyOutputSink, PtyOutputSinks,
+};
 use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
@@ -137,7 +139,8 @@ pub fn attach_pty_output(
 		);
 	}
 	{
-		let mut receivers = receivers.lock().map_err(|_| AppError::LockError)?;
+		let mut receivers =
+			receivers.lock().map_err(|_| AppError::LockError)?;
 		receivers.insert(
 			session_id,
 			PtyOutputReceiver {
@@ -159,14 +162,17 @@ pub async fn stream_pty_output(
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
 	let receiver = {
-		let mut receivers = receivers.lock().map_err(|_| AppError::LockError)?;
+		let mut receivers =
+			receivers.lock().map_err(|_| AppError::LockError)?;
 		let Some(receiver) = receivers.get(&session_id) else {
 			return Ok(());
 		};
 		if receiver.stream_id != stream_id {
 			return Ok(());
 		}
-		receivers.remove(&session_id).map(|receiver| receiver.receiver)
+		receivers
+			.remove(&session_id)
+			.map(|receiver| receiver.receiver)
 	};
 	let Some(mut receiver) = receiver else {
 		return Ok(());

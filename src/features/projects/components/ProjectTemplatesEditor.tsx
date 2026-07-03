@@ -1,5 +1,5 @@
+import { PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useState } from "react";
-import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import {
 	Empty,
@@ -126,7 +126,7 @@ export function ProjectTemplatesEditor({
 										aria-label={m.editTerminalTemplate()}
 										onClick={() => openEdit(t.id)}
 									>
-										<FiEdit2 />
+										<PencilSimpleIcon />
 									</Button>
 									<Button
 										variant="ghost"
@@ -137,7 +137,7 @@ export function ProjectTemplatesEditor({
 										}
 										className="text-destructive hover:text-destructive"
 									>
-										<FiTrash2 />
+										<TrashIcon />
 									</Button>
 								</div>
 							</div>

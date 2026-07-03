@@ -1,5 +1,5 @@
+import { ArrowLeftIcon } from "@phosphor-icons/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { FiArrowLeft } from "react-icons/fi";
 import { memo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import type { GitCommit } from "@/generated";
@@ -30,7 +30,7 @@ function CommitHeader({
 				aria-label={m.backToCommitList()}
 				onClick={onBack}
 			>
-				<FiArrowLeft />
+				<ArrowLeftIcon />
 			</Button>
 			<div className="flex min-w-0 flex-1 flex-col">
 				<div className="line-clamp-1 text-sm font-medium">

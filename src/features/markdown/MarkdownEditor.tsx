@@ -1,3 +1,4 @@
+import { ArrowElbowDownRightIcon, CheckIcon, CodeIcon, CodepenLogoIcon, ColumnsIcon, FloppyDiskIcon, HashIcon, LinkIcon, ListBulletsIcon, ListIcon, MinusIcon, PlusIcon, TableIcon, TextBIcon, TextItalicIcon, TextTIcon, TrashIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageDescription, LanguageSupport, StreamLanguage } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -50,27 +51,6 @@ import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { $prose, type $Command } from "@milkdown/kit/utils";
 import { nord } from "@milkdown/theme-nord";
-import {
-	FiAlertCircle,
-	FiBold,
-	FiCheck,
-	FiCode,
-	FiCodepen,
-	FiColumns,
-	FiCornerDownRight,
-	FiHash,
-	FiItalic,
-	FiLink,
-	FiList,
-	FiMenu,
-	FiMinus,
-	FiPlus,
-	FiSave,
-	FiTable,
-	FiTrash2,
-	FiType,
-	FiX,
-} from "react-icons/fi";
 import { basicSetup } from "codemirror";
 import type { Ctx } from "@milkdown/kit/ctx";
 import { Badge } from "@/components/ui/badge";
@@ -546,11 +526,11 @@ function SaveStatusIndicator({ status }: { status: MarkdownEditorSaveStatus }) {
 	const content = useMemo(() => {
 		switch (status) {
 			case "saving":
-				return { icon: <FiSave />, label: m.notesSaving(), variant: "secondary" as const };
+				return { icon: <FloppyDiskIcon />, label: m.notesSaving(), variant: "secondary" as const };
 			case "saved":
-				return { icon: <FiCheck />, label: m.notesSaved(), variant: "default" as const };
+				return { icon: <CheckIcon />, label: m.notesSaved(), variant: "default" as const };
 			case "failed":
-				return { icon: <FiAlertCircle />, label: m.notesSaveFailedShort(), variant: "destructive" as const };
+				return { icon: <WarningCircleIcon />, label: m.notesSaveFailedShort(), variant: "destructive" as const };
 			default:
 				return null;
 		}
@@ -621,54 +601,54 @@ function MarkdownToolbar({
 							/>
 						}
 					>
-						<FiMenu />
+						<ListIcon />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent className="min-w-44">
 						<DropdownMenuItem
 							onClick={() => runCommand(turnIntoTextCommand)}
 						>
-							<FiType />
+							<TextTIcon />
 							{m.notesFormatParagraph()}
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							onClick={() => runCommand(wrapInHeadingCommand, 1)}
 						>
-							<FiHash />
+							<HashIcon />
 							{m.notesFormatHeading1()}
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							onClick={() => runCommand(wrapInHeadingCommand, 2)}
 						>
-							<FiHash />
+							<HashIcon />
 							{m.notesFormatHeading2()}
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							onClick={() => runCommand(wrapInHeadingCommand, 3)}
 						>
-							<FiHash />
+							<HashIcon />
 							{m.notesFormatHeading3()}
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							onClick={() => runCommand(wrapInBlockquoteCommand)}
 						>
-							<FiCornerDownRight />
+							<ArrowElbowDownRightIcon />
 							{m.notesFormatQuote()}
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							onClick={() => runCommand(createCodeBlockCommand)}
 						>
-							<FiCodepen />
+							<CodepenLogoIcon />
 							{m.notesFormatCodeBlock()}
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
 						>
-							<FiTable />
+							<TableIcon />
 							{m.notesInsertTable()}
 						</DropdownMenuItem>
 						<DropdownMenuItem onClick={() => runCommand(insertHrCommand)}>
-							<FiMinus />
+							<MinusIcon />
 							{m.notesInsertDivider()}
 						</DropdownMenuItem>
 					</DropdownMenuContent>
@@ -683,21 +663,21 @@ function MarkdownToolbar({
 					isActive={toolbarState.bold}
 					onRun={() => runCommand(toggleStrongCommand)}
 				>
-					<FiBold />
+					<TextBIcon />
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={`${m.notesFormatItalic()}  ⌘I`}
 					isActive={toolbarState.italic}
 					onRun={() => runCommand(toggleEmphasisCommand)}
 				>
-					<FiItalic />
+					<TextItalicIcon />
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={`${m.notesFormatCode()}  ⌘E`}
 					isActive={toolbarState.code}
 					onRun={() => runCommand(toggleInlineCodeCommand)}
 				>
-					<FiCode />
+					<CodeIcon />
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={m.notesFormatStrike()}
@@ -713,7 +693,7 @@ function MarkdownToolbar({
 					isActive={toolbarState.link}
 					onRun={openLinkEditor}
 				>
-					<FiLink />
+					<LinkIcon />
 				</NotesToolbarButton>
 			</div>
 
@@ -725,7 +705,7 @@ function MarkdownToolbar({
 					isActive={toolbarState.block === "bullet-list"}
 					onRun={() => runCommand(wrapInBulletListCommand)}
 				>
-					<FiList />
+					<ListBulletsIcon />
 				</NotesToolbarButton>
 				<NotesToolbarButton
 					label={m.notesFormatOrderedList()}
@@ -741,7 +721,7 @@ function MarkdownToolbar({
 					isActive={toolbarState.block === "quote"}
 					onRun={() => runCommand(wrapInBlockquoteCommand)}
 				>
-					<FiCornerDownRight />
+					<ArrowElbowDownRightIcon />
 				</NotesToolbarButton>
 			</div>
 
@@ -759,35 +739,35 @@ function MarkdownToolbar({
 						/>
 					}
 				>
-					<FiTable />
+					<TableIcon />
 				</DropdownMenuTrigger>
 				<DropdownMenuContent className="min-w-44">
 					<DropdownMenuItem
 						onClick={() => runCommand(insertTableCommand, { row: 3, col: 3 })}
 					>
-						<FiTable />
+						<TableIcon />
 						{m.notesInsertTable()}
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem onClick={() => runCommand(addRowAfterCommand)}>
-						<FiPlus />
+						<PlusIcon />
 						{m.notesTableAddRow()}
 					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => runCommand(addColAfterCommand)}>
-						<FiColumns />
+						<ColumnsIcon />
 						{m.notesTableAddColumn()}
 					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => runCommand(addRowBeforeCommand)}>
-						<FiPlus />
+						<PlusIcon />
 						{m.notesTableAddRowBefore()}
 					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => runCommand(addColBeforeCommand)}>
-						<FiColumns />
+						<ColumnsIcon />
 						{m.notesTableAddColumnBefore()}
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem onClick={() => runCommand(deleteSelectedCellsCommand)}>
-						<FiTrash2 />
+						<TrashIcon />
 						{m.notesTableDeleteCells()}
 					</DropdownMenuItem>
 				</DropdownMenuContent>
@@ -811,7 +791,7 @@ function MarkdownToolbar({
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={applyLink}
 					>
-						<FiCheck />
+						<CheckIcon />
 					</Button>
 					<Button
 						aria-label={m.notesRemoveLink()}
@@ -820,7 +800,7 @@ function MarkdownToolbar({
 						onMouseDown={(event) => event.preventDefault()}
 						onClick={removeLink}
 					>
-						<FiX />
+						<XIcon />
 					</Button>
 				</div>
 			)}

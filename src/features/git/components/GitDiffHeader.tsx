@@ -1,5 +1,5 @@
+import { GitBranchIcon, XIcon } from "@phosphor-icons/react";
 import { memo, useCallback, useMemo } from "react";
-import { FiGitBranch, FiX } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import {
 	DialogClose,
@@ -45,7 +45,7 @@ function GitDiffHeader({
 			<div className="flex min-w-0 items-center gap-3">
 				<DialogTitle className="min-w-0 flex-1 text-sm">
 					<span className="flex min-w-0 items-center gap-1.5">
-						<FiGitBranch className="size-4 shrink-0" />
+						<GitBranchIcon className="size-4 shrink-0" />
 						<span className="truncate">{branchName ?? "main"}</span>
 					</span>
 				</DialogTitle>
@@ -75,7 +75,7 @@ function GitDiffHeader({
 						/>
 					)}
 				>
-					<FiX />
+					<XIcon />
 				</DialogClose>
 			</div>
 		</DialogHeader>

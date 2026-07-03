@@ -1,4 +1,4 @@
-import { RiArrowDownSLine, RiArrowUpSLine, RiCloseLine } from "@remixicon/react";
+import { CaretDownIcon, CaretUpIcon, XIcon } from "@phosphor-icons/react";
 import type { SearchAddon } from "@xterm/addon-search";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,7 @@ export function TerminalSearchBar({
 				variant="ghost"
 				onClick={searchPrevious}
 			>
-				<RiArrowUpSLine />
+				<CaretUpIcon />
 			</Button>
 			<Button
 				type="button"
@@ -113,7 +113,7 @@ export function TerminalSearchBar({
 				variant="ghost"
 				onClick={() => searchNext()}
 			>
-				<RiArrowDownSLine />
+				<CaretDownIcon />
 			</Button>
 			<Button
 				type="button"
@@ -122,7 +122,7 @@ export function TerminalSearchBar({
 				variant="ghost"
 				onClick={close}
 			>
-				<RiCloseLine />
+				<XIcon />
 			</Button>
 		</div>
 	);

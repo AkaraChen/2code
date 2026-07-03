@@ -1,6 +1,6 @@
+import { PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import {
 	commandPreview,
@@ -129,7 +129,7 @@ export function GlobalTerminalTemplatesSettings() {
 										onClick={() => openEditDialog(template.id)}
 										disabled={replaceTemplates.isPending}
 									>
-										<FiEdit2 />
+										<PencilSimpleIcon />
 									</Button>
 									<Button
 										variant="ghost"
@@ -139,7 +139,7 @@ export function GlobalTerminalTemplatesSettings() {
 										disabled={replaceTemplates.isPending}
 										className="text-destructive hover:text-destructive"
 									>
-										<FiTrash2 />
+										<TrashIcon />
 									</Button>
 								</div>
 							</div>

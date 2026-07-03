@@ -1,3 +1,4 @@
+import { GearSixIcon, GitBranchIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import type { Dispatch } from "react";
 import {
@@ -13,11 +14,6 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-	PiGearSixFill,
-	PiGitBranchFill,
-	PiSidebarSimpleFill,
-} from "react-icons/pi";
 import { cn } from "@/lib/utils";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
 import SwitchBranchDialog from "@/features/git/SwitchBranchDialog";
@@ -57,7 +53,7 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 	if (!branch) return null;
 	return (
 		<span className="flex select-none items-center gap-1">
-			<PiGitBranchFill />
+			<GitBranchIcon className="shrink-0" />
 			<span>{branch}</span>
 		</span>
 	);
@@ -211,7 +207,7 @@ export default function ProjectTopBar({
 								}
 								style={{ display: "inline-flex" }}
 							>
-								<PiSidebarSimpleFill />
+								<SidebarSimpleIcon />
 							</motion.span>
 					</TooltipTrigger>
 					<TooltipContent>
@@ -260,7 +256,7 @@ export default function ProjectTopBar({
 					) : null
 				) : (
 					<span className="flex select-none items-center gap-1">
-						<PiGitBranchFill />
+						<GitBranchIcon className="shrink-0" />
 						<span className="truncate">{profile.branch_name}</span>
 					</span>
 				)}
@@ -294,7 +290,7 @@ export default function ProjectTopBar({
 					/>
 					)}
 				>
-					<PiGearSixFill />
+					<GearSixIcon />
 				</TooltipTrigger>
 				<TooltipContent>{m.projectSettings()}</TooltipContent>
 			</Tooltip>

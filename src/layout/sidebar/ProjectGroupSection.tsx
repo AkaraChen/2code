@@ -1,5 +1,5 @@
+import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import {
 	SidebarMenuBadge,
 	SidebarMenuButton,
@@ -55,7 +55,7 @@ export function ProjectGroupSection({
 					handleToggle();
 				}}
 			>
-				{collapsed ? <FiChevronRight /> : <FiChevronDown />}
+				{collapsed ? <CaretRightIcon /> : <CaretDownIcon />}
 				<span>{group.name}</span>
 			</SidebarMenuButton>
 			<SidebarMenuBadge>{projects.length}</SidebarMenuBadge>

@@ -1,3 +1,4 @@
+import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import {
 	autoUpdate,
 	computePosition,
@@ -15,7 +16,6 @@ import type {
 import { FileDiff } from "@pierre/diffs/react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlus, FiX } from "react-icons/fi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -455,7 +455,7 @@ function ActiveGitDiffFilePane({
 											setSelectedLines(null);
 										}}
 									>
-										<FiX />
+										<XIcon />
 									</Button>
 								</div>
 								<Textarea
@@ -472,7 +472,7 @@ function ActiveGitDiffFilePane({
 										disabled={!commentBody.trim()}
 										onClick={handleAddReviewComment}
 									>
-										<FiPlus />
+										<PlusIcon />
 										Add to queue
 									</Button>
 								</div>

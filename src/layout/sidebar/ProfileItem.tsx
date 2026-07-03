@@ -1,4 +1,4 @@
-import { FiGitBranch } from "react-icons/fi";
+import { GitBranchIcon } from "@phosphor-icons/react";
 import { NavLink } from "react-router";
 import {
 	ContextMenu,
@@ -52,7 +52,7 @@ export function ProfileItem({
 						/>
 					)}
 				>
-					<FiGitBranch />
+					<GitBranchIcon />
 					<OverflowTooltipText
 						displayValue={profile.branch_name}
 						tooltipValue={profile.branch_name}

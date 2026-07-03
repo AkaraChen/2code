@@ -1,7 +1,7 @@
+import { FolderIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useForm, useWatch } from "react-hook-form";
-import { FiEdit2, FiFolder } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,7 +104,7 @@ export default function CreateProjectDialog({
 							onClick={handleChooseFolder}
 						>
 							<div className="flex flex-col items-center gap-2">
-								<FiFolder className="size-6 text-muted-foreground" />
+								<FolderIcon className="size-6 text-muted-foreground" />
 								<span className="text-sm text-muted-foreground">
 									{m.chooseFolder()}
 								</span>
@@ -121,7 +121,7 @@ export default function CreateProjectDialog({
 									size="xs"
 									onClick={handleChooseFolder}
 								>
-									<FiEdit2 />
+									<PencilSimpleIcon />
 									{m.chooseFolder()}
 								</Button>
 							</div>

@@ -1,12 +1,5 @@
+import { BellIcon, CodeIcon, GearSixIcon, InfoIcon, MonitorIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { use, useState, type ReactNode } from "react";
-import {
-	FiBell,
-	FiCode,
-	FiInfo,
-	FiMonitor,
-	FiSettings,
-	FiTerminal,
-} from "react-icons/fi";
 import { useSearchParams } from "react-router";
 import {
 	Field,
@@ -64,12 +57,12 @@ const settingsTabs = [
 type SettingsTab = (typeof settingsTabs)[number];
 
 const settingsTabIcons: Record<SettingsTab, ReactNode> = {
-	general: <FiSettings />,
-	terminal: <FiTerminal />,
-	template: <FiCode />,
-	notification: <FiBell />,
-	topbar: <FiMonitor />,
-	about: <FiInfo />,
+	general: <GearSixIcon />,
+	terminal: <TerminalWindowIcon />,
+	template: <CodeIcon />,
+	notification: <BellIcon />,
+	topbar: <MonitorIcon />,
+	about: <InfoIcon />,
 };
 
 function readSettingsTab(value: string | null): SettingsTab {
@@ -106,7 +99,7 @@ export default function SettingsPage() {
 				data-tauri-drag-region
 				className="flex h-[52px] shrink-0 items-center gap-2 border-b px-5"
 			>
-				<FiSettings className="size-4 text-muted-foreground" />
+				<GearSixIcon className="size-4 text-muted-foreground" />
 				<h1 className="select-none text-sm font-semibold">{m.settings()}</h1>
 			</header>
 			<div className="min-h-0 flex-1 overflow-auto p-5">
