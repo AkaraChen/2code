@@ -81,7 +81,7 @@ export function ProjectMenuItem({
 	const expanded = userExpanded ?? true;
 
 	return (
-		<SidebarMenuItem>
+		<SidebarMenuItem className="group/project-item">
 			<ContextMenu open={menuOpen} onOpenChange={setMenuOpen}>
 				<ContextMenuTrigger
 					render={(
@@ -105,9 +105,6 @@ export function ProjectMenuItem({
 					<span className="min-w-0 flex-1 truncate font-medium">
 						{project.name}
 					</span>
-					{hasOnlyDefaultProfile && defaultAgentIndicator && (
-						<AgentStatusDot status={defaultAgentIndicator} />
-					)}
 				</ContextMenuTrigger>
 				<ContextMenuContent>
 					<ContextMenuGroup>
@@ -141,7 +138,6 @@ export function ProjectMenuItem({
 					<TooltipTrigger
 						render={(
 							<SidebarMenuAction
-								showOnHover
 								aria-label={m.createProfile()}
 							/>
 						)}
@@ -157,7 +153,13 @@ export function ProjectMenuItem({
 							createProfileDialog.onOpen();
 						}}
 					>
-						<FiPlus />
+						<FiPlus className="hidden group-hover/project-item:block group-focus-within/project-item:block" />
+						{defaultAgentIndicator && (
+							<AgentStatusDot
+								status={defaultAgentIndicator}
+								className="group-hover/project-item:hidden group-focus-within/project-item:hidden"
+							/>
+						)}
 					</TooltipTrigger>
 					<TooltipContent side="right">
 						{m.createProfile()}
