@@ -126,7 +126,7 @@ function TabCloseButton({
 				onClose();
 			}}
 		>
-			<XIcon className="size-3" />
+			<XIcon className="size-3" weight="regular" />
 		</button>
 	);
 }

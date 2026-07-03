@@ -55,7 +55,11 @@ export function ProjectGroupSection({
 					handleToggle();
 				}}
 			>
-				{collapsed ? <CaretRightIcon /> : <CaretDownIcon />}
+				{collapsed ? (
+					<CaretRightIcon weight="regular" />
+				) : (
+					<CaretDownIcon weight="regular" />
+				)}
 				<span>{group.name}</span>
 			</SidebarMenuButton>
 			<SidebarMenuBadge>{projects.length}</SidebarMenuBadge>

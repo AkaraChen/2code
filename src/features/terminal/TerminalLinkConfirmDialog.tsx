@@ -111,7 +111,7 @@ export function TerminalLinkConfirmDialog({
 									/>
 								}
 							>
-								<CaretDownIcon />
+								<CaretDownIcon weight="regular" />
 							</DropdownMenuTrigger>
 							<DropdownMenuContent className="min-w-52">
 								{browsers.map((browser) => (

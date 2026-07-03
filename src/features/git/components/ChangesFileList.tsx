@@ -194,7 +194,7 @@ function ChangesFileList({
 							className="ml-auto size-6 p-0 text-muted-foreground"
 							onClick={onMaximize}
 						>
-							<ArrowsOutSimpleIcon />
+							<ArrowsOutSimpleIcon weight="regular" />
 						</Button>
 					) : null}
 				</div>

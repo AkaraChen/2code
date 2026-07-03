@@ -104,7 +104,7 @@ export default function ProjectDetailPage() {
 										/>
 									}
 								>
-									<CaretDownIcon />
+									<CaretDownIcon weight="regular" />
 								</DropdownMenuTrigger>
 								<DropdownMenuContent className="min-w-56 p-1">
 									<TerminalTemplateDropdownContent

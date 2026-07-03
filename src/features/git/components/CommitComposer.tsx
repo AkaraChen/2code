@@ -87,26 +87,9 @@ export default function CommitComposer({
 					/>
 				</Field>
 
-				<div className="flex items-center justify-between gap-2">
-					{isDisabled ? (
-						<p className="flex-1 text-xs leading-snug text-muted-foreground">
-							{m.gitCommitShortcutHint()}
-						</p>
-					) : (
-						<p className="flex-1 text-xs leading-snug text-muted-foreground">
-							{m.gitCommitIncludedCount({
-								includedCount,
-								totalCount,
-							})}
-							{" • "}
-							{m.gitCommitShortcutHint()}
-						</p>
-					)}
-
+				<div className="flex items-center justify-end gap-2">
 					{isDisabled ? (
 						<Button
-							size="xs"
-							className="shrink-0"
 							disabled={isPushing || aheadCount === 0}
 							onClick={onPush}
 						>
@@ -115,17 +98,15 @@ export default function CommitComposer({
 									{aheadCount}
 								</span>
 							)}
-							{isPushing ? <Spinner className="size-3" /> : <UploadSimpleIcon />}
+							{isPushing ? <Spinner /> : <UploadSimpleIcon />}
 							{m.gitPushButton()}
 						</Button>
 					) : (
 						<Button
-							size="xs"
-							className="shrink-0"
 							disabled={!canSubmit || isPending}
 							onClick={onSubmit}
 						>
-							{isPending ? <Spinner className="size-3" /> : null}
+							{isPending ? <Spinner /> : null}
 							{m.gitCommitButton()}
 						</Button>
 					)}

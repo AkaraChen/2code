@@ -30,7 +30,7 @@ function CommitHeader({
 				aria-label={m.backToCommitList()}
 				onClick={onBack}
 			>
-				<ArrowLeftIcon />
+				<ArrowLeftIcon weight="regular" />
 			</Button>
 			<div className="flex min-w-0 flex-1 flex-col">
 				<div className="line-clamp-1 text-sm font-medium">

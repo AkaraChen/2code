@@ -104,7 +104,7 @@ export function TerminalSearchBar({
 				variant="ghost"
 				onClick={searchPrevious}
 			>
-				<CaretUpIcon />
+				<CaretUpIcon weight="regular" />
 			</Button>
 			<Button
 				type="button"
@@ -113,7 +113,7 @@ export function TerminalSearchBar({
 				variant="ghost"
 				onClick={() => searchNext()}
 			>
-				<CaretDownIcon />
+				<CaretDownIcon weight="regular" />
 			</Button>
 			<Button
 				type="button"

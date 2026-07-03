@@ -1,8 +1,11 @@
+import { IconContext } from "@phosphor-icons/react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-function Empty({ className, ...props }: React.ComponentProps<"div">) {
+const emptyIconDefaults = { weight: "regular" } as const
+
+function Empty({ children, className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty"
@@ -11,7 +14,9 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
         className
       )}
       {...props}
-    />
+    >
+      <IconContext value={emptyIconDefaults}>{children}</IconContext>
+    </div>
   )
 }
 

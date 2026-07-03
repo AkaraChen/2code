@@ -172,7 +172,11 @@ export function ProjectMenuItem({
 						);
 					}}
 				>
-					{expanded ? <CaretDownIcon /> : <CaretRightIcon />}
+					{expanded ? (
+						<CaretDownIcon weight="regular" />
+					) : (
+						<CaretRightIcon weight="regular" />
+					)}
 				</SidebarMenuAction>
 			)}
 

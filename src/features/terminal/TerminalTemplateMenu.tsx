@@ -220,7 +220,7 @@ export default function TerminalTemplateMenu({
 					/>
 				)}
 			>
-				<PlusIcon />
+				<PlusIcon weight="regular" />
 				<span>{m.newTerminal()}</span>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent sideOffset={8}>

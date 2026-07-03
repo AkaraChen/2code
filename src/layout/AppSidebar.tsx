@@ -574,14 +574,14 @@ export default function AppSidebar() {
 												className="right-9 bg-sidebar-accent text-sidebar-accent-foreground"
 												onClick={toggleReorderMode}
 											>
-												<CheckIcon />
+												<CheckIcon weight="regular" />
 											</SidebarGroupAction>
 											<SidebarGroupAction
 												id="add-project-button"
 												aria-label={m.newProject()}
 												onClick={createDialog.onOpen}
 											>
-												<PlusIcon />
+												<PlusIcon weight="regular" />
 											</SidebarGroupAction>
 										</SidebarGroupLabel>
 										<SidebarGroupContent>
@@ -701,14 +701,14 @@ export default function AppSidebar() {
 													className="right-9"
 													onClick={toggleReorderMode}
 												>
-													<PencilSimpleLineIcon />
+													<PencilSimpleLineIcon weight="regular" />
 												</SidebarGroupAction>
 												<SidebarGroupAction
 													id="add-project-button"
 													aria-label={m.newProject()}
 													onClick={createDialog.onOpen}
 												>
-													<PlusIcon />
+													<PlusIcon weight="regular" />
 												</SidebarGroupAction>
 											</SidebarGroupLabel>
 											<SidebarGroupContent>
