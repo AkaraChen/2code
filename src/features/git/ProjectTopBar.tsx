@@ -1,5 +1,4 @@
 import { GearSixIcon, GitBranchIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
-import { motion, useReducedMotion } from "motion/react";
 import type { Dispatch } from "react";
 import {
 	useCallback,
@@ -38,15 +37,13 @@ import {
 } from "@/features/topbar/registry";
 import { useTopBarStore } from "@/features/topbar/store";
 import type { Profile } from "@/generated";
+import { useAppSidebarStore } from "@/layout/sidebarStore";
 import * as m from "@/paraglide/messages.js";
-import { isWindowsPlatform } from "@/shared/lib/platform";
+import { isMacPlatform, isWindowsPlatform } from "@/shared/lib/platform";
 
-const FILE_TREE_TOGGLE_ICON_TRANSITION = {
-	duration: 0.12,
-	ease: [0.2, 0, 0.2, 1],
-} as const;
 const EMPTY_CONTROL_OPTIONS: Record<string, unknown> = {};
 const IS_WINDOWS_PLATFORM = isWindowsPlatform();
+const IS_MAC_PLATFORM = isMacPlatform();
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -122,7 +119,10 @@ export default function ProjectTopBar({
 		initialState,
 	);
 	const { data: supportedAppIds = [] } = useSupportedTopbarAppIds();
-	const prefersReducedMotion = useReducedMotion() ?? false;
+	const isAppSidebarCollapsed = useAppSidebarStore((s) => s.isCollapsed);
+	const toggleAppSidebarCollapsed = useAppSidebarStore(
+		(s) => s.toggleCollapsed,
+	);
 	const openGitDiffDialog = useCallback(() => {
 		dispatchGitDiff({ type: "switchTab", tab: "changes" });
 		setGitDiffOpen(true);
@@ -174,51 +174,30 @@ export default function ProjectTopBar({
 
 	const leftContent = (
 		<div className="flex items-center gap-2">
-			{onToggleFileTree && (
+			{isAppSidebarCollapsed && (
 				<Tooltip>
 					<TooltipTrigger
 						render={(
 							<Button
-							aria-label={isFileTreeOpen ? "Close file tree" : "Open file tree"}
-							aria-pressed={isFileTreeOpen}
-							size="icon"
-							variant="ghost"
-							className={cn(
-								"p-0",
-								isFileTreeOpen
-									? "bg-muted text-foreground hover:bg-muted"
-									: "text-muted-foreground",
-								!prefersReducedMotion &&
-									"transition-colors duration-200",
-							)}
-							onClick={onToggleFileTree}
-						/>
+								aria-label={m.expandSidebar()}
+								aria-expanded={false}
+								size="icon"
+								variant="ghost"
+								className="text-muted-foreground"
+								onClick={toggleAppSidebarCollapsed}
+							/>
 						)}
 					>
-							<motion.span
-								animate={{
-									rotate: isFileTreeOpen ? 0 : 180,
-									x: isFileTreeOpen ? 0 : -1,
-								}}
-								transition={
-									prefersReducedMotion
-										? { duration: 0 }
-										: FILE_TREE_TOGGLE_ICON_TRANSITION
-								}
-								style={{ display: "inline-flex" }}
-							>
-								<SidebarSimpleIcon />
-							</motion.span>
+						<SidebarSimpleIcon />
 					</TooltipTrigger>
-					<TooltipContent>
-						{isFileTreeOpen ? "Close file tree" : "Open file tree"} ⌘E
-					</TooltipContent>
+					<TooltipContent>{m.expandSidebar()}</TooltipContent>
 				</Tooltip>
 			)}
 			{sidebarMode && onSidebarModeChange && (
 				<SidebarModeSwitch
 					profileId={profile.id}
 					isActive={isActive}
+					isOpen={isFileTreeOpen}
 					mode={sidebarMode}
 					onModeChange={onSidebarModeChange}
 				/>
@@ -304,6 +283,8 @@ export default function ProjectTopBar({
 				className={cn(
 					"relative flex min-h-[44px] items-end justify-between px-4 pt-1 pb-1.5",
 					IS_WINDOWS_PLATFORM ? "pr-[118px]" : "pr-5",
+					// Clear the macOS traffic lights when the app sidebar is hidden.
+					IS_MAC_PLATFORM && isAppSidebarCollapsed && "pl-[84px]",
 				)}
 			>
 				{leftContent}

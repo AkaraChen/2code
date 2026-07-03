@@ -19,6 +19,7 @@ const MODE_ITEMS = [
 interface SidebarModeSwitchProps {
 	profileId: string;
 	isActive?: boolean;
+	isOpen?: boolean;
 	mode: ProfileSidebarMode;
 	onModeChange: (mode: ProfileSidebarMode) => void;
 }
@@ -26,6 +27,7 @@ interface SidebarModeSwitchProps {
 export default function SidebarModeSwitch({
 	profileId,
 	isActive = false,
+	isOpen = true,
 	mode,
 	onModeChange,
 }: SidebarModeSwitchProps) {
@@ -33,8 +35,10 @@ export default function SidebarModeSwitch({
 
 	return (
 		<Tabs
-			value={mode}
-			onValueChange={(value) => onModeChange(value as ProfileSidebarMode)}
+			value={isOpen ? mode : null}
+			onValueChange={(value) => {
+				if (value != null) onModeChange(value as ProfileSidebarMode);
+			}}
 		>
 			<TabsList className="h-7">
 				{MODE_ITEMS.map(({ value, icon: Icon, label }) => (
@@ -45,6 +49,7 @@ export default function SidebarModeSwitch({
 									value={value}
 									aria-label={label()}
 									className="px-2"
+									onClick={() => onModeChange(value)}
 								/>
 							)}
 						>

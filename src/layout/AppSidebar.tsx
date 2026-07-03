@@ -1,4 +1,4 @@
-import { CheckIcon, DotsSixVerticalIcon, FolderIcon, GearSixIcon, HouseIcon, PencilSimpleLineIcon, PlusIcon, StarIcon } from "@phosphor-icons/react";
+import { CheckIcon, DotsSixVerticalIcon, FolderIcon, GearSixIcon, HouseIcon, PencilSimpleLineIcon, PlusIcon, SidebarSimpleIcon, StarIcon } from "@phosphor-icons/react";
 import {
 	closestCenter,
 	DndContext,
@@ -300,6 +300,8 @@ export default function AppSidebar() {
 	const updateSidebarLayout = useUpdateProjectSidebarLayout();
 	const isReorderMode = useAppSidebarStore((s) => s.isReorderMode);
 	const toggleReorderMode = useAppSidebarStore((s) => s.toggleReorderMode);
+	const isCollapsed = useAppSidebarStore((s) => s.isCollapsed);
+	const toggleCollapsed = useAppSidebarStore((s) => s.toggleCollapsed);
 	const sidebarWidth = useAppSidebarStore((s) => s.width);
 	const setSidebarWidth = useAppSidebarStore((s) => s.setWidth);
 	const resize = useHorizontalResize({
@@ -467,6 +469,8 @@ export default function AppSidebar() {
 		e.preventDefault();
 	}, []);
 
+	if (isCollapsed) return null;
+
 	return (
 		<>
 			<SidebarProvider
@@ -488,7 +492,8 @@ export default function AppSidebar() {
 							data-tauri-drag-region
 							className={cn(
 								"shrink-0",
-								IS_MAC_PLATFORM ? "pt-7" : "pt-2",
+								// Keep the header clear of the lowered macOS traffic lights (y:26 + 12px).
+								IS_MAC_PLATFORM ? "pt-8" : "pt-2",
 							)}
 						>
 							<SidebarMenu>
@@ -499,6 +504,13 @@ export default function AppSidebar() {
 									>
 										<span className="font-semibold">2Code</span>
 									</SidebarMenuButton>
+									<SidebarMenuAction
+										aria-label={m.collapseSidebar()}
+										aria-expanded
+										onClick={toggleCollapsed}
+									>
+										<SidebarSimpleIcon weight="regular" />
+									</SidebarMenuAction>
 								</SidebarMenuItem>
 							</SidebarMenu>
 						</SidebarHeader>

@@ -12,6 +12,8 @@
 	"settings": "设置",
 	"about": "关于",
 	"sideNavLabel": "侧边导航",
+	"collapseSidebar": "收起侧边栏",
+	"expandSidebar": "展开侧边栏",
 	"editProjectOrder": "编辑项目顺序",
 	"doneEditingProjectOrder": "完成项目排序",
 	"pinProject": "置顶项目",

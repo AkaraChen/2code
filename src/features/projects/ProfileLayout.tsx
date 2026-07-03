@@ -27,11 +27,18 @@ export default function ProfileLayout({
 	const handleToggleFileTree = useCallback(() => {
 		setFileTreeOpen((isOpen) => !isOpen);
 	}, []);
-	const handleSidebarModeChange = useCallback((mode: ProfileSidebarMode) => {
-		setSidebarMode(mode);
-		// Picking a mode while the sidebar is closed should reveal it.
-		setFileTreeOpen(true);
-	}, []);
+	const handleSidebarModeChange = useCallback(
+		(mode: ProfileSidebarMode) => {
+			// Re-clicking the active mode while open closes the sidebar.
+			if (fileTreeOpen && mode === sidebarMode) {
+				setFileTreeOpen(false);
+				return;
+			}
+			setSidebarMode(mode);
+			setFileTreeOpen(true);
+		},
+		[fileTreeOpen, sidebarMode],
+	);
 	const handleOpenFile = useCallback(
 		(filePath: string) => {
 			openFileTab(profile.id, filePath);

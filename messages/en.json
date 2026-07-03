@@ -12,6 +12,8 @@
 	"settings": "Settings",
 	"about": "About",
 	"sideNavLabel": "Side navigation",
+	"collapseSidebar": "Collapse sidebar",
+	"expandSidebar": "Expand sidebar",
 	"editProjectOrder": "Edit project order",
 	"doneEditingProjectOrder": "Done editing project order",
 	"pinProject": "Pin project",
