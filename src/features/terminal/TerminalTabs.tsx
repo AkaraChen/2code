@@ -390,8 +390,8 @@ export default function TerminalTabs({
 			onValueChange={handleTabChange}
 			className="flex h-full w-full min-w-0 flex-col gap-0"
 		>
-			<div className="flex w-full min-w-0 items-center overflow-x-auto overflow-y-hidden px-2 py-1">
-				<TabsList className="w-max flex-none">
+			<div className="flex w-full min-w-0 items-center overflow-x-auto overflow-y-hidden border-b p-0">
+				<TabsList variant="line" className="w-max flex-none">
 					{profile ? (
 						<Tooltip>
 							<TooltipTrigger
