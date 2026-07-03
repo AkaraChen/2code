@@ -71,10 +71,7 @@ pub fn create_session(
 	// Build the command with shell-specific args based on injection type
 	let mut cmd = build_injected_command(options.shell, options.injection);
 
-	// Common env vars for all shells
-	cmd.env("TERM", "xterm-256color");
-	cmd.env("TERM_PROGRAM", "vscode"); // Makes VS Code's shell integration scripts work
-	cmd.env("VSCODE_INJECTION", "1"); // Tells scripts they were injected (not manually installed)
+	apply_terminal_env(&mut cmd);
 
 	// Apply shell-specific env vars
 	if let ShellInjection::Zsh {
@@ -235,6 +232,14 @@ fn build_injected_command(
 	}
 }
 
+fn apply_terminal_env(cmd: &mut CommandBuilder) {
+	cmd.env_remove("NO_COLOR");
+	cmd.env("TERM", "xterm-256color");
+	cmd.env("COLORTERM", "truecolor");
+	cmd.env("TERM_PROGRAM", "vscode"); // Makes VS Code's shell integration scripts work
+	cmd.env("VSCODE_INJECTION", "1"); // Tells scripts they were injected (not manually installed)
+}
+
 pub fn write_to_pty(
 	sessions: &PtySessionMap,
 	session_id: &str,
@@ -349,6 +354,31 @@ mod tests {
 		let tracker = create_thread_tracker();
 		let inner = tracker.lock().unwrap();
 		assert!(inner.is_empty());
+	}
+
+	#[test]
+	fn terminal_env_advertises_truecolor() {
+		let mut cmd = CommandBuilder::new("sh");
+		cmd.env("NO_COLOR", "1");
+		apply_terminal_env(&mut cmd);
+
+		assert_eq!(cmd.get_env("NO_COLOR"), None);
+		assert_eq!(
+			cmd.get_env("TERM").and_then(|v| v.to_str()),
+			Some("xterm-256color")
+		);
+		assert_eq!(
+			cmd.get_env("COLORTERM").and_then(|v| v.to_str()),
+			Some("truecolor")
+		);
+		assert_eq!(
+			cmd.get_env("TERM_PROGRAM").and_then(|v| v.to_str()),
+			Some("vscode")
+		);
+		assert_eq!(
+			cmd.get_env("VSCODE_INJECTION").and_then(|v| v.to_str()),
+			Some("1")
+		);
 	}
 
 	#[test]
