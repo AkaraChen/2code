@@ -9,7 +9,8 @@ use crate::no_window::command_without_windows_console;
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
 use model::project::{
-	GitAuthor, GitCommit, GitDiffSnapshot, GitDiffStats, GitPullRequestStatus,
+	GitAuthor, GitBranchInfo, GitCommit, GitDiffSnapshot, GitDiffStats,
+	GitPullRequestStatus,
 };
 
 #[derive(serde::Deserialize)]
@@ -622,6 +623,166 @@ pub fn ahead_count(folder: &str) -> u32 {
 			.unwrap_or(0),
 		_ => 0,
 	}
+}
+
+/// Default branch name: origin/HEAD symbolic ref, else existing main/master.
+fn trunk_branch_name(folder: &str) -> Option<String> {
+	let output = command_without_windows_console("git")
+		.args(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+		.current_dir(folder)
+		.output();
+	if let Ok(o) = output {
+		if o.status.success() {
+			let name = String::from_utf8_lossy(&o.stdout).trim().to_string();
+			if let Some(stripped) = name.strip_prefix("origin/") {
+				if !stripped.is_empty() {
+					return Some(stripped.to_string());
+				}
+			} else if !name.is_empty() {
+				return Some(name);
+			}
+		}
+	}
+
+	["main", "master"].iter().find_map(|candidate| {
+		let verified = command_without_windows_console("git")
+			.args([
+				"show-ref",
+				"--verify",
+				"--quiet",
+				&format!("refs/heads/{candidate}"),
+			])
+			.current_dir(folder)
+			.status()
+			.map(|status| status.success())
+			.unwrap_or(false);
+		verified.then(|| (*candidate).to_string())
+	})
+}
+
+/// Branches checked out in a git worktree other than `folder` itself.
+fn branches_used_by_other_worktrees(folder: &str) -> HashSet<String> {
+	let own_toplevel = command_without_windows_console("git")
+		.args(["rev-parse", "--show-toplevel"])
+		.current_dir(folder)
+		.output()
+		.ok()
+		.filter(|o| o.status.success())
+		.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+		.unwrap_or_default();
+
+	let output = command_without_windows_console("git")
+		.args(["worktree", "list", "--porcelain"])
+		.current_dir(folder)
+		.output();
+	let Ok(output) = output else {
+		return HashSet::new();
+	};
+	if !output.status.success() {
+		return HashSet::new();
+	}
+
+	let stdout = String::from_utf8_lossy(&output.stdout);
+	let mut used = HashSet::new();
+	let mut current_path: Option<String> = None;
+	for line in stdout.lines() {
+		if let Some(path) = line.strip_prefix("worktree ") {
+			current_path = Some(path.trim().to_string());
+		} else if let Some(branch_ref) = line.strip_prefix("branch ") {
+			let is_own = current_path.as_deref() == Some(own_toplevel.as_str());
+			if !is_own {
+				if let Some(name) = branch_ref.trim().strip_prefix("refs/heads/") {
+					used.insert(name.to_string());
+				}
+			}
+		}
+	}
+	used
+}
+
+/// (ahead, behind) of `branch_name` relative to the current HEAD.
+fn branch_ahead_behind(folder: &str, branch_name: &str) -> (u32, u32) {
+	let output = command_without_windows_console("git")
+		.args([
+			"rev-list",
+			"--left-right",
+			"--count",
+			&format!("HEAD...{branch_name}"),
+		])
+		.current_dir(folder)
+		.output();
+
+	let Ok(output) = output else {
+		return (0, 0);
+	};
+	if !output.status.success() {
+		return (0, 0);
+	}
+
+	let stdout = String::from_utf8_lossy(&output.stdout);
+	let mut parts = stdout.split_whitespace();
+	// left = commits only on HEAD (branch is behind), right = only on branch (ahead)
+	let behind = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+	let ahead = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+	(ahead, behind)
+}
+
+pub fn list_branches(folder: &str) -> Result<Vec<GitBranchInfo>, AppError> {
+	let output = command_without_windows_console("git")
+		.args([
+			"for-each-ref",
+			"refs/heads",
+			"--format=%(refname:short)",
+			"--sort=-committerdate",
+		])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+
+	let current = branch(folder).unwrap_or_default();
+	let trunk = trunk_branch_name(folder);
+	let used = branches_used_by_other_worktrees(folder);
+
+	let branches = String::from_utf8_lossy(&output.stdout)
+		.lines()
+		.map(str::trim)
+		.filter(|name| !name.is_empty())
+		.map(|name| {
+			let is_current = name == current;
+			let (ahead, behind) = if is_current {
+				(0, 0)
+			} else {
+				branch_ahead_behind(folder, name)
+			};
+			GitBranchInfo {
+				name: name.to_string(),
+				is_current,
+				ahead,
+				behind,
+				is_used: used.contains(name),
+				is_trunk: trunk.as_deref() == Some(name),
+			}
+		})
+		.collect();
+
+	Ok(branches)
+}
+
+pub fn checkout_branch(folder: &str, branch_name: &str) -> Result<(), AppError> {
+	let output = command_without_windows_console("git")
+		.args(["checkout", branch_name])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		return Err(AppError::GitError(
+			String::from_utf8_lossy(&output.stderr).trim().to_string(),
+		));
+	}
+	Ok(())
 }
 
 pub fn branch_unique_commits(

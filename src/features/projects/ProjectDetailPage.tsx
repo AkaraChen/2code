@@ -42,9 +42,6 @@ export default function ProjectDetailPage() {
 	const hasFileTabs = useFileViewerTabsStore(
 		(s) => (s.profiles[profileId ?? ""]?.tabs.length ?? 0) > 0,
 	);
-	const notesActive = useFileViewerTabsStore(
-		(s) => s.profiles[profileId ?? ""]?.notesActive ?? false,
-	);
 	const terminalTemplateActions = useTerminalTemplateActions({
 		profileId: profile?.id ?? "",
 		cwd: profile?.worktree_path ?? "",
@@ -72,7 +69,7 @@ export default function ProjectDetailPage() {
 		return <Navigate to="/" replace />;
 	}
 
-	const shouldRenderEmptyState = !hasTabs && !hasFileTabs && !notesActive;
+	const shouldRenderEmptyState = !hasTabs && !hasFileTabs;
 	const emptyTerminalState = (
 		<div className="flex h-full items-center justify-center">
 			<Empty>

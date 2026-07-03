@@ -30,9 +30,7 @@ describe("topbar registry", () => {
 		expect(getSupportedControlIds(["cursor", "warp"])).toEqual([
 			"cursor",
 			"warp",
-			"git-diff",
 			"pr-status",
-			"reveal-in-finder",
 		]);
 	});
 });

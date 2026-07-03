@@ -163,6 +163,21 @@ export function getGitBinaryPreviewRevision(
 	return file.newObjectId ?? file.name;
 }
 
+export function resolveWorktreeFilePath(
+	worktreePath: string,
+	relativePath: string,
+) {
+	const separator = worktreePath.includes("\\") ? "\\" : "/";
+	const normalizedRelativePath =
+		separator === "\\"
+			? relativePath.replace(/\//g, "\\")
+			: relativePath.replace(/\\/g, "/");
+
+	return worktreePath.endsWith("/") || worktreePath.endsWith("\\")
+		? `${worktreePath}${normalizedRelativePath}`
+		: `${worktreePath}${separator}${normalizedRelativePath}`;
+}
+
 export function reconcileIncludedFiles(
 	nextFileNames: string[],
 	prevIncluded: Set<string>,

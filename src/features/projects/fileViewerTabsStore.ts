@@ -14,7 +14,6 @@ interface ProfileFileViewerState {
 	tabs: FileViewerTab[];
 	activeFilePath: string | null;
 	fileTabActive: boolean;
-	notesActive: boolean;
 }
 
 interface FileViewerTabsStore {
@@ -22,7 +21,6 @@ interface FileViewerTabsStore {
 	openFile: (profileId: string, filePath: string) => void;
 	closeTab: (profileId: string, filePath: string) => void;
 	setFileActive: (profileId: string, filePath: string) => void;
-	setNotesActive: (profileId: string) => void;
 	setTerminalActive: (profileId: string) => void;
 }
 
@@ -130,7 +128,6 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 						tabs: [],
 						activeFilePath: null,
 						fileTabActive: false,
-						notesActive: false,
 					};
 					const alreadyOpen = existing.tabs.some(
 						(t) => t.filePath === filePath,
@@ -141,7 +138,6 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 							: [...existing.tabs, { filePath, title }],
 						activeFilePath: filePath,
 						fileTabActive: true,
-						notesActive: false,
 					};
 				});
 			},
@@ -165,7 +161,7 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 							profile.fileTabActive = false;
 						}
 					}
-					if (profile.tabs.length === 0 && !profile.notesActive) {
+					if (profile.tabs.length === 0) {
 						delete state.profiles[profileId];
 					}
 				});
@@ -180,23 +176,6 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 					if (!profile) return;
 					profile.activeFilePath = filePath;
 					profile.fileTabActive = true;
-					profile.notesActive = false;
-				});
-			},
-
-			setNotesActive(profileId) {
-				set((state) => {
-					const existing = state.profiles[profileId] ?? {
-						tabs: [],
-						activeFilePath: null,
-						fileTabActive: false,
-						notesActive: false,
-					};
-					state.profiles[profileId] = {
-						...existing,
-						fileTabActive: false,
-						notesActive: true,
-					};
 				});
 			},
 
@@ -205,7 +184,6 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 					const profile = state.profiles[profileId];
 					if (!profile) return;
 					profile.fileTabActive = false;
-					profile.notesActive = false;
 					if (profile.tabs.length === 0) delete state.profiles[profileId];
 				});
 			},
@@ -217,9 +195,7 @@ export const useFileViewerTabsStore = create<FileViewerTabsStore>()(
 function useFileViewerProfileIds() {
 	return useFileViewerTabsStore(
 		useShallow((s) =>
-			Object.keys(s.profiles).filter(
-				(id) => s.profiles[id].tabs.length > 0 || s.profiles[id].notesActive,
-			),
+			Object.keys(s.profiles).filter((id) => s.profiles[id].tabs.length > 0),
 		),
 	);
 }

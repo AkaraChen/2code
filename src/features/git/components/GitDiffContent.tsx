@@ -40,7 +40,11 @@ import {
 	useGitPush,
 } from "../hooks";
 import type { DiffReviewComment } from "../reviewQueue";
-import { reconcileIncludedFiles, toggleIncludedFileName } from "../utils";
+import {
+	reconcileIncludedFiles,
+	resolveWorktreeFilePath,
+	toggleIncludedFileName,
+} from "../utils";
 import { ChangesDiffPane, ChangesSidebar } from "./GitDiffChangesPanel";
 import { HistoryDiffPane, HistorySidebar } from "./GitDiffHistoryPanel";
 import GitReviewQueueDialog from "./GitReviewQueueDialog";
@@ -56,18 +60,6 @@ interface GitDiffContentProps {
   state: GitDiffState;
   dispatch: React.Dispatch<GitDiffAction>;
   options: FileDiffOptions<unknown>;
-}
-
-function resolveWorktreeFilePath(worktreePath: string, relativePath: string) {
-  const separator = worktreePath.includes("\\") ? "\\" : "/";
-  const normalizedRelativePath =
-  separator === "\\" ?
-  relativePath.replace(/\//g, "\\") :
-  relativePath.replace(/\\/g, "/");
-
-  return worktreePath.endsWith("/") || worktreePath.endsWith("\\") ?
-  `${worktreePath}${normalizedRelativePath}` :
-  `${worktreePath}${separator}${normalizedRelativePath}`;
 }
 
 export default function GitDiffContent({

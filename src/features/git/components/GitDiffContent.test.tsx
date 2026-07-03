@@ -1,5 +1,5 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "../gitDiffReducer";
 import GitDiffContent from "./GitDiffContent";
@@ -61,9 +61,16 @@ function renderContent() {
 	);
 }
 
+// Scoped to file rows — the list header has its own select-all checkbox.
+function getFileCheckboxes() {
+	return screen
+		.getAllByTestId("git-file-list-item")
+		.map((item) => within(item).getByRole("checkbox"));
+}
+
 async function expectIncludedStates(states: boolean[]) {
 	await waitFor(() => {
-		const checkboxes = screen.getAllByRole("checkbox");
+		const checkboxes = getFileCheckboxes();
 		expect(checkboxes).toHaveLength(states.length);
 		for (const [index, checked] of states.entries()) {
 			expect(checkboxes[index]).toHaveAttribute(
@@ -90,7 +97,7 @@ describe("git diff content included file reconciliation", () => {
 
 		await expectIncludedStates([true, true]);
 
-		fireEvent.click(screen.getAllByRole("checkbox")[0]);
+		fireEvent.click(getFileCheckboxes()[0]);
 		await expectIncludedStates([false, true]);
 
 		view.rerender(

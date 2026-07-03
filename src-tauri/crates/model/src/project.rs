@@ -112,6 +112,18 @@ pub struct GitDiffSnapshot {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct GitBranchInfo {
+	pub name: String,
+	pub is_current: bool,
+	pub ahead: u32,
+	pub behind: u32,
+	/// Checked out in another git worktree — checkout here would fail.
+	pub is_used: bool,
+	/// The repository's default branch (origin/HEAD, else main/master).
+	pub is_trunk: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GitBinaryPreview {
 	pub file_path: String,
 }

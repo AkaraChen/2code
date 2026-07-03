@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
-	GitBinaryPreview, GitCommit, GitDiffSnapshot, GitDiffStats,
+	GitBinaryPreview, GitBranchInfo, GitCommit, GitDiffSnapshot, GitDiffStats,
 	GitPullRequestStatus, Project, ProjectConfig, ProjectSidebarLayoutUpdate,
 	ProjectWithProfiles,
 };
@@ -252,6 +252,35 @@ pub async fn get_git_ahead_count(
 	super::run_blocking(move || {
 		let worktree_path = profile_worktree_path(&db, &profile_id)?;
 		Ok(infra::git::ahead_count(&worktree_path))
+	})
+	.await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn list_git_branches(
+	profile_id: String,
+	state: State<'_, DbPool>,
+) -> Result<Vec<GitBranchInfo>, AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::list_branches(&worktree_path)
+	})
+	.await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn checkout_git_branch(
+	profile_id: String,
+	branch: String,
+	state: State<'_, DbPool>,
+) -> Result<(), AppError> {
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		infra::git::checkout_branch(&worktree_path, &branch)
 	})
 	.await
 }

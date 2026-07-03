@@ -8,23 +8,16 @@ import {
 	SiWindsurf,
 	SiZedindustries,
 } from "@icons-pack/react-simple-icons";
-import {
-	PiFolderOpenFill,
-	PiGitDiffFill,
-	PiGitPullRequestFill,
-	PiTerminalWindowFill,
-} from "react-icons/pi";
+import { PiGitPullRequestFill, PiTerminalWindowFill } from "react-icons/pi";
 import { VscVscode } from "react-icons/vsc";
 import * as m from "@/paraglide/messages.js";
 import {
 	CursorControl,
 	GhosttyControl,
-	GitDiffControl,
 	GitPullRequestStatusControl,
 	GithubDesktopControl,
 	Iterm2Control,
 	KittyControl,
-	RevealInFinderControl,
 	SublimeTextControl,
 	VscodeControl,
 	WarpControl,
@@ -115,28 +108,12 @@ const definitions: ControlDefinition[] = [
 		component: WarpControl,
 	},
 	{
-		id: "git-diff",
-		kind: "static",
-		label: () => m.topbarGitDiff(),
-		icon: PiGitDiffFill,
-		optionFields: [],
-		component: GitDiffControl,
-	},
-	{
 		id: "pr-status",
 		kind: "static",
 		label: () => m.topbarPrStatus(),
 		icon: PiGitPullRequestFill,
 		optionFields: [],
 		component: GitPullRequestStatusControl,
-	},
-	{
-		id: "reveal-in-finder",
-		kind: "static",
-		label: () => m.revealInFinder(),
-		icon: PiFolderOpenFill,
-		optionFields: [],
-		component: RevealInFinderControl,
 	},
 ];
 

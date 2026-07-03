@@ -17,7 +17,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { FiFileText, FiTerminal } from "react-icons/fi";
+import { FiTerminal } from "react-icons/fi";
 import { useShallow } from "zustand/react/shallow";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -25,11 +25,6 @@ import {
 	TabsList,
 	TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
@@ -45,7 +40,6 @@ import {
 	hasFileTreeTerminalDropPayload,
 	readFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
-import * as m from "@/paraglide/messages.js";
 import { AgentStatusDot } from "./AgentStatusDot";
 import { useCloseTerminalTab } from "./hooks";
 import { restorePendingTerminalTab } from "./restoration";
@@ -54,7 +48,6 @@ import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
 const FileViewerPane = lazy(() => import("@/features/projects/FileViewerPane"));
-const ProfileNotesEditor = lazy(() => import("@/features/profiles/ProfileNotesEditor"));
 const UnsavedFileCloseDialog = lazy(() => import("@/features/projects/UnsavedFileCloseDialog"));
 
 // Stable fallbacks — module-level constants prevent new object refs each render,
@@ -67,10 +60,8 @@ const EMPTY_FILE_PROFILE = {
 	tabs: [] as { filePath: string; title: string }[],
 	activeFilePath: null as string | null,
 	fileTabActive: false,
-	notesActive: false,
 };
 const EMPTY_DIRTY_FILE_PATHS: string[] = [];
-const NOTES_TAB_VALUE = "__profile-notes__";
 const TAB_TRIGGER_LAYOUT_CLASS = "max-w-56 flex-none justify-start";
 const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "claude", iconUrl: claudeIconUrl },
@@ -196,13 +187,11 @@ export default function TerminalTabs({
 	);
 	const closeFileTab = useFileViewerTabsStore((state) => state.closeTab);
 	const setFileActive = useFileViewerTabsStore((state) => state.setFileActive);
-	const setNotesActive = useFileViewerTabsStore((state) => state.setNotesActive);
 	const setTerminalActive = useFileViewerTabsStore((state) => state.setTerminalActive);
 
 	const fileTabs = fileViewerState.tabs;
 	const activeFilePath = fileViewerState.activeFilePath;
 	const fileTabActive = fileViewerState.fileTabActive;
-	const notesActive = fileViewerState.notesActive;
 	const dirtyFilePathSet = useMemo(
 		() => new Set(dirtyFilePaths),
 		[dirtyFilePaths],
@@ -214,19 +203,10 @@ export default function TerminalTabs({
 		title: string;
 	} | null>(null);
 
-	const activeValue = notesActive
-		? NOTES_TAB_VALUE
-		: fileTabActive
-			? activeFilePath
-			: activeTabId;
+	const activeValue = fileTabActive ? activeFilePath : activeTabId;
 
 	const handleTabChange = useCallback((value: string | null) => {
 		if (!value) return;
-
-		if (value === NOTES_TAB_VALUE) {
-			setNotesActive(profileId);
-			return;
-		}
 
 		const isFileTab = fileTabs.some((tab) => tab.filePath === value);
 		if (isFileTab) {
@@ -244,7 +224,6 @@ export default function TerminalTabs({
 		profileId,
 		setActiveTab,
 		setFileActive,
-		setNotesActive,
 		setTerminalActive,
 		tabs,
 	]);
@@ -392,24 +371,6 @@ export default function TerminalTabs({
 		>
 			<div className="flex w-full min-w-0 items-center overflow-x-auto overflow-y-hidden border-b p-0">
 				<TabsList variant="line" className="w-max flex-none">
-					{profile ? (
-						<Tooltip>
-							<TooltipTrigger
-								render={(
-									<TabsTrigger
-										value={NOTES_TAB_VALUE}
-										aria-label={m.notes()}
-										className="max-w-56 flex-none justify-start"
-									/>
-								)}
-							>
-								<FiFileText size={14} />
-								<span>{m.notes()}</span>
-							</TooltipTrigger>
-							<TooltipContent>{m.notes()}</TooltipContent>
-						</Tooltip>
-					) : null}
-
 					{tabs.map((tab) => {
 						const status = agentStatusByTabId.get(tab.id);
 						const completion = agentCompletionByTabId.get(tab.id);
@@ -480,7 +441,7 @@ export default function TerminalTabs({
 			</div>
 
 			{/* File viewer — static content, safe to conditionally render */}
-			{fileTabActive && !notesActive && activeFilePath && (
+			{fileTabActive && activeFilePath && (
 				<div className="min-h-0 flex-1 overflow-hidden">
 					<AsyncBoundary
 						fallback={(
@@ -502,28 +463,10 @@ export default function TerminalTabs({
 				</div>
 			)}
 
-			{/* Notes editor — conditionally rendered when notes surface is active */}
-			{notesActive && profile && (
-				<div className="min-h-0 flex-1 overflow-hidden">
-					<AsyncBoundary
-						fallback={(
-							<div className="flex h-32 items-center justify-center">
-								<Spinner />
-							</div>
-						)}
-						errorFallback={({ error, onRetry }) => (
-							<InlineError error={error} height="32" onRetry={onRetry} />
-						)}
-					>
-						<ProfileNotesEditor profile={profile} />
-					</AsyncBoundary>
-				</div>
-			)}
-
 			{/* Terminal area — NEVER unmounted, hidden via CSS when file tab is active */}
 			<div
 				className="relative min-h-0 flex-1"
-				style={{ display: fileTabActive || notesActive ? "none" : "block" }}
+				style={{ display: fileTabActive ? "none" : "block" }}
 				ref={activeTerminalDropRef}
 			>
 				{tabs.map((tab) => (
@@ -539,8 +482,7 @@ export default function TerminalTabs({
 						{tab.restore ? (
 							isActive &&
 							tab.id === activeTabId &&
-							!fileTabActive &&
-							!notesActive ? (
+							!fileTabActive ? (
 								<Suspense
 									fallback={(
 										<div className="flex h-full items-center justify-center">
@@ -561,8 +503,7 @@ export default function TerminalTabs({
 								isActive={
 									isActive &&
 									tab.id === activeTabId &&
-									!fileTabActive &&
-									!notesActive
+									!fileTabActive
 								}
 							/>
 						)}

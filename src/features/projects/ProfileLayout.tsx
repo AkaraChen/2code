@@ -1,7 +1,8 @@
 import { useCallback, type ReactNode, useState } from "react";
 import ProjectTopBar from "@/features/git/ProjectTopBar";
 import CommandPalette from "@/features/projects/CommandPalette";
-import FileTreePanel from "@/features/projects/FileTreePanel";
+import ProfileSidebar from "@/features/projects/ProfileSidebar";
+import type { ProfileSidebarMode } from "@/features/projects/SidebarModeSwitch";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import type { Profile } from "@/generated";
 
@@ -21,9 +22,15 @@ export default function ProfileLayout({
 	children,
 }: ProfileLayoutProps) {
 	const [fileTreeOpen, setFileTreeOpen] = useState(true);
+	const [sidebarMode, setSidebarMode] = useState<ProfileSidebarMode>("files");
 	const openFileTab = useFileViewerTabsStore((s) => s.openFile);
 	const handleToggleFileTree = useCallback(() => {
 		setFileTreeOpen((isOpen) => !isOpen);
+	}, []);
+	const handleSidebarModeChange = useCallback((mode: ProfileSidebarMode) => {
+		setSidebarMode(mode);
+		// Picking a mode while the sidebar is closed should reveal it.
+		setFileTreeOpen(true);
 	}, []);
 	const handleOpenFile = useCallback(
 		(filePath: string) => {
@@ -43,13 +50,15 @@ export default function ProfileLayout({
 					isActive={isActive}
 					isFileTreeOpen={fileTreeOpen}
 					onToggleFileTree={handleToggleFileTree}
+					sidebarMode={sidebarMode}
+					onSidebarModeChange={handleSidebarModeChange}
 				/>
 			</div>
 			<div className="flex min-h-0 min-w-0 flex-1">
-				<FileTreePanel
+				<ProfileSidebar
 					key={profile.id}
-					profileId={profile.id}
-					rootPath={profile.worktree_path}
+					profile={profile}
+					mode={sidebarMode}
 					isOpen={fileTreeOpen}
 					isActive={isActive}
 					onOpenFile={handleOpenFile}

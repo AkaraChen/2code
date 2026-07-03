@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import {
+	checkoutGitBranch,
 	commitGitChanges,
 	discardGitFileChanges,
 	getCommitDiff,
@@ -15,9 +16,10 @@ import {
 	getGitLog,
 	getGitPullRequestStatus,
 	gitPush,
+	listGitBranches,
 } from "@/generated";
 import type { GitDiffStats } from "@/generated";
-import { queryKeys } from "@/shared/lib/queryKeys";
+import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import { parseDiffFiles } from "./patchFiles";
 import type { GitBinaryPreviewSource } from "./utils";
@@ -119,6 +121,50 @@ export function useGitPullRequestStatus(
 		staleTime: 30_000,
 		refetchInterval: enabled ? PR_STATUS_REFRESH_INTERVAL_MS : false,
 		retry: false,
+	});
+}
+
+export function useGitBranches(profileId: string, enabled = true) {
+	return useQuery({
+		queryKey: queryKeys.git.branches(profileId),
+		queryFn: () => listGitBranches({ profileId }),
+		enabled,
+		staleTime: 10_000,
+		refetchOnMount: "always",
+	});
+}
+
+export function useCheckoutGitBranch(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: ({ branch }: { branch: string }) =>
+			checkoutGitBranch({ profileId, branch }),
+		onSuccess: async () => {
+			await Promise.all([
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.branches(profileId),
+				}),
+				// Branch-name queries key by folder, so invalidate the namespace.
+				queryClient.invalidateQueries({
+					queryKey: [queryNamespaces["git-branch"]],
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diff(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.diffStats(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.log(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.status(profileId),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.git.aheadCount(profileId),
+				}),
+			]);
+		},
 	});
 }
 

@@ -105,6 +105,8 @@ pub fn run() {
 			handler::project::commit_git_changes,
 			handler::project::discard_git_file_changes,
 			handler::project::get_git_ahead_count,
+			handler::project::list_git_branches,
+			handler::project::checkout_git_branch,
 			handler::project::git_push,
 			handler::project::get_git_pull_request_status,
 			handler::project::get_project_config,

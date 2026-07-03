@@ -19,6 +19,8 @@ interface OverflowTooltipTextProps {
 	tooltipValue: string;
 	className?: string;
 	tooltipClassName?: string;
+	/** Suppress the tooltip entirely, keeping only the truncated text. */
+	tooltipDisabled?: boolean;
 }
 
 function buildCanvasFont(style: CSSStyleDeclaration) {
@@ -33,6 +35,7 @@ function OverflowTooltipText({
 	tooltipValue,
 	className,
 	tooltipClassName,
+	tooltipDisabled = false,
 }: OverflowTooltipTextProps) {
 	const observerRef = useRef<ResizeObserver | null>(null);
 	const [snapshot, setSnapshot] = useState<MeasuredTextSnapshot>({
@@ -83,7 +86,7 @@ function OverflowTooltipText({
 
 	return (
 		<Tooltip
-			disabled={!isOverflowing}
+			disabled={tooltipDisabled || !isOverflowing}
 		>
 			<TooltipTrigger
 				render={(

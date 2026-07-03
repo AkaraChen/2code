@@ -11,6 +11,7 @@ interface FileListItemProps {
 	file: FileDiffMetadata;
 	isActive: boolean;
 	isIncluded?: boolean;
+	tooltipsDisabled?: boolean;
 	onClick: () => void;
 	onDoubleClick?: () => void;
 	onContextMenu?: MouseEventHandler<HTMLDivElement>;
@@ -21,6 +22,7 @@ function FileListItemComponent({
 	file,
 	isActive,
 	isIncluded,
+	tooltipsDisabled = false,
 	onClick,
 	onDoubleClick,
 	onContextMenu,
@@ -58,6 +60,7 @@ function FileListItemComponent({
 				<OverflowTooltipText
 					displayValue={basename}
 					tooltipValue={file.name}
+					tooltipDisabled={tooltipsDisabled}
 					className={cn(
 						"min-w-0 flex-[1_1_auto] text-sm",
 						isActive && "font-medium",
@@ -67,6 +70,7 @@ function FileListItemComponent({
 					<OverflowTooltipText
 						displayValue={parentPath}
 						tooltipValue={file.name}
+						tooltipDisabled={tooltipsDisabled}
 						className="min-w-[2ch] flex-[0_10_auto] text-xs text-muted-foreground"
 					/>
 				)}

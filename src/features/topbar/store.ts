@@ -5,9 +5,7 @@ import type { ControlId } from "./types";
 export const defaultActiveControls: ControlId[] = [
 	"github-desktop",
 	"vscode",
-	"git-diff",
 	"pr-status",
-	"reveal-in-finder",
 ];
 
 interface TopBarStore {
@@ -23,11 +21,13 @@ interface TopBarStore {
 }
 
 interface PersistedTopBarState {
-	activeControls?: ControlId[];
+	// Persisted lists may contain retired ids (e.g. "git-diff"), so keep
+	// migration inputs as plain strings.
+	activeControls?: string[];
 	controlOptions?: Record<string, Record<string, unknown>>;
 }
 
-function withPrStatusControl(controls: ControlId[]) {
+function withPrStatusControl(controls: string[]) {
 	if (controls.includes("pr-status")) return controls;
 
 	const gitDiffIndex = controls.indexOf("git-diff");
@@ -64,16 +64,23 @@ export const useTopBarStore = create<TopBarStore>()(
 		}),
 		{
 			name: "topbar-settings",
-			version: 2,
+			version: 4,
 			migrate: (persistedState, version) => {
-				if (version >= 2 || !persistedState) return persistedState;
+				if (version >= 4 || !persistedState) return persistedState;
 
 				const state = persistedState as PersistedTopBarState;
+				let controls = state.activeControls ?? [...defaultActiveControls];
+				if (version < 2) {
+					controls = withPrStatusControl(controls);
+				}
+				// v3: git-diff moved into the sidebar git panel;
+				// v4: reveal-in-finder replaced by clicking the project name
+				controls = controls.filter(
+					(id) => id !== "git-diff" && id !== "reveal-in-finder",
+				);
 				return {
 					...state,
-					activeControls: withPrStatusControl(
-						state.activeControls ?? defaultActiveControls,
-					),
+					activeControls: controls as ControlId[],
 				};
 			},
 		},

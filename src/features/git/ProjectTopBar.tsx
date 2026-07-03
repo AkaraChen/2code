@@ -20,14 +20,21 @@ import {
 } from "react-icons/pi";
 import { cn } from "@/lib/utils";
 import GitDiffDialog from "@/features/git/GitDiffDialog";
+import SwitchBranchDialog from "@/features/git/SwitchBranchDialog";
 import {
 	type GitDiffAction,
 	type GitDiffState,
 	gitDiffReducer,
 	initialState,
 } from "@/features/git/gitDiffReducer";
-import { useGitBranch } from "@/features/projects/hooks";
+import {
+	useGitBranch,
+	useRevealPathInFileManager,
+} from "@/features/projects/hooks";
 import ProjectSettingsDialog from "@/features/projects/ProjectSettingsDialog";
+import SidebarModeSwitch, {
+	type ProfileSidebarMode,
+} from "@/features/projects/SidebarModeSwitch";
 import { useSupportedTopbarAppIds } from "@/features/topbar/hooks";
 import {
 	controlRegistry,
@@ -96,6 +103,8 @@ interface ProjectTopBarProps {
 	isActive: boolean;
 	isFileTreeOpen?: boolean;
 	onToggleFileTree?: () => void;
+	sidebarMode?: ProfileSidebarMode;
+	onSidebarModeChange?: (mode: ProfileSidebarMode) => void;
 }
 
 export default function ProjectTopBar({
@@ -105,6 +114,8 @@ export default function ProjectTopBar({
 	isActive,
 	isFileTreeOpen = false,
 	onToggleFileTree,
+	sidebarMode,
+	onSidebarModeChange,
 }: ProjectTopBarProps) {
 	const activeControls = useTopBarStore((s) => s.activeControls);
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
@@ -123,6 +134,19 @@ export default function ProjectTopBar({
 	const closeGitDiffDialog = useCallback(() => setGitDiffOpen(false), []);
 	const openSettingsDialog = useCallback(() => setSettingsOpen(true), []);
 	const closeSettingsDialog = useCallback(() => setSettingsOpen(false), []);
+	const revealInFileManager = useRevealPathInFileManager(profile.id);
+	const handleRevealWorktree = useCallback(() => {
+		revealInFileManager.mutate({ path: null });
+	}, [revealInFileManager]);
+	const [switchBranchOpen, setSwitchBranchOpen] = useState(false);
+	const openSwitchBranchDialog = useCallback(
+		() => setSwitchBranchOpen(true),
+		[],
+	);
+	const closeSwitchBranchDialog = useCallback(
+		() => setSwitchBranchOpen(false),
+		[],
+	);
 
 	useEffect(() => {
 		if (!isActive) return;
@@ -151,17 +175,9 @@ export default function ProjectTopBar({
 		() => activeControls.filter((id) => supportedControlIdSet.has(id)),
 		[activeControls, supportedControlIdSet],
 	);
-	const gitDiffControlOptions = useMemo(
-		() => ({
-			...(controlOptions["git-diff"] ?? EMPTY_CONTROL_OPTIONS),
-			onOpen: openGitDiffDialog,
-			statsPaused: gitDiffOpen,
-		}),
-		[controlOptions, gitDiffOpen, openGitDiffDialog],
-	);
 
-	const titleContent = (
-		<div className="flex min-w-0 items-center gap-2">
+	const leftContent = (
+		<div className="flex items-center gap-2">
 			{onToggleFileTree && (
 				<Tooltip>
 					<TooltipTrigger
@@ -203,10 +219,27 @@ export default function ProjectTopBar({
 					</TooltipContent>
 				</Tooltip>
 			)}
+			{sidebarMode && onSidebarModeChange && (
+				<SidebarModeSwitch
+					profileId={profile.id}
+					isActive={isActive}
+					mode={sidebarMode}
+					onModeChange={onSidebarModeChange}
+				/>
+			)}
+		</div>
+	);
+
+	const titleContent = (
+		<div className="pointer-events-none absolute inset-x-0 bottom-1.5 flex min-w-0 items-center justify-center gap-2 px-32">
 			<Tooltip>
 				<TooltipTrigger
 					render={(
-						<span className="cursor-default select-none font-semibold" />
+						<button
+							type="button"
+							className="pointer-events-auto cursor-pointer select-none truncate font-semibold"
+							onClick={handleRevealWorktree}
+						/>
 					)}
 				>
 					{projectName}
@@ -215,7 +248,12 @@ export default function ProjectTopBar({
 					<span className="text-xs">{profile.worktree_path}</span>
 				</TooltipContent>
 			</Tooltip>
-			<div className="text-muted-foreground">
+			<button
+				type="button"
+				aria-label={m.switchBranchTitle()}
+				className="pointer-events-auto min-w-0 cursor-pointer text-muted-foreground hover:text-foreground"
+				onClick={openSwitchBranchDialog}
+			>
 				{profile.is_default ? (
 					isActive ? (
 						<GitBranchLabel cwd={profile.worktree_path} />
@@ -223,10 +261,10 @@ export default function ProjectTopBar({
 				) : (
 					<span className="flex select-none items-center gap-1">
 						<PiGitBranchFill />
-						<span>{profile.branch_name}</span>
+						<span className="truncate">{profile.branch_name}</span>
 					</span>
 				)}
-			</div>
+			</button>
 		</div>
 	);
 
@@ -241,11 +279,7 @@ export default function ProjectTopBar({
 						key={controlId}
 						profile={profile}
 						isActive={isActive}
-						options={
-							controlId === "git-diff"
-								? gitDiffControlOptions
-								: (controlOptions[controlId] ?? EMPTY_CONTROL_OPTIONS)
-						}
+						options={controlOptions[controlId] ?? EMPTY_CONTROL_OPTIONS}
 					/>
 				);
 			})}
@@ -272,10 +306,11 @@ export default function ProjectTopBar({
 			<div
 				data-tauri-drag-region
 				className={cn(
-					"flex min-h-[44px] items-end justify-between px-4 pt-1 pb-1.5",
+					"relative flex min-h-[44px] items-end justify-between px-4 pt-1 pb-1.5",
 					IS_WINDOWS_PLATFORM ? "pr-[118px]" : "pr-5",
 				)}
 			>
+				{leftContent}
 				{titleContent}
 				{controlsContent}
 			</div>
@@ -284,6 +319,12 @@ export default function ProjectTopBar({
 				isOpen={settingsOpen}
 				onClose={closeSettingsDialog}
 				projectId={projectId}
+			/>
+
+			<SwitchBranchDialog
+				isOpen={switchBranchOpen}
+				onClose={closeSwitchBranchDialog}
+				profileId={profile.id}
 			/>
 
 			{profile.is_default ? (

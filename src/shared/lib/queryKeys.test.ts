@@ -9,6 +9,7 @@ describe("queryNamespaces", () => {
 			"project-avatar": "project-avatar",
 			"project-config": "project-config",
 			"git-branch": "git-branch",
+			"git-branches": "git-branches",
 			"git-diff": "git-diff",
 			"git-diff-stats": "git-diff-stats",
 			"git-status": "git-status",

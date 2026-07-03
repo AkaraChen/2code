@@ -8,19 +8,11 @@ import {
 	SiWindsurf,
 	SiZedindustries,
 } from "@icons-pack/react-simple-icons";
-import { Command, open } from "@tauri-apps/plugin-shell";
+import { open } from "@tauri-apps/plugin-shell";
 import type { ComponentType } from "react";
-import {
-	PiFolderOpenFill,
-	PiGitDiffFill,
-	PiGitPullRequestFill,
-	PiTerminalWindowFill,
-} from "react-icons/pi";
+import { PiGitPullRequestFill, PiTerminalWindowFill } from "react-icons/pi";
 import { VscVscode } from "react-icons/vsc";
-import {
-	useGitDiffStats,
-	useGitPullRequestStatus,
-} from "@/features/git/hooks";
+import { useGitPullRequestStatus } from "@/features/git/hooks";
 import { Button } from "@/components/ui/button";
 import {
 	Tooltip,
@@ -179,40 +171,6 @@ export function WarpControl(props: ControlProps) {
 	);
 }
 
-export function GitDiffControl({ profile, isActive, options }: ControlProps) {
-	const onOpen = options.onOpen as (() => void) | undefined;
-	const statsPaused = options.statsPaused === true;
-	const stats = useGitDiffStats(profile.id, isActive && !statsPaused);
-
-	return (
-		<Tooltip>
-			<TooltipTrigger
-				render={
-					<Button
-						aria-label={m.topbarGitDiff()}
-						size="xs"
-						variant="secondary"
-						onClick={() => onOpen?.()}
-					/>
-				}
-			>
-				<PiGitDiffFill size={16} />
-				{stats && (
-					<>
-						<span className="text-xs text-green-500">
-							+{stats.additions}
-						</span>
-						<span className="text-xs text-red-500">
-							-{stats.deletions}
-						</span>
-					</>
-				)}
-			</TooltipTrigger>
-			<TooltipContent>{m.topbarGitDiff()}</TooltipContent>
-		</Tooltip>
-	);
-}
-
 function getPullRequestStateMeta(pr: GitPullRequestStatus) {
 	const state = pr.state.toUpperCase();
 
@@ -275,35 +233,6 @@ export function GitPullRequestStatusControl({
 				<span className="text-xs">{label}</span>
 			</TooltipTrigger>
 			<TooltipContent>{tooltip}</TooltipContent>
-		</Tooltip>
-	);
-}
-
-export function RevealInFinderControl({ profile }: ControlProps) {
-	const handleReveal = async () => {
-		const platform = navigator.platform.toUpperCase();
-		const isMac = platform.includes("MAC");
-		const isWindows = platform.includes("WIN");
-		const cmd = isMac ? "open" : isWindows ? "explorer" : "xdg-open";
-		const args = isMac ? ["-R", profile.worktree_path] : [profile.worktree_path];
-		await Command.create(cmd, args).execute();
-	};
-
-	return (
-		<Tooltip>
-			<TooltipTrigger
-				render={
-					<Button
-						aria-label={m.revealInFinder()}
-						size="icon-sm"
-						variant="secondary"
-						onClick={handleReveal}
-					/>
-				}
-			>
-				<PiFolderOpenFill />
-			</TooltipTrigger>
-			<TooltipContent>{m.revealInFinder()}</TooltipContent>
 		</Tooltip>
 	);
 }
