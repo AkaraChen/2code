@@ -222,8 +222,10 @@ async function waitForWebDriverServer() {
 }
 
 async function readBodyText() {
-	const body = await waitForElement("body");
-	return body.getText();
+	await waitForElement("body");
+	return driver.executeScript(
+		"return document.body?.innerText || document.body?.textContent || '';",
+	);
 }
 
 async function waitForPageReady(timeoutMs = 60_000) {
