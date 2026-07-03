@@ -67,27 +67,23 @@ export default function RenameProjectDialog({
 				<DialogHeader>
 					<DialogTitle>{m.renameProject()}</DialogTitle>
 				</DialogHeader>
-				<Field>
-					<FieldLabel>{m.newName()}</FieldLabel>
-					<Input
-						data-rename-input
-						{...form.register("name")}
-						onKeyDown={(event) => {
-							if (event.key === "Enter") handleRename();
-						}}
-					/>
-				</Field>
-				<DialogFooter>
-					<Button variant="outline" onClick={onClose}>
-						{m.cancel()}
-					</Button>
-					<Button
-						onClick={handleRename}
-						disabled={!name.trim() || name.trim() === initName}
-					>
-						{m.rename()}
-					</Button>
-				</DialogFooter>
+				<form onSubmit={handleRename} className="contents">
+					<Field>
+						<FieldLabel>{m.newName()}</FieldLabel>
+						<Input data-rename-input {...form.register("name")} />
+					</Field>
+					<DialogFooter>
+						<Button type="button" variant="outline" onClick={onClose}>
+							{m.cancel()}
+						</Button>
+						<Button
+							type="submit"
+							disabled={!name.trim() || name.trim() === initName}
+						>
+							{m.rename()}
+						</Button>
+					</DialogFooter>
+				</form>
 			</DialogContent>
 		</Dialog>
 	);
