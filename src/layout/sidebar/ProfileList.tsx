@@ -36,7 +36,7 @@ export function ProfileList({
 					data-sidebar-item
 					onClick={createDialog.onOpen}
 				>
-					<PlusIcon />
+					<PlusIcon weight="regular" />
 					<span>{m.createProfile()}</span>
 				</SidebarMenuSubButton>
 				<CreateProfileDialog

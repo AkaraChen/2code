@@ -148,7 +148,10 @@ export function ProjectMenuItem({
 							createProfileDialog.onOpen();
 						}}
 					>
-						<PlusIcon className="hidden group-hover/project-item:block group-focus-within/project-item:block" />
+						<PlusIcon
+							className="hidden group-hover/project-item:block group-focus-within/project-item:block"
+							weight="regular"
+						/>
 						{defaultAgentIndicator && (
 							<AgentStatusDot
 								status={defaultAgentIndicator}
