@@ -349,7 +349,7 @@ describe("gitDiffReducer", () => {
 		});
 
 		describe("target: commit", () => {
-			it("ArrowDown from no selection lands on the first commit", () => {
+			it("arrow down from no selection lands on the first commit", () => {
 				const next = gitDiffReducer(initialState, {
 					type: "stepIndex",
 					target: "commit",
@@ -359,7 +359,7 @@ describe("gitDiffReducer", () => {
 				expect(next.selectedCommitIndex).toBe(0);
 			});
 
-			it("ArrowUp from no selection also lands on the first commit", () => {
+			it("arrow up from no selection also lands on the first commit", () => {
 				const next = gitDiffReducer(initialState, {
 					type: "stepIndex",
 					target: "commit",
