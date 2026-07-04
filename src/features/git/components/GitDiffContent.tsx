@@ -317,7 +317,7 @@ export default function GitDiffContent({
     {
       e.preventDefault();
       if (
-      commits.length > 0 &&
+      state.selectedCommitIndex >= 0 &&
       state.selectedCommitIndex < commits.length)
       {
         startTransition(() => {

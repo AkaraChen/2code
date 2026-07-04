@@ -16,6 +16,9 @@ export interface GitDiffState {
 	commitFileCount: number;
 }
 
+/** No highlighted commit until the user navigates with arrow keys. */
+export const NO_COMMIT_SELECTION = -1;
+
 export type GitDiffAction =
 	| { type: "switchTab"; tab: Tab }
 	| { type: "setViewMode"; viewMode: GitDiffViewMode }
@@ -36,7 +39,7 @@ export const initialState: GitDiffState = {
 	viewMode: "unified",
 	selectedCommit: null,
 	selectedFileIndex: 0,
-	selectedCommitIndex: 0,
+	selectedCommitIndex: NO_COMMIT_SELECTION,
 	selectedCommitFileIndex: 0,
 	commitFileCount: 0,
 };
@@ -58,7 +61,7 @@ export const gitDiffReducer = produce(
 				draft.activeTab = action.tab;
 				draft.selectedCommit = null;
 				draft.selectedFileIndex = 0;
-				draft.selectedCommitIndex = 0;
+				draft.selectedCommitIndex = NO_COMMIT_SELECTION;
 				draft.selectedCommitFileIndex = 0;
 				draft.commitFileCount = 0;
 				break;
@@ -85,6 +88,7 @@ export const gitDiffReducer = produce(
 				draft.commitFileCount = action.count;
 				break;
 			case "stepIndex": {
+				if (action.count <= 0) break;
 				const key = stepKeyMap[action.target];
 				draft[key] = clamp(
 					draft[key] + action.delta,

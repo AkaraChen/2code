@@ -4,6 +4,7 @@ import {
 	type GitDiffState,
 	gitDiffReducer,
 	initialState,
+	NO_COMMIT_SELECTION,
 } from "./gitDiffReducer";
 
 const mockCommit: GitCommit = {
@@ -24,7 +25,7 @@ describe("initialState", () => {
 			viewMode: "unified",
 			selectedCommit: null,
 			selectedFileIndex: 0,
-			selectedCommitIndex: 0,
+			selectedCommitIndex: NO_COMMIT_SELECTION,
 			selectedCommitFileIndex: 0,
 			commitFileCount: 0,
 		});
@@ -77,7 +78,7 @@ describe("gitDiffReducer", () => {
 			expect(next.selectedCommit).toBeNull();
 		});
 
-		it("resets all indices to 0", () => {
+		it("resets indices and clears the commit selection", () => {
 			const state: GitDiffState = {
 				...initialState,
 				selectedFileIndex: 5,
@@ -90,7 +91,7 @@ describe("gitDiffReducer", () => {
 				tab: "changes",
 			});
 			expect(next.selectedFileIndex).toBe(0);
-			expect(next.selectedCommitIndex).toBe(0);
+			expect(next.selectedCommitIndex).toBe(NO_COMMIT_SELECTION);
 			expect(next.selectedCommitFileIndex).toBe(0);
 			expect(next.commitFileCount).toBe(0);
 		});
@@ -322,14 +323,13 @@ describe("gitDiffReducer", () => {
 				expect(next.selectedFileIndex).toBe(0);
 			});
 
-			it("handles count of 0 (empty list)", () => {
+			it("handles count of 0 (empty list) as a no-op", () => {
 				const next = gitDiffReducer(initialState, {
 					type: "stepIndex",
 					target: "file",
 					delta: 1,
 					count: 0,
 				});
-				// clamp(0+1, 0, -1) = Math.max(0, Math.min(1, -1)) = 0
 				expect(next.selectedFileIndex).toBe(0);
 			});
 
@@ -349,6 +349,36 @@ describe("gitDiffReducer", () => {
 		});
 
 		describe("target: commit", () => {
+			it("ArrowDown from no selection lands on the first commit", () => {
+				const next = gitDiffReducer(initialState, {
+					type: "stepIndex",
+					target: "commit",
+					delta: 1,
+					count: 5,
+				});
+				expect(next.selectedCommitIndex).toBe(0);
+			});
+
+			it("ArrowUp from no selection also lands on the first commit", () => {
+				const next = gitDiffReducer(initialState, {
+					type: "stepIndex",
+					target: "commit",
+					delta: -1,
+					count: 5,
+				});
+				expect(next.selectedCommitIndex).toBe(0);
+			});
+
+			it("stays unselected when the list is empty", () => {
+				const next = gitDiffReducer(initialState, {
+					type: "stepIndex",
+					target: "commit",
+					delta: 1,
+					count: 0,
+				});
+				expect(next.selectedCommitIndex).toBe(NO_COMMIT_SELECTION);
+			});
+
 			it("increments selectedCommitIndex by delta", () => {
 				const state: GitDiffState = {
 					...initialState,
@@ -434,8 +464,7 @@ describe("gitDiffReducer", () => {
 			expect(next.selectedFileIndex).toBe(5);
 		});
 
-		it("negative count results in clamped 0", () => {
-			// clamp(0 + 1, 0, -2) = Math.max(0, Math.min(1, -2)) = 0
+		it("negative count is a no-op", () => {
 			const next = gitDiffReducer(initialState, {
 				type: "stepIndex",
 				target: "file",
@@ -459,7 +488,7 @@ describe("gitDiffReducer", () => {
 			expect(next.selectedCommitIndex).toBe(6);
 		});
 
-		it("step from non-zero index in empty list clamps to 0", () => {
+		it("step from non-zero index in empty list is a no-op", () => {
 			// Simulates state where index was set before list became empty
 			const state: GitDiffState = {
 				...initialState,
@@ -471,8 +500,7 @@ describe("gitDiffReducer", () => {
 				delta: -1,
 				count: 0,
 			});
-			// clamp(5 + (-1), 0, -1) = clamp(4, 0, -1) = Math.max(0, Math.min(4, -1)) = 0
-			expect(next.selectedFileIndex).toBe(0);
+			expect(next.selectedFileIndex).toBe(5);
 		});
 	});
 
