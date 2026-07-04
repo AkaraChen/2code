@@ -145,6 +145,7 @@ pub fn run() {
 			handler::debug::append_frontend_profile_events,
 			handler::debug::is_performance_profile_enabled,
 			handler::debug::set_performance_profile_enabled,
+			handler::window::open_settings_window,
 		])
 		.build(tauri::generate_context!())
 		.expect("error while building tauri application");

@@ -1,5 +1,12 @@
-import { BellIcon, CodeIcon, GearSixIcon, InfoIcon, MonitorIcon, TerminalWindowIcon } from "@phosphor-icons/react";
-import { use, useState, type ReactNode } from "react";
+import {
+	BellIcon,
+	CodeIcon,
+	GearSixIcon,
+	InfoIcon,
+	MonitorIcon,
+	TerminalWindowIcon,
+} from "@phosphor-icons/react";
+import { type ReactNode, use, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
 	Field,
@@ -13,12 +20,7 @@ import {
 } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import {
-	Tabs,
-	TabsContent,
-	TabsList,
-	TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { usePerformanceProfileStore } from "@/features/debug/performanceProfileStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
@@ -35,8 +37,8 @@ import { FontPicker } from "./FontPicker";
 import { FontSizePicker } from "./FontSizePicker";
 import { GlobalTerminalTemplatesSettings } from "./GlobalTerminalTemplatesSettings";
 import { NotificationSettings } from "./NotificationSettings";
-import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { ShellPicker } from "./ShellPicker";
+import { SidebarAppearanceSettings } from "./SidebarAppearanceSettings";
 import { TerminalThemePicker } from "./TerminalThemePicker";
 import { WorktreeSettings } from "./WorktreeSettings";
 
@@ -95,43 +97,37 @@ export default function SettingsPage() {
 
 	return (
 		<div className="flex h-full flex-col">
-			<header
-				data-tauri-drag-region
-				className="flex h-[52px] shrink-0 items-center gap-2 border-b px-5"
+			<Tabs
+				className="flex min-h-0 flex-1 flex-col"
+				value={activeTab}
+				onValueChange={(value) => {
+					const nextTab = readSettingsTab(String(value));
+					setSearchParams(
+						nextTab === "general" ? {} : { tab: nextTab },
+						{ replace: true },
+					);
+				}}
 			>
-				<GearSixIcon className="size-4 text-muted-foreground" />
-				<h1 className="select-none text-sm font-semibold">{m.settings()}</h1>
-			</header>
-			<div className="min-h-0 flex-1 overflow-auto p-5">
-				<Tabs
-					value={activeTab}
-					onValueChange={(value) => {
-						const nextTab = readSettingsTab(String(value));
-						setSearchParams(
-							nextTab === "general" ? {} : { tab: nextTab },
-							{ replace: true },
-						);
-					}}
-				>
-					<TabsList className="mb-5 max-w-full overflow-x-auto">
-						{settingsTabs.map((tab) => (
-							<TabsTrigger key={tab} value={tab}>
-								{settingsTabIcons[tab]}
-								{tab === "general"
-									? m.general()
-									: tab === "terminal"
-										? m.terminal()
-										: tab === "template"
-											? m.terminalTemplates()
-											: tab === "notification"
-												? m.notification()
-												: tab === "topbar"
-													? m.topbar()
-													: m.about()}
-							</TabsTrigger>
-						))}
-					</TabsList>
+				<TabsList className="mx-5 mt-5 max-w-full shrink-0 overflow-x-auto">
+					{settingsTabs.map((tab) => (
+						<TabsTrigger key={tab} value={tab}>
+							{settingsTabIcons[tab]}
+							{tab === "general"
+								? m.general()
+								: tab === "terminal"
+									? m.terminal()
+									: tab === "template"
+										? m.terminalTemplates()
+										: tab === "notification"
+											? m.notification()
+											: tab === "topbar"
+												? m.topbar()
+												: m.about()}
+						</TabsTrigger>
+					))}
+				</TabsList>
 
+				<div className="min-h-0 flex-1 overflow-auto p-5">
 					<TabsContent value="general">
 						<div className="flex max-w-md flex-col gap-6">
 							<Field>
@@ -139,7 +135,9 @@ export default function SettingsPage() {
 								<NativeSelect
 									value={locale}
 									onChange={(event) =>
-										setAppLocale(event.target.value as Locale)
+										setAppLocale(
+											event.target.value as Locale,
+										)
 									}
 									size="sm"
 								>
@@ -197,14 +195,18 @@ export default function SettingsPage() {
 
 							<Field orientation="horizontal">
 								<FieldContent>
-									<FieldLabel>{m.performanceProfile()}</FieldLabel>
+									<FieldLabel>
+										{m.performanceProfile()}
+									</FieldLabel>
 									<FieldDescription>
 										{m.performanceProfileDescription()}
 									</FieldDescription>
 								</FieldContent>
 								<Switch
 									checked={performanceProfileEnabled}
-									onCheckedChange={setPerformanceProfileEnabled}
+									onCheckedChange={
+										setPerformanceProfileEnabled
+									}
 								/>
 							</Field>
 
@@ -215,7 +217,9 @@ export default function SettingsPage() {
 					<TabsContent value="terminal">
 						<div className="flex items-start gap-8">
 							<div className="flex min-w-0 max-w-md flex-1 flex-col gap-6">
-								<TerminalThemePicker onPreview={setPreviewThemeId} />
+								<TerminalThemePicker
+									onPreview={setPreviewThemeId}
+								/>
 								<AsyncBoundary
 									fallback={<Skeleton className="h-[70px]" />}
 									errorFallback={({ error, onRetry }) => (
@@ -262,8 +266,8 @@ export default function SettingsPage() {
 					<TabsContent value="about">
 						<AboutSettings />
 					</TabsContent>
-				</Tabs>
-			</div>
+				</div>
+			</Tabs>
 		</div>
 	);
 }

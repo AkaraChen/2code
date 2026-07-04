@@ -6,9 +6,9 @@ import { useDebugStore } from "./features/debug/debugStore";
 import { onReactRender } from "./features/debug/performanceProfile";
 import HomePage from "./features/home/HomePage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
-import SettingsPage from "./features/settings/SettingsPage";
 import TerminalLayer from "./features/terminal/TerminalLayer";
 import StartupUpdateCheck from "./features/updater/StartupUpdateCheck";
+import { openSettingsWindow } from "./generated";
 import AppSidebar from "./layout/AppSidebar";
 import WindowControls from "./layout/WindowControls";
 import {
@@ -33,6 +33,16 @@ export default function App() {
 
 	// Cmd+Shift+D (macOS) / Ctrl+Shift+D (other)
 	useKey("D", handleDebugShortcut);
+
+	const handleSettingsShortcut = useCallback((e: KeyboardEvent) => {
+		if (e.metaKey || e.ctrlKey) {
+			e.preventDefault();
+			void openSettingsWindow();
+		}
+	}, []);
+
+	// Cmd+, (macOS) / Ctrl+, (other) — settings opens in its own window
+	useKey(",", handleSettingsShortcut);
 
 	return (
 		<div className="flex h-full flex-col bg-background text-foreground">
@@ -61,10 +71,6 @@ export default function App() {
 								<Route
 									path="/projects/:id/profiles/:profileId"
 									element={<ProjectDetailPage />}
-								/>
-								<Route
-									path="/settings"
-									element={<SettingsPage />}
 								/>
 								<Route
 									path="*"

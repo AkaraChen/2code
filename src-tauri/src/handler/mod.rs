@@ -12,6 +12,7 @@ pub mod sound;
 pub mod topbar;
 pub mod updater;
 pub mod watcher;
+pub mod window;
 
 pub async fn run_blocking<T, F>(job: F) -> Result<T, AppError>
 where

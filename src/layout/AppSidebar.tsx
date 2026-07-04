@@ -1,4 +1,3 @@
-import { CheckIcon, DotsSixVerticalIcon, FolderIcon, GearSixIcon, HouseIcon, PencilSimpleLineIcon, PlusIcon, SidebarSimpleIcon, StarIcon } from "@phosphor-icons/react";
 import {
 	closestCenter,
 	DndContext,
@@ -14,8 +13,25 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+	CheckIcon,
+	DotsSixVerticalIcon,
+	FolderIcon,
+	GearSixIcon,
+	HouseIcon,
+	PencilSimpleLineIcon,
+	PlusIcon,
+	SidebarSimpleIcon,
+	StarIcon,
+} from "@phosphor-icons/react";
 import { LayoutGroup } from "motion/react";
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+	type CSSProperties,
+	useCallback,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { matchPath, useLocation } from "react-router";
 import { toast } from "sonner";
 import {
@@ -40,7 +56,7 @@ import {
 	useProjects,
 	useUpdateProjectSidebarLayout,
 } from "@/features/projects/hooks";
-import type { ProjectWithProfiles } from "@/generated";
+import { openSettingsWindow, type ProjectWithProfiles } from "@/generated";
 import { cn } from "@/lib/utils";
 import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
@@ -55,16 +71,16 @@ import {
 	createSidebarLayoutUpdates,
 	groupDropId,
 	groupEntryId,
+	PINNED_DROP_ID,
 	parseDropId,
 	parseEntryId,
-	PINNED_DROP_ID,
 	projectEntryId,
 	type SidebarContainerId,
 	type SidebarEntryId,
 	type SidebarLayoutState,
 	type SidebarTopEntry,
-	toSidebarLayoutState,
 	TOP_LEVEL_DROP_ID,
+	toSidebarLayoutState,
 } from "./sidebar/sidebarLayout";
 import {
 	APP_SIDEBAR_MAX_WIDTH,
@@ -85,15 +101,19 @@ function removeProjectFromState(
 	projectId: string,
 ): SidebarLayoutState {
 	return {
-		pinnedProjectIds: state.pinnedProjectIds.filter((id) => id !== projectId),
+		pinnedProjectIds: state.pinnedProjectIds.filter(
+			(id) => id !== projectId,
+		),
 		topEntryIds: state.topEntryIds.filter(
 			(id) => id !== projectEntryId(projectId),
 		),
 		groupProjectIds: new Map(
-			Array.from(state.groupProjectIds.entries()).map(([groupId, ids]) => [
-				groupId,
-				ids.filter((id) => id !== projectId),
-			]),
+			Array.from(state.groupProjectIds.entries()).map(
+				([groupId, ids]) => [
+					groupId,
+					ids.filter((id) => id !== projectId),
+				],
+			),
 		),
 	};
 }
@@ -104,7 +124,9 @@ function removeGroupFromState(
 ): SidebarLayoutState {
 	return {
 		...state,
-		topEntryIds: state.topEntryIds.filter((id) => id !== groupEntryId(groupId)),
+		topEntryIds: state.topEntryIds.filter(
+			(id) => id !== groupEntryId(groupId),
+		),
 	};
 }
 
@@ -153,7 +175,8 @@ function getInsertIndex(
 
 	if (container.startsWith("group:") && parsed.kind === "project") {
 		const groupId = container.slice("group:".length);
-		const index = state.groupProjectIds.get(groupId)?.indexOf(parsed.id) ?? -1;
+		const index =
+			state.groupProjectIds.get(groupId)?.indexOf(parsed.id) ?? -1;
 		return index === -1 ? Number.POSITIVE_INFINITY : index;
 	}
 
@@ -164,7 +187,11 @@ function SidebarDropZone({
 	id,
 	label,
 	compact,
-}: { id: string; label: string; compact?: boolean }) {
+}: {
+	id: string;
+	label: string;
+	compact?: boolean;
+}) {
 	const { isOver, setNodeRef } = useDroppable({ id });
 
 	return (
@@ -224,7 +251,10 @@ function SortableProjectRow({
 				>
 					<DotsSixVerticalIcon />
 				</span>
-				<ProjectAvatar projectId={project.id} projectName={project.name} />
+				<ProjectAvatar
+					projectId={project.id}
+					projectName={project.name}
+				/>
 				<span>{project.name}</span>
 			</SidebarMenuButton>
 			<SidebarMenuAction
@@ -355,7 +385,10 @@ export default function AppSidebar() {
 				project.id,
 			);
 			if (project.pinned_order == null) {
-				state.pinnedProjectIds = [...state.pinnedProjectIds, project.id];
+				state.pinnedProjectIds = [
+					...state.pinnedProjectIds,
+					project.id,
+				];
 			} else {
 				state.topEntryIds = [
 					...state.topEntryIds,
@@ -392,7 +425,11 @@ export default function AppSidebar() {
 				activeEntry.kind === "project"
 					? removeProjectFromState(baseState, activeEntry.id)
 					: removeGroupFromState(baseState, activeEntry.id);
-			const insertIndex = getInsertIndex(targetContainer, overId, nextState);
+			const insertIndex = getInsertIndex(
+				targetContainer,
+				overId,
+				nextState,
+			);
 
 			if (activeEntry.kind === "group") {
 				if (targetContainer !== "top-level") return;
@@ -502,7 +539,9 @@ export default function AppSidebar() {
 										size="lg"
 										className="pointer-events-none"
 									>
-										<span className="font-semibold">2Code</span>
+										<span className="font-semibold">
+											2Code
+										</span>
 									</SidebarMenuButton>
 									<SidebarMenuAction
 										aria-label={m.collapseSidebar()}
@@ -519,7 +558,10 @@ export default function AppSidebar() {
 								<SidebarGroup>
 									<SidebarGroupContent>
 										<SidebarMenu>
-											<SidebarLink to="/" icon={<HouseIcon />}>
+											<SidebarLink
+												to="/"
+												icon={<HouseIcon />}
+											>
 												{m.home()}
 											</SidebarLink>
 										</SidebarMenu>
@@ -536,22 +578,32 @@ export default function AppSidebar() {
 										<SidebarGroupContent>
 											<DndContext
 												sensors={sensors}
-												collisionDetection={closestCenter}
+												collisionDetection={
+													closestCenter
+												}
 												onDragEnd={handleDragEnd}
 											>
 												<SidebarMenu>
 													<SortableContext
 														items={sidebarLayout.pinnedProjects.map(
 															(project) =>
-																projectEntryId(project.id),
+																projectEntryId(
+																	project.id,
+																),
 														)}
-														strategy={verticalListSortingStrategy}
+														strategy={
+															verticalListSortingStrategy
+														}
 													>
 														{sidebarLayout.pinnedProjects.map(
 															(project) => (
 																<SortableProjectRow
-																	key={project.id}
-																	project={project}
+																	key={
+																		project.id
+																	}
+																	project={
+																		project
+																	}
 																	isPinned
 																	onTogglePinned={
 																		handleTogglePinned
@@ -568,7 +620,8 @@ export default function AppSidebar() {
 													id={PINNED_DROP_ID}
 													label={m.dropHereToPin()}
 													compact={
-														sidebarLayout.pinnedProjects
+														sidebarLayout
+															.pinnedProjects
 															.length > 0
 													}
 												/>
@@ -578,7 +631,9 @@ export default function AppSidebar() {
 
 									<SidebarGroup>
 										<SidebarGroupLabel>
-											<span>{m.sidebarProjectsSection()}</span>
+											<span>
+												{m.sidebarProjectsSection()}
+											</span>
 											<SidebarGroupAction
 												aria-label={m.doneEditingProjectOrder()}
 												aria-pressed={isReorderMode}
@@ -599,7 +654,9 @@ export default function AppSidebar() {
 										<SidebarGroupContent>
 											<DndContext
 												sensors={sensors}
-												collisionDetection={closestCenter}
+												collisionDetection={
+													closestCenter
+												}
 												onDragEnd={handleDragEnd}
 											>
 												<SidebarMenu>
@@ -607,67 +664,93 @@ export default function AppSidebar() {
 														items={sidebarLayout.topEntries.map(
 															(entry) => entry.id,
 														)}
-														strategy={verticalListSortingStrategy}
+														strategy={
+															verticalListSortingStrategy
+														}
 													>
-														{sidebarLayout.topEntries.map((entry) =>
-															entry.kind === "group" ? (
-																<SortableGroupRow
-																	key={entry.id}
-																	entry={entry}
-																	disabled={
-																		isSidebarLayoutSaving
-																	}
-																>
-																	<SidebarMenu className="pl-4">
-																		<SortableContext
-																			items={entry.projects.map(
-																				(project) =>
-																					projectEntryId(
-																						project.id,
+														{sidebarLayout.topEntries.map(
+															(entry) =>
+																entry.kind ===
+																"group" ? (
+																	<SortableGroupRow
+																		key={
+																			entry.id
+																		}
+																		entry={
+																			entry
+																		}
+																		disabled={
+																			isSidebarLayoutSaving
+																		}
+																	>
+																		<SidebarMenu className="pl-4">
+																			<SortableContext
+																				items={entry.projects.map(
+																					(
+																						project,
+																					) =>
+																						projectEntryId(
+																							project.id,
+																						),
+																				)}
+																				strategy={
+																					verticalListSortingStrategy
+																				}
+																			>
+																				{entry.projects.map(
+																					(
+																						project,
+																					) => (
+																						<SortableProjectRow
+																							key={
+																								project.id
+																							}
+																							project={
+																								project
+																							}
+																							isPinned={
+																								false
+																							}
+																							onTogglePinned={
+																								handleTogglePinned
+																							}
+																							disabled={
+																								isSidebarLayoutSaving
+																							}
+																						/>
 																					),
+																				)}
+																			</SortableContext>
+																		</SidebarMenu>
+																		<SidebarDropZone
+																			id={groupDropId(
+																				entry
+																					.group
+																					.id,
 																			)}
-																			strategy={
-																				verticalListSortingStrategy
-																			}
-																		>
-																			{entry.projects.map(
-																				(project) => (
-																					<SortableProjectRow
-																						key={project.id}
-																						project={project}
-																						isPinned={false}
-																						onTogglePinned={
-																							handleTogglePinned
-																						}
-																						disabled={
-																							isSidebarLayoutSaving
-																						}
-																					/>
-																				),
-																			)}
-																		</SortableContext>
-																	</SidebarMenu>
-																	<SidebarDropZone
-																		id={groupDropId(
-																			entry.group.id,
-																		)}
-																		label={m.dropProjectIntoFolder()}
-																		compact
+																			label={m.dropProjectIntoFolder()}
+																			compact
+																		/>
+																	</SortableGroupRow>
+																) : (
+																	<SortableProjectRow
+																		key={
+																			entry.id
+																		}
+																		project={
+																			entry.project
+																		}
+																		isPinned={
+																			false
+																		}
+																		onTogglePinned={
+																			handleTogglePinned
+																		}
+																		disabled={
+																			isSidebarLayoutSaving
+																		}
 																	/>
-																</SortableGroupRow>
-															) : (
-																<SortableProjectRow
-																	key={entry.id}
-																	project={entry.project}
-																	isPinned={false}
-																	onTogglePinned={
-																		handleTogglePinned
-																	}
-																	disabled={
-																		isSidebarLayoutSaving
-																	}
-																/>
-															),
+																),
 														)}
 													</SortableContext>
 												</SidebarMenu>
@@ -681,79 +764,119 @@ export default function AppSidebar() {
 								</>
 							) : (
 								<>
-										{sidebarLayout.pinnedProjects.length > 0 && (
-											<SidebarGroup>
-												<SidebarGroupLabel>
-													{m.pinnedProjects()}
-												</SidebarGroupLabel>
-												<SidebarGroupContent>
-													<SidebarMenu>
-														{sidebarLayout.pinnedProjects.map(
-															(project) => (
-																<ProjectMenuItem
-																	key={project.id}
-																	project={project}
-																	projectGroups={projectGroups}
-																	activeProfileId={activeProfileId}
-																/>
-															),
-														)}
-													</SidebarMenu>
-												</SidebarGroupContent>
-											</SidebarGroup>
-										)}
-
+									{sidebarLayout.pinnedProjects.length >
+										0 && (
 										<SidebarGroup>
 											<SidebarGroupLabel>
-												<span>{m.sidebarProjectsSection()}</span>
-												<SidebarGroupAction
-													aria-label={m.editProjectOrder()}
-													aria-pressed={isReorderMode}
-													disabled={isSidebarLayoutSaving}
-													className="right-9"
-													onClick={toggleReorderMode}
-												>
-													<PencilSimpleLineIcon weight="regular" />
-												</SidebarGroupAction>
-												<SidebarGroupAction
-													id="add-project-button"
-													aria-label={m.newProject()}
-													onClick={createDialog.onOpen}
-												>
-													<PlusIcon weight="regular" />
-												</SidebarGroupAction>
+												{m.pinnedProjects()}
 											</SidebarGroupLabel>
 											<SidebarGroupContent>
 												<SidebarMenu>
-													{sidebarLayout.topEntries.map((entry) =>
-														entry.kind === "group" ? (
-															<ProjectGroupSection
-																key={entry.group.id}
-																group={entry.group}
-																projectGroups={projectGroups}
-																projects={entry.projects}
-																activeProfileId={activeProfileId}
-															/>
-														) : (
+													{sidebarLayout.pinnedProjects.map(
+														(project) => (
 															<ProjectMenuItem
-																key={entry.project.id}
-																project={entry.project}
-																projectGroups={projectGroups}
-																activeProfileId={activeProfileId}
+																key={project.id}
+																project={
+																	project
+																}
+																projectGroups={
+																	projectGroups
+																}
+																activeProfileId={
+																	activeProfileId
+																}
 															/>
 														),
 													)}
 												</SidebarMenu>
 											</SidebarGroupContent>
 										</SidebarGroup>
-									</>
-								)}
+									)}
+
+									<SidebarGroup>
+										<SidebarGroupLabel>
+											<span>
+												{m.sidebarProjectsSection()}
+											</span>
+											<SidebarGroupAction
+												aria-label={m.editProjectOrder()}
+												aria-pressed={isReorderMode}
+												disabled={isSidebarLayoutSaving}
+												className="right-9"
+												onClick={toggleReorderMode}
+											>
+												<PencilSimpleLineIcon weight="regular" />
+											</SidebarGroupAction>
+											<SidebarGroupAction
+												id="add-project-button"
+												aria-label={m.newProject()}
+												onClick={createDialog.onOpen}
+											>
+												<PlusIcon weight="regular" />
+											</SidebarGroupAction>
+										</SidebarGroupLabel>
+										<SidebarGroupContent>
+											<SidebarMenu>
+												{sidebarLayout.topEntries.map(
+													(entry) =>
+														entry.kind ===
+														"group" ? (
+															<ProjectGroupSection
+																key={
+																	entry.group
+																		.id
+																}
+																group={
+																	entry.group
+																}
+																projectGroups={
+																	projectGroups
+																}
+																projects={
+																	entry.projects
+																}
+																activeProfileId={
+																	activeProfileId
+																}
+															/>
+														) : (
+															<ProjectMenuItem
+																key={
+																	entry
+																		.project
+																		.id
+																}
+																project={
+																	entry.project
+																}
+																projectGroups={
+																	projectGroups
+																}
+																activeProfileId={
+																	activeProfileId
+																}
+															/>
+														),
+												)}
+											</SidebarMenu>
+										</SidebarGroupContent>
+									</SidebarGroup>
+								</>
+							)}
 						</SidebarContent>
 						<SidebarFooter className="shrink-0">
 							<SidebarMenu>
-								<SidebarLink to="/settings" icon={<GearSixIcon />}>
-									{m.settings()}
-								</SidebarLink>
+								<SidebarMenuItem>
+									<SidebarMenuButton
+										onClick={() =>
+											void openSettingsWindow()
+										}
+										data-sidebar-item
+									>
+										<GearSixIcon />
+										<span>{m.settings()}</span>
+									</SidebarMenuButton>
+								</SidebarMenuItem>
 							</SidebarMenu>
 						</SidebarFooter>
 					</LayoutGroup>
