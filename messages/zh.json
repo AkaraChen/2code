@@ -305,6 +305,8 @@
 	"contributors": "贡献者",
 	"primaryContributorDescription": "项目维护者和主要贡献者。",
 	"repository": "仓库",
+	"releases": "版本发布",
+	"aboutVersionCopied": "版本号已复制",
 	"website": "网站",
 	"checkForUpdates": "检查更新",
 	"acceptBetaUpdates": "接收 Beta 更新",

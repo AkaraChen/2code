@@ -305,6 +305,8 @@
 	"contributors": "Contributors",
 	"primaryContributorDescription": "Project maintainer and primary contributor.",
 	"repository": "Repository",
+	"releases": "Releases",
+	"aboutVersionCopied": "Version copied to clipboard",
 	"website": "Website",
 	"checkForUpdates": "Check for Updates",
 	"acceptBetaUpdates": "Accept Beta Updates",
