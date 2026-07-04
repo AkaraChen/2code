@@ -108,6 +108,7 @@ vi.mock("@/generated", () => ({
 	deletePtySessionRecord: vi.fn(() => Promise.resolve()),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	getProjectGithubAvatar: vi.fn(() => Promise.resolve(null)),
+	openUpdatePage: vi.fn(() => Promise.resolve()),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-id", history: [] }),

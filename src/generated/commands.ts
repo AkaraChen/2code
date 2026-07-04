@@ -348,6 +348,10 @@ export async function openSettingsWindow(): Promise<void> {
 	return invoke("open_settings_window");
 }
 
+export async function openUpdatePage(): Promise<void> {
+	return invoke("open_update_page");
+}
+
 export async function startDebugLog(
 	params: types.StartDebugLogParams,
 ): Promise<void> {
