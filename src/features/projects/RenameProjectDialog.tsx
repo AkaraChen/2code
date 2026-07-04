@@ -1,3 +1,4 @@
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,10 @@ export default function RenameProjectDialog({
 				}
 			>
 				<DialogHeader>
-					<DialogTitle>{m.renameProject()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<PencilSimpleIcon className="size-4 shrink-0" />
+						{m.renameProject()}
+					</DialogTitle>
 				</DialogHeader>
 				<form onSubmit={handleRename} className="contents">
 					<Field>

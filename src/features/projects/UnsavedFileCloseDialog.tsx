@@ -1,3 +1,4 @@
+import { WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -30,7 +31,10 @@ export default function UnsavedFileCloseDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.closeUnsavedFileTitle()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<WarningCircleIcon className="size-4 shrink-0" />
+						{m.closeUnsavedFileTitle()}
+					</DialogTitle>
 				</DialogHeader>
 				<p className="text-sm">
 					{m.closeUnsavedFileDescription({ file: fileName })}

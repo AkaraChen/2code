@@ -1,3 +1,4 @@
+import { TrashIcon } from "@phosphor-icons/react";
 import { useMatch, useNavigate } from "react-router";
 import {
 	Alert,
@@ -105,7 +106,10 @@ export default function DeleteProfileDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.deleteProfile()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<TrashIcon className="size-4 shrink-0" />
+						{m.deleteProfile()}
+					</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-3">
 					<p className="text-sm">{m.confirmDeleteProfile()}</p>

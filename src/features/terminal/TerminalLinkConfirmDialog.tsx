@@ -1,4 +1,4 @@
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, LinkIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,10 @@ export function TerminalLinkConfirmDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.terminalOpenLink()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<LinkIcon className="size-4 shrink-0" />
+						{m.terminalOpenLink()}
+					</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-1">
 					<p className="text-sm">{m.terminalOpenLinkConfirmDescription()}</p>

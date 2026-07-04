@@ -75,7 +75,10 @@ export function TerminalFileLinkPickerDialog() {
 		>
 			<DialogContent className="sm:max-w-xl">
 				<DialogHeader>
-					<DialogTitle>{m.terminalChooseFilePath()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<FileTextIcon className="size-4 shrink-0" />
+						{m.terminalChooseFilePath()}
+					</DialogTitle>
 				</DialogHeader>
 				<p className="text-sm text-muted-foreground">
 					{m.terminalChooseFilePathDescription()}

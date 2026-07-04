@@ -1,3 +1,4 @@
+import { GitBranchIcon } from "@phosphor-icons/react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,10 @@ export default function CreateProfileDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.createProfile()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<GitBranchIcon className="size-4 shrink-0" />
+						{m.createProfile()}
+					</DialogTitle>
 				</DialogHeader>
 				<Field>
 					<FieldLabel>{m.branchName()}</FieldLabel>

@@ -1,3 +1,4 @@
+import { CodeIcon, GearSixIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import type { UseFormRegisterReturn } from "react-hook-form";
@@ -114,8 +115,14 @@ function ProjectSettingsForm({
 		<>
 			<Tabs defaultValue="scripts">
 				<TabsList className="mb-3">
-					<TabsTrigger value="scripts">{m.scripts()}</TabsTrigger>
-					<TabsTrigger value="templates">{m.templates()}</TabsTrigger>
+					<TabsTrigger value="scripts">
+						<CodeIcon />
+						{m.scripts()}
+					</TabsTrigger>
+					<TabsTrigger value="templates">
+						<TerminalWindowIcon />
+						{m.templates()}
+					</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="scripts">
@@ -186,7 +193,10 @@ export default function ProjectSettingsDialog({
 		>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>{m.projectSettings()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<GearSixIcon className="size-4 shrink-0" />
+						{m.projectSettings()}
+					</DialogTitle>
 				</DialogHeader>
 				<AsyncBoundary
 					fallback={

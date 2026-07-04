@@ -1,4 +1,4 @@
-import { CopyIcon, TrashIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, CopyIcon, TrashIcon } from "@phosphor-icons/react";
 import type { FileDiffOptions } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import type { CSSProperties, ChangeEvent } from "react";
@@ -159,7 +159,10 @@ export default function GitReviewQueueDialog({
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="flex max-h-[80vh] w-[min(56rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
 				<DialogHeader className="border-b p-4">
-					<DialogTitle>{m.reviewQueue()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<ChatTextIcon className="size-4 shrink-0" />
+						{m.reviewQueue()}
+					</DialogTitle>
 				</DialogHeader>
 				<div className="min-h-0 flex-1 overflow-auto p-4">
 					<div className="flex flex-col gap-3">

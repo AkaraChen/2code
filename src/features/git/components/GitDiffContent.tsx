@@ -1,4 +1,4 @@
-import { ChatTextIcon } from "@phosphor-icons/react";
+import { ChatTextIcon, GitCommitIcon, GitDiffIcon } from "@phosphor-icons/react";
 import type { FileDiffMetadata, FileDiffOptions } from "@pierre/diffs";
 import {
 	Activity,
@@ -444,8 +444,14 @@ export default function GitDiffContent({
 							className="flex min-h-0 flex-1 flex-col gap-0"
 						>
 							<TabsList className="mx-3 mb-2 mt-2">
-								<TabsTrigger value="changes">{m.changes()}</TabsTrigger>
-								<TabsTrigger value="history">{m.history()}</TabsTrigger>
+								<TabsTrigger value="changes">
+									<GitDiffIcon />
+									{m.changes()}
+								</TabsTrigger>
+								<TabsTrigger value="history">
+									<GitCommitIcon />
+									{m.history()}
+								</TabsTrigger>
 							</TabsList>
 
 							<div className="relative min-h-0 flex-1 overflow-hidden">

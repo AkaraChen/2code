@@ -15,7 +15,7 @@ import SettingsWindow from "./features/settings/SettingsWindow";
 import { queryClient } from "./shared/lib/queryClient";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 
-const iconDefaults = { weight: "duotone" } as const;
+const iconDefaults = { size: "1em", weight: "duotone" } as const;
 
 const isSettingsWindow = getCurrentWebviewWindow().label === "settings";
 

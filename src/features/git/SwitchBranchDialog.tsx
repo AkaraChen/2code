@@ -133,7 +133,8 @@ function SwitchBranchContent({
 	return (
 		<>
 			<DialogHeader className="border-b px-4 py-3">
-				<DialogTitle className="text-sm">
+				<DialogTitle className="flex items-center gap-2 text-sm">
+					<GitBranchIcon className="size-4 shrink-0" />
 					{m.switchBranchTitle()}
 				</DialogTitle>
 			</DialogHeader>

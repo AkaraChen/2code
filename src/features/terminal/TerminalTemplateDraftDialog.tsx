@@ -1,3 +1,4 @@
+import { TerminalWindowIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -53,7 +54,8 @@ export function TerminalTemplateDraftDialog<T extends GlobalTerminalTemplateDraf
 		>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<TerminalWindowIcon className="size-4 shrink-0" />
 						{isEditing
 							? m.editTerminalTemplate()
 							: m.addTerminalTemplate()}

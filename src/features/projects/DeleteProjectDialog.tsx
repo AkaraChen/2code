@@ -1,3 +1,4 @@
+import { TrashIcon } from "@phosphor-icons/react";
 import { useMatch, useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,7 +81,10 @@ export default function DeleteProjectDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.deleteProject()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<TrashIcon className="size-4 shrink-0" />
+						{m.deleteProject()}
+					</DialogTitle>
 				</DialogHeader>
 				<p className="text-sm">{m.confirmDeleteProject()}</p>
 				<DialogFooter>

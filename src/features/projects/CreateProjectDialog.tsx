@@ -1,4 +1,4 @@
-import { FolderIcon, PencilSimpleIcon } from "@phosphor-icons/react";
+import { FolderIcon, FolderPlusIcon, PencilSimpleIcon } from "@phosphor-icons/react";
 import { basename } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useForm, useWatch } from "react-hook-form";
@@ -94,7 +94,10 @@ export default function CreateProjectDialog({
 		>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{m.createProject()}</DialogTitle>
+					<DialogTitle className="flex items-center gap-2">
+						<FolderPlusIcon className="size-4 shrink-0" />
+						{m.createProject()}
+					</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-5">
 					{!folder ? (
