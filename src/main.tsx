@@ -12,6 +12,8 @@ import {
 	syncPerformanceProfileFromBackend,
 } from "./features/debug/performanceProfile";
 import SettingsWindow from "./features/settings/SettingsWindow";
+// Keeps settings stores live-synced between the main and settings windows.
+import "./features/settings/stores/crossWindowSync";
 import { queryClient } from "./shared/lib/queryClient";
 import { ThemeProvider } from "./shared/providers/ThemeProvider";
 
