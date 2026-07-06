@@ -32,7 +32,6 @@ import { collectOrderedIncludedFileNames } from "./includedFileNames";
 interface SidebarGitPanelProps {
 	profileId: string;
 	worktreePath: string;
-	onOpenFile: (absoluteFilePath: string) => void;
 }
 
 // Simple sidebar variant of the git dialog's changes tab: pick files, commit.
@@ -40,7 +39,6 @@ interface SidebarGitPanelProps {
 export default function SidebarGitPanel({
 	profileId,
 	worktreePath,
-	onOpenFile,
 }: SidebarGitPanelProps) {
 	const [includedFileNames, setIncludedFileNames] = useState<Set<string>>(
 		() => new Set(),
@@ -113,11 +111,17 @@ export default function SidebarGitPanel({
 		setIncludedFileNames(new Set());
 	}, []);
 
+	// Double-click jumps into the diff dialog focused on that file.
 	const handleOpenFile = useCallback(
 		(file: FileDiffMetadata) => {
-			onOpenFile(resolveWorktreeFilePath(worktreePath, file.name));
+			const index = changesFiles.findIndex((f) => f.name === file.name);
+			dispatchDiffDialog({ type: "switchTab", tab: "changes" });
+			if (index > 0) {
+				dispatchDiffDialog({ type: "selectFile", index });
+			}
+			setDiffDialogOpen(true);
 		},
-		[onOpenFile, worktreePath],
+		[changesFiles],
 	);
 
 	const handleDiscardFile = useCallback(
@@ -198,27 +202,20 @@ export default function SidebarGitPanel({
 	return (
 		<>
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-			{changesFiles.length === 0 ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center p-6">
-					<p className="text-center text-xs text-muted-foreground">
-						{m.noChangesDetected()}
-					</p>
-				</div>
-			) : (
-				<ChangesFileList
-					files={changesFiles}
-					selectedIndex={clampedSelectedIndex}
-					includedFileNames={includedFileNames}
-					onSelect={setSelectedIndex}
-					onToggleIncluded={handleToggleIncluded}
-					onOpenFile={handleOpenFile}
-					onDiscardFile={handleDiscardFile}
-					onIncludeAll={handleIncludeAll}
-					onIncludeNone={handleIncludeNone}
-					onMaximize={handleMaximize}
-					tooltipsDisabled
-				/>
-			)}
+			<ChangesFileList
+				files={changesFiles}
+				selectedIndex={clampedSelectedIndex}
+				includedFileNames={includedFileNames}
+				onSelect={setSelectedIndex}
+				onToggleIncluded={handleToggleIncluded}
+				onOpenFile={handleOpenFile}
+				onDiscardFile={handleDiscardFile}
+				onIncludeAll={handleIncludeAll}
+				onIncludeNone={handleIncludeNone}
+				onMaximize={handleMaximize}
+				tooltipsDisabled
+				emptyMessage={m.noChangesDetected()}
+			/>
 			<CommitComposer
 				commitMessage={commitMessage}
 				commitBody={commitBody}

@@ -75,7 +75,7 @@ function GitDiffHeader({
 						/>
 					)}
 				>
-					<XIcon />
+					<XIcon weight="regular" />
 				</DialogClose>
 			</div>
 		</DialogHeader>

@@ -133,7 +133,6 @@ export default function ProfileSidebar({
 					<SidebarGitPanel
 						profileId={profile.id}
 						worktreePath={profile.worktree_path}
-						onOpenFile={onOpenFile}
 					/>
 				</SidebarAltPanel>
 			)}

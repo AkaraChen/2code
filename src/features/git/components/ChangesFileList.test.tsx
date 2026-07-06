@@ -60,6 +60,25 @@ describe("changesFileList", () => {
 		expect(onOpenFile).toHaveBeenCalledWith(file);
 	});
 
+	it("keeps the header expand button visible when there are no files", () => {
+		const onMaximize = vi.fn();
+
+		renderList({
+			files: [],
+			includedFileNames: new Set(),
+			onMaximize,
+			emptyMessage: m.noChangesDetected(),
+		});
+
+		expect(screen.getByText(m.noChangesDetected())).toBeInTheDocument();
+
+		fireEvent.click(
+			screen.getByRole("button", { name: m.gitOpenDiffView() }),
+		);
+
+		expect(onMaximize).toHaveBeenCalled();
+	});
+
 	it("shows a context menu and discards the selected file", async () => {
 		const { onSelect, onDiscardFile } = renderList();
 

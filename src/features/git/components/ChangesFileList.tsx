@@ -26,6 +26,8 @@ interface ChangesFileListProps {
 	onMaximize?: () => void;
 	/** Suppress file-path tooltips (e.g. compact sidebar mode). */
 	tooltipsDisabled?: boolean;
+	/** Shown below the header when there are no files; keeps the header (and expand button) visible. */
+	emptyMessage?: string;
 }
 
 interface ChangesFileListRowProps {
@@ -104,6 +106,7 @@ function ChangesFileList({
 	onIncludeNone,
 	onMaximize,
 	tooltipsDisabled,
+	emptyMessage,
 }: ChangesFileListProps) {
 	const { ref: containerRef } =
 		useScrollIntoView<HTMLDivElement>(selectedIndex);
@@ -198,6 +201,13 @@ function ChangesFileList({
 						</Button>
 					) : null}
 				</div>
+				{files.length === 0 && emptyMessage ? (
+					<div className="flex items-center justify-center p-6">
+						<p className="text-center text-xs text-muted-foreground">
+							{emptyMessage}
+						</p>
+					</div>
+				) : null}
 				{files.map((file, i) => (
 					<ChangesFileListRow
 						key={file.name}
