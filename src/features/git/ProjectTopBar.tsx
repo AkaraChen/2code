@@ -1,6 +1,8 @@
 import { GearSixIcon, GitBranchIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import type { Dispatch } from "react";
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -14,7 +16,6 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import GitDiffDialog from "@/features/git/GitDiffDialog";
 import SwitchBranchDialog from "@/features/git/SwitchBranchDialog";
 import {
 	type GitDiffAction,
@@ -44,6 +45,7 @@ import { isMacPlatform, isWindowsPlatform } from "@/shared/lib/platform";
 const EMPTY_CONTROL_OPTIONS: Record<string, unknown> = {};
 const IS_WINDOWS_PLATFORM = isWindowsPlatform();
 const IS_MAC_PLATFORM = isMacPlatform();
+const GitDiffDialog = lazy(() => import("@/features/git/GitDiffDialog"));
 
 function GitBranchLabel({ cwd }: { cwd: string }) {
 	const { data: branch } = useGitBranch(cwd);
@@ -114,6 +116,7 @@ export default function ProjectTopBar({
 	const controlOptions = useTopBarStore((s) => s.controlOptions);
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const [gitDiffOpen, setGitDiffOpen] = useState(false);
+	const [hasEverOpenedGitDiff, setHasEverOpenedGitDiff] = useState(false);
 	const [gitDiffState, dispatchGitDiff] = useReducer(
 		gitDiffReducer,
 		initialState,
@@ -125,6 +128,7 @@ export default function ProjectTopBar({
 	);
 	const openGitDiffDialog = useCallback(() => {
 		dispatchGitDiff({ type: "switchTab", tab: "changes" });
+		setHasEverOpenedGitDiff(true);
 		setGitDiffOpen(true);
 	}, []);
 	const closeGitDiffDialog = useCallback(() => setGitDiffOpen(false), []);
@@ -304,27 +308,31 @@ export default function ProjectTopBar({
 				profileId={profile.id}
 			/>
 
-			{profile.is_default ? (
-				<GitDiffDialogWithBranch
-					cwd={profile.worktree_path}
-					isOpen={gitDiffOpen}
-					isActive={isActive}
-					onClose={closeGitDiffDialog}
-					profileId={profile.id}
-					worktreePath={profile.worktree_path}
-					state={gitDiffState}
-					dispatch={dispatchGitDiff}
-				/>
-			) : (
-				<GitDiffDialog
-					isOpen={gitDiffOpen}
-					onClose={closeGitDiffDialog}
-					profileId={profile.id}
-					worktreePath={profile.worktree_path}
-					branchName={profile.branch_name}
-					state={gitDiffState}
-					dispatch={dispatchGitDiff}
-				/>
+			{hasEverOpenedGitDiff && (
+				<Suspense fallback={null}>
+					{profile.is_default ? (
+						<GitDiffDialogWithBranch
+							cwd={profile.worktree_path}
+							isOpen={gitDiffOpen}
+							isActive={isActive}
+							onClose={closeGitDiffDialog}
+							profileId={profile.id}
+							worktreePath={profile.worktree_path}
+							state={gitDiffState}
+							dispatch={dispatchGitDiff}
+						/>
+					) : (
+						<GitDiffDialog
+							isOpen={gitDiffOpen}
+							onClose={closeGitDiffDialog}
+							profileId={profile.id}
+							worktreePath={profile.worktree_path}
+							branchName={profile.branch_name}
+							state={gitDiffState}
+							dispatch={dispatchGitDiff}
+						/>
+					)}
+				</Suspense>
 			)}
 		</>
 	);

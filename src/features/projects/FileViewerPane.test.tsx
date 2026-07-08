@@ -64,27 +64,32 @@ vi.mock("@/features/markdown/MarkdownEditor", () => ({
 
 vi.mock("@monaco-editor/react", () => ({
 	default: ({
+		beforeMount,
 		language,
 		onChange,
 		path,
 		theme,
 		value,
 	}: {
+		beforeMount?: (monaco: { languages: Record<string, never> }) => void;
 		language?: string;
 		onChange?: (value: string | undefined) => void;
 		path?: string;
 		theme?: string;
 		value?: string;
-	}) => (
-		<textarea
-			aria-label="Monaco Editor"
-			data-language={language}
-			data-path={path}
-			data-theme={theme}
-			value={value ?? ""}
-			onChange={(event) => onChange?.(event.currentTarget.value)}
-		/>
-	),
+	}) => {
+		beforeMount?.({ languages: {} });
+		return (
+			<textarea
+				aria-label="Monaco Editor"
+				data-language={language}
+				data-path={path}
+				data-theme={theme}
+				value={value ?? ""}
+				onChange={(event) => onChange?.(event.currentTarget.value)}
+			/>
+		);
+	},
 }));
 
 vi.mock("./hooks", () => ({
@@ -185,6 +190,15 @@ describe("fileViewerPane", () => {
 		expect(editor).toHaveAttribute("data-path", filePath);
 		expect(editor).toHaveAttribute("data-theme", "vs-dark");
 		expect(screen.queryByRole("button")).not.toBeInTheDocument();
+	});
+
+	it("renders code files when the Monaco TypeScript service is unavailable", async () => {
+		renderPane("/repo/src/main.ts");
+
+		const editor = await screen.findByLabelText("Monaco Editor");
+
+		expect(editor).toHaveValue(fileContent);
+		expect(editor).toHaveAttribute("data-language", "typescript");
 	});
 
 	it("disables file content and preview queries while inactive", () => {

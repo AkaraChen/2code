@@ -18,11 +18,13 @@ import {
 const {
 	commitGitChangesMock,
 	getGitAheadCountMock,
+	getGitDiffStatsMock,
 	getGitDiffSnapshotMock,
 	getGitLogMock,
 } = vi.hoisted(() => ({
 	commitGitChangesMock: vi.fn(),
 	getGitAheadCountMock: vi.fn(),
+	getGitDiffStatsMock: vi.fn(),
 	getGitDiffSnapshotMock: vi.fn(),
 	getGitLogMock: vi.fn(),
 }));
@@ -35,6 +37,7 @@ vi.mock("@/generated", async () => {
 		...actual,
 		commitGitChanges: commitGitChangesMock,
 		getGitAheadCount: getGitAheadCountMock,
+		getGitDiffStats: getGitDiffStatsMock,
 		getGitDiffSnapshot: getGitDiffSnapshotMock,
 		getGitLog: getGitLogMock,
 	};
@@ -71,6 +74,7 @@ describe("git query refresh policy", () => {
 	beforeEach(() => {
 		commitGitChangesMock.mockReset();
 		getGitAheadCountMock.mockReset();
+		getGitDiffStatsMock.mockReset();
 		getGitDiffSnapshotMock.mockReset();
 		getGitLogMock.mockReset();
 	});
@@ -97,7 +101,29 @@ describe("git query refresh policy", () => {
 		);
 		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
 		expect(options?.staleTime).toBe(30_000);
-		expect(options?.refetchOnMount).toBe("always");
+	});
+
+	it("stops full diff snapshot polling while the panel is hidden", async () => {
+		const queryClient = createQueryClient();
+		getGitDiffSnapshotMock.mockResolvedValue({
+			diff: "",
+			stats: { files_changed: 0, insertions: 0, deletions: 0 },
+		});
+
+		const { result } = renderHook(
+			() => useGitDiffFiles("profile-1", false),
+			{ wrapper: createWrapper(queryClient) },
+		);
+
+		await waitFor(() => {
+			expect(result.current).toEqual([]);
+		});
+
+		const options = getRuntimeQueryOptions(
+			queryClient,
+			queryKeys.git.diff("profile-1"),
+		);
+		expect(options?.refetchInterval).toBe(false);
 	});
 
 	it("uses backend stats from the shared diff snapshot", async () => {
@@ -170,15 +196,12 @@ index 587be6b..f9264f7 100644
 		expect(options?.refetchInterval).toBe(false);
 	});
 
-	it("keeps visible diff stats on the shared snapshot refresh", async () => {
+	it("polls lightweight diff stats under the diff-stats key", async () => {
 		const queryClient = createQueryClient();
-		getGitDiffSnapshotMock.mockResolvedValue({
-			diff: "",
-			stats: {
-				files_changed: 1,
-				insertions: 2,
-				deletions: 3,
-			},
+		getGitDiffStatsMock.mockResolvedValue({
+			files_changed: 1,
+			insertions: 2,
+			deletions: 3,
 		});
 
 		const { result } = renderHook(
@@ -196,11 +219,11 @@ index 587be6b..f9264f7 100644
 
 		const options = getRuntimeQueryOptions(
 			queryClient,
-			queryKeys.git.diff("profile-1"),
+			queryKeys.git.diffStats("profile-1"),
 		);
 		expect(options?.refetchInterval).toBe(GIT_LIGHT_REFRESH_INTERVAL_MS);
 		expect(options?.staleTime).toBe(30_000);
-		expect(options?.refetchOnMount).toBe("always");
+		expect(getGitDiffSnapshotMock).not.toHaveBeenCalled();
 	});
 
 	it("uses a fast fallback refresh for visible ahead counts", async () => {
@@ -226,21 +249,15 @@ index 587be6b..f9264f7 100644
 
 	it("refetches diff stats when an enabled-gated profile reactivates", async () => {
 		const queryClient = createQueryClient();
-		queryClient.setQueryData(queryKeys.git.diff("profile-1"), {
-			diff: "",
-			stats: {
-				files_changed: 1,
-				insertions: 2,
-				deletions: 3,
-			},
+		queryClient.setQueryData(queryKeys.git.diffStats("profile-1"), {
+			files_changed: 1,
+			insertions: 2,
+			deletions: 3,
 		});
-		getGitDiffSnapshotMock.mockResolvedValue({
-			diff: "",
-			stats: {
-				files_changed: 2,
-				insertions: 5,
-				deletions: 8,
-			},
+		getGitDiffStatsMock.mockResolvedValue({
+			files_changed: 2,
+			insertions: 5,
+			deletions: 8,
 		});
 
 		const { rerender } = renderHook(
@@ -251,12 +268,12 @@ index 587be6b..f9264f7 100644
 			},
 		);
 
-		expect(getGitDiffSnapshotMock).not.toHaveBeenCalled();
+		expect(getGitDiffStatsMock).not.toHaveBeenCalled();
 
 		rerender({ enabled: true });
 
 		await waitFor(() => {
-			expect(getGitDiffSnapshotMock).toHaveBeenCalledTimes(1);
+			expect(getGitDiffStatsMock).toHaveBeenCalledTimes(1);
 		});
 	});
 });

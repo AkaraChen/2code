@@ -23,6 +23,15 @@ for (const { path, pairs } of replacements) {
 	for (const [from, to] of pairs) {
 		content = content.replaceAll(from, to);
 	}
+	if (
+		path.pathname.endsWith("/types.ts")
+		&& !content.includes("export type RawBytesResponse")
+	) {
+		content = content.replace(
+			"import type { Channel } from '@tauri-apps/api/core';\n",
+			"import type { Channel } from '@tauri-apps/api/core';\n\nexport type RawBytesResponse = ArrayBuffer;\n",
+		);
+	}
 	content = `${content.trimEnd()}\n`;
 	await writeFile(path, content);
 }

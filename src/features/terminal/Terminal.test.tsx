@@ -1,7 +1,7 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getPtySessionHistory } from "@/generated";
+import { fetchPtySessionHistory } from "./ptyHistoryIpc";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "./store";
 
@@ -13,6 +13,8 @@ const {
 	writeClipboardTextMock,
 } = vi.hoisted(() => {
 	interface MockTerminalInstance {
+		dispose: Mock;
+		element: HTMLElement | null;
 		fireSelectionChange: () => void;
 		fireTitleChange: (title: string) => void;
 		setSelection: (selection: string) => void;
@@ -34,6 +36,7 @@ const {
 				getLine: () => undefined,
 			},
 		};
+		dispose = vi.fn();
 		private selection = "";
 		private selectionListeners: Array<() => void> = [];
 		private titleListeners: Array<(title: string) => void> = [];
@@ -128,16 +131,19 @@ vi.mock("@/generated", () => ({
 	clearPtyOutput: vi.fn(() => Promise.resolve()),
 	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	flushPtyOutput: vi.fn(() => Promise.resolve()),
-	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	playSystemSound: vi.fn(() => Promise.resolve()),
 	resizePty: vi.fn(() => Promise.resolve()),
 	restorePtySession: vi.fn(() =>
-		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
+		Promise.resolve({ newSessionId: "mock-session-id", historyLen: 0 }),
 	),
 	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("./ptyHistoryIpc", () => ({
+	fetchPtySessionHistory: vi.fn(() => Promise.resolve(new Uint8Array())),
 }));
 
 vi.mock("sonner", () => ({
@@ -169,7 +175,6 @@ vi.mock("./lib", () => ({
 		dispose: vi.fn(),
 	}),
 	createTerminalKeyEventHandler: () => () => true,
-	getTerminalParkingContainer: () => document.body,
 	installImagePasteFallback: () => vi.fn(),
 	loadAddons: () => ({
 		fitAddon: { fit: vi.fn() },
@@ -204,7 +209,7 @@ function renderTerminal() {
 }
 
 describe("terminal select to copy", () => {
-	const getPtySessionHistoryMock = getPtySessionHistory as unknown as Mock;
+	const fetchPtySessionHistoryMock = fetchPtySessionHistory as unknown as Mock;
 
 	beforeEach(() => {
 		terminalInstances.length = 0;
@@ -212,7 +217,7 @@ describe("terminal select to copy", () => {
 		writeClipboardTextMock.mockResolvedValue(undefined);
 		readClipboardTextMock.mockReset();
 		toasterCreateMock.mockReset();
-		getPtySessionHistoryMock.mockClear();
+		fetchPtySessionHistoryMock.mockClear();
 		useTerminalStore.setState({
 			profiles: {},
 			agentStatuses: {},
@@ -274,11 +279,39 @@ describe("terminal select to copy", () => {
 		expect(toasterCreateMock).toHaveBeenCalledTimes(1);
 	});
 
+	it("disposes xterm and removes its wrapper on unmount while the tab is still open", () => {
+		useTerminalStore.setState({
+			profiles: {
+				"profile-1": {
+					tabs: [{ id: "session-1", title: "Terminal 1" }],
+					activeTabId: "session-1",
+					counter: 1,
+				},
+			},
+			agentStatuses: {},
+			agentCompletions: {},
+			sessionProfileIds: { "session-1": "profile-1" },
+		});
+
+		const { unmount } = render(
+			<Terminal profileId="profile-1" sessionId="session-1" isActive={false} />,
+		);
+		const terminal = terminalInstances[terminalInstances.length - 1];
+
+		expect(terminal.element?.isConnected).toBe(true);
+
+		unmount();
+
+		expect(terminal.dispose).toHaveBeenCalledTimes(1);
+		expect(terminal.element?.isConnected).toBe(false);
+		expect(document.getElementById("terminal-parking")).toBeNull();
+	});
+
 	it("publishes waiting status from an action-required title", async () => {
 		const terminal = renderTerminal();
 
 		await waitFor(() => {
-			expect(getPtySessionHistoryMock).toHaveBeenCalled();
+			expect(fetchPtySessionHistoryMock).toHaveBeenCalled();
 		});
 		terminal.fireTitleChange("Action Required");
 
@@ -290,9 +323,9 @@ describe("terminal select to copy", () => {
 	});
 
 	it("keeps pending agent detection until the stream is ready", async () => {
-		let resolveHistory: (value: number[]) => void = () => {};
-		getPtySessionHistoryMock.mockReturnValueOnce(
-			new Promise<number[]>((resolve) => {
+		let resolveHistory: (value: Uint8Array) => void = () => {};
+		fetchPtySessionHistoryMock.mockReturnValueOnce(
+			new Promise<Uint8Array>((resolve) => {
 				resolveHistory = resolve;
 			}),
 		);
@@ -301,7 +334,7 @@ describe("terminal select to copy", () => {
 		terminal.fireTitleChange("Action Required");
 		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBeUndefined();
 
-		resolveHistory([]);
+		resolveHistory(new Uint8Array());
 
 		await waitFor(() => {
 			expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(

@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { startDebugLog, stopDebugLog } from "@/generated";
 import type { LogEntry } from "@/generated/types";
-import { useDebugLogStore } from "./debugLogStore";
+import { enqueueDebugLog, flushDebugLogs } from "./debugLogStore";
 
 interface DebugStore {
 	enabled: boolean;
@@ -19,13 +19,14 @@ function syncDebugChannel(enabled: boolean) {
 	if (enabled && !activeChannel) {
 		const channel = new Channel<LogEntry>();
 		channel.onmessage = (entry) => {
-			useDebugLogStore.getState().addLog(entry);
+			enqueueDebugLog(entry);
 		};
 		activeChannel = channel;
 		startDebugLog({ onEvent: channel });
 	} else if (!enabled && activeChannel) {
 		stopDebugLog();
 		activeChannel = null;
+		flushDebugLogs();
 	}
 }
 

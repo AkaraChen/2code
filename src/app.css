@@ -8,6 +8,7 @@
 
 :root {
 	--sidebar-width: 250px;
+	--app-sidebar-width: 250px;
 	--app-focus-ring: Highlight;
 	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 	font-family:

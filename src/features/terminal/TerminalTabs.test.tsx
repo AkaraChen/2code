@@ -2,8 +2,8 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Profiler, type ReactNode } from "react";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,24 +18,35 @@ import { writeToPty } from "@/generated";
 import TerminalTabs from "./TerminalTabs";
 import { useTerminalStore } from "./store";
 
-const { restorePendingTerminalTabMock } = vi.hoisted(() => ({
+const { restorePendingTerminalTabMock, terminalRenderCounts } = vi.hoisted(() => ({
 	restorePendingTerminalTabMock: vi.fn(),
+	terminalRenderCounts: new Map<string, number>(),
 }));
 
-vi.mock("./Terminal", () => ({
-	Terminal: ({
-		sessionId,
-		isActive,
-	}: {
-		sessionId: string;
-		isActive: boolean;
-	}) => (
-		<div
-			data-active={isActive ? "true" : "false"}
-			data-testid={`terminal-${sessionId}`}
-		/>
-	),
-}));
+vi.mock("./Terminal", async () => {
+	const { memo } = await import("react");
+
+	return {
+		Terminal: memo(({
+			sessionId,
+			isActive,
+		}: {
+			sessionId: string;
+			isActive: boolean;
+		}) => {
+			terminalRenderCounts.set(
+				sessionId,
+				(terminalRenderCounts.get(sessionId) ?? 0) + 1,
+			);
+			return (
+				<div
+					data-active={isActive ? "true" : "false"}
+					data-testid={`terminal-${sessionId}`}
+				/>
+			);
+		}),
+	};
+});
 
 vi.mock("./restoration", () => ({
 	restorePendingTerminalTab: restorePendingTerminalTabMock,
@@ -110,11 +121,14 @@ function createFileTreeDrop(paths: string[]) {
 	return dataTransfer;
 }
 
-function renderTerminalTabs(options: { isActive?: boolean } = {}) {
+function renderTerminalTabs(
+	options: { isActive?: boolean; profileId?: string } = {},
+) {
+	const targetProfileId = options.profileId ?? profileId;
 	return render(
 		<TerminalTabs
 			projectId="project-1"
-			profileId={profileId}
+			profileId={targetProfileId}
 			cwd="/root"
 			isActive={options.isActive ?? true}
 		/>,
@@ -140,6 +154,7 @@ describe("terminalTabs file tree drops", () => {
 		writeToPtyMock.mockResolvedValue(undefined);
 		restorePendingTerminalTabMock.mockReset();
 		restorePendingTerminalTabMock.mockReturnValue(new Promise(() => {}));
+		terminalRenderCounts.clear();
 	});
 
 	it("activates the dropped terminal tab and writes dropped paths to its PTY", async () => {
@@ -250,6 +265,45 @@ describe("terminalTabs file tree drops", () => {
 		expect(dot).toBeInTheDocument();
 		expect(dot).toHaveClass("bg-yellow-400");
 		expect(screen.queryByText("Needs input")).not.toBeInTheDocument();
+	});
+
+	it("does not re-render other profiles or terminal children for one tab status change", () => {
+		const otherProfileId = "profile-2";
+		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
+		useTerminalStore.getState().addTab(
+			otherProfileId,
+			"session-2",
+			"Terminal 2",
+		);
+		const own = renderTerminalTabs();
+		let otherCommits = 0;
+		const other = render(
+			<Profiler id="other-profile" onRender={() => { otherCommits += 1; }}>
+				<TerminalTabs
+					projectId="project-1"
+					profileId={otherProfileId}
+					cwd="/root"
+				/>
+			</Profiler>,
+			{ wrapper: createWrapper() },
+		);
+		const ownTerminalRenders = terminalRenderCounts.get("session-1") ?? 0;
+		const otherTerminalRenders = terminalRenderCounts.get("session-2") ?? 0;
+		const otherProfileCommits = otherCommits;
+
+		act(() => {
+			useTerminalStore.getState().setAgentStatus("session-1", "running");
+		});
+
+		expect(
+			own.container.querySelector('[data-agent-status="running"]'),
+		).toBeInTheDocument();
+		expect(
+			other.container.querySelector('[data-agent-status="running"]'),
+		).not.toBeInTheDocument();
+		expect(terminalRenderCounts.get("session-1")).toBe(ownTerminalRenders);
+		expect(terminalRenderCounts.get("session-2")).toBe(otherTerminalRenders);
+		expect(otherCommits).toBe(otherProfileCommits);
 	});
 
 	it("renders a dismissable completion notification after running becomes idle", async () => {

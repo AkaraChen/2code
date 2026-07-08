@@ -42,7 +42,12 @@ import {
 import { AgentStatusDot } from "./AgentStatusDot";
 import { useCloseTerminalTab } from "./hooks";
 import { restorePendingTerminalTab } from "./restoration";
-import { useTerminalStore, type TerminalTab } from "./store";
+import {
+	useTerminalStore,
+	type AgentCompletionNotification,
+	type AgentStatus,
+	type TerminalTab,
+} from "./store";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
 
@@ -60,8 +65,10 @@ const EMPTY_FILE_PROFILE = {
 	activeFilePath: null as string | null,
 	fileTabActive: false,
 };
+const EMPTY_TAB_AGENT_PROJECTION: string[] = [];
 const EMPTY_DIRTY_FILE_PATHS: string[] = [];
 const TAB_TRIGGER_LAYOUT_CLASS = "max-w-56 flex-none justify-start";
+const TAB_AGENT_DELIMITER = "\u0000";
 const AGENT_TAB_ICONS: { keyword: string; iconUrl: string }[] = [
 	{ keyword: "claude", iconUrl: claudeIconUrl },
 	{ keyword: "codex", iconUrl: codexIconUrl },
@@ -151,30 +158,43 @@ export default function TerminalTabs({
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
-	const agentStatuses = useTerminalStore((state) => state.agentStatuses);
-	const agentCompletions = useTerminalStore((state) => state.agentCompletions);
+	const tabAgentProjection = useTerminalStore(
+		useShallow((state) => {
+			const profileTabs = state.profiles[profileId]?.tabs;
+			if (!profileTabs || profileTabs.length === 0) {
+				return EMPTY_TAB_AGENT_PROJECTION;
+			}
+			return profileTabs.map(
+				(tab) =>
+					`${tab.id}${TAB_AGENT_DELIMITER}${
+						state.agentStatuses[tab.id] ?? ""
+					}${TAB_AGENT_DELIMITER}${state.agentCompletions[tab.id] ?? ""}`,
+			);
+		}),
+	);
 	const dismissAgentCompletion = useTerminalStore(
 		(state) => state.dismissAgentCompletion,
 	);
-	const agentStatusByTabId = useMemo(
+	const { agentStatusByTabId, agentCompletionByTabId } = useMemo(
 		() => {
-			const entries = tabs.flatMap((tab) => {
-				const status = agentStatuses[tab.id];
-				return status ? [[tab.id, status] as const] : [];
-			});
-			return new Map(entries);
+			const statusMap = new Map<string, AgentStatus>();
+			const completionMap = new Map<string, AgentCompletionNotification>();
+			for (const entry of tabAgentProjection) {
+				const [tabId, status, completion] = entry.split(TAB_AGENT_DELIMITER);
+				if (!tabId) continue;
+				if (status === "running" || status === "waiting") {
+					statusMap.set(tabId, status);
+				}
+				if (completion === "completed") {
+					completionMap.set(tabId, completion);
+				}
+			}
+			return {
+				agentStatusByTabId: statusMap,
+				agentCompletionByTabId: completionMap,
+			};
 		},
-		[agentStatuses, tabs],
-	);
-	const agentCompletionByTabId = useMemo(
-		() => {
-			const entries = tabs.flatMap((tab) => {
-				const status = agentCompletions[tab.id];
-				return status ? [[tab.id, status] as const] : [];
-			});
-			return new Map(entries);
-		},
-		[agentCompletions, tabs],
+		[tabAgentProjection],
 	);
 	const setActiveTab = useTerminalStore((state) => state.setActiveTab);
 

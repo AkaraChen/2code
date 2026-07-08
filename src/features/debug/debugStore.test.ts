@@ -2,14 +2,14 @@ import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { startDebugLog, stopDebugLog } from "@/generated";
 import { useDebugStore } from "./debugStore";
-import { useDebugLogStore } from "./debugLogStore";
+import { flushDebugLogs, useDebugLogStore } from "./debugLogStore";
 
 const startDebugLogMock = startDebugLog as unknown as Mock;
 const stopDebugLogMock = stopDebugLog as unknown as Mock;
 
 function resetStore() {
 	useDebugStore.setState({ enabled: false, panelOpen: false });
-	useDebugLogStore.setState({ logs: [] });
+	useDebugLogStore.getState().clear();
 	startDebugLogMock.mockClear();
 	stopDebugLogMock.mockClear();
 }
@@ -106,11 +106,12 @@ describe("useDebugStore", () => {
 				message: "hello from channel",
 			};
 			channel.onmessage!(entry);
+			flushDebugLogs();
 
 			// Verify it was forwarded to debugLogStore
 			const logs = useDebugLogStore.getState().logs;
 			expect(logs).toHaveLength(1);
-			expect(logs[0]).toEqual(entry);
+			expect(logs[0]).toMatchObject(entry);
 		});
 	});
 });

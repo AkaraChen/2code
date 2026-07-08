@@ -1,7 +1,6 @@
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
-import { LigaturesAddon } from "@xterm/addon-ligatures";
 import { ProgressAddon } from "@xterm/addon-progress";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
@@ -39,11 +38,13 @@ export function loadAddons(
 		terminal.loadAddon(new WebLinksAddon(options.onWebLinkActivate));
 	}
 
-	try {
-		terminal.loadAddon(new LigaturesAddon());
-	} catch {
-		// Ligatures not supported by current font
-	}
+	void import("@xterm/addon-ligatures")
+		.then(({ LigaturesAddon }) => {
+			terminal.loadAddon(new LigaturesAddon());
+		})
+		.catch(() => {
+			// Ligatures not supported by current font or terminal lifetime.
+		});
 
 	// Activate Unicode 11 widths before restoring any buffer, else CJK/emoji/ZWJ
 	// widths get baked wrong into the replay.

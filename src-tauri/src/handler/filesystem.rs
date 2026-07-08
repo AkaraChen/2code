@@ -201,8 +201,7 @@ pub async fn search_file(
 ) -> Result<Vec<FileSearchResult>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::search_file(conn, &profile_id, &query)
+		service::filesystem::search_file(&db, &profile_id, &query)
 	})
 	.await
 }
@@ -215,8 +214,7 @@ pub async fn get_file_tree_git_status(
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::get_file_tree_git_status(conn, &profile_id)
+		service::filesystem::get_file_tree_git_status(&db, &profile_id)
 	})
 	.await
 }

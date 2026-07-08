@@ -38,7 +38,7 @@ describe("useAppSidebarStore", () => {
 	it("syncs the CSS variable on document.documentElement", () => {
 		getState().setWidth(320);
 		expect(
-			document.documentElement.style.getPropertyValue("--sidebar-width"),
+			document.documentElement.style.getPropertyValue("--app-sidebar-width"),
 		).toBe("320px");
 	});
 

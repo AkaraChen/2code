@@ -111,7 +111,7 @@ vi.mock("@/generated", () => ({
 	openUpdatePage: vi.fn(() => Promise.resolve()),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	restorePtySession: vi.fn(() =>
-		Promise.resolve({ newSessionId: "mock-id", history: [] }),
+		Promise.resolve({ newSessionId: "mock-id", historyLen: 0 }),
 	),
 }));
 

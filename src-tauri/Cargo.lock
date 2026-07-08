@@ -2289,6 +2289,7 @@ dependencies = [
  "slug",
  "tar",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",

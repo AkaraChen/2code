@@ -1,14 +1,31 @@
 use tauri::{ipc::Channel, AppHandle, State};
-use tokio::sync::mpsc;
 
 use crate::bridge::{
 	PtyOutputReceiver, PtyOutputReceivers, PtyOutputSink, PtyOutputSinks,
+	RestoredHistories,
 };
 use infra::db::DbPool;
 use infra::pty::{self as session, PtySessionMap};
+use infra::pty_stream::{
+	coalesce_chunks, create_output_channel, MAX_BATCH_BYTES,
+};
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use service::pty::{PtyFlushSenders, PtyLogDir};
+
+pub struct RawBytesResponse(Vec<u8>);
+
+impl RawBytesResponse {
+	fn new(bytes: Vec<u8>) -> Self {
+		Self(bytes)
+	}
+}
+
+impl tauri::ipc::IpcResponse for RawBytesResponse {
+	fn body(self) -> tauri::Result<tauri::ipc::InvokeResponseBody> {
+		Ok(tauri::ipc::InvokeResponseBody::Raw(self.0))
+	}
+}
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -45,20 +62,33 @@ pub fn resize_pty(
 ) -> Result<(), AppError> {
 	session::resize_pty(&sessions, &session_id, rows, cols)?;
 
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::pty::update_dimensions(conn, &session_id, cols, rows);
+	let db = db.inner().clone();
+	tauri::async_runtime::spawn_blocking(move || {
+		if let Ok(mut conn) = db.lock() {
+			repo::pty::update_dimensions(&mut conn, &session_id, cols, rows);
+		}
+	});
 
 	Ok(())
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn close_pty_session(
+pub async fn close_pty_session(
 	db: State<'_, DbPool>,
 	sessions: State<'_, PtySessionMap>,
+	stash: State<'_, RestoredHistories>,
 	session_id: String,
 ) -> Result<(), AppError> {
-	service::pty::close_session(db.inner(), sessions.inner(), &session_id)
+	if let Ok(mut histories) = stash.0.lock() {
+		histories.remove(&session_id);
+	}
+	let db = db.inner().clone();
+	let sessions = sessions.inner().clone();
+	super::run_blocking(move || {
+		service::pty::close_session(&db, &sessions, &session_id)
+	})
+	.await
 }
 
 #[tauri::command]
@@ -80,12 +110,13 @@ pub async fn list_project_sessions(
 pub async fn get_pty_session_history(
 	session_id: String,
 	log_dir: State<'_, PtyLogDir>,
-) -> Result<Vec<u8>, AppError> {
+) -> Result<RawBytesResponse, AppError> {
 	let dir = log_dir.0.clone();
-	super::run_blocking(move || {
+	let bytes = super::run_blocking(move || {
 		Ok(service::pty::get_history(&dir, &session_id))
 	})
-	.await
+	.await?;
+	Ok(RawBytesResponse::new(bytes))
 }
 
 #[tauri::command]
@@ -94,7 +125,11 @@ pub async fn delete_pty_session_record(
 	session_id: String,
 	state: State<'_, DbPool>,
 	log_dir: State<'_, PtyLogDir>,
+	stash: State<'_, RestoredHistories>,
 ) -> Result<(), AppError> {
+	if let Ok(mut histories) = stash.0.lock() {
+		histories.remove(&session_id);
+	}
 	let db = state.inner().clone();
 	let dir = log_dir.0.clone();
 	super::run_blocking(move || {
@@ -111,12 +146,42 @@ pub async fn restore_pty_session(
 	old_session_id: String,
 	meta: PtySessionMeta,
 	config: PtyConfig,
+	stash: State<'_, RestoredHistories>,
 ) -> Result<RestoreResult, AppError> {
 	let ctx = crate::bridge::build_pty_context(&app);
-	super::run_blocking(move || {
+	let restored = super::run_blocking(move || {
 		service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
 	})
-	.await
+	.await?;
+
+	let history_len = restored.history.len();
+	if history_len > 0 {
+		stash
+			.0
+			.lock()
+			.map_err(|_| AppError::LockError)?
+			.insert(restored.new_session_id.clone(), restored.history);
+	}
+
+	Ok(RestoreResult {
+		new_session_id: restored.new_session_id,
+		history_len,
+	})
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn take_restored_history(
+	session_id: String,
+	stash: State<'_, RestoredHistories>,
+) -> Result<RawBytesResponse, AppError> {
+	let bytes = stash
+		.0
+		.lock()
+		.map_err(|_| AppError::LockError)?
+		.remove(&session_id)
+		.unwrap_or_default();
+	Ok(RawBytesResponse::new(bytes))
 }
 
 #[tauri::command]
@@ -127,7 +192,7 @@ pub fn attach_pty_output(
 	sinks: State<'_, PtyOutputSinks>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
-	let (sender, receiver) = mpsc::unbounded_channel();
+	let (sender, receiver) = create_output_channel();
 	{
 		let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
 		sinks.insert(
@@ -178,8 +243,10 @@ pub async fn stream_pty_output(
 		return Ok(());
 	};
 
+	let mut batch = Vec::with_capacity(MAX_BATCH_BYTES);
 	while let Some(chunk) = receiver.recv().await {
-		if on_output.send(chunk.as_slice()).is_err() {
+		coalesce_chunks(&mut batch, chunk, &mut receiver, MAX_BATCH_BYTES);
+		if on_output.send(batch.as_slice()).is_err() {
 			break;
 		}
 	}
@@ -215,19 +282,28 @@ pub fn detach_pty_output(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn flush_pty_output(
+pub async fn flush_pty_output(
 	session_id: String,
 	state: State<'_, PtyFlushSenders>,
 ) -> Result<(), AppError> {
-	service::pty::flush_output(state.inner(), &session_id)
+	let senders = state.inner().clone();
+	super::run_blocking(move || {
+		service::pty::flush_output(&senders, &session_id)
+	})
+	.await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn clear_pty_output(
+pub async fn clear_pty_output(
 	session_id: String,
 	log_dir: State<'_, PtyLogDir>,
 	state: State<'_, PtyFlushSenders>,
 ) -> Result<(), AppError> {
-	service::pty::clear_output(&log_dir.0, state.inner(), &session_id)
+	let dir = log_dir.0.clone();
+	let senders = state.inner().clone();
+	super::run_blocking(move || {
+		service::pty::clear_output(&dir, &senders, &session_id)
+	})
+	.await
 }

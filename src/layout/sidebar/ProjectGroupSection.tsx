@@ -1,5 +1,6 @@
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { memo } from "react";
 import {
 	SidebarMenuBadge,
 	SidebarMenuButton,
@@ -23,12 +24,12 @@ interface ProjectGroupSectionProps {
 	projects: ProjectWithProfiles[];
 }
 
-export function ProjectGroupSection({
+export const ProjectGroupSection = memo(({
 	activeProfileId,
 	group,
 	projectGroups,
 	projects,
-}: ProjectGroupSectionProps) {
+}: ProjectGroupSectionProps) => {
 	const collapsed = useAppSidebarStore((state) =>
 		state.collapsedProjectGroupIds.includes(group.id),
 	);
@@ -100,4 +101,6 @@ export function ProjectGroupSection({
 			</AnimatePresence>
 		</SidebarMenuItem>
 	);
-}
+});
+
+ProjectGroupSection.displayName = "ProjectGroupSection";

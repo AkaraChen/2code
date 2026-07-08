@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type { LogEntry } from "@/generated/types";
 import * as m from "@/paraglide/messages.js";
-import { useDebugLogStore } from "./debugLogStore";
+import { flushDebugLogs, useDebugLogStore } from "./debugLogStore";
 
 function formatTime(timestamp: number): string {
 	const d = new Date(timestamp);
@@ -65,6 +65,10 @@ function DebugLogContent() {
 	const [search, setSearch] = useState("");
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const autoScrollRef = useRef(true);
+
+	useEffect(() => {
+		flushDebugLogs();
+	}, []);
 
 	const filtered = useMemo(() => {
 		if (!search) return logs;
@@ -129,7 +133,7 @@ function DebugLogContent() {
 							</div>
 						) : (
 							filtered.map((entry) => (
-								<LogRow key={entry.timestamp} entry={entry} />
+								<LogRow key={entry.id} entry={entry} />
 							))
 						)}
 					</div>

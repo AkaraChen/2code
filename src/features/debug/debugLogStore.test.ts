@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { useDebugLogStore } from "./debugLogStore";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	enqueueDebugLog,
+	flushDebugLogs,
+	useDebugLogStore,
+} from "./debugLogStore";
 
 const makeEntry = (i: number) => ({
 	timestamp: i,
@@ -9,7 +13,7 @@ const makeEntry = (i: number) => ({
 });
 
 function resetStore() {
-	useDebugLogStore.setState({ logs: [] });
+	useDebugLogStore.getState().clear();
 }
 
 function getState() {
@@ -18,6 +22,11 @@ function getState() {
 
 describe("useDebugLogStore", () => {
 	beforeEach(resetStore);
+
+	afterEach(() => {
+		resetStore();
+		vi.useRealTimers();
+	});
 
 	describe("addLog", () => {
 		it("appends a log entry", () => {
@@ -38,7 +47,6 @@ describe("useDebugLogStore", () => {
 				getState().addLog(makeEntry(i));
 			}
 			expect(getState().logs).toHaveLength(1000);
-			// First entry (index 0) should have been trimmed
 			expect(getState().logs[0].timestamp).toBe(1);
 		});
 
@@ -52,7 +60,6 @@ describe("useDebugLogStore", () => {
 		});
 
 		it("keeps exactly 1000 after multiple overflows", () => {
-			// Add 999, then add 5 more (total 1004)
 			for (let i = 0; i < 999; i++) {
 				getState().addLog(makeEntry(i));
 			}
@@ -62,6 +69,26 @@ describe("useDebugLogStore", () => {
 				getState().addLog(makeEntry(i));
 			}
 			expect(getState().logs).toHaveLength(1000);
+		});
+	});
+
+	describe("addLogs", () => {
+		it("assigns distinct ids to entries with identical timestamps", () => {
+			getState().addLogs([makeEntry(5), makeEntry(5)]);
+			const [first, second] = getState().logs;
+
+			expect(first.id).not.toBe(second.id);
+			expect(second.id).toBeGreaterThan(first.id);
+		});
+
+		it("trims a large batch to the newest 1000 entries", () => {
+			getState().addLogs(
+				Array.from({ length: 1500 }, (_, i) => makeEntry(i)),
+			);
+
+			expect(getState().logs).toHaveLength(1000);
+			expect(getState().logs[0].timestamp).toBe(500);
+			expect(getState().logs[999].timestamp).toBe(1499);
 		});
 	});
 
@@ -91,7 +118,7 @@ describe("useDebugLogStore", () => {
 				message: "something broke",
 			};
 			getState().addLog(entry);
-			expect(getState().logs[0]).toEqual(entry);
+			expect(getState().logs[0]).toMatchObject(entry);
 		});
 
 		it("clear then addLog cycle works correctly", () => {
@@ -104,6 +131,53 @@ describe("useDebugLogStore", () => {
 			getState().addLog(makeEntry(9999));
 			expect(getState().logs).toHaveLength(1);
 			expect(getState().logs[0].timestamp).toBe(9999);
+		});
+	});
+
+	describe("batched ingestion", () => {
+		it("coalesces queued entries into one store update", () => {
+			let notifications = 0;
+			const unsubscribe = useDebugLogStore.subscribe(() => {
+				notifications += 1;
+			});
+
+			for (let i = 0; i < 5; i++) {
+				enqueueDebugLog(makeEntry(i));
+			}
+			expect(notifications).toBe(0);
+
+			flushDebugLogs();
+			unsubscribe();
+
+			expect(notifications).toBe(1);
+			expect(getState().logs.map((entry) => entry.timestamp)).toEqual([
+				0, 1, 2, 3, 4,
+			]);
+		});
+
+		it("flushes queued entries on the timer", () => {
+			vi.useFakeTimers();
+
+			for (let i = 0; i < 3; i++) {
+				enqueueDebugLog(makeEntry(i));
+			}
+			expect(getState().logs).toHaveLength(0);
+
+			vi.advanceTimersByTime(100);
+
+			expect(getState().logs.map((entry) => entry.timestamp)).toEqual([
+				0, 1, 2,
+			]);
+		});
+
+		it("clear drops queued entries", () => {
+			enqueueDebugLog(makeEntry(1));
+			enqueueDebugLog(makeEntry(2));
+
+			getState().clear();
+			flushDebugLogs();
+
+			expect(getState().logs).toEqual([]);
 		});
 	});
 

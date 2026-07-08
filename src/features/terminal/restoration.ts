@@ -10,6 +10,7 @@ import {
 	type PendingTerminalRestore,
 	type TerminalTab,
 } from "./store";
+import { takeRestoredHistory } from "./ptyHistoryIpc";
 
 /**
  * Transient scrollback data for restored sessions.
@@ -18,6 +19,11 @@ import {
 export const sessionHistory = new Map<string, Uint8Array>();
 
 const pendingRestores = new Map<string, Promise<void>>();
+
+interface RestoreSessionResult {
+	newSessionId: string;
+	historyLen: number;
+}
 
 export function restorePendingTerminalTab(
 	profileId: string,
@@ -57,7 +63,7 @@ async function runRestore(
 			cols: restore.cols,
 			startupCommands: [],
 		},
-	});
+	}) as unknown as RestoreSessionResult;
 
 	removeTerminalStorage(restore.oldSessionId);
 
@@ -69,8 +75,11 @@ async function runRestore(
 		return;
 	}
 
-	if (result.history.length > 0) {
-		sessionHistory.set(result.newSessionId, new Uint8Array(result.history));
+	if (result.historyLen > 0) {
+		const history = await takeRestoredHistory(result.newSessionId);
+		if (history.length > 0) {
+			sessionHistory.set(result.newSessionId, history);
+		}
 	}
 
 	useTerminalStore

@@ -6,14 +6,13 @@
 //! the global DB mutex, so a chatty terminal can no longer stall other
 //! sessions, and there is no per-flush blob rewrite.
 //!
-//! There is deliberately **no byte cap**: a log file lives only for the
-//! duration of one session (it is removed on restore/close/delete), and
-//! scrollback is bounded on restore by the vt100 emulator in
-//! `service::pty::sanitize_history` (10k lines), not by trimming bytes here.
+//! There is deliberately **no on-disk byte cap**: a log file lives only for the
+//! duration of one session (it is removed on restore/close/delete). Restore and
+//! history replay read a bounded tail because terminal scrollback is bounded.
 
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 /// Directory holding all per-session log files.
@@ -60,6 +59,22 @@ impl SessionLog {
 /// produced output is indistinguishable from an absent one, by design).
 pub fn read_all(dir: &Path, session_id: &str) -> Vec<u8> {
 	fs::read(session_path(dir, session_id)).unwrap_or_default()
+}
+
+/// Read at most the last `max_bytes` of a session's history. Missing file →
+/// empty, matching [`read_all`].
+pub fn read_tail(dir: &Path, session_id: &str, max_bytes: u64) -> Vec<u8> {
+	let read = || -> io::Result<Vec<u8>> {
+		let mut file = File::open(session_path(dir, session_id))?;
+		let len = file.metadata()?.len();
+		if len > max_bytes {
+			file.seek(SeekFrom::Start(len - max_bytes))?;
+		}
+		let mut buf = Vec::with_capacity(len.min(max_bytes) as usize);
+		file.read_to_end(&mut buf)?;
+		Ok(buf)
+	};
+	read().unwrap_or_default()
 }
 
 /// Truncate a session's log without holding an open [`SessionLog`]. Used by the
@@ -129,6 +144,58 @@ mod tests {
 		let dir = tmp();
 		fs::create_dir_all(&dir).unwrap();
 		assert!(read_all(&dir, "nope").is_empty());
+		let _ = fs::remove_dir_all(&dir);
+	}
+
+	#[test]
+	fn read_tail_returns_whole_file_when_smaller_than_cap() {
+		let dir = tmp();
+		SessionLog::open(&dir, "s1")
+			.unwrap()
+			.append(b"hello world")
+			.unwrap();
+		assert_eq!(read_tail(&dir, "s1", 1024), b"hello world");
+		let _ = fs::remove_dir_all(&dir);
+	}
+
+	#[test]
+	fn read_tail_returns_last_max_bytes_when_larger() {
+		let dir = tmp();
+		SessionLog::open(&dir, "s1")
+			.unwrap()
+			.append(b"0123456789")
+			.unwrap();
+		assert_eq!(read_tail(&dir, "s1", 4), b"6789");
+		let _ = fs::remove_dir_all(&dir);
+	}
+
+	#[test]
+	fn read_tail_exact_size_boundary() {
+		let dir = tmp();
+		SessionLog::open(&dir, "s1")
+			.unwrap()
+			.append(b"12345")
+			.unwrap();
+		assert_eq!(read_tail(&dir, "s1", 5), b"12345");
+		let _ = fs::remove_dir_all(&dir);
+	}
+
+	#[test]
+	fn read_tail_missing_session_reads_empty() {
+		let dir = tmp();
+		fs::create_dir_all(&dir).unwrap();
+		assert!(read_tail(&dir, "nope", 5).is_empty());
+		let _ = fs::remove_dir_all(&dir);
+	}
+
+	#[test]
+	fn read_tail_zero_cap_reads_empty() {
+		let dir = tmp();
+		SessionLog::open(&dir, "s1")
+			.unwrap()
+			.append(b"12345")
+			.unwrap();
+		assert!(read_tail(&dir, "s1", 0).is_empty());
 		let _ = fs::remove_dir_all(&dir);
 	}
 

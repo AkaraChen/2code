@@ -1,7 +1,7 @@
 /**
- * Debounced title-change notification. The underlying value updates
- * immediately so getTitle() reads the latest; only listener notifications
- * wait, preventing flicker when shells retitle rapidly.
+ * Coalesced title-change notification. The underlying value updates
+ * immediately so value reads the latest; listener notification is deferred
+ * at most one coalesce window after the first change in a burst.
  * Matches ghostty's 75ms coalesce window.
  */
 const TITLE_COALESCE_MS = 75;
@@ -19,7 +19,7 @@ export class TitleDebouncer {
 		if (this.title === nextTitle) return;
 		this.title = nextTitle;
 		if (this.timerId !== null) {
-			clearTimeout(this.timerId);
+			return;
 		}
 		this.timerId = setTimeout(() => {
 			this.timerId = null;

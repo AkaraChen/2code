@@ -133,6 +133,7 @@ export default function ProfileSidebar({
 					<SidebarGitPanel
 						profileId={profile.id}
 						worktreePath={profile.worktree_path}
+						isActive={Boolean(isActive) && isOpen}
 					/>
 				</SidebarAltPanel>
 			)}

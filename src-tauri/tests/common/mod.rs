@@ -1,10 +1,11 @@
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
-use infra::db::MIGRATIONS;
+use infra::db::{DbPool, MIGRATIONS};
 use infra::no_window::command_without_windows_console;
 use model::profile::Profile;
 use model::project::Project;
@@ -19,6 +20,11 @@ pub fn setup_db() -> SqliteConnection {
 	conn.run_pending_migrations(MIGRATIONS)
 		.expect("run migrations");
 	conn
+}
+
+/// Wrap a test connection in the app's DbPool type.
+pub fn wrap_db(conn: SqliteConnection) -> DbPool {
+	Arc::new(Mutex::new(conn))
 }
 
 /// Create a temporary git repository with user config set.

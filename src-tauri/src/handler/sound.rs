@@ -43,8 +43,10 @@ fn load_system_sounds() -> Vec<String> {
 }
 
 #[tauri::command]
-pub fn play_system_sound(name: String) -> Result<(), String> {
-	play_sound_name(&name)
+pub async fn play_system_sound(name: String) -> Result<(), String> {
+	tauri::async_runtime::spawn_blocking(move || play_sound_name(&name))
+		.await
+		.map_err(|err| format!("Sound task failed: {err}"))?
 }
 
 pub fn play_sound_name(name: &str) -> Result<(), String> {

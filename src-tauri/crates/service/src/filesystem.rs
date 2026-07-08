@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{
@@ -8,21 +7,21 @@ use model::filesystem::{
 };
 
 pub fn search_file(
-	conn: &mut SqliteConnection,
+	db: &DbPool,
 	profile_id: &str,
 	query: &str,
 ) -> Result<Vec<FileSearchResult>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	let root = std::path::Path::new(&profile.worktree_path);
-	infra::filesystem::search_files(root, query)
+	let root = get_profile_worktree_path(db, profile_id)?;
+	infra::filesystem::search_files(&root, query)
 }
 
 pub fn get_file_tree_git_status(
-	conn: &mut SqliteConnection,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::status(&profile.worktree_path)
+	let worktree = get_profile_worktree_path(db, profile_id)?;
+	let worktree_path = worktree.to_string_lossy();
+	infra::git::status(worktree_path.as_ref())
 }
 
 /// Resolve profile ID to its worktree path (short DB lock).
@@ -248,6 +247,8 @@ pub fn resolve_terminal_file_path(
 
 #[cfg(test)]
 mod tests {
+	use std::sync::{Arc, Mutex};
+
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use model::error::AppError;
@@ -280,6 +281,10 @@ mod tests {
 		"profile-1".to_string()
 	}
 
+	fn into_pool(conn: SqliteConnection) -> infra::db::DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
 	#[test]
 	fn search_file_uses_the_profiles_worktree() {
 		let dir = tempdir().expect("tempdir");
@@ -292,9 +297,10 @@ mod tests {
 		let mut conn = setup_db();
 		let profile_id =
 			insert_profile(&mut conn, &dir.path().to_string_lossy());
+		let db = into_pool(conn);
 
 		let results =
-			search_file(&mut conn, &profile_id, "main").expect("search files");
+			search_file(&db, &profile_id, "main").expect("search files");
 
 		assert_eq!(results.len(), 1);
 		assert_eq!(results[0].name, "main.rs");
@@ -303,10 +309,30 @@ mod tests {
 
 	#[test]
 	fn search_file_returns_a_not_found_error_for_unknown_profiles() {
-		let mut conn = setup_db();
+		let conn = setup_db();
+		let db = into_pool(conn);
 
-		let result = search_file(&mut conn, "missing-profile", "main");
+		let result = search_file(&db, "missing-profile", "main");
 
 		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
+
+	#[test]
+	fn search_file_releases_the_db_lock_before_returning() {
+		let dir = tempdir().expect("tempdir");
+		std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
+		std::fs::write(dir.path().join("src/main.rs"), "fn main() {}")
+			.expect("write main");
+
+		let mut conn = setup_db();
+		let profile_id =
+			insert_profile(&mut conn, &dir.path().to_string_lossy());
+		let db = into_pool(conn);
+
+		let results =
+			search_file(&db, &profile_id, "main").expect("search files");
+
+		assert_eq!(results.len(), 1);
+		assert!(db.try_lock().is_ok());
 	}
 }

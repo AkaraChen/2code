@@ -2,16 +2,17 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import {
 	useCallback,
 	useEffect,
+	lazy,
 	useMemo,
 	useReducer,
 	useRef,
 	useState,
+	Suspense,
 } from "react";
 import { toast } from "sonner";
 import { useGitBranch } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
 import { areSetsEqual } from "@/shared/lib/setUtils";
-import GitDiffDialog from "../GitDiffDialog";
 import { gitDiffReducer, initialState } from "../gitDiffReducer";
 import {
 	useCommitGitChanges,
@@ -29,9 +30,12 @@ import ChangesFileList from "./ChangesFileList";
 import CommitComposer from "./CommitComposer";
 import { collectOrderedIncludedFileNames } from "./includedFileNames";
 
+const GitDiffDialog = lazy(() => import("../GitDiffDialog"));
+
 interface SidebarGitPanelProps {
 	profileId: string;
 	worktreePath: string;
+	isActive?: boolean;
 }
 
 // Simple sidebar variant of the git dialog's changes tab: pick files, commit.
@@ -39,6 +43,7 @@ interface SidebarGitPanelProps {
 export default function SidebarGitPanel({
 	profileId,
 	worktreePath,
+	isActive = false,
 }: SidebarGitPanelProps) {
 	const [includedFileNames, setIncludedFileNames] = useState<Set<string>>(
 		() => new Set(),
@@ -47,6 +52,7 @@ export default function SidebarGitPanel({
 	const [commitMessage, setCommitMessage] = useState("");
 	const [commitBody, setCommitBody] = useState("");
 	const [diffDialogOpen, setDiffDialogOpen] = useState(false);
+	const [hasEverOpenedDiffDialog, setHasEverOpenedDiffDialog] = useState(false);
 	const [diffDialogState, dispatchDiffDialog] = useReducer(
 		gitDiffReducer,
 		initialState,
@@ -54,7 +60,7 @@ export default function SidebarGitPanel({
 	const { data: branchName } = useGitBranch(worktreePath, diffDialogOpen);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 
-	const changesFiles = useGitDiffFiles(profileId);
+	const changesFiles = useGitDiffFiles(profileId, isActive);
 	const changeFileNames = useMemo(
 		() => changesFiles.map((file) => file.name),
 		[changesFiles],
@@ -63,7 +69,7 @@ export default function SidebarGitPanel({
 		useCommitGitChanges(profileId);
 	const { mutateAsync: discardGitFileChanges } =
 		useDiscardGitFileChanges(profileId);
-	const aheadCount = useGitAheadCount(profileId);
+	const aheadCount = useGitAheadCount(profileId, isActive);
 	const { mutateAsync: gitPush, isPending: isPushing } = useGitPush(profileId);
 	const orderedIncludedFileNames = useMemo(
 		() => collectOrderedIncludedFileNames(changesFiles, includedFileNames),
@@ -119,6 +125,7 @@ export default function SidebarGitPanel({
 			if (index > 0) {
 				dispatchDiffDialog({ type: "selectFile", index });
 			}
+			setHasEverOpenedDiffDialog(true);
 			setDiffDialogOpen(true);
 		},
 		[changesFiles],
@@ -181,6 +188,7 @@ export default function SidebarGitPanel({
 
 	const handleMaximize = useCallback(() => {
 		dispatchDiffDialog({ type: "switchTab", tab: "changes" });
+		setHasEverOpenedDiffDialog(true);
 		setDiffDialogOpen(true);
 	}, []);
 	const handleCloseDiffDialog = useCallback(() => {
@@ -231,15 +239,19 @@ export default function SidebarGitPanel({
 			/>
 		</div>
 
-		<GitDiffDialog
-			isOpen={diffDialogOpen}
-			onClose={handleCloseDiffDialog}
-			profileId={profileId}
-			worktreePath={worktreePath}
-			branchName={branchName ?? undefined}
-			state={diffDialogState}
-			dispatch={dispatchDiffDialog}
-		/>
+		{hasEverOpenedDiffDialog && (
+			<Suspense fallback={null}>
+				<GitDiffDialog
+					isOpen={diffDialogOpen}
+					onClose={handleCloseDiffDialog}
+					profileId={profileId}
+					worktreePath={worktreePath}
+					branchName={branchName ?? undefined}
+					state={diffDialogState}
+					dispatch={dispatchDiffDialog}
+				/>
+			</Suspense>
+		)}
 		</>
 	);
 }

@@ -39,11 +39,13 @@ export function ProfileList({
 					<PlusIcon weight="regular" />
 					<span>{m.createProfile()}</span>
 				</SidebarMenuSubButton>
-				<CreateProfileDialog
-					isOpen={createDialog.isOpen}
-					onClose={createDialog.onClose}
-					projectId={projectId}
-				/>
+				{createDialog.isOpen && (
+					<CreateProfileDialog
+						isOpen={createDialog.isOpen}
+						onClose={createDialog.onClose}
+						projectId={projectId}
+					/>
+				)}
 			</SidebarMenuSubItem>
 		</>
 	);

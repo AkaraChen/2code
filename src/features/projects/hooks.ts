@@ -315,6 +315,12 @@ export function useFileTreeChildPaths(
 	});
 }
 
+function combineFileTreeChildPathResults(
+	results: { data: string[] | undefined }[],
+) {
+	return results.flatMap((result) => result.data ?? []);
+}
+
 export function useFileTreeExpandedChildPaths(
 	profileId: string,
 	parentPaths: readonly string[],
@@ -327,6 +333,7 @@ export function useFileTreeExpandedChildPaths(
 			enabled: !!profileId && enabled,
 			staleTime: FILE_TREE_STALE_TIME_MS,
 		})),
+		combine: combineFileTreeChildPathResults,
 	});
 }
 
