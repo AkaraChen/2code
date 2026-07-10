@@ -28,7 +28,7 @@ jobs:
         run: bun run lint:check
 
       - name: Run node tooling typecheck
-        run: ./node_modules/.bin/tsc -p tsconfig.node.json --noEmit
+        run: node ./node_modules/@typescript/native/bin/tsc -p tsconfig.node.json --noEmit
 
       - name: Run app typecheck
         run: bun run typecheck
