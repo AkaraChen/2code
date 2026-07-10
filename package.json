@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "vite",
     "paraglide:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide",
-    "build": "bun run paraglide:compile && tsc && vite build",
-    "typecheck": "bun run paraglide:compile && tsc -p tsconfig.json --noEmit",
+    "build": "bun run paraglide:compile && node ./node_modules/typescript-7/bin/tsc && vite build",
+    "typecheck": "bun run paraglide:compile && node ./node_modules/typescript-7/bin/tsc -p tsconfig.json --noEmit",
     "tauri:before-build": "bun ./scripts/tauri-before.mjs build",
     "tauri:before-dev": "bun ./scripts/tauri-before.mjs dev",
     "typegen": "rm -rf src/generated && cargo tauri-typegen generate && node ./scripts/fix-tauri-generated.mjs",
@@ -121,6 +121,7 @@
     "shadcn": "^4.12.0",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.3",
+    "typescript-7": "npm:typescript@^7.0.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   },
