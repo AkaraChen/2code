@@ -23,6 +23,7 @@ import {
 	useFileTreeGitStatus,
 	useMoveFileTreePaths,
 	useOpenPathInDefaultApp,
+	useRefreshProfileWorkspaceCaches,
 	useRenameFileTreePath,
 	useRevealPathInFileManager,
 } from "./hooks";
@@ -38,6 +39,7 @@ const {
 	getFocusedItemMock,
 	moveMutateAsyncMock,
 	renameMutateAsyncMock,
+	refreshMutateAsyncMock,
 	revealMutateAsyncMock,
 	resetPathsMock,
 	setGitStatusMock,
@@ -64,6 +66,7 @@ const {
 	getFocusedItemMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
 	renameMutateAsyncMock: vi.fn(),
+	refreshMutateAsyncMock: vi.fn(),
 	revealMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
@@ -222,6 +225,7 @@ vi.mock("./hooks", () => ({
 	useFileTreeGitStatus: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
 	useOpenPathInDefaultApp: vi.fn(),
+	useRefreshProfileWorkspaceCaches: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
 	useRevealPathInFileManager: vi.fn(),
 }));
@@ -327,6 +331,8 @@ describe("fileTreePanel", () => {
 		moveMutateAsyncMock.mockResolvedValue(undefined);
 		renameMutateAsyncMock.mockReset();
 		renameMutateAsyncMock.mockResolvedValue(undefined);
+		refreshMutateAsyncMock.mockReset();
+		refreshMutateAsyncMock.mockResolvedValue(undefined);
 		revealMutateAsyncMock.mockReset();
 		revealMutateAsyncMock.mockResolvedValue(undefined);
 		resetPathsMock.mockReset();
@@ -362,6 +368,10 @@ describe("fileTreePanel", () => {
 		vi.mocked(useOpenPathInDefaultApp).mockReturnValue({
 			mutateAsync: openDefaultAppMutateAsyncMock,
 		} as unknown as ReturnType<typeof useOpenPathInDefaultApp>);
+		vi.mocked(useRefreshProfileWorkspaceCaches).mockReturnValue({
+			isPending: false,
+			mutateAsync: refreshMutateAsyncMock,
+		} as unknown as ReturnType<typeof useRefreshProfileWorkspaceCaches>);
 		vi.mocked(useRevealPathInFileManager).mockReturnValue({
 			mutateAsync: revealMutateAsyncMock,
 		} as unknown as ReturnType<typeof useRevealPathInFileManager>);
@@ -731,6 +741,34 @@ describe("fileTreePanel", () => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
 				path: null,
 			});
+		});
+	});
+
+	it("refreshes the current profile from the file context menu", async () => {
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Refresh" }));
+
+		await waitFor(() => {
+			expect(refreshMutateAsyncMock).toHaveBeenCalledOnce();
+		});
+		expect(useRefreshProfileWorkspaceCaches).toHaveBeenCalledWith(profileId);
+		expect(closeContextMenuMock).toHaveBeenCalledWith({
+			restoreFocus: false,
+		});
+	});
+
+	it("refreshes the current profile from the empty area context menu", async () => {
+		renderPanel();
+
+		fireEvent.contextMenu(screen.getByTestId("pierre-tree"), {
+			clientX: 30,
+			clientY: 40,
+		});
+		fireEvent.click(getLastMenuItem("Refresh"));
+
+		await waitFor(() => {
+			expect(refreshMutateAsyncMock).toHaveBeenCalledOnce();
 		});
 	});
 

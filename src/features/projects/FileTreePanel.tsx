@@ -51,6 +51,7 @@ import {
   useFileTreeGitStatus,
   useMoveFileTreePaths,
   useOpenPathInDefaultApp,
+  useRefreshProfileWorkspaceCaches,
   useRenameFileTreePath,
   useRevealPathInFileManager } from
 "./hooks";
@@ -413,6 +414,7 @@ expandedPaths: readonly string[])
 }
 
 interface FileTreeRootContextMenuProps {
+  isRefreshing: boolean;
   position: RootContextMenuState;
   rootPath: string;
   onClose: () => void;
@@ -420,14 +422,17 @@ interface FileTreeRootContextMenuProps {
   parentPath: string | null,
   kind: "directory" | "file")
   => void;
+  onRefresh: () => Promise<void>;
   onRevealRoot: () => void;
 }
 
 function FileTreeRootContextMenu({
+  isRefreshing,
   position,
   rootPath,
   onClose,
   onCreatePath,
+  onRefresh,
   onRevealRoot
 }: FileTreeRootContextMenuProps) {
   const handleCreateFile = () => {
@@ -441,6 +446,11 @@ function FileTreeRootContextMenu({
   const handleRevealRoot = () => {
     onClose();
     onRevealRoot();
+  };
+  const handleRefresh = () => {
+    if (isRefreshing) return;
+    onClose();
+    void onRefresh();
   };
   const handleCopyRelativePath = () => {
     void copyTextToClipboard(".").catch(() => {});
@@ -460,6 +470,9 @@ function FileTreeRootContextMenu({
         {m.fileTreeContextMenuNewFolder()}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={isRefreshing} onClick={handleRefresh}>
+        {m.fileTreeContextMenuRefresh()}
+      </DropdownMenuItem>
       <DropdownMenuItem onClick={handleRevealRoot}>
         {m.fileTreeContextMenuRevealInFileManager()}
       </DropdownMenuItem>
@@ -479,6 +492,7 @@ interface FileTreeContextMenuProps {
   deletablePathSet: ReadonlySet<string>;
   filePathSet: ReadonlySet<string>;
   isDeleting: boolean;
+  isRefreshing: boolean;
   item: FileTreeContextMenuItem;
   rootPath: string;
   selectedPaths: readonly string[];
@@ -490,6 +504,7 @@ interface FileTreeContextMenuProps {
   => void;
   onOpenFile: (relativePath: string) => void;
   onOpenPathInDefaultApp: (relativePath: string) => void;
+  onRefresh: () => Promise<void>;
   onRevealPath: (relativePath: string) => void;
   onStartRename: (path: string) => void;
 }
@@ -499,6 +514,7 @@ function FileTreeContextMenu({
   deletablePathSet,
   filePathSet,
   isDeleting,
+  isRefreshing,
   item,
   rootPath,
   selectedPaths,
@@ -507,6 +523,7 @@ function FileTreeContextMenu({
   onCreatePath,
   onOpenFile,
   onOpenPathInDefaultApp,
+  onRefresh,
   onRevealPath,
   onStartRename
 }: FileTreeContextMenuProps) {
@@ -535,6 +552,11 @@ function FileTreeContextMenu({
       onOpenPathInDefaultApp(item.path)
       );
     }
+  };
+  const handleRefresh = () => {
+    if (isRefreshing) return;
+    context.close({ restoreFocus: false });
+    void onRefresh();
   };
   const handleRename = () => {
     if (!canRename) return;
@@ -586,6 +608,10 @@ function FileTreeContextMenu({
       </DropdownMenuItem>
       <DropdownMenuItem disabled={!canReveal} onClick={handleRevealPath}>
         {m.fileTreeContextMenuRevealInFileManager()}
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem disabled={isRefreshing} onClick={handleRefresh}>
+        {m.fileTreeContextMenuRefresh()}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={handleCreateFile}>
@@ -681,6 +707,8 @@ export default function FileTreePanel({
   const renameFileTreePath = useRenameFileTreePath(profileId);
   const moveFileTreePaths = useMoveFileTreePaths(profileId);
   const deleteFileTreePaths = useDeleteFileTreePaths(profileId);
+  const refreshProfileWorkspaceCaches =
+  useRefreshProfileWorkspaceCaches(profileId);
   const openPathInDefaultApp = useOpenPathInDefaultApp(profileId);
   const revealPathInFileManager = useRevealPathInFileManager(profileId);
   const treePaths = useMemo(
@@ -1045,6 +1073,18 @@ export default function FileTreePanel({
   const closeRootContextMenu = useCallback(() => {
     dispatchFileTreeUi({ type: "closeRootContextMenu" });
   }, []);
+  const handleRefresh = async () => {
+    try {
+      await refreshProfileWorkspaceCaches.mutateAsync();
+    } catch (error) {
+      toast.error(
+        m.somethingWentWrong(), {
+          description: getErrorMessage(error) });
+
+
+
+    }
+  };
   const handleDeletePaths = useCallback(
     async (paths: readonly string[]) => {
       try {
@@ -1178,6 +1218,9 @@ export default function FileTreePanel({
                         isDeleting={
                         deleteFileTreePaths.isPending
                         }
+                        isRefreshing={
+                        refreshProfileWorkspaceCaches.isPending
+                        }
                         item={item}
                         rootPath={rootPath}
                         selectedPaths={
@@ -1196,6 +1239,7 @@ export default function FileTreePanel({
                         onOpenPathInDefaultApp={
                         handleOpenPathInDefaultApp
                         }
+                        onRefresh={handleRefresh}
                         onRevealPath={
                         handleRevealPath
                         }
@@ -1208,6 +1252,9 @@ export default function FileTreePanel({
                     
 										{rootContextMenu &&
                     <FileTreeRootContextMenu
+                      isRefreshing={
+                      refreshProfileWorkspaceCaches.isPending
+                      }
                       position={rootContextMenu}
                       rootPath={rootPath}
                       onClose={
@@ -1216,6 +1263,7 @@ export default function FileTreePanel({
                       onCreatePath={
                       handleCreatePath
                       }
+                      onRefresh={handleRefresh}
                       onRevealRoot={
                       handleRevealRoot
                       } />

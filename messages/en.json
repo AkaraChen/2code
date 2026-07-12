@@ -291,6 +291,7 @@
 	"noTemplatesDropdownHint": "Add project templates in Project Settings, or global templates in Settings.",
 	"fileTreeLoading": "Loading...",
 	"fileTreeEmptyDirectory": "Empty",
+	"fileTreeContextMenuRefresh": "Refresh",
 	"fileTreeContextMenuOpen": "Open",
 	"fileTreeContextMenuOpenInDefaultApp": "Open in Default App",
 	"fileTreeContextMenuRevealInFileManager": "Reveal in Finder",

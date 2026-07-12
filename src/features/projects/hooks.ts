@@ -385,6 +385,13 @@ async function refreshProfileWorkspaceCaches(
 	});
 }
 
+export function useRefreshProfileWorkspaceCaches(profileId: string) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: () => refreshProfileWorkspaceCaches(queryClient, profileId),
+	});
+}
+
 function settleFileTreeMutation(
 	queryClient: QueryClient,
 	profileId: string,

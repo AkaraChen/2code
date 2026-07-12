@@ -291,6 +291,7 @@
 	"noTemplatesDropdownHint": "可在项目设置中添加项目模板，或在全局设置中添加全局模板。",
 	"fileTreeLoading": "加载中...",
 	"fileTreeEmptyDirectory": "空文件夹",
+	"fileTreeContextMenuRefresh": "刷新",
 	"fileTreeContextMenuOpen": "打开",
 	"fileTreeContextMenuOpenInDefaultApp": "用默认应用打开",
 	"fileTreeContextMenuRevealInFileManager": "在 Finder 中打开",

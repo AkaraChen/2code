@@ -17,6 +17,7 @@ import {
 	useDeleteProject,
 	useFileTreeGitStatus,
 	useFileSearch,
+	useRefreshProfileWorkspaceCaches,
 	useUpdateProjectSidebarLayout,
 } from "./hooks";
 
@@ -276,6 +277,53 @@ describe("useDeleteFileTreePaths", () => {
 			queryKey: queryKeys.git.diffStats("profile-1"),
 		});
 		invalidateQueriesSpy.mockRestore();
+	});
+});
+
+describe("useRefreshProfileWorkspaceCaches", () => {
+	it("invalidates every current-profile workspace cache and refetches active tree queries", async () => {
+		const queryClient = createQueryClient();
+		const invalidateQueriesSpy = vi
+			.spyOn(queryClient, "invalidateQueries")
+			.mockResolvedValue(undefined);
+		const refetchQueriesSpy = vi
+			.spyOn(queryClient, "refetchQueries")
+			.mockResolvedValue(undefined);
+
+		const { result } = renderHook(
+			() => useRefreshProfileWorkspaceCaches("profile-1"),
+			{ wrapper: createWrapperWithClient(queryClient) },
+		);
+
+		await act(async () => {
+			await result.current.mutateAsync();
+		});
+
+		expect(
+			invalidateQueriesSpy.mock.calls.map(([filters]) => filters),
+		).toEqual(
+			[
+				queryKeys.fs.treeChildrenPrefix("profile-1"),
+				queryKeys.git.status("profile-1"),
+				queryKeys.git.diff("profile-1"),
+				queryKeys.git.diffStats("profile-1"),
+				[queryNamespaces["fs-file"], "profile-1"],
+				[queryNamespaces["fs-file-preview"], "profile-1"],
+				[queryNamespaces["fs-search"], "profile-1"],
+				queryKeys.git.log("profile-1"),
+				queryKeys.git.aheadCount("profile-1"),
+				[queryNamespaces["git-binary-preview"], "profile-1"],
+				[queryNamespaces["git-commit-diff"], "profile-1"],
+				[queryNamespaces["git-pull-request-status"], "profile-1"],
+			].map((queryKey) => ({ queryKey })),
+		);
+		expect(refetchQueriesSpy).toHaveBeenCalledWith({
+			queryKey: queryKeys.fs.treeChildrenPrefix("profile-1"),
+			type: "active",
+		});
+
+		invalidateQueriesSpy.mockRestore();
+		refetchQueriesSpy.mockRestore();
 	});
 });
 
