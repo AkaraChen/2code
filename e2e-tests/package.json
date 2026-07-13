@@ -8,7 +8,7 @@
   "dependencies": {
     "chai": "^6.2.2",
     "mocha": "^11.7.6",
-    "selenium-webdriver": "^4.44.0"
+    "selenium-webdriver": "^4.46.0"
   },
   "overrides": {
     "serialize-javascript": "7.0.5",
