@@ -76,7 +76,7 @@ function FileListItemComponent({
 				)}
 				<Badge
 					variant="outline"
-					className={cn("ml-auto h-4 shrink-0 px-1.5 font-mono text-[10px]", badge.className)}
+					className={cn("ml-auto size-4 shrink-0 rounded-sm p-0 font-mono text-[10px]", badge.className)}
 				>
 					{badge.label}
 				</Badge>

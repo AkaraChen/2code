@@ -54,7 +54,7 @@ function FileDiffHeader({
 		<div className="flex select-none items-center gap-3 bg-card px-3 py-1.5">
 			<Badge
 				variant="outline"
-				className={cn("h-4 px-1.5 font-mono text-[10px]", badge.className)}
+				className={cn("size-4 rounded-sm p-0 font-mono text-[10px]", badge.className)}
 			>
 				{badge.label}
 			</Badge>
