@@ -2,7 +2,6 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type {
   ContextMenuItem as FileTreeContextMenuItem,
   ContextMenuOpenContext as FileTreeContextMenuOpenContext,
-  FileTreeDirectoryHandle,
   FileTreeDropContext,
   FileTreeDropResult,
   FileTree as FileTreeModel,
@@ -670,6 +669,8 @@ export default function FileTreePanel({
   const modelRef = useRef<FileTreeModel | null>(null);
   const draftCreateRef = useRef(draftCreate);
   const lastResetModelRef = useRef<FileTreeModel | null>(null);
+  const lastResetDraftPathRef = useRef<string | null>(null);
+  const renamingDraftPathRef = useRef<string | null>(null);
   const lastResetModelPathsRef = useRef<readonly string[] | null>(null);
   const lastResetExpandedPathsRef = useRef<readonly string[] | null>(null);
   const skipNextSelectionOpenRef = useRef(false);
@@ -772,7 +773,12 @@ export default function FileTreePanel({
   };
   renameFileTreePathRef.current = (event) => {
     const draft = draftCreateRef.current;
-    if (draft?.path === event.sourcePath) {
+    // Trees strips the trailing slash from folder paths before emitting the
+    // rename event, so compare by collision key rather than raw path.
+    if (
+    draft &&
+    toPathCollisionKey(draft.path) === toPathCollisionKey(event.sourcePath))
+    {
       void createFileTreePath.
       mutateAsync({
         kind: draft.kind,
@@ -865,9 +871,16 @@ export default function FileTreePanel({
     },
     paths: [],
     renaming: {
-      canRename: (item) =>
-      draftCreateRef.current?.path === item.path ||
-      hasTreePath(treePathSetRef.current, item.path),
+      canRename: (item) => {
+        const draftPath = draftCreateRef.current?.path;
+        if (
+        draftPath != null &&
+        toPathCollisionKey(draftPath) === toPathCollisionKey(item.path))
+        {
+          return true;
+        }
+        return hasTreePath(treePathSetRef.current, item.path);
+      },
       onError: () => {
         restoreModelRef.current();
       },
@@ -880,7 +893,14 @@ export default function FileTreePanel({
   modelRef.current = model;
 
   useEffect(() => {
+    // Resetting the model destroys any in-progress rename, so once the draft
+    // item has been folded into the tree we freeze resets until it settles.
+    if (draftCreate && lastResetDraftPathRef.current === draftCreate.path) {
+      return;
+    }
     if (
+    !draftCreate &&
+    lastResetDraftPathRef.current === null &&
     lastResetModelRef.current === model &&
     lastResetModelPathsRef.current === modelPaths &&
     lastResetExpandedPathsRef.current === expandedPaths)
@@ -889,10 +909,34 @@ export default function FileTreePanel({
     }
 
     resetFileTreeModel(model, modelPaths, expandedPaths);
+    lastResetDraftPathRef.current = draftCreate?.path ?? null;
     lastResetModelRef.current = model;
     lastResetModelPathsRef.current = modelPaths;
     lastResetExpandedPathsRef.current = expandedPaths;
-  }, [expandedPaths, model, modelPaths]);
+  }, [draftCreate, expandedPaths, model, modelPaths]);
+
+  // Runs after the reset effect above, so the draft item exists in the model.
+  // Guarded by path so a re-render never restarts an in-progress edit.
+  useEffect(() => {
+    if (!draftCreate) {
+      renamingDraftPathRef.current = null;
+      return;
+    }
+    if (renamingDraftPathRef.current === draftCreate.path) return;
+    renamingDraftPathRef.current = draftCreate.path;
+    model.startRenaming(draftCreate.path, { removeIfCanceled: true });
+  }, [draftCreate, model]);
+
+  // Canceling the rename removes the draft row; drop the draft so the tree
+  // resumes syncing with the query data.
+  useEffect(() => {
+    if (!draftCreate) return;
+    const draftKey = toPathCollisionKey(draftCreate.path);
+    return model.onMutation("remove", (event) => {
+      if (toPathCollisionKey(event.path) !== draftKey) return;
+      dispatchFileTreeUi({ type: "setDraftCreate", draftCreate: null });
+    });
+  }, [draftCreate, model]);
 
   useEffect(() => {
     model.setGitStatus(gitStatus);
@@ -964,21 +1008,15 @@ export default function FileTreePanel({
         kind,
         treePathSetRef.current
       );
+      if (parentPath) {
+        expandDirectoryPath(parentPath);
+      }
       dispatchFileTreeUi({
         type: "setDraftCreate",
         draftCreate: { kind, path: createPath }
       });
-      model.add(createPath);
-      if (parentPath) {
-        expandDirectoryPath(parentPath);
-        const parentItem = model.getItem(parentPath);
-        if (parentItem?.isDirectory()) {
-          (parentItem as FileTreeDirectoryHandle).expand();
-        }
-      }
-      model.startRenaming(createPath, { removeIfCanceled: true });
     },
-    [expandDirectoryPath, model]
+    [expandDirectoryPath]
   );
   const handleTreeContextMenu = useCallback(
     (event: MouseEvent<HTMLElement>) => {
