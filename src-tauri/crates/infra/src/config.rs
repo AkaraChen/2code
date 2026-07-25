@@ -18,12 +18,17 @@ pub fn load_project_config(
 		}
 		Err(e) => return Err(AppError::IoError(e)),
 	};
-	serde_json::from_str(&content).map_err(|e| {
-		AppError::IoError(std::io::Error::new(
-			std::io::ErrorKind::InvalidData,
-			format!("Failed to parse 2code.json: {e}"),
-		))
-	})
+	let mut config: ProjectConfig =
+		serde_json::from_str(&content).map_err(|e| {
+			AppError::IoError(std::io::Error::new(
+				std::io::ErrorKind::InvalidData,
+				format!("Failed to parse 2code.json: {e}"),
+			))
+		})?;
+	for (index, template) in config.terminal_templates.iter_mut().enumerate() {
+		template.id = format!("project-template-{index}");
+	}
+	Ok(config)
 }
 
 pub fn write_project_config(
@@ -31,7 +36,11 @@ pub fn write_project_config(
 	config: &ProjectConfig,
 ) -> Result<(), AppError> {
 	let config_path = Path::new(project_folder).join("2code.json");
-	let content = serde_json::to_string_pretty(config).map_err(|e| {
+	let mut file_config = config.clone();
+	for template in &mut file_config.terminal_templates {
+		template.id.clear();
+	}
+	let content = serde_json::to_string_pretty(&file_config).map_err(|e| {
 		AppError::IoError(std::io::Error::new(
 			std::io::ErrorKind::InvalidData,
 			format!("Failed to serialize 2code.json: {e}"),
@@ -225,8 +234,16 @@ mod tests {
 
 		write_project_config(dir.path().to_str().unwrap(), &config).unwrap();
 
+		let saved: serde_json::Value = serde_json::from_str(
+			&fs::read_to_string(dir.path().join("2code.json")).unwrap(),
+		)
+		.unwrap();
+		assert!(saved["terminal_templates"][0].get("id").is_none());
+
 		let loaded = load_project_config(dir.path().to_str().unwrap()).unwrap();
-		assert_eq!(loaded, config);
+		let mut expected = config;
+		expected.terminal_templates[0].id = "project-template-0".to_string();
+		assert_eq!(loaded, expected);
 	}
 
 	#[test]

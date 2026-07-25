@@ -19,6 +19,7 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Deserialize, Serialize, Default, PartialEq, Clone)]
 pub struct ProjectTerminalTemplate {
+	#[serde(default, skip_serializing_if = "String::is_empty")]
 	pub id: String,
 	pub name: String,
 	pub cwd: String,
