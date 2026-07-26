@@ -60,18 +60,18 @@ export const useAppSidebarStore = create<AppSidebarStore>()(
 	),
 );
 
-function syncSidebarWidth(width: number) {
+export function syncAppSidebarWidthVar(width: number) {
 	if (typeof document === "undefined") return;
 	document.documentElement.style.setProperty(
-		"--sidebar-width",
+		"--app-sidebar-width",
 		`${clampAppSidebarWidth(width)}px`,
 	);
 }
 
-syncSidebarWidth(useAppSidebarStore.getState().width);
+syncAppSidebarWidthVar(useAppSidebarStore.getState().width);
 
 useAppSidebarStore.subscribe((state, prevState) => {
 	if (state.width !== prevState.width) {
-		syncSidebarWidth(state.width);
+		syncAppSidebarWidthVar(state.width);
 	}
 });

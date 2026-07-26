@@ -2,34 +2,19 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use tauri::{ipc::Channel, AppHandle, Emitter, Manager};
-use tokio::sync::mpsc;
 
 use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
+pub use infra::pty_stream::{
+	create_output_receivers, create_output_sinks, PtyOutputReceiver,
+	PtyOutputReceivers, PtyOutputSink, PtyOutputSinks,
+};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
 use service::{PtyEventEmitter, WatchEventSender};
 
-pub struct PtyOutputSink {
-	pub stream_id: String,
-	pub sender: mpsc::UnboundedSender<Vec<u8>>,
-}
-
-pub struct PtyOutputReceiver {
-	pub stream_id: String,
-	pub receiver: mpsc::UnboundedReceiver<Vec<u8>>,
-}
-
-pub type PtyOutputSinks = Arc<Mutex<HashMap<String, PtyOutputSink>>>;
-pub type PtyOutputReceivers = Arc<Mutex<HashMap<String, PtyOutputReceiver>>>;
-
-pub fn create_output_sinks() -> PtyOutputSinks {
-	Arc::new(Mutex::new(HashMap::new()))
-}
-
-pub fn create_output_receivers() -> PtyOutputReceivers {
-	Arc::new(Mutex::new(HashMap::new()))
-}
+#[derive(Clone, Default)]
+pub struct RestoredHistories(pub Arc<Mutex<HashMap<String, Vec<u8>>>>);
 
 /// Tauri implementation of the PtyEventEmitter trait.
 pub struct TauriPtyEmitter {
@@ -40,20 +25,7 @@ pub struct TauriPtyEmitter {
 
 impl PtyEventEmitter for TauriPtyEmitter {
 	fn emit_output(&self, session_id: &str, bytes: &[u8]) -> bool {
-		let Ok(sinks) = self.sinks.lock() else {
-			return true;
-		};
-		let should_detach = sinks
-			.get(session_id)
-			.is_some_and(|sink| sink.sender.send(bytes.to_vec()).is_err());
-		drop(sinks);
-
-		if should_detach {
-			if let Ok(mut sinks) = self.sinks.lock() {
-				sinks.remove(session_id);
-			}
-		}
-
+		infra::pty_stream::send_output(&self.sinks, session_id, bytes);
 		true
 	}
 

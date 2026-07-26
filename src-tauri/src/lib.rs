@@ -34,6 +34,7 @@ pub fn run() {
 		.manage(flush_senders)
 		.manage(output_sinks)
 		.manage(output_receivers)
+		.manage(bridge::RestoredHistories::default())
 		.manage(shutdown_flag)
 		.manage(layer_handle)
 		.manage(handler::updater::PendingUpdate::default())
@@ -84,6 +85,7 @@ pub fn run() {
 			handler::pty::flush_pty_output,
 			handler::pty::clear_pty_output,
 			handler::pty::restore_pty_session,
+			handler::pty::take_restored_history,
 			handler::pty::attach_pty_output,
 			handler::pty::stream_pty_output,
 			handler::pty::detach_pty_output,

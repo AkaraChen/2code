@@ -6,7 +6,10 @@ interface PatchWithFiles {
 }
 
 const PARSED_DIFF_CACHE_LIMIT = 20;
+export const PARSED_DIFF_CACHE_MAX_ENTRY_LENGTH = 1024 * 1024;
+export const PARSED_DIFF_CACHE_TOTAL_LENGTH_BUDGET = 8 * 1024 * 1024;
 const parsedDiffFilesCache = new Map<string, FileDiffMetadata[]>();
+let cachedTotalLength = 0;
 
 function collectPatchFiles(patches: readonly PatchWithFiles[]) {
 	let fileCount = 0;
@@ -36,13 +39,21 @@ export function parseDiffFiles(diff: string) {
 	}
 
 	const files = collectPatchFiles(parsePatchFiles(diff));
-	parsedDiffFilesCache.set(diff, files);
+	if (diff.length > PARSED_DIFF_CACHE_MAX_ENTRY_LENGTH) {
+		return files;
+	}
 
-	if (parsedDiffFilesCache.size > PARSED_DIFF_CACHE_LIMIT) {
+	parsedDiffFilesCache.set(diff, files);
+	cachedTotalLength += diff.length;
+
+	while (
+		parsedDiffFilesCache.size > PARSED_DIFF_CACHE_LIMIT
+		|| cachedTotalLength > PARSED_DIFF_CACHE_TOTAL_LENGTH_BUDGET
+	) {
 		const oldestKey = parsedDiffFilesCache.keys().next().value;
-		if (oldestKey !== undefined) {
-			parsedDiffFilesCache.delete(oldestKey);
-		}
+		if (oldestKey === undefined) break;
+		parsedDiffFilesCache.delete(oldestKey);
+		cachedTotalLength -= oldestKey.length;
 	}
 
 	return files;

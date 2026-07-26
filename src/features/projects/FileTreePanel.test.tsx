@@ -46,6 +46,7 @@ const {
 	setGitStatusMock,
 	startRenamingMock,
 	expandedChildPathsRef,
+	lastExpandedChildPathsRef,
 	toasterCreateMock,
 	useFileTreeOptionsRef,
 	openDefaultAppMutateAsyncMock,
@@ -77,6 +78,9 @@ const {
 	startRenamingMock: vi.fn(),
 	expandedChildPathsRef: {
 		current: new Map<string, readonly string[]>(),
+	},
+	lastExpandedChildPathsRef: {
+		current: null as null | readonly string[],
 	},
 	toasterCreateMock: vi.fn(),
 	useFileTreeOptionsRef: {
@@ -221,10 +225,22 @@ vi.mock("./hooks", () => ({
 	useCreateFileTreePath: vi.fn(),
 	useDeleteFileTreePaths: vi.fn(),
 	useFileTreeExpandedChildPaths: vi.fn(
-		(_profileId: string, parentPaths: readonly string[]) =>
-			parentPaths.map((parentPath) => ({
-				data: expandedChildPathsRef.current.get(parentPath),
-			})),
+		(_profileId: string, parentPaths: readonly string[]) => {
+			const next = parentPaths.flatMap(
+				(parentPath) =>
+					expandedChildPathsRef.current.get(parentPath) ?? [],
+			);
+			const previous = lastExpandedChildPathsRef.current;
+			if (
+				previous &&
+				previous.length === next.length &&
+				previous.every((path, index) => path === next[index])
+			) {
+				return previous;
+			}
+			lastExpandedChildPathsRef.current = next;
+			return next;
+		},
 	),
 	useFileTreeChildPaths: vi.fn(),
 	useFileTreeGitStatus: vi.fn(),
@@ -351,6 +367,7 @@ describe("fileTreePanel", () => {
 		setGitStatusMock.mockReset();
 		startRenamingMock.mockReset();
 		expandedChildPathsRef.current.clear();
+		lastExpandedChildPathsRef.current = null;
 		openDefaultAppMutateAsyncMock.mockReset();
 		openDefaultAppMutateAsyncMock.mockResolvedValue(undefined);
 		getFocusedItemMock.mockReset();
@@ -395,6 +412,26 @@ describe("fileTreePanel", () => {
 		await waitFor(() => {
 			expect(resetPathsMock).toHaveBeenCalledWith(treePaths);
 		});
+	});
+
+	it("does not reset the Pierre tree model for selection-only changes", async () => {
+		renderPanel();
+
+		await waitFor(() => {
+			expect(resetPathsMock).toHaveBeenCalledWith(treePaths);
+		});
+		const resetCount = resetPathsMock.mock.calls.length;
+
+		act(() => {
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
+			useFileTreeOptionsRef.current?.onSelectionChange?.([
+				"src/index.ts",
+			]);
+		});
+
+		expect(resetPathsMock).toHaveBeenCalledTimes(resetCount);
 	});
 
 	it("disables tree and git status queries while inactive", () => {

@@ -11,7 +11,7 @@ import {
 	onReactRender,
 	syncPerformanceProfileFromBackend,
 } from "./features/debug/performanceProfile";
-import SettingsWindow from "./features/settings/SettingsWindow";
+import SettingsWindow from "./features/settings/LazySettingsWindow";
 // Keeps settings stores live-synced between the main and settings windows.
 import "./features/settings/stores/crossWindowSync";
 import { queryClient } from "./shared/lib/queryClient";
@@ -46,7 +46,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 								onRender={onReactRender}
 							>
 								{isSettingsWindow ? (
-									<SettingsWindow />
+									<React.Suspense fallback={null}>
+										<SettingsWindow />
+									</React.Suspense>
 								) : (
 									<AppRoot />
 								)}

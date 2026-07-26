@@ -285,16 +285,17 @@ export default function FileViewerPane({
 	);
 
 	const handleEditorBeforeMount = useCallback<BeforeMount>((monaco) => {
+		const ts = monaco.languages.typescript as
+			| typeof monaco.languages.typescript
+			| undefined;
+		if (!ts) return;
+
 		const diagnosticsOptions = {
 			noSemanticValidation: true,
 			noSyntaxValidation: true,
 		};
-		monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(
-			diagnosticsOptions,
-		);
-		monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(
-			diagnosticsOptions,
-		);
+		ts.typescriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
+		ts.javascriptDefaults.setDiagnosticsOptions(diagnosticsOptions);
 	}, []);
 
 	const handleFileChange = useCallback(

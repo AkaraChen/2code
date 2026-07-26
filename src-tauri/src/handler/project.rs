@@ -9,19 +9,6 @@ use model::project::{
 };
 use model::project_group::ProjectGroup;
 
-fn profile_worktree_path(
-	db: &DbPool,
-	profile_id: &str,
-) -> Result<String, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
-}
-
-fn project_folder(db: &DbPool, project_id: &str) -> Result<String, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::project::find_by_id(conn, project_id)?.folder)
-}
-
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn create_project_from_folder(
@@ -79,11 +66,8 @@ pub async fn get_git_diff(
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::diff(&worktree_path)
-	})
-	.await
+	super::run_blocking(move || service::project::get_diff(&db, &profile_id))
+		.await
 }
 
 #[tauri::command]
@@ -94,8 +78,7 @@ pub async fn get_git_diff_snapshot(
 ) -> Result<GitDiffSnapshot, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::diff_snapshot(&worktree_path)
+		service::project::get_diff_snapshot(&db, &profile_id)
 	})
 	.await
 }
@@ -108,8 +91,7 @@ pub async fn get_git_diff_stats(
 ) -> Result<GitDiffStats, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::diff_stats(&worktree_path)
+		service::project::get_diff_stats(&db, &profile_id)
 	})
 	.await
 }
@@ -123,8 +105,7 @@ pub async fn get_git_log(
 ) -> Result<Vec<GitCommit>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::log(&worktree_path, limit.unwrap_or(50))
+		service::project::get_log(&db, &profile_id, limit.unwrap_or(50))
 	})
 	.await
 }
@@ -138,8 +119,7 @@ pub async fn get_commit_diff(
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::show(&worktree_path, &commit_hash)
+		service::project::get_commit_diff(&db, &profile_id, &commit_hash)
 	})
 	.await
 }
@@ -161,51 +141,14 @@ pub async fn get_git_binary_preview(
 		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?
 		.join("git-preview-cache");
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		let file_path = match source.as_str() {
-			"working_tree" => infra::git::read_worktree_file(
-				&worktree_path,
-				&cache_root,
-				&path,
-			)?,
-			"head" => {
-				infra::git::read_head_file(&worktree_path, &cache_root, &path)?
-			}
-			"commit" => {
-				let commit_hash = commit_hash.as_deref().ok_or_else(|| {
-					AppError::GitError(
-						"commit_hash is required for commit previews".into(),
-					)
-				})?;
-				infra::git::read_commit_file(
-					&worktree_path,
-					&cache_root,
-					commit_hash,
-					&path,
-				)?
-			}
-			"parent_commit" => {
-				let commit_hash = commit_hash.as_deref().ok_or_else(|| {
-					AppError::GitError(
-						"commit_hash is required for parent commit previews"
-							.into(),
-					)
-				})?;
-				infra::git::read_parent_commit_file(
-					&worktree_path,
-					&cache_root,
-					commit_hash,
-					&path,
-				)?
-			}
-			other => {
-				return Err(AppError::GitError(format!(
-					"Unsupported preview source: {other}"
-				)));
-			}
-		};
-
-		Ok(file_path.map(|file_path| GitBinaryPreview { file_path }))
+		service::project::get_binary_preview(
+			&db,
+			&profile_id,
+			&cache_root,
+			&path,
+			&source,
+			commit_hash.as_deref(),
+		)
 	})
 	.await
 }
@@ -221,8 +164,13 @@ pub async fn commit_git_changes(
 ) -> Result<String, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::commit(&worktree_path, &files, &message, body.as_deref())
+		service::project::commit_changes(
+			&db,
+			&profile_id,
+			&files,
+			&message,
+			body.as_deref(),
+		)
 	})
 	.await
 }
@@ -236,8 +184,7 @@ pub async fn discard_git_file_changes(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::discard_changes(&worktree_path, &paths)
+		service::project::discard_file_changes(&db, &profile_id, &paths)
 	})
 	.await
 }
@@ -250,8 +197,7 @@ pub async fn get_git_ahead_count(
 ) -> Result<u32, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		Ok(infra::git::ahead_count(&worktree_path))
+		service::project::get_ahead_count(&db, &profile_id)
 	})
 	.await
 }
@@ -264,8 +210,7 @@ pub async fn list_git_branches(
 ) -> Result<Vec<GitBranchInfo>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::list_branches(&worktree_path)
+		service::project::list_branches(&db, &profile_id)
 	})
 	.await
 }
@@ -279,8 +224,7 @@ pub async fn checkout_git_branch(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::checkout_branch(&worktree_path, &branch)
+		service::project::checkout_branch(&db, &profile_id, &branch)
 	})
 	.await
 }
@@ -292,11 +236,7 @@ pub async fn git_push(
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		infra::git::push(&worktree_path)
-	})
-	.await
+	super::run_blocking(move || service::project::push(&db, &profile_id)).await
 }
 
 #[tauri::command]
@@ -308,9 +248,9 @@ pub async fn get_git_pull_request_status(
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
-		service::project::get_pull_request_status_for_folder(
-			&worktree_path,
+		service::project::get_pull_request_status(
+			&db,
+			&profile_id,
 			branch_name.as_deref(),
 		)
 	})
@@ -393,11 +333,8 @@ pub async fn get_project_config(
 	state: State<'_, DbPool>,
 ) -> Result<ProjectConfig, AppError> {
 	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let folder = project_folder(&db, &project_id)?;
-		infra::config::load_project_config(&folder)
-	})
-	.await
+	super::run_blocking(move || service::project::get_config(&db, &project_id))
+		.await
 }
 
 #[tauri::command]
@@ -409,8 +346,7 @@ pub async fn save_project_config(
 ) -> Result<(), AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let folder = project_folder(&db, &project_id)?;
-		infra::config::write_project_config(&folder, &config)
+		service::project::save_config(&db, &project_id, &config)
 	})
 	.await
 }
@@ -423,87 +359,7 @@ pub async fn get_project_github_avatar(
 ) -> Result<Option<String>, AppError> {
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let folder = project_folder(&db, &project_id)?;
-		Ok(infra::git::github_avatar_url(&folder))
+		service::project::get_github_avatar(&db, &project_id)
 	})
 	.await
-}
-
-#[cfg(test)]
-mod tests {
-	use std::sync::{Arc, Mutex};
-
-	use diesel::prelude::*;
-	use diesel_migrations::MigrationHarness;
-	use model::profile::NewProfile;
-	use model::project::NewProject;
-
-	use super::*;
-
-	fn setup_db() -> DbPool {
-		let mut conn =
-			SqliteConnection::establish(":memory:").expect("in-memory db");
-		conn.run_pending_migrations(infra::db::MIGRATIONS)
-			.expect("run migrations");
-
-		diesel::insert_into(model::schema::projects::table)
-			.values(&NewProject {
-				id: "proj-1",
-				name: "Project",
-				folder: "/repo",
-				group_id: None,
-				sort_order: 1000,
-			})
-			.execute(&mut conn)
-			.expect("insert project");
-
-		diesel::insert_into(model::schema::profiles::table)
-			.values(&NewProfile {
-				id: "profile-1",
-				project_id: "proj-1",
-				branch_name: "main",
-				worktree_path: "/repo/worktree",
-				is_default: true,
-			})
-			.execute(&mut conn)
-			.expect("insert profile");
-
-		Arc::new(Mutex::new(conn))
-	}
-
-	#[test]
-	fn profile_worktree_path_reads_only_the_needed_field() {
-		let db = setup_db();
-
-		let worktree = profile_worktree_path(&db, "profile-1").unwrap();
-
-		assert_eq!(worktree, "/repo/worktree");
-	}
-
-	#[test]
-	fn project_folder_reads_only_the_needed_field() {
-		let db = setup_db();
-
-		let folder = project_folder(&db, "proj-1").unwrap();
-
-		assert_eq!(folder, "/repo");
-	}
-
-	#[test]
-	fn profile_worktree_path_returns_not_found_for_missing_profile() {
-		let db = setup_db();
-
-		let result = profile_worktree_path(&db, "missing-profile");
-
-		assert!(matches!(result, Err(AppError::NotFound(_))));
-	}
-
-	#[test]
-	fn project_folder_returns_not_found_for_missing_project() {
-		let db = setup_db();
-
-		let result = project_folder(&db, "missing-project");
-
-		assert!(matches!(result, Err(AppError::NotFound(_))));
-	}
 }

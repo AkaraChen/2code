@@ -7,8 +7,11 @@ import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 
 const channel = new Channel<WatchEvent>();
 const INVALIDATION_DEBOUNCE_MS = 1000;
+const INVALIDATION_MAX_WAIT_MS = 3000;
+const MAX_PENDING_EVENTS = 500;
 let invalidateTimer: number | null = null;
-const pendingEvents: WatchEvent[] = [];
+let maxWaitTimer: number | null = null;
+const pendingEvents = new Map<string, WatchEvent>();
 
 function invalidateAllProjectQueries() {
 	queryClient.invalidateQueries({
@@ -52,38 +55,33 @@ function normalizeFilePath(path: string) {
 	return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-function isSameOrDescendantPath(candidatePath: string, changedPath: string) {
-	const normalizedCandidate = normalizeFilePath(candidatePath);
-	const normalizedChanged = normalizeFilePath(changedPath);
-	return (
-		normalizedCandidate === normalizedChanged
-		|| normalizedCandidate.startsWith(`${normalizedChanged}/`)
-	);
+function pendingEventKey(event: WatchEvent) {
+	return `${event.project_id}\u0000${event.profile_id ?? ""}\u0000${event.path ?? ""}`;
 }
 
-function invalidateMatchingCachedFileQueries(
+function invalidateCachedFileQueriesForPaths(
 	namespace: string,
 	profileId: string,
-	changedPath: string,
+	changedPaths: ReadonlySet<string>,
 ) {
-	const queries = queryClient.getQueryCache().findAll({
-		queryKey: [namespace, profileId],
+	queryClient.invalidateQueries({
+		predicate: (query) => {
+			const key = query.queryKey;
+			if (key[0] !== namespace || key[1] !== profileId) return false;
+			const cachedPath = key[2];
+			if (typeof cachedPath !== "string") return false;
+
+			let candidate = normalizeFilePath(cachedPath);
+			for (;;) {
+				if (changedPaths.has(candidate)) return true;
+				const slash = candidate.lastIndexOf("/");
+				if (slash === -1) return false;
+				candidate = candidate.slice(0, slash);
+			}
+		},
 	});
-
-	for (const query of queries) {
-		const queryKey = query.queryKey;
-		const cachedPath = queryKey[2];
-		if (
-			typeof cachedPath !== "string"
-			|| normalizeFilePath(cachedPath) === changedPath
-			|| !isSameOrDescendantPath(cachedPath, changedPath)
-		) {
-			continue;
-		}
-
-		queryClient.invalidateQueries({ queryKey });
-	}
 }
+
 function invalidateChangedEvents(events: readonly WatchEvent[]) {
 	const projects = queryClient.getQueryData<ProjectWithProfiles[]>(
 		queryKeys.projects.all,
@@ -140,43 +138,69 @@ function invalidateChangedEvents(events: readonly WatchEvent[]) {
 			continue;
 		}
 
+		const changedPaths = new Set<string>();
 		for (const path of paths) {
 			if (path == null) continue;
-			const normalizedPath = normalizeFilePath(path);
-			queryClient.invalidateQueries({
-				queryKey: queryKeys.fs.file(profileId, normalizedPath),
-			});
-			queryClient.invalidateQueries({
-				queryKey: queryKeys.fs.filePreview(profileId, normalizedPath),
-			});
-			invalidateMatchingCachedFileQueries(
-				queryNamespaces["fs-file"],
-				profileId,
-				normalizedPath,
-			);
-			invalidateMatchingCachedFileQueries(
-				queryNamespaces["fs-file-preview"],
-				profileId,
-				normalizedPath,
-			);
+			changedPaths.add(normalizeFilePath(path));
 		}
+		if (changedPaths.size === 0) continue;
+
+		invalidateCachedFileQueriesForPaths(
+			queryNamespaces["fs-file"],
+			profileId,
+			changedPaths,
+		);
+		invalidateCachedFileQueriesForPaths(
+			queryNamespaces["fs-file-preview"],
+			profileId,
+			changedPaths,
+		);
 	}
 }
 
-channel.onmessage = (event) => {
-	pendingEvents.push(event);
-	// File watcher events arrive in bursts during builds/codegen.
-	// Coalesce them so we don't repeatedly re-run full git commands.
+function flushPendingEvents() {
 	if (invalidateTimer !== null) {
 		window.clearTimeout(invalidateTimer);
+		invalidateTimer = null;
+	}
+	if (maxWaitTimer !== null) {
+		window.clearTimeout(maxWaitTimer);
+		maxWaitTimer = null;
+	}
+	if (pendingEvents.size === 0) return;
+
+	const events = [...pendingEvents.values()];
+	pendingEvents.clear();
+	invalidateChangedEvents(events);
+}
+
+channel.onmessage = (event) => {
+	pendingEvents.set(pendingEventKey(event), event);
+	if (pendingEvents.size > MAX_PENDING_EVENTS) {
+		const collapsed = new Map<string, WatchEvent>();
+		for (const pending of pendingEvents.values()) {
+			const wide: WatchEvent = { ...pending, path: null };
+			collapsed.set(pendingEventKey(wide), wide);
+		}
+		pendingEvents.clear();
+		for (const [key, wide] of collapsed) pendingEvents.set(key, wide);
 	}
 
-	invalidateTimer = window.setTimeout(() => {
-		invalidateTimer = null;
-		const events = pendingEvents.splice(0);
+	// File watcher events arrive in bursts during builds/codegen.
+	// Arm once so sustained activity cannot starve invalidation forever.
+	if (invalidateTimer === null) {
+		invalidateTimer = window.setTimeout(
+			flushPendingEvents,
+			INVALIDATION_DEBOUNCE_MS,
+		);
+	}
 
-		invalidateChangedEvents(events);
-	}, INVALIDATION_DEBOUNCE_MS);
+	if (maxWaitTimer === null) {
+		maxWaitTimer = window.setTimeout(
+			flushPendingEvents,
+			INVALIDATION_MAX_WAIT_MS,
+		);
+	}
 };
 
 watchProjects({ onEvent: channel }).catch((error) => {

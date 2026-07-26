@@ -1,4 +1,5 @@
 import { GitBranchIcon } from "@phosphor-icons/react";
+import { memo } from "react";
 import { NavLink } from "react-router";
 import {
 	ContextMenu,
@@ -22,15 +23,17 @@ import * as m from "@/paraglide/messages.js";
 import OverflowTooltipText from "@/shared/components/OverflowTooltipText";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 
-export function ProfileItem({
-	profile,
-	projectId,
-	isActive,
-}: {
+interface ProfileItemProps {
 	profile: Profile;
 	projectId: string;
 	isActive: boolean;
-}) {
+}
+
+export const ProfileItem = memo(({
+	profile,
+	projectId,
+	isActive,
+}: ProfileItemProps) => {
 	const deleteDialog = useDialogState();
 	const agentStatus = useProfileAgentStatus(profile.id);
 	const agentCompletion = useProfileAgentCompletion(profile.id);
@@ -71,11 +74,15 @@ export function ProfileItem({
 					</ContextMenuGroup>
 				</ContextMenuContent>
 			</ContextMenu>
-			<DeleteProfileDialog
-				isOpen={deleteDialog.isOpen}
-				onClose={deleteDialog.onClose}
-				profile={profile}
-			/>
+			{deleteDialog.isOpen && (
+				<DeleteProfileDialog
+					isOpen={deleteDialog.isOpen}
+					onClose={deleteDialog.onClose}
+					profile={profile}
+				/>
+			)}
 		</SidebarMenuSubItem>
 	);
-}
+});
+
+ProfileItem.displayName = "ProfileItem";

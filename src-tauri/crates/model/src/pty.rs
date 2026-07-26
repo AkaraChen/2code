@@ -51,5 +51,5 @@ pub struct PtyConfig {
 #[serde(rename_all = "camelCase")]
 pub struct RestoreResult {
 	pub new_session_id: String,
-	pub history: Vec<u8>,
+	pub history_len: usize,
 }

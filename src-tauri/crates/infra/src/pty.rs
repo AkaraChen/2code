@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
@@ -12,7 +13,7 @@ use crate::shell_init::ShellInjection;
 
 pub struct PtySession {
 	pub master: Box<dyn MasterPty + Send>,
-	pub writer: Box<dyn Write + Send>,
+	pub input_tx: mpsc::Sender<Vec<u8>>,
 	pub child: Box<dyn portable_pty::Child + Send + Sync>,
 }
 
@@ -97,14 +98,31 @@ pub fn create_session(
 		.try_clone_reader()
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
 
-	let writer = pair
+	let mut writer = pair
 		.master
 		.take_writer()
 		.map_err(|e| AppError::PtyError(e.to_string()))?;
+	let (input_tx, input_rx) = mpsc::channel::<Vec<u8>>();
+	let writer_session_id = options.session_id.to_string();
+	std::thread::spawn(move || {
+		while let Ok(data) = input_rx.recv() {
+			if let Err(err) =
+				writer.write_all(&data).and_then(|_| writer.flush())
+			{
+				tracing::warn!(
+					target: "pty",
+					session_id = %writer_session_id,
+					error = %err,
+					"input writer stopped"
+				);
+				break;
+			}
+		}
+	});
 
 	let session = PtySession {
 		master: pair.master,
-		writer,
+		input_tx,
 		child,
 	};
 
@@ -245,21 +263,19 @@ pub fn write_to_pty(
 	session_id: &str,
 	data: &[u8],
 ) -> Result<(), AppError> {
-	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
-	let session = map.get_mut(session_id).ok_or_else(|| {
-		AppError::PtyError(format!("Session not found: {}", session_id))
-	})?;
+	let input_tx = {
+		let map = sessions.lock().map_err(|_| AppError::LockError)?;
+		map.get(session_id)
+			.ok_or_else(|| {
+				AppError::PtyError(format!("Session not found: {}", session_id))
+			})?
+			.input_tx
+			.clone()
+	};
 
-	session
-		.writer
-		.write_all(data)
-		.map_err(|e| AppError::PtyError(e.to_string()))?;
-	session
-		.writer
-		.flush()
-		.map_err(|e| AppError::PtyError(e.to_string()))?;
-
-	Ok(())
+	input_tx.send(data.to_vec()).map_err(|_| {
+		AppError::PtyError(format!("Session input closed: {}", session_id))
+	})
 }
 
 pub fn resize_pty(
@@ -290,8 +306,11 @@ pub fn close_session(
 	sessions: &PtySessionMap,
 	session_id: &str,
 ) -> Result<(), AppError> {
-	let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
-	if let Some(mut session) = map.remove(session_id) {
+	let session = {
+		let mut map = sessions.lock().map_err(|_| AppError::LockError)?;
+		map.remove(session_id)
+	};
+	if let Some(mut session) = session {
 		let _ = session.child.kill();
 		let _ = session.child.wait();
 	}
@@ -299,11 +318,13 @@ pub fn close_session(
 }
 
 pub fn close_all_sessions(sessions: &PtySessionMap) {
-	if let Ok(mut map) = sessions.lock() {
-		for (_, mut session) in map.drain() {
-			let _ = session.child.kill();
-			let _ = session.child.wait();
-		}
+	let drained: Vec<PtySession> = match sessions.lock() {
+		Ok(mut map) => map.drain().map(|(_, session)| session).collect(),
+		Err(_) => return,
+	};
+	for mut session in drained {
+		let _ = session.child.kill();
+		let _ = session.child.wait();
 	}
 }
 
@@ -341,6 +362,53 @@ mod tests {
 		let sessions = create_session_map();
 		let result = close_session(&sessions, "nonexistent");
 		assert!(result.is_ok());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn write_to_pty_preserves_fifo_order() {
+		use std::io::Read;
+		use std::sync::mpsc as test_mpsc;
+		use std::time::Duration;
+
+		let sessions = create_session_map();
+		let mut reader = create_session(
+			&sessions,
+			CreateSessionOptions {
+				session_id: "cat",
+				shell: "cat",
+				cwd: "/tmp",
+				rows: 24,
+				cols: 80,
+				injection: &ShellInjection::None,
+			},
+		)
+		.expect("create cat session");
+		let payload = b"abcdefghijklmnopqrstuvwxyz\n".to_vec();
+		let expected_len = payload.len();
+		let (tx, rx) = test_mpsc::channel();
+		std::thread::spawn(move || {
+			let mut output = Vec::new();
+			let mut buf = [0_u8; 1024];
+			while output.len() < expected_len {
+				match reader.read(&mut buf) {
+					Ok(0) | Err(_) => break,
+					Ok(n) => output.extend_from_slice(&buf[..n]),
+				}
+			}
+			let _ = tx.send(output);
+		});
+
+		for byte in &payload {
+			write_to_pty(&sessions, "cat", &[*byte]).expect("write byte");
+		}
+		let output = rx
+			.recv_timeout(Duration::from_secs(2))
+			.expect("read cat output");
+		let normalized: Vec<u8> =
+			output.into_iter().filter(|byte| *byte != b'\r').collect();
+		assert!(normalized.windows(payload.len()).any(|w| w == payload));
+		let _ = close_session(&sessions, "cat");
 	}
 
 	#[test]

@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
@@ -16,7 +17,17 @@ use crate::WatchEventSender;
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const RECV_TIMEOUT: Duration = Duration::from_millis(100);
 const DEBOUNCE_DURATION: Duration = Duration::from_millis(500);
-const MAX_DEBOUNCE_KEYS: usize = 1024;
+const COALESCER_IDLE_RETENTION: Duration = Duration::from_secs(2);
+const IGNORED_DIR_COMPONENTS: &[&str] = &[
+	".git",
+	"node_modules",
+	"target",
+	"dist",
+	"build",
+	".venv",
+	".next",
+	"__pycache__",
+];
 
 struct ProjectWatcher {
 	// The watcher must be kept alive — dropping it stops watching.
@@ -29,6 +40,75 @@ struct WatchTarget {
 	project_id: String,
 	profile_id: Option<String>,
 	root_path: String,
+}
+
+#[derive(Default)]
+struct TargetCoalescer {
+	last_sent: HashMap<String, Instant>,
+	pending: HashMap<String, WatchEvent>,
+}
+
+fn target_key(event: &WatchEvent) -> String {
+	format!(
+		"{}:{}",
+		event.project_id,
+		event.profile_id.as_deref().unwrap_or("")
+	)
+}
+
+impl TargetCoalescer {
+	fn offer(&mut self, event: WatchEvent, now: Instant) -> Option<WatchEvent> {
+		let key = target_key(&event);
+		let quiet = self
+			.last_sent
+			.get(&key)
+			.map(|timestamp| {
+				now.duration_since(*timestamp) >= DEBOUNCE_DURATION
+			})
+			.unwrap_or(true);
+
+		if quiet && !self.pending.contains_key(&key) {
+			self.last_sent.insert(key, now);
+			return Some(event);
+		}
+
+		self.pending
+			.entry(key)
+			.and_modify(|pending| {
+				if pending.path != event.path {
+					pending.path = None;
+				}
+			})
+			.or_insert(event);
+		None
+	}
+
+	fn flush_due(&mut self, now: Instant) -> Vec<WatchEvent> {
+		let due = self
+			.pending
+			.keys()
+			.filter(|key| {
+				self.last_sent
+					.get(*key)
+					.map(|timestamp| {
+						now.duration_since(*timestamp) >= DEBOUNCE_DURATION
+					})
+					.unwrap_or(true)
+			})
+			.cloned()
+			.collect::<Vec<_>>();
+		let mut flushed = Vec::with_capacity(due.len());
+		for key in due {
+			if let Some(event) = self.pending.remove(&key) {
+				self.last_sent.insert(key, now);
+				flushed.push(event);
+			}
+		}
+		self.last_sent.retain(|_, timestamp| {
+			now.duration_since(*timestamp) < COALESCER_IDLE_RETENTION
+		});
+		flushed
+	}
 }
 
 pub fn start(
@@ -50,7 +130,7 @@ fn run_coordinator(
 
 	let mut watchers: HashMap<String, ProjectWatcher> = HashMap::new();
 	let mut last_poll = Instant::now() - DB_POLL_INTERVAL;
-	let mut last_event: HashMap<String, Instant> = HashMap::new();
+	let mut coalescer = TargetCoalescer::default();
 
 	loop {
 		if shutdown.load(Ordering::Relaxed) {
@@ -67,24 +147,8 @@ fn run_coordinator(
 		match rx.recv_timeout(RECV_TIMEOUT) {
 			Ok(event) => {
 				let now = Instant::now();
-				prune_debounce_cache(&mut last_event, now);
-				let event_key = watch_event_debounce_key(&event);
-				let should_send = last_event
-					.get(&event_key)
-					.map(|t| now.duration_since(*t) >= DEBOUNCE_DURATION)
-					.unwrap_or(true);
-
-				if should_send {
-					last_event.insert(event_key, now);
-					tracing::trace!(
-						target: "watcher",
-						project_id = %event.project_id,
-						profile_id = ?event.profile_id,
-						path = ?event.path,
-						"file changed"
-					);
-					if !sender.send(event) {
-						// Channel closed — frontend dropped it
+				if let Some(event) = coalescer.offer(event, now) {
+					if !send_watch_event(sender.as_ref(), event) {
 						break;
 					}
 				}
@@ -92,7 +156,24 @@ fn run_coordinator(
 			Err(mpsc::RecvTimeoutError::Timeout) => {}
 			Err(mpsc::RecvTimeoutError::Disconnected) => break,
 		}
+
+		for event in coalescer.flush_due(Instant::now()) {
+			if !send_watch_event(sender.as_ref(), event) {
+				return;
+			}
+		}
 	}
+}
+
+fn send_watch_event(sender: &dyn WatchEventSender, event: WatchEvent) -> bool {
+	tracing::trace!(
+		target: "watcher",
+		project_id = %event.project_id,
+		profile_id = ?event.profile_id,
+		path = ?event.path,
+		"file changed"
+	);
+	sender.send(event)
 }
 
 fn reconcile_watchers(
@@ -210,37 +291,12 @@ fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
 	targets
 }
 
-fn prune_debounce_cache(
-	last_event: &mut HashMap<String, Instant>,
-	now: Instant,
-) {
-	last_event.retain(|_, timestamp| {
-		now.duration_since(*timestamp) < DEBOUNCE_DURATION
-	});
-
-	if last_event.len() <= MAX_DEBOUNCE_KEYS {
-		return;
-	}
-
-	let mut entries = last_event
-		.iter()
-		.map(|(key, timestamp)| (key.clone(), *timestamp))
-		.collect::<Vec<_>>();
-	entries.sort_by_key(|(_, timestamp)| *timestamp);
-
-	let remove_count = last_event.len().saturating_sub(MAX_DEBOUNCE_KEYS);
-	for (key, _) in entries.into_iter().take(remove_count) {
-		last_event.remove(&key);
-	}
-}
-
-fn watch_event_debounce_key(event: &WatchEvent) -> String {
-	format!(
-		"{}:{}:{}",
-		event.project_id,
-		event.profile_id.as_deref().unwrap_or(""),
-		event.path.as_deref().unwrap_or("")
-	)
+fn is_ignored_path(path: &Path) -> bool {
+	path.components().any(|component| {
+		IGNORED_DIR_COMPONENTS
+			.iter()
+			.any(|dir| component.as_os_str() == OsStr::new(dir))
+	})
 }
 
 fn watch_event_for_notify_event(
@@ -250,7 +306,7 @@ fn watch_event_for_notify_event(
 	let paths = event
 		.paths
 		.iter()
-		.filter(|path| !path.components().any(|c| c.as_os_str() == ".git"))
+		.filter(|path| !is_ignored_path(path))
 		.collect::<Vec<_>>();
 	if paths.is_empty() {
 		return None;
@@ -341,6 +397,24 @@ mod tests {
 		}
 	}
 
+	fn watch_event(profile_id: Option<&str>, path: Option<&str>) -> WatchEvent {
+		WatchEvent {
+			project_id: "project-1".to_string(),
+			profile_id: profile_id.map(str::to_string),
+			root_path: "/repo".to_string(),
+			path: path.map(str::to_string),
+		}
+	}
+
+	fn watch_target() -> WatchTarget {
+		WatchTarget {
+			key: "profile:profile-1:/repo".to_string(),
+			project_id: "project-1".to_string(),
+			profile_id: Some("profile-1".to_string()),
+			root_path: "/repo".to_string(),
+		}
+	}
+
 	#[test]
 	fn watcher_targets_include_profile_worktrees_and_dedupe_default_root() {
 		let projects = vec![project_with_profiles(
@@ -415,29 +489,6 @@ mod tests {
 	}
 
 	#[test]
-	fn prune_debounce_cache_removes_expired_entries_and_bounds_size() {
-		let now = Instant::now();
-		let expired = now - DEBOUNCE_DURATION - Duration::from_millis(1);
-		let fresh = now - Duration::from_millis(1);
-		let mut last_event = HashMap::from([("expired".to_string(), expired)]);
-
-		for index in 0..(MAX_DEBOUNCE_KEYS + 10) {
-			last_event.insert(
-				format!("fresh-{index}"),
-				fresh + Duration::from_nanos(index as u64),
-			);
-		}
-
-		prune_debounce_cache(&mut last_event, now);
-
-		assert!(!last_event.contains_key("expired"));
-		assert_eq!(last_event.len(), MAX_DEBOUNCE_KEYS);
-		for index in 0..10 {
-			assert!(!last_event.contains_key(&format!("fresh-{index}")));
-		}
-	}
-
-	#[test]
 	fn relative_event_path_is_root_relative() {
 		let root = Path::new("/repo");
 
@@ -450,5 +501,83 @@ mod tests {
 			relative_event_path(root, Path::new("/other/main.rs")),
 			None
 		);
+	}
+
+	#[test]
+	fn target_coalescer_sends_quiet_target_immediately() {
+		let mut coalescer = TargetCoalescer::default();
+		let now = Instant::now();
+		let event = watch_event(Some("profile-1"), Some("src/main.rs"));
+
+		let offered = coalescer.offer(event, now).expect("immediate event");
+
+		assert_eq!(offered.profile_id.as_deref(), Some("profile-1"));
+		assert_eq!(offered.path.as_deref(), Some("src/main.rs"));
+	}
+
+	#[test]
+	fn target_coalescer_merges_burst_paths_per_target() {
+		let mut coalescer = TargetCoalescer::default();
+		let now = Instant::now();
+		let first = watch_event(Some("profile-1"), Some("src/a.rs"));
+		let second = watch_event(Some("profile-1"), Some("src/b.rs"));
+		let third = watch_event(Some("profile-1"), Some("src/c.rs"));
+
+		assert!(coalescer.offer(first, now).is_some());
+		assert!(coalescer
+			.offer(second, now + Duration::from_millis(1))
+			.is_none());
+		assert!(coalescer
+			.offer(third, now + Duration::from_millis(2))
+			.is_none());
+		assert!(coalescer
+			.flush_due(now + DEBOUNCE_DURATION - Duration::from_millis(1))
+			.is_empty());
+
+		let flushed = coalescer.flush_due(now + DEBOUNCE_DURATION);
+
+		assert_eq!(flushed.len(), 1);
+		assert_eq!(flushed[0].profile_id.as_deref(), Some("profile-1"));
+		assert_eq!(flushed[0].path, None);
+	}
+
+	#[test]
+	fn target_coalescer_keeps_precise_path_when_burst_agrees() {
+		let mut coalescer = TargetCoalescer::default();
+		let now = Instant::now();
+		let first = watch_event(Some("profile-1"), Some("src/a.rs"));
+		let second = watch_event(Some("profile-1"), Some("src/a.rs"));
+
+		assert!(coalescer.offer(first, now).is_some());
+		assert!(coalescer
+			.offer(second, now + Duration::from_millis(1))
+			.is_none());
+
+		let flushed = coalescer.flush_due(now + DEBOUNCE_DURATION);
+
+		assert_eq!(flushed.len(), 1);
+		assert_eq!(flushed[0].path.as_deref(), Some("src/a.rs"));
+	}
+
+	#[test]
+	fn watch_event_filters_ignored_directory_components() {
+		let event = Event::new(EventKind::Any)
+			.add_path(
+				Path::new("/repo/node_modules/pkg/index.js").to_path_buf(),
+			)
+			.add_path(Path::new("/repo/src/main.rs").to_path_buf());
+
+		let watch_event = watch_event_for_notify_event(&watch_target(), &event)
+			.expect("watch event");
+
+		assert_eq!(watch_event.path.as_deref(), Some("src/main.rs"));
+	}
+
+	#[test]
+	fn watch_event_drops_events_with_only_ignored_paths() {
+		let event = Event::new(EventKind::Any)
+			.add_path(Path::new("/repo/target/debug/app").to_path_buf());
+
+		assert!(watch_event_for_notify_event(&watch_target(), &event).is_none());
 	}
 }

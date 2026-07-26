@@ -1,5 +1,5 @@
 import { FolderIcon, FolderPlusIcon } from "@phosphor-icons/react";
-import { useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
 	Empty,
@@ -10,7 +10,12 @@ import {
 } from "@/components/ui/empty";
 import { useProjects } from "@/features/projects/hooks";
 import * as m from "@/paraglide/messages.js";
-import { TourOnboarding } from "./TourOnboarding";
+
+const TourOnboarding = lazy(() =>
+	import("./TourOnboarding").then((module) => ({
+		default: module.TourOnboarding,
+	})),
+);
 
 export default function HomePage() {
 	const { data: projects } = useProjects();
@@ -55,7 +60,11 @@ export default function HomePage() {
 				</div>
 			) : null}
 
-			<TourOnboarding isEnabled={hasNoProjects} />
+			{hasNoProjects && (
+				<Suspense fallback={null}>
+					<TourOnboarding isEnabled />
+				</Suspense>
+			)}
 		</div>
 	);
 }

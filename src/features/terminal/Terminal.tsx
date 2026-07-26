@@ -10,7 +10,14 @@ import type { SearchAddon } from "@xterm/addon-search";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as XTerm } from "@xterm/xterm";
 import consola from "consola";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState } from
+"react";
 import { useNotificationStore } from "@/features/settings/stores/notificationStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
@@ -18,7 +25,6 @@ import {
   clearPtyOutput,
   detachPtyOutput,
   flushPtyOutput,
-  getPtySessionHistory,
   playSystemSound,
   resizePty,
   streamPtyOutput,
@@ -38,6 +44,7 @@ import {
   shouldBypassTerminalLinkConfirm,
 } from "./linkOpening";
 import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
+import { fetchPtySessionHistory } from "./ptyHistoryIpc";
 import { sessionHistory } from "./restoration";
 import { useTerminalStore, type AgentStatus } from "./store";
 import { TerminalSearchBar } from "./TerminalSearchBar";
@@ -48,8 +55,8 @@ import {
   createTerminalKeyEventHandler,
   BUFFER_STORAGE_PREFIX,
   DIMS_STORAGE_PREFIX,
-  getTerminalParkingContainer,
   installImagePasteFallback,
+  LiveOutputQueue,
   loadAddons,
   measureAndResize,
   scheduleFontSettleRefit,
@@ -112,7 +119,7 @@ interface TerminalProps {
   isActive: boolean;
 }
 
-export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
+function TerminalImpl({ profileId, sessionId, isActive }: TerminalProps) {
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<ReturnType<typeof loadAddons>["fitAddon"] | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
@@ -242,8 +249,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       let disposed = false;
       isStreamReadyRef.current = false;
       pendingEventsRef.current = [];
-      const liveOutputBuffer: Uint8Array[] = [];
-      let liveOutputFrame: number | null = null;
       let agentDetectionTimer: number | null = null;
       let hasPendingAgentDetection = false;
       let lastAgentDetectionAt = 0;
@@ -536,6 +541,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const titleDebouncer = new TitleDebouncer();
       cleanups.push(() => titleDebouncer.dispose());
       const titleDisposable = term.onTitleChange((title) => {
+        latestTitle = title;
         titleDebouncer.set(title);
       });
       cleanups.push(() => titleDisposable.dispose());
@@ -556,19 +562,25 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       latestProgress = `${addonsResult.progressAddon.progress.state};${addonsResult.progressAddon.progress.value}`;
       cleanups.push(() => progressDisposable.dispose());
 
-      function flushLiveOutputBuffer() {
-        liveOutputFrame = null;
-        if (liveOutputBuffer.length === 0 || disposed) return;
-        const output = concatBytes(liveOutputBuffer);
-        liveOutputBuffer.length = 0;
-        term.write(output, scheduleAgentDetection);
-      }
+      const liveOutput = new LiveOutputQueue({
+        write: (data, onDone) => term.write(data, onDone),
+        onFlushed: scheduleAgentDetection
+      });
+
+      const onVisibilityChange = () => {
+        if (!document.hidden) {
+          liveOutput.flushNow();
+          scheduleAgentDetection();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      cleanups.push(() =>
+        document.removeEventListener("visibilitychange", onVisibilityChange)
+      );
 
       function writeLiveOutput(output: Uint8Array) {
-        if (output.length === 0 || disposed) return;
-        liveOutputBuffer.push(output);
-        if (liveOutputFrame !== null) return;
-        liveOutputFrame = window.requestAnimationFrame(flushLiveOutputBuffer);
+        if (disposed) return;
+        liveOutput.push(output);
       }
 
       function flushPendingEventsAfterHistory(history: Uint8Array) {
@@ -645,8 +657,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         }
         try {
           await flushPtyOutput({ sessionId });
-          const history = await getPtySessionHistory({ sessionId });
-          replayInitialHistory(new Uint8Array(history));
+          const history = await fetchPtySessionHistory(sessionId);
+          replayInitialHistory(history);
         } catch (error) {
           consola.warn(
             `[pty-terminal] failed to load initial history for session ${sessionId}`,
@@ -701,11 +713,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         // Reset stream state
         isStreamReadyRef.current = false;
         pendingEventsRef.current = [];
-        liveOutputBuffer.length = 0;
-        if (liveOutputFrame !== null) {
-          window.cancelAnimationFrame(liveOutputFrame);
-          liveOutputFrame = null;
-        }
+        liveOutput.dispose();
         if (agentDetectionTimer !== null) {
           window.clearTimeout(agentDetectionTimer);
           agentDetectionTimer = null;
@@ -721,15 +729,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           cleanup();
         }
 
-        if (stillOpen) {
-          // Park wrapper instead of removing — xterm survives React unmount
-          getTerminalParkingContainer().appendChild(wrapper);
-        } else if (typeof term.dispose === "function") {
-          term.dispose();
-          wrapper.remove();
-        } else {
-          wrapper.remove();
-        }
+        term.dispose();
+        wrapper.remove();
 
         termRef.current = null;
         fitAddonRef.current = null;
@@ -772,3 +773,5 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		</>);
 
 }
+
+export const Terminal = memo(TerminalImpl);

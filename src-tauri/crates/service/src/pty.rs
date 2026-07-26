@@ -13,7 +13,6 @@ use infra::pty_log::{self, SessionLog};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
-	RestoreResult,
 };
 
 use crate::PtyEventEmitter;
@@ -59,6 +58,18 @@ const VT100_SCROLLBACK: usize = 10000;
 const PERSIST_BATCH_BYTES: usize = 32 * 1024;
 const PERSIST_FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 const PERSIST_FLUSH_TIMEOUT: Duration = Duration::from_secs(1);
+const RESTORE_TAIL_MIN_BYTES: u64 = 4 * 1024 * 1024;
+const HISTORY_TAIL_BYTES: u64 = 16 * 1024 * 1024;
+
+pub struct RestoredSession {
+	pub new_session_id: String,
+	pub history: Vec<u8>,
+}
+
+fn restore_tail_cap(cols: u16) -> u64 {
+	RESTORE_TAIL_MIN_BYTES
+		.max(VT100_SCROLLBACK as u64 * u64::from(cols.max(1)) * 8)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AltScreenTransition {
@@ -85,7 +96,7 @@ fn strip_alternative_screen(raw: &[u8]) -> Vec<u8> {
 				&& !in_alt_screen
 				&& !saw_alt_transition
 			{
-				// The persisted buffer may start mid-alt-screen after 1MB trimming.
+				// The buffer may start mid-alt-screen after a tail read.
 				// In that case, everything before the first unmatched exit belongs
 				// to the alternate screen as well.
 				output.clear();
@@ -427,10 +438,10 @@ pub fn list_project_sessions(
 	repo::pty::list_by_project(conn, project_id)
 }
 
-/// Read a session's full output history from its log file.
+/// Read a bounded tail of a session's output history from its log file.
 /// A session that never produced output (or an unknown id) reads as empty.
 pub fn get_history(output_dir: &Path, session_id: &str) -> Vec<u8> {
-	let data = pty_log::read_all(output_dir, session_id);
+	let data = pty_log::read_tail(output_dir, session_id, HISTORY_TAIL_BYTES);
 	tracing::info!(target: "pty", %session_id, total_bytes = data.len(), "loaded history from file");
 	data
 }
@@ -471,7 +482,7 @@ pub fn restore_session(
 	old_session_id: &str,
 	meta: &PtySessionMeta,
 	config: &PtyConfig,
-) -> Result<RestoreResult, AppError> {
+) -> Result<RestoredSession, AppError> {
 	let old_session_is_live = {
 		let sessions = ctx.sessions.lock().map_err(|_| AppError::LockError)?;
 		sessions.contains_key(old_session_id)
@@ -485,8 +496,14 @@ pub fn restore_session(
 		)?;
 	}
 
-	// 1. Read raw history from the old session's log file (no DB lock needed)
-	let raw_history = pty_log::read_all(&ctx.output_dir, old_session_id);
+	// 1. Read a bounded tail of the old session's log file (no DB lock needed).
+	// Only VT100_SCROLLBACK lines survive sanitize_history, so anything before a
+	// generous tail is wasted replay work.
+	let raw_history = pty_log::read_tail(
+		&ctx.output_dir,
+		old_session_id,
+		restore_tail_cap(config.cols),
+	);
 	tracing::info!(target: "pty", %old_session_id, raw_bytes = raw_history.len(), "restore: loaded raw history");
 
 	// 2. Sanitize through vt100 virtual terminal emulator
@@ -504,7 +521,7 @@ pub fn restore_session(
 	}
 	pty_log::remove(&ctx.output_dir, old_session_id);
 
-	Ok(RestoreResult {
+	Ok(RestoredSession {
 		new_session_id,
 		history,
 	})
@@ -1162,6 +1179,32 @@ mod tests {
 			lines.len() < 24,
 			"Should trim trailing empty lines, got {} lines",
 			lines.len()
+		);
+	}
+
+	#[test]
+	fn restore_tail_cap_floor_and_cols_scaling() {
+		assert_eq!(
+			restore_tail_cap(80),
+			RESTORE_TAIL_MIN_BYTES.max(VT100_SCROLLBACK as u64 * 80 * 8)
+		);
+		assert!(restore_tail_cap(0) >= RESTORE_TAIL_MIN_BYTES);
+	}
+
+	#[test]
+	fn sanitize_of_tail_equals_sanitize_of_full_log() {
+		let mut log = Vec::new();
+		for i in 0..70_000 {
+			log.extend_from_slice(
+				format!("\x1b[32mline {i:05}\x1b[0m\r\n").as_bytes(),
+			);
+		}
+		let cap = restore_tail_cap(120).min(log.len() as u64) as usize;
+		let tail = &log[log.len() - cap..];
+
+		assert_eq!(
+			sanitize_history(&log, 40, 120),
+			sanitize_history(tail, 40, 120)
 		);
 	}
 

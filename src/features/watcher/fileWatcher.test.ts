@@ -49,6 +49,22 @@ async function loadWatcher() {
 	};
 }
 
+type QueryPredicate = (query: { queryKey: unknown[] }) => boolean;
+
+function queryPredicates() {
+	return invalidateQueriesMock.mock.calls
+		.map(([call]) => call?.predicate)
+		.filter((predicate): predicate is QueryPredicate => typeof predicate === "function");
+}
+
+function findPredicateMatching(queryKey: unknown[]) {
+	const predicate = queryPredicates().find((candidate) =>
+		candidate({ queryKey }),
+	);
+	expect(predicate).toBeTypeOf("function");
+	return predicate as QueryPredicate;
+}
+
 describe("fileWatcher", () => {
 	beforeEach(() => {
 		vi.resetModules();
@@ -139,17 +155,41 @@ describe("fileWatcher", () => {
 		]);
 	});
 
-	it("resets the debounce timer when another event arrives before the flush", async () => {
+	it("does not reset an armed debounce timer when another event arrives", async () => {
 		const channel = await loadWatcher();
 
 		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
 		vi.advanceTimersByTime(500);
 		channel.onmessage?.({ project_id: "project-1", root_path: "/repo" });
-		vi.advanceTimersByTime(999);
+		vi.advanceTimersByTime(499);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
 		vi.advanceTimersByTime(1);
 		expect(invalidateQueriesMock).toHaveBeenCalledTimes(6);
+	});
+
+	it("flushes during sustained file activity on the first armed timer", async () => {
+		const channel = await loadWatcher();
+
+		channel.onmessage?.({
+			project_id: "project-1",
+			profile_id: "profile-1",
+			root_path: "/repo",
+			path: "file-0.ts",
+		});
+		for (let i = 1; i <= 3; i++) {
+			vi.advanceTimersByTime(250);
+			channel.onmessage?.({
+				project_id: "project-1",
+				profile_id: "profile-1",
+				root_path: "/repo",
+				path: `file-${i}.ts`,
+			});
+		}
+		expect(invalidateQueriesMock).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(250);
+		expect(invalidateQueriesMock).toHaveBeenCalled();
 	});
 
 	it("invalidates precise profile file and preview queries when event includes a path", async () => {
@@ -173,31 +213,22 @@ describe("fileWatcher", () => {
 					exact: false,
 				},
 			],
-			[{ queryKey: ["fs-file", "profile-1", "src/index.ts"] }],
-			[{ queryKey: ["fs-file-preview", "profile-1", "src/index.ts"] }],
+			[{ predicate: expect.any(Function) }],
+			[{ predicate: expect.any(Function) }],
 		]);
+		expect(
+			findPredicateMatching(["fs-file", "profile-1", "src/index.ts"])({
+				queryKey: ["fs-file", "profile-1", "src-other/index.ts"],
+			}),
+		).toBe(false);
+		expect(
+			findPredicateMatching(["fs-file-preview", "profile-1", "src/index.ts"])({
+				queryKey: ["fs-file-preview", "profile-1", "src-other/index.ts"],
+			}),
+		).toBe(false);
 	});
 
-it("invalidates cached descendant file queries for directory events", async () => {
-		queryCacheFindAllMock.mockImplementation(({ queryKey }) => {
-			if (queryKey[0] === "fs-file") {
-				return [
-					{ queryKey: ["fs-file", "profile-1", "src/index.ts"] },
-					{ queryKey: ["fs-file", "profile-1", "src"] },
-					{ queryKey: ["fs-file", "profile-1", "src-other/index.ts"] },
-				];
-			}
-
-			return [
-				{
-					queryKey: [
-						"fs-file-preview",
-						"profile-1",
-						"src/components/Button.tsx",
-					],
-				},
-			];
-		});
+	it("invalidates cached descendant file queries for directory events", async () => {
 		const channel = await loadWatcher();
 
 		channel.onmessage?.({
@@ -208,35 +239,52 @@ it("invalidates cached descendant file queries for directory events", async () =
 		});
 		vi.advanceTimersByTime(1000);
 
-		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
-			queryKey: ["fs-file", "profile-1"],
-		});
-		expect(queryCacheFindAllMock).toHaveBeenCalledWith({
-			queryKey: ["fs-file-preview", "profile-1"],
-		});
-		expect(invalidateQueriesMock).toHaveBeenCalledWith({
-			queryKey: ["fs-file", "profile-1", "src"],
-		});
-		expect(invalidateQueriesMock).toHaveBeenCalledWith({
-			queryKey: ["fs-file", "profile-1", "src/index.ts"],
-		});
-		expect(invalidateQueriesMock).toHaveBeenCalledWith({
-			queryKey: [
-				"fs-file-preview",
-				"profile-1",
-				"src/components/Button.tsx",
-			],
-		});
-		expect(invalidateQueriesMock).not.toHaveBeenCalledWith({
-			queryKey: ["fs-file", "profile-1", "src-other/index.ts"],
-		});
+		const fsFilePredicate = findPredicateMatching([
+			"fs-file",
+			"profile-1",
+			"src/index.ts",
+		]);
+		expect(fsFilePredicate({ queryKey: ["fs-file", "profile-1", "src"] }))
+			.toBe(true);
 		expect(
-			invalidateQueriesMock.mock.calls.filter(
-				([call]) =>
-					JSON.stringify(call.queryKey)
-					=== JSON.stringify(["fs-file", "profile-1", "src"]),
-			),
-		).toHaveLength(1);
+			fsFilePredicate({
+				queryKey: ["fs-file", "profile-1", "src-other/index.ts"],
+			}),
+		).toBe(false);
+
+		const previewPredicate = findPredicateMatching([
+			"fs-file-preview",
+			"profile-1",
+			"src/components/Button.tsx",
+		]);
+		expect(
+			previewPredicate({
+				queryKey: ["fs-file-preview", "profile-1", "src-other/Button.tsx"],
+			}),
+		).toBe(false);
+	});
+
+	it("collapses oversized path bursts to profile-wide file invalidation", async () => {
+		const channel = await loadWatcher();
+
+		for (let i = 0; i <= 500; i++) {
+			channel.onmessage?.({
+				project_id: "project-1",
+				profile_id: "profile-1",
+				root_path: "/repo",
+				path: `src/file-${i}.ts`,
+			});
+		}
+		vi.advanceTimersByTime(1000);
+
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file", "profile-1"],
+			exact: false,
+		});
+		expect(invalidateQueriesMock).toHaveBeenCalledWith({
+			queryKey: ["fs-file-preview", "profile-1"],
+			exact: false,
+		});
 	});
 
 	it("invalidates profile file namespaces when event has no precise path", async () => {

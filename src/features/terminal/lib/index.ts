@@ -10,7 +10,12 @@ export {
 export {
 	createTerminalKeyEventHandler,
 } from "./keyEventHandler";
-export { getTerminalParkingContainer } from "./parking";
+export {
+	LiveOutputQueue,
+	LIVE_OUTPUT_FALLBACK_FLUSH_MS,
+	LIVE_OUTPUT_MAX_BUFFERED_BYTES,
+	LIVE_OUTPUT_MAX_WRITE_CHUNK_BYTES,
+} from "./liveOutputQueue";
 export {
 	createResizeScheduler,
 	measureAndResize,

@@ -1,5 +1,5 @@
 import { CaretDownIcon, CaretRightIcon, PlusIcon, TerminalWindowIcon } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { NavLink } from "react-router";
 import {
 	ContextMenu,
@@ -39,15 +39,17 @@ import { ProfileList } from "./ProfileList";
 import { ProjectAvatar } from "./ProjectAvatar";
 import { ProjectGroupMenu } from "./ProjectGroupMenu";
 
-export function ProjectMenuItem({
-	activeProfileId,
-	project,
-	projectGroups,
-}: {
+interface ProjectMenuItemProps {
 	activeProfileId: string | null;
 	project: ProjectWithProfiles;
 	projectGroups: ProjectGroup[];
-}) {
+}
+
+export const ProjectMenuItem = memo(({
+	activeProfileId,
+	project,
+	projectGroups,
+}: ProjectMenuItemProps) => {
 	const defaultProfile = useMemo(
 		() => project.profiles.find((p) => p.is_default),
 		[project.profiles],
@@ -211,23 +213,29 @@ export function ProjectMenuItem({
 				</SidebarMenuSub>
 			)}
 
-			<RenameProjectDialog
-				isOpen={renameDialog.isOpen}
-				onClose={renameDialog.onClose}
-				projectId={project.id}
-				initName={project.name}
-			/>
-			<DeleteProjectDialog
-				isOpen={deleteDialog.isOpen}
-				onClose={deleteDialog.onClose}
-				project={project}
-			/>
-			<ProjectSettingsDialog
-				isOpen={settingsDialog.isOpen}
-				onClose={settingsDialog.onClose}
-				projectId={project.id}
-			/>
-			{hasOnlyDefaultProfile && (
+			{renameDialog.isOpen && (
+				<RenameProjectDialog
+					isOpen={renameDialog.isOpen}
+					onClose={renameDialog.onClose}
+					projectId={project.id}
+					initName={project.name}
+				/>
+			)}
+			{deleteDialog.isOpen && (
+				<DeleteProjectDialog
+					isOpen={deleteDialog.isOpen}
+					onClose={deleteDialog.onClose}
+					project={project}
+				/>
+			)}
+			{settingsDialog.isOpen && (
+				<ProjectSettingsDialog
+					isOpen={settingsDialog.isOpen}
+					onClose={settingsDialog.onClose}
+					projectId={project.id}
+				/>
+			)}
+			{hasOnlyDefaultProfile && createProfileDialog.isOpen && (
 				<CreateProfileDialog
 					isOpen={createProfileDialog.isOpen}
 					onClose={createProfileDialog.onClose}
@@ -236,4 +244,6 @@ export function ProjectMenuItem({
 			)}
 		</SidebarMenuItem>
 	);
-}
+});
+
+ProjectMenuItem.displayName = "ProjectMenuItem";

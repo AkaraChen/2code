@@ -20,6 +20,7 @@ ignore = "0.4"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 tar = "0.4.46"
 flate2 = "1.1.9"
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 uuid = { version = "1", features = ["v4"] }

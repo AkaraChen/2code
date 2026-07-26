@@ -12,6 +12,7 @@ import {
 	getCommitDiff,
 	getGitBinaryPreview,
 	getGitAheadCount,
+	getGitDiffStats,
 	getGitDiffSnapshot,
 	getGitLog,
 	getGitPullRequestStatus,
@@ -39,14 +40,13 @@ function useRefreshOnEnable(enabled: boolean, refetch: () => Promise<unknown>) {
 	}, [enabled, refetch]);
 }
 
-function useGitDiff(profileId: string) {
+function useGitDiff(profileId: string, isVisible = true) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
 		queryFn: () => getGitDiffSnapshot({ profileId }),
 		select: (snapshot) => snapshot.diff,
 		staleTime: GIT_DIFF_SNAPSHOT_STALE_MS,
-		refetchOnMount: "always",
-		refetchInterval: GIT_LIGHT_REFRESH_INTERVAL_MS,
+		refetchInterval: isVisible ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 }
 
@@ -75,17 +75,16 @@ function useCommitDiff(profileId: string, commitHash: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.commitDiff(profileId, commitHash),
 		queryFn: () => getCommitDiff({ profileId, commitHash }),
+		staleTime: Number.POSITIVE_INFINITY,
 	});
 }
 
 export function useGitDiffStats(profileId: string, enabled = true) {
 	const { data, refetch } = useQuery({
-		queryKey: queryKeys.git.diff(profileId),
-		queryFn: () => getGitDiffSnapshot({ profileId }),
-		select: (snapshot) => snapshot.stats,
+		queryKey: queryKeys.git.diffStats(profileId),
+		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
 		staleTime: GIT_DIFF_SNAPSHOT_STALE_MS,
-		refetchOnMount: "always",
 		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,
 	});
 	useRefreshOnEnable(enabled, refetch);
@@ -254,8 +253,8 @@ export function useDiscardGitFileChanges(profileId: string) {
 	});
 }
 
-export function useGitDiffFiles(profileId: string) {
-	const { data: diff } = useGitDiff(profileId);
+export function useGitDiffFiles(profileId: string, isVisible = true) {
+	const { data: diff } = useGitDiff(profileId, isVisible);
 	return useMemo(() => parseDiffFiles(diff), [diff]);
 }
 

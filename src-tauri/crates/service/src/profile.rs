@@ -548,11 +548,14 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	repo::profile::delete_record(conn, id)
 }
 
-pub fn delete_check(
-	conn: &mut SqliteConnection,
+pub fn delete_check_with_db(
+	db: &DbPool,
 	id: &str,
 ) -> Result<ProfileDeleteCheck, AppError> {
-	let profile = repo::profile::find_by_id(conn, id)?;
+	let profile = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::profile::find_by_id(conn, id)?
+	};
 	let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
 	let unpushed_commits = infra::git::branch_unique_commits(
 		&profile.worktree_path,
@@ -632,6 +635,46 @@ mod tests {
 			crate::project::create_from_folder(conn, "Test Project", &folder)
 				.expect("create project from folder");
 		(project, dir)
+	}
+
+	#[test]
+	fn add_diff_stats_sums_fields() {
+		let left = GitDiffStats {
+			files_changed: 2,
+			insertions: 3,
+			deletions: 5,
+		};
+		let right = GitDiffStats {
+			files_changed: 7,
+			insertions: 11,
+			deletions: 13,
+		};
+
+		let total = add_diff_stats(&left, &right);
+
+		assert_eq!(total.files_changed, 9);
+		assert_eq!(total.insertions, 14);
+		assert_eq!(total.deletions, 18);
+	}
+
+	#[test]
+	fn add_diff_stats_keeps_zero_side_neutral() {
+		let zero = GitDiffStats {
+			files_changed: 0,
+			insertions: 0,
+			deletions: 0,
+		};
+		let diff = GitDiffStats {
+			files_changed: 4,
+			insertions: 8,
+			deletions: 15,
+		};
+
+		let total = add_diff_stats(&zero, &diff);
+
+		assert_eq!(total.files_changed, diff.files_changed);
+		assert_eq!(total.insertions, diff.insertions);
+		assert_eq!(total.deletions, diff.deletions);
 	}
 
 	// --- worktree base resolution ---

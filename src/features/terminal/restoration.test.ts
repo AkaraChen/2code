@@ -12,11 +12,16 @@ import {
 	useTerminalStore,
 	type PendingTerminalRestore,
 } from "./store";
+import { takeRestoredHistory } from "./ptyHistoryIpc";
 
 vi.mock("@/generated", () => ({
 	closePtySession: vi.fn(),
 	deletePtySessionRecord: vi.fn(),
 	restorePtySession: vi.fn(),
+}));
+
+vi.mock("./ptyHistoryIpc", () => ({
+	takeRestoredHistory: vi.fn(),
 }));
 
 vi.mock("consola", () => ({
@@ -28,6 +33,17 @@ vi.mock("consola", () => ({
 const closePtySessionMock = vi.mocked(closePtySession);
 const deletePtySessionRecordMock = vi.mocked(deletePtySessionRecord);
 const restorePtySessionMock = vi.mocked(restorePtySession);
+const takeRestoredHistoryMock = vi.mocked(takeRestoredHistory);
+
+interface RestoreSessionResult {
+	newSessionId: string;
+	historyLen: number;
+}
+type GeneratedRestoreResult = Awaited<ReturnType<typeof restorePtySession>>;
+
+function restoreResult(result: RestoreSessionResult) {
+	return result as unknown as GeneratedRestoreResult;
+}
 
 const pendingRestore: PendingTerminalRestore = {
 	oldSessionId: "old-session",
@@ -50,6 +66,8 @@ function resetStore() {
 	deletePtySessionRecordMock.mockReset();
 	deletePtySessionRecordMock.mockResolvedValue(undefined);
 	restorePtySessionMock.mockReset();
+	takeRestoredHistoryMock.mockReset();
+	takeRestoredHistoryMock.mockResolvedValue(new Uint8Array());
 }
 
 function addPendingTab() {
@@ -63,10 +81,11 @@ describe("restorePendingTerminalTab", () => {
 	beforeEach(resetStore);
 
 	it("restores a pending tab and swaps it to the live session id", async () => {
-		restorePtySessionMock.mockResolvedValue({
+		restorePtySessionMock.mockResolvedValue(restoreResult({
 			newSessionId: "new-session",
-			history: [1, 2, 3],
-		});
+			historyLen: 3,
+		}));
+		takeRestoredHistoryMock.mockResolvedValue(new Uint8Array([1, 2, 3]));
 
 		await restorePendingTerminalTab("profile-1", addPendingTab());
 
@@ -89,13 +108,10 @@ describe("restorePendingTerminalTab", () => {
 	});
 
 	it("deduplicates concurrent restore attempts for the same old session", async () => {
-		let resolveRestore!: (value: {
-			newSessionId: string;
-			history: number[];
-		}) => void;
+		let resolveRestore!: (value: RestoreSessionResult) => void;
 		restorePtySessionMock.mockReturnValue(
 			new Promise((resolve) => {
-				resolveRestore = resolve;
+				resolveRestore = (value) => resolve(restoreResult(value));
 			}),
 		);
 		const tab = addPendingTab();
@@ -106,7 +122,7 @@ describe("restorePendingTerminalTab", () => {
 		expect(second).toBe(first);
 		expect(restorePtySessionMock).toHaveBeenCalledTimes(1);
 
-		resolveRestore({ newSessionId: "new-session", history: [] });
+		resolveRestore({ newSessionId: "new-session", historyLen: 0 });
 		await first;
 	});
 
@@ -119,19 +135,16 @@ describe("restorePendingTerminalTab", () => {
 	});
 
 	it("closes the new session if the pending tab was closed before restore finished", async () => {
-		let resolveRestore!: (value: {
-			newSessionId: string;
-			history: number[];
-		}) => void;
+		let resolveRestore!: (value: RestoreSessionResult) => void;
 		restorePtySessionMock.mockReturnValue(
 			new Promise((resolve) => {
-				resolveRestore = resolve;
+				resolveRestore = (value) => resolve(restoreResult(value));
 			}),
 		);
 		const restorePromise = restorePendingTerminalTab("profile-1", addPendingTab());
 
 		useTerminalStore.getState().closeTab("profile-1", "old-session");
-		resolveRestore({ newSessionId: "new-session", history: [1] });
+		resolveRestore({ newSessionId: "new-session", historyLen: 1 });
 		await restorePromise;
 
 		expect(closePtySessionMock).toHaveBeenCalledWith({

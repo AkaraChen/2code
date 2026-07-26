@@ -1,8 +1,10 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Component, Path};
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use crate::no_window::command_without_windows_console;
 
@@ -31,32 +33,38 @@ struct GhPullRequestOwner {
 }
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
+const GH_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Clone)]
+struct CachedDiff {
+	fingerprint: u64,
+	stats: GitDiffStats,
+	snapshot: Option<GitDiffSnapshot>,
+}
+
+#[derive(Clone)]
+struct CachedLog {
+	head_oid: String,
+	commits: Vec<GitCommit>,
+}
+
+static DIFF_CACHE: OnceLock<Mutex<HashMap<String, CachedDiff>>> =
+	OnceLock::new();
+static LOG_CACHE: OnceLock<Mutex<HashMap<(String, u32), CachedLog>>> =
+	OnceLock::new();
+
+fn diff_cache() -> &'static Mutex<HashMap<String, CachedDiff>> {
+	DIFF_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn log_cache() -> &'static Mutex<HashMap<(String, u32), CachedLog>> {
+	LOG_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn github_avatar_url(folder: &str) -> Option<String> {
 	let remote_url = remote_url(folder).ok().flatten()?;
 	let (owner, _) = parse_github_owner_and_repo(&remote_url)?;
-	if let Some(avatar_url) = github_avatar_url_from_api(&owner) {
-		return Some(avatar_url);
-	}
 	Some(format!("https://avatars.githubusercontent.com/{owner}?v=4"))
-}
-
-fn github_avatar_url_from_api(owner: &str) -> Option<String> {
-	let output = command_without_windows_console("gh")
-		.args(["api", &format!("users/{owner}"), "--jq", ".avatar_url"])
-		.output();
-
-	let output = match output {
-		Ok(output) if output.status.success() => output,
-		_ => return None,
-	};
-
-	let avatar = String::from_utf8_lossy(&output.stdout).trim().to_string();
-	if avatar.is_empty() {
-		return None;
-	}
-
-	Some(avatar)
 }
 
 pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
@@ -159,52 +167,60 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 }
 
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
-	Ok(diff_snapshot(folder)?.stats)
+	let status_z = status_porcelain_z_uall(folder)?;
+	if status_z.is_empty() {
+		return Ok(GitDiffStats::default());
+	}
+
+	let fingerprint = snapshot_fingerprint(folder, &status_z);
+	if let Some(hit) = diff_cache().lock().unwrap().get(folder) {
+		if hit.fingerprint == fingerprint {
+			return Ok(hit.stats.clone());
+		}
+	}
+
+	let stats = compute_diff_stats_uncached(folder)?;
+	diff_cache().lock().unwrap().insert(
+		folder.to_string(),
+		CachedDiff {
+			fingerprint,
+			stats: stats.clone(),
+			snapshot: None,
+		},
+	);
+	Ok(stats)
 }
 
 pub fn diff_snapshot(folder: &str) -> Result<GitDiffSnapshot, AppError> {
-	if !has_any_changes(folder)? {
+	let status_z = status_porcelain_z_uall(folder)?;
+	if status_z.is_empty() {
 		return Ok(GitDiffSnapshot::default());
 	}
 
-	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
-
-	stage_all_changes(folder, &tmp_index)?;
-
-	let diff_output = run_cached_diff(folder, &tmp_index, false)?;
-	let diff = if diff_output.status.success() {
-		String::from_utf8_lossy(&diff_output.stdout).to_string()
-	} else {
-		let stderr = String::from_utf8_lossy(&diff_output.stderr)
-			.trim()
-			.to_string();
-		if is_no_head_error(&stderr) {
-			String::new()
-		} else {
-			return Err(AppError::GitError(stderr));
+	let fingerprint = snapshot_fingerprint(folder, &status_z);
+	if let Some(hit) = diff_cache().lock().unwrap().get(folder) {
+		if hit.fingerprint == fingerprint {
+			if let Some(snapshot) = &hit.snapshot {
+				return Ok(snapshot.clone());
+			}
 		}
-	};
+	}
 
-	let stats_output = run_cached_diff(folder, &tmp_index, true)?;
-	let stats = if stats_output.status.success() {
-		parse_diff_stats(&stats_output.stdout)
-	} else {
-		let stderr = String::from_utf8_lossy(&stats_output.stderr)
-			.trim()
-			.to_string();
-		if is_no_head_error(&stderr) {
-			GitDiffStats::default()
-		} else {
-			return Err(AppError::GitError(stderr));
-		}
-	};
-
-	Ok(GitDiffSnapshot { diff, stats })
+	let snapshot = compute_diff_snapshot_uncached(folder)?;
+	diff_cache().lock().unwrap().insert(
+		folder.to_string(),
+		CachedDiff {
+			fingerprint,
+			stats: snapshot.stats.clone(),
+			snapshot: Some(snapshot.clone()),
+		},
+	);
+	Ok(snapshot)
 }
 
-fn has_any_changes(folder: &str) -> Result<bool, AppError> {
+fn status_porcelain_z_uall(folder: &str) -> Result<Vec<u8>, AppError> {
 	let output = command_without_windows_console("git")
-		.args(["status", "--porcelain", "--untracked-files=all"])
+		.args(["status", "--porcelain", "-z", "--untracked-files=all"])
 		.current_dir(folder)
 		.output()?;
 
@@ -214,47 +230,170 @@ fn has_any_changes(folder: &str) -> Result<bool, AppError> {
 		));
 	}
 
-	Ok(!output.stdout.is_empty())
+	Ok(output.stdout)
 }
 
-fn stage_all_changes(folder: &str, tmp_index: &Path) -> Result<(), AppError> {
+fn head_commit(folder: &str) -> Option<String> {
 	let output = command_without_windows_console("git")
-		.args(["add", "-A"])
+		.args(["rev-parse", "HEAD"])
+		.current_dir(folder)
+		.output()
+		.ok()?;
+
+	output
+		.status
+		.success()
+		.then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn snapshot_fingerprint(folder: &str, status_z: &[u8]) -> u64 {
+	let mut hasher = DefaultHasher::new();
+	status_z.hash(&mut hasher);
+	head_commit(folder).hash(&mut hasher);
+	for path in status_z_paths(status_z) {
+		match std::fs::symlink_metadata(Path::new(folder).join(path)) {
+			Ok(metadata) => {
+				metadata.len().hash(&mut hasher);
+				metadata
+					.modified()
+					.ok()
+					.and_then(|time| {
+						time.duration_since(std::time::UNIX_EPOCH).ok()
+					})
+					.map(|duration| {
+						(duration.as_secs(), duration.subsec_nanos())
+					})
+					.hash(&mut hasher);
+			}
+			Err(_) => 0u8.hash(&mut hasher),
+		}
+	}
+	hasher.finish()
+}
+
+fn status_z_paths(output: &[u8]) -> Vec<String> {
+	let records: Vec<&[u8]> = output
+		.split(|byte| *byte == 0)
+		.filter(|record| !record.is_empty())
+		.collect();
+	let mut paths = Vec::new();
+	let mut index = 0usize;
+	while let Some(record) = records.get(index) {
+		if record.len() < 4 {
+			index += 1;
+			continue;
+		}
+
+		let status_code = &record[..2];
+		paths.push(String::from_utf8_lossy(&record[3..]).into_owned());
+		if status_code.contains(&b'R') || status_code.contains(&b'C') {
+			index += 1;
+		}
+		index += 1;
+	}
+	paths
+}
+
+fn register_untracked_intent_to_add(
+	folder: &str,
+	tmp_index: &Path,
+) -> Result<(), AppError> {
+	let output = command_without_windows_console("git")
+		.args(["add", "--intent-to-add", "."])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", tmp_index)
 		.output()?;
 
 	if !output.status.success() {
-		return Err(AppError::GitError(
-			String::from_utf8_lossy(&output.stderr).trim().to_string(),
-		));
+		let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+		if stderr.contains("did not match any files") {
+			return Ok(());
+		}
+		return Err(AppError::GitError(stderr));
 	}
 
 	Ok(())
 }
 
-fn run_cached_diff(
-	folder: &str,
-	tmp_index: &Path,
-	shortstat: bool,
-) -> Result<std::process::Output, AppError> {
-	let mut args = vec![
-		"diff",
-		"--no-color",
-		"--src-prefix=a/",
-		"--dst-prefix=b/",
-		"--cached",
-	];
-	if shortstat {
-		args.push("--shortstat");
-	}
-	args.push("HEAD");
+fn compute_diff_stats_uncached(folder: &str) -> Result<GitDiffStats, AppError> {
+	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
+	register_untracked_intent_to_add(folder, &tmp_index)?;
 
-	Ok(command_without_windows_console("git")
-		.args(args)
+	let output = command_without_windows_console("git")
+		.args([
+			"diff",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--shortstat",
+			"HEAD",
+		])
+		.current_dir(folder)
+		.env("GIT_INDEX_FILE", &tmp_index)
+		.output()?;
+
+	if output.status.success() {
+		return Ok(parse_diff_stats(&output.stdout));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if is_no_head_error(&stderr) {
+		Ok(GitDiffStats::default())
+	} else {
+		Err(AppError::GitError(stderr))
+	}
+}
+
+fn compute_diff_snapshot_uncached(
+	folder: &str,
+) -> Result<GitDiffSnapshot, AppError> {
+	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
+	register_untracked_intent_to_add(folder, &tmp_index)?;
+
+	let output = command_without_windows_console("git")
+		.args([
+			"diff",
+			"--no-color",
+			"--src-prefix=a/",
+			"--dst-prefix=b/",
+			"--shortstat",
+			"-p",
+			"HEAD",
+		])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", tmp_index)
-		.output()?)
+		.output()?;
+
+	if output.status.success() {
+		return Ok(split_shortstat_and_patch(&output.stdout));
+	}
+
+	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+	if is_no_head_error(&stderr) {
+		Ok(GitDiffSnapshot::default())
+	} else {
+		Err(AppError::GitError(stderr))
+	}
+}
+
+fn split_shortstat_and_patch(stdout: &[u8]) -> GitDiffSnapshot {
+	let text = String::from_utf8_lossy(stdout);
+	let patch_start = if text.starts_with("diff --git ") {
+		Some(0)
+	} else {
+		text.find("\ndiff --git ").map(|index| index + 1)
+	};
+
+	match patch_start {
+		Some(index) => GitDiffSnapshot {
+			diff: text[index..].to_string(),
+			stats: parse_diff_stats(text[..index].as_bytes()),
+		},
+		None => GitDiffSnapshot {
+			diff: String::new(),
+			stats: parse_diff_stats(stdout),
+		},
+	}
 }
 
 fn is_no_head_error(stderr: &str) -> bool {
@@ -334,6 +473,37 @@ fn resolve_git_index_path(
 }
 
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
+	let initial_head = head_commit(folder);
+	let Some(head_oid) = initial_head else {
+		return log_uncached(folder, limit);
+	};
+	let cache_key = (folder.to_string(), limit);
+
+	if let Some(commits) = log_cache()
+		.lock()
+		.unwrap()
+		.get(&cache_key)
+		.filter(|entry| entry.head_oid == head_oid)
+		.map(|entry| entry.commits.clone())
+	{
+		return Ok(commits);
+	}
+
+	let commits = log_uncached(folder, limit)?;
+	if head_commit(folder).as_deref() == Some(head_oid.as_str()) {
+		log_cache().lock().unwrap().insert(
+			cache_key,
+			CachedLog {
+				head_oid,
+				commits: commits.clone(),
+			},
+		);
+	}
+
+	Ok(commits)
+}
+
+fn log_uncached(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 	let output = command_without_windows_console("git")
 		.args([
 			"log",
@@ -355,6 +525,19 @@ pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 
 	let stdout = String::from_utf8_lossy(&output.stdout);
 	Ok(parse_git_log(&stdout))
+}
+
+#[cfg(test)]
+fn log_cache_insert_for_test(
+	folder: &str,
+	limit: u32,
+	head_oid: String,
+	commits: Vec<GitCommit>,
+) {
+	log_cache()
+		.lock()
+		.unwrap()
+		.insert((folder.to_string(), limit), CachedLog { head_oid, commits });
 }
 
 pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
@@ -734,6 +917,54 @@ pub fn list_branches(folder: &str) -> Result<Vec<GitBranchInfo>, AppError> {
 		.args([
 			"for-each-ref",
 			"refs/heads",
+			"--format=%(refname:short)%09%(ahead-behind:HEAD)",
+			"--sort=-committerdate",
+		])
+		.current_dir(folder)
+		.output()?;
+	if !output.status.success() {
+		return list_branches_per_branch(folder);
+	}
+
+	let current = branch(folder).unwrap_or_default();
+	let trunk = trunk_branch_name(folder);
+	let used = branches_used_by_other_worktrees(folder);
+
+	let branches = String::from_utf8_lossy(&output.stdout)
+		.lines()
+		.map(str::trim)
+		.filter(|line| !line.is_empty())
+		.map(|line| {
+			let (name, counts) = line.split_once('\t').unwrap_or((line, ""));
+			let name = name.trim();
+			// %(ahead-behind:HEAD) prints "ahead behind"; rev-list fallback
+			// parses the opposite order from --left-right output.
+			let mut parts = counts.split_whitespace();
+			let ahead = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+			let behind = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+			let is_current = name == current;
+			GitBranchInfo {
+				name: name.to_string(),
+				is_current,
+				ahead: if is_current { 0 } else { ahead },
+				behind: if is_current { 0 } else { behind },
+				is_used: used.contains(name),
+				is_trunk: trunk.as_deref() == Some(name),
+			}
+		})
+		.collect();
+
+	Ok(branches)
+}
+
+#[doc(hidden)]
+pub fn list_branches_per_branch(
+	folder: &str,
+) -> Result<Vec<GitBranchInfo>, AppError> {
+	let output = command_without_windows_console("git")
+		.args([
+			"for-each-ref",
+			"refs/heads",
 			"--format=%(refname:short)",
 			"--sort=-committerdate",
 		])
@@ -889,7 +1120,8 @@ pub fn pull_request_status_for_branch(
 		return Ok(None);
 	};
 
-	let output = command_without_windows_console("gh")
+	let mut command = command_without_windows_console("gh");
+	command
 		.args([
 			"pr",
 			"list",
@@ -902,11 +1134,15 @@ pub fn pull_request_status_for_branch(
 			"--limit",
 			"100",
 		])
-		.current_dir(folder)
-		.output();
+		.env("GH_PROMPT_DISABLED", "1")
+		.current_dir(folder);
 
-	let output = match output {
-		Ok(output) => output,
+	let output = match crate::process::output_with_timeout(
+		&mut command,
+		GH_COMMAND_TIMEOUT,
+	) {
+		Ok(Some(output)) => output,
+		Ok(None) => return Ok(None),
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
 			return Err(AppError::GitError("gh CLI not found".into()));
 		}
@@ -2375,6 +2611,68 @@ mod tests {
 			.unwrap();
 	}
 
+	fn git_ok(dir: &std::path::Path, args: &[&str]) {
+		let output = command_without_windows_console("git")
+			.args(args)
+			.current_dir(dir)
+			.output()
+			.unwrap();
+		assert!(
+			output.status.success(),
+			"git {:?} failed: {}",
+			args,
+			String::from_utf8_lossy(&output.stderr),
+		);
+	}
+
+	fn current_head(dir: &std::path::Path) -> String {
+		let output = command_without_windows_console("git")
+			.args(["rev-parse", "HEAD"])
+			.current_dir(dir)
+			.output()
+			.unwrap();
+		assert!(
+			output.status.success(),
+			"git rev-parse HEAD failed: {}",
+			String::from_utf8_lossy(&output.stderr)
+		);
+		String::from_utf8_lossy(&output.stdout).trim().to_string()
+	}
+
+	fn sentinel_commit(message: &str) -> GitCommit {
+		GitCommit {
+			hash: "sentinel".to_string(),
+			full_hash: "sentinel000000000000000000000000000000000000"
+				.to_string(),
+			author: GitAuthor {
+				name: "Cache".to_string(),
+				email: "cache@example.com".to_string(),
+			},
+			date: "2026-01-01T00:00:00+00:00".to_string(),
+			message: message.to_string(),
+			files_changed: 0,
+			insertions: 0,
+			deletions: 0,
+		}
+	}
+
+	fn count_loose_objects(dir: &std::path::Path) -> usize {
+		let objects = dir.join(".git/objects");
+		let mut count = 0;
+		for entry in std::fs::read_dir(&objects).into_iter().flatten().flatten()
+		{
+			let name = entry.file_name();
+			let name = name.to_string_lossy();
+			if name == "pack" || name == "info" {
+				continue;
+			}
+			count += std::fs::read_dir(entry.path())
+				.map(|entries| entries.flatten().count())
+				.unwrap_or(0);
+		}
+		count
+	}
+
 	#[test]
 	fn branch_in_git_repo() {
 		let dir = create_temp_git_repo();
@@ -2411,6 +2709,104 @@ mod tests {
 	}
 
 	#[test]
+	fn list_branches_reports_diverged_ahead_behind_counts() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "1", "base 1");
+		add_commit(&dir, "base.txt", "2", "base 2");
+		add_commit(&dir, "main-a.txt", "3", "main 3");
+		add_commit(&dir, "main-b.txt", "4", "main 4");
+		let trunk = branch(&dir.to_string_lossy()).unwrap();
+		git_ok(&dir, &["checkout", "-b", "feat", "HEAD~2"]);
+		add_commit(&dir, "feat-a.txt", "a", "feat a");
+		add_commit(&dir, "feat-b.txt", "b", "feat b");
+		add_commit(&dir, "feat-c.txt", "c", "feat c");
+		git_ok(&dir, &["checkout", &trunk]);
+
+		let branches = list_branches(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+		let feat = branches.iter().find(|item| item.name == "feat").unwrap();
+		let current = branches.iter().find(|item| item.name == trunk).unwrap();
+
+		assert_eq!(feat.ahead, 3);
+		assert_eq!(feat.behind, 2);
+		assert!(current.is_current);
+		assert_eq!(current.ahead, 0);
+		assert_eq!(current.behind, 0);
+		assert_eq!(branches.iter().filter(|item| item.is_trunk).count(), 1);
+	}
+
+	#[test]
+	fn list_branches_reports_purely_behind_branch() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "1", "base 1");
+		add_commit(&dir, "base.txt", "2", "base 2");
+		add_commit(&dir, "base.txt", "3", "base 3");
+		git_ok(&dir, &["branch", "old", "HEAD~2"]);
+
+		let branches = list_branches(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+		let old = branches.iter().find(|item| item.name == "old").unwrap();
+
+		assert_eq!(old.ahead, 0);
+		assert_eq!(old.behind, 2);
+	}
+
+	#[test]
+	fn list_branches_empty_repo_returns_empty_vec() {
+		let dir = create_temp_git_repo();
+		let branches = list_branches(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(branches.is_empty());
+	}
+
+	#[test]
+	fn list_branches_marks_branch_used_by_other_worktree() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "1", "base 1");
+		git_ok(&dir, &["branch", "feat"]);
+		let worktree = std::env::temp_dir()
+			.join(format!("git-infra-worktree-{}", uuid::Uuid::new_v4()));
+		git_ok(
+			&dir,
+			&[
+				"worktree",
+				"add",
+				worktree.to_string_lossy().as_ref(),
+				"feat",
+			],
+		);
+
+		let branches = list_branches(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&worktree);
+		let _ = std::fs::remove_dir_all(&dir);
+		let feat = branches.iter().find(|item| item.name == "feat").unwrap();
+		let current = branches.iter().find(|item| item.is_current).unwrap();
+
+		assert!(feat.is_used);
+		assert!(!current.is_used);
+	}
+
+	#[test]
+	fn list_branches_fast_path_matches_per_branch_fallback() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "base.txt", "1", "base 1");
+		add_commit(&dir, "base.txt", "2", "base 2");
+		add_commit(&dir, "main-a.txt", "3", "main 3");
+		let trunk = branch(&dir.to_string_lossy()).unwrap();
+		git_ok(&dir, &["checkout", "-b", "feat", "HEAD~1"]);
+		add_commit(&dir, "feat.txt", "feat", "feat");
+		git_ok(&dir, &["checkout", &trunk]);
+
+		let fast = list_branches(&dir.to_string_lossy()).unwrap();
+		let fallback =
+			list_branches_per_branch(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(fast, fallback);
+	}
+
+	#[test]
 	fn log_basic() {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "a.txt", "hello", "First");
@@ -2442,6 +2838,104 @@ mod tests {
 		let dir = create_temp_git_repo();
 		let commits = log(&dir.to_string_lossy(), 50).unwrap();
 		let _ = std::fs::remove_dir_all(&dir);
+		assert!(commits.is_empty());
+	}
+
+	#[test]
+	fn log_cache_hit_reuses_head_guarded_entry() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "First");
+		let head = current_head(&dir);
+		log_cache_insert_for_test(
+			&dir.to_string_lossy(),
+			50,
+			head,
+			vec![sentinel_commit("cached")],
+		);
+
+		let commits = log(&dir.to_string_lossy(), 50).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(commits.len(), 1);
+		assert_eq!(commits[0].message, "cached");
+	}
+
+	#[test]
+	fn log_cache_miss_when_head_moves() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "First");
+		let old_head = current_head(&dir);
+		log_cache_insert_for_test(
+			&dir.to_string_lossy(),
+			50,
+			old_head,
+			vec![sentinel_commit("stale")],
+		);
+		add_commit(&dir, "b.txt", "world", "Second");
+
+		let commits = log(&dir.to_string_lossy(), 50).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(commits[0].message, "Second");
+		assert!(commits.iter().all(|commit| commit.message != "stale"));
+	}
+
+	#[test]
+	fn log_cache_populates_after_stable_read() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "hello", "First");
+
+		let uncached = log(&dir.to_string_lossy(), 50).unwrap();
+		std::fs::remove_file(dir.join("a.txt")).unwrap();
+		let cached = log(&dir.to_string_lossy(), 50).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(cached.len(), uncached.len());
+		assert_eq!(cached[0].hash, uncached[0].hash);
+		assert_eq!(cached[0].message, uncached[0].message);
+		assert_eq!(cached[0].files_changed, uncached[0].files_changed);
+	}
+
+	#[test]
+	fn log_cache_keeps_limits_independent() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "a", "First");
+		add_commit(&dir, "b.txt", "b", "Second");
+		let head = current_head(&dir);
+		log_cache_insert_for_test(
+			&dir.to_string_lossy(),
+			1,
+			head.clone(),
+			vec![sentinel_commit("limit one")],
+		);
+		log_cache_insert_for_test(
+			&dir.to_string_lossy(),
+			2,
+			head,
+			vec![sentinel_commit("limit two")],
+		);
+
+		let one = log(&dir.to_string_lossy(), 1).unwrap();
+		let two = log(&dir.to_string_lossy(), 2).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(one[0].message, "limit one");
+		assert_eq!(two[0].message, "limit two");
+	}
+
+	#[test]
+	fn log_empty_repo_bypasses_cache_without_head() {
+		let dir = create_temp_git_repo();
+		log_cache_insert_for_test(
+			&dir.to_string_lossy(),
+			50,
+			"missing-head".to_string(),
+			vec![sentinel_commit("should not be returned")],
+		);
+
+		let commits = log(&dir.to_string_lossy(), 50).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
 		assert!(commits.is_empty());
 	}
 
@@ -2711,6 +3205,98 @@ mod tests {
 		assert_eq!(stats.files_changed, 0);
 		assert_eq!(stats.insertions, 0);
 		assert_eq!(stats.deletions, 0);
+	}
+
+	#[test]
+	fn diff_stats_matches_snapshot_stats_including_untracked() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "line1\nline2\n", "Init");
+		std::fs::write(dir.join("a.txt"), "line1 changed\n").unwrap();
+		std::fs::write(dir.join("new.txt"), "brand\nnew\n").unwrap();
+
+		let folder = dir.to_string_lossy().to_string();
+		let stats = diff_stats(&folder).unwrap();
+		let snapshot = diff_snapshot(&folder).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert_eq!(stats, snapshot.stats);
+		assert_eq!(stats.files_changed, 2);
+		assert!(stats.insertions >= 3);
+	}
+
+	#[test]
+	fn diff_snapshot_combined_invocation_reports_stats_and_patch() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "old\n", "Init a");
+		add_commit(&dir, "b.txt", "bye\n", "Init b");
+		std::fs::write(dir.join("a.txt"), "new\nextra\n").unwrap();
+		std::fs::remove_file(dir.join("b.txt")).unwrap();
+		std::fs::write(dir.join("new.txt"), "one\ntwo\n").unwrap();
+
+		let snapshot = diff_snapshot(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(snapshot.diff.starts_with("diff --git "));
+		assert!(snapshot.diff.contains("a.txt"));
+		assert!(snapshot.diff.contains("b.txt"));
+		assert!(snapshot.diff.contains("new.txt"));
+		assert_eq!(snapshot.stats.files_changed, 3);
+		assert_eq!(snapshot.stats.insertions, 4);
+		assert_eq!(snapshot.stats.deletions, 2);
+	}
+
+	#[test]
+	fn diff_snapshot_writes_no_loose_objects_per_poll() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "old\n", "Init a");
+		add_commit(&dir, "b.txt", "gone\n", "Init b");
+		std::fs::write(dir.join("a.txt"), "new\n").unwrap();
+		std::fs::remove_file(dir.join("b.txt")).unwrap();
+		std::fs::write(dir.join("new.txt"), "untracked\n").unwrap();
+
+		let before = count_loose_objects(&dir);
+		diff_snapshot(&dir.to_string_lossy()).unwrap();
+		let after_first = count_loose_objects(&dir);
+		diff_snapshot(&dir.to_string_lossy()).unwrap();
+		let after_second = count_loose_objects(&dir);
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(after_first.saturating_sub(before) <= 1);
+		assert_eq!(after_second, after_first);
+	}
+
+	#[test]
+	fn diff_snapshot_cache_detects_content_change_with_unchanged_status() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "old\n", "Init");
+		std::fs::write(dir.join("a.txt"), "first\n").unwrap();
+
+		let first = diff_snapshot(&dir.to_string_lossy()).unwrap();
+		std::fs::write(dir.join("a.txt"), "second longer\n").unwrap();
+		let second = diff_snapshot(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(first.diff.contains("+first"));
+		assert!(second.diff.contains("+second longer"));
+		assert_ne!(first.diff, second.diff);
+	}
+
+	#[test]
+	fn diff_snapshot_when_all_tracked_files_deleted() {
+		let dir = create_temp_git_repo();
+		add_commit(&dir, "a.txt", "a\n", "Init a");
+		add_commit(&dir, "b.txt", "b\n", "Init b");
+		std::fs::remove_file(dir.join("a.txt")).unwrap();
+		std::fs::remove_file(dir.join("b.txt")).unwrap();
+
+		let snapshot = diff_snapshot(&dir.to_string_lossy()).unwrap();
+		let _ = std::fs::remove_dir_all(&dir);
+
+		assert!(snapshot.diff.contains("deleted file"));
+		assert!(snapshot.diff.contains("a.txt"));
+		assert!(snapshot.diff.contains("b.txt"));
+		assert_eq!(snapshot.stats.files_changed, 2);
+		assert_eq!(snapshot.stats.deletions, 2);
 	}
 
 	#[test]

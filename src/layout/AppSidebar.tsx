@@ -85,10 +85,14 @@ import {
 import {
 	APP_SIDEBAR_MAX_WIDTH,
 	APP_SIDEBAR_MIN_WIDTH,
+	syncAppSidebarWidthVar,
 	useAppSidebarStore,
 } from "./sidebarStore";
 
 const IS_MAC_PLATFORM = isMacPlatform();
+const SIDEBAR_PROVIDER_STYLE = {
+	"--sidebar-width": "var(--app-sidebar-width, 250px)",
+} as CSSProperties;
 
 function insertAt<T>(items: T[], item: T, index: number) {
 	const next = [...items];
@@ -325,6 +329,7 @@ export default function AppSidebar() {
 	const location = useLocation();
 	const createDialog = useDialogState();
 	const navRef = useRef<HTMLDivElement>(null);
+	const resizeSeparatorRef = useRef<HTMLDivElement>(null);
 	const isLayoutSaveInFlightRef = useRef(false);
 	const [isSidebarLayoutSaving, setIsSidebarLayoutSaving] = useState(false);
 	const updateSidebarLayout = useUpdateProjectSidebarLayout();
@@ -334,11 +339,16 @@ export default function AppSidebar() {
 	const toggleCollapsed = useAppSidebarStore((s) => s.toggleCollapsed);
 	const sidebarWidth = useAppSidebarStore((s) => s.width);
 	const setSidebarWidth = useAppSidebarStore((s) => s.setWidth);
+	const handleLiveResize = useCallback((width: number) => {
+		syncAppSidebarWidthVar(width);
+		resizeSeparatorRef.current?.setAttribute("aria-valuenow", String(width));
+	}, []);
 	const resize = useHorizontalResize({
 		value: sidebarWidth,
 		min: APP_SIDEBAR_MIN_WIDTH,
 		max: APP_SIDEBAR_MAX_WIDTH,
-		onChange: setSidebarWidth,
+		onChange: handleLiveResize,
+		onCommit: setSidebarWidth,
 	});
 	const sidebarLayout = useMemo(
 		() => buildSidebarLayout(projects, projectGroups),
@@ -512,9 +522,7 @@ export default function AppSidebar() {
 		<>
 			<SidebarProvider
 				className="h-full min-h-0 w-auto shrink-0"
-				style={
-					{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties
-				}
+				style={SIDEBAR_PROVIDER_STYLE}
 			>
 				<Sidebar
 					ref={navRef}
@@ -881,6 +889,7 @@ export default function AppSidebar() {
 						</SidebarFooter>
 					</LayoutGroup>
 					<div
+						ref={resizeSeparatorRef}
 						role="separator"
 						aria-label="Resize sidebar"
 						aria-orientation="vertical"

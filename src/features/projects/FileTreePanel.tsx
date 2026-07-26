@@ -166,11 +166,12 @@ function useFileTreePanelWidth() {
     readStoredFileTreePanelWidth
   );
   const updatePanelWidth = useCallback((width: number) => {
-    const nextWidth = clampFileTreePanelWidth(width);
-    setPanelWidth(nextWidth);
-    writeStoredFileTreePanelWidth(nextWidth);
+    setPanelWidth(clampFileTreePanelWidth(width));
   }, []);
-  return [panelWidth, updatePanelWidth] as const;
+  const persistPanelWidth = useCallback((width: number) => {
+    writeStoredFileTreePanelWidth(clampFileTreePanelWidth(width));
+  }, []);
+  return [panelWidth, updatePanelWidth, persistPanelWidth] as const;
 }
 
 function toPathCollisionKey(path: string) {
@@ -681,13 +682,14 @@ export default function FileTreePanel({
   const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
   const moveFileTreePathsRef = useRef((_event: FileTreeDropResult) => {});
   const prefersReducedMotion = useReducedMotion() ?? false;
-  const [panelWidth, setPanelWidth] = useFileTreePanelWidth();
+  const [panelWidth, setPanelWidth, persistPanelWidth] = useFileTreePanelWidth();
   const resize = useHorizontalResize({
     value: panelWidth,
     min: FILE_TREE_PANEL_MIN_WIDTH,
     max: FILE_TREE_PANEL_MAX_WIDTH,
     disabled: !isOpen,
-    onChange: setPanelWidth
+    onChange: setPanelWidth,
+    onCommit: persistPanelWidth
   });
 
   const {
@@ -699,7 +701,7 @@ export default function FileTreePanel({
     profileId,
     isOpen && isActive
   );
-  const expandedChildPathResults = useFileTreeExpandedChildPaths(
+  const expandedChildPaths = useFileTreeExpandedChildPaths(
     profileId,
     expandedPaths,
     isOpen && isActive
@@ -715,12 +717,12 @@ export default function FileTreePanel({
   const treePaths = useMemo(
     () => {
       const paths = rootChildPaths ? [...rootChildPaths] : [];
-      for (const result of expandedChildPathResults) {
-        if (result.data) paths.push(...result.data);
+      for (const path of expandedChildPaths) {
+        paths.push(path);
       }
       return paths;
     },
-    [expandedChildPathResults, rootChildPaths]
+    [expandedChildPaths, rootChildPaths]
   );
   const gitStatus = useMemo(
     () => toFileTreeGitStatus(gitStatusEntries),
