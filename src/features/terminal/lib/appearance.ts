@@ -107,6 +107,15 @@ function sanitizeTerminalFontFamily(
 	return serializeFontFamilyList(result);
 }
 
+/**
+ * First family of a CSS font-family list, unquoted — the one that must be
+ * loaded before the terminal's cell metrics are meaningful.
+ */
+export function getPrimaryFontFamily(cssValue: string): string {
+	const families = parseFontFamilyList(cssValue);
+	return families[0] ?? "";
+}
+
 export function buildFontFamilyCss(family: string): string {
 	const sanitized = sanitizeTerminalFontFamily(family);
 	return sanitized;
