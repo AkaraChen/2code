@@ -1,5 +1,7 @@
 import { ThemeProvider as NextThemesProvider, useTheme } from "next-themes";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { isLinuxPlatform } from "@/shared/lib/platform";
 import type { Preference, ThemeContextValue } from "./themeContext";
 import { ThemeContext } from "./themeContext";
 
@@ -18,6 +20,17 @@ const getRemoteThemeVersion = () => remoteThemeVersion;
 
 function ThemeBridge({ children }: { children: React.ReactNode }) {
 	const { theme, setTheme, resolvedTheme } = useTheme();
+
+	useEffect(() => {
+		if (!isLinuxPlatform() || !resolvedTheme) return;
+
+		void getCurrentWindow()
+			.setTheme(resolvedTheme === "dark" ? "dark" : "light")
+			.catch((error) => {
+				console.error("Failed to sync Linux window theme", error);
+			});
+	}, [resolvedTheme]);
+
 	const setPreference = useCallback(
 		(preference: Preference) => {
 			setTheme(preference);
