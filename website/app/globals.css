@@ -26,7 +26,6 @@
 
   --marker: #fbff81;
   --link: #4f39f6;
-  --status-ok: #538a2e;
 
   --keycap-fill: #403d391a;
 
@@ -73,7 +72,6 @@
 
     --marker: #4c4d23;
     --link: #7b8ff8;
-    --status-ok: #7cae4e;
 
     --keycap-fill: #e8e8e41a;
 
@@ -104,7 +102,6 @@
 
   --marker: #4c4d23;
   --link: #7b8ff8;
-  --status-ok: #7cae4e;
 
   --keycap-fill: #e8e8e41a;
 
@@ -311,9 +308,8 @@ h3 {
 }
 
 .brand-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius);
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .brand-name {
@@ -429,13 +425,6 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-}
-
-.status-dot {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-  background: var(--status-ok);
 }
 
 .hero-copy h1 {

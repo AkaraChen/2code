@@ -95,8 +95,7 @@ export function HomePageContent({
         <section className="hero-section shell" id="hero">
           <div className="hero-copy">
             <p className="label hero-badge">
-              <span className="status-dot" aria-hidden="true" />
-              <span className="marker">{t.hero.status}</span>
+              <span className="marker">{t.hero.kicker}</span>
             </p>
 
             <h1>

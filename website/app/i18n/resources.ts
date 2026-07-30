@@ -28,7 +28,6 @@ export const resources = {
       },
       hero: {
         kicker: 'Your next Agentic IDE',
-        status: 'Public beta',
         titleLineOne: 'Your agents need',
         titleLineTwo: 'a better terminal.',
         lede:
@@ -152,7 +151,6 @@ export const resources = {
       },
       hero: {
         kicker: '你的下一个 Agentic IDE',
-        status: '公开测试中',
         titleLineOne: '你的 Agent',
         titleLineTwo: '需要更好的终端',
         lede:
