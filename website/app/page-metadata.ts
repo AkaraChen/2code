@@ -27,13 +27,15 @@ export function buildPageMetadata(
       images: [
         {
           url: siteConfig.ogImage,
+          width: siteConfig.ogImageWidth,
+          height: siteConfig.ogImageHeight,
           alt: messages.metadata.title,
         },
       ],
       locale: locale === 'zh-cn' ? 'zh_CN' : 'en_US',
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title: messages.metadata.title,
       description: messages.metadata.description,
       images: [siteConfig.ogImage],
