@@ -1,6 +1,7 @@
-import { HeroParallaxMedia } from './hero-parallax-media'
-import { ScrollHeader } from './scroll-header'
 import { type AppLocale, type resources } from './i18n/resources'
+import { LocaleSwitch } from './locale-switch'
+import { PageEffects } from './page-effects'
+import { SiteHeader } from './site-header'
 import { siteConfig } from './site-config'
 
 const features = [
@@ -27,6 +28,9 @@ const faqs = [
   'platforms',
   'production',
 ] as const
+
+const SCREENSHOT_WIDTH = 2498
+const SCREENSHOT_HEIGHT = 1802
 
 type Messages = (typeof resources)[AppLocale]
 
@@ -69,11 +73,9 @@ export function HomePageContent({
         operatingSystem: 'macOS',
         description: t.metadata.description,
         url: locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url,
-        screenshot: [
-          `${siteConfig.url}/screenshots/terminal-tabs.png`,
-          `${siteConfig.url}/screenshots/git-diff.png`,
-          `${siteConfig.url}/screenshots/worktree.png`,
-        ],
+        screenshot: features.map(
+          (feature) => `${siteConfig.url}${feature.screenshotSrc}`,
+        ),
         sameAs: [siteConfig.githubUrl],
       },
     ],
@@ -85,111 +87,163 @@ export function HomePageContent({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-      <HeroParallaxMedia />
 
-      <ScrollHeader messages={t} />
+      <SiteHeader messages={t} />
+      <PageEffects />
 
       <main>
-        <section className="hero-section" id="hero">
-          <div className="hero-copy reveal">
-            <p className="section-kicker hero-kicker">{t.hero.kicker}</p>
+        <section className="hero-section shell" id="hero">
+          <div className="hero-copy">
+            <p className="label hero-badge">
+              <span className="marker">{t.hero.kicker}</span>
+            </p>
+
             <h1>
               {t.hero.titleLineOne}
               <br />
               {t.hero.titleLineTwo}
             </h1>
+
             <p className="hero-lede">{t.hero.lede}</p>
             <p className="hero-supporting-copy">{t.hero.supporting}</p>
 
             <div className="hero-actions">
               <a
+                id="cta-download"
                 className="button button-primary"
                 href={siteConfig.githubReleaseUrl}
                 target="_blank"
                 rel="noreferrer"
+                aria-keyshortcuts="d"
               >
-                {t.hero.primaryCta}
+                <span>{t.hero.primaryCta}</span>
+                <kbd className="keycap" aria-hidden="true">
+                  D
+                </kbd>
               </a>
-              <a className="button button-secondary" href="#features">
-                {t.hero.secondaryCta}
+              <a
+                id="cta-features"
+                className="button button-secondary"
+                href="#features"
+                aria-keyshortcuts="f"
+              >
+                <span>{t.hero.secondaryCta}</span>
+                <kbd className="keycap" aria-hidden="true">
+                  F
+                </kbd>
               </a>
             </div>
           </div>
+
+          <div className="hero-shot reveal">
+            <figure className="shot-frame">
+              <img
+                src="/screenshots/terminal-tabs.png"
+                alt={t.hero.shotAlt}
+                width={SCREENSHOT_WIDTH}
+                height={SCREENSHOT_HEIGHT}
+                loading="eager"
+                decoding="async"
+              />
+            </figure>
+          </div>
         </section>
 
-        <div className="content-surface">
-          <section className="features-section" id="features">
-            <div className="feature-list">
-              {features.map((feature, index) => (
-                <section
-                  className={`feature-row ${
-                    index % 2 === 1 ? 'feature-row-reverse' : ''
-                  } reveal`}
-                  key={feature.id}
-                >
-                  {/*
-                    Keep the page structure static and swap only the route-level
-                    content object so both locales export cleanly.
-                  */}
-                  <div className="feature-copy">
-                    <h3>{t.features.items[feature.id].title}</h3>
-                    <p className="feature-body">
-                      {t.features.items[feature.id].copy}
-                    </p>
-                    <ul className="feature-points">
-                      {t.features.items[feature.id].points.map((point) => (
-                        <li key={point}>{point}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="feature-shot">
-                    <figure className="shot-frame">
-                      <img
-                        className="feature-image"
-                        src={feature.screenshotSrc}
-                        alt={t.features.items[feature.id].imageAlt}
-                        width={2722}
-                        height={2026}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    </figure>
-                  </div>
-                </section>
-              ))}
-            </div>
-          </section>
-
-          <section className="faq-section reveal" id="faq">
-            <div className="section-heading faq-heading">
-              <p className="section-kicker">{t.faq.kicker}</p>
-              <h2>{t.faq.title}</h2>
-            </div>
-
-            <div className="faq-list">
-              {faqs.map((id) => (
-                <details className="faq-item" key={id}>
-                  <summary>{t.faq.items[id].question}</summary>
-                  <p>{t.faq.items[id].answer}</p>
-                </details>
-              ))}
-            </div>
-
-            <div className="faq-cta">
-              <p>{t.faq.cta}</p>
-              <a
-                className="button button-primary"
-                href={siteConfig.githubReleaseUrl}
-                target="_blank"
-                rel="noreferrer"
+        <section className="features-section shell ruled-top" id="features">
+          <div className="feature-list">
+            {features.map((feature, index) => (
+              <section
+                className={`feature-row ${
+                  index % 2 === 1 ? 'feature-row-reverse' : ''
+                } reveal`}
+                key={feature.id}
               >
-                {t.hero.primaryCta}
-              </a>
-            </div>
-          </section>
-        </div>
+                {/*
+                  Keep the page structure static and swap only the route-level
+                  content object so both locales export cleanly.
+                */}
+                <div className="feature-copy">
+                  <p className="label">{t.features.items[feature.id].eyebrow}</p>
+                  <h3>{t.features.items[feature.id].title}</h3>
+                  <p className="feature-body">
+                    {t.features.items[feature.id].copy}
+                  </p>
+                  <ul className="feature-points">
+                    {t.features.items[feature.id].points.map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="feature-shot">
+                  <figure className="shot-frame">
+                    <img
+                      className="feature-image"
+                      src={feature.screenshotSrc}
+                      alt={t.features.items[feature.id].imageAlt}
+                      width={SCREENSHOT_WIDTH}
+                      height={SCREENSHOT_HEIGHT}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </figure>
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+
+        <section className="faq-section shell ruled-top" id="faq">
+          <div className="section-heading">
+            <p className="label">{t.faq.kicker}</p>
+            <h2>{t.faq.title}</h2>
+          </div>
+
+          <div className="faq-list">
+            {faqs.map((id) => (
+              <details className="faq-item" key={id}>
+                <summary>{t.faq.items[id].question}</summary>
+                <p>{t.faq.items[id].answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="cta-section shell">
+          <div className="cta-panel">
+            <p>{t.faq.cta}</p>
+            <a
+              className="button button-primary"
+              href={siteConfig.githubReleaseUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t.hero.primaryCta}
+            </a>
+          </div>
+        </section>
       </main>
+
+      <footer className="site-footer">
+        <div className="shell footer-inner">
+          <p className="caption">2code — {t.footer.tagline}</p>
+
+          <div className="footer-links">
+            <a href={siteConfig.githubUrl} target="_blank" rel="noreferrer">
+              {t.nav.github}
+            </a>
+            <a
+              href={siteConfig.githubReleaseUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t.footer.releases}
+            </a>
+          </div>
+
+          <LocaleSwitch locale={locale} messages={t} />
+        </div>
+      </footer>
     </div>
   )
 }

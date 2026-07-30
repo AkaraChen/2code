@@ -5,21 +5,22 @@
     "": {
       "name": "2code-site",
       "dependencies": {
-        "@fontsource/instrument-serif": "^5.2.8",
-        "@fontsource/manrope": "^5.2.8",
-        "next": "^16.2.2",
-        "react": "^19.2.4",
-        "react-dom": "^19.2.4",
-        "react-grab": "^0.1.37",
+        "@fontsource/geist-mono": "^5.3.0",
+        "@fontsource/inter": "^5.3.0",
+        "@fontsource/zilla-slab": "^5.3.0",
+        "next": "^16.2.9",
+        "react": "^19.2.7",
+        "react-dom": "^19.2.7",
+        "react-grab": "^0.1.44",
       },
       "devDependencies": {
-        "@types/node": "^24.12.0",
-        "@types/react": "^19.2.14",
+        "@types/node": "^24.13.2",
+        "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
         "eslint": "^9.39.4",
-        "eslint-config-next": "^16.2.2",
+        "eslint-config-next": "^16.2.9",
         "typescript": "~5.9.3",
-        "typescript-eslint": "^8.57.0",
+        "typescript-eslint": "^8.61.0",
       },
     },
   },
@@ -80,9 +81,11 @@
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.4.1", "", { "dependencies": { "@eslint/core": "^0.17.0", "levn": "^0.4.1" } }, "sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA=="],
 
-    "@fontsource/instrument-serif": ["@fontsource/instrument-serif@5.2.8", "", {}, "sha512-s+bkz+syj2rO00Rmq9g0P+PwuLig33DR1xDR8pTWmovH1pUjwnncrFk++q9mmOex8fUQ7oW80gPpPDaw7V1MMw=="],
+    "@fontsource/geist-mono": ["@fontsource/geist-mono@5.3.0", "", {}, "sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg=="],
 
-    "@fontsource/manrope": ["@fontsource/manrope@5.2.8", "", {}, "sha512-gJHJmcuUk7qWcNCfcAri/DJQtXtBYqi9yKratr4jXhSo0I3xUtNNKI+igQIcw5c+m95g0vounk8ZnX/kb8o0TA=="],
+    "@fontsource/inter": ["@fontsource/inter@5.3.0", "", {}, "sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g=="],
+
+    "@fontsource/zilla-slab": ["@fontsource/zilla-slab@5.3.0", "", {}, "sha512-xbdDx5OESJDQqp3GIp4pjBgI+qpcg4AxnHLN15ekfJbG+ZYaOXg3uBjDpYlkuPQpey91afxHBNaqZgzluJ2FWA=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.1", "", {}, "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="],
 

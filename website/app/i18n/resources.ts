@@ -24,6 +24,7 @@ export const resources = {
         features: 'Features',
         faq: 'FAQ',
         github: 'GitHub',
+        theme: 'Switch between light and dark',
       },
       hero: {
         kicker: 'Your next Agentic IDE',
@@ -35,6 +36,14 @@ export const resources = {
           'If you bounce between agents, dev servers, and multiple worktrees every day, 2code is worth a download.',
         primaryCta: 'Download for macOS',
         secondaryCta: 'Explore features',
+        shotAlt: '2code running four agent terminals in one project window',
+      },
+      footer: {
+        tagline: 'Desktop software for vibe coding.',
+        releases: 'Releases',
+        languageLabel: 'Language',
+        english: 'English',
+        chinese: '简体中文',
       },
       features: {
         items: {
@@ -138,6 +147,7 @@ export const resources = {
         features: '亮点',
         faq: 'FAQ',
         github: 'GitHub',
+        theme: '切换浅色 / 深色',
       },
       hero: {
         kicker: '你的下一个 Agentic IDE',
@@ -149,6 +159,14 @@ export const resources = {
           '如果你每天都在终端、Agent、dev server 和多个 worktree 之间切来切去，2code 值得你下载试一次。',
         primaryCta: '下载最新版本',
         secondaryCta: '查看亮点',
+        shotAlt: '2code 在一个项目窗口里同时跑四个 Agent 终端',
+      },
+      footer: {
+        tagline: '为 vibe coding 而生的桌面工具。',
+        releases: '版本发布',
+        languageLabel: '语言',
+        english: 'English',
+        chinese: '简体中文',
       },
       features: {
         items: {
