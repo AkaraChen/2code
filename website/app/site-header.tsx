@@ -27,12 +27,13 @@ export function SiteHeader({ messages }: SiteHeaderProps) {
     <header className="topbar">
       <div className="shell topbar-inner">
         <a className="brand" href="#hero" aria-label={messages.nav.home}>
+          {/* The shipped app icon, so the site and the dock show the same mark. */}
           <img
             className="brand-icon"
-            src="/favicon.svg"
+            src="/app-icon.png"
             alt=""
-            width={20}
-            height={20}
+            width={24}
+            height={24}
             decoding="async"
           />
           <span className="brand-name">2code</span>

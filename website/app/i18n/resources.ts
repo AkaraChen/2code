@@ -39,14 +39,6 @@ export const resources = {
         secondaryCta: 'Explore features',
         shotAlt: '2code running four agent terminals in one project window',
       },
-      spec: {
-        items: [
-          { label: 'Platform', value: 'macOS' },
-          { label: 'Experimental', value: 'Windows · Linux' },
-          { label: 'Built with', value: 'Tauri 2 · Rust' },
-          { label: 'Terminal', value: 'Full emulator' },
-        ],
-      },
       footer: {
         tagline: 'Desktop software for vibe coding.',
         releases: 'Releases',
@@ -170,14 +162,6 @@ export const resources = {
         primaryCta: '下载最新版本',
         secondaryCta: '查看亮点',
         shotAlt: '2code 在一个项目窗口里同时跑四个 Agent 终端',
-      },
-      spec: {
-        items: [
-          { label: '平台', value: 'macOS' },
-          { label: '实验支持', value: 'Windows · Linux' },
-          { label: '技术栈', value: 'Tauri 2 · Rust' },
-          { label: '终端', value: '完整模拟器' },
-        ],
       },
       footer: {
         tagline: '为 vibe coding 而生的桌面工具。',

@@ -484,35 +484,6 @@ h3 {
   height: auto;
 }
 
-/* ---------- spec band ---------- */
-
-.spec-section {
-  padding-block: clamp(1.75rem, 3vw, 2.5rem);
-}
-
-.spec-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.spec-cell {
-  display: grid;
-  gap: 0.4rem;
-  padding: 1rem 1.1rem;
-  background: var(--paper);
-}
-
-.spec-value {
-  color: var(--ink);
-  font-family: var(--font-display);
-  font-size: 1.0625rem;
-  line-height: 1.25;
-}
-
 /* ---------- features ---------- */
 
 .features-section {
@@ -594,10 +565,9 @@ h3 {
 
 /*
   contain, not cover: the whole app window stays visible at every width.
-  Screenshots are 2722x2026, so the frame reserves that ratio.
+  The PNGs are trimmed to the window itself, so intrinsic sizing is enough.
 */
 .feature-image {
-  aspect-ratio: 2722 / 2026;
   object-fit: contain;
 }
 
@@ -759,17 +729,9 @@ h3 {
   .feature-row-reverse .feature-shot {
     order: initial;
   }
-
-  .spec-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 640px) {
-  .spec-grid {
-    grid-template-columns: 1fr;
-  }
-
   .hero-actions {
     width: 100%;
     flex-direction: column;

@@ -29,8 +29,8 @@ const faqs = [
   'production',
 ] as const
 
-const SCREENSHOT_WIDTH = 2722
-const SCREENSHOT_HEIGHT = 2026
+const SCREENSHOT_WIDTH = 2498
+const SCREENSHOT_HEIGHT = 1802
 
 type Messages = (typeof resources)[AppLocale]
 
@@ -148,18 +148,6 @@ export function HomePageContent({
               />
             </figure>
           </div>
-        </section>
-
-        {/* Spec sheet: only facts that hold today, no invented metrics. */}
-        <section className="spec-section shell ruled-top">
-          <dl className="spec-grid">
-            {t.spec.items.map((item) => (
-              <div className="spec-cell" key={item.label}>
-                <dt className="label">{item.label}</dt>
-                <dd className="spec-value">{item.value}</dd>
-              </div>
-            ))}
-          </dl>
         </section>
 
         <section className="features-section shell ruled-top" id="features">

@@ -7,6 +7,6 @@ export const siteConfig = {
     'https://github.com/akarachen/2code/releases/latest',
   // The product window is the share image; there is no decorative hero art.
   ogImage: '/screenshots/terminal-tabs.png',
-  ogImageWidth: 2722,
-  ogImageHeight: 2026,
+  ogImageWidth: 2498,
+  ogImageHeight: 1802,
 } as const
