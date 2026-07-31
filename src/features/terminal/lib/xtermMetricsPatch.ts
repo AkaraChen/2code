@@ -25,34 +25,34 @@ interface MeasuredSize {
 }
 
 interface MeasureStrategy {
-	measure(): MeasuredSize;
+	measure: () => MeasuredSize;
 }
 
 interface WidthCacheCanvas {
-	setFont(
+	setFont: (
 		fontFamily: string,
 		fontSize: number,
 		fontWeight: string,
 		italic: boolean,
-	): void;
-	measure(text: string): number;
+	) => void;
+	measure: (text: string) => number;
 }
 
 interface WidthCacheLike {
 	_canvasElements: WidthCacheCanvas[];
 	_font: string;
-	setFont(
+	setFont: (
 		fontFamily: string,
 		fontSize: number,
 		fontWeight: string,
 		fontWeightBold: string,
-	): void;
-	clear(): void;
+	) => void;
+	clear: () => void;
 }
 
 interface CharSizeServiceLike {
 	_measureStrategy: MeasureStrategy;
-	measure(): void;
+	measure: () => void;
 }
 
 interface TerminalInternals {
