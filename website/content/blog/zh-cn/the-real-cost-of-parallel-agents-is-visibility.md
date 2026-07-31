@@ -1,9 +1,18 @@
 ---
 title: 并行 AI 编程的真正成本不是模型，是可见性
-description: 大家都在卷 agent 数量，但并行真正的摩擦不是 token，是你看不见 agent 在干什么、干到哪了。
-date: 2026-08-07
+description: Superset 说瓶颈是 agent 数量，JetBrains Air 说是工作流。但在你需要一层编排之前，你先需要一层可见——并行跑 Claude Code 时，最先坏掉的就是这个。
+date: 2026-08-01
+publishAt: 2026-08-01T00:00:00+08:00
 slug: the-real-cost-of-parallel-agents-is-visibility
-tags: [可见性, Agent, 并行]
+tags:
+  [
+    Agent 可见性,
+    并行 Agent,
+    agent orchestration,
+    Agentic IDE,
+    Claude Code,
+    终端工作站,
+  ]
 ---
 
 ## 你不是在并行，你是在轮询

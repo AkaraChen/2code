@@ -1,9 +1,18 @@
 ---
 title: The Real Cost of Parallel AI Coding Isn't the Model. It's Visibility.
-description: Everyone is racing to run more agents. But the real friction in parallel work isn't tokens — it's that you can't see what your agents are doing, or how far they've gotten.
-date: 2026-08-07
+description: Superset says the bottleneck is agent quantity. JetBrains Air says it's workflow. Both skip a layer — before you need agent orchestration, you need visibility, and that's what breaks first when you run Claude Code in parallel.
+date: 2026-08-01
+publishAt: 2026-08-01T00:00:00+08:00
 slug: the-real-cost-of-parallel-agents-is-visibility
-tags: [visibility, agents, parallel]
+tags:
+  [
+    agent visibility,
+    parallel agents,
+    agent orchestration,
+    agentic IDE,
+    Claude Code,
+    terminal workstation,
+  ]
 ---
 
 ## You're not running agents in parallel. You're polling them.
