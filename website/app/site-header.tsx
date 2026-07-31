@@ -1,3 +1,4 @@
+import { blogListPath, homePath } from './blog/lib/routes'
 import { type AppLocale, type resources } from './i18n/resources'
 import { siteConfig } from './site-config'
 import { ThemeToggle } from './theme-toggle'
@@ -5,6 +6,7 @@ import { ThemeToggle } from './theme-toggle'
 type Messages = (typeof resources)[AppLocale]
 
 type SiteHeaderProps = Readonly<{
+  locale: AppLocale
   messages: Messages
 }>
 
@@ -21,12 +23,22 @@ function ExternalIcon() {
   A ruled bar pinned to the top of the document instead of a floating pill: the
   hairline border is the same structural device every section below uses, so the
   header reads as the document's header row. No scroll listener needed.
+
+  Section links are absolute (`/#features`, `/zh-cn#features`) rather than bare
+  fragments: the same header renders on blog pages, where `#features` would
+  scroll nowhere.
 */
-export function SiteHeader({ messages }: SiteHeaderProps) {
+export function SiteHeader({ locale, messages }: SiteHeaderProps) {
+  const home = homePath(locale)
+
   return (
     <header className="topbar">
       <div className="shell topbar-inner">
-        <a className="brand" href="#hero" aria-label={messages.nav.home}>
+        <a
+          className="brand"
+          href={`${home}#hero`}
+          aria-label={messages.nav.home}
+        >
           {/* The shipped app icon, so the site and the dock show the same mark. */}
           <img
             className="brand-icon"
@@ -40,10 +52,11 @@ export function SiteHeader({ messages }: SiteHeaderProps) {
         </a>
 
         <nav className="topnav" aria-label={messages.nav.primary}>
-          <a href="#features" data-nav="features">
+          <a href={`${home}#features`} data-nav="features">
             {messages.nav.features}
           </a>
-          <a href="#faq">{messages.nav.faq}</a>
+          <a href={`${home}#faq`}>{messages.nav.faq}</a>
+          <a href={blogListPath(locale)}>{messages.nav.blog}</a>
           <a
             id="cta-github"
             href={siteConfig.githubUrl}

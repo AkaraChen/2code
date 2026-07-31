@@ -685,6 +685,398 @@ h3 {
   color: var(--ink);
 }
 
+/* ---------- blog ---------- */
+
+/*
+  The blog reuses the datasheet grammar rather than introducing a second one:
+  hairlines separate entries, mono sets metadata, Zilla Slab sets headings, and
+  the article column is capped at a reading measure instead of the page measure.
+*/
+
+.blog-header {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: clamp(3rem, 7vw, 5rem);
+  padding-bottom: clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.blog-header h1 {
+  max-width: 20ch;
+  font-size: clamp(2.25rem, 5vw, 3.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+}
+
+.blog-lede {
+  max-width: 52ch;
+  color: var(--ink-2);
+  font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+  line-height: 1.65;
+}
+
+.blog-section {
+  padding-block: clamp(2rem, 5vw, 3.5rem) clamp(3rem, 7vw, 5rem);
+}
+
+.blog-empty {
+  display: grid;
+  justify-items: start;
+  gap: 0.875rem;
+  max-width: 52ch;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--beige);
+}
+
+.blog-empty h2 {
+  font-size: clamp(1.25rem, 2.2vw, 1.625rem);
+}
+
+.blog-empty p {
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.post-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.post-row {
+  border-bottom: 1px solid var(--line);
+}
+
+.post-row-link {
+  display: grid;
+  gap: 0.5rem;
+  padding-block: clamp(1.25rem, 2.5vw, 1.75rem);
+  text-decoration: none;
+  color: inherit;
+}
+
+.post-row-link:hover .post-row-title {
+  color: var(--link);
+}
+
+.post-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.post-draft {
+  padding: 0 0.35rem;
+  border: 1px solid var(--line-dash);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+}
+
+.post-row-title {
+  max-width: 30ch;
+  font-size: clamp(1.375rem, 2.4vw, 1.75rem);
+  line-height: 1.18;
+  transition: color 150ms var(--ease);
+}
+
+.post-row-description {
+  max-width: 62ch;
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.post-tags li::before {
+  content: '#';
+  color: var(--ink-4);
+}
+
+/* ---------- article ---------- */
+
+.post {
+  padding-block: clamp(2rem, 5vw, 3.25rem) clamp(3rem, 7vw, 5rem);
+}
+
+/*
+  The article is a single reading column centred in the page shell. The index
+  keeps the full ruled width — a list of entries is a table, an article is not.
+*/
+.post-header,
+.post-cover,
+.post > .prose,
+.post-footer {
+  margin-inline: auto;
+}
+
+.post-header {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 68ch;
+  padding-bottom: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.post-header h1 {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.post-back {
+  justify-self: start;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-decoration: none;
+  transition: color 150ms var(--ease);
+}
+
+.post-back:hover {
+  color: var(--ink);
+}
+
+.post-description {
+  max-width: 60ch;
+  color: var(--ink-2);
+  font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+  line-height: 1.65;
+}
+
+.post-cover {
+  max-width: 68ch;
+  margin: 0 0 clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.post-cover img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.post-footer {
+  max-width: 68ch;
+  margin-top: clamp(2rem, 4vw, 3rem);
+  padding-top: 1.25rem;
+}
+
+/* ---------- rendered markdown ---------- */
+
+.prose {
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  line-height: 1.75;
+}
+
+.prose > * {
+  margin-block: 0 1.1em;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin: 0;
+  margin-block: 2em 0.7em;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.prose h2 {
+  padding-top: 0.6em;
+  border-top: 1px solid var(--line);
+  font-size: 1.5rem;
+}
+
+.prose h3 {
+  font-size: 1.1875rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+}
+
+.prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.prose strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.25rem;
+}
+
+.prose li {
+  margin-bottom: 0.4em;
+}
+
+.prose li::marker {
+  color: var(--ink-4);
+}
+
+.prose blockquote {
+  margin-inline: 0;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 2px solid var(--line-ink);
+  color: var(--ink-3);
+}
+
+.prose hr {
+  height: 0;
+  margin-block: 2em;
+  border: 0;
+  border-top: 1px dashed var(--line-dash);
+}
+
+.prose img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.prose figcaption,
+.prose > p > em:only-child {
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.prose th,
+.prose td {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.prose kbd {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--line-dash);
+  border-radius: var(--radius);
+  background: var(--keycap-fill);
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+}
+
+.prose code {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+}
+
+.prose pre {
+  overflow-x: auto;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.prose pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+}
+
+/*
+  Shiki is asked for both themes at build time and emits each token's colours as
+  CSS variables, so switching theme is a variable swap — no second render, no
+  client-side highlighter. The three selectors mirror the token blocks at the
+  top of this file: explicit dark, explicit light, and system preference.
+
+  Only the token colours are taken: the block keeps the page's warm --surface-1
+  instead of GitHub's white/slate, so a code block still reads as part of the
+  paper.
+*/
+.prose .shiki,
+.prose .shiki span {
+  color: var(--shiki-light);
+}
+
+:root[data-theme='dark'] .prose .shiki,
+:root[data-theme='dark'] .prose .shiki span {
+  color: var(--shiki-dark);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .prose .shiki,
+  :root:not([data-theme='light']) .prose .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+.prose .footnotes {
+  margin-top: 2.5em;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+}
+
+.prose .footnotes-sep {
+  display: none;
+}
+
+.prose .footnote-backref {
+  text-decoration: none;
+}
+
 /* ---------- reveal ---------- */
 
 /*

@@ -19,6 +19,8 @@
 - [Homepage (EN)](https://2code.akr.moe/)
 - [Homepage (中文)](https://2code.akr.moe/zh-cn)
 - [Markdown homepage](https://2code.akr.moe/index.md)
+- [Blog (EN)](https://2code.akr.moe/blog) · [Markdown index](https://2code.akr.moe/blog.md) · [RSS](https://2code.akr.moe/blog/feed.xml)
+- [Blog (中文)](https://2code.akr.moe/zh-cn/blog) · [Markdown index](https://2code.akr.moe/zh-cn/blog.md) · [RSS](https://2code.akr.moe/zh-cn/blog/feed.xml)
 - [Full product brief for LLMs](https://2code.akr.moe/llms-full.txt)
 - [GitHub](https://github.com/AkaraChen/2code)
 - [Latest release](https://github.com/AkaraChen/2code/releases/latest)

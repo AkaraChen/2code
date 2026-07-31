@@ -1,12 +1,21 @@
 import type { MetadataRoute } from 'next'
+import { listPosts } from './blog/lib/posts'
+import {
+  blogFeedPath,
+  blogListMarkdownPath,
+  blogListPath,
+  blogPostMarkdownPath,
+  blogPostPath,
+} from './blog/lib/routes'
+import { supportedLocales } from './i18n/resources'
 import { siteConfig } from './site-config'
 
 export const dynamic = 'force-static'
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date()
 
-  return [
+  const entries: MetadataRoute.Sitemap = [
     {
       url: siteConfig.url,
       lastModified,
@@ -45,4 +54,55 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.5,
     },
   ]
+
+  /*
+    Blog URLs are derived from the content directory rather than listed by hand:
+    adding a Markdown file is the whole publishing step, and the sitemap has to
+    follow from that alone.
+  */
+  for (const locale of supportedLocales) {
+    entries.push(
+      {
+        url: `${siteConfig.url}${blogListPath(locale)}`,
+        lastModified,
+        changeFrequency: 'weekly',
+        priority: 0.8,
+      },
+      {
+        url: `${siteConfig.url}${blogListMarkdownPath(locale)}`,
+        lastModified,
+        changeFrequency: 'weekly',
+        priority: 0.4,
+      },
+      {
+        url: `${siteConfig.url}${blogFeedPath(locale)}`,
+        lastModified,
+        changeFrequency: 'weekly',
+        priority: 0.3,
+      },
+    )
+
+    for (const post of await listPosts(locale)) {
+      if (post.draft) {
+        continue
+      }
+
+      entries.push(
+        {
+          url: `${siteConfig.url}${blogPostPath(locale, post.slug)}`,
+          lastModified: new Date(post.date),
+          changeFrequency: 'monthly',
+          priority: 0.7,
+        },
+        {
+          url: `${siteConfig.url}${blogPostMarkdownPath(locale, post.slug)}`,
+          lastModified: new Date(post.date),
+          changeFrequency: 'monthly',
+          priority: 0.4,
+        },
+      )
+    }
+  }
+
+  return entries
 }
