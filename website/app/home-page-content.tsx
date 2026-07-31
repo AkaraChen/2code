@@ -45,6 +45,14 @@ export function HomePageContent({
 }: HomePageContentProps) {
   const t = messages
 
+  const pageUrl =
+    locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url
+  const markdownUrl =
+    locale === 'zh-cn'
+      ? `${siteConfig.url}${siteConfig.markdownZhPath}`
+      : `${siteConfig.url}${siteConfig.markdownHomePath}`
+
+  // JSON-LD kept for Bing/Copilot enrichment; visible page content remains source of truth.
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -59,24 +67,58 @@ export function HomePageContent({
         '@type': 'WebSite',
         '@id': `${siteConfig.url}/#website`,
         name: siteConfig.name,
-        url: locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url,
+        url: pageUrl,
         description: t.metadata.description,
+        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
         publisher: {
           '@id': `${siteConfig.url}/#organization`,
         },
+      },
+      {
+        '@type': 'WebPage',
+        '@id': `${pageUrl}#webpage`,
+        url: pageUrl,
+        name: t.metadata.title,
+        description: t.metadata.description,
+        isPartOf: { '@id': `${siteConfig.url}/#website` },
+        about: { '@id': `${siteConfig.url}/#software` },
+        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+        // Machine-readable alternate (GEO: rel=alternate type=text/markdown)
+        encodingFormat: 'text/html',
+        relatedLink: [
+          markdownUrl,
+          `${siteConfig.url}${siteConfig.llmsTxtPath}`,
+          `${siteConfig.url}${siteConfig.llmsFullTxtPath}`,
+        ],
       },
       {
         '@type': 'SoftwareApplication',
         '@id': `${siteConfig.url}/#software`,
         name: siteConfig.name,
         applicationCategory: 'DeveloperApplication',
-        operatingSystem: 'macOS',
+        applicationSubCategory: 'Terminal workstation',
+        operatingSystem: 'macOS, Windows (experimental), Linux (experimental)',
         description: t.metadata.description,
-        url: locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url,
+        url: pageUrl,
+        downloadUrl: siteConfig.githubReleaseUrl,
+        installUrl: siteConfig.githubReleaseUrl,
+        softwareVersion: 'latest',
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+          availability: 'https://schema.org/InStock',
+          url: siteConfig.githubReleaseUrl,
+        },
         screenshot: features.map(
           (feature) => `${siteConfig.url}${feature.screenshotSrc}`,
         ),
         sameAs: [siteConfig.githubUrl],
+        featureList: [
+          t.features.items.terminals.title,
+          t.features.items.git.title,
+          t.features.items.profiles.title,
+        ],
       },
     ],
   }

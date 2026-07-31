@@ -10,6 +10,24 @@ export const resources = {
         title: '2code | Terminal Workstation for Projects, Worktrees, and Agents',
         description:
           '2code is a terminal workstation with project and worktree tabs, independent windows, agent notifications, templates, file editing, git review, and session restore.',
+        // Keyword set informed by nearby products (Orca / Superset-style agentic coding SEO)
+        // without stuffing competitor brand names into visible page copy.
+        keywords: [
+          '2code',
+          'terminal workstation',
+          'agentic IDE',
+          'AI coding terminal',
+          'vibe coding',
+          'git worktree',
+          'coding agents',
+          'Claude Code',
+          'Codex',
+          'persistent terminal',
+          'developer desktop app',
+          'macOS terminal',
+          'git review',
+          'AI-assisted development',
+        ],
         faviconAlt: '2code favicon',
       },
       announcement: {
@@ -133,6 +151,22 @@ export const resources = {
         title: '2code | 管项目、Worktree 和 Agent 的终端工作站',
         description:
           '2code 是一个完整的终端模拟器，内置项目和 worktree 管理、独立窗口、Agent 完成提醒、文件树、轻量编辑器、Git review、命令模板和历史恢复。',
+        keywords: [
+          '2code',
+          '终端工作站',
+          'Agentic IDE',
+          'AI 编程终端',
+          'vibe coding',
+          'git worktree',
+          'coding agent',
+          'Claude Code',
+          'Codex',
+          '持久终端',
+          '开发者桌面应用',
+          'macOS 终端',
+          'Git review',
+          'AI 辅助开发',
+        ],
         faviconAlt: '2code 网站图标',
       },
       announcement: {
