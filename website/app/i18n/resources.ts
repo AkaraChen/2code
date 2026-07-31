@@ -15,7 +15,10 @@ export const resources = {
         keywords: [
           '2code',
           'terminal workstation',
+          'terminal multiplexer',
           'agentic IDE',
+          'harness',
+          'agent',
           'AI coding terminal',
           'vibe coding',
           'git worktree',
@@ -177,7 +180,10 @@ export const resources = {
         keywords: [
           '2code',
           '终端工作站',
+          'terminal multiplexer',
           'Agentic IDE',
+          'harness',
+          'agent',
           'AI 编程终端',
           'vibe coding',
           'git worktree',
