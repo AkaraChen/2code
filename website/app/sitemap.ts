@@ -10,7 +10,11 @@ import {
 import { supportedLocales } from './i18n/resources'
 import { siteConfig } from './site-config'
 
-export const dynamic = 'force-static'
+/*
+  Not force-static: the sitemap has to pick up posts that publish themselves
+  between deploys, so it re-renders on the same window as the blog.
+*/
+export const revalidate = 3600
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date()

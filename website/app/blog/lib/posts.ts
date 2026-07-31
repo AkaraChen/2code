@@ -65,31 +65,35 @@ export function includeScheduled(): boolean {
 }
 
 /*
-  One reference instant per build, not per call: a build that straddles midnight
-  must not publish a post into the list while the sitemap and the feed — read
-  moments later — still consider it scheduled. `BLOG_NOW` overrides it so a
-  schedule can be tested without touching the clock.
+  Read fresh on every call, never memoised: this module lives in a long-running
+  server process, so a cached "now" would freeze the blog at the instant the
+  server booted and no scheduled post would ever appear. Each page, feed, and
+  sitemap re-renders on its own revalidate window anyway, so there is no single
+  build instant to pin them to.
+
+  `BLOG_NOW` overrides the clock so a schedule can be checked without waiting;
+  it is parsed once because it cannot change while the process runs.
 */
-let buildNow: number | null = null
+let overrideNow: number | null | undefined
 
 export function publishReferenceTime(): number {
-  if (buildNow === null) {
+  if (overrideNow === undefined) {
     const override = process.env.BLOG_NOW
 
-    if (override) {
+    if (!override) {
+      overrideNow = null
+    } else {
       const parsed = new Date(override)
 
       if (Number.isNaN(parsed.getTime())) {
         throw new Error(`BLOG_NOW is not a valid date: "${override}"`)
       }
 
-      buildNow = parsed.getTime()
-    } else {
-      buildNow = Date.now()
+      overrideNow = parsed.getTime()
     }
   }
 
-  return buildNow
+  return overrideNow ?? Date.now()
 }
 
 function localeDir(locale: AppLocale) {

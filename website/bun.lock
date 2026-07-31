@@ -18,6 +18,7 @@
         "shiki": "^4.3.1",
       },
       "devDependencies": {
+        "@netlify/plugin-nextjs": "^5.15.13",
         "@types/node": "^24.13.2",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
@@ -162,6 +163,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@0.2.12", "", { "dependencies": { "@emnapi/core": "^1.4.3", "@emnapi/runtime": "^1.4.3", "@tybys/wasm-util": "^0.10.0" } }, "sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ=="],
+
+    "@netlify/plugin-nextjs": ["@netlify/plugin-nextjs@5.15.13", "", {}, "sha512-gBmWtgG13ZW4ytNMCvacfwZemtdtV/Ekc+6RBYvI5fndjmDvKxgFHylsw7oli+PHMGAtNqaJrN8QccGnDReu6A=="],
 
     "@next/env": ["@next/env@16.2.9", "", {}, "sha512-ki5VxxXfzD/9TDe13wyeTKIjQTAwBVpnr8KhRDUr8ltMUq1/NBpWNT5tiPoxiGl+PHM4X2ahSOiPk6iAimIzPg=="],
 

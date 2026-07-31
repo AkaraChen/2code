@@ -25,7 +25,7 @@ export function blogFeedPath(locale: AppLocale): string {
   return `${blogListPath(locale)}/feed.xml`
 }
 
-/** Markdown alternate of a page, emitted into `out/` after the Next build. */
+/** Markdown alternate of a page, served via the `middleware.ts` rewrite. */
 export function blogListMarkdownPath(locale: AppLocale): string {
   return `${blogListPath(locale)}.md`
 }

@@ -4,8 +4,8 @@ import { siteConfig } from './site-config'
 
 /*
   Every HTML page has a Markdown twin for AI crawlers. The two homepages ship
-  theirs from /public; blog pages get theirs emitted into `out/` after the build
-  (see scripts/emit-blog-markdown.mjs), so this map only needs the static pair.
+  theirs from /public; blog pages pass their own path in and are served by the
+  `middleware.ts` rewrite, so this map only needs the static pair.
 */
 const markdownByPath: Record<string, string> = {
   '/': siteConfig.markdownHomePath,

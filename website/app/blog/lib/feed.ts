@@ -15,8 +15,8 @@ function escapeXml(value: string): string {
 /*
   RSS 2.0 rather than Atom: it is what feed readers and the AI crawlers that
   poll for new posts already expect, and it is short enough to hand-render
-  without pulling in a feed library. Emitted by a `force-static` route handler,
-  so it lands in `out/blog/feed.xml` like any other file.
+  without pulling in a feed library. Rendered by a route handler that carries
+  the same revalidate window as the blog itself.
 */
 export async function renderFeed(locale: AppLocale): Promise<string> {
   const messages = getMessages(locale)

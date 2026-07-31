@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import { getMessages, type AppLocale } from '../../i18n/resources'
 import { buildPageMetadata } from '../../page-metadata'
 import { siteConfig } from '../../site-config'
-import { BlogListContent } from '../blog-list-content'
 import { BlogPostContent } from '../blog-post-content'
 import { getPost, hasTranslation, listPosts } from './posts'
 import { blogListPath, blogPostMarkdownPath, blogPostPath } from './routes'
@@ -33,21 +32,14 @@ async function counterpartPath(locale: AppLocale, slug: string) {
 }
 
 /*
-  `output: 'export'` refuses a dynamic route whose generateStaticParams returns
-  nothing (Next error E87), so a blog with no published posts would fail the
-  build outright. Rather than forcing a permanent placeholder article, an empty
-  locale prerenders this one stub URL: it renders the same empty state as the
-  index, is marked noindex, and is linked from nowhere — no sitemap, no feed, no
-  nav. The moment a real post exists it disappears.
+  Only published posts are prerendered. Anything else — a slug that does not
+  exist, or a post whose publishAt has not arrived — is resolved per request:
+  the first hit after a publish instant renders the post and caches it, which is
+  how a scheduled post goes live without a deploy. An empty blog prerenders
+  nothing at all, which a server runtime is fine with.
 */
-export const EMPTY_BLOG_SLUG = 'no-posts-yet'
-
 export async function generatePostParams(locale: AppLocale) {
   const posts = await listPosts(locale)
-
-  if (posts.length === 0) {
-    return [{ slug: EMPTY_BLOG_SLUG }]
-  }
 
   return posts.map((post) => ({ slug: post.slug }))
 }
@@ -96,17 +88,7 @@ export async function renderPostPage(locale: AppLocale, params: RouteParams) {
   const post = await getPost(locale, slug)
 
   if (!post) {
-    if (slug !== EMPTY_BLOG_SLUG) {
-      notFound()
-    }
-
-    return (
-      <BlogListContent
-        locale={locale}
-        messages={getMessages(locale)}
-        posts={[]}
-      />
-    )
+    notFound()
   }
 
   const counterpart = await counterpartPath(locale, slug)
