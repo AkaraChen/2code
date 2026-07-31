@@ -15,7 +15,7 @@ export const dynamic = 'error'
 
 // `lang` follows the path (not the browser) so the Chinese page is always
 // announced as zh-CN, and an explicit footer choice wins over the auto-redirect.
-const localeBootstrapScript = `(function(){var path=window.location.pathname;document.documentElement.lang=path.indexOf('/zh-cn')===0?'zh-CN':'en';var stored=null;try{stored=localStorage.getItem('2code-locale');}catch(e){}var lang=(navigator.languages&&navigator.languages[0])||navigator.language||'en';var prefersZh=stored?stored==='zh-cn':/^zh/i.test(lang);if(path==='/'&&prefersZh){window.location.replace('/zh-cn');}})();`
+const localeBootstrapScript = `(function(){var path=window.location.pathname;document.documentElement.lang=path.indexOf('/zh-cn')===0?'zh-CN':'en';var stored=null;try{stored=localStorage.getItem('2code-locale');}catch(e){}var lang=(navigator.languages&&navigator.languages[0])||navigator.language||'en';var prefersZh=stored?stored==='zh-cn':/^zh/i.test(lang);if(prefersZh&&(path==='/'||path==='/blog'||path==='/blog/')){window.location.replace(path==='/'?'/zh-cn':'/zh-cn/blog');}})();`
 
 // Runs before first paint so a stored preference never flashes the wrong theme.
 // No stored value means "follow the system", which CSS handles without JS.

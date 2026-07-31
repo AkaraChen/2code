@@ -130,7 +130,7 @@ export function HomePageContent({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
 
-      <SiteHeader messages={t} />
+      <SiteHeader locale={locale} messages={t} />
       <PageEffects />
 
       <main>

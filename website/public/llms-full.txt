@@ -141,6 +141,9 @@ Windows and Linux builds exist for testing but are experimental; some Windows sy
 | llms-full.txt | https://2code.akr.moe/llms-full.txt | This document |
 | index.md | https://2code.akr.moe/index.md | Markdown alternate of EN homepage |
 | zh-cn.md | https://2code.akr.moe/zh-cn.md | Markdown alternate of ZH homepage |
+| blog | https://2code.akr.moe/blog | Blog index (EN); each post also served as `<url>.md` |
+| blog (zh) | https://2code.akr.moe/zh-cn/blog | Blog index (中文) |
+| blog feed | https://2code.akr.moe/blog/feed.xml | RSS 2.0 (zh: /zh-cn/blog/feed.xml) |
 | sitemap.xml | https://2code.akr.moe/sitemap.xml | Search engine sitemap |
 | robots.txt | https://2code.akr.moe/robots.txt | Crawler policy (search allowed, training blocked) |
 

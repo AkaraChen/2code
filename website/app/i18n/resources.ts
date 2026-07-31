@@ -41,8 +41,29 @@ export const resources = {
         primary: 'Primary',
         features: 'Features',
         faq: 'FAQ',
+        blog: 'Blog',
         github: 'GitHub',
         theme: 'Switch between light and dark',
+      },
+      blog: {
+        metadataTitle: '2code Blog | Terminals, worktrees, and coding agents',
+        metadataDescription:
+          'Notes from building 2code — terminal workflows, git worktrees, and running AI coding agents on a real desktop.',
+        kicker: 'Blog',
+        title: 'Notes from the terminal.',
+        lede:
+          'Working notes on terminal workflows, git worktrees, and running coding agents locally.',
+        indexLink: 'All posts',
+        backToList: '← All posts',
+        // {minutes} is substituted at render time.
+        readingTime: '{minutes} min read',
+        draftBadge: 'Draft',
+        tagsLabel: 'Tags',
+        feed: 'RSS',
+        emptyTitle: 'Nothing published yet.',
+        emptyBody:
+          'The first posts are being written. Until then, the README and release notes on GitHub are the most current source.',
+        emptyCta: 'Read the source on GitHub',
       },
       hero: {
         kicker: 'Your next Agentic IDE',
@@ -180,8 +201,27 @@ export const resources = {
         primary: '主导航',
         features: '亮点',
         faq: 'FAQ',
+        blog: '博客',
         github: 'GitHub',
         theme: '切换浅色 / 深色',
+      },
+      blog: {
+        metadataTitle: '2code 博客 | 终端、Worktree 与编程 Agent',
+        metadataDescription:
+          '2code 的开发笔记：终端工作流、git worktree，以及在桌面上真正跑起来的 AI 编程 Agent。',
+        kicker: '博客',
+        title: '来自终端的笔记。',
+        lede: '关于终端工作流、git worktree，以及本地跑编程 Agent 的一些记录。',
+        indexLink: '全部文章',
+        backToList: '← 全部文章',
+        readingTime: '约 {minutes} 分钟',
+        draftBadge: '草稿',
+        tagsLabel: '标签',
+        feed: 'RSS',
+        emptyTitle: '还没有发布文章。',
+        emptyBody:
+          '第一批文章正在写。在那之前，GitHub 上的 README 和 release notes 是最新的信息来源。',
+        emptyCta: '去 GitHub 看源码',
       },
       hero: {
         kicker: '你的下一个 Agentic IDE',
