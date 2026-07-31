@@ -1,6 +1,7 @@
 import { renderFeed } from '../../../blog/lib/feed'
 
-export const dynamic = 'force-static'
+// Same publish window as the English feed.
+export const revalidate = 3600
 
 export async function GET() {
   return new Response(await renderFeed('zh-cn'), {

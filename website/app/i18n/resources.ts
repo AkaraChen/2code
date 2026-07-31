@@ -58,6 +58,8 @@ export const resources = {
         // {minutes} is substituted at render time.
         readingTime: '{minutes} min read',
         draftBadge: 'Draft',
+        // {date} is substituted at render time.
+        scheduledBadge: 'Scheduled for {date}',
         tagsLabel: 'Tags',
         feed: 'RSS',
         emptyTitle: 'Nothing published yet.',
@@ -216,6 +218,7 @@ export const resources = {
         backToList: '← 全部文章',
         readingTime: '约 {minutes} 分钟',
         draftBadge: '草稿',
+        scheduledBadge: '{date} 发布',
         tagsLabel: '标签',
         feed: 'RSS',
         emptyTitle: '还没有发布文章。',

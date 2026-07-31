@@ -7,6 +7,7 @@ import {
   blogPostPath,
   formatPostDate,
   formatReadingTime,
+  formatScheduledFor,
 } from './lib/routes'
 
 type Messages = (typeof resources)[AppLocale]
@@ -68,6 +69,15 @@ export function BlogPostContent({
             </span>
             {post.draft ? (
               <span className="post-draft">{t.blog.draftBadge}</span>
+            ) : null}
+            {post.scheduled ? (
+              <span className="post-draft">
+                {formatScheduledFor(
+                  t.blog.scheduledBadge,
+                  locale,
+                  post.publishAt,
+                )}
+              </span>
             ) : null}
           </div>
 

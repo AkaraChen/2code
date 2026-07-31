@@ -7,7 +7,13 @@ import {
 
 type PageProps = Readonly<{ params: Promise<{ slug: string }> }>
 
-// Required by `output: 'export'` — every article is prerendered at build time.
+/*
+  Published posts are prerendered; a scheduled one is rendered on the first
+  request after its publishAt and cached from there. One hour is also how long a
+  404 for a not-yet-published slug is held.
+*/
+export const revalidate = 3600
+
 export async function generateStaticParams() {
   return generatePostParams('en')
 }

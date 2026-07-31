@@ -1,18 +1,26 @@
 # 2code Site
 
-Marketing site for 2code, built with Next.js App Router in static export mode.
+Marketing site for 2code, built with the Next.js App Router.
 
 ## Scripts
 
 - `bun run dev` starts the Next.js dev server (drafts visible).
-- `bun run build` creates the static export, then emits the blog Markdown alternates.
+- `bun run build` runs `next build`.
 - `bun run build:drafts` same build with `draft: true` posts included.
+- `bun run build:scheduled` same build with not-yet-published posts included.
 - `bun run lint` runs ESLint.
-- `bun run preview` serves the generated `out/` folder locally.
+- `bun run start` serves an existing build.
+- `bun run preview` builds and then serves it.
 
-## Static Output
+## Deployment
 
-`next.config.mjs` sets `output: 'export'`, so a production build emits a fully static site into `out/`.
+Netlify, running the site on the Next.js Runtime (`@netlify/plugin-nextjs`) —
+`publish = ".next"`, not a static folder.
+
+This is not a static export. Every page is still prerendered at build time, but
+each blog surface carries `revalidate = 3600`, which is what lets a post
+published by date appear without a deploy (see **Scheduled publishing**). Pages
+with no time dependency — the homepages — are plain static output either way.
 
 ## Assets
 
@@ -42,6 +50,7 @@ footer language switch point at that language's blog index instead of a 404.
 title: Why worktrees beat branch switching
 description: One sentence used in the list, the meta description, OG, and RSS.
 date: 2026-07-31
+publishAt: 2026-08-05
 slug: why-worktrees-beat-branch-switching
 tags: [worktrees, git]
 draft: false
@@ -54,6 +63,7 @@ coverImage: /screenshots/worktree.png
 | `title` | yes | Article heading, list entry, `og:title` |
 | `description` | yes | List blurb, meta description, OG, RSS `<description>` |
 | `date` | yes | `YYYY-MM-DD`; sorts the list (newest first) and sets `article:published_time` |
+| `publishAt` | no | Instant the post goes public. Defaults to `date` — set it only when the displayed date and the release moment differ |
 | `slug` | yes | Must equal the file name without its extension |
 | `tags` | no | Shown on the list and article, emitted as `keywords` and RSS `<category>` |
 | `draft` | no | `true` hides the post from production builds |
@@ -79,30 +89,68 @@ Flip `draft` to `false` (or remove it) and merge. Everything else follows from
 the file: the list entry, the article page, `sitemap.xml`, the RSS feed, and the
 `.md` alternate are all derived from `content/blog/`. Nothing else needs editing.
 
+### Scheduled publishing
+
+A post is public once its publish instant has passed, and that instant is
+`publishAt` — or `date` when `publishAt` is absent. So a post dated in the
+future is not published yet; use `publishAt` when the date shown on the article
+should differ from the moment it goes live.
+
+```markdown
+date: 2026-08-05        # shown on the post
+publishAt: 2026-08-05   # implied by `date`; can be omitted
+publishAt: 2026-08-05T09:00:00+08:00   # a specific local hour
+```
+
+A bare `YYYY-MM-DD` is **UTC midnight** — the same frame the daily rebuild runs
+in. Write the offset out when a post has to land at a local hour.
+
+Before its publish instant the post is treated exactly like a draft: it is
+absent from the index, the sitemap, the feed, and the `.md` alternates, and its
+URL is not built at all (so it 404s). It stays visible in `bun run dev` with a
+"Scheduled for …" badge.
+
+**No deploy is needed for a post to go live.** The schedule is evaluated on the
+server, and every blog surface has `revalidate = 3600`:
+
+- The **article URL** is live on the first request after its publish instant.
+  It is not in `generateStaticParams` at build time, so it renders on demand.
+- The **index, feed, sitemap and `.md` alternates** were prerendered without it,
+  so they pick it up on their next revalidate — within an hour of the instant.
+
+So an article can be linked immediately and the listings catch up shortly after.
+Anything finer than that hour is not worth expressing in `publishAt`.
+
+To check a schedule locally, override the clock instead of waiting:
+
+```bash
+BLOG_NOW=2026-08-06 bun run build   # build as if it were Aug 6
+bun run build:scheduled             # include scheduled posts, keep drafts hidden
+```
+
 ### Implementation notes
 
 - Rendering is `markdown-it` + `markdown-it-footnote`, with Shiki for syntax
-  highlighting. All of it runs at build time; the blog ships no client JS.
-  Shiki emits both the light and dark palette as CSS variables per token, so the
-  existing theme toggle works with no re-render.
+  highlighting. It runs on the server, never in the browser; the blog ships no
+  client JS. Shiki emits both the light and dark palette as CSS variables per
+  token, so the existing theme toggle works with no re-render.
 - Article styles live under `/* ---------- blog ---------- */` in
   `app/globals.css`; the rendered body is scoped to `.prose`.
-- Markdown alternates (`/blog.md`, `/blog/<slug>.md`) are written into `out/`
-  by `scripts/emit-blog-markdown.mjs` after `next build`. The App Router cannot
-  produce a `.md` URL for a dynamic segment, and the posts are already Markdown,
-  so copying them out is both cheaper and more faithful than re-serialising HTML.
-- With no published posts, `/blog/[slug]` still has to prerender something —
-  `output: 'export'` rejects a dynamic route with zero params. In that case the
-  route emits a single unlinked, `noindex` stub at `/blog/no-posts-yet` that
-  shows the same empty state as the index. It disappears as soon as one post is
-  published.
+- Markdown alternates (`/blog.md`, `/blog/<slug>.md`) are route handlers under
+  `app/api/blog-markdown/`, reached through a rewrite in `middleware.ts`. The
+  App Router cannot own a `.md` URL for a dynamic segment — `/blog/[slug]`
+  matches `/blog/my-post.md` first, with `.md` as part of the slug. Going
+  through the same `listPosts`/`getPost` as the pages is what keeps a scheduled
+  post's Markdown twin in step with its HTML.
+  (`/index.md` and `/zh-cn.md` are unrelated: still plain files in `public/`.)
 - `content/blog/*/example-post.md` is a permanent draft kept as a rendering
   fixture: it exercises every supported element in one page, so template changes
   can be checked at a glance. It never ships.
 
 ## GEO / SEO surfaces
 
-Static discovery files (copied into `out/` on build):
+Discovery surfaces. The first four are files in `public/`; the rest are
+generated by the app.
 
 | Path | Role |
 | --- | --- |

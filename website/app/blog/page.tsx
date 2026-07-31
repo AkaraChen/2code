@@ -7,6 +7,12 @@ import { blogListMarkdownPath, blogListPath } from './lib/routes'
 
 const messages = getMessages('en')
 
+/*
+  Prerendered at build time, then re-rendered at most once an hour. That window
+  is what publishes a post whose `publishAt` has passed, with no deploy.
+*/
+export const revalidate = 3600
+
 export const metadata: Metadata = buildPageMetadata('en', {
   pathname: blogListPath('en'),
   title: messages.blog.metadataTitle,

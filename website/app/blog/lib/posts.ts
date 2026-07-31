@@ -22,8 +22,12 @@ export type BlogPostMeta = Readonly<{
   description: string
   /** ISO-8601 date, always normalised to UTC midnight when authored as YYYY-MM-DD. */
   date: string
+  /** Instant the post becomes public. Defaults to `date` when not set explicitly. */
+  publishAt: string
   tags: readonly string[]
   draft: boolean
+  /** True when `publishAt` is still in the future at build time. */
+  scheduled: boolean
   coverImage?: string
   ogImage?: string
   readingMinutes: number
@@ -48,6 +52,48 @@ export function includeDrafts(): boolean {
     process.env.BLOG_INCLUDE_DRAFTS === '1' ||
     process.env.NODE_ENV !== 'production'
   )
+}
+
+/*
+  Scheduled posts get the same preview treatment as drafts: visible while
+  writing, absent from the shipped build. `BLOG_INCLUDE_SCHEDULED=1` exists on
+  its own so a real static build can be checked against a future publish date
+  without also un-hiding every draft.
+*/
+export function includeScheduled(): boolean {
+  return process.env.BLOG_INCLUDE_SCHEDULED === '1' || includeDrafts()
+}
+
+/*
+  Read fresh on every call, never memoised: this module lives in a long-running
+  server process, so a cached "now" would freeze the blog at the instant the
+  server booted and no scheduled post would ever appear. Each page, feed, and
+  sitemap re-renders on its own revalidate window anyway, so there is no single
+  build instant to pin them to.
+
+  `BLOG_NOW` overrides the clock so a schedule can be checked without waiting;
+  it is parsed once because it cannot change while the process runs.
+*/
+let overrideNow: number | null | undefined
+
+export function publishReferenceTime(): number {
+  if (overrideNow === undefined) {
+    const override = process.env.BLOG_NOW
+
+    if (!override) {
+      overrideNow = null
+    } else {
+      const parsed = new Date(override)
+
+      if (Number.isNaN(parsed.getTime())) {
+        throw new Error(`BLOG_NOW is not a valid date: "${override}"`)
+      }
+
+      overrideNow = parsed.getTime()
+    }
+  }
+
+  return overrideNow ?? Date.now()
 }
 
 function localeDir(locale: AppLocale) {
@@ -101,13 +147,18 @@ function requireString(
   throw new Error(`Blog post ${file} is missing required frontmatter "${field}"`)
 }
 
-function normaliseDate(value: unknown, file: string): string {
+/*
+  A bare `2026-08-05` is UTC midnight, which is what YAML already does with an
+  unquoted date. A post that must land at a local hour spells the offset out:
+  `publishAt: 2026-08-05T09:00:00+08:00`.
+*/
+function normaliseDate(value: unknown, field: string, file: string): string {
   // gray-matter's YAML parser turns an unquoted `2026-07-31` into a Date.
   const parsed = value instanceof Date ? value : new Date(String(value ?? ''))
 
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(
-      `Blog post ${file} has an invalid frontmatter "date" (expected YYYY-MM-DD)`,
+      `Blog post ${file} has an invalid frontmatter "${field}" (expected YYYY-MM-DD or an ISO-8601 timestamp)`,
     )
   }
 
@@ -254,14 +305,30 @@ function parse(
     )
   }
 
+  const date = normaliseDate(data.date, 'date', file)
+
+  /*
+    `publishAt` defaults to `date` rather than to "now": a post dated in the
+    future is a post that has not happened yet, which is what every static site
+    generator means by a future date, and it keeps the common case — one date,
+    one release — to a single field. Set `publishAt` explicitly only when the
+    displayed date and the release moment genuinely differ.
+  */
+  const publishAt =
+    data.publishAt === undefined || data.publishAt === null
+      ? date
+      : normaliseDate(data.publishAt, 'publishAt', file)
+
   return {
     locale,
     slug,
     title: requireString(data.title, 'title', file),
     description: requireString(data.description, 'description', file),
-    date: normaliseDate(data.date, file),
+    date,
+    publishAt,
     tags: normaliseTags(data.tags),
     draft: data.draft === true,
+    scheduled: new Date(publishAt).getTime() > publishReferenceTime(),
     coverImage:
       typeof data.coverImage === 'string' ? data.coverImage : undefined,
     ogImage: typeof data.ogImage === 'string' ? data.ogImage : undefined,
@@ -274,12 +341,16 @@ function byDateDescending(a: BlogPostMeta, b: BlogPostMeta) {
   return b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug)
 }
 
-/** Every post for a locale, newest first, with drafts filtered per environment. */
+/**
+ * Every post for a locale, newest first, with drafts and not-yet-published
+ * posts filtered per environment.
+ */
 export async function listPosts(
   locale: AppLocale,
 ): Promise<readonly BlogPostMeta[]> {
   const slugs = await listSlugs(locale)
   const withDrafts = includeDrafts()
+  const withScheduled = includeScheduled()
 
   const posts = await Promise.all(
     slugs.map(async (slug) => {
@@ -296,6 +367,7 @@ export async function listPosts(
   return posts
     .filter((post): post is BlogPostMeta & { markdown: string } => post !== null)
     .filter((post) => withDrafts || !post.draft)
+    .filter((post) => withScheduled || !post.scheduled)
     .sort(byDateDescending)
 }
 
@@ -321,6 +393,10 @@ export async function getPost(
   const meta = parse(locale, slug, found.file, found.source)
 
   if (!includeDrafts() && meta.draft) {
+    return null
+  }
+
+  if (!includeScheduled() && meta.scheduled) {
     return null
   }
 

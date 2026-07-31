@@ -7,7 +7,9 @@ import {
 
 type PageProps = Readonly<{ params: Promise<{ slug: string }> }>
 
-// Required by `output: 'export'` — every article is prerendered at build time.
+// Same one-hour publish window as the English article route.
+export const revalidate = 3600
+
 export async function generateStaticParams() {
   return generatePostParams('zh-cn')
 }

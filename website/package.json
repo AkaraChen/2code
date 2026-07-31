@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/emit-blog-markdown.mjs",
+    "build": "next build",
     "build:drafts": "BLOG_INCLUDE_DRAFTS=1 bun run build",
+    "build:scheduled": "BLOG_INCLUDE_SCHEDULED=1 bun run build",
     "lint": "eslint .",
-    "preview": "python3 -m http.server 3000 -d out"
+    "start": "next start",
+    "preview": "bun run build && bun run start"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.3.0",
@@ -24,6 +26,7 @@
     "shiki": "^4.3.1"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

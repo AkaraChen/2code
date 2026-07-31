@@ -7,6 +7,9 @@ import { buildPageMetadata } from '../../page-metadata'
 
 const messages = getMessages('zh-cn')
 
+// Same one-hour publish window as the English index.
+export const revalidate = 3600
+
 export const metadata: Metadata = buildPageMetadata('zh-cn', {
   pathname: blogListPath('zh-cn'),
   title: messages.blog.metadataTitle,

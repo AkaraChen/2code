@@ -1,6 +1,8 @@
 import { renderFeed } from '../lib/feed'
 
-export const dynamic = 'force-static'
+// Re-rendered on the same window as the blog itself, so a post that reaches
+// its publishAt shows up in the feed without a deploy.
+export const revalidate = 3600
 
 export async function GET() {
   return new Response(await renderFeed('en'), {
