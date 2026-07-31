@@ -96,8 +96,9 @@ the file: the list entry, the article page, `sitemap.xml`, the RSS feed, and the
   route emits a single unlinked, `noindex` stub at `/blog/no-posts-yet` that
   shows the same empty state as the index. It disappears as soon as one post is
   published.
-- `content/blog/*/example-post.md` is a permanent draft used as a rendering
-  fixture for every supported element. Delete it once real posts exist.
+- `content/blog/*/example-post.md` is a permanent draft kept as a rendering
+  fixture: it exercises every supported element in one page, so template changes
+  can be checked at a glance. It never ships.
 
 ## GEO / SEO surfaces
 
