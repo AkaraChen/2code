@@ -5,6 +5,11 @@ export {
 	getPrimaryFontFamily,
 } from "./appearance";
 export {
+	createAttachedContext,
+	getSharedAttachedContext,
+	resetSharedAttachedContext,
+} from "./attachedCanvas";
+export {
 	forceCharSizeRemeasure,
 	getExpectedCellWidth,
 	getRenderedCellWidth,
@@ -13,12 +18,6 @@ export {
 	remeasureIfStale,
 } from "./charSize";
 export { scheduleFontSettleRefit } from "./fontSettle";
-export {
-	createAttachedContext,
-	getSharedAttachedContext,
-	resetSharedAttachedContext,
-} from "./attachedCanvas";
-export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";
 export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
@@ -38,3 +37,4 @@ export {
 	sweepTerminalStorage,
 } from "./terminalStorage";
 export { TitleDebouncer } from "./titleDebounce";
+export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";

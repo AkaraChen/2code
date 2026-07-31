@@ -92,7 +92,7 @@ export function isCellWidthStale(terminal: XTerm): boolean {
 }
 
 interface CharSizeServiceLike {
-	measure(): void;
+	measure: () => void;
 }
 
 function getCharSizeService(terminal: XTerm): CharSizeServiceLike | null {
