@@ -26,7 +26,9 @@ export async function renderFeed(locale: AppLocale): Promise<string> {
   const language = locale === 'zh-cn' ? 'zh-CN' : 'en'
 
   const items = posts
-    .filter((post) => !post.draft)
+    // A draft build still emits a public feed: neither drafts nor posts whose
+    // publishAt has not arrived belong in it.
+    .filter((post) => !post.draft && !post.scheduled)
     .map((post) => {
       const url = `${siteConfig.url}${blogPostPath(locale, post.slug)}`
 

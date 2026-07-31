@@ -85,8 +85,9 @@ export async function generatePostMetadata(
     // No cover image means the product screenshot, same as every other page.
     image: image ? { url: image, alt: post.title } : undefined,
     article: { publishedTime: post.date, tags: post.tags },
-    // Drafts only render in dev / draft builds, but keep them out of indexes.
-    noIndex: post.draft,
+    // Drafts and not-yet-published posts only render in preview builds, but
+    // keep them out of indexes in case such a build is ever served.
+    noIndex: post.draft || post.scheduled,
   })
 }
 

@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "next build && node scripts/emit-blog-markdown.mjs",
     "build:drafts": "BLOG_INCLUDE_DRAFTS=1 bun run build",
+    "build:scheduled": "BLOG_INCLUDE_SCHEDULED=1 bun run build",
     "lint": "eslint .",
     "preview": "python3 -m http.server 3000 -d out"
   },

@@ -1,0 +1,41 @@
+# The website is a static export, so a blog post with a future
+# `publishAt` only becomes visible on the next build. This job is that build:
+# once a day it pokes the Netlify build hook, which redeploys `dev` and lets
+# every post whose publishAt has passed appear.
+#
+# Setup: create a build hook in Netlify (Site configuration → Build & deploy →
+# Build hooks) and store its URL as the `NETLIFY_BUILD_HOOK_URL` repository
+# secret. Without that secret the job logs a notice and exits cleanly, so the
+# workflow is harmless until it is configured.
+name: Website Scheduled Publish
+
+on:
+  schedule:
+    # 00:10 UTC daily. Frontmatter dates without an explicit time are UTC
+    # midnight, so this runs just after the day flips in that same frame.
+    - cron: "10 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    name: Trigger website rebuild
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Trigger Netlify build hook
+        env:
+          BUILD_HOOK_URL: ${{ secrets.NETLIFY_BUILD_HOOK_URL }}
+        run: |
+          if [ -z "$BUILD_HOOK_URL" ]; then
+            echo "::notice::NETLIFY_BUILD_HOOK_URL is not set — skipping the scheduled rebuild."
+            exit 0
+          fi
+
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -d '{}' "$BUILD_HOOK_URL")
+
+          if [ "$status" -ge 400 ]; then
+            echo "::error::Build hook responded with HTTP $status"
+            exit 1
+          fi
+
+          echo "Build hook accepted the request (HTTP $status)."

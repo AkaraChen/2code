@@ -7,6 +7,7 @@ Marketing site for 2code, built with Next.js App Router in static export mode.
 - `bun run dev` starts the Next.js dev server (drafts visible).
 - `bun run build` creates the static export, then emits the blog Markdown alternates.
 - `bun run build:drafts` same build with `draft: true` posts included.
+- `bun run build:scheduled` same build with not-yet-published posts included.
 - `bun run lint` runs ESLint.
 - `bun run preview` serves the generated `out/` folder locally.
 
@@ -42,6 +43,7 @@ footer language switch point at that language's blog index instead of a 404.
 title: Why worktrees beat branch switching
 description: One sentence used in the list, the meta description, OG, and RSS.
 date: 2026-07-31
+publishAt: 2026-08-05
 slug: why-worktrees-beat-branch-switching
 tags: [worktrees, git]
 draft: false
@@ -54,6 +56,7 @@ coverImage: /screenshots/worktree.png
 | `title` | yes | Article heading, list entry, `og:title` |
 | `description` | yes | List blurb, meta description, OG, RSS `<description>` |
 | `date` | yes | `YYYY-MM-DD`; sorts the list (newest first) and sets `article:published_time` |
+| `publishAt` | no | Instant the post goes public. Defaults to `date` — set it only when the displayed date and the release moment differ |
 | `slug` | yes | Must equal the file name without its extension |
 | `tags` | no | Shown on the list and article, emitted as `keywords` and RSS `<category>` |
 | `draft` | no | `true` hides the post from production builds |
@@ -78,6 +81,43 @@ characters/min for Chinese) — it is not a frontmatter field.
 Flip `draft` to `false` (or remove it) and merge. Everything else follows from
 the file: the list entry, the article page, `sitemap.xml`, the RSS feed, and the
 `.md` alternate are all derived from `content/blog/`. Nothing else needs editing.
+
+### Scheduled publishing
+
+A post is public once its publish instant has passed, and that instant is
+`publishAt` — or `date` when `publishAt` is absent. So a post dated in the
+future is not published yet; use `publishAt` when the date shown on the article
+should differ from the moment it goes live.
+
+```markdown
+date: 2026-08-05        # shown on the post
+publishAt: 2026-08-05   # implied by `date`; can be omitted
+publishAt: 2026-08-05T09:00:00+08:00   # a specific local hour
+```
+
+A bare `YYYY-MM-DD` is **UTC midnight** — the same frame the daily rebuild runs
+in. Write the offset out when a post has to land at a local hour.
+
+Before its publish instant the post is treated exactly like a draft: it is
+absent from the index, the sitemap, the feed, and the `.md` alternates, and its
+URL is not built at all (so it 404s). It stays visible in `bun run dev` with a
+"Scheduled for …" badge.
+
+**The schedule is evaluated at build time, not in the browser.** The site is a
+static export, so a post does not appear on its own — a build has to run after
+the publish instant. `.github/workflows/website-scheduled-publish.yml` does
+that: it pokes the Netlify build hook every day at 00:10 UTC. It needs the
+`NETLIFY_BUILD_HOOK_URL` repository secret; without it the job exits cleanly and
+scheduled posts wait for the next ordinary deploy. Netlify's daily granularity
+is why frontmatter times finer than a day only affect *which* daily build
+publishes the post.
+
+To check a schedule locally, override the clock instead of waiting:
+
+```bash
+BLOG_NOW=2026-08-06 bun run build   # build as if it were Aug 6
+bun run build:scheduled             # include scheduled posts, keep drafts hidden
+```
 
 ### Implementation notes
 

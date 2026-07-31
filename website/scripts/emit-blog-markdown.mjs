@@ -7,8 +7,11 @@
   slug. The posts are already Markdown on disk, so copying them out with a small
   header is both cheaper and more faithful than re-serialising rendered HTML.
 
-  Draft rule matches a production `next build`: drafts are skipped unless
-  BLOG_INCLUDE_DRAFTS=1.
+  Visibility rules match a production `next build`: drafts are skipped unless
+  BLOG_INCLUDE_DRAFTS=1, and a post whose `publishAt` is still in the future is
+  skipped unless BLOG_INCLUDE_SCHEDULED=1. Keep this in step with
+  `app/blog/lib/posts.ts` — the two are separate because this script runs after
+  the Next build, outside its module graph.
 */
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -26,6 +29,24 @@ const LOCALES = [
 ]
 
 const includeDrafts = process.env.BLOG_INCLUDE_DRAFTS === '1'
+const includeScheduled =
+  process.env.BLOG_INCLUDE_SCHEDULED === '1' || includeDrafts
+
+function toIso(value, field, file) {
+  const parsed = value instanceof Date ? value : new Date(String(value ?? ''))
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Blog post ${file} has an invalid frontmatter "${field}"`)
+  }
+
+  return parsed.toISOString()
+}
+
+const now = process.env.BLOG_NOW ? new Date(process.env.BLOG_NOW) : new Date()
+
+if (Number.isNaN(now.getTime())) {
+  throw new Error(`BLOG_NOW is not a valid date: "${process.env.BLOG_NOW}"`)
+}
 
 async function readPosts(locale) {
   let files
@@ -38,10 +59,22 @@ async function readPosts(locale) {
   const posts = []
 
   for (const file of files.filter((name) => /\.mdx?$/.test(name))) {
-    const source = await fs.readFile(path.join(contentRoot, locale, file), 'utf8')
+    const filePath = path.join(contentRoot, locale, file)
+    const source = await fs.readFile(filePath, 'utf8')
     const { data, content } = matter(source)
 
     if (data.draft === true && !includeDrafts) {
+      continue
+    }
+
+    const date = toIso(data.date, 'date', filePath)
+    // Same default as the site: no publishAt means the post's own date gates it.
+    const publishAt =
+      data.publishAt === undefined || data.publishAt === null
+        ? date
+        : toIso(data.publishAt, 'publishAt', filePath)
+
+    if (new Date(publishAt) > now && !includeScheduled) {
       continue
     }
 
@@ -49,10 +82,7 @@ async function readPosts(locale) {
       slug: file.replace(/\.mdx?$/, ''),
       title: String(data.title ?? ''),
       description: String(data.description ?? ''),
-      date:
-        data.date instanceof Date
-          ? data.date.toISOString()
-          : new Date(String(data.date)).toISOString(),
+      date,
       tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
       body: content.trim(),
     })

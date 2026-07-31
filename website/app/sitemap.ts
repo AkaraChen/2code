@@ -83,7 +83,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     )
 
     for (const post of await listPosts(locale)) {
-      if (post.draft) {
+      if (post.draft || post.scheduled) {
         continue
       }
 

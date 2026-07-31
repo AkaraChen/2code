@@ -46,3 +46,35 @@ export function formatPostDate(locale: AppLocale, isoDate: string): string {
 export function formatReadingTime(template: string, minutes: number): string {
   return template.replace('{minutes}', String(minutes))
 }
+
+/*
+  The scheduled badge is a preview-only affordance, so it reports the publish
+  instant in UTC — the same frame the frontmatter is interpreted in, and the one
+  the rebuild schedule runs on. A publishAt that carries an hour shows that hour;
+  a bare date stays a bare date.
+*/
+export function formatScheduledFor(
+  template: string,
+  locale: AppLocale,
+  isoDate: string,
+): string {
+  const date = new Date(isoDate)
+  const atUtcMidnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0
+
+  const formatted = atUtcMidnight
+    ? formatPostDate(locale, isoDate)
+    : new Intl.DateTimeFormat(locale === 'zh-cn' ? 'zh-CN' : 'en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+        timeZoneName: 'short',
+      }).format(date)
+
+  return template.replace('{date}', formatted)
+}
