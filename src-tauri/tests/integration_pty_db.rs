@@ -43,7 +43,7 @@ fn test_shell() -> String {
 	if cfg!(windows) {
 		"powershell.exe -NoLogo -NoProfile -NonInteractive".to_string()
 	} else {
-		"sh -i".to_string()
+		"/bin/bash".to_string()
 	}
 }
 
