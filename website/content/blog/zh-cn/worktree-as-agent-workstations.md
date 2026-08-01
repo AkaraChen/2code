@@ -1,15 +1,23 @@
 ---
-title: 用 Worktree 当 Agent 工位：我的一天并行工作流
-description: 一个 repo、一份工作副本，在 agent 时代不够用了。把 Git worktree 当成 agent 的工位——早上开三条任务线，中午看 diff，下午合一条挂一条，重启后工位还在。
+title: "用 Worktree 当 Agent 工位：我的一天并行工作流"
+description: "一个 repo、一份工作副本，在 agent 时代不够用了。把 Git worktree 当成 agent 的工位——早上开三条任务线，中午看 diff，下午合一条挂一条，重启后工位还在。"
 date: 2026-08-02
 publishAt: 2026-08-02T00:00:00+08:00
 slug: worktree-as-agent-workstations
 tags:
   [
     Git worktree,
-    Agent 工位,
+    git worktrees,
+    parallel coding agents,
     并行 Agent,
+    agent orchestration,
+    Agentic IDE,
+    Superset,
+    Orca,
+    JetBrains Air,
     Claude Code,
+    Codex,
+    Agent 工位,
     终端工作站,
     一天工作流,
   ]

@@ -1,16 +1,24 @@
 ---
-title: Git Worktrees as Agent Workstations: One Day in Parallel
-description: One repo and one working copy is not enough once agents run for minutes at a time. Treat each Git worktree as an agent workstation — open three task lines in the morning, review diffs at noon, merge one and park one in the afternoon, and the workstations are still there after restart.
+title: "Git Worktrees as Agent Workstations: One Day in Parallel"
+description: "One repo and one working copy is not enough once agents run for minutes at a time. Treat each Git worktree as an agent workstation — open three task lines in the morning, review diffs at noon, merge one and park one in the afternoon, and the workstations are still there after restart."
 date: 2026-08-02
 publishAt: 2026-08-02T00:00:00+08:00
 slug: worktree-as-agent-workstations
 tags:
   [
     Git worktree,
-    agent workstation,
-    swimlane,
+    git worktrees,
+    parallel coding agents,
     parallel agents,
+    agent orchestration,
+    agentic IDE,
+    Superset,
+    Orca,
+    JetBrains Air,
     Claude Code,
+    Codex,
+    swimlane,
+    agent workstation,
     terminal workstation,
   ]
 ---
