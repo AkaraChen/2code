@@ -1,6 +1,6 @@
 ---
 title: 用 Worktree 当 Agent 工位：我的一天并行工作流
-description: 一个 repo、一份工作副本，在 agent 时代不够用了。把 Git worktree 当成 agent 的工位——早上开三条任务线，中午看 diff，下午合一条挂一条，重启后现场还在。
+description: 一个 repo、一份工作副本，在 agent 时代不够用了。把 Git worktree 当成 agent 的工位——早上开三条任务线，中午看 diff，下午合一条挂一条，重启后工位还在。
 date: 2026-08-02
 publishAt: 2026-08-02T00:00:00+08:00
 slug: worktree-as-agent-workstations
@@ -50,7 +50,7 @@ Agent 把这个假设打碎了。
 
 Worktree 不是高级 Git 炫技。它只是把一件早就该成立的事说清楚：**并行任务需要并行工作副本**。
 
-官方文档在 [git-worktree](https://git-scm.com/docs/git-worktree)。一句话版：同一个仓库可以有多份检出，共享对象库，目录和分支各自独立。对 agent 来说，这意味着每条任务线有自己的文件系统现场——互不踩脚。
+官方文档在 [git-worktree](https://git-scm.com/docs/git-worktree)。一句话版：同一个仓库可以有多份检出，共享对象库，目录和分支各自独立。对 agent 来说，这意味着每条任务线有自己的文件树——互不踩脚。
 
 我把它记成：
 
@@ -76,7 +76,7 @@ Agent 说它修好了。Diff 说：它改了查询、加了测试，还顺手「
 
 两点，「写功能」那条也亮了。Diff 干净，我 review 完开了 draft PR。
 
-「实验」那条还在吐日志，缓存策略看起来方向不对。我没有急着杀它——下午还有会，先挂着。工位还在，终端 scrollback 还在，agent 会话还在。会议结束再回来，现场不会变成三个空白窗口加一次 `git status` 考古。
+「实验」那条还在吐日志，缓存策略看起来方向不对。我没有急着杀它——下午还有会，先挂着。工位还在，终端 scrollback 还在，agent 会话还在。会议结束再回来，不会塌成三个空白窗口加一次 `git status` 考古。
 
 四点半，笔记本合盖去楼下。回来打开 2code：
 

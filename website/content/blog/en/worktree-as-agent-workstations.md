@@ -1,6 +1,6 @@
 ---
 title: Git Worktrees as Agent Workstations: One Day in Parallel
-description: One repo and one working copy is not enough once agents run for minutes at a time. Treat each Git worktree as an agent workstation — open three task lines in the morning, review diffs at noon, merge one and park one in the afternoon, and keep the scene after restart.
+description: One repo and one working copy is not enough once agents run for minutes at a time. Treat each Git worktree as an agent workstation — open three task lines in the morning, review diffs at noon, merge one and park one in the afternoon, and the workstations are still there after restart.
 date: 2026-08-02
 publishAt: 2026-08-02T00:00:00+08:00
 slug: worktree-as-agent-workstations
@@ -50,7 +50,7 @@ An agent can run for ten or twenty minutes. It edits files, runs tests, loops. I
 
 Worktrees are not advanced Git flex. They state something that should have been obvious: **parallel tasks need parallel working copies**.
 
-The man page is [git-worktree](https://git-scm.com/docs/git-worktree). Short version: one repository, multiple checkouts, shared object store, separate directories and branches. For agents, that means each task line has its own filesystem scene — no stepping on each other.
+The man page is [git-worktree](https://git-scm.com/docs/git-worktree). Short version: one repository, multiple checkouts, shared object store, separate directories and branches. For agents, that means each task line has its own file tree — no stepping on each other.
 
 I keep it as:
 
@@ -76,7 +76,7 @@ That is the real savings from parallel work: **you leave to do something else; c
 
 At 2:00 the feature line lights up. The diff is clean. I review it and open a draft PR.
 
-The experiment is still dumping logs; the caching idea looks wrong. I do not kill it yet — I have a meeting. The workstation stays, the scrollback stays, the agent session stays. When the meeting ends, the scene is not three empty windows and a round of `git status` archaeology.
+The experiment is still dumping logs; the caching idea looks wrong. I do not kill it yet — I have a meeting. The workstation stays, the scrollback stays, the agent session stays. When the meeting ends, you do not come back to three empty windows and a round of `git status` archaeology.
 
 At 4:30 I close the laptop. When I open 2code again:
 
