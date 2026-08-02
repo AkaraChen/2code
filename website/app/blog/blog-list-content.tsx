@@ -1,5 +1,6 @@
 import { type AppLocale, type resources } from '../i18n/resources'
 import { siteConfig } from '../site-config'
+import { htmlLang } from '../structured-data'
 import { BlogShell } from './blog-shell'
 import type { BlogPostMeta } from './lib/posts'
 import {
@@ -33,7 +34,7 @@ export function BlogListContent({
     url: listUrl,
     name: t.blog.metadataTitle,
     description: t.blog.metadataDescription,
-    inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+    inLanguage: htmlLang(locale),
     publisher: { '@id': `${siteConfig.url}/#organization` },
     blogPost: posts.map((post) => ({
       '@type': 'BlogPosting',
@@ -41,7 +42,9 @@ export function BlogListContent({
       description: post.description,
       datePublished: post.date,
       url: `${siteConfig.url}${blogPostPath(locale, post.slug)}`,
+      inLanguage: htmlLang(locale),
       keywords: [...post.tags],
+      isPartOf: { '@id': `${listUrl}#blog` },
     })),
   }
 
