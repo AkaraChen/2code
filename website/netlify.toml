@@ -1,6 +1,11 @@
 [build]
   command = "bun run build"
-  publish = "out"
+  # `.next`, not a static folder: the Next.js Runtime serves the build output,
+  # which is what lets a scheduled post appear without a redeploy.
+  publish = ".next"
 
 [build.environment]
   BUN_VERSION = "1.3.6"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

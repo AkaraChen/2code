@@ -1,5 +1,6 @@
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal as XTerm } from "@xterm/xterm";
+import { remeasureIfStale } from "./charSize";
 
 const RESIZE_DEBOUNCE_MS = 75;
 
@@ -24,6 +25,11 @@ export function measureAndResize(
 	const savedViewportY = buffer.viewportY;
 	const prevCols = terminal.cols;
 	const prevRows = terminal.rows;
+
+	// FitAddon derives cols from xterm's cached cell width. If that cache was
+	// taken with a different font than the one now rendering, every fit picks
+	// the wrong column count — re-measure first so fit() sees real metrics.
+	remeasureIfStale(terminal);
 
 	fitAddon.fit();
 

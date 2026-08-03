@@ -180,6 +180,8 @@ a,
 	min-height: 100%;
 	outline: none;
 	padding: 0;
+	/* Follow settings terminal font via --font-mono (synced in terminalSettingsStore). */
+	font-family: var(--font-mono);
 }
 
 .milkdown-wrapper .markdown-editor-placeholder {
@@ -280,7 +282,7 @@ a,
 }
 
 .milkdown-wrapper .ProseMirror code {
-	font-family: monospace;
+	font-family: var(--font-mono);
 	background: var(--muted);
 	padding: 0.1em 0.3em;
 	border-radius: 3px;
@@ -498,7 +500,7 @@ a,
 	overflow-x: auto;
 	background: transparent;
 	color: #abb2bf;
-	font-family: monospace;
+	font-family: var(--font-mono);
 	font-size: 13px;
 	line-height: 1.5;
 	white-space: pre-wrap;
@@ -527,7 +529,7 @@ a,
 
 .milkdown-wrapper .ProseMirror .milkdown-code-block .cm-scroller {
 	max-height: 420px;
-	font-family: monospace;
+	font-family: var(--font-mono);
 	font-size: 13px;
 	line-height: 1.55;
 }

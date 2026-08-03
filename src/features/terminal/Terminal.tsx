@@ -49,6 +49,7 @@ import {
   BUFFER_STORAGE_PREFIX,
   DIMS_STORAGE_PREFIX,
   getTerminalParkingContainer,
+  installAttachedCanvasMetrics,
   installImagePasteFallback,
   loadAddons,
   measureAndResize,
@@ -383,10 +384,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         }
       });
 
-      // Open into wrapper, then attach wrapper to container
-      term.open(wrapper);
+      // Attach the wrapper first, then open into it: xterm measures the char
+      // size during open(), and an unattached host has no layout to measure.
       container.appendChild(wrapper);
+      term.open(wrapper);
       termRef.current = term;
+
+      // 1b. Point xterm's font measurement at attached canvases. WebKit cannot
+      //     resolve locally installed fonts from a detached/offscreen canvas,
+      //     which is what xterm measures with — see xtermMetricsPatch.ts.
+      cleanups.push(installAttachedCanvasMetrics(term).dispose);
 
       // 2. Load all addons via lib (Unicode11 + Serialize + Search +
       //    Clipboard + Image + Ligatures + Progress + WebLinks). Rendering
@@ -498,8 +505,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 7. Restore buffer from localStorage (cold restart scrollback)
       restoreBuffer(sessionId, term);
 
-      // 8. Initial fit + resize PTY
-      addonsResult.fitAddon.fit();
+      // 8. Initial fit + resize PTY (measureAndResize re-measures the char size
+      //    first if xterm's cached cell width does not match the real font)
       measureAndResize(term, addonsResult.fitAddon, container);
       resizePty({ sessionId, rows: term.rows, cols: term.cols });
 

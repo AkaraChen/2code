@@ -170,6 +170,11 @@ vi.mock("./lib", () => ({
 	}),
 	createTerminalKeyEventHandler: () => () => true,
 	getTerminalParkingContainer: () => document.body,
+	installAttachedCanvasMetrics: () => ({
+		patchedCharSize: true,
+		patchedWidthCache: true,
+		dispose: vi.fn(),
+	}),
 	installImagePasteFallback: () => vi.fn(),
 	loadAddons: () => ({
 		fitAddon: { fit: vi.fn() },

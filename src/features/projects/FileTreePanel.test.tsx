@@ -23,6 +23,7 @@ import {
 	useFileTreeGitStatus,
 	useMoveFileTreePaths,
 	useOpenPathInDefaultApp,
+	useRefreshProfileWorkspaceCaches,
 	useRenameFileTreePath,
 	useRevealPathInFileManager,
 } from "./hooks";
@@ -37,7 +38,9 @@ const {
 	expandedPathsRef,
 	getFocusedItemMock,
 	moveMutateAsyncMock,
+	onMutationMock,
 	renameMutateAsyncMock,
+	refreshMutateAsyncMock,
 	revealMutateAsyncMock,
 	resetPathsMock,
 	setGitStatusMock,
@@ -63,7 +66,11 @@ const {
 	},
 	getFocusedItemMock: vi.fn(),
 	moveMutateAsyncMock: vi.fn(),
+	onMutationMock: vi.fn(
+		(_type: string, _handler: (event: { path: string }) => void) => () => {},
+	),
 	renameMutateAsyncMock: vi.fn(),
+	refreshMutateAsyncMock: vi.fn(),
 	revealMutateAsyncMock: vi.fn(),
 	resetPathsMock: vi.fn(),
 	setGitStatusMock: vi.fn(),
@@ -201,6 +208,7 @@ vi.mock("@pierre/trees/react", () => ({
 					};
 				},
 				add: addPathMock,
+				onMutation: onMutationMock,
 				resetPaths: resetPathsMock,
 				setGitStatus: setGitStatusMock,
 				startRenaming: startRenamingMock,
@@ -222,6 +230,7 @@ vi.mock("./hooks", () => ({
 	useFileTreeGitStatus: vi.fn(),
 	useMoveFileTreePaths: vi.fn(),
 	useOpenPathInDefaultApp: vi.fn(),
+	useRefreshProfileWorkspaceCaches: vi.fn(),
 	useRenameFileTreePath: vi.fn(),
 	useRevealPathInFileManager: vi.fn(),
 }));
@@ -312,6 +321,12 @@ function createTestDataTransfer(): DataTransfer {
 	return transfer;
 }
 
+function lastResetPaths(): readonly string[] {
+	const calls = resetPathsMock.mock.calls;
+	const call = calls[calls.length - 1];
+	return (call?.[0] as readonly string[] | undefined) ?? [];
+}
+
 describe("fileTreePanel", () => {
 	beforeEach(() => {
 		addPathMock.mockReset();
@@ -325,8 +340,11 @@ describe("fileTreePanel", () => {
 		deleteMutateAsyncMock.mockResolvedValue(undefined);
 		moveMutateAsyncMock.mockReset();
 		moveMutateAsyncMock.mockResolvedValue(undefined);
+		onMutationMock.mockClear();
 		renameMutateAsyncMock.mockReset();
 		renameMutateAsyncMock.mockResolvedValue(undefined);
+		refreshMutateAsyncMock.mockReset();
+		refreshMutateAsyncMock.mockResolvedValue(undefined);
 		revealMutateAsyncMock.mockReset();
 		revealMutateAsyncMock.mockResolvedValue(undefined);
 		resetPathsMock.mockReset();
@@ -362,6 +380,10 @@ describe("fileTreePanel", () => {
 		vi.mocked(useOpenPathInDefaultApp).mockReturnValue({
 			mutateAsync: openDefaultAppMutateAsyncMock,
 		} as unknown as ReturnType<typeof useOpenPathInDefaultApp>);
+		vi.mocked(useRefreshProfileWorkspaceCaches).mockReturnValue({
+			isPending: false,
+			mutateAsync: refreshMutateAsyncMock,
+		} as unknown as ReturnType<typeof useRefreshProfileWorkspaceCaches>);
 		vi.mocked(useRevealPathInFileManager).mockReturnValue({
 			mutateAsync: revealMutateAsyncMock,
 		} as unknown as ReturnType<typeof useRevealPathInFileManager>);
@@ -709,12 +731,61 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByRole("menuitem", { name: "New File" }));
 
-		expect(addPathMock).toHaveBeenCalledWith("src/New File");
+		expect(lastResetPaths()).toContain("src/New File");
 		expect(startRenamingMock).toHaveBeenCalledWith("src/New File", {
 			removeIfCanceled: true,
 		});
 		expect(closeContextMenuMock).toHaveBeenCalledWith({
 			restoreFocus: false,
+		});
+	});
+
+	it("keeps the pending inline creation when the tree data refreshes", async () => {
+		const { onOpenFile, rerender } = renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New File" }));
+		expect(startRenamingMock).toHaveBeenCalledTimes(1);
+		resetPathsMock.mockClear();
+
+		vi.mocked(useFileTreeChildPaths).mockReturnValue(
+			createFileTreeChildPathsResult([...treePaths, "src/app.ts"], false),
+		);
+		rerender(
+			<>
+				<FileTreePanel
+					profileId={profileId}
+					rootPath={rootPath}
+					isOpen
+					isActive
+					onOpenFile={onOpenFile}
+				/>
+			</>,
+		);
+
+		await waitFor(() => {
+			expect(useFileTreeChildPaths).toHaveBeenCalled();
+		});
+		expect(resetPathsMock).not.toHaveBeenCalled();
+		expect(startRenamingMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("clears the pending inline creation when the draft row is removed", async () => {
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New File" }));
+		expect(lastResetPaths()).toContain("src/New File");
+
+		const mutationCalls = onMutationMock.mock.calls;
+		const removeHandler = mutationCalls[mutationCalls.length - 1]?.[1] as
+			| ((event: { path: string }) => void)
+			| undefined;
+		if (!removeHandler) throw new Error("expected remove handler");
+		act(() => {
+			removeHandler({ path: "src/New File" });
+		});
+
+		await waitFor(() => {
+			expect(lastResetPaths()).not.toContain("src/New File");
 		});
 	});
 
@@ -731,6 +802,34 @@ describe("fileTreePanel", () => {
 			expect(revealMutateAsyncMock).toHaveBeenCalledWith({
 				path: null,
 			});
+		});
+	});
+
+	it("refreshes the current profile from the file context menu", async () => {
+		renderPanel();
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "Refresh" }));
+
+		await waitFor(() => {
+			expect(refreshMutateAsyncMock).toHaveBeenCalledOnce();
+		});
+		expect(useRefreshProfileWorkspaceCaches).toHaveBeenCalledWith(profileId);
+		expect(closeContextMenuMock).toHaveBeenCalledWith({
+			restoreFocus: false,
+		});
+	});
+
+	it("refreshes the current profile from the empty area context menu", async () => {
+		renderPanel();
+
+		fireEvent.contextMenu(screen.getByTestId("pierre-tree"), {
+			clientX: 30,
+			clientY: 40,
+		});
+		fireEvent.click(getLastMenuItem("Refresh"));
+
+		await waitFor(() => {
+			expect(refreshMutateAsyncMock).toHaveBeenCalledOnce();
 		});
 	});
 
@@ -787,7 +886,7 @@ describe("fileTreePanel", () => {
 
 		fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
 
-		expect(addPathMock).toHaveBeenCalledWith("src/New Folder/");
+		expect(lastResetPaths()).toContain("src/New Folder/");
 		expect(startRenamingMock).toHaveBeenCalledWith("src/New Folder/", {
 			removeIfCanceled: true,
 		});
@@ -802,19 +901,37 @@ describe("fileTreePanel", () => {
 		}
 
 		fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+		// Trees strips the trailing slash from folder paths in rename events.
 		act(() => {
 			renaming.onRename?.({
-				destinationPath: "src/components/",
+				destinationPath: "src/components",
 				isFolder: true,
-				sourcePath: "src/New Folder/",
+				sourcePath: "src/New Folder",
 			});
 		});
 
 		expect(createMutateAsyncMock).toHaveBeenCalledWith({
 			kind: "directory",
-			path: "src/components/",
+			path: "src/components",
 		});
 		expect(renameMutateAsyncMock).not.toHaveBeenCalled();
+	});
+
+	it("allows the pending folder draft to enter rename mode", () => {
+		contextMenuItemRef.current = { kind: "directory", path: "src/" };
+		renderPanel();
+		const renaming = useFileTreeOptionsRef.current?.renaming;
+		if (!renaming || typeof renaming === "boolean") {
+			throw new Error("expected renaming config");
+		}
+
+		fireEvent.click(screen.getByRole("menuitem", { name: "New Folder" }));
+
+		// Trees passes the folder's public path without a trailing slash; the
+		// draft still tracks the "src/New Folder/" form.
+		expect(
+			renaming.canRename?.({ isFolder: true, path: "src/New Folder" }),
+		).toBe(true);
 	});
 
 	it("allows folder rename when Trees passes the public folder path", () => {

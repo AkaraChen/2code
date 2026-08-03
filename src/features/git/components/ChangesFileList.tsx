@@ -178,7 +178,7 @@ function ChangesFileList({
 	return (
 		<>
 			<div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto">
-				<div className="sticky top-0 z-[1] flex items-center gap-2 border-b px-3 py-2.5 backdrop-blur">
+				<div className="sticky top-0 z-[1] flex items-center gap-2 border-b bg-background px-3 py-2.5">
 					<Checkbox
 						aria-label={m.gitCommitIncludeAll()}
 						checked={files.length > 0 && includedCount === files.length}
