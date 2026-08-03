@@ -1,5 +1,6 @@
 import { type AppLocale, type resources } from './i18n/resources'
 import { LocaleSwitch } from './locale-switch'
+import { htmlLang, organizationNode } from './structured-data'
 import { PageEffects } from './page-effects'
 import { SiteHeader } from './site-header'
 import { siteConfig } from './site-config'
@@ -56,20 +57,14 @@ export function HomePageContent({
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Organization',
-        '@id': `${siteConfig.url}/#organization`,
-        name: siteConfig.name,
-        url: siteConfig.url,
-        sameAs: [siteConfig.githubUrl],
-      },
+      organizationNode(),
       {
         '@type': 'WebSite',
         '@id': `${siteConfig.url}/#website`,
         name: siteConfig.name,
         url: pageUrl,
         description: t.metadata.description,
-        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+        inLanguage: htmlLang(locale),
         publisher: {
           '@id': `${siteConfig.url}/#organization`,
         },
@@ -82,7 +77,7 @@ export function HomePageContent({
         description: t.metadata.description,
         isPartOf: { '@id': `${siteConfig.url}/#website` },
         about: { '@id': `${siteConfig.url}/#software` },
-        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+        inLanguage: htmlLang(locale),
         // Machine-readable alternate (GEO: rel=alternate type=text/markdown)
         encodingFormat: 'text/html',
         relatedLink: [
@@ -124,7 +119,7 @@ export function HomePageContent({
   }
 
   return (
-    <div className="page-shell">
+    <div className="page-shell" lang={htmlLang(locale)}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
