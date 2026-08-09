@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
-import { lazy, useState, type ReactNode } from "react";
+import { lazy, useCallback, useState, type ReactNode } from "react";
 import SidebarGitPanel from "@/features/git/components/SidebarGitPanel";
 import FileTreePanel from "@/features/projects/FileTreePanel";
 import type { ProfileSidebarMode } from "@/features/projects/SidebarModeSwitch";
@@ -9,6 +9,8 @@ import {
 	LoadingError,
 	LoadingSpinner,
 } from "@/shared/components/Fallbacks";
+import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
+import * as m from "@/paraglide/messages.js";
 
 const ProfileNotesEditor = lazy(
 	() => import("@/features/profiles/ProfileNotesEditor"),
@@ -20,11 +22,17 @@ const SIDEBAR_PANEL_TRANSITION = {
 	damping: 34,
 	mass: 0.9,
 } as const;
-// Mirrors FileTreePanel's persisted width so all sidebar modes line up.
 const SIDEBAR_PANEL_MIN_WIDTH = 180;
 const SIDEBAR_PANEL_MAX_WIDTH = 560;
 const DEFAULT_SIDEBAR_PANEL_WIDTH = 208;
 const SIDEBAR_PANEL_STORAGE_KEY = "file-tree-panel";
+
+function clampSidebarPanelWidth(width: number) {
+	return Math.min(
+		SIDEBAR_PANEL_MAX_WIDTH,
+		Math.max(SIDEBAR_PANEL_MIN_WIDTH, width),
+	);
+}
 
 function readStoredSidebarPanelWidth() {
 	if (typeof window === "undefined") return DEFAULT_SIDEBAR_PANEL_WIDTH;
@@ -37,59 +45,35 @@ function readStoredSidebarPanelWidth() {
 		};
 		const width = parsed.state?.panelWidth ?? parsed.panelWidth;
 		return typeof width === "number" && Number.isFinite(width)
-			? Math.min(
-					SIDEBAR_PANEL_MAX_WIDTH,
-					Math.max(SIDEBAR_PANEL_MIN_WIDTH, width),
-				)
+			? clampSidebarPanelWidth(width)
 			: DEFAULT_SIDEBAR_PANEL_WIDTH;
 	} catch {
 		return DEFAULT_SIDEBAR_PANEL_WIDTH;
 	}
 }
 
-// Fixed-width sibling of FileTreePanel for the non-tree sidebar modes,
-// matching its stored width and open/close animation.
-function SidebarAltPanel({
-	isOpen,
-	children,
-}: {
-	isOpen: boolean;
-	children: ReactNode;
-}) {
-	const prefersReducedMotion = useReducedMotion() ?? false;
-	// Read once per mount — mode switches remount and pick up resizes.
-	const [panelWidth] = useState(readStoredSidebarPanelWidth);
+function writeStoredSidebarPanelWidth(width: number) {
+	try {
+		window.localStorage.setItem(
+			SIDEBAR_PANEL_STORAGE_KEY,
+			JSON.stringify({ state: { panelWidth: width }, version: 2 }),
+		);
+	} catch {
+		// Resizing should still work in-memory when storage is unavailable.
+	}
+}
 
+function SidebarPanelContent({ children }: { children: ReactNode }) {
 	return (
-		<div
-			className="h-full shrink-0"
-			style={{ pointerEvents: isOpen ? "auto" : "none" }}
-			aria-hidden={!isOpen}
-		>
-			<motion.div
-				initial={false}
-				animate={{ width: isOpen ? panelWidth : 0 }}
-				transition={
-					prefersReducedMotion ? { duration: 0 } : SIDEBAR_PANEL_TRANSITION
-				}
-				style={{
-					display: "flex",
-					height: "100%",
-					minWidth: 0,
-					overflow: "hidden",
-				}}
+		<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r">
+			<AsyncBoundary
+				fallback={<LoadingSpinner />}
+				errorFallback={({ error, onRetry }) => (
+					<LoadingError error={error} onRetry={onRetry} />
+				)}
 			>
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r">
-					<AsyncBoundary
-						fallback={<LoadingSpinner />}
-						errorFallback={({ error, onRetry }) => (
-							<LoadingError error={error} onRetry={onRetry} />
-						)}
-					>
-						{children}
-					</AsyncBoundary>
-				</div>
-			</motion.div>
+				{children}
+			</AsyncBoundary>
 		</div>
 	);
 }
@@ -110,40 +94,84 @@ export default function ProfileSidebar({
 	onOpenFile,
 }: ProfileSidebarProps) {
 	const isFilesMode = mode === "files";
+	const prefersReducedMotion = useReducedMotion() ?? false;
+	const [panelWidth, setPanelWidth] = useState(readStoredSidebarPanelWidth);
+	const updatePanelWidth = useCallback((width: number) => {
+		const nextWidth = clampSidebarPanelWidth(width);
+		setPanelWidth(nextWidth);
+		writeStoredSidebarPanelWidth(nextWidth);
+	}, []);
+	const resize = useHorizontalResize({
+		value: panelWidth,
+		min: SIDEBAR_PANEL_MIN_WIDTH,
+		max: SIDEBAR_PANEL_MAX_WIDTH,
+		disabled: !isOpen,
+		onChange: updatePanelWidth,
+	});
 
 	return (
-		<div className="flex h-full shrink-0 flex-col">
-			{/* File tree stays mounted across mode switches to keep expansion
-			    and selection state — hidden via CSS only */}
-			<div
-				className="min-h-0 flex-1"
-				style={{ display: isFilesMode ? "block" : "none" }}
+		<div
+			className="h-full shrink-0"
+			style={{ pointerEvents: isOpen ? "auto" : "none" }}
+			aria-hidden={!isOpen}
+		>
+			<motion.div
+				initial={false}
+				animate={{ width: isOpen ? panelWidth : 0 }}
+				transition={
+					prefersReducedMotion || resize.isDragging
+						? { duration: 0 }
+						: SIDEBAR_PANEL_TRANSITION
+				}
+				className="relative flex h-full min-w-0 flex-col"
+				style={{ overflow: "visible", willChange: "width" }}
 			>
-				<FileTreePanel
-					profileId={profile.id}
-					rootPath={profile.worktree_path}
-					isOpen={isOpen}
-					isActive={isActive && isFilesMode}
-					onOpenFile={onOpenFile}
-				/>
-			</div>
-
-			{mode === "git" && (
-				<SidebarAltPanel isOpen={isOpen}>
-					<SidebarGitPanel
+				{/* Keep the tree mounted across mode switches to preserve its UI state. */}
+				<div
+					className="min-h-0 flex-1"
+					style={{ display: isFilesMode ? "block" : "none" }}
+				>
+					<FileTreePanel
 						profileId={profile.id}
-						worktreePath={profile.worktree_path}
+						rootPath={profile.worktree_path}
+						isOpen={isOpen}
+						isActive={isActive && isFilesMode}
+						onOpenFile={onOpenFile}
 					/>
-				</SidebarAltPanel>
-			)}
+				</div>
 
-			{mode === "notes" && (
-				<SidebarAltPanel isOpen={isOpen}>
-					<div className="min-h-0 flex-1 overflow-hidden">
-						<ProfileNotesEditor profile={profile} />
-					</div>
-				</SidebarAltPanel>
-			)}
+				{mode === "git" && (
+					<SidebarPanelContent>
+						<SidebarGitPanel
+							profileId={profile.id}
+							worktreePath={profile.worktree_path}
+						/>
+					</SidebarPanelContent>
+				)}
+
+				{mode === "notes" && (
+					<SidebarPanelContent>
+						<div className="min-h-0 flex-1 overflow-hidden">
+							<ProfileNotesEditor profile={profile} />
+						</div>
+					</SidebarPanelContent>
+				)}
+
+				{isOpen && (
+					<div
+						role="separator"
+						aria-label={m.profileSidebarResizeSeparator()}
+						aria-orientation="vertical"
+						aria-valuemin={SIDEBAR_PANEL_MIN_WIDTH}
+						aria-valuemax={SIDEBAR_PANEL_MAX_WIDTH}
+						aria-valuenow={panelWidth}
+						tabIndex={0}
+						className="absolute top-0 -right-1 bottom-0 z-[1] w-2 cursor-col-resize focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-focus-ring)]"
+						onPointerDown={resize.handlePointerDown}
+						onKeyDown={resize.handleKeyDown}
+					/>
+				)}
+			</motion.div>
 		</div>
 	);
 }

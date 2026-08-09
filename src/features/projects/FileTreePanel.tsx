@@ -20,15 +20,13 @@ import {
   useEffect,
   useMemo,
   useReducer,
-  useRef,
-  useState } from
+  useRef } from
 "react";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator } from
 "@/components/ui/dropdown-menu";
 import * as m from "@/paraglide/messages.js";
-import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
 import { copyTextToClipboard } from "@/shared/lib/clipboard";
 import { getErrorMessage } from "@/shared/lib/errors";
 import {
@@ -55,20 +53,10 @@ import {
   useRevealPathInFileManager } from
 "./hooks";
 
-const FILE_TREE_PANEL_TRANSITION = {
-  type: "spring",
-  stiffness: 320,
-  damping: 34,
-  mass: 0.9
-} as const;
 const FILE_TREE_CONTENT_TRANSITION = {
   duration: 0.18,
   ease: [0.22, 1, 0.36, 1]
 } as const;
-const FILE_TREE_PANEL_MIN_WIDTH = 180;
-const FILE_TREE_PANEL_MAX_WIDTH = 560;
-const DEFAULT_FILE_TREE_PANEL_WIDTH = 208;
-const FILE_TREE_PANEL_STORAGE_KEY = "file-tree-panel";
 const TRAILING_PATH_SEPARATOR_RE = /[\\/]+$/;
 const FILE_TREE_CREATE_NAMES = {
   directory: "New Folder",
@@ -118,59 +106,6 @@ function getTreeItemPath(event: MouseEvent<HTMLElement>) {
 function toAbsolutePath(rootPath: string, relativePath: string) {
   const normalizedRoot = rootPath.replace(TRAILING_PATH_SEPARATOR_RE, "");
   return `${normalizedRoot}/${relativePath}`;
-}
-
-function clampFileTreePanelWidth(width: number) {
-  return Math.min(
-    FILE_TREE_PANEL_MAX_WIDTH,
-    Math.max(FILE_TREE_PANEL_MIN_WIDTH, width)
-  );
-}
-
-function sanitizeFileTreePanelWidth(width: unknown) {
-  return typeof width === "number" && Number.isFinite(width) ?
-  clampFileTreePanelWidth(width) :
-  DEFAULT_FILE_TREE_PANEL_WIDTH;
-}
-
-function readStoredFileTreePanelWidth() {
-  if (typeof window === "undefined") return DEFAULT_FILE_TREE_PANEL_WIDTH;
-  try {
-    const raw = window.localStorage.getItem(FILE_TREE_PANEL_STORAGE_KEY);
-    if (!raw) return DEFAULT_FILE_TREE_PANEL_WIDTH;
-    const parsed = JSON.parse(raw) as {
-      panelWidth?: unknown;
-      state?: {panelWidth?: unknown;};
-    };
-    return sanitizeFileTreePanelWidth(
-      parsed.state?.panelWidth ?? parsed.panelWidth
-    );
-  } catch {
-    return DEFAULT_FILE_TREE_PANEL_WIDTH;
-  }
-}
-
-function writeStoredFileTreePanelWidth(width: number) {
-  try {
-    window.localStorage.setItem(
-      FILE_TREE_PANEL_STORAGE_KEY,
-      JSON.stringify({ state: { panelWidth: width }, version: 2 })
-    );
-  } catch {
-
-    // Ignore restricted storage; resizing should still work in-memory.
-  }}
-
-function useFileTreePanelWidth() {
-  const [panelWidth, setPanelWidth] = useState(
-    readStoredFileTreePanelWidth
-  );
-  const updatePanelWidth = useCallback((width: number) => {
-    const nextWidth = clampFileTreePanelWidth(width);
-    setPanelWidth(nextWidth);
-    writeStoredFileTreePanelWidth(nextWidth);
-  }, []);
-  return [panelWidth, updatePanelWidth] as const;
 }
 
 function toPathCollisionKey(path: string) {
@@ -681,15 +616,6 @@ export default function FileTreePanel({
   const renameFileTreePathRef = useRef((_event: FileTreeRenameEvent) => {});
   const moveFileTreePathsRef = useRef((_event: FileTreeDropResult) => {});
   const prefersReducedMotion = useReducedMotion() ?? false;
-  const [panelWidth, setPanelWidth] = useFileTreePanelWidth();
-  const resize = useHorizontalResize({
-    value: panelWidth,
-    min: FILE_TREE_PANEL_MIN_WIDTH,
-    max: FILE_TREE_PANEL_MAX_WIDTH,
-    disabled: !isOpen,
-    onChange: setPanelWidth
-  });
-
   const {
     data: rootChildPaths,
     error: treePathsError,
@@ -1189,31 +1115,7 @@ export default function FileTreePanel({
   );
 
   return (
-    <>
-			<div
-        className="h-full shrink-0"
-        style={{ pointerEvents: isOpen ? "auto" : "none" }}
-        aria-hidden={!isOpen}>
-        
-				<motion.div
-            initial={false}
-            animate={{ width: isOpen ? panelWidth : 0 }}
-            transition={
-            prefersReducedMotion || resize.isDragging ?
-            { duration: 0 } :
-            FILE_TREE_PANEL_TRANSITION
-            }
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              height: "100%",
-              minWidth: 0,
-              overflow: "visible",
-              position: "relative",
-              willChange: "width"
-            }}>
-            
-						<div className="flex min-h-0 flex-1 overflow-hidden">
+		<div className="flex h-full min-h-0 min-w-0 overflow-hidden">
 							<motion.div
                   initial={false}
                   animate={{
@@ -1319,23 +1221,6 @@ export default function FileTreePanel({
                     }
 									</div>
 								</motion.div>
-						</div>
-						{isOpen &&
-            <div
-              role="separator"
-              aria-label={m.fileTreeResizeSeparator()}
-              aria-orientation="vertical"
-              aria-valuemin={FILE_TREE_PANEL_MIN_WIDTH}
-              aria-valuemax={FILE_TREE_PANEL_MAX_WIDTH}
-              aria-valuenow={panelWidth}
-              tabIndex={0}
-              className="absolute top-0 -right-1 bottom-0 z-[1] w-2 cursor-col-resize focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--app-focus-ring)]"
-              onPointerDown={resize.handlePointerDown}
-              onKeyDown={resize.handleKeyDown} />
-
-            }
-					</motion.div>
-			</div>
-		</>);
+		</div>);
 
 }
