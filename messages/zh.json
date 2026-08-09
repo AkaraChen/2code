@@ -154,7 +154,7 @@
 	"radiusXLarge": "超大",
 	"changes": "变更",
 	"history": "历史",
-	"fileTreeResizeSeparator": "调整文件树宽度",
+	"profileSidebarResizeSeparator": "调整侧边栏宽度",
 	"sidebarFilesTab": "文件",
 	"sidebarGitTab": "Git",
 	"gitOpenDiffView": "打开差异视图",
