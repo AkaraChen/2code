@@ -25,6 +25,12 @@
 - [GitHub](https://github.com/AkaraChen/2code)
 - [Latest release](https://github.com/AkaraChen/2code/releases/latest)
 
+## Also from Akara
+
+- [akr.moe](https://akr.moe) — Akara Chen's site (hub)
+- [Angel Engine](https://ag.akr.moe) — Local desktop for coding agents
+- [OGKit](https://ogkit.akr.moe) — Open Graph lint for web, extension, and CLI
+
 ## Install
 
 ```bash
