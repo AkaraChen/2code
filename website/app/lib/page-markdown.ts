@@ -54,6 +54,7 @@ export function renderHomeMarkdown(locale: AppLocale): string {
     t.hero.supporting,
     '',
     `- **${t.hero.kicker}**`,
+    `- ${t.hero.primaryCta}${t.hero.secondaryCta}`,
     `- **${t.hero.primaryCta}:** ${siteConfig.githubReleaseUrl}`,
     `- **${t.hero.secondaryCta}:** ${url}#features`,
     locale === 'zh-cn'
@@ -66,7 +67,9 @@ export function renderHomeMarkdown(locale: AppLocale): string {
     ...FEATURE_IDS.flatMap((id) => {
       const item = t.features.items[id]
       return [
-        `### ${item.title}`,
+        `### ${item.eyebrow}`,
+        '',
+        `#### ${item.title}`,
         '',
         item.copy,
         '',

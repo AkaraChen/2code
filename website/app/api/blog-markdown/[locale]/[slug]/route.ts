@@ -1,5 +1,5 @@
 import { renderBlogPostMarkdown } from '../../../../lib/page-markdown'
-import { textResponse } from '../../../../lib/agent-docs'
+import { textResponse } from '../../../../lib/text-response'
 import { getPost, listPosts } from '../../../../blog/lib/posts'
 import { supportedLocales } from '../../../../i18n/resources'
 import { parseLocale } from '../../locale'

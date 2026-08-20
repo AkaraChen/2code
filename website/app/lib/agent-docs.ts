@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { siteConfig } from '../site-config'
 
 export const LOCALE_COOKIE = '2code-locale'
@@ -80,20 +79,4 @@ export function markdownAlternatePath(pathname: string): string | null {
 
 export function agentMarkdownDirective(llmsTxtUrl: string): string {
   return `> For AI agents: a documentation index is available at [llms.txt](${llmsTxtUrl}). Markdown versions are available at \`.md\` URLs or by sending \`Accept: text/markdown\`.`
-}
-
-export function textResponse(
-  body: string,
-  contentType: 'text/markdown' | 'text/plain',
-): Response {
-  const etag = `"${createHash('sha256').update(body).digest('hex')}"`
-
-  return new Response(body, {
-    headers: {
-      'Content-Type': `${contentType}; charset=utf-8`,
-      'Cache-Control': AGENT_CACHE_CONTROL,
-      ETag: etag,
-      Vary: 'Accept',
-    },
-  })
 }

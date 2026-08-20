@@ -1,6 +1,5 @@
 import { listPosts } from '../blog/lib/posts'
 import {
-  blogFeedPath,
   blogListMarkdownPath,
   blogListPath,
   blogPostMarkdownPath,
@@ -112,6 +111,3 @@ export function absoluteUrl(pathname: string): string {
   return pathname === '/' ? siteConfig.url : `${siteConfig.url}${pathname}`
 }
 
-export function feedSitemapPaths(): readonly string[] {
-  return supportedLocales.map((locale) => blogFeedPath(locale))
-}

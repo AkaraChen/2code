@@ -1,5 +1,5 @@
 import { renderBlogIndexMarkdown } from '../../../lib/page-markdown'
-import { textResponse } from '../../../lib/agent-docs'
+import { textResponse } from '../../../lib/text-response'
 import { parseLocale } from '../locale'
 
 /*

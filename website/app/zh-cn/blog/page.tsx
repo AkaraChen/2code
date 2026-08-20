@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import { BlogListContent } from '../../blog/blog-list-content'
 import { listPosts } from '../../blog/lib/posts'
-import { blogListMarkdownPath, blogListPath } from '../../blog/lib/routes'
+import {
+  blogFeedPath,
+  blogListMarkdownPath,
+  blogListPath,
+} from '../../blog/lib/routes'
 import { getMessages } from '../../i18n/resources'
 import { buildPageMetadata } from '../../page-metadata'
 
@@ -15,6 +19,7 @@ export const metadata: Metadata = buildPageMetadata('zh-cn', {
   title: messages.blog.metadataTitle,
   description: messages.blog.metadataDescription,
   markdownPath: blogListMarkdownPath('zh-cn'),
+  rssPath: blogFeedPath('zh-cn'),
   languages: {
     en: blogListPath('en'),
     'zh-CN': blogListPath('zh-cn'),
