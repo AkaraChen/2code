@@ -1,4 +1,7 @@
+import { AgentDirective } from './agent-directive'
+import { blogListPath } from './blog/lib/routes'
 import { type AppLocale, type resources } from './i18n/resources'
+import { productPath } from './lib/product-pages'
 import { LocaleSwitch } from './locale-switch'
 import { htmlLang, organizationNode } from './structured-data'
 import { PageEffects } from './page-effects'
@@ -125,7 +128,10 @@ export function HomePageContent({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
 
-      <SiteHeader locale={locale} messages={t} />
+      <AgentDirective locale={locale} />
+      <div data-markdown-ignore>
+        <SiteHeader locale={locale} messages={t} />
+      </div>
       <PageEffects />
 
       <main>
@@ -154,7 +160,7 @@ export function HomePageContent({
                 aria-keyshortcuts="d"
               >
                 <span>{t.hero.primaryCta}</span>
-                <kbd className="keycap" aria-hidden="true">
+                <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
                   D
                 </kbd>
               </a>
@@ -165,7 +171,7 @@ export function HomePageContent({
                 aria-keyshortcuts="f"
               >
                 <span>{t.hero.secondaryCta}</span>
-                <kbd className="keycap" aria-hidden="true">
+                <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
                   F
                 </kbd>
               </a>
@@ -173,7 +179,7 @@ export function HomePageContent({
           </div>
 
           <div className="hero-shot reveal">
-            <figure className="shot-frame">
+            <figure className="shot-frame" data-markdown-ignore>
               <img
                 src="/screenshots/terminal-tabs.png"
                 alt={t.hero.shotAlt}
@@ -213,7 +219,7 @@ export function HomePageContent({
                 </div>
 
                 <div className="feature-shot">
-                  <figure className="shot-frame">
+                  <figure className="shot-frame" data-markdown-ignore>
                     <img
                       className="feature-image"
                       src={feature.screenshotSrc}
@@ -261,11 +267,17 @@ export function HomePageContent({
         </section>
       </main>
 
-      <footer className="site-footer">
+      <footer className="site-footer" data-markdown-ignore>
         <div className="shell footer-inner">
           <p className="caption">2code — {t.footer.tagline}</p>
 
           <div className="footer-links">
+            <a href={productPath(locale, 'faq')}>{t.nav.faq}</a>
+            <a href={productPath(locale, 'install')}>{t.footer.install}</a>
+            <a href={productPath(locale, 'getting-started')}>
+              {t.footer.gettingStarted}
+            </a>
+            <a href={blogListPath(locale)}>{t.nav.blog}</a>
             <a href={siteConfig.githubUrl} target="_blank" rel="noreferrer">
               {t.nav.github}
             </a>

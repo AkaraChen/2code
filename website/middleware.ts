@@ -1,34 +1,85 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { markdownAlternatePath, prefersMarkdown } from './app/lib/agent-docs'
+import { LOCALE_COOKIE, localeRedirectPath } from './app/lib/locale-redirect'
 
 /*
-  `/blog.md` and `/blog/<slug>.md` are the Markdown alternates the HTML pages
-  advertise. The App Router cannot own them directly — `/blog/[slug]` matches
-  `/blog/my-post.md` first, with `.md` as part of the slug — so they are
-  rewritten onto the route handlers under `/api/blog-markdown`.
+  Three jobs, in order:
 
-  Only these paths are rewritten. `/index.md` and `/zh-cn.md` are still plain
-  files in `public/` and are left alone.
+  1. Same-host HTTP 302 for the Chinese locale preference (replaces the old
+     `window.location.replace` boot script). Crawlers are not redirected.
+  2. Honor `Accept: text/markdown` by serving the `.md` twin when one exists.
+  3. Rewrite `.md` URLs onto route handlers. The App Router cannot own a
+     dynamic `*.md` segment — `/blog/[slug]` would swallow `/blog/foo.md`.
 */
+
 const BLOG_MARKDOWN = /^(\/zh-cn)?\/blog(?:\/([^/]+))?\.md$/
+const PAGE_MARKDOWN =
+  /^\/(?:index|zh-cn|(?:zh-cn\/)?(?:features|faq|install|getting-started))\.md$/
 
-export function middleware(request: NextRequest) {
-  const match = BLOG_MARKDOWN.exec(request.nextUrl.pathname)
+function rewriteMarkdown(request: NextRequest, pathname: string): NextResponse {
+  const blogMatch = BLOG_MARKDOWN.exec(pathname)
 
-  if (!match) {
-    return NextResponse.next()
+  if (blogMatch) {
+    const [, zhPrefix, slug] = blogMatch
+    const locale = zhPrefix ? 'zh-cn' : 'en'
+    const url = request.nextUrl.clone()
+    url.pathname = slug
+      ? `/api/blog-markdown/${locale}/${slug}`
+      : `/api/blog-markdown/${locale}`
+    const response = NextResponse.rewrite(url)
+    response.headers.append('Vary', 'Accept')
+    return response
   }
 
-  const [, zhPrefix, slug] = match
-  const locale = zhPrefix ? 'zh-cn' : 'en'
-  const url = request.nextUrl.clone()
+  if (PAGE_MARKDOWN.test(pathname)) {
+    const url = request.nextUrl.clone()
+    url.pathname = `/api/page-markdown${pathname}`
+    const response = NextResponse.rewrite(url)
+    response.headers.append('Vary', 'Accept')
+    return response
+  }
 
-  url.pathname = slug
-    ? `/api/blog-markdown/${locale}/${slug}`
-    : `/api/blog-markdown/${locale}`
+  return NextResponse.next()
+}
 
-  return NextResponse.rewrite(url)
+export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  const localeTarget = localeRedirectPath(
+    pathname,
+    request.cookies.get(LOCALE_COOKIE)?.value,
+    request.headers.get('accept-language'),
+    request.headers.get('user-agent'),
+  )
+
+  if (localeTarget) {
+    const url = request.nextUrl.clone()
+    url.pathname = localeTarget
+    const response = NextResponse.redirect(url, 302)
+    response.headers.set('Vary', 'Accept-Language, Cookie')
+    return response
+  }
+
+  if (pathname.endsWith('.md')) {
+    return rewriteMarkdown(request, pathname)
+  }
+
+  if (prefersMarkdown(request.headers.get('accept'))) {
+    const markdownPath = markdownAlternatePath(pathname)
+
+    if (markdownPath) {
+      return rewriteMarkdown(request, markdownPath)
+    }
+  }
+
+  const response = NextResponse.next()
+  response.headers.append('Vary', 'Accept')
+  return response
 }
 
 export const config = {
-  matcher: ['/blog.md', '/blog/:slug*', '/zh-cn/blog.md', '/zh-cn/blog/:slug*'],
+  matcher: [
+    '/',
+    '/((?!_next/static|_next/image|api/|screenshots/|favicon.ico|icon-|apple-touch|app-icon|icons.svg).*)',
+  ],
 }

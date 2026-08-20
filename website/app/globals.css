@@ -1097,6 +1097,26 @@ h3 {
   transform: none;
 }
 
+/*
+  Agent-facing llms.txt pointer. Clip-rect (not display:none) so the node stays
+  in the accessibility tree and survives HTML-to-markdown conversion.
+*/
+.agent-docs-directive {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.product-feature-list {
+  margin-top: 2rem;
+}
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 1000px) {

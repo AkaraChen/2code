@@ -1,4 +1,5 @@
-import { renderIndexMarkdown } from '../../../blog/lib/markdown-alternates'
+import { renderBlogIndexMarkdown } from '../../../lib/page-markdown'
+import { textResponse } from '../../../lib/text-response'
 import { parseLocale } from '../locale'
 
 /*
@@ -6,7 +7,7 @@ import { parseLocale } from '../locale'
   Prerendered per locale and re-rendered on the same window as the blog index,
   so a post that has just reached its publishAt shows up in both.
 */
-export const revalidate = 3600
+export const revalidate = 300
 
 export function generateStaticParams() {
   return [{ locale: 'en' }, { locale: 'zh-cn' }]
@@ -21,7 +22,5 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return new Response('Not found', { status: 404 })
   }
 
-  return new Response(await renderIndexMarkdown(locale), {
-    headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
-  })
+  return textResponse(await renderBlogIndexMarkdown(locale), 'text/markdown')
 }

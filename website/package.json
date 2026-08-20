@@ -9,6 +9,7 @@
     "build:drafts": "BLOG_INCLUDE_DRAFTS=1 bun run build",
     "build:scheduled": "BLOG_INCLUDE_SCHEDULED=1 bun run build",
     "lint": "eslint .",
+    "test": "bun test",
     "start": "next start",
     "preview": "bun run build && bun run start"
   },

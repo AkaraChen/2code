@@ -1,9 +1,8 @@
 import { renderLlmsTxt } from '../llms-txt'
+import { textResponse } from '../lib/text-response'
 
-export const dynamic = 'force-static'
+export const revalidate = 300
 
-export function GET() {
-  return new Response(renderLlmsTxt(), {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-  })
+export async function GET() {
+  return textResponse(await renderLlmsTxt(), 'text/plain')
 }
