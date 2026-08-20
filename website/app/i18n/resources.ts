@@ -88,6 +88,43 @@ export const resources = {
         languageLabel: 'Language',
         english: 'English',
         chinese: '简体中文',
+        install: 'Install',
+        gettingStarted: 'Getting started',
+      },
+      agent: {
+        htmlLead: 'For AI agents: a documentation index is available at',
+        htmlMarkdown:
+          'Markdown versions are available at the same URL with a .md suffix, or by sending Accept: text/markdown.',
+      },
+      pages: {
+        features: {
+          metadataTitle:
+            '2code Features | Persistent terminals, git, and worktrees',
+          metadataDescription:
+            'What 2code adds to a normal terminal: persistent sessions, in-app git review, and isolated worktree windows.',
+        },
+        faq: {
+          metadataTitle: '2code FAQ | Terminal workstation questions',
+          metadataDescription:
+            'Answers about who 2code is for, platforms, agents, templates, and session restore.',
+        },
+        install: {
+          metadataTitle: 'Install 2code | Homebrew and GitHub Releases',
+          metadataDescription:
+            'Install 2code on macOS with Homebrew, or download a DMG from GitHub Releases. Windows and Linux are experimental.',
+          title: 'Install 2code',
+          lede: 'macOS is the primary platform. Windows and Linux builds are experimental.',
+          brewHeading: 'Homebrew (macOS)',
+          releasesHeading: 'GitHub Releases',
+          releasesBody: 'DMG builds are also published on GitHub Releases.',
+        },
+        gettingStarted: {
+          metadataTitle: 'Getting started with 2code',
+          metadataDescription:
+            'Who 2code is for, how to install it, and what to expect on each platform.',
+          title: 'Getting started',
+          lede: '2code is a local terminal workstation for projects, worktrees, and AI coding agents.',
+        },
       },
       features: {
         items: {
@@ -250,6 +287,42 @@ export const resources = {
         languageLabel: '语言',
         english: 'English',
         chinese: '简体中文',
+        install: '安装',
+        gettingStarted: '快速开始',
+      },
+      agent: {
+        htmlLead: '给 AI agent：文档索引在',
+        htmlMarkdown:
+          '这些页面的 Markdown 版本可通过同路径加 .md 后缀获取，或发送 Accept: text/markdown。',
+      },
+      pages: {
+        features: {
+          metadataTitle: '2code 亮点 | 持久终端、Git 与 Worktree',
+          metadataDescription:
+            '2code 在普通终端之上加了持久会话、应用内 Git review，以及隔离的 worktree 窗口。',
+        },
+        faq: {
+          metadataTitle: '2code FAQ | 终端工作站常见问题',
+          metadataDescription:
+            '关于适用人群、平台、Agent、命令模板和会话恢复的说明。',
+        },
+        install: {
+          metadataTitle: '安装 2code | Homebrew 与 GitHub Releases',
+          metadataDescription:
+            '用 Homebrew 在 macOS 上安装 2code，或从 GitHub Releases 下载 DMG。Windows 与 Linux 为实验支持。',
+          title: '安装 2code',
+          lede: '当前以 macOS 为主；Windows 与 Linux 构建为实验支持。',
+          brewHeading: 'Homebrew（macOS）',
+          releasesHeading: 'GitHub Releases',
+          releasesBody: 'DMG 构建也会发布在 GitHub Releases。',
+        },
+        gettingStarted: {
+          metadataTitle: '开始使用 2code',
+          metadataDescription:
+            '2code 适合谁、怎么安装，以及各平台目前能期待什么。',
+          title: '快速开始',
+          lede: '2code 是面向项目、worktree 和 AI coding agent 的本地终端工作站。',
+        },
       },
       features: {
         items: {
