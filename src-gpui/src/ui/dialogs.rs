@@ -275,6 +275,9 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 								.when(kind == DialogKind::ChooseFile, |el| {
 									el.child(Icon::new(IconName::File).w(px(16.)))
 								})
+								.when(kind == DialogKind::EditTemplate, |el| {
+									el.child(Icon::new(IconName::SquareTerminal).w(px(16.)))
+								})
 								.child(div().font_semibold().child(title)),
 						)
 						.child(Button::new("dlg-x").ghost().xsmall().icon(IconName::Close).on_click({
