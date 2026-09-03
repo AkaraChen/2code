@@ -16,7 +16,9 @@ infra = { path = "../src-tauri/crates/infra" }
 service = { path = "../src-tauri/crates/service" }
 
 gpui = "0.2.2"
-gpui-component = "0.5.1"
+gpui-component = { version = "0.5.1", features = ["tree-sitter-languages"] }
+# Unify with tree-sitter-sequel (~1.2) and libsqlite3-sys (^1.2).
+cc = "=1.2.67"
 diesel = { version = "2", features = ["sqlite"] }
 anyhow = "1"
 dirs = "6"

@@ -150,12 +150,20 @@ fn window_controls() -> impl IntoElement {
 		.right_0()
 		.h(px(28.))
 		.flex()
-		.child(win_btn("min", "–", false, |window| window.minimize_window()))
-		.child(win_btn("max", "□", false, |window| window.zoom_window()))
-		.child(win_btn("close", "×", true, |window| window.remove_window()))
+		.child(win_btn("min", "–", "Minimize", false, |window| {
+			window.minimize_window()
+		}))
+		.child(win_btn("max", "□", "Maximize", false, |window| window.zoom_window()))
+		.child(win_btn("close", "×", "Close", true, |window| window.remove_window()))
 }
 
-fn win_btn(id: &'static str, label: &'static str, close: bool, on: impl Fn(&mut Window) + 'static) -> impl IntoElement {
+fn win_btn(
+	id: &'static str,
+	label: &'static str,
+	tip: &'static str,
+	close: bool,
+	on: impl Fn(&mut Window) + 'static,
+) -> impl IntoElement {
 	div()
 		.id(id)
 		.h(px(28.))
@@ -171,6 +179,12 @@ fn win_btn(id: &'static str, label: &'static str, close: bool, on: impl Fn(&mut 
 				el.bg(gpui::hsla(0., 0., 0.5, 0.12))
 			}
 		})
-		.on_mouse_down(MouseButton::Left, move |_, window, _| on(window))
-		.child(label)
+		.child(
+			Button::new(crate::ui::eid(format!("{id}-btn")))
+				.ghost()
+				.xsmall()
+				.label(label)
+				.tooltip(tip.to_string())
+				.on_click(move |_, window, _| on(window)),
+		)
 }

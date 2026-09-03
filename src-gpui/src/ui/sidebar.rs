@@ -29,6 +29,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.id("app-sidebar-wrap")
 		.relative()
 		.h_full()
+		.child(onboarding_popover(app, width, cx))
 		.child(
 			v_flex()
 				.id("app-sidebar")
@@ -433,44 +434,54 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 				},
 			))
 		})
-		.when(app.data.overlay.onboarding && !has_any_projects(app), |el| {
-			el.child(
-				v_flex()
-					.mt_2()
-					.p_3()
-					.rounded_lg()
-					.border_1()
-					.border_color(theme.border)
-					.bg(theme.background)
-					.gap_1()
-					.child(
-						h_flex()
-							.justify_between()
-							.child(div().font_semibold().text_sm().child(app.t("onboardingTourTitle")))
-							.child(
-								Button::new("onboarding-close")
-									.ghost()
-									.xsmall()
-									.icon(IconName::Close)
-									.on_click({
-										let view = view.clone();
-										move |_, _, cx| {
-											view.update(cx, |app, cx| {
-												app.data.overlay.onboarding = false;
-												cx.notify();
-											});
-										}
-									}),
-							),
-					)
-					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(app.t("onboardingTourDesc")),
-					),
-			)
-		})
+}
+
+fn onboarding_popover(app: &AppView, sidebar_width: f32, cx: &mut Context<AppView>) -> impl IntoElement {
+	if !app.data.overlay.onboarding || has_any_projects(app) {
+		return div().id("onboarding-hidden").into_any_element();
+	}
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	v_flex()
+		.id("onboarding-tour")
+		.absolute()
+		.top(px(148.))
+		.left(px(sidebar_width + 8.))
+		.w(px(260.))
+		.p_3()
+		.gap_1()
+		.rounded_lg()
+		.border_1()
+		.border_color(theme.border)
+		.bg(theme.background)
+		.shadow_lg()
+		.child(
+			h_flex()
+				.justify_between()
+				.child(div().font_semibold().text_sm().child(app.t("onboardingTourTitle")))
+				.child(
+					Button::new("onboarding-close")
+						.ghost()
+						.xsmall()
+						.icon(IconName::Close)
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									app.data.overlay.onboarding = false;
+									cx.notify();
+								});
+							}
+						}),
+				),
+		)
+		.child(
+			div()
+				.text_xs()
+				.text_color(theme.muted_foreground)
+				.child(app.t("onboardingTourDesc")),
+		)
+		.into_any_element()
 }
 
 fn has_any_projects(app: &AppView) -> bool {

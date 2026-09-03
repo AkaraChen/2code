@@ -582,6 +582,40 @@ pub fn is_document_preview(kind: &str, path: &str) -> bool {
 	matches!(kind, "pdf" | "office-pdf" | "office") || is_pdf(path) || is_office(path)
 }
 
+pub fn language_from_path(path: &str) -> &'static str {
+	let ext = Path::new(path)
+		.extension()
+		.and_then(|s| s.to_str())
+		.unwrap_or("")
+		.to_ascii_lowercase();
+	match ext.as_str() {
+		"rs" => "rust",
+		"ts" => "typescript",
+		"tsx" => "tsx",
+		"js" | "mjs" | "cjs" | "jsx" => "javascript",
+		"json" | "jsonc" => "json",
+		"py" => "python",
+		"go" => "go",
+		"toml" => "toml",
+		"yml" | "yaml" => "yaml",
+		"md" | "mdx" => "markdown",
+		"css" | "scss" => "css",
+		"html" | "htm" => "html",
+		"sh" | "bash" | "zsh" => "bash",
+		"c" | "h" => "c",
+		"cpp" | "cc" | "cxx" | "hpp" | "hh" => "cpp",
+		"java" => "java",
+		"rb" => "ruby",
+		"sql" => "sql",
+		"swift" => "swift",
+		"zig" => "zig",
+		"cs" => "csharp",
+		"diff" | "patch" => "diff",
+		"xml" => "html",
+		_ => "text",
+	}
+}
+
 pub fn file_name(path: &str) -> String {
 	Path::new(path)
 		.file_name()
@@ -600,5 +634,13 @@ mod tests {
 		assert!(is_document_preview("", "spec.pdf"));
 		assert!(is_document_preview("", "brief.docx"));
 		assert!(!is_document_preview("", "readme.md"));
+	}
+
+	#[test]
+	fn language_from_path_maps_extensions() {
+		assert_eq!(language_from_path("src/main.rs"), "rust");
+		assert_eq!(language_from_path("app.tsx"), "tsx");
+		assert_eq!(language_from_path("notes.md"), "markdown");
+		assert_eq!(language_from_path("unknown.xyz"), "text");
 	}
 }

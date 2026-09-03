@@ -105,23 +105,21 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 				.justify_center()
 				.gap_2()
 				.child(
-					div()
-						.id("topbar-project-name")
-						.font_semibold()
-						.text_sm()
+					Button::new("topbar-project-name")
+						.ghost()
+						.small()
+						.label(name)
+						.tooltip(worktree.clone())
 						.on_click({
 							let view = view.clone();
-							let worktree = worktree.clone();
 							move |_, _, cx| {
 								view.update(cx, |app, _| {
 									let _ = app
 										.backend
 										.reveal_path(app.data.current_profile.as_deref().unwrap_or(""), None);
-									let _ = worktree;
 								});
 							}
-						})
-						.child(name),
+						}),
 				)
 				.child(
 					h_flex()
@@ -598,9 +596,8 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 							if let Some(file) = app.data.current_ws().and_then(|w| w.files.get(ix)) {
 								if !file.preview {
 									let draft = file.draft.clone();
-									app.inputs.file_editor.update(cx, |s, cx| {
-										s.set_value(draft, window, cx);
-									});
+									let path = file.path.clone();
+									app.bind_file_editor(&path, &draft, window, cx);
 								}
 							}
 							cx.notify();

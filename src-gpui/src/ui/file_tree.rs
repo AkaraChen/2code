@@ -1,4 +1,6 @@
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use std::time::Duration;
+
+use gpui::{div, prelude::*, px, Animation, AnimationExt, Context, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
@@ -225,10 +227,19 @@ fn node_view(
 				}),
 		)
 		.when(node.is_dir && node.expanded, |el| {
-			el.children(
-				node.children
-					.iter()
-					.map(|child| node_view(app, child, depth + 1, profile, window, cx)),
+			el.child(
+				v_flex()
+					.id(crate::ui::eid(format!("tree-children-{path}")))
+					.children(
+						node.children
+							.iter()
+							.map(|child| node_view(app, child, depth + 1, profile, window, cx)),
+					)
+					.with_animation(
+						crate::ui::eid(format!("tree-open-{path}")),
+						Animation::new(Duration::from_millis(18)),
+						|this, delta| this.opacity(delta).ml(px(12.0 * (1.0 - delta))),
+					),
 			)
 		})
 		.into_any_element()

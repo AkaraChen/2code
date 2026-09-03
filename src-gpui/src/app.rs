@@ -123,7 +123,13 @@ impl AppView {
 			commit_body: input(window, cx, "", true),
 			notes: input(window, cx, "", true),
 			palette: input(window, cx, "", false),
-			file_editor: input(window, cx, "", true),
+			file_editor: cx.new(|cx| {
+				InputState::new(window, cx)
+					.multi_line(true)
+					.code_editor("text")
+					.line_number(true)
+					.soft_wrap(false)
+			}),
 			file_search: input(window, cx, "Find", false),
 			debug_search: input(window, cx, "", false),
 			branch_search: input(window, cx, "", false),
@@ -222,7 +228,16 @@ impl AppView {
 		view.reload_projects();
 		view.restore_all_sessions();
 		if view.data.projects.is_empty() {
-			view.data.overlay.onboarding = true;
+			cx.spawn(async move |this, cx| {
+				Timer::after(Duration::from_millis(300)).await;
+				let _ = this.update(cx, |app, cx| {
+					if app.data.projects.is_empty() && app.data.overlay.dialog.is_none() {
+						app.data.overlay.onboarding = true;
+						cx.notify();
+					}
+				});
+			})
+			.detach();
 		} else if let Some((project_id, profile_id)) = view.data.projects.first().and_then(|first| {
 			first
 				.profiles
@@ -505,9 +520,9 @@ impl AppView {
 		if let Some(ix) = ws.files.iter().position(|f| f.path == path) {
 			ws.active = Some(UnifiedTab::File { index: ix });
 			if !ws.files[ix].preview {
-				self.inputs.file_editor.update(cx, |s, cx| {
-					s.set_value(ws.files[ix].draft.clone(), window, cx);
-				});
+				let draft = ws.files[ix].draft.clone();
+				let file_path = ws.files[ix].path.clone();
+				self.bind_file_editor(&file_path, &draft, window, cx);
 			}
 			return;
 		}
@@ -527,10 +542,19 @@ impl AppView {
 			index: ws.files.len() - 1,
 		});
 		if !previewable {
-			self.inputs.file_editor.update(cx, |s, cx| {
-				s.set_value(content, window, cx);
-			});
+			self.bind_file_editor(path, &content, window, cx);
 		}
+	}
+
+	pub fn bind_file_editor(&mut self, path: &str, content: &str, window: &mut Window, cx: &mut Context<Self>) {
+		let lang = backend::language_from_path(path);
+		let show_gutter = !backend::is_markdown(path);
+		self.inputs.file_editor.update(cx, |s, cx| {
+			s.set_highlighter(lang, cx);
+			s.set_line_number(show_gutter, window, cx);
+			s.set_soft_wrap(false, window, cx);
+			s.set_value(content.to_string(), window, cx);
+		});
 	}
 
 	pub fn save_active_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -141,11 +141,12 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				),
 		)
 		.child(
-			h_flex()
+			div()
+				.id("text-editor")
 				.flex_1()
 				.min_h_0()
-				.child(line_gutter(&file.draft, app.data.prefs.font_size, &theme))
-				.child(div().flex_1().min_h_0().child(Input::new(&app.inputs.file_editor))),
+				.py(px(12.))
+				.child(Input::new(&app.inputs.file_editor)),
 		)
 		.into_any_element()
 }
@@ -286,30 +287,6 @@ pub fn line_number_count(text: &str) -> usize {
 	} else {
 		text.lines().count().max(1)
 	}
-}
-
-fn line_gutter(text: &str, font_size: f32, theme: &gpui_component::Theme) -> impl IntoElement {
-	let count = line_number_count(text);
-	let line_h = px((font_size * 1.4).max(16.0));
-	v_flex()
-		.id("line-gutter")
-		.w(px(48.))
-		.h_full()
-		.py(px(12.))
-		.px_1()
-		.bg(theme.muted)
-		.text_color(theme.muted_foreground)
-		.text_xs()
-		.font_family("monospace")
-		.children((1..=count).map(move |n| {
-			div()
-				.h(line_h)
-				.w_full()
-				.flex()
-				.justify_end()
-				.pr_1()
-				.child(format!("{n}"))
-		}))
 }
 
 fn checkerboard() -> impl IntoElement {

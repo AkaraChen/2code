@@ -29,10 +29,14 @@ pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 				.min_h_0()
 				.child(
 					h_flex()
+						.id("git-changes-header")
 						.w_full()
 						.px_2()
 						.py_1()
 						.gap_2()
+						.bg(theme.background)
+						.border_b_1()
+						.border_color(theme.border)
 						.child(
 							Checkbox::new("git-all")
 								.checked(!files.is_empty() && included.len() == files.len())
