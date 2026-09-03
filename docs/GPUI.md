@@ -2,7 +2,7 @@
 
 2code’s shipped desktop process is a native [GPUI](https://gpui.rs) application (`gpui_app::run()`, binary `2code`). `cargo run` in `src-tauri` starts GPUI, not Tauri. It uses [gpui-component](https://github.com/longbridge/gpui-component) widgets and talks to `service` / `repo` / `infra` directly.
 
-The old Tauri/React webview is behind `--features legacy-tauri`.
+The old Tauri/React webview is behind `--features legacy-tauri`. Default `code` / `2code` builds do not link WebKit.
 
 ## Style baseline
 

@@ -107,4 +107,8 @@ jobs:
             src-tauri -> target
 
       - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace
+
+      - name: Run legacy Tauri handler tests
+        if: runner.os == 'Linux'
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p code --features legacy-tauri --lib

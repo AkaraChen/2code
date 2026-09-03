@@ -429,7 +429,8 @@ impl AppRoot {
 								),
 						),
 				)
-				.child(
+				.child({
+					let spans = self.terminal_spans.clone();
 					div()
 						.id("terminal-output")
 						.flex_1()
@@ -437,13 +438,29 @@ impl AppRoot {
 						.font_family("monospace")
 						.text_sm()
 						.overflow_y_scroll()
-						.child(if output.is_empty() {
-							self.t("Waiting for shell output…", "等待终端输出…")
-								.to_string()
+						.child(if spans.is_empty() && output.is_empty() {
+							div()
+								.text_color(cx.theme().muted_foreground)
+								.child(
+									self.t("Waiting for shell output…", "等待终端输出…")
+										.to_string(),
+								)
+								.into_any_element()
+						} else if spans.is_empty() {
+							div().child(output).into_any_element()
 						} else {
-							output
-						}),
-				)
+							v_flex()
+								.gap_0()
+								.children(spans.into_iter().map(|line| {
+									h_flex().children(line.into_iter().map(|span| {
+										div()
+											.text_color(gpui::rgb(span.fg))
+											.child(span.text)
+									}))
+								}))
+								.into_any_element()
+						})
+				})
 				.child(
 					h_flex()
 						.p_2()

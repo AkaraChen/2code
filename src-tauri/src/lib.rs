@@ -1,7 +1,16 @@
+#[cfg(feature = "legacy-tauri")]
 mod bridge;
+#[cfg(feature = "legacy-tauri")]
 mod handler;
+#[cfg(feature = "legacy-tauri")]
 mod profiler;
 
+#[cfg(not(feature = "legacy-tauri"))]
+pub fn run() {
+	gpui_app::run();
+}
+
+#[cfg(feature = "legacy-tauri")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
 	// Fix PATH when launched from GUI (macOS Finder / Dock) so shell

@@ -1,3 +1,4 @@
+mod debug;
 mod dialogs;
 mod home;
 mod settings;

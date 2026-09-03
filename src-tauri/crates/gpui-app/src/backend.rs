@@ -83,6 +83,10 @@ impl TermSession {
 		self.parser.screen().contents()
 	}
 
+	fn spans(&self) -> Vec<Vec<crate::terminal::TermSpan>> {
+		crate::terminal::screen_spans(&self.parser)
+	}
+
 	fn title(&self) -> String {
 		crate::detector::last_osc_title(&self.raw)
 	}
@@ -264,6 +268,17 @@ impl Backend {
 			.lock()
 			.ok()
 			.and_then(|buffers| buffers.sessions.get(session_id).map(TermSession::screen))
+			.unwrap_or_default()
+	}
+
+	pub fn session_spans(
+		&self,
+		session_id: &str,
+	) -> Vec<Vec<crate::terminal::TermSpan>> {
+		self.buffers
+			.lock()
+			.ok()
+			.and_then(|buffers| buffers.sessions.get(session_id).map(TermSession::spans))
 			.unwrap_or_default()
 	}
 

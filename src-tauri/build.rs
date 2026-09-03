@@ -3,5 +3,7 @@ fn main() {
 		"cargo:rustc-env=TARGET={}",
 		std::env::var("TARGET").unwrap()
 	);
-	tauri_build::build()
+	if cfg!(feature = "legacy-tauri") {
+		tauri_build::build();
+	}
 }

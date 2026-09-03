@@ -3,6 +3,7 @@ mod backend;
 mod detector;
 mod i18n;
 mod settings;
+mod terminal;
 mod theme;
 mod views;
 

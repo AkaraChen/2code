@@ -1,8 +1,9 @@
 use std::time::Duration;
 
 use gpui::{
-	AppContext, Context, Entity, FocusHandle, InteractiveElement, IntoElement,
-	ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
+	AppContext, Context, Entity, FocusHandle, InteractiveElement,
+	IntoElement, KeyDownEvent, ParentElement, Render, Styled, Window, div,
+	prelude::FluentBuilder, px,
 };
 use gpui_component::{
 	ActiveTheme, Theme, ThemeMode, TitleBar, WindowExt, h_flex, input::InputState,
@@ -15,6 +16,7 @@ use crate::backend::{Backend, ProfileVm, ProjectVm};
 use crate::detector::{AgentStatus, AgentStatusDetector, DetectionInput};
 use crate::i18n;
 use crate::settings::AppSettings;
+use crate::terminal::{TermSpan, keystroke_to_bytes};
 use crate::theme::TwoCodePalette;
 use model::project::GitCommit;
 
@@ -73,6 +75,8 @@ pub struct AppRoot {
 	pub terminals: Vec<TerminalTab>,
 	pub active_session: Option<String>,
 	pub terminal_output: String,
+	pub terminal_spans: Vec<Vec<TermSpan>>,
+	pub debug_open: bool,
 	pub git_branch: String,
 	pub git_stats_label: String,
 	pub git_diff: String,
@@ -123,6 +127,8 @@ impl AppRoot {
 			terminals: Vec::new(),
 			active_session: None,
 			terminal_output: String::new(),
+			terminal_spans: Vec::new(),
+			debug_open: false,
 			git_branch: String::new(),
 			git_stats_label: String::new(),
 			git_diff: String::new(),
@@ -366,6 +372,7 @@ impl AppRoot {
 	pub fn refresh_terminal(&mut self) {
 		if let Some(session_id) = &self.active_session {
 			self.terminal_output = self.backend.take_output(session_id);
+			self.terminal_spans = self.backend.session_spans(session_id);
 			let title = self.backend.session_title(session_id);
 			let detector = self
 				.detectors
@@ -576,6 +583,39 @@ impl AppRoot {
 		self.persist_settings();
 		cx.notify();
 	}
+
+	pub fn handle_terminal_key(
+		&mut self,
+		event: &KeyDownEvent,
+		cx: &mut Context<Self>,
+	) {
+		let keystroke = &event.keystroke;
+		if (keystroke.modifiers.control || keystroke.modifiers.platform)
+			&& keystroke.key == "k"
+		{
+			return;
+		}
+		let Some(session_id) = self.active_session.clone() else {
+			return;
+		};
+		let Some(bytes) = keystroke_to_bytes(
+			&keystroke.key,
+			keystroke.key_char.as_deref(),
+			keystroke.modifiers.control,
+		) else {
+			return;
+		};
+		if let Err(error) = self.backend.write_pty(&session_id, &bytes) {
+			self.error = Some(error.to_string());
+		}
+		self.refresh_terminal();
+		cx.notify();
+	}
+
+	pub fn toggle_debug(&mut self, cx: &mut Context<Self>) {
+		self.debug_open = !self.debug_open;
+		cx.notify();
+	}
 }
 
 impl Render for AppRoot {
@@ -605,8 +645,28 @@ impl Render for AppRoot {
 			.child(
 				h_flex()
 					.id("shell")
+					.track_focus(&self.focus)
 					.flex_1()
 					.min_h_0()
+					.on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+						if (event.keystroke.modifiers.control
+							|| event.keystroke.modifiers.platform)
+							&& event.keystroke.key == "k"
+						{
+							this.open_command_palette(window, cx);
+							return;
+						}
+						if event.keystroke.modifiers.shift
+							&& event.keystroke.modifiers.platform
+							&& event.keystroke.key == "d"
+						{
+							this.toggle_debug(cx);
+							return;
+						}
+						if this.workspace_pane == WorkspacePane::Terminal {
+							this.handle_terminal_key(event, cx);
+						}
+					}))
 					.child(self.render_sidebar(cx))
 					.child(
 						v_flex()
@@ -643,5 +703,6 @@ impl Render for AppRoot {
 					.w(px(TwoCodePalette::SIDEBAR_WIDTH))
 					.bg(palette.sidebar),
 			)
+			.child(self.render_debug_overlay(cx))
 	}
 }

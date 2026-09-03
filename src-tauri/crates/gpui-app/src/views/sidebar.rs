@@ -1,5 +1,5 @@
 use gpui::{
-	Context, IntoElement, ParentElement, Styled, div, px,
+	Context, IntoElement, ParentElement, Styled, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
 	Icon, IconName, Selectable, StyledExt,
@@ -135,7 +135,18 @@ impl AppRoot {
 							.on_click(cx.listener(|this, _, window, cx| {
 								this.open_command_palette(window, cx);
 							})),
-					),
+					)
+					.when(self.settings.debug_mode, |this| {
+						this.child(
+							Button::new("open-debug")
+								.ghost()
+								.icon(IconName::Info)
+								.label("Debug")
+								.on_click(cx.listener(|this, _, _, cx| {
+									this.toggle_debug(cx);
+								})),
+						)
+					}),
 			)
 	}
 }
