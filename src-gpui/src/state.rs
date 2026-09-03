@@ -635,6 +635,7 @@ pub struct OverlayState {
 	pub md_preview: bool,
 	pub new_terminal_hover: bool,
 	pub delete_check_failed: bool,
+	pub open_link_menu: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -775,6 +776,7 @@ pub fn leftover_dialog_width(kind: DialogKind) -> f32 {
 		DialogKind::SwitchBranch => 448.0,
 		DialogKind::ProjectSettings => 512.0,
 		DialogKind::DebugLog => 512.0,
+		DialogKind::ChooseFile => 576.0,
 		_ => 384.0,
 	}
 }
@@ -936,6 +938,7 @@ mod tests {
 		assert_eq!(leftover_dialog_width(DialogKind::SwitchBranch), 448.0);
 		assert_eq!(leftover_dialog_width(DialogKind::DebugLog), 512.0);
 		assert_eq!(leftover_dialog_width(DialogKind::ReviewQueue), 896.0);
+		assert_eq!(leftover_dialog_width(DialogKind::ChooseFile), 576.0);
 		assert!(leftover_rename_disabled("", "App"));
 		assert!(leftover_rename_disabled("App", "App"));
 		assert!(leftover_rename_disabled("  App  ", "App"));

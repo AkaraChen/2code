@@ -206,21 +206,24 @@ fn win_btn(
 		.items_center()
 		.justify_center()
 		.text_xs()
+		.text_color(gpui::hsla(0., 0., 0.45, 1.))
+		.tooltip(crate::ui::tip(tip))
+		.on_click(move |_, window, _| on(window))
 		.hover(|el| {
 			if close {
 				el.bg(rgb(0xc42b1c)).text_color(gpui::white())
 			} else {
-				el.bg(gpui::hsla(0., 0., 0.5, 0.12))
+				el.bg(gpui::hsla(0., 0., 0.97, 1.))
 			}
 		})
-		.child(
-			Button::new(crate::ui::eid(format!("{id}-btn")))
-				.ghost()
-				.xsmall()
-				.label(label)
-				.tooltip(tip.to_string())
-				.on_click(move |_, window, _| on(window)),
-		)
+		.active(|el| {
+			if close {
+				el.bg(rgb(0xb32717)).text_color(gpui::white())
+			} else {
+				el.bg(gpui::hsla(0., 0., 0.97, 1.))
+			}
+		})
+		.child(label)
 }
 
 #[cfg(test)]

@@ -107,6 +107,15 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 								.when(kind == DialogKind::SwitchBranch, |el| {
 									el.child(crate::ui::leftover_branch_glyph(theme.muted_foreground))
 								})
+								.when(kind == DialogKind::CloseUnsaved, |el| {
+									el.child(Icon::new(IconName::TriangleAlert).w(px(16.)))
+								})
+								.when(kind == DialogKind::OpenLink, |el| {
+									el.child(Icon::new(IconName::ExternalLink).w(px(16.)))
+								})
+								.when(kind == DialogKind::ChooseFile, |el| {
+									el.child(Icon::new(IconName::File).w(px(16.)))
+								})
 								.child(div().font_semibold().child(title)),
 						)
 						.child(Button::new("dlg-x").ghost().xsmall().icon(IconName::Close).on_click({
@@ -502,72 +511,80 @@ fn dialog_body(
 				.into_any_element()
 		}
 		DialogKind::OpenLink => v_flex()
-			.gap_2()
+			.gap_1()
 			.child(div().text_sm().child(app.t("terminalOpenLinkConfirmDescription")))
 			.child(
 				div()
-					.text_xs()
-					.text_color(theme.muted_foreground)
+					.mt_3()
 					.font_family("monospace")
+					.text_sm()
+					.text_color(theme.muted_foreground)
 					.child(app.t("terminalOpenLinkUrlLabel")),
 			)
 			.child(
 				div()
 					.font_family("monospace")
-					.text_xs()
+					.text_sm()
 					.child(app.data.overlay.dialog_url.clone().unwrap_or_default()),
-			)
-			.child(
-				div()
-					.text_xs()
-					.text_color(theme.muted_foreground)
-					.child(app.t("browserOpenWith")),
-			)
-			.child(
-				h_flex()
-					.gap_1()
-					.flex_wrap()
-					.children(crate::platform::installed_browsers().into_iter().map(|browser| {
-						let cmd = browser.command;
-						Button::new(crate::ui::eid(format!("open-with-{cmd}")))
-							.xsmall()
-							.label(browser.id)
-							.on_click({
-								let view = view.clone();
-								move |_, _, cx| {
-									view.update(cx, |app, cx| {
-										app.open_url_with(cmd);
-										cx.notify();
-									});
-								}
-							})
-					})),
 			)
 			.into_any_element(),
 		DialogKind::ChooseFile => v_flex()
 			.gap_2()
-			.child(div().text_sm().child(app.t("terminalChooseFilePathDescription")))
-			.children(app.data.overlay.fuzzy_files.iter().map(|f| {
-				let path = f.path.clone();
+			.child(
 				div()
-					.id(crate::ui::eid(format!("fuzzy-{path}")))
-					.px_2()
-					.py_1()
-					.on_click({
-						let view = view.clone();
-						let path = path.clone();
-						move |_, window, cx| {
-							view.update(cx, |app, cx| {
-								if let Some(pid) = app.data.current_profile.clone() {
-									app.open_file(&pid, &path, window, cx);
+					.text_sm()
+					.text_color(theme.muted_foreground)
+					.child(app.t("terminalChooseFilePathDescription")),
+			)
+			.child(
+				div()
+					.id("choose-file-list")
+					.max_h(px(450.))
+					.overflow_y_scroll()
+					.rounded_md()
+					.border_1()
+					.border_color(theme.border)
+					.children(app.data.overlay.fuzzy_files.iter().map(|f| {
+						let path = f.path.clone();
+						h_flex()
+							.id(crate::ui::eid(format!("fuzzy-{path}")))
+							.min_h(px(44.))
+							.px_3()
+							.py_2()
+							.gap_3()
+							.border_b_1()
+							.border_color(theme.border)
+							.hover(|el| el.bg(theme.muted))
+							.on_click({
+								let view = view.clone();
+								let path = path.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										if let Some(pid) = app.data.current_profile.clone() {
+											app.open_file(&pid, &path, window, cx);
+										}
+										app.data.overlay.dialog = None;
+										cx.notify();
+									});
 								}
-								app.data.overlay.dialog = None;
-								cx.notify();
-							});
-						}
-					})
-					.child(f.name.clone())
-			}))
+							})
+							.child(crate::ui::file_icons::file_glyph(&f.name, false, false, 16.))
+							.child(
+								v_flex()
+									.min_w_0()
+									.flex_1()
+									.child(div().text_sm().font_medium().child(f.name.clone()))
+									.child(
+										div()
+											.font_family("monospace")
+											.text_xs()
+											.text_color(theme.muted_foreground)
+											.child(f.relative_path.clone()),
+									),
+							)
+							.child(Icon::new(IconName::File).w(px(14.)))
+					})),
+			)
 			.into_any_element(),
 		DialogKind::EditTemplate => v_flex()
 			.gap_2()
@@ -837,6 +854,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		return div().id("no-debug-footer").into_any_element();
 	}
 	let view = cx.entity();
+	let theme = cx.theme().clone();
 	let danger = matches!(
 		kind,
 		DialogKind::DeleteProject | DialogKind::DeleteProfile | DialogKind::CloseUnsaved
@@ -892,6 +910,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 							move |_, _, cx| {
 								view.update(cx, |app, cx| {
 									app.data.overlay.dialog = None;
+									app.data.overlay.open_link_menu = false;
 									cx.notify();
 								});
 							}
@@ -991,6 +1010,57 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 						}
 					}),
 			)
+			.when(kind == DialogKind::OpenLink, |el| {
+				el.child(
+					Button::new("dlg-open-with")
+						.primary()
+						.small()
+						.icon(IconName::ChevronDown)
+						.tooltip(app.t("browserOpenWith"))
+						.disabled(crate::platform::installed_browsers().is_empty())
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									app.data.overlay.open_link_menu = !app.data.overlay.open_link_menu;
+									cx.notify();
+								});
+							}
+						}),
+				)
+				.when(app.data.overlay.open_link_menu, |el| {
+					el.child(
+						v_flex()
+							.id("open-link-browsers")
+							.min_w(px(208.))
+							.p_1()
+							.rounded_lg()
+							.border_1()
+							.border_color(theme.border)
+							.bg(theme.popover)
+							.children(crate::platform::installed_browsers().into_iter().map(|browser| {
+								let cmd = browser.command;
+								div()
+									.id(crate::ui::eid(format!("open-with-{cmd}")))
+									.px_2()
+									.py_1()
+									.rounded_md()
+									.hover(|row| row.bg(theme.muted))
+									.on_click({
+										let view = view.clone();
+										move |_, _, cx| {
+											view.update(cx, |app, cx| {
+												app.open_url_with(cmd);
+												app.data.overlay.open_link_menu = false;
+												cx.notify();
+											});
+										}
+									})
+									.child(div().text_sm().child(browser.id))
+							})),
+					)
+				})
+			})
 		})
 		.into_any_element()
 }

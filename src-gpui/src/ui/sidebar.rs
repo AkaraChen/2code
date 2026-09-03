@@ -91,9 +91,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						.gap_1()
 						.overflow_hidden()
 						.when(!has_projects, |el| {
-							el.child(nav_row(
-								"home-row",
-								IconName::Inbox,
+							el.child(leftover_home_row(
 								app.t("home"),
 								app.data.route == Route::Home
 									|| app.data.overlay.sidebar_nav == Some(SidebarNavItem::Home),
@@ -106,6 +104,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 										});
 									}
 								},
+								cx,
 							))
 						})
 						.when_some(app.data.sidebar_error.clone(), |el, err| {
@@ -502,7 +501,7 @@ fn onboarding_popover(app: &AppView, sidebar_width: f32, cx: &mut Context<AppVie
 	v_flex()
 		.id("onboarding-tour")
 		.absolute()
-		.top(px(148.))
+		.top(px(leftover_onboarding_top(cfg!(target_os = "macos"))))
 		.left(px(sidebar_width + 8.))
 		.w(px(260.))
 		.p_3()
@@ -539,6 +538,11 @@ fn onboarding_popover(app: &AppView, sidebar_width: f32, cx: &mut Context<AppVie
 				.child(app.t("onboardingTourDesc")),
 		)
 		.into_any_element()
+}
+
+pub fn leftover_onboarding_top(macos_overlay: bool) -> f32 {
+	let chrome = if macos_overlay { 52. } else { 28. };
+	chrome + 36. + 32.
 }
 
 fn has_any_projects(app: &AppView) -> bool {
@@ -913,15 +917,15 @@ fn project_row(
 		})
 }
 
-fn nav_row(
-	id: &'static str,
-	icon: IconName,
+fn leftover_home_row(
 	label: String,
 	selected: bool,
 	on_click: impl Fn(&mut gpui::App) + 'static,
+	cx: &mut Context<AppView>,
 ) -> impl IntoElement {
+	let theme = cx.theme().clone();
 	div()
-		.id(id)
+		.id("home-row")
 		.px_2()
 		.py_1()
 		.rounded_md()
@@ -930,7 +934,7 @@ fn nav_row(
 		.child(
 			h_flex()
 				.gap_2()
-				.child(Icon::new(icon).w(px(14.)))
+				.child(crate::ui::leftover_house_glyph(theme.muted_foreground))
 				.child(div().text_sm().child(label)),
 		)
 }
@@ -964,4 +968,15 @@ pub fn agent_dot(status: AgentStatus) -> impl IntoElement {
 #[allow(dead_code)]
 fn _file_name(path: &str) -> String {
 	backend::file_name(path)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::leftover_onboarding_top;
+
+	#[test]
+	fn leftover_onboarding_anchors_right_of_add_project() {
+		assert_eq!(leftover_onboarding_top(true), 120.0);
+		assert_eq!(leftover_onboarding_top(false), 96.0);
+	}
 }

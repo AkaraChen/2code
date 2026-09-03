@@ -2321,6 +2321,7 @@ impl AppView {
 					return;
 				}
 				self.data.overlay.dialog_url = Some(url.clone());
+				self.data.overlay.open_link_menu = false;
 				self.data.overlay.dialog = Some(DialogKind::OpenLink);
 			}
 			crate::detector::Clickable::Path(path) => {

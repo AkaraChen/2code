@@ -5,7 +5,7 @@ use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
-use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable};
+use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
 use crate::backend;
@@ -87,93 +87,78 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.size_full()
 		.font(markdown::editor_font(app.data.prefs.font_family.clone()))
 		.text_size(px(app.data.prefs.font_size))
-		.child(
-			h_flex()
-				.w_full()
-				.px_2()
-				.py_1()
-				.gap_2()
-				.border_b_1()
-				.border_color(theme.border)
-				.when(app.data.overlay.file_search_open, |el| {
-					el.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
-						.child(
-							div()
-								.text_xs()
-								.text_color(theme.muted_foreground)
-								.child(if q.is_empty() {
-									app.t("fileViewerFindInFile")
-								} else if hit_count == 0 {
-									app.t("terminalSearchNoResults")
-								} else {
-									format!("{hit_ix}/{hit_count}")
-								}),
-						)
-						.child(
-							Button::new("file-find-prev")
-								.ghost()
-								.xsmall()
-								.icon(IconName::ChevronUp)
-								.tooltip(app.t("fileViewerPreviousMatch"))
-								.on_click({
-									let view = view.clone();
-									move |_, window, cx| {
-										view.update(cx, |app, cx| {
-											app.cycle_file_search(window, cx, false);
-											cx.notify();
-										});
-									}
-								}),
-						)
-						.child(
-							Button::new("file-find-next")
-								.ghost()
-								.xsmall()
-								.icon(IconName::ChevronDown)
-								.tooltip(app.t("fileViewerNextMatch"))
-								.on_click({
-									let view = view.clone();
-									move |_, window, cx| {
-										view.update(cx, |app, cx| {
-											app.cycle_file_search(window, cx, true);
-											cx.notify();
-										});
-									}
-								}),
-						)
-						.child(
-							Button::new("file-find-close")
-								.ghost()
-								.xsmall()
-								.icon(IconName::Close)
-								.tooltip(app.t("fileViewerCloseFileSearch"))
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											app.data.overlay.file_search_open = false;
-											cx.notify();
-										});
-									}
-								}),
-						)
-				})
-				.child(
-					Button::new("file-save")
-						.xsmall()
-						.primary()
-						.label(app.t("save"))
-						.on_click({
-							let view = view.clone();
-							move |_, window, cx| {
-								view.update(cx, |app, cx| {
-									app.save_active_file(window, cx);
-									cx.notify();
-								});
-							}
-						}),
-				),
-		)
+		.when(app.data.overlay.file_search_open, |el| {
+			el.child(
+				h_flex()
+					.w_full()
+					.px_2()
+					.py_1()
+					.gap_2()
+					.border_b_1()
+					.border_color(theme.border)
+					.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(if q.is_empty() {
+								app.t("fileViewerFindInFile")
+							} else if hit_count == 0 {
+								app.t("terminalSearchNoResults")
+							} else {
+								format!("{hit_ix}/{hit_count}")
+							}),
+					)
+					.child(
+						Button::new("file-find-prev")
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronUp)
+							.tooltip(app.t("fileViewerPreviousMatch"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										app.cycle_file_search(window, cx, false);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("file-find-next")
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronDown)
+							.tooltip(app.t("fileViewerNextMatch"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										app.cycle_file_search(window, cx, true);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("file-find-close")
+							.ghost()
+							.xsmall()
+							.icon(IconName::Close)
+							.tooltip(app.t("fileViewerCloseFileSearch"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.data.overlay.file_search_open = false;
+										cx.notify();
+									});
+								}
+							}),
+					),
+			)
+		})
 		.child(
 			div()
 				.id("text-editor")
@@ -185,44 +170,83 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.into_any_element()
 }
 
+pub fn leftover_preview_label(kind: &str) -> &'static str {
+	if kind == "office-pdf" {
+		"Office Preview"
+	} else {
+		"Preview"
+	}
+}
+
+pub fn leftover_archive_counts(entries: &[(String, String)]) -> (usize, usize) {
+	let files = entries.iter().filter(|(_, kind)| kind == "file").count();
+	(files, entries.len().saturating_sub(files))
+}
+
+fn leftover_preview_header(theme: &gpui_component::Theme, title: &str, right: String) -> impl IntoElement {
+	h_flex()
+		.w_full()
+		.min_h(px(36.))
+		.px_3()
+		.gap_3()
+		.border_b_1()
+		.border_color(theme.border)
+		.bg(theme.muted)
+		.justify_between()
+		.child(div().min_w_0().text_sm().font_medium().child(title.to_string()))
+		.child(
+			div()
+				.text_xs()
+				.text_color(theme.muted_foreground)
+				.whitespace_nowrap()
+				.child(right),
+		)
+}
+
 fn preview_pane(_app: &AppView, file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
-	let view = cx.entity();
-	let path = file.path.clone();
+	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
+		let (files, folders) = leftover_archive_counts(&file.archive_entries);
+		return v_flex()
+			.id("archive-preview")
+			.size_full()
+			.overflow_hidden()
+			.child(leftover_preview_header(
+				&theme,
+				&file.title,
+				format!("{files} files / {folders} folders"),
+			))
+			.child(
+				v_flex()
+					.flex_1()
+					.min_h_0()
+					.min_w_0()
+					.overflow_hidden()
+					.px(px(6.))
+					.py_1()
+					.children(file.archive_entries.iter().map(|(path, kind)| {
+						let is_dir = kind == "dir";
+						let depth = path.matches('/').count();
+						h_flex()
+							.gap_1()
+							.pl(px(4. + 12. * depth as f32))
+							.child(crate::ui::file_icons::file_glyph(path, is_dir, false, 13.))
+							.child(div().text_size(px(13.)).child(path.clone()))
+					})),
+			)
+			.into_any_element();
+	}
 	v_flex()
 		.id("binary-preview")
 		.size_full()
-		.child(
-			h_flex()
-				.w_full()
-				.min_h(px(36.))
-				.px_3()
-				.bg(theme.muted)
-				.justify_between()
-				.child(div().text_sm().child(file.title.clone()))
-				.child(
-					h_flex()
-						.gap_2()
-						.child(div().text_xs().child(
-							if backend::is_document_preview(&file.preview_kind, &file.path)
-								&& !backend::is_pdf(&file.path)
-								&& file.preview_kind != "pdf"
-							{
-								"Office Preview".to_string()
-							} else {
-								"Preview".to_string()
-							},
-						))
-						.child(Button::new("open-external").xsmall().label("Open").on_click({
-							let view = view.clone();
-							let path = path.clone();
-							move |_, _, cx| {
-								view.update(cx, |app, _| app.open_external(&path));
-							}
-						})),
-				),
-		)
+		.overflow_hidden()
+		.child(leftover_preview_header(
+			&theme,
+			&file.title,
+			leftover_preview_label(&file.preview_kind).to_string(),
+		))
 		.child(preview_body(file, cx))
+		.into_any_element()
 }
 
 fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -265,65 +289,16 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 				.child(img(png).id("pdf-preview-img").max_w_full().max_h_full())
 				.into_any_element();
 		}
-		let open_path = path.clone();
-		return v_flex()
-			.id("document-preview")
-			.size_full()
-			.bg(rgb(0xffffff))
-			.items_center()
-			.justify_center()
-			.gap_2()
-			.child(div().text_sm().text_color(rgb(0x1f2328)).child(file.title.clone()))
-			.child(div().text_xs().text_color(rgb(0x656d76)).child(
-				if file.preview_kind == "office-pdf" || backend::is_office(&file.path) {
-					"Office Preview".to_string()
-				} else {
-					"Preview".to_string()
-				},
-			))
-			.child(Button::new("doc-open").small().label("Open").on_click(move |_, _, _| {
-				let _ = open::that(&open_path);
-			}))
-			.into_any_element();
-	}
-	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
-		let files = file.archive_entries.iter().filter(|(_, k)| k != "dir").count();
-		let folders = file.archive_entries.iter().filter(|(_, k)| k == "dir").count();
-		return v_flex()
-			.id("archive-preview")
-			.size_full()
-			.p_3()
-			.gap_1()
-			.child(
-				div()
-					.text_xs()
-					.text_color(theme.muted_foreground)
-					.child(format!("{files} files / {folders} folders")),
-			)
-			.children(file.archive_entries.iter().map(|(path, kind)| {
-				let is_dir = kind == "dir";
-				let depth = path.matches('/').count();
-				h_flex()
-					.gap_1()
-					.pl(px(4. + 12. * depth as f32))
-					.child(crate::ui::file_icons::file_glyph(path, is_dir, false, 13.))
-					.child(div().text_size(px(13.)).child(path.clone()))
-			}))
-			.into_any_element();
 	}
 	v_flex()
 		.flex_1()
 		.items_center()
 		.justify_center()
-		.gap_2()
 		.child(
 			div()
-				.text_color(theme.muted_foreground)
-				.child(file.preview_kind.clone()),
-		)
-		.child(
-			div()
-				.text_xs()
+				.max_w(px(512.))
+				.px_6()
+				.text_sm()
 				.text_color(theme.muted_foreground)
 				.child(if file.binary_note.is_empty() {
 					"Preview unavailable".to_string()
@@ -343,27 +318,22 @@ pub fn line_number_count(text: &str) -> usize {
 }
 
 fn checkerboard() -> impl IntoElement {
-	let light = rgb(0x2a2e33);
-	let dark = rgb(0x1b1f23);
 	let cell = px(16.);
+	let mark = gpui::hsla(0., 0., 0.5, 0.08);
 	v_flex()
 		.id("image-checkerboard")
 		.absolute()
 		.inset_0()
 		.overflow_hidden()
 		.children((0..24).map(move |row| {
-			h_flex().children((0..40).map(move |col| {
-				div()
-					.w(cell)
-					.h(cell)
-					.bg(if (row + col) % 2 == 0 { light } else { dark })
-			}))
+			h_flex()
+				.children((0..40).map(move |col| div().w(cell).h(cell).when((row + col) % 2 == 0, |el| el.bg(mark))))
 		}))
 }
 
 #[cfg(test)]
 mod tests {
-	use super::line_number_count;
+	use super::{leftover_archive_counts, leftover_preview_label, line_number_count};
 
 	#[test]
 	fn line_number_count_empty_is_one() {
@@ -375,5 +345,24 @@ mod tests {
 		assert_eq!(line_number_count("a"), 1);
 		assert_eq!(line_number_count("a\nb"), 2);
 		assert_eq!(line_number_count("a\nb\nc"), 3);
+	}
+
+	#[test]
+	fn leftover_preview_label_is_office_only_for_office_pdf() {
+		assert_eq!(leftover_preview_label("office-pdf"), "Office Preview");
+		assert_eq!(leftover_preview_label("pdf"), "Preview");
+		assert_eq!(leftover_preview_label("image"), "Preview");
+	}
+
+	#[test]
+	fn leftover_archive_counts_match_file_preview_pane() {
+		assert_eq!(
+			leftover_archive_counts(&[
+				("a.txt".into(), "file".into()),
+				("src/".into(), "dir".into()),
+				("src/b.rs".into(), "file".into()),
+			]),
+			(2, 1)
+		);
 	}
 }
