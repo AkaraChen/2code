@@ -4,7 +4,7 @@ use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, Sizable, StyledExt};
 
 use crate::app::AppView;
 use crate::backend;
@@ -260,10 +260,17 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 					.child(format!("{files} files / {folders} folders")),
 			)
 			.children(file.archive_entries.iter().map(|(path, kind)| {
+				let is_dir = kind == "dir";
+				let depth = path.matches('/').count();
 				h_flex()
-					.gap_2()
-					.child(div().text_xs().text_color(theme.muted_foreground).child(kind.clone()))
-					.child(div().text_sm().child(path.clone()))
+					.gap_1()
+					.pl(px(4. + 12. * depth as f32))
+					.child(
+						Icon::new(crate::ui::file_icons::file_icon(path, is_dir, false))
+							.w(px(13.))
+							.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(path, is_dir))),
+					)
+					.child(div().text_size(px(13.)).child(path.clone()))
 			}))
 			.into_any_element();
 	}

@@ -520,7 +520,7 @@ impl SettingsView {
 										let view = view.clone();
 										move |_, _, cx| {
 											view.update(cx, |this, cx| {
-												this.prefs.font_size = (this.prefs.font_size + 1.0).min(22.0);
+												this.prefs.font_size = (this.prefs.font_size + 1.0).min(20.0);
 												this.persist(cx);
 												cx.notify();
 											});

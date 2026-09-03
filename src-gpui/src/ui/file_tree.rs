@@ -24,7 +24,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.size_full()
 		.px_1()
 		.py_1()
-		.text_sm()
+		.text_size(px(13.))
 		.on_mouse_down(MouseButton::Right, {
 			let view = view.clone();
 			move |ev, _, cx| {
@@ -215,13 +215,31 @@ fn node_view(
 						)
 						.into_any_element()
 				} else {
-					div().flex_1().child(node.name.clone()).into_any_element()
+					div()
+						.flex_1()
+						.when(
+							status.as_ref().is_some_and(|st| {
+								crate::app::git_status_kind(st) == crate::app::GitStatusKind::Deleted
+							}),
+							|el| el.line_through().text_color(theme.muted_foreground),
+						)
+						.child(node.name.clone())
+						.into_any_element()
 				})
 				.when_some(status.filter(|_| !renaming), |el, st| {
+					let kind = crate::app::git_status_kind(&st);
 					el.child(
 						div()
 							.text_xs()
-							.text_color(if st.contains('D') { theme.danger } else { theme.success })
+							.text_color(match kind {
+								crate::app::GitStatusKind::Added | crate::app::GitStatusKind::Untracked => {
+									theme.success
+								}
+								crate::app::GitStatusKind::Deleted => theme.danger,
+								crate::app::GitStatusKind::Renamed => theme.warning,
+								crate::app::GitStatusKind::Ignored => theme.muted_foreground,
+								crate::app::GitStatusKind::Modified => theme.warning,
+							})
 							.child(crate::app::file_status_badge(&st)),
 					)
 				}),

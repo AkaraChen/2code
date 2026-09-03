@@ -162,6 +162,7 @@ fn file_row(
 				.text_color(match badge {
 					"A" => theme.success,
 					"D" => theme.danger,
+					"R" | "M" => theme.warning,
 					_ => theme.muted_foreground,
 				})
 				.child(badge),

@@ -57,10 +57,17 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 							|| ev.keystroke.modifiers.platform && ev.keystroke.key == "f"
 						{
 							view.update(cx, |app, cx| {
-								if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
-									term.search_open = true;
-								}
+								app.open_find(window, cx);
 								cx.notify();
+							});
+							return;
+						}
+						if (ev.keystroke.modifiers.platform || ev.keystroke.modifiers.control)
+							&& ev.keystroke.key == "v"
+							&& !ev.keystroke.modifiers.alt
+						{
+							view.update(cx, |app, cx| {
+								app.paste_to_pty(cx);
 							});
 							return;
 						}
@@ -109,8 +116,10 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 						div()
 							.text_xs()
 							.text_color(cx.theme().muted_foreground)
-							.child(if hits.is_empty() {
-								"0/0".to_string()
+							.child(if search_query.is_empty() {
+								String::new()
+							} else if hits.is_empty() {
+								app.t("terminalSearchNoResults")
 							} else {
 								format!("{}/{}", hit_ix + 1, hits.len())
 							}),
@@ -152,6 +161,7 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 							.ghost()
 							.xsmall()
 							.icon(IconName::Close)
+							.tooltip(app.t("terminalSearchClose"))
 							.on_click({
 								let view = view.clone();
 								move |_, _, cx| {
@@ -297,6 +307,24 @@ fn brighten(color: u32) -> u32 {
 
 fn key_to_bytes(ev: &KeyDownEvent) -> Option<Vec<u8>> {
 	let key = ev.keystroke.key.as_str();
+	let mods = &ev.keystroke.modifiers;
+	if mods.shift && !mods.control && !mods.platform && !mods.alt && key == "enter" {
+		return Some(b"\n".to_vec());
+	}
+	if mods.platform && !mods.control && !mods.alt && !mods.shift {
+		match key {
+			"left" => return Some(b"\x1b[H".to_vec()),
+			"right" => return Some(b"\x1b[F".to_vec()),
+			_ => {}
+		}
+	}
+	if mods.alt && !mods.control && !mods.platform && !mods.shift {
+		match key {
+			"left" => return Some(b"\x1bb".to_vec()),
+			"right" => return Some(b"\x1bf".to_vec()),
+			_ => {}
+		}
+	}
 	if ev.keystroke.modifiers.control {
 		return match key {
 			"c" => Some(vec![0x03]),

@@ -34,6 +34,15 @@ pub struct CommitChanges;
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
 pub struct DismissOverlay;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct FindInTerminal;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct IncreaseFontSize;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct DecreaseFontSize;
 use crate::backend::{self, Backend};
 use crate::i18n::{self, Locale};
 use crate::prefs::{term_theme_by_name, Prefs, ThemePref};
@@ -953,7 +962,7 @@ impl AppView {
 		}
 		if is_dir {
 			self.toggle_dir(&profile, path);
-		} else {
+		} else if !self.is_deleted_tree_path(&profile, path) {
 			self.open_file(&profile, path, window, cx);
 		}
 	}
@@ -1006,6 +1015,47 @@ impl AppView {
 			Some(_) => {
 				self.data.notes_dirty_since = None;
 				self.save_notes(cx);
+			}
+		}
+	}
+
+	fn is_deleted_tree_path(&self, profile: &str, path: &str) -> bool {
+		self.data
+			.workspaces
+			.get(profile)
+			.and_then(|w| w.git_files.iter().find(|(p, _)| p == path || p.ends_with(path)))
+			.is_some_and(|(_, status)| git_status_kind(status) == GitStatusKind::Deleted)
+	}
+
+	pub fn open_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let file_tab = self
+			.data
+			.current_ws()
+			.and_then(|w| w.active.as_ref())
+			.is_some_and(|tab| matches!(tab, UnifiedTab::File { .. }));
+		if file_tab {
+			self.inputs.file_search.update(cx, |input, cx| {
+				input.focus(window, cx);
+			});
+			return;
+		}
+		if let Some(term) = self.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+			term.search_open = true;
+		}
+		self.inputs.term_search.update(cx, |input, cx| {
+			input.focus(window, cx);
+		});
+	}
+
+	pub fn bump_font_size(&mut self, delta: f32) {
+		self.data.prefs.font_size = (self.data.prefs.font_size + delta).clamp(10.0, 20.0);
+		self.persist_prefs();
+	}
+
+	pub fn paste_to_pty(&mut self, cx: &mut Context<Self>) {
+		if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+			if !text.is_empty() {
+				self.write_to_active_pty(text.as_bytes());
 			}
 		}
 	}
@@ -1905,6 +1955,13 @@ impl AppView {
 			KeyBinding::new("cmd-enter", CommitChanges, None),
 			KeyBinding::new("ctrl-enter", CommitChanges, None),
 			KeyBinding::new("escape", DismissOverlay, None),
+			KeyBinding::new("cmd-f", FindInTerminal, None),
+			KeyBinding::new("ctrl-shift-f", FindInTerminal, None),
+			KeyBinding::new("cmd-=", IncreaseFontSize, None),
+			KeyBinding::new("cmd-+", IncreaseFontSize, None),
+			KeyBinding::new("ctrl-=", IncreaseFontSize, None),
+			KeyBinding::new("cmd--", DecreaseFontSize, None),
+			KeyBinding::new("ctrl--", DecreaseFontSize, None),
 		]);
 	}
 
@@ -2141,16 +2198,40 @@ pub fn parse_diff_files(diff: &str) -> Vec<String> {
 	files
 }
 
-pub fn file_status_badge(status: &str) -> &'static str {
-	let s = status.to_ascii_uppercase();
-	if s.contains('A') || s.contains('?') {
-		"A"
-	} else if s.contains('D') {
-		"D"
-	} else if s.contains('R') {
-		"R"
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitStatusKind {
+	Added,
+	Untracked,
+	Deleted,
+	Renamed,
+	Ignored,
+	Modified,
+}
+
+pub fn git_status_kind(status: &str) -> GitStatusKind {
+	let s = status.trim().to_ascii_lowercase();
+	if s.contains("untrack") || s.contains('?') {
+		GitStatusKind::Untracked
+	} else if s.contains("added") || s == "a" || s.contains("add") {
+		GitStatusKind::Added
+	} else if s.contains("delet") || s == "d" {
+		GitStatusKind::Deleted
+	} else if s.contains("renam") || s == "r" {
+		GitStatusKind::Renamed
+	} else if s.contains("ignor") {
+		GitStatusKind::Ignored
 	} else {
-		"M"
+		GitStatusKind::Modified
+	}
+}
+
+pub fn file_status_badge(status: &str) -> &'static str {
+	match git_status_kind(status) {
+		GitStatusKind::Added | GitStatusKind::Untracked => "A",
+		GitStatusKind::Deleted => "D",
+		GitStatusKind::Renamed => "R",
+		GitStatusKind::Ignored => "I",
+		GitStatusKind::Modified => "M",
 	}
 }
 
@@ -2277,6 +2358,18 @@ impl gpui::Render for AppView {
 					cx.notify();
 				}
 			}))
+			.on_action(cx.listener(|this, _: &FindInTerminal, window, cx| {
+				this.open_find(window, cx);
+				cx.notify();
+			}))
+			.on_action(cx.listener(|this, _: &IncreaseFontSize, _, cx| {
+				this.bump_font_size(1.0);
+				cx.notify();
+			}))
+			.on_action(cx.listener(|this, _: &DecreaseFontSize, _, cx| {
+				this.bump_font_size(-1.0);
+				cx.notify();
+			}))
 			.child(ui::shell::render(self, window, cx))
 	}
 }
@@ -2296,7 +2389,7 @@ pub fn suggested_project_name(folder: &str, current_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-	use super::{suggested_project_name, unique_tree_name};
+	use super::{file_status_badge, git_status_kind, suggested_project_name, unique_tree_name, GitStatusKind};
 
 	#[test]
 	fn unique_tree_name_adds_numbers() {
@@ -2313,5 +2406,17 @@ mod tests {
 		assert_eq!(suggested_project_name("/tmp/my-app", ""), "my-app");
 		assert_eq!(suggested_project_name("/tmp/my-app", "   "), "my-app");
 		assert_eq!(suggested_project_name("/tmp/my-app", "Custom"), "Custom");
+	}
+
+	#[test]
+	fn file_status_badge_maps_word_and_letter_status() {
+		assert_eq!(file_status_badge("untracked"), "A");
+		assert_eq!(file_status_badge("added"), "A");
+		assert_eq!(file_status_badge("deleted"), "D");
+		assert_eq!(file_status_badge("renamed"), "R");
+		assert_eq!(file_status_badge("ignored"), "I");
+		assert_eq!(file_status_badge("modified"), "M");
+		assert_eq!(git_status_kind("deleted"), GitStatusKind::Deleted);
+		assert_eq!(git_status_kind("??"), GitStatusKind::Untracked);
 	}
 }
