@@ -1,0 +1,31 @@
+[package]
+name = "gpui-app"
+version = "0.1.0"
+edition = "2021"
+description = "Native GPUI desktop shell for 2code"
+
+[[bin]]
+name = "2code"
+path = "src/main.rs"
+
+[dependencies]
+model = { path = "../model" }
+repo = { path = "../repo" }
+infra = { path = "../infra" }
+service = { path = "../service" }
+
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
+
+anyhow = "1"
+dirs = "6"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -39,14 +39,12 @@ AI-assisted development creates more parallel state than a normal coding session
 
 ## Tech Stack
 
-- **Desktop shell**: Tauri 2
-- **Frontend**: React 19, TypeScript, Vite
-- **UI state**: Zustand + Immer
-- **Server state**: TanStack Query
-- **Backend**: Rust workspace
+- **Desktop shell**: Zed GPUI + [gpui-component](https://github.com/longbridge/gpui-component) native widgets
+- **Legacy shell**: Tauri 2 + React 19 (kept for existing tests)
+- **Backend**: Rust workspace (`model` / `repo` / `service` / `infra`)
 - **Database**: SQLite via Diesel migrations
 - **Terminal runtime**: integrated PTY service
-- **Package manager**: Bun
+- **Package manager**: Bun (legacy frontend) + Cargo (native app)
 
 ## Getting Started
 
@@ -65,29 +63,38 @@ AI-assisted development creates more parallel state than a normal coding session
 bun install
 ```
 
-### Run the desktop app
+### Run the native GPUI app
+
+```bash
+cd src-tauri && cargo run -p gpui-app
+```
+
+This opens the 2code workstation as a native GPUI window: sidebar, home, workspaces, settings, dialogs, Git status, and PTY terminals. It talks to the existing Rust service layer directly — there is no webview.
+
+### Run the legacy Tauri/React shell
 
 ```bash
 bun tauri dev
 ```
 
-### Run only the frontend
+### Run only the legacy frontend
 
 ```bash
 bun run dev
 ```
 
-### Build
+### Build the native app
 
 ```bash
-bun tauri build
+cd src-tauri && cargo build -p gpui-app --release
 ```
 
 ## Useful Commands
 
 | Command | Description |
 | --- | --- |
-| `bun tauri dev` | Run the full desktop app with frontend and Rust hot reload |
+| `cargo run -p gpui-app` | Run the native GPUI desktop app |
+| `bun tauri dev` | Run the legacy Tauri/React desktop shell |
 | `bun run dev` | Run the Vite frontend only |
 | `bun tauri build` | Build the production desktop app |
 | `cd src-tauri && cargo test` | Run Rust tests |
@@ -110,6 +117,7 @@ bun tauri build
 │   ├── crates/infra/           # DB, PTY, Git, watcher infrastructure
 │   ├── crates/service/         # Business logic
 │   ├── crates/repo/            # Diesel repositories
+│   ├── crates/gpui-app/        # Native GPUI desktop shell
 │   ├── crates/model/           # DTOs, Diesel models, error types
 │   └── migrations/             # Embedded Diesel migrations
 ├── messages/                   # i18n source messages

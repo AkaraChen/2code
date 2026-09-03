@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>2code style baseline</title>
+		<style>
+			:root {
+				--sidebar-width: 250px;
+				--radius: 0.625rem;
+				--background: oklch(1 0 0);
+				--foreground: oklch(0.145 0 0);
+				--card: oklch(1 0 0);
+				--primary: oklch(0.205 0 0);
+				--primary-foreground: oklch(0.985 0 0);
+				--muted: oklch(0.97 0 0);
+				--muted-foreground: oklch(0.556 0 0);
+				--border: oklch(0.922 0 0);
+				--sidebar: oklch(0.985 0 0);
+				--sidebar-foreground: oklch(0.145 0 0);
+				--sidebar-accent: oklch(0.97 0 0);
+				font-family:
+					Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+					Roboto, Helvetica, Arial, sans-serif;
+			}
+			html.dark {
+				--background: oklch(0.145 0 0);
+				--foreground: oklch(0.985 0 0);
+				--card: oklch(0.205 0 0);
+				--primary: oklch(0.922 0 0);
+				--primary-foreground: oklch(0.205 0 0);
+				--muted: oklch(0.269 0 0);
+				--muted-foreground: oklch(0.708 0 0);
+				--border: oklch(1 0 0 / 10%);
+				--sidebar: oklch(0.205 0 0);
+				--sidebar-foreground: oklch(0.985 0 0);
+				--sidebar-accent: oklch(0.269 0 0);
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #111;
+			}
+			.app {
+				display: flex;
+				height: 100vh;
+				width: 100vw;
+				background: var(--background);
+				color: var(--foreground);
+			}
+			.sidebar {
+				width: var(--sidebar-width);
+				background: var(--sidebar);
+				color: var(--sidebar-foreground);
+				border-right: 1px solid var(--border);
+				display: flex;
+				flex-direction: column;
+			}
+			.sidebar-header {
+				height: 52px;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 8px 12px;
+			}
+			.brand {
+				font-weight: 600;
+				font-size: 15px;
+			}
+			.sidebar-content {
+				flex: 1;
+				padding: 8px 8px 16px;
+			}
+			.group-label {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 8px 8px 6px;
+				font-size: 12px;
+				color: var(--muted-foreground);
+			}
+			.item {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 32px;
+				padding: 0 8px;
+				border-radius: 8px;
+				font-size: 14px;
+			}
+			.item.active,
+			.item:hover {
+				background: var(--sidebar-accent);
+			}
+			svg {
+				width: 16px;
+				height: 16px;
+				flex-shrink: 0;
+			}
+			.empty-icon svg {
+				width: 16px;
+				height: 16px;
+			}
+			.sidebar-footer {
+				padding: 8px;
+				border-top: 1px solid var(--border);
+			}
+			.main {
+				flex: 1;
+				background: var(--card);
+				display: flex;
+				flex-direction: column;
+				min-width: 0;
+			}
+			.page-header {
+				height: 52px;
+				border-bottom: 1px solid var(--border);
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 0 20px;
+				font-size: 14px;
+				font-weight: 600;
+			}
+			.empty {
+				flex: 1;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.empty-inner {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 8px;
+				text-align: center;
+				max-width: 20rem;
+			}
+			.empty-icon {
+				width: 32px;
+				height: 32px;
+				border-radius: 8px;
+				background: var(--muted);
+				display: grid;
+				place-items: center;
+				margin-bottom: 8px;
+			}
+			.empty-title {
+				font-size: 14px;
+				font-weight: 500;
+			}
+			.empty-desc {
+				font-size: 14px;
+				color: var(--muted-foreground);
+				line-height: 1.5;
+			}
+			.btn {
+				height: 32px;
+				padding: 0 10px;
+				border: 0;
+				border-radius: 8px;
+				background: var(--primary);
+				color: var(--primary-foreground);
+				font: inherit;
+				font-size: 14px;
+				font-weight: 500;
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+			}
+			.topbar {
+				height: 52px;
+				border-bottom: 1px solid var(--border);
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 0 12px;
+				font-size: 13px;
+			}
+			.topbar-left,
+			.topbar-right {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			}
+			.chip {
+				height: 24px;
+				padding: 0 8px;
+				border-radius: 6px;
+				background: var(--muted);
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				color: var(--muted-foreground);
+			}
+			.settings {
+				padding: 20px;
+			}
+			.tabs {
+				display: flex;
+				gap: 4px;
+				margin-bottom: 24px;
+			}
+			.tab {
+				height: 32px;
+				padding: 0 10px;
+				border-radius: 8px;
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				font-size: 13px;
+				color: var(--muted-foreground);
+			}
+			.tab.active {
+				background: var(--muted);
+				color: var(--foreground);
+			}
+			.field {
+				max-width: 28rem;
+				margin-bottom: 20px;
+			}
+			.field label {
+				display: block;
+				font-size: 13px;
+				font-weight: 500;
+				margin-bottom: 6px;
+			}
+			select {
+				height: 32px;
+				width: 100%;
+				border: 1px solid var(--border);
+				border-radius: 8px;
+				background: var(--background);
+				color: var(--foreground);
+				padding: 0 8px;
+			}
+			.row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+				max-width: 28rem;
+				margin-bottom: 16px;
+			}
+			.switch {
+				width: 32px;
+				height: 18px;
+				border-radius: 999px;
+				background: var(--muted);
+				position: relative;
+			}
+			.switch.on {
+				background: var(--primary);
+			}
+			.switch span {
+				position: absolute;
+				top: 2px;
+				left: 2px;
+				width: 14px;
+				height: 14px;
+				border-radius: 50%;
+				background: white;
+			}
+			.switch.on span {
+				left: 16px;
+				background: var(--primary-foreground);
+			}
+			.icon-btn {
+				width: 24px;
+				height: 24px;
+				border: 0;
+				background: transparent;
+				color: var(--muted-foreground);
+				display: grid;
+				place-items: center;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="app" id="app"></div>
+		<script>
+			const params = new URLSearchParams(location.search);
+			const screen = params.get("screen") || "home-light";
+			const dark = screen.endsWith("-dark");
+			document.documentElement.classList.toggle("dark", dark);
+
+			const icons = {
+				house: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224 120v96a8 8 0 0 1-8 8h-56a8 8 0 0 1-8-8v-56h-48v56a8 8 0 0 1-8 8H40a8 8 0 0 1-8-8v-96a8 8 0 0 1 2.3-5.7l88-88a8 8 0 0 1 11.4 0l88 88A8 8 0 0 1 224 120Z"/></svg>`,
+				folder: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216 72h-85.3l-27.7-20.8A16 16 0 0 0 93.3 48H40a16 16 0 0 0-16 16v128a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V88a16 16 0 0 0-16-16Z"/></svg>`,
+				plus: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M224 128a8 8 0 0 1-8 8h-80v80a8 8 0 0 1-16 0v-80H40a8 8 0 0 1 0-16h80V40a8 8 0 0 1 16 0v80h80a8 8 0 0 1 8 8Z"/></svg>`,
+				gear: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M128 80a48 48 0 1 0 48 48 48 48 0 0 0-48-48Zm95.6 37.1-12.2-7a76.2 76.2 0 0 0 0-20.2l12.2-7a8 8 0 0 0 2.9-10.9l-12-20.8a8 8 0 0 0-10.8-2.9l-12.2 7a76.5 76.5 0 0 0-17.5-10.1V32a8 8 0 0 0-8-8h-24a8 8 0 0 0-8 8v14.2a76.5 76.5 0 0 0-17.5 10.1l-12.2-7a8 8 0 0 0-10.8 2.9l-12 20.8a8 8 0 0 0 2.9 10.9l12.2 7a76.2 76.2 0 0 0 0 20.2l-12.2 7a8 8 0 0 0-2.9 10.9l12 20.8a8 8 0 0 0 10.8 2.9l12.2-7a76.5 76.5 0 0 0 17.5 10.1V224a8 8 0 0 0 8 8h24a8 8 0 0 0 8-8v-14.2a76.5 76.5 0 0 0 17.5-10.1l12.2 7a8 8 0 0 0 10.8-2.9l12-20.8a8 8 0 0 0-2.9-10.9Z"/></svg>`,
+				terminal: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M117.3 126.7 53.3 78.2a8 8 0 1 0-10.6 12l56 42.5-56 42.5a8 8 0 0 0 10.6 12l64-48.5a8 8 0 0 0 0-12.5ZM144 176h64a8 8 0 0 1 0 16h-64a8 8 0 0 1 0-16Z"/></svg>`,
+				sidebar: `<svg viewBox="0 0 256 256" fill="currentColor"><path d="M216 40H40a16 16 0 0 0-16 16v144a16 16 0 0 0 16 16h176a16 16 0 0 0 16-16V56a16 16 0 0 0-16-16ZM40 56h48v144H40Zm176 144H104V56h112Z"/></svg>`,
+			};
+
+			function sidebar(active) {
+				return `
+					<aside class="sidebar">
+						<div class="sidebar-header">
+							<div class="brand">2Code</div>
+							<button class="icon-btn">${icons.sidebar}</button>
+						</div>
+						<div class="sidebar-content">
+							<div class="item ${active === "home" ? "active" : ""}">${icons.house}<span>Home</span></div>
+							<div class="group-label"><span>Projects</span><span>${icons.plus}</span></div>
+							<div class="item ${active === "project" ? "active" : ""}">${icons.folder}<span>2code</span></div>
+						</div>
+						<div class="sidebar-footer">
+							<div class="item ${active === "settings" ? "active" : ""}">${icons.gear}<span>Settings</span></div>
+						</div>
+					</aside>
+				`;
+			}
+
+			const screens = {
+				"home-light": home,
+				"home-dark": home,
+				"workspace-light": workspace,
+				"workspace-dark": workspace,
+				"settings-light": settings,
+				"settings-dark": settings,
+			};
+
+			function home() {
+				return `
+					${sidebar("home")}
+					<main class="main">
+						<header class="page-header">${icons.folder}<span>Home</span></header>
+						<div class="empty">
+							<div class="empty-inner">
+								<div class="empty-icon">${icons.plus}</div>
+								<div class="empty-title">No projects yet</div>
+								<div class="empty-desc">Create a project from a local folder to start working in 2code.</div>
+							</div>
+						</div>
+					</main>
+				`;
+			}
+
+			function workspace() {
+				return `
+					${sidebar("project")}
+					<main class="main">
+						<div class="topbar">
+							<div class="topbar-left">
+								<strong>2code</strong>
+								<span class="chip">main</span>
+							</div>
+							<div class="topbar-right">
+								<span class="chip">+12 −3</span>
+							</div>
+						</div>
+						<div class="empty">
+							<div class="empty-inner">
+								<div class="empty-icon">${icons.terminal}</div>
+								<div class="empty-title">No terminals open</div>
+								<div class="empty-desc">Open a terminal to start working in this project.</div>
+								<button class="btn">${icons.plus} New Terminal</button>
+							</div>
+						</div>
+					</main>
+				`;
+			}
+
+			function settings() {
+				return `
+					${sidebar("settings")}
+					<main class="main">
+						<div class="settings">
+							<div class="tabs">
+								<div class="tab active">${icons.gear} General</div>
+								<div class="tab">${icons.terminal} Terminal</div>
+								<div class="tab">Templates</div>
+								<div class="tab">Notification</div>
+								<div class="tab">About</div>
+							</div>
+							<div class="field">
+								<label>Language</label>
+								<select><option>English</option><option>中文</option></select>
+							</div>
+							<div class="field">
+								<label>Theme</label>
+								<select><option>System</option><option selected>Light</option><option>Dark</option></select>
+							</div>
+							<div class="row">
+								<div>
+									<div class="empty-title">Debug mode</div>
+									<div class="empty-desc">Show the debug overlay and extra diagnostics.</div>
+								</div>
+								<div class="switch"><span></span></div>
+							</div>
+							<div class="row">
+								<div>
+									<div class="empty-title">Performance profile</div>
+									<div class="empty-desc">Record render timings for the current session.</div>
+								</div>
+								<div class="switch on"><span></span></div>
+							</div>
+						</div>
+					</main>
+				`;
+			}
+
+			document.getElementById("app").innerHTML = (screens[screen] || home)();
+		</script>
+	</body>
+</html>
