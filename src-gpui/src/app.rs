@@ -1732,7 +1732,7 @@ impl AppView {
 		}
 	}
 
-	pub fn commit_selected(&mut self, cx: &mut Context<Self>) {
+	pub fn commit_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
 		let Some(profile_id) = self.data.current_profile.clone() else {
 			return;
 		};
@@ -1752,11 +1752,18 @@ impl AppView {
 		};
 		match self.backend.commit_changes(&profile_id, &files, &summary, body) {
 			Ok(hash) => {
+				let short = crate::ui::git::leftover_short_hash(&hash);
 				self.data.push_toast(
 					ToastKind::Success,
 					self.t("gitCommitSuccessTitle"),
-					i18n::tf(self.data.locale, "gitCommitSuccessDescription", &[("hash", &hash)]),
+					i18n::tf(self.data.locale, "gitCommitSuccessDescription", &[("hash", &short)]),
 				);
+				self.inputs.commit_summary.update(cx, |s, cx| {
+					s.set_value("", window, cx);
+				});
+				self.inputs.commit_body.update(cx, |s, cx| {
+					s.set_value("", window, cx);
+				});
 				self.refresh_workspace(&profile_id);
 			}
 			Err(err) => self
@@ -3230,7 +3237,7 @@ impl gpui::Render for AppView {
 				this.save_active_file(window, cx);
 				cx.notify();
 			}))
-			.on_action(cx.listener(|this, _: &CommitChanges, _, cx| {
+			.on_action(cx.listener(|this, _: &CommitChanges, window, cx| {
 				let (no_files, ahead) = this
 					.data
 					.current_ws()
@@ -3239,7 +3246,7 @@ impl gpui::Render for AppView {
 				if no_files && ahead > 0 {
 					this.push_current();
 				} else {
-					this.commit_selected(cx);
+					this.commit_selected(window, cx);
 				}
 				cx.notify();
 			}))

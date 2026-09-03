@@ -1,10 +1,19 @@
 use gpui::{div, prelude::*, px, rgb, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{ActiveTheme, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
-use crate::state::{Route, ToastAction};
+use crate::state::{Route, ToastAction, ToastKind};
 use crate::ui::{debug, dialogs, palette, settings, sidebar, workspace};
+
+pub fn leftover_toast_icon(kind: ToastKind) -> IconName {
+	match kind {
+		ToastKind::Success => IconName::CircleCheck,
+		ToastKind::Info => IconName::Info,
+		ToastKind::Warning => IconName::TriangleAlert,
+		ToastKind::Error => IconName::CircleX,
+	}
+}
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
@@ -102,17 +111,19 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 		.flex_col()
 		.gap_2()
 		.children(app.data.toasts.iter().rev().take(4).map(|toast| {
-			let bg = theme.background;
 			let action = toast.action;
-			div()
+			let icon = leftover_toast_icon(toast.kind);
+			h_flex()
 				.id(crate::ui::eid(format!("toast-{}", toast.id)))
-				.w(px(320.))
+				.w(px(356.))
+				.gap_2()
+				.items_start()
 				.px_3()
 				.py_2()
 				.rounded_lg()
 				.border_1()
 				.border_color(theme.border)
-				.bg(bg)
+				.bg(theme.popover)
 				.shadow_md()
 				.on_click({
 					let view = view.clone();
@@ -124,30 +135,37 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 						});
 					}
 				})
-				.child(div().text_sm().font_semibold().child(toast.title.clone()))
-				.when(!toast.body.is_empty(), |el| {
-					el.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(toast.body.clone()),
-					)
-				})
-				.when(action == Some(ToastAction::OpenAbout), |el| {
-					el.child(
-						Button::new(crate::ui::eid(format!("toast-act-{}", toast.id)))
-							.xsmall()
-							.label(app.t("openUpdatePage"))
-							.on_click({
-								let view = view.clone();
-								move |_, window, cx| {
-									view.update(cx, |app, cx| {
-										settings::open_update_page(app, window, cx);
-									});
-								}
-							}),
-					)
-				})
+				.child(Icon::new(icon).w(px(16.)).h(px(16.)))
+				.child(
+					v_flex()
+						.flex_1()
+						.min_w_0()
+						.gap_1()
+						.child(div().text_sm().font_semibold().child(toast.title.clone()))
+						.when(!toast.body.is_empty(), |el| {
+							el.child(
+								div()
+									.text_xs()
+									.text_color(theme.muted_foreground)
+									.child(toast.body.clone()),
+							)
+						})
+						.when(action == Some(ToastAction::OpenAbout), |el| {
+							el.child(
+								Button::new(crate::ui::eid(format!("toast-act-{}", toast.id)))
+									.xsmall()
+									.label(app.t("openUpdatePage"))
+									.on_click({
+										let view = view.clone();
+										move |_, window, cx| {
+											view.update(cx, |app, cx| {
+												settings::open_update_page(app, window, cx);
+											});
+										}
+									}),
+							)
+						}),
+				)
 		}))
 }
 
@@ -203,4 +221,35 @@ fn win_btn(
 				.tooltip(tip.to_string())
 				.on_click(move |_, window, _| on(window)),
 		)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::leftover_toast_icon;
+	use crate::state::ToastKind;
+	use gpui_component::IconName;
+
+	fn icon_path(name: IconName) -> String {
+		gpui_component::IconNamed::path(name).to_string()
+	}
+
+	#[test]
+	fn leftover_toast_icons_follow_sonner() {
+		assert_eq!(
+			icon_path(leftover_toast_icon(ToastKind::Success)),
+			icon_path(IconName::CircleCheck)
+		);
+		assert_eq!(
+			icon_path(leftover_toast_icon(ToastKind::Info)),
+			icon_path(IconName::Info)
+		);
+		assert_eq!(
+			icon_path(leftover_toast_icon(ToastKind::Warning)),
+			icon_path(IconName::TriangleAlert)
+		);
+		assert_eq!(
+			icon_path(leftover_toast_icon(ToastKind::Error)),
+			icon_path(IconName::CircleX)
+		);
+	}
 }

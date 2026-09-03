@@ -2,7 +2,7 @@ use gpui::{div, img, prelude::*, px, Context, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use gpui_component::{Disableable, Selectable};
 
 use crate::app::{extract_file_hunk, file_status_badge, AppView};
@@ -28,63 +28,21 @@ pub fn render_panel(app: &mut AppView, window: &mut Window, cx: &mut Context<App
 			v_flex()
 				.flex_1()
 				.min_h_0()
-				.child(
-					h_flex()
-						.id("git-changes-header")
-						.w_full()
-						.px_2()
-						.py_1()
-						.gap_2()
-						.bg(theme.background)
-						.border_b_1()
-						.border_color(theme.border)
-						.child(
-							Checkbox::new("git-all")
-								.checked(!files.is_empty() && included.len() == files.len())
-								.on_click({
-									let view = view.clone();
-									let files = files.clone();
-									move |checked, _, cx| {
-										view.update(cx, |app, cx| {
-											if let Some(ws) = app.data.current_ws_mut() {
-												ws.git_included.clear();
-												if *checked {
-													ws.git_included.extend(files.iter().map(|(p, _)| p.clone()));
-												}
-											}
-											cx.notify();
-										});
-									}
-								}),
-						)
-						.child(div().flex_1().text_xs().child(crate::i18n::tf(
-							app.data.locale,
-							"changedFiles",
-							&[("count", &files.len().to_string())],
-						)))
-						.child(
-							Button::new("open-diff")
-								.ghost()
-								.xsmall()
-								.icon(IconName::Maximize)
-								.tooltip(app.t("gitOpenDiffView"))
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											app.open_git_diff();
-											cx.notify();
-										});
-									}
-								}),
-						),
-				)
+				.child(leftover_changes_header(app, &files, included.len(), true, cx))
 				.child(if files.is_empty() {
 					div()
-						.p_4()
-						.text_sm()
-						.text_color(theme.muted_foreground)
-						.child(app.t("noChangesDetected"))
+						.flex()
+						.flex_1()
+						.w_full()
+						.items_center()
+						.justify_center()
+						.p(px(24.))
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("noChangesDetected")),
+						)
 						.into_any_element()
 				} else {
 					v_flex()
@@ -123,6 +81,34 @@ pub fn leftover_step_commit_index(current: Option<usize>, delta: i32, count: usi
 	})
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeftoverIncludeState {
+	Empty,
+	None,
+	Partial,
+	All,
+}
+
+pub fn leftover_include_state(total: usize, included: usize) -> LeftoverIncludeState {
+	if total == 0 {
+		LeftoverIncludeState::Empty
+	} else if included == 0 {
+		LeftoverIncludeState::None
+	} else if included == total {
+		LeftoverIncludeState::All
+	} else {
+		LeftoverIncludeState::Partial
+	}
+}
+
+pub fn leftover_composer_shows_push(total_files: usize) -> bool {
+	total_files == 0
+}
+
+pub fn leftover_short_hash(hash: &str) -> String {
+	hash.chars().take(7).collect()
+}
+
 pub fn leftover_change_badge(status: &str) -> (&'static str, &'static str) {
 	match file_status_badge(status) {
 		"A" => ("A", "green"),
@@ -131,6 +117,122 @@ pub fn leftover_change_badge(status: &str) -> (&'static str, &'static str) {
 		"M" => ("M", "blue"),
 		other => (other, "muted"),
 	}
+}
+
+fn leftover_changes_header(
+	app: &AppView,
+	files: &[(String, String)],
+	included: usize,
+	show_maximize: bool,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let state = leftover_include_state(files.len(), included);
+	let names: Vec<String> = files.iter().map(|(p, _)| p.clone()).collect();
+	h_flex()
+		.id("git-changes-header")
+		.w_full()
+		.px_3()
+		.py(px(10.))
+		.gap_2()
+		.bg(theme.background)
+		.border_b_1()
+		.border_color(theme.border)
+		.child(leftover_include_checkbox(
+			"git-all",
+			state,
+			names,
+			app.t("gitCommitIncludeAll"),
+			view.clone(),
+		))
+		.child(
+			div()
+				.flex_1()
+				.text_xs()
+				.text_color(theme.muted_foreground)
+				.child(crate::i18n::tf(
+					app.data.locale,
+					"changedFiles",
+					&[("count", &files.len().to_string())],
+				)),
+		)
+		.when(show_maximize, |el| {
+			el.child(
+				Button::new("open-diff")
+					.ghost()
+					.xsmall()
+					.icon(IconName::Maximize)
+					.tooltip(app.t("gitOpenDiffView"))
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								app.open_git_diff();
+								cx.notify();
+							});
+						}
+					}),
+			)
+		})
+}
+
+fn leftover_include_checkbox(
+	id: &'static str,
+	state: LeftoverIncludeState,
+	names: Vec<String>,
+	tip: String,
+	view: gpui::Entity<AppView>,
+) -> impl IntoElement {
+	let include_all = {
+		let view = view.clone();
+		let names = names.clone();
+		move |cx: &mut gpui::App| {
+			view.update(cx, |app, cx| {
+				if let Some(ws) = app.data.current_ws_mut() {
+					ws.git_included = names.iter().cloned().collect();
+				}
+				cx.notify();
+			});
+		}
+	};
+	let include_none = {
+		let view = view.clone();
+		move |cx: &mut gpui::App| {
+			view.update(cx, |app, cx| {
+				if let Some(ws) = app.data.current_ws_mut() {
+					ws.git_included.clear();
+				}
+				cx.notify();
+			});
+		}
+	};
+	if state == LeftoverIncludeState::Partial {
+		return h_flex()
+			.id(id)
+			.w(px(16.))
+			.h(px(16.))
+			.items_center()
+			.justify_center()
+			.rounded(px(4.))
+			.border_1()
+			.border_color(gpui::hsla(0., 0., 0.55, 0.45))
+			.tooltip(crate::ui::tip(tip))
+			.on_click(move |_, _, cx| include_all(cx))
+			.child(Icon::new(IconName::Dash).w(px(12.)))
+			.into_any_element();
+	}
+	let _ = tip;
+	Checkbox::new(id)
+		.checked(state == LeftoverIncludeState::All)
+		.on_click(move |checked, _, cx| {
+			if *checked {
+				include_all(cx);
+			} else {
+				include_none(cx);
+			}
+		})
+		.into_any_element()
 }
 
 fn leftover_badge_color(kind: &str) -> gpui::Hsla {
@@ -282,122 +384,64 @@ fn commit_composer(
 	let view = cx.entity();
 	let theme = cx.theme().clone();
 	let summary_empty = app.inputs.commit_summary.read(cx).value().trim().is_empty();
+	let no_files = leftover_composer_shows_push(total);
+	let can_commit = !no_files && included > 0 && !summary_empty;
 	v_flex()
 		.id("commit-composer")
 		.w_full()
 		.border_t_1()
 		.border_color(theme.border)
-		.px_2()
+		.px(px(10.))
 		.py_2()
 		.gap_2()
 		.child(
 			div()
 				.text_xs()
-				.font_semibold()
+				.font_medium()
+				.text_color(theme.muted_foreground)
 				.child(app.t("gitCommitSectionTitle").to_ascii_uppercase()),
 		)
 		.child(div().text_xs().child(app.t("gitCommitSummary")))
-		.child(Input::new(&app.inputs.commit_summary))
+		.child(Input::new(&app.inputs.commit_summary).disabled(no_files))
 		.child(div().text_xs().child(app.t("gitCommitBody")))
-		.child(Input::new(&app.inputs.commit_body))
-		.child(
-			h_flex()
-				.justify_between()
-				.child(
-					div()
-						.text_xs()
-						.text_color(theme.muted_foreground)
-						.child(crate::i18n::tf(
-							app.data.locale,
-							"gitCommitIncludedCount",
-							&[
-								("includedCount", &included.to_string()),
-								("totalCount", &total.to_string()),
-							],
-						)),
-				)
-				.child(
-					h_flex()
-						.gap_1()
-						.child(
-							Button::new("inc-all")
-								.ghost()
-								.xsmall()
-								.label(app.t("gitCommitIncludeAll"))
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											if let Some(ws) = app.data.current_ws_mut() {
-												ws.git_included = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
-											}
-											cx.notify();
-										});
-									}
-								}),
-						)
-						.child(
-							Button::new("inc-none")
-								.ghost()
-								.xsmall()
-								.label(app.t("gitCommitIncludeNone"))
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											if let Some(ws) = app.data.current_ws_mut() {
-												ws.git_included.clear();
-											}
-											cx.notify();
-										});
-									}
-								}),
-						),
-				),
-		)
-		.child(
-			h_flex()
-				.gap_2()
-				.child(
-					Button::new("commit")
-						.primary()
-						.small()
-						.label(app.t("gitCommitButton"))
-						.disabled(included == 0 || summary_empty)
-						.on_click({
-							let view = view.clone();
-							move |_, _, cx| {
-								view.update(cx, |app, cx| {
-									app.commit_selected(cx);
-									cx.notify();
-								});
-							}
-						}),
-				)
-				.when(ahead > 0, |el| {
-					el.child(
-						Button::new("push")
-							.small()
-							.icon(IconName::ArrowUp)
-							.label(app.t("gitPushButton"))
-							.on_click({
-								let view = view.clone();
-								move |_, _, cx| {
-									view.update(cx, |app, cx| {
-										app.push_current();
-										cx.notify();
-									});
-								}
-							}),
-					)
-				}),
-		)
-		.child(
-			div()
-				.text_xs()
-				.text_color(theme.muted_foreground)
-				.child(app.t("gitCommitShortcutHint")),
-		)
+		.child(Input::new(&app.inputs.commit_body).disabled(no_files))
+		.child(h_flex().w_full().justify_end().child(if no_files {
+			Button::new("push")
+				.small()
+				.disabled(ahead == 0)
+				.icon(IconName::ArrowUp)
+				.label(if ahead > 0 {
+					format!("{ahead} {}", app.t("gitPushButton"))
+				} else {
+					app.t("gitPushButton")
+				})
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.push_current();
+							cx.notify();
+						});
+					}
+				})
+				.into_any_element()
+		} else {
+			Button::new("commit")
+				.primary()
+				.small()
+				.label(app.t("gitCommitButton"))
+				.disabled(!can_commit)
+				.on_click({
+					let view = view.clone();
+					move |_, window, cx| {
+						view.update(cx, |app, cx| {
+							app.commit_selected(window, cx);
+							cx.notify();
+						});
+					}
+				})
+				.into_any_element()
+		}))
 }
 
 pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -568,7 +612,20 @@ pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Conte
 										.flex_1()
 										.min_h_0()
 										.child(if files.is_empty() {
-											div().p_4().child(app.t("noChangesDetected")).into_any_element()
+											div()
+												.flex()
+												.flex_1()
+												.w_full()
+												.items_center()
+												.justify_center()
+												.p_8()
+												.child(
+													div()
+														.text_sm()
+														.text_color(theme.muted_foreground)
+														.child(app.t("noChangesDetected")),
+												)
+												.into_any_element()
 										} else {
 											v_flex()
 												.flex_1()
@@ -1212,7 +1269,10 @@ fn image_preview(app: &AppView, path: &str, diff: &str) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-	use super::{file_display_parts, leftover_change_badge, leftover_step_commit_index, leftover_step_index};
+	use super::{
+		file_display_parts, leftover_change_badge, leftover_composer_shows_push, leftover_include_state,
+		leftover_short_hash, leftover_step_commit_index, leftover_step_index, LeftoverIncludeState,
+	};
 
 	#[test]
 	fn leftover_file_display_parts_split_git_paths() {
@@ -1251,5 +1311,25 @@ mod tests {
 		assert_eq!(leftover_change_badge("renamed"), ("R", "amber"));
 		assert_eq!(leftover_change_badge("A"), ("A", "green"));
 		assert_eq!(leftover_change_badge("M"), ("M", "blue"));
+	}
+
+	#[test]
+	fn leftover_composer_push_only_when_clean() {
+		assert!(leftover_composer_shows_push(0));
+		assert!(!leftover_composer_shows_push(1));
+	}
+
+	#[test]
+	fn leftover_include_state_is_tri_state() {
+		assert_eq!(leftover_include_state(0, 0), LeftoverIncludeState::Empty);
+		assert_eq!(leftover_include_state(3, 0), LeftoverIncludeState::None);
+		assert_eq!(leftover_include_state(3, 2), LeftoverIncludeState::Partial);
+		assert_eq!(leftover_include_state(3, 3), LeftoverIncludeState::All);
+	}
+
+	#[test]
+	fn leftover_commit_hash_is_seven_chars() {
+		assert_eq!(leftover_short_hash("abcdef1234567890"), "abcdef1");
+		assert_eq!(leftover_short_hash("abc"), "abc");
 	}
 }
