@@ -149,6 +149,112 @@ impl AppRoot {
 		});
 	}
 
+	pub(crate) fn open_delete_profile_dialog(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let Some(profile_id) = self
+			.current_profile()
+			.map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let view = cx.entity();
+		window.open_alert_dialog(cx, move |alert, _, _| {
+			alert
+				.title("Delete Profile")
+				.description(
+					"Remove this worktree profile and its terminals. This cannot be undone.",
+				)
+				.show_cancel(true)
+				.button_props(
+					DialogButtonProps::default()
+						.ok_text("Delete")
+						.ok_variant(ButtonVariant::Danger)
+						.cancel_text("Cancel")
+						.show_cancel(true),
+				)
+				.on_ok({
+					let view = view.clone();
+					let profile_id = profile_id.clone();
+					move |_, _, cx| {
+						view.update(cx, |this, cx| {
+							this.confirm_delete_profile(&profile_id, cx);
+						});
+						true
+					}
+				})
+		});
+	}
+
+	pub(crate) fn open_create_file_dialog(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let name = self.new_file_name.clone();
+		let view = cx.entity();
+		window.open_dialog(cx, move |dialog, _, _| {
+			dialog
+				.title("New File")
+				.width(px(420.))
+				.child(Input::new(&name).cleanable(true))
+				.button_props(
+					DialogButtonProps::default()
+						.ok_text("Create")
+						.cancel_text("Cancel")
+						.show_cancel(true),
+				)
+				.on_ok({
+					let view = view.clone();
+					move |_, window, cx| {
+						view.update(cx, |this, cx| {
+							this.create_named_file(window, cx);
+						});
+						true
+					}
+				})
+		});
+	}
+
+	pub(crate) fn open_branch_dialog(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let branches = self.branches.clone();
+		let view = cx.entity();
+		window.open_dialog(cx, move |dialog, _, _| {
+			dialog
+				.title("Switch Branch")
+				.width(px(420.))
+				.child(
+					v_flex().gap_1().children(branches.clone().into_iter().map(|branch| {
+						let name = branch.name.clone();
+						let label = format!(
+							"{}{}{}",
+							if branch.is_current { "● " } else { "" },
+							name,
+							if branch.is_used { " (in use)" } else { "" }
+						);
+						let view = view.clone();
+						h_flex().child(
+							Button::new(format!("branch-{name}"))
+								.ghost()
+								.label(label)
+								.on_click(move |_, _, cx| {
+									view.update(cx, |this, cx| {
+										this.checkout_current_folder_branch(&name, cx);
+									});
+								}),
+						)
+					})),
+				)
+				.button_props(DialogButtonProps::default().ok_text("Close"))
+		});
+	}
+
 	pub(crate) fn open_command_palette(
 		&mut self,
 		window: &mut Window,
@@ -194,6 +300,20 @@ impl AppRoot {
 							let view = view.clone();
 							move |_, _, cx| {
 								view.update(cx, |this, cx| this.new_terminal(cx));
+							}
+						}))
+						.child(palette_action("cmd-commit", "Commit Changes", {
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |this, cx| {
+									this.commit_selected_changes(window, cx);
+								});
+							}
+						}))
+						.child(palette_action("cmd-push", "Push Branch", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| this.push_current_branch(cx));
 							}
 						}))
 						.child(palette_action("cmd-theme", "Toggle Theme", {

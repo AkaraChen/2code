@@ -26,23 +26,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Build macOS packages on native CPU runners so app architectures stay aligned.
           - name: macOS arm64
             platform: macos-15
             rustTargets: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin
+            targetDir: aarch64-apple-darwin
+            asset: 2code-macos-arm64
+            binary: 2code
           - name: macOS x64
             platform: macos-15-intel
             rustTargets: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
+            targetDir: x86_64-apple-darwin
+            asset: 2code-macos-x64
+            binary: 2code
           - name: Linux x64
             platform: ubuntu-24.04
             rustTargets: ""
-            args: ""
+            targetDir: ""
+            asset: 2code-linux-x64
+            binary: 2code
           - name: Windows x64
             platform: windows-latest
             rustTargets: ""
-            args: --bundles nsis
+            targetDir: ""
+            asset: 2code-windows-x64.exe
+            binary: 2code.exe
 
     steps:
       - name: Checkout
@@ -53,33 +60,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \
             file \
             just \
             libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
             libsqlite3-dev \
             libxkbcommon-dev \
             libwayland-dev \
             libvulkan-dev \
             libfontconfig-dev \
             libfreetype-dev
-
-      - name: Install just (macOS)
-        if: runner.os == 'macOS'
-        run: brew install just
-
-      - name: Install just (Windows)
-        if: runner.os == 'Windows'
-        run: choco install just -y
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -93,52 +85,33 @@ jobs:
           workspaces: |
             src-tauri -> target
 
-      - name: Install app dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install Apple Developer ID G2 certificate
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$HOME/Library/Keychains/login.keychain-db"
-          security find-identity -v -p codesigning
-
-      - name: Prepare Apple notarization key
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/appstoreconnect/private_keys"
-          key_path="$RUNNER_TEMP/appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
-          printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
-          chmod 600 "$key_path"
-          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
-
       - name: Build native GPUI binary
-        run: cargo build -p gpui-app --release --manifest-path src-tauri/Cargo.toml
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.rustTargets }}" ]; then
+            cargo build -p gpui-app --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.rustTargets }}
+          else
+            cargo build -p gpui-app --release --manifest-path src-tauri/Cargo.toml
+          fi
 
-      - name: Build and publish
-        uses: tauri-apps/tauri-action@v0
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ -n "${{ matrix.targetDir }}" ]; then
+            src="src-tauri/target/${{ matrix.targetDir }}/release/${{ matrix.binary }}"
+          else
+            src="src-tauri/target/release/${{ matrix.binary }}"
+          fi
+          cp "$src" "dist/${{ matrix.asset }}"
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ matrix.asset }}
+          name: 2code ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, '-') }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
-        with:
-          tauriScript: bun tauri
-          tagName: v__VERSION__
-          releaseName: 2code v__VERSION__
-          releaseBody: See the assets to download this version and install.
-          releaseDraft: false
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, '-') }}
-          generateReleaseNotes: true
-          includeUpdaterJson: true
-          retryAttempts: 2
-          args: ${{ matrix.args }}

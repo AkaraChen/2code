@@ -232,6 +232,41 @@ impl AppRoot {
 					.text_sm()
 					.child("$ 2code — native GPUI terminal preview"),
 			)
+			.child(self.setting_field(
+				"PTY size",
+				h_flex()
+					.gap_2()
+					.child(
+						Button::new("cols-smaller")
+							.ghost()
+							.label("-")
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.settings.terminal_cols =
+									this.settings.terminal_cols.saturating_sub(4).max(40);
+								this.persist_settings();
+								this.resize_live_terminals();
+								cx.notify();
+							})),
+					)
+					.child(
+						div().text_sm().child(format!(
+							"{}×{}",
+							self.settings.terminal_cols, self.settings.terminal_rows
+						)),
+					)
+					.child(
+						Button::new("cols-larger")
+							.ghost()
+							.label("+")
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.settings.terminal_cols =
+									(this.settings.terminal_cols + 4).min(240);
+								this.persist_settings();
+								this.resize_live_terminals();
+								cx.notify();
+							})),
+					),
+			))
 	}
 
 	fn render_notification_settings(
@@ -273,6 +308,10 @@ impl AppRoot {
 							})),
 					),
 			)
+			.child(self.setting_field(
+				"Sound",
+				div().text_sm().child(self.settings.notification_sound.clone()),
+			))
 	}
 
 	fn render_about(&self) -> impl IntoElement {

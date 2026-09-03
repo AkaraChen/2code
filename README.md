@@ -35,7 +35,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
 - **Project management**: organize local code projects and launch focused workspaces quickly.
 - **Agent status awareness**: detect running/waiting agent state from terminal output, titles, and progress sequences.
-- **Localized UI**: i18n message sources live in `messages/` and are generated into the frontend.
+- **Localized UI**: native GPUI copy is bilingual (English / Chinese); leftover React messages still live in `messages/`.
 
 ## Tech Stack
 
@@ -100,7 +100,8 @@ cd src-tauri && cargo build -p gpui-app --release
 | `cargo run -p gpui-app` | Run the native GPUI desktop app |
 | `bun tauri dev` | Run the legacy Tauri/React desktop shell |
 | `bun run dev` | Run the Vite frontend only |
-| `bun tauri build` | Build the production desktop app |
+| `cargo build -p gpui-app --release` | Build the production GPUI desktop app |
+| `bun tauri build` | Build the legacy Tauri/React app |
 | `cd src-tauri && cargo test` | Run Rust tests |
 | `cargo tauri-typegen generate` | Regenerate frontend IPC bindings after Rust command changes |
 | `just fmt` | Format TypeScript and Rust |

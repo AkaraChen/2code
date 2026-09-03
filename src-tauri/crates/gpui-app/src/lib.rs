@@ -1,8 +1,10 @@
+mod actions;
 mod app;
 mod backend;
 mod detector;
 mod i18n;
 mod settings;
+mod sound;
 mod terminal;
 mod theme;
 mod views;

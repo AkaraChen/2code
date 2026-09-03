@@ -12,13 +12,16 @@ use gpui_component::{
 
 use std::collections::HashMap;
 
+use crate::actions::{commit_paths, discard_paths};
 use crate::backend::{Backend, ProfileVm, ProjectVm};
 use crate::detector::{AgentStatus, AgentStatusDetector, DetectionInput};
 use crate::i18n;
 use crate::settings::AppSettings;
+use crate::sound;
 use crate::terminal::{TermSpan, keystroke_to_bytes};
 use crate::theme::TwoCodePalette;
-use model::project::GitCommit;
+use model::filesystem::FileTreeGitStatusEntry;
+use model::project::{GitBranchInfo, GitCommit};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {
@@ -55,6 +58,7 @@ pub enum GitPane {
 pub struct TerminalTab {
 	pub id: String,
 	pub title: String,
+	pub profile_id: String,
 	pub status: Option<AgentStatus>,
 }
 
@@ -72,6 +76,8 @@ pub struct AppRoot {
 	pub create_folder: Entity<InputState>,
 	pub profile_branch: Entity<InputState>,
 	pub terminal_input: Entity<InputState>,
+	pub commit_message: Entity<InputState>,
+	pub new_file_name: Entity<InputState>,
 	pub terminals: Vec<TerminalTab>,
 	pub active_session: Option<String>,
 	pub terminal_output: String,
@@ -80,6 +86,10 @@ pub struct AppRoot {
 	pub git_branch: String,
 	pub git_stats_label: String,
 	pub git_diff: String,
+	pub changed_files: Vec<FileTreeGitStatusEntry>,
+	pub selected_change: Option<String>,
+	pub git_ahead: u32,
+	pub branches: Vec<GitBranchInfo>,
 	pub commits: Vec<GitCommit>,
 	pub selected_commit: Option<String>,
 	pub commit_diff: String,
@@ -110,6 +120,12 @@ impl AppRoot {
 		let terminal_input = cx.new(|cx| {
 			InputState::new(window, cx).placeholder("Send to the PTY and press Enter")
 		});
+		let commit_message = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("Commit message")
+		});
+		let new_file_name = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("src/new-file.rs")
+		});
 		let mut app = Self {
 			backend,
 			settings,
@@ -124,6 +140,8 @@ impl AppRoot {
 			create_folder,
 			profile_branch,
 			terminal_input,
+			commit_message,
+			new_file_name,
 			terminals: Vec::new(),
 			active_session: None,
 			terminal_output: String::new(),
@@ -132,6 +150,10 @@ impl AppRoot {
 			git_branch: String::new(),
 			git_stats_label: String::new(),
 			git_diff: String::new(),
+			changed_files: Vec::new(),
+			selected_change: None,
+			git_ahead: 0,
+			branches: Vec::new(),
 			commits: Vec::new(),
 			selected_commit: None,
 			commit_diff: String::new(),
@@ -276,7 +298,9 @@ impl AppRoot {
 		self.file_preview.clear();
 		self.selected_commit = None;
 		self.commit_diff.clear();
+		self.selected_change = None;
 		self.refresh_workspace();
+		self.ensure_profile_terminals();
 		cx.notify();
 	}
 
@@ -284,6 +308,7 @@ impl AppRoot {
 		if let Some(folder) = self.current_project().map(|project| project.folder.clone())
 		{
 			self.git_branch = self.backend.git_branch(&folder);
+			self.branches = self.backend.list_branches(&folder);
 		}
 		if let Some(profile_id) =
 			self.current_profile().map(|profile| profile.id.clone())
@@ -294,6 +319,8 @@ impl AppRoot {
 				stats.insertions, stats.deletions, stats.files_changed
 			);
 			self.git_diff = self.backend.git_diff(&profile_id);
+			self.changed_files = self.backend.git_status(&profile_id);
+			self.git_ahead = self.backend.git_ahead(&profile_id);
 			self.commits = self.backend.git_log(&profile_id);
 			self.files = self
 				.backend
@@ -401,6 +428,7 @@ impl AppRoot {
 				let agent = result.agent_id.unwrap_or_else(|| "agent".into());
 				self.pending_notification =
 					Some(format!("{agent} is waiting for input"));
+				sound::play_notification(&self.settings.notification_sound);
 			}
 		}
 	}
@@ -503,15 +531,19 @@ impl AppRoot {
 		let Some(profile) = self.current_profile().cloned() else {
 			return;
 		};
-		match self
-			.backend
-			.create_terminal(&profile.id, &profile.worktree_path, "Terminal")
-		{
+		match self.backend.create_terminal(
+			&profile.id,
+			&profile.worktree_path,
+			"Terminal",
+			self.settings.terminal_rows,
+			self.settings.terminal_cols,
+		) {
 			Ok(session_id) => {
-				let title = format!("Terminal {}", self.terminals.len() + 1);
+				let title = format!("Terminal {}", self.profile_terminals().len() + 1);
 				self.terminals.push(TerminalTab {
 					id: session_id.clone(),
 					title,
+					profile_id: profile.id,
 					status: None,
 				});
 				self.active_session = Some(session_id);
@@ -615,6 +647,282 @@ impl AppRoot {
 	pub fn toggle_debug(&mut self, cx: &mut Context<Self>) {
 		self.debug_open = !self.debug_open;
 		cx.notify();
+	}
+
+	pub fn profile_terminals(&self) -> Vec<TerminalTab> {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return Vec::new();
+		};
+		self.terminals
+			.iter()
+			.filter(|tab| tab.profile_id == profile_id)
+			.cloned()
+			.collect()
+	}
+
+	fn ensure_profile_terminals(&mut self) {
+		let Some(profile) = self.current_profile().cloned() else {
+			return;
+		};
+		if !self
+			.terminals
+			.iter()
+			.any(|tab| tab.profile_id == profile.id)
+		{
+			if let Ok(sessions) = self
+				.backend
+				.list_profile_sessions(&profile.project_id, &profile.id)
+			{
+				for session in sessions.into_iter().rev().take(4).rev() {
+					if let Ok(session_id) = self.backend.restore_terminal(&session) {
+						self.terminals.push(TerminalTab {
+							id: session_id,
+							title: session.title,
+							profile_id: profile.id.clone(),
+							status: None,
+						});
+					}
+				}
+			}
+		}
+		let ids: Vec<String> = self
+			.profile_terminals()
+			.into_iter()
+			.map(|tab| tab.id)
+			.collect();
+		if self
+			.active_session
+			.as_ref()
+			.is_none_or(|active| !ids.iter().any(|id| id == active))
+		{
+			self.active_session = ids.last().cloned();
+		}
+		self.refresh_terminal();
+	}
+
+	pub fn confirm_delete_profile(&mut self, profile_id: &str, cx: &mut Context<Self>) {
+		let project_id = self.current_project().map(|project| project.id.clone());
+		if let Err(error) = self.backend.delete_profile(profile_id) {
+			self.error = Some(error.to_string());
+			cx.notify();
+			return;
+		}
+		self.terminals.retain(|tab| tab.profile_id != profile_id);
+		self.reload_projects(cx);
+		if let Some(project_id) = project_id {
+			if let Some(profile) = self
+				.projects
+				.iter()
+				.find(|project| project.id == project_id)
+				.and_then(ProjectVm::default_profile)
+				.cloned()
+			{
+				self.open_workspace(&project_id, &profile.id, cx);
+				return;
+			}
+		}
+		self.open_home(cx);
+	}
+
+	pub fn select_change(&mut self, path: &str, cx: &mut Context<Self>) {
+		self.selected_change = Some(path.to_string());
+		self.git_pane = GitPane::Changes;
+		cx.notify();
+	}
+
+	pub fn commit_selected_changes(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let message = self.commit_message.read(cx).value().to_string();
+		if message.trim().is_empty() {
+			self.error = Some("Write a commit message first.".into());
+			cx.notify();
+			return;
+		}
+		let changed: Vec<String> = self
+			.changed_files
+			.iter()
+			.map(|entry| entry.path.clone())
+			.collect();
+		let files = commit_paths(&changed, self.selected_change.as_deref());
+		if files.is_empty() {
+			self.error = Some("Nothing to commit.".into());
+			cx.notify();
+			return;
+		}
+		match self.backend.commit_changes(&profile_id, &files, &message) {
+			Ok(_) => {
+				self.error = None;
+				self.selected_change = None;
+				self.commit_message.update(cx, |state, cx| {
+					state.set_value("", window, cx);
+				});
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn discard_selected_changes(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let changed: Vec<String> = self
+			.changed_files
+			.iter()
+			.map(|entry| entry.path.clone())
+			.collect();
+		let files = discard_paths(&changed, self.selected_change.as_deref());
+		if files.is_empty() {
+			self.error = Some("Nothing to discard.".into());
+			cx.notify();
+			return;
+		}
+		match self.backend.discard_changes(&profile_id, &files) {
+			Ok(()) => {
+				self.error = None;
+				self.selected_change = None;
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn push_current_branch(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		match self.backend.git_push(&profile_id) {
+			Ok(()) => {
+				self.error = None;
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn checkout_current_folder_branch(&mut self, branch: &str, cx: &mut Context<Self>) {
+		let Some(folder) = self.current_project().map(|project| project.folder.clone())
+		else {
+			return;
+		};
+		match self.backend.checkout_branch(&folder, branch) {
+			Ok(()) => {
+				self.error = None;
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn create_named_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let mut path = self.new_file_name.read(cx).value().to_string();
+		path = path.trim().to_string();
+		if path.is_empty() {
+			self.error = Some("Enter a file path.".into());
+			cx.notify();
+			return;
+		}
+		if let Some(parent) = &self.file_parent {
+			if !path.contains('/') {
+				path = format!("{parent}/{path}");
+			}
+		}
+		match self.backend.create_file(&profile_id, &path) {
+			Ok(()) => {
+				self.error = None;
+				self.new_file_name.update(cx, |state, cx| {
+					state.set_value("", window, cx);
+				});
+				self.open_path(&path, cx);
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn delete_selected_file(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let Some(path) = self.selected_file.clone() else {
+			self.error = Some("Select a file first.".into());
+			cx.notify();
+			return;
+		};
+		match self.backend.delete_files(&profile_id, &[path]) {
+			Ok(()) => {
+				self.error = None;
+				self.selected_file = None;
+				self.file_preview.clear();
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn save_selected_file(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let Some(path) = self.selected_file.clone() else {
+			self.error = Some("Select a file first.".into());
+			cx.notify();
+			return;
+		};
+		match self
+			.backend
+			.write_file(&profile_id, &path, &self.file_preview)
+		{
+			Ok(()) => {
+				self.error = None;
+				self.refresh_workspace();
+			}
+			Err(error) => self.error = Some(error.to_string()),
+		}
+		cx.notify();
+	}
+
+	pub fn reveal_selected_path(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		if let Err(error) = self
+			.backend
+			.reveal_path(&profile_id, self.selected_file.as_deref())
+		{
+			self.error = Some(error.to_string());
+		}
+		cx.notify();
+	}
+
+	pub fn resize_live_terminals(&mut self) {
+		let rows = self.settings.terminal_rows;
+		let cols = self.settings.terminal_cols;
+		for tab in &self.terminals {
+			let _ = self.backend.resize_pty(&tab.id, rows, cols);
+		}
 	}
 }
 

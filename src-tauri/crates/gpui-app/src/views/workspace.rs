@@ -77,12 +77,28 @@ impl AppRoot {
 									.child(stats),
 							)
 							.child(
+								Button::new("switch-branch")
+									.ghost()
+									.label(self.t("Branch", "分支"))
+									.on_click(cx.listener(|this, _, window, cx| {
+										this.open_branch_dialog(window, cx);
+									})),
+							)
+							.child(
 								Button::new("new-profile")
 									.ghost()
 									.icon(IconName::Plus)
 									.label(self.t("New Profile", "新建配置"))
 									.on_click(cx.listener(|this, _, window, cx| {
 										this.open_create_profile_dialog(window, cx);
+									})),
+							)
+							.child(
+								Button::new("delete-profile")
+									.ghost()
+									.label(self.t("Delete Profile", "删除配置"))
+									.on_click(cx.listener(|this, _, window, cx| {
+										this.open_delete_profile_dialog(window, cx);
 									})),
 							)
 							.child(
@@ -151,6 +167,46 @@ impl AppRoot {
 									.text_xs()
 									.text_color(cx.theme().muted_foreground)
 									.child(parent.clone().unwrap_or_else(|| ".".into())),
+							)
+							.child(
+								h_flex()
+									.gap_1()
+									.child(
+										Button::new("files-new")
+											.ghost()
+											.xsmall()
+											.icon(IconName::Plus)
+											.on_click(cx.listener(|this, _, window, cx| {
+												this.open_create_file_dialog(window, cx);
+											})),
+									)
+									.child(
+										Button::new("files-save")
+											.ghost()
+											.xsmall()
+											.label(self.t("Save", "保存"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.save_selected_file(cx);
+											})),
+									)
+									.child(
+										Button::new("files-reveal")
+											.ghost()
+											.xsmall()
+											.label(self.t("Reveal", "打开"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.reveal_selected_path(cx);
+											})),
+									)
+									.child(
+										Button::new("files-delete")
+											.ghost()
+											.xsmall()
+											.icon(IconName::Delete)
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.delete_selected_file(cx);
+											})),
+									),
 							)
 							.when(parent.is_some(), |this| {
 								this.child(
@@ -261,20 +317,7 @@ impl AppRoot {
 					.child(Tab::new().label(self.t("History", "历史"))),
 			)
 			.child(match git_pane {
-				GitPane::Changes => div()
-					.id("git-diff")
-					.flex_1()
-					.p_3()
-					.font_family("monospace")
-					.text_xs()
-					.overflow_y_scroll()
-					.child(if diff.is_empty() {
-						self.t("Working tree is clean.", "工作区是干净的。")
-							.to_string()
-					} else {
-						diff
-					})
-					.into_any_element(),
+				GitPane::Changes => self.render_git_changes(cx, diff).into_any_element(),
 				GitPane::History => h_flex()
 					.flex_1()
 					.min_h_0()
@@ -331,8 +374,124 @@ impl AppRoot {
 			})
 	}
 
+	fn render_git_changes(
+		&mut self,
+		cx: &mut Context<Self>,
+		diff: String,
+	) -> impl IntoElement {
+		let changed = self.changed_files.clone();
+		let selected = self.selected_change.clone();
+		let ahead = self.git_ahead;
+		let commit = self.commit_message.clone();
+		h_flex()
+			.flex_1()
+			.min_h_0()
+			.child(
+				v_flex()
+					.w(px(260.))
+					.h_full()
+					.border_r_1()
+					.border_color(cx.theme().border)
+					.child(
+						div()
+							.px_3()
+							.py_2()
+							.text_xs()
+							.text_color(cx.theme().muted_foreground)
+							.child(format!(
+								"{} · {} ahead",
+								self.t("Changed files", "变更文件"),
+								ahead
+							)),
+					)
+					.child(
+						v_flex()
+							.flex_1()
+							.id("changed-files")
+							.overflow_y_scroll()
+							.children(changed.into_iter().map(|entry| {
+								let path = entry.path.clone();
+								let active = selected.as_deref() == Some(path.as_str());
+								let row_id = format!("change-{path}");
+								h_flex()
+									.id(row_id)
+									.h(px(28.))
+									.px_3()
+									.gap_2()
+									.when(active, |this| this.bg(cx.theme().muted))
+									.hover(|this| this.bg(cx.theme().muted))
+									.cursor_pointer()
+									.on_click(cx.listener(move |this, _, _, cx| {
+										this.select_change(&path, cx);
+									}))
+									.child(
+										div()
+											.text_xs()
+											.text_color(cx.theme().muted_foreground)
+											.child(entry.status),
+									)
+									.child(div().text_xs().child(entry.path))
+							})),
+					)
+					.child(
+						v_flex()
+							.p_2()
+							.gap_2()
+							.border_t_1()
+							.border_color(cx.theme().border)
+							.child(Input::new(&commit).cleanable(true))
+							.child(
+								h_flex()
+									.gap_1()
+									.child(
+										Button::new("git-commit")
+											.primary()
+											.xsmall()
+											.label(self.t("Commit", "提交"))
+											.on_click(cx.listener(|this, _, window, cx| {
+												this.commit_selected_changes(window, cx);
+											})),
+									)
+									.child(
+										Button::new("git-discard")
+											.ghost()
+											.xsmall()
+											.label(self.t("Discard", "丢弃"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.discard_selected_changes(cx);
+											})),
+									)
+									.child(
+										Button::new("git-push")
+											.ghost()
+											.xsmall()
+											.label(self.t("Push", "推送"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.push_current_branch(cx);
+											})),
+									),
+							),
+					),
+			)
+			.child(
+				div()
+					.id("git-diff")
+					.flex_1()
+					.p_3()
+					.font_family("monospace")
+					.text_xs()
+					.overflow_y_scroll()
+					.child(if diff.is_empty() {
+						self.t("Working tree is clean.", "工作区是干净的。")
+							.to_string()
+					} else {
+						diff
+					}),
+			)
+	}
+
 	fn render_terminal_pane(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-		let terminals = self.terminals.clone();
+		let terminals = self.profile_terminals();
 		let has_terminal = self.active_session.is_some();
 		let output = self.terminal_output.clone();
 		let input = self.terminal_input.clone();
@@ -431,12 +590,13 @@ impl AppRoot {
 				)
 				.child({
 					let spans = self.terminal_spans.clone();
+					let font_size = self.settings.terminal_font_size;
 					div()
 						.id("terminal-output")
 						.flex_1()
 						.p_3()
-						.font_family("monospace")
-						.text_sm()
+						.font_family(self.settings.terminal_font.clone())
+						.text_size(px(font_size))
 						.overflow_y_scroll()
 						.child(if spans.is_empty() && output.is_empty() {
 							div()

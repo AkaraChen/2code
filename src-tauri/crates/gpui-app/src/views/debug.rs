@@ -57,6 +57,23 @@ impl AppRoot {
 							.text_xs()
 							.child(format!("git: {}", self.git_stats_label)),
 					)
+					.child(
+						div()
+							.text_xs()
+							.child(format!(
+								"changes: {} · ahead {}",
+								self.changed_files.len(),
+								self.git_ahead
+							)),
+					)
+					.child(
+						div()
+							.text_xs()
+							.child(format!(
+								"pty: {}×{}",
+								self.settings.terminal_cols, self.settings.terminal_rows
+							)),
+					)
 					.when_some(self.error.clone(), |this, error| {
 						this.child(
 							div()

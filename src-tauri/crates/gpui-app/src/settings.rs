@@ -14,6 +14,12 @@ pub struct AppSettings {
 	pub worktree_dir: String,
 	#[serde(default)]
 	pub notifications_enabled: bool,
+	#[serde(default = "default_notification_sound")]
+	pub notification_sound: String,
+	#[serde(default = "default_terminal_rows")]
+	pub terminal_rows: u16,
+	#[serde(default = "default_terminal_cols")]
+	pub terminal_cols: u16,
 }
 
 impl Default for AppSettings {
@@ -27,8 +33,23 @@ impl Default for AppSettings {
 			terminal_font_size: 13.0,
 			worktree_dir: String::new(),
 			notifications_enabled: false,
+			notification_sound: default_notification_sound(),
+			terminal_rows: default_terminal_rows(),
+			terminal_cols: default_terminal_cols(),
 		}
 	}
+}
+
+fn default_notification_sound() -> String {
+	"message".into()
+}
+
+fn default_terminal_rows() -> u16 {
+	32
+}
+
+fn default_terminal_cols() -> u16 {
+	120
 }
 
 impl AppSettings {

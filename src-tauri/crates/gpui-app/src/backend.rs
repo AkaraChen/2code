@@ -4,15 +4,15 @@ use std::sync::{Arc, Mutex};
 use infra::db::{init_db, DbPool};
 use infra::pty::{create_session_map, create_thread_tracker, PtyReadThreads, PtySessionMap};
 use model::error::AppError;
-use model::project::{GitCommit, GitDiffStats, ProjectWithProfiles};
-use model::pty::{PtyConfig, PtySessionMeta};
+use model::filesystem::FileTreeGitStatusEntry;
+use model::project::{GitBranchInfo, GitCommit, GitDiffStats, ProjectWithProfiles};
+use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
 use service::pty::{create_flush_senders, PtyContext, PtyFlushSenders};
 use service::PtyEventEmitter;
 
 #[derive(Clone, Debug)]
 pub struct ProfileVm {
 	pub id: String,
-	#[allow(dead_code)]
 	pub project_id: String,
 	pub branch_name: String,
 	pub worktree_path: String,
@@ -77,6 +77,12 @@ impl TermSession {
 	fn write(&mut self, bytes: &[u8]) {
 		self.raw.extend_from_slice(bytes);
 		self.parser.process(bytes);
+	}
+
+	fn set_size(&mut self, rows: u16, cols: u16) {
+		let mut parser = vt100::Parser::new(rows.max(1), cols.max(1), 2_000);
+		parser.process(&self.raw);
+		self.parser = parser;
 	}
 
 	fn screen(&self) -> String {
@@ -222,7 +228,6 @@ impl Backend {
 		})
 	}
 
-	#[allow(dead_code)]
 	pub fn delete_profile(&self, id: &str) -> Result<(), AppError> {
 		service::profile::delete_with_context(&self.pty_context(), id)
 	}
@@ -232,6 +237,8 @@ impl Backend {
 		profile_id: &str,
 		cwd: &str,
 		title: &str,
+		rows: u16,
+		cols: u16,
 	) -> Result<String, AppError> {
 		let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
 		service::pty::create_session(
@@ -243,11 +250,52 @@ impl Backend {
 			&PtyConfig {
 				shell,
 				cwd: cwd.to_string(),
-				rows: 32,
-				cols: 120,
+				rows: rows.max(8),
+				cols: cols.max(20),
 				startup_commands: Vec::new(),
 			},
 		)
+	}
+
+	pub fn resize_pty(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), AppError> {
+		infra::pty::resize_pty(&self.sessions, session_id, rows, cols)?;
+		if let Ok(mut buffers) = self.buffers.lock() {
+			if let Some(session) = buffers.sessions.get_mut(session_id) {
+				session.set_size(rows, cols);
+			}
+		}
+		Ok(())
+	}
+
+	pub fn list_profile_sessions(
+		&self,
+		project_id: &str,
+		profile_id: &str,
+	) -> Result<Vec<PtySessionRecord>, AppError> {
+		let conn = &mut *self.db.lock().map_err(|_| AppError::LockError)?;
+		let mut sessions = service::pty::list_project_sessions(conn, project_id)?;
+		sessions.retain(|session| session.profile_id == profile_id);
+		Ok(sessions)
+	}
+
+	pub fn restore_terminal(&self, old: &PtySessionRecord) -> Result<String, AppError> {
+		let result = service::pty::restore_session(
+			&self.pty_context(),
+			&old.id,
+			&PtySessionMeta {
+				profile_id: old.profile_id.clone(),
+				title: old.title.clone(),
+			},
+			&PtyConfig {
+				shell: old.shell.clone(),
+				cwd: old.cwd.clone(),
+				rows: old.rows.max(8) as u16,
+				cols: old.cols.max(20) as u16,
+				startup_commands: Vec::new(),
+			},
+		)?;
+		let _ = self.emitter.emit_output(&result.new_session_id, &result.history);
+		Ok(result.new_session_id)
 	}
 
 	pub fn write_pty(&self, session_id: &str, bytes: &[u8]) -> Result<(), AppError> {
@@ -343,6 +391,69 @@ impl Backend {
 		} else {
 			Ok(content)
 		}
+	}
+
+	pub fn write_file(
+		&self,
+		profile_id: &str,
+		path: &str,
+		content: &str,
+	) -> Result<(), AppError> {
+		service::filesystem::write_file_content(&self.db, profile_id, path, content)
+	}
+
+	pub fn create_file(&self, profile_id: &str, path: &str) -> Result<(), AppError> {
+		service::filesystem::create_file_tree_path(&self.db, profile_id, path, "file")
+	}
+
+	pub fn delete_files(&self, profile_id: &str, paths: &[String]) -> Result<(), AppError> {
+		service::filesystem::delete_file_tree_paths(&self.db, profile_id, paths)
+	}
+
+	pub fn reveal_path(&self, profile_id: &str, path: Option<&str>) -> Result<(), AppError> {
+		service::filesystem::reveal_path_in_file_manager(&self.db, profile_id, path)
+	}
+
+	pub fn git_status(&self, profile_id: &str) -> Vec<FileTreeGitStatusEntry> {
+		let Ok(mut conn) = self.db.lock() else {
+			return Vec::new();
+		};
+		service::filesystem::get_file_tree_git_status(&mut conn, profile_id).unwrap_or_default()
+	}
+
+	pub fn commit_changes(
+		&self,
+		profile_id: &str,
+		files: &[String],
+		message: &str,
+	) -> Result<String, AppError> {
+		let conn = &mut *self.db.lock().map_err(|_| AppError::LockError)?;
+		service::project::commit_changes(conn, profile_id, files, message, None)
+	}
+
+	pub fn discard_changes(&self, profile_id: &str, paths: &[String]) -> Result<(), AppError> {
+		let conn = &mut *self.db.lock().map_err(|_| AppError::LockError)?;
+		service::project::discard_file_changes(conn, profile_id, paths)
+	}
+
+	pub fn git_push(&self, profile_id: &str) -> Result<(), AppError> {
+		let conn = &mut *self.db.lock().map_err(|_| AppError::LockError)?;
+		service::project::push(conn, profile_id)
+	}
+
+	pub fn git_ahead(&self, profile_id: &str) -> u32 {
+		let Ok(mut conn) = self.db.lock() else {
+			return 0;
+		};
+		service::project::get_ahead_count(&mut conn, profile_id).unwrap_or(0)
+	}
+
+	pub fn list_branches(&self, folder: &str) -> Vec<GitBranchInfo> {
+		infra::git::list_branches(folder).unwrap_or_default()
+	}
+
+	pub fn checkout_branch(&self, folder: &str, branch: &str) -> Result<(), AppError> {
+		infra::git::checkout_branch(folder, branch)
 	}
 }
 

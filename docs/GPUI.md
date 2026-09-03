@@ -34,6 +34,8 @@ cd src-tauri && cargo run -p gpui-app
 - Workspace panes via native `TabBar`: Files (preview + markdown `TextView`), Git (Changes / History), Terminal tabs + PTY
 - Settings (language, theme, debug, terminal font) via `Switch` / `TabBar`
 - Native `Dialog` / `AlertDialog` for create project, create profile, delete, and command palette
-- vt100-backed PTY screen + agent status detector (Claude / Codex / Cursor)
-- In-app notifications when an agent is waiting
+- vt100-backed PTY screen + raw key input, color spans, resize, and session restore
+- Agent status detector (Claude / Codex / Cursor) with in-app + system-sound notifications
+- Git changes list with commit / discard / push / branch checkout
+- File create, delete, reveal, and markdown preview
 - Tokens from `src/app.css` are applied onto the gpui-component `Theme`
