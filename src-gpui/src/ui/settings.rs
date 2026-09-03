@@ -102,6 +102,7 @@ pub struct SettingsView {
 	fonts: Vec<String>,
 	sounds: Vec<String>,
 	editing_template_id: Option<String>,
+	preview_theme: Option<String>,
 }
 
 impl SettingsView {
@@ -130,9 +131,10 @@ impl SettingsView {
 				s
 			})
 		}
-		let custom_shell = inp(window, cx, "", &prefs.custom_shell, false);
+		let custom_shell = inp(window, cx, &crate::i18n::t(locale, "customShellPlaceholder"), &prefs.custom_shell, false);
 		let worktree = inp(window, cx, "", &prefs.worktree_dir, false);
 		custom_shell.update(cx, |s, cx| {
+			s.set_placeholder(crate::i18n::t(locale, "customShellPlaceholder"), window, cx);
 			s.set_value(prefs.custom_shell.clone(), window, cx);
 		});
 		worktree.update(cx, |s, cx| {
@@ -156,6 +158,7 @@ impl SettingsView {
 			fonts: crate::platform::list_mono_fonts(),
 			sounds: crate::platform::list_system_sounds(),
 			editing_template_id: None,
+			preview_theme: None,
 		}
 	}
 
@@ -164,7 +167,11 @@ impl SettingsView {
 	}
 
 	fn persist(&mut self, cx: &mut Context<Self>) {
-		self.prefs.custom_shell = self.custom_shell.read(cx).value().to_string();
+		let typed = self.custom_shell.read(cx).value().to_string();
+		let listed = crate::platform::list_shells();
+		if self.prefs.custom_shell.is_empty() || !listed.iter().any(|s| s == &self.prefs.custom_shell) {
+			self.prefs.custom_shell = typed;
+		}
 		self.prefs.worktree_dir = self.worktree.read(cx).value().to_string();
 		self.prefs.language = self.locale;
 		self.prefs.save(&self.backend.app_data_dir);
@@ -364,9 +371,33 @@ impl SettingsView {
 			))
 	}
 
+	fn preview_theme_name(&self, cx: &Context<Self>) -> String {
+		if let Some(name) = &self.preview_theme {
+			return name.clone();
+		}
+		if !self.prefs.sync_terminal_theme && cx.theme().mode == ThemeMode::Light {
+			self.prefs.terminal_theme_light.clone()
+		} else {
+			self.prefs.terminal_theme_dark.clone()
+		}
+	}
+
 	fn terminal(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 		let view = cx.entity();
-		let theme = term_theme_by_name(&self.prefs.terminal_theme_dark);
+		let theme = term_theme_by_name(&self.preview_theme_name(cx));
+		let shells = crate::platform::list_shells();
+		let default_shell = crate::backend::default_shell();
+		let custom_selected = self.prefs.custom_shell.is_empty() || !shells.iter().any(|s| s == &self.prefs.custom_shell);
+		let fonts = if self.prefs.show_all_fonts {
+			crate::platform::visible_font_families(true)
+		} else {
+			self.fonts.clone()
+		};
+		let dark_label = if self.prefs.sync_terminal_theme {
+			self.t("terminalTheme")
+		} else {
+			self.t("terminalThemeDark")
+		};
 		h_flex()
 			.id("settings-terminal")
 			.size_full()
@@ -375,7 +406,16 @@ impl SettingsView {
 				v_flex()
 					.max_w(px(448.))
 					.gap_4()
-					.child(field_label(&self.t("terminalTheme")))
+					.child(theme_label_row(&dark_label, "preview-dark", self.t("preview"), {
+						let view = view.clone();
+						let name = self.prefs.terminal_theme_dark.clone();
+						move |cx| {
+							view.update(cx, |this, cx| {
+								this.preview_theme = Some(name.clone());
+								cx.notify();
+							});
+						}
+					}))
 					.child(
 						v_flex().gap_1().children(TERM_THEMES.iter().map(|t| {
 							let selected = self.prefs.terminal_theme_dark == t.name;
@@ -412,7 +452,16 @@ impl SettingsView {
 						},
 					))
 					.when(!self.prefs.sync_terminal_theme, |el| {
-						el.child(field_label(&self.t("terminalTheme")))
+						el.child(theme_label_row(&self.t("terminalThemeLight"), "preview-light", self.t("preview"), {
+							let view = view.clone();
+							let name = self.prefs.terminal_theme_light.clone();
+							move |cx| {
+								view.update(cx, |this, cx| {
+									this.preview_theme = Some(name.clone());
+									cx.notify();
+								});
+							}
+						}))
 							.child(
 								v_flex().gap_1().children(TERM_THEMES.iter().map(|t| {
 									let selected = self.prefs.terminal_theme_light == t.name;
@@ -432,22 +481,53 @@ impl SettingsView {
 					})
 					.child(field_label(&self.t("defaultShell")))
 					.child(
-						h_flex().gap_1().flex_wrap().children(crate::platform::list_shells().into_iter().map(|shell| {
-							let selected = self.prefs.custom_shell == shell;
-							choice(format!("shell-{shell}"), &shell, selected, {
+						div()
+							.text_xs()
+							.text_color(cx.theme().muted_foreground)
+							.child(self.t("defaultShellDescription")),
+					)
+					.child({
+						let mut chips: Vec<gpui::AnyElement> = shells
+							.into_iter()
+							.map(|shell| {
+								let selected = self.prefs.custom_shell == shell;
+								let label = if shell == default_shell {
+									format!("{shell} (default)")
+								} else {
+									shell.clone()
+								};
+								choice(format!("shell-{shell}"), &label, selected, {
+									let view = view.clone();
+									let shell = shell.clone();
+									move |cx| {
+										view.update(cx, |this, cx| {
+											this.prefs.custom_shell = shell.clone();
+											this.persist(cx);
+											cx.notify();
+										});
+									}
+								})
+								.into_any_element()
+							})
+							.collect();
+						chips.push(
+							choice("shell-custom", &self.t("customShell"), custom_selected, {
 								let view = view.clone();
-								let shell = shell.clone();
 								move |cx| {
 									view.update(cx, |this, cx| {
-										this.prefs.custom_shell = shell.clone();
+										if crate::platform::list_shells().iter().any(|s| s == &this.prefs.custom_shell) {
+											this.prefs.custom_shell.clear();
+										}
 										this.persist(cx);
 										cx.notify();
 									});
 								}
 							})
-						})),
-					)
-					.child(Input::new(&self.custom_shell))
+							.into_any_element(),
+						);
+						h_flex().gap_1().flex_wrap().children(chips)
+					})
+					.when(custom_selected, |el| el.child(Input::new(&self.custom_shell)))
 					.child(field_label(&self.t("terminalFont")))
 					.child(div().text_sm().child(self.prefs.font_family.clone()))
 					.child(switch_row(
@@ -466,32 +546,37 @@ impl SettingsView {
 							}
 						},
 					))
-					.child(
-						div()
-							.max_h(px(180.))
-							.overflow_y_hidden()
-							.child({
-								let fonts = if self.prefs.show_all_fonts {
-									crate::platform::visible_font_families(true)
-								} else {
-									self.fonts.clone()
-								};
-								h_flex().gap_1().flex_wrap().children(fonts.into_iter().map(|family| {
-									let selected = self.prefs.font_family == family;
-									choice(format!("font-{family}"), &family, selected, {
-										let view = view.clone();
-										let family = family.clone();
-										move |cx| {
-											view.update(cx, |this, cx| {
-												this.prefs.font_family = family.clone();
-												this.persist(cx);
-												cx.notify();
-											});
-										}
-									})
-								}))
-							}),
-					)
+					.when(fonts.is_empty(), |el| {
+						el.child(div().text_sm().child(self.t("fontPickerUnavailable"))).child(
+							div()
+								.text_xs()
+								.text_color(cx.theme().muted_foreground)
+								.child(self.t("fontPickerUnavailableDescription")),
+						)
+					})
+					.when(!fonts.is_empty(), |el| {
+						el.child(
+							div()
+								.max_h(px(180.))
+								.overflow_y_hidden()
+								.child(
+									h_flex().gap_1().flex_wrap().children(fonts.into_iter().map(|family| {
+										let selected = self.prefs.font_family == family;
+										choice(format!("font-{family}"), &family, selected, {
+											let view = view.clone();
+											let family = family.clone();
+											move |cx| {
+												view.update(cx, |this, cx| {
+													this.prefs.font_family = family.clone();
+													this.persist(cx);
+													cx.notify();
+												});
+											}
+										})
+									})),
+								),
+						)
+					})
 					.child(field_label(&self.t("fontSize")))
 					.child(
 						h_flex()
@@ -1106,6 +1191,26 @@ fn set_tab(
 
 fn field_label(text: &str) -> impl IntoElement {
 	div().font_medium().text_sm().child(text.to_string())
+}
+
+fn theme_label_row(
+	label: &str,
+	preview_id: &'static str,
+	preview_label: String,
+	on_preview: impl Fn(&mut App) + 'static,
+) -> impl IntoElement {
+	h_flex()
+		.w_full()
+		.justify_between()
+		.child(field_label(label))
+		.child(
+			Button::new(preview_id)
+				.ghost()
+				.xsmall()
+				.icon(IconName::Eye)
+				.tooltip(preview_label)
+				.on_click(move |_, _, cx| on_preview(cx)),
+		)
 }
 
 fn choice(

@@ -415,6 +415,44 @@ pub struct OverlayState {
 	pub drag_file: Option<String>,
 	pub renaming_path: Option<String>,
 	pub update_checked: bool,
+	pub group_menu_creating: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupMenuRow {
+	Empty,
+	Group { id: String, name: String, current: bool },
+	Remove,
+	Create,
+	CreateInput,
+}
+
+pub fn project_group_menu_rows(
+	groups: &[(String, String)],
+	current_group: Option<&str>,
+	creating: bool,
+) -> Vec<GroupMenuRow> {
+	let mut rows = Vec::new();
+	if groups.is_empty() {
+		rows.push(GroupMenuRow::Empty);
+	} else {
+		for (id, name) in groups {
+			rows.push(GroupMenuRow::Group {
+				id: id.clone(),
+				name: name.clone(),
+				current: current_group == Some(id.as_str()),
+			});
+		}
+	}
+	if current_group.is_some() {
+		rows.push(GroupMenuRow::Remove);
+	}
+	if creating || groups.is_empty() {
+		rows.push(GroupMenuRow::CreateInput);
+	} else {
+		rows.push(GroupMenuRow::Create);
+	}
+	rows
 }
 
 pub struct AppData {
@@ -544,6 +582,49 @@ mod tests {
 		assert_eq!(
 			collect_sidebar_nav_items(&[], &[], &[], &HashSet::new(), None),
 			vec![SidebarNavItem::Home]
+		);
+	}
+
+	#[test]
+	fn project_group_menu_rows_match_inventory() {
+		assert_eq!(
+			project_group_menu_rows(&[], None, false),
+			vec![GroupMenuRow::Empty, GroupMenuRow::CreateInput]
+		);
+		assert_eq!(
+			project_group_menu_rows(&[("g1".into(), "Work".into())], None, false),
+			vec![
+				GroupMenuRow::Group {
+					id: "g1".into(),
+					name: "Work".into(),
+					current: false,
+				},
+				GroupMenuRow::Create,
+			]
+		);
+		assert_eq!(
+			project_group_menu_rows(&[("g1".into(), "Work".into())], Some("g1"), false),
+			vec![
+				GroupMenuRow::Group {
+					id: "g1".into(),
+					name: "Work".into(),
+					current: true,
+				},
+				GroupMenuRow::Remove,
+				GroupMenuRow::Create,
+			]
+		);
+		assert_eq!(
+			project_group_menu_rows(&[("g1".into(), "Work".into())], Some("g1"), true),
+			vec![
+				GroupMenuRow::Group {
+					id: "g1".into(),
+					name: "Work".into(),
+					current: true,
+				},
+				GroupMenuRow::Remove,
+				GroupMenuRow::CreateInput,
+			]
 		);
 	}
 

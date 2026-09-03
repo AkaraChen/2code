@@ -1177,6 +1177,52 @@ impl AppView {
 		self.reload_projects();
 	}
 
+	pub fn open_project_menu(&mut self, id: String, x: f32, y: f32, window: &mut Window, cx: &mut Context<Self>) {
+		self.inputs.group_name.update(cx, |s, cx| {
+			s.set_value("", window, cx);
+		});
+		self.data.overlay.group_menu_creating = self.data.groups.is_empty();
+		self.data.overlay.context_menu = Some((ContextMenu::Project { id }, x, y));
+	}
+
+	pub fn assign_project_to_group(&mut self, project_id: &str, group_id: Option<String>) {
+		if let Err(err) = self.backend.assign_to_group(project_id, group_id) {
+			self.data
+				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+			return;
+		}
+		self.reload_projects();
+		self.data.overlay.context_menu = None;
+		self.data.overlay.group_menu_creating = false;
+	}
+
+	pub fn submit_create_group(&mut self, project_id: Option<&str>, cx: &mut Context<Self>) {
+		let name = self.inputs.group_name.read(cx).value().trim().to_string();
+		if name.is_empty() {
+			return;
+		}
+		let pid = project_id
+			.map(|id| id.to_string())
+			.or_else(|| self.data.overlay.dialog_project.clone());
+		match self.backend.create_group(&name) {
+			Ok(group) => {
+				if let Some(pid) = pid {
+					if let Err(err) = self.backend.assign_to_group(&pid, Some(group.id)) {
+						self.data
+							.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+					}
+				}
+				self.reload_projects();
+				self.data.overlay.dialog = None;
+				self.data.overlay.context_menu = None;
+				self.data.overlay.group_menu_creating = false;
+			}
+			Err(err) => self
+				.data
+				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string()),
+		}
+	}
+
 	pub fn apply_picked_folder(&mut self, folder: String, window: &mut Window, cx: &mut Context<Self>) {
 		let empty = self.inputs.project_name.read(cx).value().trim().is_empty();
 		self.data.overlay.dialog_folder = Some(folder.clone());
@@ -1967,7 +2013,15 @@ impl AppView {
 
 	/// Close the topmost overlay. Returns true when something was dismissed.
 	pub fn dismiss_overlay(&mut self) -> bool {
+		if self.data.overlay.context_menu.is_some()
+			&& self.data.overlay.group_menu_creating
+			&& !self.data.groups.is_empty()
+		{
+			self.data.overlay.group_menu_creating = false;
+			return true;
+		}
 		if self.data.overlay.context_menu.take().is_some() {
+			self.data.overlay.group_menu_creating = false;
 			return true;
 		}
 		if self.data.overlay.renaming_path.take().is_some() {
@@ -2094,6 +2148,18 @@ impl AppView {
 		if self.data.overlay.dialog == Some(DialogKind::RenameProject) && key == "enter" {
 			self.rename_dialog_project(cx);
 			return true;
+		}
+		if self.data.overlay.dialog == Some(DialogKind::CreateGroup) && key == "enter" {
+			self.submit_create_group(None, cx);
+			return true;
+		}
+		if key == "enter" {
+			if let Some((ContextMenu::Project { id }, _, _)) = self.data.overlay.context_menu.clone() {
+				if self.data.overlay.group_menu_creating || self.data.groups.is_empty() {
+					self.submit_create_group(Some(&id), cx);
+					return true;
+				}
+			}
 		}
 		if self.data.overlay.palette_open {
 			return match key {

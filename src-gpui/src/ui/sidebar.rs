@@ -168,14 +168,14 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 }
 
 fn drop_zone(
-	id: &'static str,
+	id: impl Into<gpui::SharedString>,
 	label: String,
 	border: gpui::Hsla,
 	muted: gpui::Hsla,
 	on_drop: impl Fn(&SidebarDrag, &mut gpui::App) + 'static,
 ) -> impl IntoElement {
 	div()
-		.id(id)
+		.id(id.into())
 		.mt_2()
 		.px_2()
 		.py_3()
@@ -296,7 +296,7 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 								.icon(if app.data.overlay.sort_mode {
 									IconName::Check
 								} else {
-									IconName::EllipsisVertical
+									IconName::Replace
 								})
 								.tooltip(if app.data.overlay.sort_mode {
 									app.t("doneEditingProjectOrder")
@@ -391,6 +391,9 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 										}
 									})
 								})
+								.when(app.data.overlay.sort_mode, |el| {
+									el.child(div().text_xs().text_color(theme.muted_foreground).child("⠿"))
+								})
 								.child(
 									Icon::new(if collapsed {
 										IconName::ChevronRight
@@ -407,6 +410,25 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 										.child(count.to_string()),
 								),
 						)
+						.when(app.data.overlay.sort_mode, |el| {
+							el.child(drop_zone(
+								crate::ui::eid(format!("sidebar-drop-group-{}", group.id)),
+								app.t("dropProjectIntoFolder"),
+								theme.border,
+								theme.muted_foreground,
+								{
+									let view = view.clone();
+									let gid = gid.clone();
+									move |drag: &SidebarDrag, cx| {
+										view.update(cx, |app, cx| {
+											let _ = app.backend.assign_to_group(&drag.id, Some(gid.clone()));
+											app.reload_projects();
+											cx.notify();
+										});
+									}
+								},
+							))
+						})
 						.when(!collapsed, |el| {
 							el.child(
 								v_flex()
@@ -571,13 +593,9 @@ fn project_row(
 				.on_mouse_down(MouseButton::Right, {
 					let view = view.clone();
 					let id = id.clone();
-					move |ev, _, cx| {
+					move |ev, window, cx| {
 						view.update(cx, |app, cx| {
-							app.data.overlay.context_menu = Some((
-								ContextMenu::Project { id: id.clone() },
-								ev.position.x.into(),
-								ev.position.y.into(),
-							));
+							app.open_project_menu(id.clone(), ev.position.x.into(), ev.position.y.into(), window, cx);
 							cx.notify();
 						});
 					}
@@ -585,6 +603,7 @@ fn project_row(
 				.when(app.data.overlay.sort_mode, |el| {
 					el.cursor(gpui::CursorStyle::OpenHand)
 						.opacity(0.95)
+						.child(div().text_xs().text_color(theme.muted_foreground).child("⠿"))
 						.on_drag(
 							SidebarDrag {
 								id: id.clone(),

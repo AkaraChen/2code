@@ -7,7 +7,7 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
-use crate::state::{ContextMenu, DialogKind};
+use crate::state::{project_group_menu_rows, ContextMenu, DialogKind, GroupMenuRow};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	div()
@@ -652,14 +652,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 										app.open_url_with("");
 									}
 									DialogKind::CreateGroup => {
-										let name = app.inputs.group_name.read(cx).value().to_string();
-										if let Ok(group) = app.backend.create_group(&name) {
-											if let Some(pid) = app.data.overlay.dialog_project.clone() {
-												let _ = app.backend.assign_to_group(&pid, Some(group.id));
-											}
-											app.reload_projects();
-										}
-										app.data.overlay.dialog = None;
+										app.submit_create_group(None, cx);
 									}
 									DialogKind::ReviewQueue => {
 										app.copy_review_comments(false, cx);
@@ -691,6 +684,7 @@ fn context_menu(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			move |_, _, cx| {
 				view.update(cx, |app, cx| {
 					app.data.overlay.context_menu = None;
+					app.data.overlay.group_menu_creating = false;
 					cx.notify();
 				});
 			}
@@ -701,42 +695,73 @@ fn context_menu(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.absolute()
 				.left(px(x))
 				.top(px(y))
-				.min_w(px(220.))
+				.min_w(px(224.))
 				.py_1()
 				.rounded_lg()
 				.bg(theme.background)
 				.border_1()
 				.border_color(theme.border)
 				.shadow_md()
-				.children(items.into_iter().map(|(label, danger, action)| {
+				.on_click(|_, _, _| {})
+				.children(items.into_iter().map(|item| {
+					if item.input {
+						return div()
+							.id(crate::ui::eid(item.id.clone()))
+							.px_2()
+							.py_1()
+							.child(Input::new(&app.inputs.group_name))
+							.into_any_element();
+					}
+					let muted = item.muted || item.header;
+					let disabled = item.disabled;
+					let keep_open = item.keep_open || item.header || item.muted || item.disabled;
 					div()
-						.id(crate::ui::eid(format!("ctx-{label}")))
+						.id(crate::ui::eid(item.id.clone()))
 						.px_3()
 						.py_1()
 						.text_sm()
-						.when(danger, |el| el.text_color(theme.danger))
-						.hover(|el| el.bg(theme.muted))
+						.when(item.danger, |el| el.text_color(theme.danger))
+						.when(muted, |el| el.text_color(theme.muted_foreground))
+						.when(item.disabled, |el| el.opacity(0.55))
+						.when(!muted && !disabled, |el| el.hover(|el| el.bg(theme.muted)))
 						.on_click({
 							let view = view.clone();
 							let menu = menu.clone();
+							let action = item.action.clone();
 							move |_, window, cx| {
+								if disabled {
+									return;
+								}
 								view.update(cx, |app, cx| {
-									run_menu(app, &menu, action, window, cx);
-									app.data.overlay.context_menu = None;
+									run_menu(app, &menu, action.clone(), window, cx);
+									if !keep_open {
+										app.data.overlay.context_menu = None;
+										app.data.overlay.group_menu_creating = false;
+									}
 									cx.notify();
 								});
 							}
 						})
-						.child(label)
+						.child(if item.checked || matches!(item.action, MenuAction::AssignGroup(_)) {
+							h_flex()
+								.gap_2()
+								.child(div().w(px(12.)).child(if item.checked { "✓" } else { "" }))
+								.child(item.label)
+								.into_any_element()
+						} else {
+							div().child(item.label).into_any_element()
+						})
+						.into_any_element()
 				})),
 		)
 		.into_any_element()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum MenuAction {
-	AddToGroup,
-	CreateGroup,
+	AssignGroup(String),
+	StartCreateGroup,
+	SubmitCreateGroup,
 	RemoveGroup,
 	ProjectSettings,
 	Rename,
@@ -758,66 +783,202 @@ enum MenuAction {
 	Header,
 }
 
-fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuAction)> {
+struct MenuItem {
+	id: String,
+	label: String,
+	danger: bool,
+	disabled: bool,
+	checked: bool,
+	muted: bool,
+	header: bool,
+	keep_open: bool,
+	input: bool,
+	action: MenuAction,
+}
+
+fn item(id: impl Into<String>, label: impl Into<String>, action: MenuAction) -> MenuItem {
+	MenuItem {
+		id: id.into(),
+		label: label.into(),
+		danger: false,
+		disabled: false,
+		checked: false,
+		muted: false,
+		header: false,
+		keep_open: false,
+		input: false,
+		action,
+	}
+}
+
+fn danger(mut item: MenuItem) -> MenuItem {
+	item.danger = true;
+	item
+}
+
+fn header(id: impl Into<String>, label: impl Into<String>) -> MenuItem {
+	let mut item = item(id, label, MenuAction::Header);
+	item.header = true;
+	item.muted = true;
+	item
+}
+
+fn project_menu_items(app: &AppView, project_id: &str) -> Vec<MenuItem> {
+	let current = app
+		.data
+		.projects
+		.iter()
+		.find(|p| p.id == project_id)
+		.and_then(|p| p.group_id.clone());
+	let groups: Vec<(String, String)> = app.data.groups.iter().map(|g| (g.id.clone(), g.name.clone())).collect();
+	let rows = project_group_menu_rows(&groups, current.as_deref(), app.data.overlay.group_menu_creating);
+	let mut items = vec![header("add-group-h", app.t("addToProjectGroup"))];
+	for row in rows {
+		match row {
+			GroupMenuRow::Empty => {
+				let mut empty = item("no-groups", app.t("noProjectGroups"), MenuAction::Header);
+				empty.muted = true;
+				items.push(empty);
+			}
+			GroupMenuRow::Group { id, name, current } => {
+				let mut row = item(format!("grp-{id}"), name, MenuAction::AssignGroup(id));
+				row.checked = current;
+				row.disabled = current;
+				items.push(row);
+			}
+			GroupMenuRow::Remove => items.push(item(
+				"remove-group",
+				app.t("removeFromProjectGroup"),
+				MenuAction::RemoveGroup,
+			)),
+			GroupMenuRow::Create => {
+				let mut create = item(
+					"create-group",
+					app.t("createProjectGroup"),
+					MenuAction::StartCreateGroup,
+				);
+				create.keep_open = true;
+				items.push(create);
+			}
+			GroupMenuRow::CreateInput => {
+				items.push(MenuItem {
+					id: "create-group-input".into(),
+					label: String::new(),
+					danger: false,
+					disabled: false,
+					checked: false,
+					muted: false,
+					header: false,
+					keep_open: true,
+					input: true,
+					action: MenuAction::SubmitCreateGroup,
+				});
+			}
+		}
+	}
+	items.push(item(
+		"proj-settings",
+		app.t("projectSettings"),
+		MenuAction::ProjectSettings,
+	));
+	items.push(item("rename-proj", app.t("renameProject"), MenuAction::Rename));
+	items.push(danger(item(
+		"del-proj",
+		app.t("deleteProject"),
+		MenuAction::DeleteProject,
+	)));
+	items
+}
+
+fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 	match menu {
-		ContextMenu::Project { .. } => vec![
-			(app.t("addToProjectGroup"), false, MenuAction::AddToGroup),
-			(app.t("createProjectGroup"), false, MenuAction::CreateGroup),
-			(app.t("removeFromProjectGroup"), false, MenuAction::RemoveGroup),
-			(app.t("projectSettings"), false, MenuAction::ProjectSettings),
-			(app.t("renameProject"), false, MenuAction::Rename),
-			(app.t("deleteProject"), true, MenuAction::DeleteProject),
-		],
-		ContextMenu::Profile { .. } => vec![(app.t("deleteProfile"), true, MenuAction::DeleteProfile)],
+		ContextMenu::Project { id } => project_menu_items(app, id),
+		ContextMenu::Profile { .. } => vec![danger(item(
+			"del-prof",
+			app.t("deleteProfile"),
+			MenuAction::DeleteProfile,
+		))],
 		ContextMenu::File { .. } => vec![
-			(app.t("fileTreeContextMenuOpen"), false, MenuAction::Open),
-			(
+			item("open", app.t("fileTreeContextMenuOpen"), MenuAction::Open),
+			item(
+				"open-default",
 				app.t("fileTreeContextMenuOpenInDefaultApp"),
-				false,
 				MenuAction::OpenDefault,
 			),
-			(
+			item(
+				"reveal",
 				app.t("fileTreeContextMenuRevealInFileManager"),
-				false,
 				MenuAction::Reveal,
 			),
-			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
-			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
-			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
-			(app.t("rename"), false, MenuAction::RenamePath),
-			(app.t("fileTreeContextMenuCopyRelativePath"), false, MenuAction::CopyRel),
-			(app.t("fileTreeContextMenuCopyAbsolutePath"), false, MenuAction::CopyAbs),
-			(app.t("delete"), true, MenuAction::DeletePath),
+			item("refresh", app.t("fileTreeContextMenuRefresh"), MenuAction::Refresh),
+			item("new-file", app.t("fileTreeContextMenuNewFile"), MenuAction::NewFile),
+			item(
+				"new-folder",
+				app.t("fileTreeContextMenuNewFolder"),
+				MenuAction::NewFolder,
+			),
+			item("rename-path", app.t("rename"), MenuAction::RenamePath),
+			item(
+				"copy-rel",
+				app.t("fileTreeContextMenuCopyRelativePath"),
+				MenuAction::CopyRel,
+			),
+			item(
+				"copy-abs",
+				app.t("fileTreeContextMenuCopyAbsolutePath"),
+				MenuAction::CopyAbs,
+			),
+			danger(item("del-path", app.t("delete"), MenuAction::DeletePath)),
 		],
 		ContextMenu::TreeBlank => vec![
-			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
-			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
-			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
-			(
+			item(
+				"blank-new-file",
+				app.t("fileTreeContextMenuNewFile"),
+				MenuAction::NewFile,
+			),
+			item(
+				"blank-new-folder",
+				app.t("fileTreeContextMenuNewFolder"),
+				MenuAction::NewFolder,
+			),
+			item(
+				"blank-refresh",
+				app.t("fileTreeContextMenuRefresh"),
+				MenuAction::Refresh,
+			),
+			item(
+				"blank-reveal",
 				app.t("fileTreeContextMenuRevealInFileManager"),
-				false,
 				MenuAction::Reveal,
 			),
-			(app.t("fileTreeContextMenuCopyRelativePath"), false, MenuAction::CopyRel),
-			(app.t("fileTreeContextMenuCopyAbsolutePath"), false, MenuAction::CopyAbs),
+			item(
+				"blank-copy-rel",
+				app.t("fileTreeContextMenuCopyRelativePath"),
+				MenuAction::CopyRel,
+			),
+			item(
+				"blank-copy-abs",
+				app.t("fileTreeContextMenuCopyAbsolutePath"),
+				MenuAction::CopyAbs,
+			),
 		],
 		ContextMenu::NewTerminal => {
-			let mut items = vec![(app.t("newTerminal"), false, MenuAction::NewTerm)];
+			let mut items = vec![item("new-term", app.t("newTerminal"), MenuAction::NewTerm)];
 			let project = app
 				.data
 				.current_ws()
 				.map(|w| w.config.terminal_templates.clone())
 				.unwrap_or_default();
 			if !project.is_empty() {
-				items.push((app.t("projectTerminalTemplates"), false, MenuAction::Header));
+				items.push(header("proj-templates", app.t("projectTerminalTemplates")));
 				for (i, t) in project.iter().enumerate() {
-					items.push((t.name.clone(), false, MenuAction::ProjectTemplate(i)));
+					items.push(item(format!("pt-{i}"), t.name.clone(), MenuAction::ProjectTemplate(i)));
 				}
 			}
 			if !app.data.prefs.templates.is_empty() {
-				items.push((app.t("globalTerminalTemplates"), false, MenuAction::Header));
+				items.push(header("global-templates", app.t("globalTerminalTemplates")));
 				for (i, t) in app.data.prefs.templates.iter().enumerate() {
-					items.push((t.name.clone(), false, MenuAction::Template(i)));
+					items.push(item(format!("gt-{i}"), t.name.clone(), MenuAction::Template(i)));
 				}
 			}
 			items
@@ -844,22 +1005,18 @@ fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &
 			app.data.overlay.dialog = Some(DialogKind::ProjectSettings);
 			app.data.overlay.dialog_project = Some(id.clone());
 		}
-		(ContextMenu::Project { id }, MenuAction::CreateGroup) => {
-			app.data.overlay.dialog = Some(DialogKind::CreateGroup);
+		(ContextMenu::Project { id }, MenuAction::StartCreateGroup) => {
+			app.data.overlay.group_menu_creating = true;
 			app.data.overlay.dialog_project = Some(id.clone());
 		}
-		(ContextMenu::Project { id }, MenuAction::RemoveGroup) => {
-			let _ = app.backend.assign_to_group(id, None);
-			app.reload_projects();
+		(ContextMenu::Project { id }, MenuAction::SubmitCreateGroup) => {
+			app.submit_create_group(Some(id), cx);
 		}
-		(ContextMenu::Project { id }, MenuAction::AddToGroup) => {
-			if let Some(g) = app.data.groups.first() {
-				let _ = app.backend.assign_to_group(id, Some(g.id.clone()));
-				app.reload_projects();
-			} else {
-				app.data.overlay.dialog = Some(DialogKind::CreateGroup);
-				app.data.overlay.dialog_project = Some(id.clone());
-			}
+		(ContextMenu::Project { id }, MenuAction::AssignGroup(group_id)) => {
+			app.assign_project_to_group(id, Some(group_id));
+		}
+		(ContextMenu::Project { id }, MenuAction::RemoveGroup) => {
+			app.assign_project_to_group(id, None);
 		}
 		(ContextMenu::Profile { id, .. }, MenuAction::DeleteProfile) => {
 			app.prepare_delete_profile(id);
