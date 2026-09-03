@@ -6,7 +6,7 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::state::{AgentKind, DialogKind, SidebarMode, UnifiedTab};
-use crate::ui::{file_tree, file_viewer, git, notes, sidebar, terminal};
+use crate::ui::{file_tree, file_viewer, git, leftover_branch_glyph, notes, sidebar, terminal, tip};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	v_flex()
@@ -66,6 +66,64 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 		.flex()
 		.items_end()
 		.justify_between()
+		.relative()
+		.child(
+			h_flex()
+				.id("topbar-title")
+				.absolute()
+				.left_0()
+				.right_0()
+				.bottom(px(6.))
+				.px(px(128.))
+				.min_w_0()
+				.items_center()
+				.justify_center()
+				.gap_2()
+				.child(
+					div()
+						.id("topbar-project-name")
+						.min_w_0()
+						.font_semibold()
+						.truncate()
+						.tooltip(tip(worktree.clone()))
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, _| {
+									let _ = app
+										.backend
+										.reveal_path(app.data.current_profile.as_deref().unwrap_or(""), None);
+								});
+							}
+						})
+						.child(name),
+				)
+				.child(
+					h_flex()
+						.id("topbar-branch")
+						.min_w_0()
+						.gap_1()
+						.items_center()
+						.text_color(theme.muted_foreground)
+						.hover(|el| el.text_color(theme.foreground))
+						.tooltip(tip(app.t("switchBranchTitle")))
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									if let Some(ws) = app.data.current_ws() {
+										app.data.overlay.branches =
+											app.backend.list_branches(&ws.worktree).unwrap_or_default();
+									}
+									app.data.overlay.dialog = Some(DialogKind::SwitchBranch);
+									cx.notify();
+								});
+							}
+						})
+						.child(leftover_branch_glyph(theme.muted_foreground))
+						.child(div().min_w_0().truncate().child(branch)),
+				),
+		)
 		.child(
 			h_flex()
 				.gap_2()
@@ -88,62 +146,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 							}),
 					)
 				})
-				.child(mode_switch(
-					app,
-					mode,
-					open,
-					stats.files_changed,
-					stats.insertions,
-					stats.deletions,
-					cx,
-				)),
-		)
-		.child(
-			h_flex()
-				.absolute()
-				.left_0()
-				.right_0()
-				.justify_center()
-				.gap_2()
-				.child(
-					Button::new("topbar-project-name")
-						.ghost()
-						.small()
-						.label(name)
-						.tooltip(worktree.clone())
-						.on_click({
-							let view = view.clone();
-							move |_, _, cx| {
-								view.update(cx, |app, _| {
-									let _ = app
-										.backend
-										.reveal_path(app.data.current_profile.as_deref().unwrap_or(""), None);
-								});
-							}
-						}),
-				)
-				.child(
-					h_flex()
-						.id("topbar-branch")
-						.gap_1()
-						.text_color(theme.muted_foreground)
-						.hover(|el| el.text_color(theme.foreground))
-						.on_click({
-							let view = view.clone();
-							move |_, _, cx| {
-								view.update(cx, |app, cx| {
-									if let Some(ws) = app.data.current_ws() {
-										app.data.overlay.branches =
-											app.backend.list_branches(&ws.worktree).unwrap_or_default();
-									}
-									app.data.overlay.dialog = Some(DialogKind::SwitchBranch);
-									cx.notify();
-								});
-							}
-						})
-						.child(Icon::new(IconName::GitHub).w(px(12.)))
-						.child(div().text_sm().child(branch)),
-				),
+				.child(mode_switch(app, mode, open, stats.insertions, stats.deletions, cx)),
 		)
 		.child(
 			h_flex()
@@ -189,17 +192,21 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 		.into_any_element()
 }
 
+pub fn leftover_show_git_diff_stats(insertions: u32, deletions: u32) -> bool {
+	insertions != 0 || deletions != 0
+}
+
 fn mode_switch(
 	app: &AppView,
 	mode: SidebarMode,
 	open: bool,
-	files: u32,
 	ins: u32,
 	del: u32,
 	cx: &mut Context<AppView>,
 ) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
+	let git_selected = open && mode == SidebarMode::Git;
 	h_flex()
 		.id("sidebar-mode-switch")
 		.h(px(28.))
@@ -218,23 +225,39 @@ fn mode_switch(
 		.child(
 			h_flex()
 				.id("git-mode-btn")
-				.child(mode_btn(
-					"git",
-					IconName::GitHub,
-					app.t("sidebarGitTab"),
-					open && mode == SidebarMode::Git,
-					SidebarMode::Git,
-					view.clone(),
-				))
-				.when(files > 0, |el| {
-					el.child(
-						h_flex()
-							.gap_1()
-							.pr_1()
-							.text_xs()
-							.child(div().text_color(rgb(0x22c55e)).child(format!("+{ins}")))
-							.child(div().text_color(rgb(0xef4444)).child(format!("-{del}"))),
-					)
+				.h(px(24.))
+				.px_2()
+				.gap_1()
+				.items_center()
+				.rounded_md()
+				.when(git_selected, |el| el.bg(theme.background))
+				.tooltip(tip(app.t("sidebarGitTab")))
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							if let Some(ws) = app.data.current_ws_mut() {
+								if ws.sidebar_open && ws.sidebar_mode == SidebarMode::Git {
+									ws.sidebar_open = false;
+								} else {
+									ws.sidebar_mode = SidebarMode::Git;
+									ws.sidebar_open = true;
+								}
+								app.data.prefs.profile_sidebar_open = ws.sidebar_open;
+								app.persist_prefs();
+							}
+							cx.notify();
+						});
+					}
+				})
+				.child(leftover_branch_glyph(if git_selected {
+					theme.foreground
+				} else {
+					theme.muted_foreground
+				}))
+				.when(leftover_show_git_diff_stats(ins, del), |el| {
+					el.child(div().text_xs().text_color(rgb(0x22c55e)).child(format!("+{ins}")))
+						.child(div().text_xs().text_color(rgb(0xef4444)).child(format!("-{del}")))
 				}),
 		)
 		.child(mode_btn(
@@ -288,7 +311,6 @@ fn topbar_control(
 	let view = cx.entity();
 	match id {
 		"github-desktop" => Button::new("tb-gh")
-			.ghost()
 			.small()
 			.icon(IconName::GitHub)
 			.tooltip(app.t("topbarGithubDesktop"))
@@ -300,7 +322,6 @@ fn topbar_control(
 			})
 			.into_any_element(),
 		"editor" => Button::new("tb-ed")
-			.ghost()
 			.small()
 			.icon(IconName::ALargeSmall)
 			.tooltip(app.t("topbarEditor"))
@@ -312,7 +333,6 @@ fn topbar_control(
 			})
 			.into_any_element(),
 		"terminal" => Button::new("tb-term")
-			.ghost()
 			.small()
 			.icon(IconName::SquareTerminal)
 			.tooltip(app.t("topbarTerminal"))
@@ -357,7 +377,6 @@ fn topbar_control(
 				),
 			};
 			Button::new("tb-pr")
-				.ghost()
 				.small()
 				.icon(IconName::GitHub)
 				.label(label)
@@ -785,4 +804,17 @@ fn persistent_terminals(app: &mut AppView, window: &mut Window, cx: &mut Context
 				.size_full()
 				.child(terminal::render(app, &profile_id, index, visible, window, cx))
 		}))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::leftover_show_git_diff_stats;
+
+	#[test]
+	fn leftover_git_stats_hide_clean_trees() {
+		assert!(!leftover_show_git_diff_stats(0, 0));
+		assert!(leftover_show_git_diff_stats(1, 0));
+		assert!(leftover_show_git_diff_stats(0, 4));
+		assert!(leftover_show_git_diff_stats(2, 3));
+	}
 }

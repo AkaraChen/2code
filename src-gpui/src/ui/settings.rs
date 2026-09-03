@@ -16,7 +16,7 @@ use gpui_component::tab::Tab;
 use crate::app::AppView;
 use crate::i18n::Locale;
 use crate::prefs::{term_theme_by_name, RadiusPref, TERM_THEMES, ThemePref};
-use crate::state::SettingsTab;
+use crate::state::{DialogKind, SettingsTab};
 
 pub fn open_update_page(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) {
 	open_settings_at(app, window, cx, Some(SettingsTab::About));
@@ -189,6 +189,12 @@ impl SettingsView {
 			main.update(cx, |app, cx| {
 				app.data.prefs = prefs;
 				app.data.locale = locale;
+				if !app.data.prefs.debug_mode {
+					if app.data.overlay.dialog == Some(DialogKind::DebugLog) {
+						app.data.overlay.dialog = None;
+					}
+					app.data.overlay.debug_open = false;
+				}
 				app.persist_prefs();
 				cx.notify();
 			});

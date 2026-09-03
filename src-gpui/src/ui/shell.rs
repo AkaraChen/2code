@@ -83,7 +83,6 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.child(palette::render(app, window, cx))
 		.child(crate::ui::git::render_diff_dialog(app, window, cx))
 		.child(debug::render_fab(app, window, cx))
-		.child(debug::render_panel(app, window, cx))
 		.child(toasts(app, cx))
 }
 

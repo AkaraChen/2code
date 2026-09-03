@@ -65,12 +65,14 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 					720.
 				} else if matches!(kind, DialogKind::SwitchBranch) {
 					448.
-				} else if matches!(kind, DialogKind::ProjectSettings | DialogKind::DebugLog) {
+				} else if matches!(kind, DialogKind::ProjectSettings) {
 					560.
+				} else if matches!(kind, DialogKind::DebugLog) {
+					512.
 				} else {
 					380.
 				}))
-				.max_h(px(640.))
+				.max_h(px(if matches!(kind, DialogKind::DebugLog) { 630. } else { 640. }))
 				.p_4()
 				.gap_3()
 				.rounded_xl()
@@ -541,7 +543,7 @@ fn dialog_body(
 			.child(Input::new(&app.inputs.template_commands))
 			.into_any_element(),
 		DialogKind::ReviewQueue => review_queue_body(app, theme.muted_foreground, cx).into_any_element(),
-		DialogKind::DebugLog => crate::ui::debug::render_panel(app, _window, cx).into_any_element(),
+		DialogKind::DebugLog => crate::ui::debug::render_dialog_body(app, cx).into_any_element(),
 		DialogKind::CreateGroup => v_flex()
 			.gap_2()
 			.child(div().text_sm().child(app.t("projectGroupName")))
@@ -783,6 +785,9 @@ fn leftover_branch_row(
 }
 
 fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> impl IntoElement {
+	if kind == DialogKind::DebugLog {
+		return div().id("no-debug-footer").into_any_element();
+	}
 	let view = cx.entity();
 	let danger = matches!(
 		kind,
@@ -817,7 +822,9 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		.justify_end()
 		.gap_2()
 		.when(
-			kind != DialogKind::ReviewQueue && kind != DialogKind::SwitchBranch,
+			kind != DialogKind::ReviewQueue
+				&& kind != DialogKind::SwitchBranch
+				&& kind != DialogKind::DebugLog,
 			|el| {
 				el.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
 					let view = view.clone();
@@ -919,6 +926,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 					}),
 			)
 		})
+		.into_any_element()
 }
 
 fn context_menu(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {

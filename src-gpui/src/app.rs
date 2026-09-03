@@ -2655,6 +2655,29 @@ impl AppView {
 		]);
 	}
 
+	pub fn open_debug_log(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		if !self.data.prefs.debug_mode {
+			return;
+		}
+		self.inputs.debug_search.update(cx, |s, cx| {
+			s.set_value("", window, cx);
+		});
+		self.data.overlay.dialog = Some(DialogKind::DebugLog);
+		self.data.overlay.debug_open = true;
+	}
+
+	pub fn toggle_debug_log(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		if !self.data.prefs.debug_mode {
+			return;
+		}
+		if self.data.overlay.dialog == Some(DialogKind::DebugLog) {
+			self.data.overlay.dialog = None;
+			self.data.overlay.debug_open = false;
+			return;
+		}
+		self.open_debug_log(window, cx);
+	}
+
 	/// Close the topmost overlay. Returns true when something was dismissed.
 	pub fn dismiss_overlay(&mut self) -> bool {
 		if self.data.overlay.context_menu.is_some()
@@ -2700,6 +2723,7 @@ impl AppView {
 		if self.data.overlay.dialog.take().is_some() {
 			self.data.overlay.dialog_error = None;
 			self.data.overlay.dialog_busy = false;
+			self.data.overlay.debug_open = false;
 			return true;
 		}
 		if self.data.overlay.debug_open {
@@ -3152,10 +3176,8 @@ impl gpui::Render for AppView {
 			.on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
 				ui::settings::open_settings_window(this, window, cx);
 			}))
-			.on_action(cx.listener(|this, _: &ToggleDebug, _, cx| {
-				this.data.prefs.debug_mode = !this.data.prefs.debug_mode;
-				this.data.overlay.debug_open = this.data.prefs.debug_mode;
-				this.persist_prefs();
+			.on_action(cx.listener(|this, _: &ToggleDebug, window, cx| {
+				this.toggle_debug_log(window, cx);
 				cx.notify();
 			}))
 			.on_action(cx.listener(|this, _: &OpenPalette, _, cx| {

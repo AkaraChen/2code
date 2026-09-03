@@ -710,6 +710,16 @@ pub fn format_debug_time(timestamp_ms: u64) -> String {
 	format!("{h:02}:{m:02}:{s:02}.{ms:03}")
 }
 
+pub fn leftover_debug_log_matches(entry: &model::debug::LogEntry, query: &str) -> bool {
+	if query.is_empty() {
+		return true;
+	}
+	let q = query.to_ascii_lowercase();
+	entry.message.to_ascii_lowercase().contains(&q)
+		|| entry.source.to_ascii_lowercase().contains(&q)
+		|| entry.level.to_ascii_lowercase().contains(&q)
+}
+
 pub fn format_debug_log(entry: &model::debug::LogEntry) -> String {
 	format!(
 		"{} {} {} {}",
@@ -768,5 +778,21 @@ mod tests {
 			message: "ready".into(),
 		});
 		assert_eq!(line, "00:00:01.000 INFO pty ready");
+	}
+
+	#[test]
+	fn leftover_debug_search_matches_message_source_level() {
+		let entry = model::debug::LogEntry {
+			timestamp: 1_000,
+			level: "WARN".into(),
+			source: "pty".into(),
+			message: "ready".into(),
+		};
+		assert!(leftover_debug_log_matches(&entry, ""));
+		assert!(leftover_debug_log_matches(&entry, "rea"));
+		assert!(leftover_debug_log_matches(&entry, "PTY"));
+		assert!(leftover_debug_log_matches(&entry, "warn"));
+		assert!(!leftover_debug_log_matches(&entry, "00:00"));
+		assert!(!leftover_debug_log_matches(&entry, "error"));
 	}
 }
