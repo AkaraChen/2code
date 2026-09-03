@@ -1,9 +1,8 @@
 use gpui::{
-	Context, InteractiveElement, IntoElement, ParentElement, Styled, div,
-	prelude::FluentBuilder, px,
+	Context, IntoElement, ParentElement, Styled, div, px,
 };
 use gpui_component::{
-	ActiveTheme, Icon, IconName, Sizable,
+	Icon, IconName, Selectable, StyledExt,
 	button::{Button, ButtonVariants},
 	sidebar::{
 		Sidebar, SidebarCollapsible, SidebarGroup, SidebarHeader, SidebarMenu,
@@ -56,7 +55,7 @@ impl AppRoot {
 					SidebarMenu::new()
 						.child(
 							SidebarMenuItem::new("Home")
-								.icon(Icon::new(IconName::House).size_4())
+								.icon(Icon::new(IconName::LayoutDashboard).size_4())
 								.active(matches!(route, Route::Home))
 								.on_click(cx.listener(|this, _, _, cx| {
 									this.open_home(cx);
@@ -87,7 +86,7 @@ impl AppRoot {
 											if current == &profile_id
 									);
 									SidebarMenuItem::new(profile.branch_name.clone())
-										.icon(Icon::new(IconName::GitBranch).size_4())
+										.icon(Icon::new(IconName::Folder).size_4())
 										.active(selected)
 										.on_click(cx.listener(move |this, _, _, cx| {
 											this.open_workspace(
@@ -120,14 +119,14 @@ impl AppRoot {
 							})),
 					)
 					.child(
-						SidebarMenu::new().child(
-							SidebarMenuItem::new("Settings")
-								.icon(Icon::new(IconName::Settings).size_4())
-								.active(matches!(route, Route::Settings))
-								.on_click(cx.listener(|this, _, _, cx| {
-									this.open_settings(cx);
-								})),
-						),
+						Button::new("open-settings")
+							.ghost()
+							.icon(IconName::Settings)
+							.label("Settings")
+							.selected(matches!(route, Route::Settings))
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.open_settings(cx);
+							})),
 					),
 			)
 	}

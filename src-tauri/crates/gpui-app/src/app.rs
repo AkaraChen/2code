@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 use gpui::{
-	AppContext, Context, Entity, FocusHandle, IntoElement, ParentElement,
-	Render, Styled, Window, div, prelude::FluentBuilder, px,
+	AppContext, Context, Entity, FocusHandle, InteractiveElement, IntoElement,
+	ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, Theme, ThemeMode, TitleBar, h_flex, input::InputState, v_flex,
+	ActiveTheme, Theme, ThemeMode, TitleBar, h_flex, input::InputState,
+	v_flex,
 };
 
 use crate::backend::{Backend, ProfileVm, ProjectVm};
@@ -50,6 +51,7 @@ pub struct AppRoot {
 	pub git_stats_label: String,
 	pub git_diff: String,
 	pub files: Vec<String>,
+	#[allow(dead_code)]
 	pub focus: FocusHandle,
 }
 
@@ -57,10 +59,18 @@ impl AppRoot {
 	pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
 		let backend = Backend::boot().expect("failed to initialize 2code backend");
 		let settings = AppSettings::load(&backend.settings_path());
-		let create_name = cx.new(|cx| InputState::new(window, cx));
-		let create_folder = cx.new(|cx| InputState::new(window, cx));
-		let profile_branch = cx.new(|cx| InputState::new(window, cx));
-		let terminal_input = cx.new(|cx| InputState::new(window, cx));
+		let create_name = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("Optional project name")
+		});
+		let create_folder = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("Project folder")
+		});
+		let profile_branch = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("feature/my-lane")
+		});
+		let terminal_input = cx.new(|cx| {
+			InputState::new(window, cx).placeholder("Send to the PTY and press Enter")
+		});
 		let mut app = Self {
 			backend,
 			settings,
@@ -186,17 +196,18 @@ impl AppRoot {
 	}
 
 	pub fn refresh_workspace(&mut self) {
-		if let Some(project) = self.current_project() {
-			self.git_branch = self.backend.git_branch(&project.folder);
+		if let Some(folder) = self.current_project().map(|project| project.folder.clone())
+		{
+			self.git_branch = self.backend.git_branch(&folder);
 		}
-		if let Some(profile) = self.current_profile() {
-			let stats = self.backend.git_diff_stats(&profile.id);
-			self.git_stats_label = format!(
-				"+{} −{}",
-				stats.insertions, stats.deletions
-			);
-			self.git_diff = self.backend.git_diff(&profile.id);
-			self.files = self.backend.list_files(&profile.id);
+		if let Some(profile_id) =
+			self.current_profile().map(|profile| profile.id.clone())
+		{
+			let stats = self.backend.git_diff_stats(&profile_id);
+			self.git_stats_label =
+				format!("+{} −{}", stats.insertions, stats.deletions);
+			self.git_diff = self.backend.git_diff(&profile_id);
+			self.files = self.backend.list_files(&profile_id);
 		}
 		self.refresh_terminal();
 	}
@@ -222,8 +233,8 @@ impl AppRoot {
 		window: &mut Window,
 		cx: &mut Context<Self>,
 	) {
-		let name = self.create_name.read(cx).value(cx).to_string();
-		let folder = self.create_folder.read(cx).value(cx).to_string();
+		let name = self.create_name.read(cx).value().to_string();
+		let folder = self.create_folder.read(cx).value().to_string();
 		if folder.trim().is_empty() {
 			self.error = Some("Choose a folder first.".into());
 			cx.notify();
@@ -262,7 +273,7 @@ impl AppRoot {
 		let Some(project) = self.current_project().cloned() else {
 			return;
 		};
-		let branch = self.profile_branch.read(cx).value(cx).to_string();
+		let branch = self.profile_branch.read(cx).value().to_string();
 		let worktree = if self.settings.worktree_dir.is_empty() {
 			None
 		} else {
@@ -293,10 +304,13 @@ impl AppRoot {
 			self.reload_projects(cx);
 			if self.projects.is_empty() {
 				self.route = Route::Home;
-			} else if let Some(project) = self.projects.first() {
-				if let Some(profile) = project.default_profile() {
-					self.open_workspace(&project.id, &profile.id, cx);
-				}
+			} else if let Some((project_id, profile_id)) =
+				self.projects.first().and_then(|project| {
+					project.default_profile().map(|profile| {
+						(project.id.clone(), profile.id.clone())
+					})
+				}) {
+				self.open_workspace(&project_id, &profile_id, cx);
 			}
 		}
 		cx.notify();
@@ -328,7 +342,7 @@ impl AppRoot {
 		let Some(session_id) = self.active_session.clone() else {
 			return;
 		};
-		let mut command = self.terminal_input.read(cx).value(cx).to_string();
+		let mut command = self.terminal_input.read(cx).value().to_string();
 		if !command.ends_with('\n') {
 			command.push('\n');
 		}

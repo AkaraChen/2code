@@ -1,9 +1,8 @@
 use gpui::{
-	Context, IntoElement, ParentElement, Styled, Window, div, prelude::FluentBuilder,
-	px,
+	App, ClickEvent, Context, IntoElement, ParentElement, Styled, Window, div, px,
 };
 use gpui_component::{
-	ActiveTheme, IconName,
+	ActiveTheme, IconName, StyledExt,
 	button::{Button, ButtonVariants},
 	h_flex,
 	switch::Switch,
@@ -40,7 +39,7 @@ impl AppRoot {
 						cx.notify();
 					}))
 					.child(Tab::new().icon(IconName::Settings).label("General"))
-					.child(Tab::new().icon(IconName::Terminal).label("Terminal"))
+					.child(Tab::new().icon(IconName::SquareTerminal).label("Terminal"))
 					.child(Tab::new().icon(IconName::Info).label("About")),
 			)
 			.child(match tab {
@@ -263,7 +262,7 @@ impl AppRoot {
 		id: &'static str,
 		label: &'static str,
 		selected: bool,
-		on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut Context<Self>) + 'static,
+		on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 	) -> impl IntoElement {
 		let button = Button::new(id).label(label).on_click(on_click);
 		if selected {

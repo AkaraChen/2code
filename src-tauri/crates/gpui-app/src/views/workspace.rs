@@ -1,11 +1,12 @@
 use gpui::{
-	Context, IntoElement, ParentElement, Styled, Window, div, prelude::FluentBuilder,
-	px,
+	Context, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
+	Styled, Window, div,
+	prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, Icon, IconName, Sizable,
+	ActiveTheme, Icon, IconName, Sizable, StyledExt,
 	button::{Button, ButtonVariants},
-	h_flex, input::Input, scroll::ScrollableElement, v_flex,
+	h_flex, input::Input, v_flex,
 };
 
 use crate::app::AppRoot;
@@ -55,7 +56,7 @@ impl AppRoot {
 									.rounded(px(6.))
 									.bg(cx.theme().muted)
 									.gap_1()
-									.child(Icon::new(IconName::GitBranch).size_3())
+									.child(Icon::new(IconName::Folder).size_3())
 									.child(
 										div()
 											.text_xs()
@@ -90,7 +91,7 @@ impl AppRoot {
 							.child(
 								Button::new("delete-project")
 									.ghost()
-									.icon(IconName::Trash)
+									.icon(IconName::Delete)
 									.label("Delete")
 									.on_click(cx.listener(|this, _, _, cx| {
 										this.show_delete_project = this
@@ -124,7 +125,8 @@ impl AppRoot {
 									.flex_1()
 									.px_2()
 									.gap_1()
-									.vertical_scroll()
+									.id("file-list")
+									.overflow_y_scroll()
 									.children(files.into_iter().map(|path| {
 										h_flex()
 											.h(px(28.))
@@ -172,7 +174,7 @@ impl AppRoot {
 												.p_3()
 												.font_family("monospace")
 												.text_xs()
-												.vertical_scroll()
+												.overflow_y_scroll()
 												.child(if output.is_empty() {
 													"Waiting for shell output…"
 														.to_string()
@@ -189,7 +191,6 @@ impl AppRoot {
 												.child(
 													Input::new(&input)
 														.cleanable(true)
-														.placeholder("Send to the PTY and press Enter"),
 												)
 												.child(
 													Button::new("send-terminal")
@@ -221,7 +222,7 @@ impl AppRoot {
 												.items_center()
 												.justify_center()
 												.child(
-													Icon::new(IconName::Terminal)
+													Icon::new(IconName::SquareTerminal)
 														.size_4(),
 												),
 										)
@@ -261,7 +262,8 @@ impl AppRoot {
 													.bg(cx.theme().muted)
 													.font_family("monospace")
 													.text_xs()
-													.vertical_scroll()
+													.id("git-diff")
+													.overflow_y_scroll()
 													.child(diff),
 											)
 										}),

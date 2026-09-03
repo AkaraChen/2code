@@ -2,7 +2,7 @@ use gpui::{
 	Context, IntoElement, ParentElement, Styled, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, Icon, IconName, Sizable,
+	ActiveTheme, Icon, IconName, StyledExt,
 	button::{Button, ButtonVariants},
 	v_flex,
 };
@@ -43,7 +43,7 @@ impl AppRoot {
 							.flex()
 							.items_center()
 							.justify_center()
-							.child(Icon::new(IconName::FolderPlus).size_4()),
+							.child(Icon::new(IconName::Folder).size_4()),
 					)
 					.child(div().text_sm().font_medium().child("No projects yet"))
 					.child(

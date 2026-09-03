@@ -12,6 +12,7 @@ use service::PtyEventEmitter;
 #[derive(Clone, Debug)]
 pub struct ProfileVm {
 	pub id: String,
+	#[allow(dead_code)]
 	pub project_id: String,
 	pub branch_name: String,
 	pub worktree_path: String,
@@ -23,7 +24,9 @@ pub struct ProjectVm {
 	pub id: String,
 	pub name: String,
 	pub folder: String,
+	#[allow(dead_code)]
 	pub pinned_order: Option<i32>,
+	#[allow(dead_code)]
 	pub group_id: Option<String>,
 	pub profiles: Vec<ProfileVm>,
 }
@@ -189,6 +192,7 @@ impl Backend {
 		})
 	}
 
+	#[allow(dead_code)]
 	pub fn delete_profile(&self, id: &str) -> Result<(), AppError> {
 		service::profile::delete_with_context(&self.pty_context(), id)
 	}
@@ -255,6 +259,7 @@ impl Backend {
 		service::project::get_diff(&mut conn, profile_id).unwrap_or_default()
 	}
 
+	#[allow(dead_code)]
 	pub fn git_log(&self, profile_id: &str) -> Vec<GitCommit> {
 		let Ok(mut conn) = self.db.lock() else {
 			return Vec::new();

@@ -23,6 +23,7 @@ pub struct TwoCodePalette {
 impl TwoCodePalette {
 	pub const SIDEBAR_WIDTH: f32 = 250.0;
 	pub const HEADER_HEIGHT: f32 = 52.0;
+	#[allow(dead_code)]
 	pub const RADIUS: f32 = 10.0;
 
 	pub fn light() -> Self {
@@ -70,6 +71,7 @@ impl TwoCodePalette {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn background_hsla(&self) -> Hsla {
 		self.background.into()
 	}

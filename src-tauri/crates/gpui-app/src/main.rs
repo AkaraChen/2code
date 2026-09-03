@@ -5,9 +5,9 @@ mod theme;
 mod views;
 
 use gpui::{
-	App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size,
+	App, Bounds, WindowBounds, WindowOptions, point, prelude::*, px, size,
 };
-use gpui_component::{Root, TitleBar};
+use gpui_component::{ActiveTheme, Root, TitleBar};
 
 use crate::app::AppRoot;
 
@@ -26,7 +26,10 @@ fn main() {
 		gpui_component::init(cx);
 
 		cx.spawn(async move |cx| {
-			let bounds = Bounds::centered(None, size(px(1280.), px(800.)), &cx);
+			let bounds = Bounds {
+				origin: point(px(80.), px(80.)),
+				size: size(px(1280.), px(800.)),
+			};
 			cx.open_window(
 				WindowOptions {
 					window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -35,7 +38,7 @@ fn main() {
 				},
 				|window, cx| {
 					let view = cx.new(|cx| AppRoot::new(window, cx));
-					cx.new(|cx| Root::new(view.into(), window, cx).bg(cx.theme().background))
+					cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
 				},
 			)
 			.expect("failed to open 2code window");

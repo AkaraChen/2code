@@ -3,7 +3,7 @@ use gpui::{
 	px,
 };
 use gpui_component::{
-	ActiveTheme,
+	ActiveTheme, StyledExt,
 	button::{Button, ButtonVariants},
 	h_flex, input::Input, v_flex,
 };
@@ -36,8 +36,8 @@ impl AppRoot {
 							"Choose a folder first. 2code will use that folder as the project root.",
 							v_flex()
 								.gap_3()
-								.child(Input::new(&name).placeholder("Optional project name").cleanable(true))
-								.child(Input::new(&folder).placeholder("Project folder").cleanable(true))
+								.child(Input::new(&name).cleanable(true))
+								.child(Input::new(&folder).cleanable(true))
 								.child(
 									h_flex()
 										.gap_2()
@@ -76,11 +76,7 @@ impl AppRoot {
 							"Leave the branch empty to auto-generate a worktree lane.",
 							v_flex()
 								.gap_3()
-								.child(
-									Input::new(&branch)
-										.placeholder("feature/my-lane")
-										.cleanable(true),
-								)
+								.child(Input::new(&branch).cleanable(true))
 								.child(
 									h_flex()
 										.gap_2()
