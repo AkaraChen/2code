@@ -70,3 +70,7 @@
 | [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
 | [Configuration](configuration.md) | Config files, environment variables, database schema                      |
 | [Notification Behavior](notification-behavior.md) | Terminal unread-dot state machine and click behavior          |
+| [UI Inventory](ui-inventory.md) | Framework-agnostic rewrite spec for every window, screen, component, layout, and dialog |
+| [Sidebar UI Inventory](sidebar-ui-inventory.md) | Pixel-level appendix: app sidebar + profile sidebar |
+| [Home / Project UI Inventory](ui-inventory-home-project.md) | Pixel-level appendix: home, file tree, viewer, command palette, project dialogs |
+| [Settings / Terminal / Git UI Inventory](ui-inventory-settings-terminal-git-debug-updater.md) | Pixel-level appendix: settings window, terminal, git, debug, updater |
