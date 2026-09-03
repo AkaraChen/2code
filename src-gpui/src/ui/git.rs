@@ -609,36 +609,188 @@ fn tab_btn(
 		})
 }
 
+pub fn format_relative_time(iso: &str, now_secs: i64) -> String {
+	let Some(then) = parse_iso8601_secs(iso) else {
+		return iso.to_string();
+	};
+	let diff_sec = now_secs - then;
+	if diff_sec < 60 {
+		return "just now".into();
+	}
+	let diff_min = diff_sec / 60;
+	if diff_min < 60 {
+		return format!("{diff_min}m ago");
+	}
+	let diff_hr = diff_min / 60;
+	if diff_hr < 24 {
+		return format!("{diff_hr}h ago");
+	}
+	let diff_day = diff_hr / 24;
+	if diff_day < 30 {
+		return format!("{diff_day}d ago");
+	}
+	let diff_month = diff_day / 30;
+	if diff_month < 12 {
+		return format!("{diff_month}mo ago");
+	}
+	format!("{}y ago", diff_month / 12)
+}
+
+fn parse_iso8601_secs(raw: &str) -> Option<i64> {
+	let s = raw.trim();
+	let (date, time_tz) = s.split_once('T')?;
+	let mut dp = date.split('-');
+	let year: i32 = dp.next()?.parse().ok()?;
+	let month: i32 = dp.next()?.parse().ok()?;
+	let day: i32 = dp.next()?.parse().ok()?;
+	let (time, offset) = if let Some(time) = time_tz.strip_suffix('Z').or_else(|| time_tz.strip_suffix('z')) {
+		(time, 0i64)
+	} else if let Some(idx) = time_tz.rfind('+') {
+		(&time_tz[..idx], parse_tz_offset(&time_tz[idx..])?)
+	} else if let Some(rel) = time_tz.find('-').filter(|&i| i >= 8) {
+		(&time_tz[..rel], parse_tz_offset(&time_tz[rel..])?)
+	} else {
+		(time_tz, 0)
+	};
+	let time = time.split('.').next()?;
+	let mut tp = time.split(':');
+	let hour: i64 = tp.next()?.parse().ok()?;
+	let minute: i64 = tp.next()?.parse().ok()?;
+	let second: i64 = tp.next().unwrap_or("0").parse().ok()?;
+	Some(civil_to_unix(year, month, day) + hour * 3600 + minute * 60 + second - offset)
+}
+
+fn parse_tz_offset(raw: &str) -> Option<i64> {
+	let (sign, rest) = if let Some(rest) = raw.strip_prefix('+') {
+		(1i64, rest)
+	} else if let Some(rest) = raw.strip_prefix('-') {
+		(-1, rest)
+	} else {
+		return None;
+	};
+	let compact = rest.replace(':', "");
+	if compact.len() < 2 {
+		return None;
+	}
+	let hours: i64 = compact[..2].parse().ok()?;
+	let minutes: i64 = if compact.len() >= 4 {
+		compact[2..4].parse().ok()?
+	} else {
+		0
+	};
+	Some(sign * (hours * 3600 + minutes * 60))
+}
+
+fn civil_to_unix(year: i32, month: i32, day: i32) -> i64 {
+	let (mut year, mut month) = (year, month);
+	if month <= 2 {
+		year -= 1;
+		month += 9;
+	} else {
+		month -= 3;
+	}
+	let era = if year >= 0 { year } else { year - 399 } / 400;
+	let yoe = (year - era * 400) as u32;
+	let doy = (153 * month as u32 + 2) / 5 + day as u32 - 1;
+	let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	(era as i64 * 146097 + doe as i64 - 719468) * 86400
+}
+
+fn unix_now_secs() -> i64 {
+	std::time::SystemTime::now()
+		.duration_since(std::time::UNIX_EPOCH)
+		.map(|d| d.as_secs() as i64)
+		.unwrap_or(0)
+}
+
 fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
 	if let Some(hash) = app.data.overlay.git_selected_commit.clone() {
+		let commit = app
+			.data
+			.overlay
+			.git_commits
+			.iter()
+			.find(|c| c.hash == hash || c.full_hash == hash)
+			.cloned();
+		let selected_file = app.data.overlay.git_diff_file.clone();
 		return v_flex()
+			.id("commit-drill-in")
 			.child(
-				Button::new("back-commits")
-					.ghost()
-					.small()
-					.label(app.t("backToCommitList"))
-					.on_click({
-						let view = view.clone();
-						move |_, _, cx| {
-							view.update(cx, |app, cx| {
-								app.data.overlay.git_selected_commit = None;
-								cx.notify();
-							});
-						}
-					}),
+				h_flex()
+					.px_2()
+					.py_1()
+					.gap_1()
+					.child(
+						Button::new("back-commits")
+							.ghost()
+							.xsmall()
+							.icon(IconName::ArrowLeft)
+							.tooltip(app.t("backToCommitList"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.data.overlay.git_selected_commit = None;
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						v_flex()
+							.min_w_0()
+							.flex_1()
+							.child(
+								div()
+									.text_sm()
+									.font_medium()
+									.child(commit.as_ref().map(|c| c.message.clone()).unwrap_or_default()),
+							)
+							.child(
+								div()
+									.text_xs()
+									.font_family("monospace")
+									.text_color(theme.muted_foreground)
+									.child(commit.as_ref().map(|c| c.hash.clone()).unwrap_or(hash.clone())),
+							),
+					),
 			)
 			.child(if app.data.overlay.git_commit_files.is_empty() {
-				div().p_3().child(app.t("noFileChanges")).into_any_element()
+				div()
+					.p_8()
+					.text_sm()
+					.text_color(theme.muted_foreground)
+					.child(app.t("noFileChanges"))
+					.into_any_element()
 			} else {
 				v_flex()
+					.child(
+						div()
+							.px_3()
+							.py_1()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(crate::i18n::tf(
+								app.data.locale,
+								"changedFiles",
+								&[("count", &app.data.overlay.git_commit_files.len().to_string())],
+							)),
+					)
 					.children(app.data.overlay.git_commit_files.iter().map(|p| {
 						let path = p.clone();
-						div()
+						let active = selected_file.as_deref() == Some(p.as_str());
+						let (name, parent) = match p.rsplit_once('/') {
+							Some((dir, base)) => (base.to_string(), Some(dir.to_string())),
+							None => (p.clone(), None),
+						};
+						h_flex()
 							.id(crate::ui::eid(format!("cfile-{p}")))
-							.px_2()
-							.py_1()
+							.px_3()
+							.py_2()
+							.gap_2()
+							.when(active, |el| el.bg(theme.muted))
 							.hover(|el| el.bg(theme.muted))
 							.on_click({
 								let view = view.clone();
@@ -649,23 +801,33 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 									});
 								}
 							})
-							.child(p.clone())
+							.child(div().text_sm().when(active, |el| el.font_medium()).child(name))
+							.when_some(parent, |el, dir| {
+								el.child(div().text_xs().text_color(theme.muted_foreground).child(dir))
+							})
 					}))
 					.into_any_element()
 			})
 			.into_any_element();
 	}
 	if app.data.overlay.git_commits.is_empty() {
-		return div().p_4().child(app.t("noCommitsFound")).into_any_element();
+		return div()
+			.p_8()
+			.text_sm()
+			.text_color(theme.muted_foreground)
+			.child(app.t("noCommitsFound"))
+			.into_any_element();
 	}
+	let now = unix_now_secs();
 	v_flex()
+		.id("commit-list")
 		.children(app.data.overlay.git_commits.iter().map(|c| {
 			let hash = c.hash.clone();
 			v_flex()
 				.id(crate::ui::eid(format!("commit-{hash}")))
 				.px_3()
-				.py_2()
-				.gap_1()
+				.py(px(6.))
+				.gap(px(2.))
 				.hover(|el| el.bg(theme.muted))
 				.on_click({
 					let view = view.clone();
@@ -677,12 +839,42 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 						});
 					}
 				})
-				.child(div().font_medium().text_sm().child(c.message.clone()))
-				.child(div().text_xs().text_color(theme.muted_foreground).child(format!(
-					"{} · {}",
-					c.author.name,
-					&hash[..hash.len().min(7)]
-				)))
+				.child(div().text_sm().child(c.message.clone()))
+				.child(
+					h_flex()
+						.gap_2()
+						.text_xs()
+						.text_color(theme.muted_foreground)
+						.child(div().font_family("monospace").child(hash.clone()))
+						.child(div().min_w_0().flex_1().child(c.author.name.clone()))
+						.child(div().child(format_relative_time(&c.date, now))),
+				)
+				.child(
+					h_flex()
+						.gap_2()
+						.text_xs()
+						.when(c.files_changed > 0, |el| {
+							el.child(div().text_color(theme.muted_foreground).child(format!(
+								"{} {}",
+								c.files_changed,
+								if c.files_changed == 1 { "file" } else { "files" }
+							)))
+						})
+						.when(c.insertions > 0, |el| {
+							el.child(
+								div()
+									.text_color(gpui::hsla(0.38, 0.7, 0.45, 1.))
+									.child(format!("+{}", c.insertions)),
+							)
+						})
+						.when(c.deletions > 0, |el| {
+							el.child(
+								div()
+									.text_color(gpui::hsla(0.02, 0.75, 0.5, 1.))
+									.child(format!("-{}", c.deletions)),
+							)
+						}),
+				)
 		}))
 		.into_any_element()
 }
@@ -1015,4 +1207,39 @@ fn image_preview(app: &AppView, path: &str, diff: &str) -> impl IntoElement {
 						.into_any_element()
 				}),
 		)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{civil_to_unix, format_relative_time, parse_iso8601_secs};
+
+	#[test]
+	fn format_relative_time_matches_leftover_commit_list() {
+		let then = parse_iso8601_secs("2026-04-09T12:00:00Z").unwrap();
+		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 30), "just now");
+		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 5 * 60), "5m ago");
+		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 3 * 3600), "3h ago");
+		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 2 * 86400), "2d ago");
+		assert_eq!(
+			format_relative_time("2026-04-09T12:00:00Z", then + 30 * 86400),
+			"1mo ago"
+		);
+		assert_eq!(
+			format_relative_time("2026-04-09T12:00:00Z", then + 400 * 86400),
+			"1y ago"
+		);
+	}
+
+	#[test]
+	fn parse_iso8601_respects_timezone_offset() {
+		let utc = parse_iso8601_secs("2026-04-09T12:00:00Z").unwrap();
+		let plus8 = parse_iso8601_secs("2026-04-09T20:00:00+08:00").unwrap();
+		assert_eq!(utc, plus8);
+		assert_eq!(utc, civil_to_unix(2026, 4, 9) + 12 * 3600);
+	}
+
+	#[test]
+	fn format_relative_time_falls_back_to_raw_date() {
+		assert_eq!(format_relative_time("not-a-date", 0), "not-a-date");
+	}
 }
