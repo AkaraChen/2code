@@ -27,7 +27,7 @@ pub struct ProjectTerminalTemplate {
 	pub commands: Vec<String>,
 }
 
-#[derive(Queryable, Selectable, Serialize)]
+#[derive(Queryable, Selectable, Serialize, Clone, Debug)]
 #[diesel(table_name = projects)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Project {
@@ -58,7 +58,7 @@ pub struct UpdateProject {
 	pub folder: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ProjectWithProfiles {
 	pub id: String,
 	pub name: String,

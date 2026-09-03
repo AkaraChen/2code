@@ -92,6 +92,20 @@ fn wait_for_flush_sender(ctx: &PtyContext, session_id: &str) {
 	panic!("flush sender was not registered for session {session_id}");
 }
 
+fn wait_for_history_contains(logs: &Path, session_id: &str, needle: &str) -> String {
+	let attempts = if cfg!(windows) { 80 } else { 40 };
+	let mut history_text = String::new();
+	for _ in 0..attempts {
+		let history = service::pty::get_history(logs, session_id);
+		history_text = String::from_utf8_lossy(&history).into_owned();
+		if history_text.contains(needle) {
+			return history_text;
+		}
+		std::thread::sleep(Duration::from_millis(100));
+	}
+	history_text
+}
+
 fn pty_config(cwd: String) -> PtyConfig {
 	PtyConfig {
 		shell: test_shell(),
@@ -500,12 +514,11 @@ fn create_session_executes_startup_commands() {
 	)
 	.unwrap();
 
-	std::thread::sleep(std::time::Duration::from_secs(2));
+	wait_for_flush_sender(&ctx, &session_id);
+	let history_text = wait_for_history_contains(&logs, &session_id, "tmpl-ok");
 	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 
-	let history = service::pty::get_history(&logs, &session_id);
-	let history_text = String::from_utf8_lossy(&history);
 	assert!(
 		history_text.contains("tmpl-ok"),
 		"history did not contain startup output: {history_text:?}",

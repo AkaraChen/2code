@@ -2,7 +2,7 @@ use crate::schema::project_groups;
 use diesel::prelude::*;
 use serde::Serialize;
 
-#[derive(Queryable, Selectable, Serialize)]
+#[derive(Queryable, Selectable, Serialize, Clone, Debug)]
 #[diesel(table_name = project_groups)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct ProjectGroup {

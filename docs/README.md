@@ -1,16 +1,17 @@
 # 2code Architecture Documentation
 
-> Auto-generated structural documentation for the **2code** Tauri 2 desktop application.
+> Structural documentation for **2code**. The current product UI is the GPUI native shell in `src-gpui/`. The Tauri + React tree remains as a reference implementation.
 
 ## Overview
 
-**2code** is a macOS desktop app for managing code projects with integrated persistent terminal sessions. It pairs a React 19 frontend with a Rust backend, connected via Tauri 2 IPC with auto-generated TypeScript bindings.
+**2code** is a desktop app for managing code projects with integrated persistent terminal sessions. The GPUI rewrite in `src-gpui/` owns the windows and UI; it reuses the existing Rust domain crates (`model`, `repo`, `service`, `infra`) without Tauri IPC.
 
 ### Tech Stack
 
 | Layer          | Technology                                 |
 | -------------- | ------------------------------------------ |
-| Frontend       | React 19, TypeScript, Vite 8, shadcn/ui    |
+| Native UI      | GPUI + gpui-component (`src-gpui/`)        |
+| Frontend       | React 19, TypeScript, Vite 8, shadcn/ui (legacy Tauri shell)    |
 | State (client) | Zustand 5 + immer                          |
 | State (server) | TanStack Query 5                           |
 | Routing        | react-router v7                            |
@@ -42,6 +43,8 @@
 │   ├── generated/              # Auto-generated Tauri IPC bindings (gitignored)
 │   └── paraglide/              # Generated i18n code (gitignored)
 │
+├── src-gpui/                   # GPUI native rewrite (primary desktop shell)
+│
 ├── src-tauri/                  # Backend (Rust)
 │   ├── src/
 │   │   ├── lib.rs              # App setup: plugins, state, commands, lifecycle
@@ -70,3 +73,8 @@
 | [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
 | [Configuration](configuration.md) | Config files, environment variables, database schema                      |
 | [Notification Behavior](notification-behavior.md) | Terminal unread-dot state machine and click behavior          |
+| [UI Inventory](ui-inventory.md) | Framework-agnostic rewrite spec for every window, screen, component, layout, and dialog |
+| [Sidebar UI Inventory](sidebar-ui-inventory.md) | Pixel-level appendix: app sidebar + profile sidebar |
+| [Home / Project UI Inventory](ui-inventory-home-project.md) | Pixel-level appendix: home, file tree, viewer, command palette, project dialogs |
+| [Settings / Terminal / Git UI Inventory](ui-inventory-settings-terminal-git-debug-updater.md) | Pixel-level appendix: settings window, terminal, git, debug, updater |
+| [GPUI rewrite](../src-gpui/README.md) | Native GPUI desktop shell that implements the UI inventory |

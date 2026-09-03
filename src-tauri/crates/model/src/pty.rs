@@ -2,7 +2,7 @@ use crate::schema::pty_sessions;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Serialize)]
+#[derive(Queryable, Selectable, Serialize, Clone)]
 #[diesel(table_name = pty_sessions)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct PtySessionRecord {

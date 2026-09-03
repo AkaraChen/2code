@@ -2,13 +2,7 @@ name: Tauri Smoke
 
 on:
   workflow_call:
-  push:
-    branches:
-      - dev
-      - "codex/**"
-  pull_request:
-    branches:
-      - dev
+  workflow_dispatch:
 
 jobs:
   smoke:

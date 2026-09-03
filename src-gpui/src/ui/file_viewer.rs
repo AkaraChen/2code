@@ -1,0 +1,368 @@
+use std::path::PathBuf;
+
+use crate::ui::markdown::{self, MarkupTarget};
+use gpui::{div, img, prelude::*, px, rgb, Context, Window};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::Input;
+use gpui_component::text::TextView;
+use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
+
+use crate::app::AppView;
+use crate::backend;
+use crate::state::UnifiedTab;
+
+pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let Some(ws) = app.data.current_ws() else {
+		return div().id("file-viewer-none").into_any_element();
+	};
+	let Some(UnifiedTab::File { index }) = ws.active else {
+		return div().id("file-viewer-hidden").into_any_element();
+	};
+	let Some(file) = ws.files.get(index).cloned() else {
+		return div().id("file-viewer-missing").into_any_element();
+	};
+
+	if let Some(err) = file.load_error.clone() {
+		return v_flex()
+			.id("file-viewer-error")
+			.size_full()
+			.items_center()
+			.justify_center()
+			.h(px(128.))
+			.gap_2()
+			.child(
+				div()
+					.text_color(theme.muted_foreground)
+					.child(app.t("somethingWentWrong")),
+			)
+			.child(div().text_xs().text_color(theme.muted_foreground).child(err))
+			.into_any_element();
+	}
+
+	if file.preview {
+		return preview_pane(app, &file, cx).into_any_element();
+	}
+
+	if backend::is_markdown(&file.path) {
+		let preview = app.data.overlay.md_preview;
+		let draft = file.draft.clone();
+		return v_flex()
+			.id("markdown-viewer")
+			.size_full()
+			.font(markdown::editor_font(app.data.prefs.font_family.clone()))
+			.text_size(px(app.data.prefs.font_size))
+			.child(markdown::toolbar(app, MarkupTarget::File, window, cx))
+			.child(if preview {
+				div()
+					.id("markdown-preview")
+					.flex_1()
+					.min_h_0()
+					.p_3()
+					.child(TextView::markdown("md-preview", draft, window, cx))
+					.into_any_element()
+			} else {
+				div()
+					.id("markdown-editor")
+					.flex_1()
+					.min_h_0()
+					.p_2()
+					.child(Input::new(&app.inputs.file_editor))
+					.into_any_element()
+			})
+			.into_any_element();
+	}
+
+	let q = app.inputs.file_search.read(cx).value().to_string();
+	let hits = crate::app::search_match_offsets(&file.draft, &q);
+	let hit_count = hits.len();
+	let hit_ix = if hit_count == 0 {
+		0
+	} else {
+		app.data.overlay.file_search_ix % hit_count + 1
+	};
+	v_flex()
+		.id("text-viewer")
+		.size_full()
+		.font(markdown::editor_font(app.data.prefs.font_family.clone()))
+		.text_size(px(app.data.prefs.font_size))
+		.when(app.data.overlay.file_search_open, |el| {
+			el.child(
+				h_flex()
+					.w_full()
+					.px_2()
+					.py_1()
+					.gap_2()
+					.border_b_1()
+					.border_color(theme.border)
+					.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(if q.is_empty() {
+								app.t("fileViewerFindInFile")
+							} else if hit_count == 0 {
+								app.t("terminalSearchNoResults")
+							} else {
+								format!("{hit_ix}/{hit_count}")
+							}),
+					)
+					.child(
+						Button::new("file-find-prev")
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronUp)
+							.tooltip(app.t("fileViewerPreviousMatch"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										app.cycle_file_search(window, cx, false);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("file-find-next")
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronDown)
+							.tooltip(app.t("fileViewerNextMatch"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										app.cycle_file_search(window, cx, true);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("file-find-close")
+							.ghost()
+							.xsmall()
+							.icon(IconName::Close)
+							.tooltip(app.t("fileViewerCloseFileSearch"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.data.overlay.file_search_open = false;
+										cx.notify();
+									});
+								}
+							}),
+					),
+			)
+		})
+		.child(
+			div()
+				.id("text-editor")
+				.flex_1()
+				.min_h_0()
+				.py(px(12.))
+				.child(Input::new(&app.inputs.file_editor)),
+		)
+		.into_any_element()
+}
+
+pub fn leftover_preview_label(kind: &str) -> &'static str {
+	if kind == "office-pdf" {
+		"Office Preview"
+	} else {
+		"Preview"
+	}
+}
+
+pub fn leftover_archive_counts(entries: &[(String, String)]) -> (usize, usize) {
+	let files = entries.iter().filter(|(_, kind)| kind == "file").count();
+	(files, entries.len().saturating_sub(files))
+}
+
+fn leftover_preview_header(theme: &gpui_component::Theme, title: &str, right: String) -> impl IntoElement {
+	h_flex()
+		.w_full()
+		.min_h(px(36.))
+		.px_3()
+		.gap_3()
+		.border_b_1()
+		.border_color(theme.border)
+		.bg(theme.muted)
+		.justify_between()
+		.child(div().min_w_0().text_sm().font_medium().child(title.to_string()))
+		.child(
+			div()
+				.text_xs()
+				.text_color(theme.muted_foreground)
+				.whitespace_nowrap()
+				.child(right),
+		)
+}
+
+fn preview_pane(_app: &AppView, file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
+		let (files, folders) = leftover_archive_counts(&file.archive_entries);
+		return v_flex()
+			.id("archive-preview")
+			.size_full()
+			.overflow_hidden()
+			.child(leftover_preview_header(
+				&theme,
+				&file.title,
+				format!("{files} files / {folders} folders"),
+			))
+			.child(
+				v_flex()
+					.flex_1()
+					.min_h_0()
+					.min_w_0()
+					.overflow_hidden()
+					.px(px(6.))
+					.py_1()
+					.children(file.archive_entries.iter().map(|(path, kind)| {
+						let is_dir = kind == "dir";
+						let depth = path.matches('/').count();
+						h_flex()
+							.gap_1()
+							.pl(px(4. + 12. * depth as f32))
+							.child(crate::ui::file_icons::file_glyph(path, is_dir, false, 13.))
+							.child(div().text_size(px(13.)).child(path.clone()))
+					})),
+			)
+			.into_any_element();
+	}
+	v_flex()
+		.id("binary-preview")
+		.size_full()
+		.overflow_hidden()
+		.child(leftover_preview_header(
+			&theme,
+			&file.title,
+			leftover_preview_label(&file.preview_kind).to_string(),
+		))
+		.child(preview_body(file, cx))
+		.into_any_element()
+}
+
+fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	if file.preview_kind == "image" || backend::is_image(&file.path) {
+		let src = if file.preview_path.is_empty() {
+			file.path.clone()
+		} else {
+			file.preview_path.clone()
+		};
+		return div()
+			.id("image-preview")
+			.size_full()
+			.relative()
+			.child(checkerboard())
+			.child(
+				div().absolute().inset_0().flex().items_center().justify_center().child(
+					img(PathBuf::from(src))
+						.id("image-preview-img")
+						.max_w_full()
+						.max_h_full(),
+				),
+			)
+			.into_any_element();
+	}
+	if backend::is_document_preview(&file.preview_kind, &file.path) {
+		let path = if file.preview_path.is_empty() {
+			file.path.clone()
+		} else {
+			file.preview_path.clone()
+		};
+		if let Some(png) = backend::rasterize_pdf_preview(&path) {
+			return div()
+				.id("document-preview")
+				.size_full()
+				.bg(rgb(0xffffff))
+				.flex()
+				.items_center()
+				.justify_center()
+				.child(img(png).id("pdf-preview-img").max_w_full().max_h_full())
+				.into_any_element();
+		}
+	}
+	v_flex()
+		.flex_1()
+		.items_center()
+		.justify_center()
+		.child(
+			div()
+				.max_w(px(512.))
+				.px_6()
+				.text_sm()
+				.text_color(theme.muted_foreground)
+				.child(if file.binary_note.is_empty() {
+					"Preview unavailable".to_string()
+				} else {
+					file.binary_note.clone()
+				}),
+		)
+		.into_any_element()
+}
+
+pub fn line_number_count(text: &str) -> usize {
+	if text.is_empty() {
+		1
+	} else {
+		text.lines().count().max(1)
+	}
+}
+
+fn checkerboard() -> impl IntoElement {
+	let cell = px(16.);
+	let mark = gpui::hsla(0., 0., 0.5, 0.08);
+	v_flex()
+		.id("image-checkerboard")
+		.absolute()
+		.inset_0()
+		.overflow_hidden()
+		.children((0..24).map(move |row| {
+			h_flex()
+				.children((0..40).map(move |col| div().w(cell).h(cell).when((row + col) % 2 == 0, |el| el.bg(mark))))
+		}))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{leftover_archive_counts, leftover_preview_label, line_number_count};
+
+	#[test]
+	fn line_number_count_empty_is_one() {
+		assert_eq!(line_number_count(""), 1);
+	}
+
+	#[test]
+	fn line_number_count_counts_lines() {
+		assert_eq!(line_number_count("a"), 1);
+		assert_eq!(line_number_count("a\nb"), 2);
+		assert_eq!(line_number_count("a\nb\nc"), 3);
+	}
+
+	#[test]
+	fn leftover_preview_label_is_office_only_for_office_pdf() {
+		assert_eq!(leftover_preview_label("office-pdf"), "Office Preview");
+		assert_eq!(leftover_preview_label("pdf"), "Preview");
+		assert_eq!(leftover_preview_label("image"), "Preview");
+	}
+
+	#[test]
+	fn leftover_archive_counts_match_file_preview_pane() {
+		assert_eq!(
+			leftover_archive_counts(&[
+				("a.txt".into(), "file".into()),
+				("src/".into(), "dir".into()),
+				("src/b.rs".into(), "file".into()),
+			]),
+			(2, 1)
+		);
+	}
+}

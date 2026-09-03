@@ -361,5 +361,6 @@
 	"notesCodeBlockHidePreview": "Hide preview",
 	"reviewCommentsCopied": "Review comments copied",
 	"reviewCommentsCopiedAndCleared": "Review comments copied and cleared",
-	"reviewQueue": "Review Queue"
+	"reviewQueue": "Review Queue",
+	"gitReviewCommentPlaceholder": "Write a review comment"
 }

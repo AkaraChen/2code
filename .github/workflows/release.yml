@@ -13,37 +13,29 @@ on:
 
 jobs:
   smoke:
-    name: Linux Smoke Gate
-    uses: ./.github/workflows/tauri-smoke.yml
+    name: GPUI Gate
+    uses: ./.github/workflows/gpui-check.yml
 
-  publish:
-    name: Publish (${{ matrix.name }})
+  gpui-binaries:
+    name: GPUI binary (${{ matrix.name }})
     needs: smoke
-    runs-on: ${{ matrix.platform }}
-    permissions:
-      contents: write
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Build macOS packages on native CPU runners so app architectures stay aligned.
-          - name: macOS arm64
-            platform: macos-15
-            rustTargets: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin
-          - name: macOS x64
-            platform: macos-15-intel
-            rustTargets: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
-          - name: Linux x64
-            platform: ubuntu-24.04
-            rustTargets: ""
-            args: ""
-          - name: Windows x64
-            platform: windows-latest
-            rustTargets: ""
-            args: --bundles nsis
-
+          - name: linux-x64
+            os: ubuntu-24.04
+            target: ""
+            bin: 2code
+          - name: macos-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            bin: 2code
+          - name: windows-x64
+            os: windows-latest
+            target: ""
+            bin: 2code.exe
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -53,83 +45,90 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
             build-essential \
-            curl \
-            wget \
-            file \
-            just \
+            pkg-config \
             libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
-      - name: Install just (macOS)
-        if: runner.os == 'macOS'
-        run: brew install just
-
-      - name: Install just (Windows)
-        if: runner.os == 'Windows'
-        run: choco install just -y
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+            libsqlite3-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
 
       - name: Setup Rust
+        if: matrix.target == ''
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust with target
+        if: matrix.target != ''
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rustTargets }}
+          targets: ${{ matrix.target }}
 
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
           cache-bin: false
           workspaces: |
-            src-tauri -> target
+            src-gpui -> target
 
-      - name: Install app dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Install Apple Developer ID G2 certificate
-        if: runner.os == 'macOS'
+      - name: Build GPUI app
         shell: bash
         run: |
-          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
-          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$HOME/Library/Keychains/login.keychain-db"
-          security find-identity -v -p codesigning
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --manifest-path src-gpui/Cargo.toml --target "${{ matrix.target }}"
+            echo "GPUI_BIN=src-gpui/target/${{ matrix.target }}/release/${{ matrix.bin }}" >> "$GITHUB_ENV"
+          else
+            cargo build --release --manifest-path src-gpui/Cargo.toml
+            echo "GPUI_BIN=src-gpui/target/release/${{ matrix.bin }}" >> "$GITHUB_ENV"
+          fi
 
-      - name: Prepare Apple notarization key
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/appstoreconnect/private_keys"
-          key_path="$RUNNER_TEMP/appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
-          printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
-          chmod 600 "$key_path"
-          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
-
-      - name: Build and publish
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH }}
+      - name: Upload GPUI binary
+        uses: actions/upload-artifact@v4
         with:
-          tauriScript: bun tauri
-          tagName: v__VERSION__
-          releaseName: 2code v__VERSION__
-          releaseBody: See the assets to download this version and install.
-          releaseDraft: false
+          name: 2code-gpui-${{ matrix.name }}
+          path: ${{ env.GPUI_BIN }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GPUI
+    needs: gpui-binaries
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download GPUI binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Stage release assets
+        run: |
+          mkdir -p release-assets
+          if [ -f dist/2code-gpui-linux-x64/2code ]; then
+            cp dist/2code-gpui-linux-x64/2code release-assets/2code-linux-x64
+          fi
+          if [ -f dist/2code-gpui-macos-arm64/2code ]; then
+            cp dist/2code-gpui-macos-arm64/2code release-assets/2code-macos-arm64
+          fi
+          if [ -f dist/2code-gpui-windows-x64/2code.exe ]; then
+            cp dist/2code-gpui-windows-x64/2code.exe release-assets/2code-windows-x64.exe
+          fi
+          ls -la release-assets
+          test -n "$(ls -A release-assets)"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || contains(github.ref_name, '-') }}
-          generateReleaseNotes: true
-          includeUpdaterJson: true
-          retryAttempts: 2
-          args: ${{ matrix.args }}
+          body: |
+            Native GPUI 2code builds. Download the binary for your platform and run it.
+
+            - `2code-linux-x64`
+            - `2code-macos-arm64`
+            - `2code-windows-x64.exe`
