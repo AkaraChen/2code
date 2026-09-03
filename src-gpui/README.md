@@ -6,11 +6,14 @@ Native desktop rewrite of 2code using [GPUI](https://gpui.rs) and [gpui-componen
 
 ```bash
 # from repo root
-cd src-gpui && cargo run
-
+just start
 # or
 just gpui
+# or
+cd src-gpui && cargo run
 ```
+
+`./start.sh` and `bun start` also launch this GPUI shell. The legacy Tauri path is `just tauri-dev` / `bun tauri:dev`.
 
 Requires Rust 1.87+ (GPUI). On Linux install `libxkbcommon`, Vulkan, and Wayland/X11 development libraries.
 

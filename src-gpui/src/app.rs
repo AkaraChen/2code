@@ -31,12 +31,15 @@ pub struct SaveFile;
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
 pub struct CommitChanges;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct DismissOverlay;
 use crate::backend::{self, Backend};
 use crate::i18n::{self, Locale};
 use crate::prefs::{term_theme_by_name, Prefs, ThemePref};
 use crate::state::{
 	AgentStatus, AppData, ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab, NotesStatus, OpenFileTab, OverlayState,
-	Route, SettingsTab, SidebarMode, TermSession, ToastKind, TreeNode, UnifiedTab, Workspace,
+	Route, SettingsTab, SidebarMode, SidebarNavItem, TermSession, ToastKind, TreeNode, UnifiedTab, Workspace,
 };
 use crate::ui;
 use gpui_component::input::{Input, InputState};
@@ -1351,8 +1354,13 @@ impl AppView {
 			return;
 		};
 		let q = self.inputs.palette.read(cx).value().to_string();
+		if q == self.data.overlay.palette_query {
+			return;
+		}
+		self.data.overlay.palette_query = q.clone();
 		if q.trim().is_empty() {
 			self.data.overlay.palette_results.clear();
+			self.data.overlay.palette_index = 0;
 			return;
 		}
 		self.data.overlay.palette_results = self.backend.search_files(&profile_id, &q).unwrap_or_default();
@@ -1591,7 +1599,182 @@ impl AppView {
 			KeyBinding::new("ctrl-s", SaveFile, None),
 			KeyBinding::new("cmd-enter", CommitChanges, None),
 			KeyBinding::new("ctrl-enter", CommitChanges, None),
+			KeyBinding::new("escape", DismissOverlay, None),
 		]);
+	}
+
+	/// Close the topmost overlay. Returns true when something was dismissed.
+	pub fn dismiss_overlay(&mut self) -> bool {
+		if self.data.overlay.context_menu.take().is_some() {
+			return true;
+		}
+		if self.data.overlay.renaming_path.take().is_some() {
+			return true;
+		}
+		if self.data.overlay.palette_open {
+			self.data.overlay.palette_open = false;
+			self.data.overlay.palette_results.clear();
+			self.data.overlay.palette_query.clear();
+			return true;
+		}
+		if let Some(term) = self.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+			if term.search_open {
+				term.search_open = false;
+				term.search_query.clear();
+				term.search_ix = 0;
+				return true;
+			}
+		}
+		if self.data.overlay.git_diff_open {
+			self.data.overlay.git_diff_open = false;
+			return true;
+		}
+		if self.data.overlay.dialog.take().is_some() {
+			self.data.overlay.dialog_error = None;
+			self.data.overlay.dialog_busy = false;
+			return true;
+		}
+		if self.data.overlay.debug_open {
+			self.data.overlay.debug_open = false;
+			return true;
+		}
+		if self.data.overlay.onboarding {
+			self.data.overlay.onboarding = false;
+			return true;
+		}
+		false
+	}
+
+	pub fn move_palette(&mut self, delta: i32) {
+		let len = self.data.overlay.palette_results.len();
+		if len == 0 {
+			return;
+		}
+		let cur = self.data.overlay.palette_index as i32;
+		self.data.overlay.palette_index = (cur + delta).rem_euclid(len as i32) as usize;
+	}
+
+	pub fn sidebar_nav_items(&self) -> Vec<SidebarNavItem> {
+		crate::state::collect_sidebar_nav_items(
+			&self.data.projects,
+			&self.data.groups,
+			&self.data.prefs.collapsed_groups,
+			&self.data.overlay.expanded_projects,
+			self.data.current_project.as_deref(),
+		)
+	}
+
+	pub fn move_sidebar_nav(&mut self, delta: i32) -> bool {
+		let items = self.sidebar_nav_items();
+		if items.is_empty() {
+			return false;
+		}
+		let cur = self
+			.data
+			.overlay
+			.sidebar_nav
+			.as_ref()
+			.and_then(|cur| items.iter().position(|item| item == cur))
+			.unwrap_or_else(|| {
+				if let Some(pid) = &self.data.current_profile {
+					items
+						.iter()
+						.position(
+							|item| matches!(item, SidebarNavItem::Profile { profile_id, .. } if profile_id == pid),
+						)
+						.unwrap_or(0)
+				} else {
+					0
+				}
+			});
+		let next = (cur as i32 + delta).clamp(0, items.len() as i32 - 1) as usize;
+		self.data.overlay.sidebar_nav = Some(items[next].clone());
+		true
+	}
+
+	pub fn activate_sidebar_nav(&mut self) -> bool {
+		let item = self
+			.data
+			.overlay
+			.sidebar_nav
+			.clone()
+			.or_else(|| self.sidebar_nav_items().into_iter().next());
+		let Some(item) = item else {
+			return false;
+		};
+		match item {
+			SidebarNavItem::Home => {
+				self.data.route = Route::Home;
+				self.data.current_project = None;
+				self.data.current_profile = None;
+			}
+			SidebarNavItem::Project(id) => {
+				if let Some(profile) = self.data.default_profile_of(&id) {
+					self.open_profile(&id, &profile.id);
+				}
+			}
+			SidebarNavItem::Profile { project_id, profile_id } => {
+				self.open_profile(&project_id, &profile_id);
+			}
+		}
+		true
+	}
+
+	pub fn handle_overlay_key(&mut self, key: &str, shift: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+		if self.data.overlay.palette_open {
+			return match key {
+				"up" => {
+					self.move_palette(-1);
+					true
+				}
+				"down" => {
+					self.move_palette(1);
+					true
+				}
+				"enter" => {
+					self.open_palette_selection(window, cx);
+					true
+				}
+				_ => false,
+			};
+		}
+		if self
+			.data
+			.current_ws()
+			.and_then(|w| w.active_terminal())
+			.is_some_and(|t| t.search_open)
+		{
+			return match key {
+				"enter" => {
+					self.cycle_term_search(cx, !shift);
+					true
+				}
+				_ => false,
+			};
+		}
+		if self.data.overlay.renaming_path.is_some() && key == "enter" {
+			self.commit_rename_path(cx);
+			return true;
+		}
+		false
+	}
+
+	pub fn handle_sidebar_key(&mut self, key: &str) -> bool {
+		if self.data.overlay.palette_open
+			|| self.data.overlay.dialog.is_some()
+			|| self.data.overlay.git_diff_open
+			|| self.data.overlay.context_menu.is_some()
+			|| self.data.overlay.renaming_path.is_some()
+			|| self.data.overlay.sidebar_resize_focus.is_some()
+		{
+			return false;
+		}
+		match key {
+			"up" => self.move_sidebar_nav(-1),
+			"down" => self.move_sidebar_nav(1),
+			"enter" | "space" => self.activate_sidebar_nav(),
+			_ => false,
+		}
 	}
 }
 
@@ -1688,10 +1871,7 @@ impl gpui::Render for AppView {
 		self.sync_pty_size(window);
 		self.sync_notes_input(window, cx);
 		if self.data.overlay.palette_open {
-			let q = self.inputs.palette.read(cx).value().to_string();
-			if self.data.overlay.palette_results.is_empty() && !q.is_empty() {
-				self.search_palette(cx);
-			}
+			self.search_palette(cx);
 		}
 		if let Some(ws) = self.data.current_ws() {
 			if let Some(UnifiedTab::File { index }) = ws.active {
@@ -1725,6 +1905,10 @@ impl gpui::Render for AppView {
 			.on_action(cx.listener(|this, _: &OpenPalette, _, cx| {
 				if this.data.route == Route::Workspace {
 					this.data.overlay.palette_open = !this.data.overlay.palette_open;
+					if !this.data.overlay.palette_open {
+						this.data.overlay.palette_results.clear();
+						this.data.overlay.palette_query.clear();
+					}
 					cx.notify();
 				}
 			}))
@@ -1771,6 +1955,11 @@ impl gpui::Render for AppView {
 			.on_action(cx.listener(|this, _: &CommitChanges, _, cx| {
 				this.commit_selected(cx);
 				cx.notify();
+			}))
+			.on_action(cx.listener(|this, _: &DismissOverlay, _, cx| {
+				if this.dismiss_overlay() {
+					cx.notify();
+				}
 			}))
 			.child(ui::shell::render(self, window, cx))
 	}

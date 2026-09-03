@@ -519,7 +519,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			let profile = ws.profile_id.clone();
 			Tab::new()
 				.label(file.title.clone())
-				.icon(IconName::File)
+				.icon(crate::ui::file_icons::file_icon(&file.path, false, false))
 				.selected(selected)
 				.suffix(
 					h_flex()

@@ -1,6 +1,6 @@
-use gpui::{div, prelude::*, px, Context, Window};
+use gpui::{div, prelude::*, px, Context, KeyDownEvent, Window};
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon};
 
 use crate::app::AppView;
 
@@ -44,6 +44,21 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.border_color(theme.border)
 				.shadow_lg()
 				.on_click(|_, _, _| {})
+				.on_key_down({
+					let view = view.clone();
+					move |ev: &KeyDownEvent, window, cx| {
+						view.update(cx, |app, cx| {
+							if app.handle_overlay_key(
+								ev.keystroke.key.as_str(),
+								ev.keystroke.modifiers.shift,
+								window,
+								cx,
+							) {
+								cx.notify();
+							}
+						});
+					}
+				})
 				.child(
 					div()
 						.px_4()
@@ -91,7 +106,11 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 										});
 									}
 								})
-								.child(Icon::new(IconName::File).w(px(16.)))
+								.child(
+									Icon::new(crate::ui::file_icons::file_icon(&r.path, false, false))
+										.w(px(16.))
+										.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(&r.path, false))),
+								)
 								.child(div().text_sm().child(r.name.clone()))
 								.child(
 									div()

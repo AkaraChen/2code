@@ -39,12 +39,19 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					.gap_1()
 					.border_b_1()
 					.border_color(theme.border)
-					.child(md_btn("md-h1", "H1", "# ", &view))
-					.child(md_btn("md-h2", "H2", "## ", &view))
-					.child(md_btn("md-h3", "H3", "### ", &view))
-					.child(md_btn("md-b", "B", "**", &view))
-					.child(md_btn("md-i", "I", "*", &view))
-					.child(md_btn("md-code", "`", "`", &view))
+					.child(md_btn("md-h1", "H1", "# ", "", &view))
+					.child(md_btn("md-h2", "H2", "## ", "", &view))
+					.child(md_btn("md-h3", "H3", "### ", "", &view))
+					.child(md_btn("md-b", "B", "**", "**", &view))
+					.child(md_btn("md-i", "I", "*", "*", &view))
+					.child(md_btn("md-s", "S", "~~", "~~", &view))
+					.child(md_btn("md-code", "`", "`", "`", &view))
+					.child(md_btn("md-pre", "</>", "```\n", "\n```", &view))
+					.child(md_btn("md-ul", "•", "- ", "", &view))
+					.child(md_btn("md-ol", "1.", "1. ", "", &view))
+					.child(md_btn("md-q", ">", "> ", "", &view))
+					.child(md_btn("md-link", "[]", "[", "](url)", &view))
+					.child(md_btn("md-img", "img", "![", "](src)", &view))
 					.child(
 						Button::new("md-save")
 							.xsmall()
@@ -65,12 +72,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				h_flex()
 					.flex_1()
 					.min_h_0()
-					.child(
-						div()
-							.flex_1()
-							.h_full()
-							.child(Input::new(&app.inputs.file_editor)),
-					)
+					.child(div().flex_1().h_full().child(Input::new(&app.inputs.file_editor)))
 					.child(
 						div()
 							.flex_1()
@@ -78,12 +80,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 							.p_3()
 							.border_l_1()
 							.border_color(theme.border)
-							.child(TextView::markdown(
-								"md-preview",
-								file.draft.clone(),
-								window,
-								cx,
-							)),
+							.child(TextView::markdown("md-preview", file.draft.clone(), window, cx)),
 					),
 			)
 			.into_any_element();
@@ -120,11 +117,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.into_any_element()
 }
 
-fn preview_pane(
-	_app: &AppView,
-	file: &crate::state::OpenFileTab,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+fn preview_pane(_app: &AppView, file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
 	let view = cx.entity();
 	let path = file.path.clone();
@@ -143,18 +136,13 @@ fn preview_pane(
 					h_flex()
 						.gap_2()
 						.child(div().text_xs().child(file.preview_kind.clone()))
-						.child(
-							Button::new("open-external")
-								.xsmall()
-								.label("Open")
-								.on_click({
-									let view = view.clone();
-									let path = path.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, _| app.open_external(&path));
-									}
-								}),
-						),
+						.child(Button::new("open-external").xsmall().label("Open").on_click({
+							let view = view.clone();
+							let path = path.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, _| app.open_external(&path));
+							}
+						})),
 				),
 		)
 		.child(preview_body(file, cx))
@@ -221,7 +209,13 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 		.into_any_element()
 }
 
-fn md_btn(id: &'static str, label: &'static str, wrap: &'static str, view: &gpui::Entity<AppView>) -> impl IntoElement {
+fn md_btn(
+	id: &'static str,
+	label: &'static str,
+	prefix: &'static str,
+	suffix: &'static str,
+	view: &gpui::Entity<AppView>,
+) -> impl IntoElement {
 	let view = view.clone();
 	Button::new(id)
 		.ghost()
@@ -230,7 +224,11 @@ fn md_btn(id: &'static str, label: &'static str, wrap: &'static str, view: &gpui
 		.on_click(move |_, window, cx| {
 			view.update(cx, |app, cx| {
 				let mut text = app.inputs.file_editor.read(cx).value().to_string();
-				text.push_str(wrap);
+				if !text.is_empty() && !text.ends_with('\n') && (prefix.ends_with(' ') || prefix.ends_with('\n')) {
+					text.push('\n');
+				}
+				text.push_str(prefix);
+				text.push_str(suffix);
 				app.inputs.file_editor.update(cx, |s, cx| {
 					s.set_value(text, window, cx);
 				});

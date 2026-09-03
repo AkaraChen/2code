@@ -85,6 +85,7 @@ The legacy Tauri bundle is still `bun tauri build`.
 
 | Command | Description |
 | --- | --- |
+| `just start` / `./start.sh` | Run the GPUI desktop app |
 | `just gpui` | Run the GPUI desktop app |
 | `just gpui-check` | Type-check the GPUI crate |
 | `cd src-tauri && cargo test` | Run Rust domain tests |

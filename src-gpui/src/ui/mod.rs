@@ -16,6 +16,7 @@ impl gpui::Render for DragGhost {
 
 pub mod debug;
 pub mod dialogs;
+pub mod file_icons;
 pub mod file_tree;
 pub mod file_viewer;
 pub mod git;

@@ -6,19 +6,10 @@ use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
 use crate::app::AppView;
 use crate::prefs::TermTheme;
 
-pub fn render(
-	app: &mut AppView,
-	index: usize,
-	_window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = app.current_term_theme();
 	let view = cx.entity();
-	let Some(term) = app
-		.data
-		.current_ws()
-		.and_then(|w| w.terminals.get(index))
-	else {
+	let Some(term) = app.data.current_ws().and_then(|w| w.terminals.get(index)) else {
 		return div().id("term-missing").into_any_element();
 	};
 	let search_open = term.search_open;
@@ -61,18 +52,31 @@ pub fn render(
 				.overflow_hidden()
 				.on_key_down({
 					let view = view.clone();
-					move |ev: &KeyDownEvent, _, cx| {
+					move |ev: &KeyDownEvent, window, cx| {
 						if ev.keystroke.modifiers.control && ev.keystroke.key == "f"
 							|| ev.keystroke.modifiers.platform && ev.keystroke.key == "f"
 						{
 							view.update(cx, |app, cx| {
-								if let Some(term) =
-									app.data.current_ws_mut().and_then(|w| w.active_terminal_mut())
-								{
+								if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
 									term.search_open = true;
 								}
 								cx.notify();
 							});
+							return;
+						}
+						let handled = view.update(cx, |app, cx| {
+							let handled = app.handle_overlay_key(
+								ev.keystroke.key.as_str(),
+								ev.keystroke.modifiers.shift,
+								window,
+								cx,
+							);
+							if handled {
+								cx.notify();
+							}
+							handled
+						});
+						if handled {
 							return;
 						}
 						if let Some(bytes) = key_to_bytes(ev) {
@@ -152,10 +156,8 @@ pub fn render(
 								let view = view.clone();
 								move |_, _, cx| {
 									view.update(cx, |app, cx| {
-										if let Some(term) = app
-											.data
-											.current_ws_mut()
-											.and_then(|w| w.active_terminal_mut())
+										if let Some(term) =
+											app.data.current_ws_mut().and_then(|w| w.active_terminal_mut())
 										{
 											term.search_open = false;
 										}
@@ -198,12 +200,7 @@ pub fn render(
 		.into_any_element()
 }
 
-fn render_grid(
-	term: &crate::state::TermSession,
-	theme: &TermTheme,
-	query: &str,
-	hit_ix: usize,
-) -> impl IntoElement {
+fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str, hit_ix: usize) -> impl IntoElement {
 	let screen = term.parser.screen();
 	let (rows, cols) = screen.size();
 	let hits = term.search_hits(query);
@@ -225,12 +222,7 @@ fn render_grid(
 				})
 				.unwrap_or_else(|| " ".into());
 			let (mut fg, mut bg) = cell
-				.map(|c| {
-					(
-						map_color(c.fgcolor(), theme.fg),
-						map_color(c.bgcolor(), theme.bg),
-					)
-				})
+				.map(|c| (map_color(c.fgcolor(), theme.fg), map_color(c.bgcolor(), theme.bg)))
 				.unwrap_or((theme.fg, theme.bg));
 			if cell.map(|c| c.inverse()).unwrap_or(false) {
 				std::mem::swap(&mut fg, &mut bg);
@@ -238,14 +230,13 @@ fn render_grid(
 			if cell.map(|c| c.bold()).unwrap_or(false) {
 				fg = brighten(fg);
 			}
-			let highlight = hits.iter().any(|&(r, c, len)| {
-				r == row && (col as usize) >= c && (col as usize) < c + len
-			});
+			let highlight = hits
+				.iter()
+				.any(|&(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len);
 			if highlight {
 				bg = if active == Some((row, col as usize, query_len))
-					|| active.is_some_and(|(r, c, len)| {
-						r == row && (col as usize) >= c && (col as usize) < c + len
-					}) {
+					|| active.is_some_and(|(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len)
+				{
 					0xe3b341
 				} else {
 					0x3b6ea8
@@ -260,13 +251,11 @@ fn render_grid(
 			}
 			spans.push((ch, fg, bg, highlight));
 		}
-		h_flex().children(spans.into_iter().map(|(text, fg, bg, _)| {
-			div()
-				.bg(rgb(bg))
-				.text_color(rgb(fg))
-				.whitespace_nowrap()
-				.child(text)
-		}))
+		h_flex().children(
+			spans
+				.into_iter()
+				.map(|(text, fg, bg, _)| div().bg(rgb(bg)).text_color(rgb(fg)).whitespace_nowrap().child(text)),
+		)
 	}))
 }
 
@@ -280,8 +269,8 @@ fn map_color(color: vt100::Color, fallback: u32) -> u32 {
 
 fn ansi_color(idx: u8) -> u32 {
 	const BASIC: [u32; 16] = [
-		0x0d1117, 0xff7b72, 0x3fb950, 0xd29922, 0x58a6ff, 0xbc8cff, 0x39c5cf, 0xc9d1d9, 0x6e7681,
-		0xffa198, 0x56d364, 0xe3b341, 0x79c0ff, 0xd2a8ff, 0x56d4dd, 0xffffff,
+		0x0d1117, 0xff7b72, 0x3fb950, 0xd29922, 0x58a6ff, 0xbc8cff, 0x39c5cf, 0xc9d1d9, 0x6e7681, 0xffa198, 0x56d364,
+		0xe3b341, 0x79c0ff, 0xd2a8ff, 0x56d4dd, 0xffffff,
 	];
 	if (idx as usize) < 16 {
 		return BASIC[idx as usize];

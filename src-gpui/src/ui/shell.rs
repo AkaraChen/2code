@@ -36,12 +36,16 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		})
 		.on_key_down({
 			let view = view.clone();
-			move |ev: &KeyDownEvent, _, cx| {
+			move |ev: &KeyDownEvent, window, cx| {
 				view.update(cx, |app, cx| {
 					if let Some(profile) = app.data.overlay.sidebar_resize_focus {
 						if app.nudge_sidebar(profile, ev.keystroke.key.as_str()) {
 							cx.notify();
+							return;
 						}
+					}
+					if app.handle_overlay_key(ev.keystroke.key.as_str(), ev.keystroke.modifiers.shift, window, cx) {
+						cx.notify();
 					}
 				});
 			}

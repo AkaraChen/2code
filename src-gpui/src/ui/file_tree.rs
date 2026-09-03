@@ -176,16 +176,9 @@ fn node_view(
 					}
 				})
 				.child(
-					Icon::new(if node.is_dir {
-						if node.expanded {
-							IconName::FolderOpen
-						} else {
-							IconName::Folder
-						}
-					} else {
-						IconName::File
-					})
-					.w(px(13.)),
+					Icon::new(crate::ui::file_icons::file_icon(path, node.is_dir, node.expanded))
+						.w(px(13.))
+						.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(path, node.is_dir))),
 				)
 				.child(if renaming {
 					h_flex()

@@ -117,6 +117,13 @@ pub enum ContextMenu {
 	NewTerminal,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SidebarNavItem {
+	Home,
+	Project(String),
+	Profile { project_id: String, profile_id: String },
+}
+
 #[derive(Debug, Clone)]
 pub struct Toast {
 	pub id: u64,
@@ -295,6 +302,13 @@ pub enum NotesStatus {
 }
 
 impl Workspace {
+	pub fn active_terminal(&self) -> Option<&TermSession> {
+		match self.active {
+			Some(UnifiedTab::Terminal { index }) => self.terminals.get(index),
+			_ => None,
+		}
+	}
+
 	pub fn active_terminal_mut(&mut self) -> Option<&mut TermSession> {
 		match self.active {
 			Some(UnifiedTab::Terminal { index }) => self.terminals.get_mut(index),
@@ -329,6 +343,7 @@ pub struct OverlayState {
 	pub palette_open: bool,
 	pub palette_results: Vec<FileSearchResult>,
 	pub palette_index: usize,
+	pub palette_query: String,
 	pub git_diff_open: bool,
 	pub git_diff_tab: GitDiffTab,
 	pub git_diff_mode: DiffPreviewMode,
@@ -355,6 +370,7 @@ pub struct OverlayState {
 	pub sidebar_drag: Option<(f32, f32)>,
 	pub profile_sidebar_drag: Option<(f32, f32)>,
 	pub sidebar_resize_focus: Option<bool>,
+	pub sidebar_nav: Option<SidebarNavItem>,
 	pub drag_project: Option<String>,
 	pub drag_file: Option<String>,
 	pub renaming_path: Option<String>,
@@ -427,5 +443,67 @@ impl AppData {
 	pub fn expire_toasts(&mut self) {
 		self.toasts
 			.retain(|t| t.created.elapsed().as_secs() < if t.action.is_some() { 12 } else { 5 });
+	}
+}
+
+pub fn collect_sidebar_nav_items(
+	projects: &[ProjectWithProfiles],
+	groups: &[ProjectGroup],
+	collapsed_groups: &[String],
+	expanded_projects: &HashSet<String>,
+	current_project: Option<&str>,
+) -> Vec<SidebarNavItem> {
+	let mut items = Vec::new();
+	if projects.is_empty() {
+		items.push(SidebarNavItem::Home);
+		return items;
+	}
+	let mut push_project = |project: &ProjectWithProfiles| {
+		items.push(SidebarNavItem::Project(project.id.clone()));
+		let extras: Vec<_> = project.profiles.iter().filter(|p| !p.is_default).collect();
+		let selected = current_project == Some(project.id.as_str());
+		let expanded = expanded_projects.contains(&project.id) || extras.is_empty() || selected;
+		if expanded {
+			for profile in &project.profiles {
+				items.push(SidebarNavItem::Profile {
+					project_id: project.id.clone(),
+					profile_id: profile.id.clone(),
+				});
+			}
+		}
+	};
+	for project in projects.iter().filter(|p| p.pinned_at.is_some()) {
+		push_project(project);
+	}
+	for group in groups {
+		if collapsed_groups.contains(&group.id) {
+			continue;
+		}
+		for project in projects
+			.iter()
+			.filter(|p| p.group_id.as_deref() == Some(group.id.as_str()) && p.pinned_at.is_none())
+		{
+			push_project(project);
+		}
+	}
+	for project in projects
+		.iter()
+		.filter(|p| p.pinned_at.is_none() && p.group_id.is_none())
+	{
+		push_project(project);
+	}
+	items
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn empty_sidebar_starts_at_home() {
+		assert_eq!(
+			collect_sidebar_nav_items(&[], &[], &[], &HashSet::new(), None),
+			vec![SidebarNavItem::Home]
+		);
 	}
 }

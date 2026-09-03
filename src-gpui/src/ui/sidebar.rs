@@ -5,7 +5,7 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
-use crate::state::{AgentStatus, ContextMenu, DialogKind, Route};
+use crate::state::{AgentStatus, ContextMenu, DialogKind, Route, SidebarNavItem};
 use crate::ui::settings;
 
 #[derive(Clone)]
@@ -37,6 +37,17 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.bg(theme.sidebar)
 				.border_r_1()
 				.border_color(theme.border)
+				.tab_index(0)
+				.on_key_down({
+					let view = view.clone();
+					move |ev: &KeyDownEvent, _, cx| {
+						view.update(cx, |app, cx| {
+							if app.handle_sidebar_key(ev.keystroke.key.as_str()) {
+								cx.notify();
+							}
+						});
+					}
+				})
 				.child(
 					h_flex()
 						.id("sidebar-header")
@@ -78,7 +89,8 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 								"home-row",
 								IconName::Inbox,
 								app.t("home"),
-								app.data.route == Route::Home,
+								app.data.route == Route::Home
+									|| app.data.overlay.sidebar_nav == Some(SidebarNavItem::Home),
 								{
 									let view = view.clone();
 									move |cx| {
@@ -431,7 +443,26 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 					.border_color(theme.border)
 					.bg(theme.background)
 					.gap_1()
-					.child(div().font_semibold().text_sm().child(app.t("onboardingTourTitle")))
+					.child(
+						h_flex()
+							.justify_between()
+							.child(div().font_semibold().text_sm().child(app.t("onboardingTourTitle")))
+							.child(
+								Button::new("onboarding-close")
+									.ghost()
+									.xsmall()
+									.icon(IconName::Close)
+									.on_click({
+										let view = view.clone();
+										move |_, _, cx| {
+											view.update(cx, |app, cx| {
+												app.data.overlay.onboarding = false;
+												cx.notify();
+											});
+										}
+									}),
+							),
+					)
 					.child(
 						div()
 							.text_xs()
@@ -458,6 +489,7 @@ fn project_row(
 	let theme = cx.theme().clone();
 	let view = cx.entity();
 	let selected = app.data.current_project.as_deref() == Some(project.id.as_str());
+	let nav_focus = app.data.overlay.sidebar_nav.as_ref() == Some(&SidebarNavItem::Project(project.id.clone()));
 	let extras: Vec<_> = project.profiles.iter().filter(|p| !p.is_default).cloned().collect();
 	let expanded = app.data.overlay.expanded_projects.contains(&project.id) || extras.is_empty() || selected;
 	let agent = app.agent_for_project(&project.id);
@@ -481,6 +513,7 @@ fn project_row(
 				.rounded_md()
 				.gap_2()
 				.when(selected, |el| el.bg(theme.sidebar_accent))
+				.when(nav_focus && !selected, |el| el.border_1().border_color(theme.border))
 				.hover(|el| el.bg(theme.sidebar_accent))
 				.on_click({
 					let view = view.clone();
@@ -491,6 +524,7 @@ fn project_row(
 							if app.data.overlay.sort_mode {
 								return;
 							}
+							app.data.overlay.sidebar_nav = Some(SidebarNavItem::Project(id.clone()));
 							if let Some(pid) = default_profile.clone() {
 								app.open_profile(&id, &pid);
 							}
@@ -683,6 +717,11 @@ fn project_row(
 						let pid = profile.id.clone();
 						let proj = project.id.clone();
 						let selected = app.data.current_profile.as_deref() == Some(profile.id.as_str());
+						let nav_focus = app.data.overlay.sidebar_nav.as_ref()
+							== Some(&SidebarNavItem::Profile {
+								project_id: project.id.clone(),
+								profile_id: profile.id.clone(),
+							});
 						let label = if profile.is_default {
 							app.t("defaultProfile")
 						} else {
@@ -695,6 +734,7 @@ fn project_row(
 							.rounded_md()
 							.gap_2()
 							.when(selected, |el| el.bg(theme.sidebar_accent))
+							.when(nav_focus && !selected, |el| el.border_1().border_color(theme.border))
 							.hover(|el| el.bg(theme.sidebar_accent))
 							.on_click({
 								let view = view.clone();
@@ -702,6 +742,10 @@ fn project_row(
 								let proj = proj.clone();
 								move |_, _, cx| {
 									view.update(cx, |app, cx| {
+										app.data.overlay.sidebar_nav = Some(SidebarNavItem::Profile {
+											project_id: proj.clone(),
+											profile_id: pid.clone(),
+										});
 										app.open_profile(&proj, &pid);
 										cx.notify();
 									});

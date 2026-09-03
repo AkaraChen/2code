@@ -9,7 +9,7 @@ start:
     just gpui
 
 tauri-dev:
-    ./start.sh
+    bun tauri dev
 
 fmt:
     fama "./src/**/*.{ts,tsx}"
