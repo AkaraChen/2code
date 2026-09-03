@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui::{
 	div, prelude::*, px, Action, App, ClipboardEntry, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle,
-	KeyBinding, Timer, Window, WindowHandle,
+	Focusable, KeyBinding, Timer, Window, WindowHandle,
 };
 
 #[derive(Clone, PartialEq, Default, Debug, Action)]
@@ -1808,13 +1808,59 @@ impl AppView {
 		self.data.overlay.git_diff_tab = GitDiffTab::Changes;
 		self.data.overlay.git_diff_text = self.backend.git_diff(&profile_id).unwrap_or_default();
 		self.data.overlay.git_commits = self.backend.git_log(&profile_id, 80).unwrap_or_default();
+		self.data.overlay.git_selected_commit = None;
+		self.data.overlay.git_commit_files.clear();
+		self.data.overlay.git_file_index = 0;
+		self.data.overlay.git_commit_index = None;
+		self.data.overlay.git_commit_file_index = 0;
 		self.refresh_workspace(&profile_id);
+		if let Some(path) = self
+			.data
+			.current_ws()
+			.and_then(|ws| ws.git_files.first().map(|(p, _)| p.clone()))
+		{
+			self.select_diff_file(&path);
+		}
+	}
+
+	pub fn switch_git_tab(&mut self, tab: GitDiffTab) {
+		self.data.overlay.git_diff_tab = tab;
+		self.data.overlay.git_selected_commit = None;
+		self.data.overlay.git_commit_files.clear();
+		self.data.overlay.git_commit_file_index = 0;
+		self.data.overlay.git_commit_index = None;
+		if tab == GitDiffTab::Changes {
+			self.data.overlay.git_file_index = 0;
+			if let Some(path) = self
+				.data
+				.current_ws()
+				.and_then(|ws| ws.git_files.first().map(|(p, _)| p.clone()))
+			{
+				self.select_diff_file(&path);
+			}
+		}
+	}
+
+	pub fn commit_back(&mut self) {
+		self.data.overlay.git_selected_commit = None;
+		self.data.overlay.git_commit_files.clear();
+		self.data.overlay.git_commit_file_index = 0;
+		self.data.overlay.git_diff_file = None;
 	}
 
 	pub fn select_diff_file(&mut self, path: &str) {
 		self.data.overlay.git_diff_file = Some(path.to_string());
+		if let Some(ix) = self
+			.data
+			.current_ws()
+			.and_then(|ws| ws.git_files.iter().position(|(p, _)| p == path))
+		{
+			self.data.overlay.git_file_index = ix;
+		}
 		if let Some(profile_id) = self.data.current_profile.clone() {
-			self.data.overlay.git_diff_text = self.backend.git_diff(&profile_id).unwrap_or_default();
+			if self.data.overlay.git_selected_commit.is_none() {
+				self.data.overlay.git_diff_text = self.backend.git_diff(&profile_id).unwrap_or_default();
+			}
 		}
 	}
 
@@ -1929,10 +1975,18 @@ impl AppView {
 
 	pub fn select_commit(&mut self, hash: &str) {
 		self.data.overlay.git_selected_commit = Some(hash.to_string());
+		self.data.overlay.git_commit_index = self
+			.data
+			.overlay
+			.git_commits
+			.iter()
+			.position(|c| c.hash == hash || c.full_hash == hash);
+		self.data.overlay.git_commit_file_index = 0;
 		if let Some(profile_id) = self.data.current_profile.clone() {
 			let diff = self.backend.commit_diff(&profile_id, hash).unwrap_or_default();
 			self.data.overlay.git_commit_files = parse_diff_files(&diff);
 			self.data.overlay.git_diff_text = diff;
+			self.data.overlay.git_diff_file = self.data.overlay.git_commit_files.first().cloned();
 		}
 	}
 
@@ -2636,6 +2690,10 @@ impl AppView {
 			}
 		}
 		if self.data.overlay.git_diff_open {
+			if self.data.overlay.git_selected_commit.is_some() {
+				self.commit_back();
+				return true;
+			}
 			self.data.overlay.git_diff_open = false;
 			return true;
 		}
@@ -2730,6 +2788,100 @@ impl AppView {
 		true
 	}
 
+	fn leftover_interactive_focused(&self, window: &Window, cx: &App) -> bool {
+		[
+			&self.inputs.commit_summary,
+			&self.inputs.commit_body,
+			&self.inputs.review_comment,
+			&self.inputs.palette,
+			&self.inputs.file_search,
+			&self.inputs.branch_search,
+			&self.inputs.debug_search,
+			&self.inputs.term_search,
+			&self.inputs.file_editor,
+			&self.inputs.notes,
+			&self.inputs.md_link,
+			&self.inputs.rename,
+			&self.inputs.new_path,
+		]
+		.iter()
+		.any(|input| input.read(cx).focus_handle(cx).is_focused(window))
+	}
+
+	pub fn handle_git_list_key(&mut self, key: &str) -> bool {
+		if !self.data.overlay.git_diff_open {
+			return false;
+		}
+		match (self.data.overlay.git_diff_tab, key) {
+			(GitDiffTab::Changes, "up" | "down") => {
+				let count = self.data.current_ws().map(|ws| ws.git_files.len()).unwrap_or(0);
+				let next = crate::ui::git::leftover_step_index(
+					self.data.overlay.git_file_index,
+					if key == "down" { 1 } else { -1 },
+					count,
+				);
+				self.data.overlay.git_file_index = next;
+				if let Some(path) = self
+					.data
+					.current_ws()
+					.and_then(|ws| ws.git_files.get(next).map(|(p, _)| p.clone()))
+				{
+					self.select_diff_file(&path);
+				}
+				true
+			}
+			(GitDiffTab::Changes, "space") => {
+				let path = self.data.current_ws().and_then(|ws| {
+					ws.git_files
+						.get(self.data.overlay.git_file_index)
+						.map(|(p, _)| p.clone())
+				});
+				let Some(path) = path else {
+					return false;
+				};
+				if let Some(ws) = self.data.current_ws_mut() {
+					if !ws.git_included.remove(&path) {
+						ws.git_included.insert(path);
+					}
+				}
+				true
+			}
+			(GitDiffTab::History, "up" | "down") if self.data.overlay.git_selected_commit.is_some() => {
+				let count = self.data.overlay.git_commit_files.len();
+				let next = crate::ui::git::leftover_step_index(
+					self.data.overlay.git_commit_file_index,
+					if key == "down" { 1 } else { -1 },
+					count,
+				);
+				self.data.overlay.git_commit_file_index = next;
+				self.data.overlay.git_diff_file = self.data.overlay.git_commit_files.get(next).cloned();
+				true
+			}
+			(GitDiffTab::History, "up" | "down") => {
+				self.data.overlay.git_commit_index = crate::ui::git::leftover_step_commit_index(
+					self.data.overlay.git_commit_index,
+					if key == "down" { 1 } else { -1 },
+					self.data.overlay.git_commits.len(),
+				);
+				true
+			}
+			(GitDiffTab::History, "enter") if self.data.overlay.git_selected_commit.is_none() => {
+				if let Some(ix) = self.data.overlay.git_commit_index {
+					if let Some(hash) = self.data.overlay.git_commits.get(ix).map(|c| c.hash.clone()) {
+						self.select_commit(&hash);
+						return true;
+					}
+				}
+				false
+			}
+			(GitDiffTab::History, "backspace") if self.data.overlay.git_selected_commit.is_some() => {
+				self.commit_back();
+				true
+			}
+			_ => false,
+		}
+	}
+
 	pub fn handle_overlay_key(&mut self, key: &str, shift: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
 		if self.data.overlay.dialog == Some(DialogKind::CreateProject) && key == "enter" {
 			self.create_project_from_dialog(window, cx);
@@ -2793,6 +2945,9 @@ impl AppView {
 		if self.data.overlay.renaming_path.is_some() && key == "enter" {
 			self.commit_rename_path(cx);
 			return true;
+		}
+		if self.data.overlay.git_diff_open && !self.leftover_interactive_focused(window, cx) {
+			return self.handle_git_list_key(key);
 		}
 		false
 	}
@@ -3054,7 +3209,16 @@ impl gpui::Render for AppView {
 				cx.notify();
 			}))
 			.on_action(cx.listener(|this, _: &CommitChanges, _, cx| {
-				this.commit_selected(cx);
+				let (no_files, ahead) = this
+					.data
+					.current_ws()
+					.map(|ws| (ws.git_files.is_empty(), ws.git_ahead))
+					.unwrap_or((true, 0));
+				if no_files && ahead > 0 {
+					this.push_current();
+				} else {
+					this.commit_selected(cx);
+				}
 				cx.notify();
 			}))
 			.on_action(cx.listener(|this, _: &DismissOverlay, _, cx| {

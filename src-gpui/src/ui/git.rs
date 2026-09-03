@@ -105,6 +105,24 @@ pub fn file_display_parts(file_name: &str) -> (String, Option<String>) {
 	}
 }
 
+pub fn leftover_step_index(current: usize, delta: i32, count: usize) -> usize {
+	if count == 0 {
+		return current;
+	}
+	let next = current as i32 + delta;
+	next.clamp(0, count as i32 - 1) as usize
+}
+
+pub fn leftover_step_commit_index(current: Option<usize>, delta: i32, count: usize) -> Option<usize> {
+	if count == 0 {
+		return current;
+	}
+	Some(match current {
+		None => 0,
+		Some(index) => leftover_step_index(index, delta, count),
+	})
+}
+
 pub fn leftover_change_badge(status: &str) -> (&'static str, &'static str) {
 	match file_status_badge(status) {
 		"A" => ("A", "green"),
@@ -674,7 +692,7 @@ fn tab_btn(
 		.label(label)
 		.on_click(move |_, _, cx| {
 			view.update(cx, |app, cx| {
-				app.data.overlay.git_diff_tab = tab;
+				app.switch_git_tab(tab);
 				cx.notify();
 			});
 		})
@@ -755,9 +773,10 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 								&[("count", &app.data.overlay.git_commit_files.len().to_string())],
 							)),
 					)
-					.children(app.data.overlay.git_commit_files.iter().map(|p| {
+					.children(app.data.overlay.git_commit_files.iter().enumerate().map(|(ix, p)| {
 						let path = p.clone();
-						let active = selected_file.as_deref() == Some(p.as_str());
+						let active = app.data.overlay.git_commit_file_index == ix
+							|| selected_file.as_deref() == Some(p.as_str());
 						h_flex()
 							.id(crate::ui::eid(format!("cfile-{p}")))
 							.w_full()
@@ -773,6 +792,7 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 								let view = view.clone();
 								move |_, _, cx| {
 									view.update(cx, |app, cx| {
+										app.data.overlay.git_commit_file_index = ix;
 										app.data.overlay.git_diff_file = Some(path.clone());
 										cx.notify();
 									});
@@ -794,15 +814,18 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			.into_any_element();
 	}
 	let now = timefmt::unix_now_secs();
+	let selected_ix = app.data.overlay.git_commit_index;
 	v_flex()
 		.id("commit-list")
-		.children(app.data.overlay.git_commits.iter().map(|c| {
+		.children(app.data.overlay.git_commits.iter().enumerate().map(|(ix, c)| {
 			let hash = c.hash.clone();
+			let active = selected_ix == Some(ix);
 			v_flex()
 				.id(crate::ui::eid(format!("commit-{hash}")))
 				.px_3()
 				.py(px(6.))
 				.gap(px(2.))
+				.when(active, |el| el.bg(theme.muted))
 				.hover(|el| el.bg(theme.muted))
 				.on_click({
 					let view = view.clone();
@@ -1186,7 +1209,7 @@ fn image_preview(app: &AppView, path: &str, diff: &str) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-	use super::{file_display_parts, leftover_change_badge};
+	use super::{file_display_parts, leftover_change_badge, leftover_step_commit_index, leftover_step_index};
 
 	#[test]
 	fn leftover_file_display_parts_split_git_paths() {
@@ -1195,6 +1218,26 @@ mod tests {
 			("FileListItem.tsx".into(), Some("src/features/git".into()))
 		);
 		assert_eq!(file_display_parts("README.md"), ("README.md".into(), None));
+	}
+
+	#[test]
+	fn leftover_step_index_clamps_like_git_diff_reducer() {
+		assert_eq!(leftover_step_index(2, 1, 10), 3);
+		assert_eq!(leftover_step_index(3, -1, 10), 2);
+		assert_eq!(leftover_step_index(0, -1, 5), 0);
+		assert_eq!(leftover_step_index(4, 1, 5), 4);
+		assert_eq!(leftover_step_index(0, 1, 1), 0);
+		assert_eq!(leftover_step_index(0, 1, 0), 0);
+		assert_eq!(leftover_step_index(2, 100, 5), 4);
+	}
+
+	#[test]
+	fn leftover_step_commit_index_starts_at_first() {
+		assert_eq!(leftover_step_commit_index(None, 1, 5), Some(0));
+		assert_eq!(leftover_step_commit_index(None, -1, 5), Some(0));
+		assert_eq!(leftover_step_commit_index(None, 1, 0), None);
+		assert_eq!(leftover_step_commit_index(Some(1), 1, 5), Some(2));
+		assert_eq!(leftover_step_commit_index(Some(4), 1, 5), Some(4));
 	}
 
 	#[test]
