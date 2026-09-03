@@ -4,158 +4,120 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions. It combines a React 19 frontend with a Rust backend, featuring:
+**2code** is a GPUI desktop application for managing code projects with integrated PTY terminals. The shipping UI lives in `src-gpui/` and calls the existing Rust domain crates directly (no Tauri IPC).
 
+- Two windows: main (1440×900 overlay chrome) and Settings (880×640)
 - Project management with folder selection and metadata
 - Profile management via git worktrees (branch-isolated workspaces)
-- Persistent PTY (pseudo-terminal) sessions with scrollback restoration
+- Persistent PTY sessions with scrollback restoration (never unmount on tab/route change)
 - SQLite database for project/session/profile storage
 - Project-level configuration (`2code.json`) for setup/teardown scripts
 - Git diff/commit history browsing
-- i18n support via Paraglide.js (English + Chinese)
+- i18n from `messages/en.json` + `messages/zh.json` (loaded directly by GPUI)
+
+The leftover Tauri 2 + React 19 shell in `src/` + `src-tauri/` is **not** the product. Domain crates under `src-tauri/crates/` are shared. Visual/behavior spec: `docs/ui-inventory.md`.
 
 ## Commands
 
 ```bash
-# Dev server (frontend + backend hot-reload)
-bun tauri dev
+# Product UI (GPUI)
+just start                 # same as just gpui
+just gpui                  # cd src-gpui && cargo run
+cd src-gpui && cargo run
 
-# Frontend-only dev
-bun run dev
-
-# Production build
-bun tauri build
-
-# Frontend-only build (runs paraglide compile → tsc → vite build)
-bun run build
-
-# Rust tests
+# Tests / gate
+just verify                # gpui tests + domain crate tests
+just gpui-check            # cd src-gpui && cargo test
 cd src-tauri && cargo test
-cd src-tauri && cargo test test_name   # single test
+cd src-tauri && cargo test test_name
 
-# Regenerate TypeScript bindings from Rust commands
-cargo tauri-typegen generate
+# Leftover Tauri + React (reference only)
+just leftover-tauri
+bun run leftover:tauri:dev
 
-# Format code
-just fmt               # runs 'fama'
+# Format
+just fmt                   # fama (TS leftover) + rustfmt
 ```
+
+App data matches the old Tauri path: `dirs::data_dir()/com.akrc.code` (`app.db` + `gpui-prefs.json`).
 
 ## Architecture
 
-### Frontend (`/src`)
+### Product UI (`/src-gpui`)
 
-React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ThemeProvider` → `TooltipProvider` → `BrowserRouter` → `AppRoot`, with the shadcn `Toaster` mounted inside `TooltipProvider`.
+Standalone crate (not in the `src-tauri` workspace), bin name `2code`. Stack: `gpui` + `gpui-component`, path-deps on `../src-tauri/crates/{model,repo,infra,service}`.
 
-**Routing** (react-router v7): `/` → HomePage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage, `*` → redirect to `/`.
+**Key modules:**
 
-**Key directories (feature-based organization):**
+- `main.rs` — window chrome, tracing + debug log channel
+- `app.rs` — `AppView` actions, shortcuts, orchestration
+- `backend.rs` — direct service/repo calls (no IPC)
+- `state.rs` — workspaces, overlays, dialogs, toasts
+- `prefs.rs` — `gpui-prefs.json` (theme, fonts, top bar, templates, sidebar)
+- `ui/` — sidebar, home, workspace, file tree, terminal, git, settings, dialogs, palette, debug
+- `detector/` — agent status manifests (same rules as the leftover React detector)
+- `i18n.rs` — `t` / `tf` over `messages/{en,zh}.json`
+- `platform.rs` — fonts, sounds, installed apps
+- `updater.rs` — GitHub releases + in-place GPUI binary replace
 
-- `generated/` — Auto-generated Tauri IPC bindings via `tauri-typegen` (gitignored, do not edit)
-- `features/home/` — HomePage
-- `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, `useProjectProfiles`, etc.) and dialogs (Create/Delete/Rename)
-- `features/profiles/` — Profile hooks (`useCreateProfile`, `useDeleteProfile`) and dialogs
-- `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
-- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger), and components (ChangesFileList, CommitList, GitDiffPane, HistoryFileList)
-- `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/terminalSettingsStore`, `stores/themeStore`, `stores/notificationStore`)
-- `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
-- `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
-- `shared/lib/` — Query client config, centralized query keys, cached promise utility
-- `shared/providers/` — ThemeProvider
-- `shared/components/` — Fallbacks (PageSkeleton, PageError, SidebarSkeleton), SidebarLink. ErrorBoundary is from `react-error-boundary` package.
-- `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
+**Windows:** main 1440×900 overlay title bar, macOS traffic lights at (16, 24); Settings via `cx.open_window` 880×640, title `"Settings"`.
 
-**State management:**
+**Shortcuts:** Cmd+, settings · Cmd+Shift+D debug · Cmd+K palette · Cmd+T/W terminal · Cmd+E sidebar · Cmd+G git diff · Cmd+S save · Cmd/Ctrl+Enter commit.
 
-- Zustand for client state (terminal tabs per project, font preferences, notification settings)
-- TanStack Query for server state (projects, sessions, profiles)
-- Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.git.diff(profileId)` pattern
-- `terminalSettingsStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
+**Invariants:**
 
-**UI Framework:**
+- Terminals stay mounted: every session keeps a stable `pty-{id}` element. Hide inactive ones; do not omit the id for a frame.
+- File tree stays mounted across Files/Git/Notes **and** when the profile sidebar is closed (width 0, not unmount).
+- Settings is a second window, not a route.
+- Brand text `"2Code"` is hardcoded.
 
-- shadcn/ui primitives in `src/components/ui` (Base UI + Tailwind CSS v4)
-- `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
-- `sonner` for toast notifications
+### Domain crates (`/src-tauri/crates`)
 
-### Backend (`/src-tauri`)
+No Tauri dependency. Four layers plus models:
 
-Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
+1. **Service** — business logic (project, profile, pty, watcher, filesystem)
+2. **Repository** — Diesel CRUD; `resolve_context_folder` tries profiles then projects
+3. **Infrastructure** — SQLite + migrations, git, PTY, pty_log, slug, config, logger, watcher, shell_init
+4. **Model** — Diesel models and DTOs
 
-**Layered architecture** (4 layers):
+**Database:** SQLite, single `Arc<Mutex<SqliteConnection>>` (not a pool) at `app_data_dir()/app.db`. WAL, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions` (metadata only — output bytes live in `pty_logs/{session_id}.log`). Migrations in `src-tauri/migrations/`, embedded at compile time.
 
-1. **Handler** (`handler/`) — Tauri `#[tauri::command]` entry points. Extracts state (DbPool, PtySessionMap), acquires DB lock, delegates to service layer. Thin layer — no business logic.
-2. **Service** (`service/`) — Business logic and orchestration. Coordinates between repository and infrastructure layers (e.g., creating temp dirs, initializing git repos, running scripts).
-3. **Repository** (`repo/`) — Direct database access via Diesel ORM. CRUD operations and complex queries (e.g., `resolve_context_folder` tries profiles table first, falls back to projects).
-4. **Infrastructure** (`infra/`) — Cross-cutting concerns: `db.rs` (SQLite setup + migrations), `git.rs` (git command execution), `pty.rs` (PTY session lifecycle), `pty_log.rs` (per-session output stored as `{app_data_dir}/pty_logs/{session_id}.log` files), `slug.rs` (CJK-aware slug generation), `config.rs` (project config loading + script execution), `logger.rs` (debug logging), `watcher.rs` (file system watching), `shell_init.rs` (ZDOTDIR-based shell init injection).
-
-**Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `Profile`, `PtySessionRecord`), Insertable structs (`NewProject`, `NewProfile`), AsChangeset structs (`UpdateProject`, `UpdateProfile`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
-
-**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `profiles`, `pty_sessions` (session **metadata** only — output bytes live in per-session files, not the DB).
-
-**Database migrations:** Diesel migrations in `src-tauri/migrations/`, embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`. Schema auto-generated in `src/schema.rs`.
-
-**PTY output streaming:** Background thread reads 4KB chunks → sends raw PTY chunks to the active output sink registered by `attach_pty_output(sessionId, streamId)`. `stream_pty_output` owns a `tauri::ipc::Channel<&[u8]>` and sends each chunk with `on_output.send(chunk.as_slice())`; `detach_pty_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session. `Terminal.tsx` receives `ArrayBuffer` and writes `new Uint8Array(payload)` to xterm. Output produced before attach is recovered from the persisted log via `get_pty_session_history` (same seam the old global-event API had). Bytes are sent as-is — xterm.js decodes UTF-8 across writes, so no backend boundary splitting is needed. Session exit is still a low-volume global event (`pty-exit-{id}`). A separate persistence thread via mpsc channel with 32KB flush buffer appends raw bytes to the session's `pty_logs/{session_id}.log` file (see `infra::pty_log`). No byte cap — a log lives only for one session (removed on restore/close/delete) and scrollback is bounded on restore by the vt100 emulator (`sanitize_history`, 10k lines). Orphan logs are reaped on startup by `service::pty::gc_orphan_logs`.
+**PTY:** `service::pty::create_session` + `PtyContext` + `PtyEventEmitter`. Restore: `mark_all_closed` → fetch sessions → `restore_session` → feed history into vt100 → attach. GPUI renders the vt100 screen; leftover React used xterm.js over a Tauri Channel.
 
 **Workspace crates:** `model/`, `repo/`, `service/`, and `infra/`.
 
-**Agent status detection:** `Terminal.tsx` detects coding-agent state from xterm screen text, OSC title, and OSC progress after live output writes. Rules live in `src/features/terminal/detector/rules/`, one manifest per agent. The detector publishes `running|waiting|idle` to `terminalStore`; waiting status can play the configured system sound via the generated `playSystemSound` Tauri command.
+### Leftover Tauri + React (`/src`, `/src-tauri`)
 
-### IPC Pattern (Frontend ↔ Backend)
-
-The project uses **tauri-typegen** to auto-generate typed TypeScript bindings from Rust commands. Config in `tauri.conf.json` under `plugins.typegen` (output: `src/generated/`).
-
-**Adding a new command:**
-
-1. Define Rust command with `#[tauri::command]` in `handler/*.rs`
-2. Register in `lib.rs` via `tauri::generate_handler![]`
-3. Run `cargo tauri-typegen generate` to regenerate TypeScript bindings
-4. Import generated function directly: `import { myCommand } from "@/generated"`
-5. Consume via TanStack Query hook in the relevant `src/features/*/hooks.ts` with query invalidation on mutations
-
-**Do not** create manual API wrappers in `src/api/` — all IPC bindings are auto-generated.
+Reference implementation of the old webview UI. Do not add product features there. Do not delete until a real-machine GUI pass against `docs/ui-inventory.md` §20. Default start/release/CI paths are GPUI.
 
 ## Key Patterns
 
 ### Terminal Persistence
 
-Terminals never unmount — tab switches and route changes use CSS `display: none` to preserve xterm.js state. The `TerminalLayer` component renders as a persistent absolute-positioned overlay across all routes.
+All PTY grids from every workspace stay in one layer with stable `pty-{id}` ids. Tab switches and profile changes hide inactive terminals; they must not be dropped from the element tree.
 
 **Session restoration on app start:**
 
-1. Fetch all sessions from DB (including closed ones with scrollback)
-2. Create new PTY session with same metadata
-3. Pass old `session.id` as `restoreFrom` prop
-4. Terminal component fetches history, writes to xterm, then deletes old record
-
-**Session cleanup:** `mark_all_open_sessions_closed()` runs both on startup (orphan cleanup) and on exit (graceful shutdown).
+1. `mark_all_open_sessions_closed()`
+2. Fetch sessions (including closed ones with scrollback)
+3. `restore_session` with the old id
+4. Feed persisted history into vt100, then attach live output
 
 ### Context ID Resolution
 
-Git operations (`get_git_diff`, `get_git_log`, `get_commit_diff`) accept a `contextId` parameter that can be either a project ID or a profile ID. The backend resolves this polymorphically via `repo::project::resolve_context_folder()`: profile ID → profile's worktree path; project ID → project's folder. This lets git operations work seamlessly with both regular project folders and profile worktrees.
+Git operations accept a project ID or a profile ID. `repo::project::resolve_context_folder()`: profile → worktree path; project → folder.
 
 ### Profile System (Git Worktrees)
 
-Profiles create isolated branch workspaces using `git worktree add`. Each profile gets a worktree in `~/.2code/workspace/{profile_id}`. Branch names are sanitized (CJK → pinyin, special chars stripped). On creation, `setup_script` from `2code.json` runs in the worktree. On deletion, `teardown_script` runs, then the worktree and branch are removed.
+`git worktree add` into `~/.2code/workspace/{profile_id}` (or the configured worktree dir). Branch names are sanitized (CJK → pinyin). `setup_script` / `teardown_script` from `2code.json` run on create/delete.
 
 ### Project Configuration (`2code.json`)
-
-Projects can include a `2code.json` in their root folder:
 
 ```json
 { "setup_script": ["npm install"], "teardown_script": ["rm -rf node_modules"] }
 ```
 
-Scripts execute via `sh -c` in the project/worktree directory. Used automatically during profile creation/deletion.
-
-### Zustand Store Convention
-
-```typescript
-// Direct access in mutations (outside React):
-useTerminalStore.getState().addTab(...)
-
-// Reactive subscriptions in components:
-const tabs = useTerminalStore(s => s.profiles[profileId]?.tabs)
-```
+Scripts execute via `sh -c` in the project/worktree directory.
 
 ### Rust Test Pattern
 
@@ -170,37 +132,29 @@ fn setup_db() -> SqliteConnection {
 }
 ```
 
-Tests are colocated with implementation in `#[cfg(test)]` modules.
+Tests are colocated with implementation in `#[cfg(test)]` modules. GPUI unit tests live in `src-gpui/src/**`.
 
 ## Internationalization (i18n)
 
-Paraglide.js v2 with inlang message format plugin. Source messages in `messages/{locale}.json`. Generated code in `src/paraglide/` (gitignored, do not edit).
+Source messages in `messages/{locale}.json`. GPUI loads them in `src-gpui/src/i18n.rs` (`t` / `tf`). The leftover React shell still uses Paraglide (`src/paraglide/`, gitignored).
 
-**Usage:** `import * as m from "@/paraglide/messages.js"` → `m.home()`
-
-**Critical:** `project.inlang/settings.json` **must** include the modules array:
+**Critical for leftover Paraglide:** `project.inlang/settings.json` **must** include:
 
 ```json
 "modules": ["https://cdn.jsdelivr.net/npm/@inlang/plugin-message-format@latest/dist/index.js"]
 ```
 
-Without this, paraglide compiles but generates empty message files. Also requires `allowJs: true` in tsconfig.json.
-
-## Path Aliases
-
-`@/` maps to `src/` — configured in both `vite.config.ts` (resolve.alias) and `tsconfig.json` (paths). Keep them in sync.
-
 ## Gotchas
 
-- **Database is single-connection** (`Arc<Mutex<SqliteConnection>>`), not a pool — avoid long-held locks
-- **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
-- **PTY output sends `&[u8]` over a per-session IPC `Channel`** (not global events; frontend receives `ArrayBuffer`) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done
-- **Terminal font metrics must be measured on an attached canvas** — WebKit only resolves locally installed fonts for canvases that are in the document; detached canvases and `OffscreenCanvas` silently report fallback metrics. xterm 6 measures offscreen but paints via the DOM, so `src/features/terminal/lib/xtermMetricsPatch.ts` redirects both of its measurement surfaces (`CharSizeService` and `WidthCache`) to attached canvases. Without it the terminal leaves ~1/6 of its width empty with any font whose advance ratio differs from the fallback's (e.g. Sarasa's 0.5 em vs Menlo's 0.6 em). See `src/features/terminal/AGENTS.md`.
-- **Font listing and sound playback are platform-backed**: macOS uses `core-text` + `/System/Library/Sounds` + `afplay`; Linux uses `fontdb` + XDG sound dirs + desktop audio players; Windows uses `fontdb` + `C:\Windows\Media` + PowerShell `Media.SoundPlayer`.
-- **UI components** should use shadcn/ui primitives from `src/components/ui`; do not add legacy UI-library APIs back
-- **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
-- **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
-- **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`
-- **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
-- **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
-- **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too
+- **Database is single-connection** — acquire/release quickly, never hold across awaits
+- **Do not drop `pty-{id}`** — GPUI persistence is by ElementId; omitting an id unmounts the session
+- **Do not rustfmt `src-gpui/src/ui/settings.rs` or `dialogs.rs` wholesale** — `settings.rs` has `rustfmt_skip`; both explode under default rustfmt
+- Safe rustfmt: `rustfmt --edition 2021 --config hard_tabs=true,tab_spaces=4,max_width=120` on edited files only
+- **`ElementId` does not impl `From<String>`** — use `ui::eid(...)` (`SharedString`)
+- **`div().overflow_y_scroll()` and `div().tooltip(...)` do not exist** — Button has `.tooltip(String)`
+- **`InputState::selected_text` is `pub(super)`** — use `EntityInputHandler::selected_text_range` (UTF-16)
+- Font listing / sound playback are platform-backed (core-text / fontdb / XDG / Windows Media)
+- Directory/branch slugs use the `pinyin` crate — don't simplify
+- Diesel schema `src-tauri/src/schema.rs` is auto-generated — do not edit
+- `src/` / `src/generated/` / `src/paraglide/` are leftover React — do not treat as the product UI
+- rustc **1.87+**; pin **`cc = "=1.2.67"`** in `src-gpui/Cargo.toml`

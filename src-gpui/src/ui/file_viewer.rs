@@ -4,7 +4,7 @@ use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
 use crate::backend;
@@ -381,9 +381,7 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 					.gap_1()
 					.pl(px(4. + 12. * depth as f32))
 					.child(
-						Icon::new(crate::ui::file_icons::file_icon(path, is_dir, false))
-							.w(px(13.))
-							.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(path, is_dir))),
+						crate::ui::file_icons::file_glyph(path, is_dir, false, 13.),
 					)
 					.child(div().text_size(px(13.)).child(path.clone()))
 			}))

@@ -150,11 +150,7 @@ fn file_row(
 					}
 				}),
 		)
-		.child(
-			Icon::new(crate::ui::file_icons::file_icon(path, false, false))
-				.w(px(13.))
-				.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(path, false))),
-		)
+		.child(crate::ui::file_icons::file_glyph(path, false, false, 13.))
 		.child(div().flex_1().text_sm().child(name))
 		.child(
 			div()

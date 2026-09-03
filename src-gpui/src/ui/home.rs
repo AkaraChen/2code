@@ -26,7 +26,11 @@ pub fn render(app: &AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 				.gap_2()
 				.border_b_1()
 				.border_color(theme.border)
-				.child(Icon::new(IconName::Folder).text_color(theme.muted_foreground).w(px(16.)))
+				.child(
+					Icon::new(IconName::Folder)
+						.text_color(theme.muted_foreground)
+						.w(px(16.)),
+				)
 				.child(div().font_semibold().text_sm().child(app.t("home"))),
 		)
 		.child(
@@ -40,10 +44,24 @@ pub fn render(app: &AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 						.size(px(48.))
 						.rounded_full()
 						.bg(theme.muted)
+						.relative()
 						.flex()
 						.items_center()
 						.justify_center()
-						.child(Icon::new(IconName::Folder).w(px(22.))),
+						.child(Icon::new(IconName::Folder).w(px(22.)))
+						.child(
+							div()
+								.absolute()
+								.bottom(px(4.))
+								.right(px(4.))
+								.size(px(16.))
+								.rounded_full()
+								.bg(theme.background)
+								.flex()
+								.items_center()
+								.justify_center()
+								.child(Icon::new(IconName::Plus).w(px(10.))),
+						),
 				)
 				.child(div().font_semibold().child(app.t("emptyProjectsTitle")))
 				.child(

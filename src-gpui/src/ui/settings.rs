@@ -906,7 +906,7 @@ impl SettingsView {
 			.gap_4()
 			.child(div().font_semibold().child(self.t("topbarPreview")))
 			.child(
-				v_flex().gap_1().children(self.prefs.topbar_controls.iter().cloned().enumerate().map(|(ix, id)| {
+				v_flex().gap_1().children(self.prefs.topbar_controls.iter().cloned().map(|id| {
 					let view = view.clone();
 					h_flex()
 						.id(crate::ui::eid(format!("tb-order-{id}")))
@@ -950,42 +950,6 @@ impl SettingsView {
 							"pr-status" => self.t("topbarPrStatus"),
 							_ => id.clone(),
 						}))
-						.child(
-							Button::new(crate::ui::eid(format!("tb-up-{id}")))
-								.ghost()
-								.xsmall()
-								.icon(IconName::ChevronUp)
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |this, cx| {
-											if ix > 0 {
-												this.prefs.topbar_controls.swap(ix, ix - 1);
-												this.persist(cx);
-												cx.notify();
-											}
-										});
-									}
-								}),
-						)
-						.child(
-							Button::new(crate::ui::eid(format!("tb-dn-{id}")))
-								.ghost()
-								.xsmall()
-								.icon(IconName::ChevronDown)
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |this, cx| {
-											if ix + 1 < this.prefs.topbar_controls.len() {
-												this.prefs.topbar_controls.swap(ix, ix + 1);
-												this.persist(cx);
-												cx.notify();
-											}
-										});
-									}
-								}),
-						)
 				})),
 			)
 			.when(self.prefs.topbar_controls.is_empty(), |el| {

@@ -1,6 +1,6 @@
 use gpui::{div, prelude::*, px, Context, KeyDownEvent, Window};
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, StyledExt};
 
 use crate::app::AppView;
 
@@ -131,11 +131,7 @@ pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>
 										});
 									}
 								})
-								.child(
-									Icon::new(crate::ui::file_icons::file_icon(&r.path, false, false))
-										.w(px(16.))
-										.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(&r.path, false))),
-								)
+								.child(crate::ui::file_icons::file_glyph(&r.path, false, false, 16.))
 								.child(div().text_sm().child(r.name.clone()))
 								.child(
 									div()

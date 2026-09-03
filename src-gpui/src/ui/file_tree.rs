@@ -52,16 +52,22 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		})
 		.when_some(sticky_folder(app), |el, crumb| {
 			el.child(
-				div()
+				h_flex()
 					.id("tree-sticky-folder")
 					.w_full()
 					.px_1()
 					.py_0p5()
 					.mb_1()
+					.gap_1()
 					.rounded_md()
 					.bg(theme.muted)
 					.text_xs()
 					.font_semibold()
+					.child(
+						Icon::new(IconName::FolderOpen)
+							.w(px(12.))
+							.text_color(gpui::rgb(0xc9a227)),
+					)
 					.child(crumb),
 			)
 		})
@@ -188,11 +194,7 @@ fn node_view(
 						});
 					}
 				})
-				.child(
-					Icon::new(crate::ui::file_icons::file_icon(path, node.is_dir, node.expanded))
-						.w(px(13.))
-						.text_color(gpui::rgb(crate::ui::file_icons::file_icon_color(path, node.is_dir))),
-				)
+				.child(crate::ui::file_icons::file_glyph(path, node.is_dir, node.expanded, 13.))
 				.child(if renaming {
 					h_flex()
 						.flex_1()
@@ -280,15 +282,19 @@ fn node_view(
 
 fn sticky_folder(app: &AppView) -> Option<String> {
 	let ws = app.data.current_ws()?;
-	if let Some(selected) = ws.tree_selected.iter().next() {
+	let path = if let Some(selected) = ws.tree_selected.iter().next() {
 		let parent = selected.rsplit_once('/').map(|(dir, _)| dir).unwrap_or(selected);
-		if !parent.is_empty() {
-			return Some(parent.to_string());
+		if parent.is_empty() {
+			None
+		} else {
+			Some(parent.to_string())
 		}
-	}
-	ws.tree
-		.values()
-		.filter(|node| node.is_dir && node.expanded && !node.path.is_empty())
-		.max_by_key(|node| node.path.matches('/').count())
-		.map(|node| node.path.clone())
+	} else {
+		ws.tree
+			.values()
+			.filter(|node| node.is_dir && node.expanded && !node.path.is_empty())
+			.max_by_key(|node| node.path.matches('/').count())
+			.map(|node| node.path.clone())
+	}?;
+	Some(path.rsplit('/').next().unwrap_or(path.as_str()).to_string())
 }

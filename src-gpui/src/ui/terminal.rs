@@ -117,7 +117,6 @@ pub fn render(
 					.absolute()
 					.top(px(12.))
 					.right(px(12.))
-					.w(px(320.))
 					.h(px(28.))
 					.px_2()
 					.gap_1()
@@ -126,7 +125,7 @@ pub fn render(
 					.border_1()
 					.border_color(cx.theme().border)
 					.shadow_md()
-					.child(div().flex_1().child(Input::new(&app.inputs.term_search)))
+					.child(div().w(px(224.)).child(Input::new(&app.inputs.term_search)))
 					.child(
 						div()
 							.text_xs()
