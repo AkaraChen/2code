@@ -409,7 +409,42 @@ impl SettingsView {
 							}
 						},
 					))
+					.when(!self.prefs.sync_terminal_theme, |el| {
+						el.child(field_label(&self.t("terminalTheme")))
+							.child(
+								v_flex().gap_1().children(TERM_THEMES.iter().map(|t| {
+									let selected = self.prefs.terminal_theme_light == t.name;
+									choice(format!("light-{name}", name = t.name), t.name, selected, {
+										let view = view.clone();
+										let name = t.name.to_string();
+										move |cx| {
+											view.update(cx, |this, cx| {
+												this.prefs.terminal_theme_light = name.clone();
+												this.persist(cx);
+												cx.notify();
+											});
+										}
+									})
+								})),
+							)
+					})
 					.child(field_label(&self.t("defaultShell")))
+					.child(
+						h_flex().gap_1().flex_wrap().children(crate::platform::list_shells().into_iter().map(|shell| {
+							let selected = self.prefs.custom_shell == shell;
+							choice(format!("shell-{shell}"), &shell, selected, {
+								let view = view.clone();
+								let shell = shell.clone();
+								move |cx| {
+									view.update(cx, |this, cx| {
+										this.prefs.custom_shell = shell.clone();
+										this.persist(cx);
+										cx.notify();
+									});
+								}
+							})
+						})),
+					)
 					.child(Input::new(&self.custom_shell))
 					.child(field_label(&self.t("terminalFont")))
 					.child(div().text_sm().child(self.prefs.font_family.clone()))
@@ -719,6 +754,65 @@ impl SettingsView {
 					},
 				)
 			}))
+			.child(field_label(&self.t("topbarEditorApp")))
+			.child(if crate::platform::installed_editors().is_empty() {
+				div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDetectingApps")).into_any_element()
+			} else {
+				h_flex()
+					.gap_1()
+					.flex_wrap()
+					.children(crate::platform::installed_editors().into_iter().map(|app| {
+						let selected = self.prefs.editor_app == app.id || self.prefs.editor_app == app.command;
+						let label = match app.id {
+							"vscode" => self.t("topbarVscode"),
+							"cursor" => self.t("topbarCursor"),
+							"windsurf" => self.t("topbarWindsurf"),
+							"zed" => self.t("topbarZed"),
+							_ => self.t("topbarSublimeText"),
+						};
+						choice(format!("ed-{id}", id = app.id), &label, selected, {
+							let view = view.clone();
+							let id = app.id.to_string();
+							move |cx| {
+								view.update(cx, |this, cx| {
+									this.prefs.editor_app = id.clone();
+									this.persist(cx);
+									cx.notify();
+								});
+							}
+						})
+					}))
+					.into_any_element()
+			})
+			.child(field_label(&self.t("topbarTerminalApp")))
+			.child(if crate::platform::installed_terminals().is_empty() {
+				div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDetectingApps")).into_any_element()
+			} else {
+				h_flex()
+					.gap_1()
+					.flex_wrap()
+					.children(crate::platform::installed_terminals().into_iter().map(|app| {
+						let selected = self.prefs.terminal_app == app.id;
+						let label = match app.id {
+							"ghostty" => self.t("topbarGhostty"),
+							"iterm2" => self.t("topbarIterm2"),
+							"kitty" => self.t("topbarKitty"),
+							_ => self.t("topbarWarp"),
+						};
+						choice(format!("termapp-{id}", id = app.id), &label, selected, {
+							let view = view.clone();
+							let id = app.id.to_string();
+							move |cx| {
+								view.update(cx, |this, cx| {
+									this.prefs.terminal_app = id.clone();
+									this.persist(cx);
+									cx.notify();
+								});
+							}
+						})
+					}))
+					.into_any_element()
+			})
 			.child(
 				Button::new("reset-topbar")
 					.label(self.t("topbarResetDefaults"))

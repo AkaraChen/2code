@@ -187,10 +187,11 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 						Button::new(crate::ui::eid(format!("pty-link-{label}")))
 							.xsmall()
 							.label(label)
-							.on_click(move |_, window, cx| {
+							.on_click(move |ev, window, cx| {
 								let token = token.clone();
+								let skip = ev.modifiers().platform || ev.modifiers().control;
 								view.update(cx, |app, cx| {
-									app.open_clickable(&token, window, cx);
+									app.open_clickable(&token, skip, window, cx);
 									cx.notify();
 								});
 							})

@@ -1527,11 +1527,47 @@ impl AppView {
 		self.write_to_active_pty(quoted.as_bytes());
 	}
 
-	pub fn open_clickable(&mut self, token: &crate::detector::Clickable, window: &mut Window, cx: &mut Context<Self>) {
+	pub fn copy_review_comments(&mut self, clear: bool, cx: &mut App) {
+		let text = self.data.overlay.review_comments.join("\n");
+		cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+		if clear {
+			self.data.overlay.review_comments.clear();
+			self.data
+				.push_toast(ToastKind::Success, self.t("reviewCommentsCopiedAndCleared"), "");
+		} else {
+			self.data
+				.push_toast(ToastKind::Success, self.t("reviewCommentsCopied"), "");
+		}
+		self.data.overlay.dialog = None;
+	}
+
+	pub fn open_url_with(&mut self, browser: &str) {
+		let Some(url) = self.data.overlay.dialog_url.clone() else {
+			return;
+		};
+		if browser.is_empty() {
+			let _ = open::that(&url);
+		} else {
+			let _ = std::process::Command::new(browser).arg(&url).spawn();
+		}
+		self.data.overlay.dialog = None;
+	}
+
+	pub fn open_clickable(
+		&mut self,
+		token: &crate::detector::Clickable,
+		skip_confirm: bool,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
 		match token {
 			crate::detector::Clickable::Url(url) => {
-				self.data.overlay.dialog = Some(DialogKind::OpenLink);
+				if skip_confirm {
+					let _ = open::that(url);
+					return;
+				}
 				self.data.overlay.dialog_url = Some(url.clone());
+				self.data.overlay.dialog = Some(DialogKind::OpenLink);
 			}
 			crate::detector::Clickable::Path(path) => {
 				let Some(profile_id) = self.data.current_profile.clone() else {
@@ -1635,7 +1671,7 @@ impl AppView {
 				"cursor" => "cursor",
 				"windsurf" => "windsurf",
 				"zed" => "zed",
-				"sublime" => "subl",
+				"sublime" | "subl" => "subl",
 				_ => "code",
 			},
 			"terminal" => match self.data.prefs.terminal_app.as_str() {
@@ -1647,6 +1683,10 @@ impl AppView {
 			},
 			_ => return,
 		};
+		if kind == "terminal" && self.data.prefs.terminal_app == "iterm2" {
+			let _ = std::process::Command::new("open").args(["-a", "iTerm", folder]).spawn();
+			return;
+		}
 		let _ = std::process::Command::new(cmd).arg(folder).spawn();
 	}
 

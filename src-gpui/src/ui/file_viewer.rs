@@ -28,6 +28,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	}
 
 	if backend::is_markdown(&file.path) {
+		let slash = file.draft.lines().last().unwrap_or("").to_string();
 		return v_flex()
 			.id("markdown-viewer")
 			.size_full()
@@ -53,6 +54,16 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					.child(md_btn("md-link", "[]", "[", "](url)", &view))
 					.child(md_btn("md-img", "img", "![", "](src)", &view))
 					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(if file.dirty() {
+								app.t("notesSaving")
+							} else {
+								app.t("notesSaved")
+							}),
+					)
+					.child(
 						Button::new("md-save")
 							.xsmall()
 							.primary()
@@ -68,6 +79,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 							}),
 					),
 			)
+			.when(slash.starts_with('/'), |el| el.child(slash_menu(&slash, &view)))
 			.child(
 				h_flex()
 					.flex_1()
@@ -233,6 +245,60 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 				}),
 		)
 		.into_any_element()
+}
+
+fn slash_menu(query: &str, view: &gpui::Entity<AppView>) -> impl IntoElement {
+	let q = query.trim_start_matches('/').to_ascii_lowercase();
+	let items: [(&str, &str, &str); 8] = [
+		("h1", "# ", ""),
+		("h2", "## ", ""),
+		("h3", "### ", ""),
+		("ul", "- ", ""),
+		("quote", "> ", ""),
+		("code", "```\n", "\n```"),
+		("link", "[", "](url)"),
+		("hr", "---\n", ""),
+	];
+	h_flex()
+		.id("md-slash")
+		.px_2()
+		.py_1()
+		.gap_1()
+		.w(px(180.))
+		.max_h(px(280.))
+		.flex_wrap()
+		.children(
+			items
+				.into_iter()
+				.filter(|(name, _, _)| q.is_empty() || name.contains(&q))
+				.map(|(name, prefix, suffix)| {
+					let view = view.clone();
+					Button::new(crate::ui::eid(format!("slash-{name}")))
+						.ghost()
+						.xsmall()
+						.label(format!("/{name}"))
+						.on_click(move |_, window, cx| {
+							view.update(cx, |app, cx| {
+								let text = app.inputs.file_editor.read(cx).value().to_string();
+								let mut lines: Vec<&str> = text.lines().collect();
+								if let Some(last) = lines.last_mut() {
+									if last.starts_with('/') {
+										*last = "";
+									}
+								}
+								let mut next = lines.join("\n");
+								if !next.is_empty() && !next.ends_with('\n') {
+									next.push('\n');
+								}
+								next.push_str(prefix);
+								next.push_str(suffix);
+								app.inputs.file_editor.update(cx, |s, cx| {
+									s.set_value(next, window, cx);
+								});
+							});
+						})
+				}),
+		)
 }
 
 fn md_btn(

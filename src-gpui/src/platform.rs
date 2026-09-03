@@ -1,5 +1,138 @@
 use std::sync::OnceLock;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DetectedApp {
+	pub id: &'static str,
+	pub command: &'static str,
+}
+
+pub fn command_exists(command: &str) -> bool {
+	if command.is_empty() {
+		return false;
+	}
+	if let Some(paths) = std::env::var_os("PATH") {
+		if std::env::split_paths(&paths).any(|dir| dir.join(command).is_file()) {
+			return true;
+		}
+	}
+	#[cfg(target_os = "macos")]
+	{
+		let apps = [
+			("cursor", "/Applications/Cursor.app"),
+			("code", "/Applications/Visual Studio Code.app"),
+			("windsurf", "/Applications/Windsurf.app"),
+			("zed", "/Applications/Zed.app"),
+			("subl", "/Applications/Sublime Text.app"),
+			("ghostty", "/Applications/Ghostty.app"),
+			("kitty", "/Applications/kitty.app"),
+			("warp", "/Applications/Warp.app"),
+			("iterm2", "/Applications/iTerm.app"),
+			("firefox", "/Applications/Firefox.app"),
+			("chrome", "/Applications/Google Chrome.app"),
+			("safari", "/Applications/Safari.app"),
+			("github", "/Applications/GitHub Desktop.app"),
+		];
+		if let Some((_, path)) = apps.iter().find(|(id, _)| *id == command) {
+			return std::path::Path::new(path).exists();
+		}
+	}
+	false
+}
+
+pub fn installed_editors() -> Vec<DetectedApp> {
+	[
+		DetectedApp {
+			id: "vscode",
+			command: "code",
+		},
+		DetectedApp {
+			id: "cursor",
+			command: "cursor",
+		},
+		DetectedApp {
+			id: "windsurf",
+			command: "windsurf",
+		},
+		DetectedApp {
+			id: "zed",
+			command: "zed",
+		},
+		DetectedApp {
+			id: "sublime",
+			command: "subl",
+		},
+	]
+	.into_iter()
+	.filter(|app| command_exists(app.command))
+	.collect()
+}
+
+pub fn installed_terminals() -> Vec<DetectedApp> {
+	[
+		DetectedApp {
+			id: "ghostty",
+			command: "ghostty",
+		},
+		DetectedApp {
+			id: "iterm2",
+			command: "iterm2",
+		},
+		DetectedApp {
+			id: "kitty",
+			command: "kitty",
+		},
+		DetectedApp {
+			id: "warp",
+			command: "warp",
+		},
+	]
+	.into_iter()
+	.filter(|app| command_exists(app.command))
+	.collect()
+}
+
+pub fn installed_browsers() -> Vec<DetectedApp> {
+	[
+		DetectedApp {
+			id: "firefox",
+			command: "firefox",
+		},
+		DetectedApp {
+			id: "chrome",
+			command: "google-chrome",
+		},
+		DetectedApp {
+			id: "chromium",
+			command: "chromium",
+		},
+		DetectedApp {
+			id: "safari",
+			command: "safari",
+		},
+	]
+	.into_iter()
+	.filter(|app| command_exists(app.command) || command_exists(app.id))
+	.collect()
+}
+
+pub fn list_shells() -> Vec<String> {
+	let mut shells = Vec::new();
+	if let Ok(text) = std::fs::read_to_string("/etc/shells") {
+		for line in text.lines() {
+			let line = line.trim();
+			if line.starts_with('/') && std::path::Path::new(line).is_file() {
+				shells.push(line.to_string());
+			}
+		}
+	}
+	for fallback in ["/bin/zsh", "/bin/bash", "/bin/sh", "/usr/bin/fish"] {
+		if std::path::Path::new(fallback).is_file() && !shells.iter().any(|s| s == fallback) {
+			shells.push(fallback.to_string());
+		}
+	}
+	shells
+}
+
 #[derive(Clone, Debug)]
 pub struct SystemFont {
 	pub family: String,
@@ -18,10 +151,7 @@ pub fn list_mono_fonts() -> Vec<String> {
 		.map(|f| f.family)
 		.collect();
 	if fonts.is_empty() {
-		fonts = list_system_fonts()
-			.into_iter()
-			.map(|f| f.family)
-			.collect();
+		fonts = list_system_fonts().into_iter().map(|f| f.family).collect();
 	}
 	fonts
 }
@@ -227,9 +357,7 @@ fn find_linux_sound_file_in_dir(dir: &std::path::Path, name: &str) -> Option<std
 			}
 			continue;
 		}
-		if is_linux_sound_file(&path)
-			&& path.file_stem().and_then(|stem| stem.to_str()) == Some(name)
-		{
+		if is_linux_sound_file(&path) && path.file_stem().and_then(|stem| stem.to_str()) == Some(name) {
 			return Some(path);
 		}
 	}
@@ -250,11 +378,7 @@ fn is_linux_sound_file(path: &std::path::Path) -> bool {
 
 #[cfg(target_os = "linux")]
 fn command_in_path(command: &str) -> bool {
-	std::env::var_os("PATH")
-		.map(|paths| {
-			std::env::split_paths(&paths).any(|path| path.join(command).is_file())
-		})
-		.unwrap_or(false)
+	command_exists(command)
 }
 
 #[cfg(target_os = "linux")]
@@ -290,7 +414,11 @@ fn collect_windows_sounds(dir: &std::path::Path, sounds: &mut std::collections::
 			collect_windows_sounds(&path, sounds);
 			continue;
 		}
-		if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("wav")) {
+		if path
+			.extension()
+			.and_then(|e| e.to_str())
+			.is_some_and(|e| e.eq_ignore_ascii_case("wav"))
+		{
 			if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
 				sounds.insert(name.to_string());
 			}
@@ -308,10 +436,7 @@ fn play_windows_sound(name: &str) -> Result<(), String> {
 		.args([
 			"-NoProfile",
 			"-Command",
-			&format!(
-				"(New-Object Media.SoundPlayer '{}').PlaySync()",
-				path.display()
-			),
+			&format!("(New-Object Media.SoundPlayer '{}').PlaySync()", path.display()),
 		])
 		.spawn()
 		.map_err(|e| format!("Failed to play sound: {e}"))?;
@@ -334,4 +459,30 @@ fn find_windows_sound_file(name: &str) -> Option<std::path::PathBuf> {
 		None
 	}
 	walk(&windows_sounds_dir(), name)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn empty_command_does_not_exist() {
+		assert!(!command_exists(""));
+	}
+
+	#[test]
+	fn sh_or_bash_exists_on_unix() {
+		assert!(command_exists("sh") || std::path::Path::new("/bin/sh").is_file());
+	}
+
+	#[test]
+	fn list_shells_includes_a_real_shell() {
+		let shells = list_shells();
+		assert!(
+			shells
+				.iter()
+				.any(|s| s.ends_with("/sh") || s.ends_with("/bash") || s.ends_with("/zsh")),
+			"{shells:?}"
+		);
+	}
 }

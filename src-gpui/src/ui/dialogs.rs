@@ -429,6 +429,32 @@ fn dialog_body(
 					.text_xs()
 					.child(app.data.overlay.dialog_url.clone().unwrap_or_default()),
 			)
+			.child(
+				div()
+					.text_xs()
+					.text_color(theme.muted_foreground)
+					.child(app.t("browserOpenWith")),
+			)
+			.child(
+				h_flex()
+					.gap_1()
+					.flex_wrap()
+					.children(crate::platform::installed_browsers().into_iter().map(|browser| {
+						let cmd = browser.command;
+						Button::new(crate::ui::eid(format!("open-with-{cmd}")))
+							.xsmall()
+							.label(browser.id)
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.open_url_with(cmd);
+										cx.notify();
+									});
+								}
+							})
+					})),
+			)
 			.into_any_element(),
 		DialogKind::ChooseFile => v_flex()
 			.gap_2()
@@ -524,6 +550,22 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 				});
 			}
 		}))
+		.when(kind == DialogKind::ReviewQueue, |el| {
+			el.child(
+				Button::new("dlg-copy-clear")
+					.small()
+					.label(app.t("reviewCommentsCopiedAndCleared"))
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								app.copy_review_comments(true, cx);
+								cx.notify();
+							});
+						}
+					}),
+			)
+		})
 		.when(show_ok, |el| {
 			el.child(
 				Button::new("dlg-ok")
@@ -553,10 +595,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 										app.data.overlay.dialog = None;
 									}
 									DialogKind::OpenLink => {
-										if let Some(url) = app.data.overlay.dialog_url.clone() {
-											let _ = open::that(url);
-										}
-										app.data.overlay.dialog = None;
+										app.open_url_with("");
 									}
 									DialogKind::CreateGroup => {
 										let name = app.inputs.group_name.read(cx).value().to_string();
@@ -569,13 +608,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 										app.data.overlay.dialog = None;
 									}
 									DialogKind::ReviewQueue => {
-										let text = app.data.overlay.review_comments.join("\n");
-										cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
-										app.data.push_toast(
-											crate::state::ToastKind::Success,
-											app.t("reviewCommentsCopied"),
-											"",
-										);
+										app.copy_review_comments(false, cx);
 									}
 									_ => app.data.overlay.dialog = None,
 								}
