@@ -56,8 +56,9 @@ use crate::backend::{self, Backend};
 use crate::i18n::{self, Locale};
 use crate::prefs::{term_theme_by_name, Prefs, ThemePref};
 use crate::state::{
-	AgentStatus, AppData, ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab, NotesStatus, OpenFileTab, OverlayState,
-	Route, SettingsTab, SidebarMode, SidebarNavItem, TermSession, ToastKind, TreeNode, UnifiedTab, Workspace,
+	AgentStatus, AppData, ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab, MdMenu, NotesStatus, OpenFileTab,
+	OverlayState, Route, SettingsTab, SidebarMode, SidebarNavItem, TermSession, ToastKind, TreeNode, UnifiedTab,
+	Workspace,
 };
 use crate::ui;
 use gpui_component::input::{Input, InputState};
@@ -89,6 +90,7 @@ pub struct Inputs {
 	pub default_worktree: Entity<InputState>,
 	pub term_search: Entity<InputState>,
 	pub review_comment: Entity<InputState>,
+	pub md_link: Entity<InputState>,
 }
 
 pub struct AppView {
@@ -166,6 +168,7 @@ impl AppView {
 			default_worktree: input(window, cx, "", false),
 			term_search: input(window, cx, "", false),
 			review_comment: input(window, cx, "", true),
+			md_link: input(window, cx, "https://", false),
 		};
 
 		inputs.project_name.update(cx, |s, cx| {
@@ -585,7 +588,7 @@ impl AppView {
 		self.inputs.file_editor.update(cx, |s, cx| {
 			s.set_highlighter(lang, cx);
 			s.set_line_number(show_gutter, window, cx);
-			s.set_soft_wrap(false, window, cx);
+			s.set_soft_wrap(!show_gutter, window, cx);
 			s.set_value(content.to_string(), window, cx);
 		});
 	}
@@ -1147,6 +1150,167 @@ impl AppView {
 			self.copy_term_selection(cx);
 		} else {
 			self.write_to_active_pty(&[0x03]);
+		}
+	}
+
+	pub fn toggle_md_menu(
+		&mut self,
+		menu: MdMenu,
+		target: crate::ui::markdown::MarkupTarget,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		if self.data.overlay.md_menu == Some(menu) {
+			self.data.overlay.md_menu = None;
+			return;
+		}
+		self.data.overlay.md_menu = Some(menu);
+		if menu == MdMenu::Link {
+			let input = crate::ui::markdown::md_input(self, target);
+			let text = input.read(cx).value().to_string();
+			let caret = input.read(cx).cursor();
+			let href = crate::ui::markdown::link_href_at(&text, caret).unwrap_or_default();
+			self.inputs.md_link.update(cx, |s, cx| {
+				s.set_placeholder("https://", window, cx);
+				s.set_value(href, window, cx);
+			});
+		}
+	}
+
+	pub fn run_md(
+		&mut self,
+		target: crate::ui::markdown::MarkupTarget,
+		action: crate::ui::markdown::MdAction,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		use crate::ui::markdown::{
+			apply_block_prefix, apply_link, apply_slash_at, apply_table_op, insert_snippet, remove_link, MdAction,
+		};
+		let input = crate::ui::markdown::md_input(self, target).clone();
+		match action {
+			MdAction::Wrap(prefix, suffix) => {
+				wrap_markup(&input, prefix, suffix, window, cx);
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::Block(prefix) => {
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let caret = state.cursor().min(text.len());
+					let (next, at) = apply_block_prefix(&text, caret, prefix);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::Slash(prefix, suffix) => {
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let caret = state.cursor().min(text.len());
+					let (next, at) = apply_slash_at(&text, caret, prefix, suffix);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::Insert(snippet) => {
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let caret = state.cursor().min(text.len());
+					let (next, at) = insert_snippet(&text, caret, snippet);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::Table(op) => {
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let caret = state.cursor().min(text.len());
+					let (next, at) = apply_table_op(&text, caret, op);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::ApplyLink => {
+				let href = self.inputs.md_link.read(cx).value().to_string();
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let (start, end) = match state.selected_text_range(true, window, cx) {
+						Some(sel) => (
+							utf16_offset_to_bytes(&text, sel.range.start),
+							utf16_offset_to_bytes(&text, sel.range.end),
+						),
+						None => {
+							let caret = state.cursor().min(text.len());
+							(caret, caret)
+						}
+					};
+					let (next, at) = apply_link(&text, start, end, &href);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+			MdAction::RemoveLink => {
+				input.update(cx, |state, cx| {
+					let text = state.value().to_string();
+					let caret = state.cursor().min(text.len());
+					let (next, at) = remove_link(&text, caret);
+					state.set_value(next.clone(), window, cx);
+					let (line, character) = offset_line_col(&next, at);
+					state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+				});
+				self.data.overlay.md_menu = None;
+			}
+		}
+		if target == crate::ui::markdown::MarkupTarget::Notes {
+			self.data.notes_dirty_since = Some(std::time::Instant::now());
+		} else {
+			self.data.file_dirty_since = Some(std::time::Instant::now());
+			let draft = input.read(cx).value().to_string();
+			if let Some(file) = self.data.current_ws_mut().and_then(|w| w.active_file_mut()) {
+				file.draft = draft;
+			}
+		}
+	}
+
+	pub fn set_md_fence_language(
+		&mut self,
+		target: crate::ui::markdown::MarkupTarget,
+		lang: &str,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let input = crate::ui::markdown::md_input(self, target).clone();
+		input.update(cx, |state, cx| {
+			let text = state.value().to_string();
+			let caret = state.cursor().min(text.len());
+			let (next, at) = crate::ui::markdown::set_fence_language(&text, caret, lang);
+			state.set_value(next.clone(), window, cx);
+			let (line, character) = offset_line_col(&next, at);
+			state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+		});
+		if target == crate::ui::markdown::MarkupTarget::Notes {
+			self.data.notes_dirty_since = Some(std::time::Instant::now());
+		} else if let Some(file) = self.data.current_ws_mut().and_then(|w| w.active_file_mut()) {
+			file.draft = input.read(cx).value().to_string();
+			self.data.file_dirty_since = Some(std::time::Instant::now());
+		}
+	}
+
+	pub fn copy_md_fence(&mut self, target: crate::ui::markdown::MarkupTarget, cx: &mut Context<Self>) {
+		let input = crate::ui::markdown::md_input(self, target);
+		let text = input.read(cx).value().to_string();
+		let caret = input.read(cx).cursor();
+		if let Some(body) = crate::ui::markdown::fence_body(&text, caret) {
+			cx.write_to_clipboard(ClipboardItem::new_string(body));
 		}
 	}
 
@@ -2686,19 +2850,7 @@ fn utf16_offset_to_bytes(text: &str, utf16: usize) -> usize {
 }
 
 pub fn apply_slash_command(text: &str, prefix: &str, suffix: &str) -> String {
-	let mut lines: Vec<&str> = text.lines().collect();
-	if let Some(last) = lines.last_mut() {
-		if last.starts_with('/') {
-			*last = "";
-		}
-	}
-	let mut next = lines.join("\n");
-	if !next.is_empty() && !next.ends_with('\n') {
-		next.push('\n');
-	}
-	next.push_str(prefix);
-	next.push_str(suffix);
-	next
+	crate::ui::markdown::apply_slash_at(text, text.len(), prefix, suffix).0
 }
 
 pub fn wrap_markup(

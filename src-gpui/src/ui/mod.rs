@@ -31,6 +31,7 @@ pub mod file_tree;
 pub mod file_viewer;
 pub mod git;
 pub mod home;
+pub mod markdown;
 pub mod notes;
 pub mod palette;
 pub mod settings;

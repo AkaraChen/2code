@@ -45,6 +45,13 @@ pub enum GitDiffTab {
 	History,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MdMenu {
+	Command,
+	Table,
+	Link,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DiffPreviewMode {
 	#[default]
@@ -526,6 +533,13 @@ impl Workspace {
 		}
 	}
 
+	pub fn active_file(&self) -> Option<&OpenFileTab> {
+		match self.active {
+			Some(UnifiedTab::File { index }) => self.files.get(index),
+			_ => None,
+		}
+	}
+
 	pub fn active_file_mut(&mut self) -> Option<&mut OpenFileTab> {
 		match self.active {
 			Some(UnifiedTab::File { index }) => self.files.get_mut(index),
@@ -588,6 +602,8 @@ pub struct OverlayState {
 	pub group_menu_creating: bool,
 	pub file_search_open: bool,
 	pub file_search_ix: usize,
+	pub md_menu: Option<MdMenu>,
+	pub md_preview: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

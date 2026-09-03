@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
+use crate::ui::markdown::{self, MarkupTarget};
 use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
-use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable};
 
 use crate::app::AppView;
 use crate::backend;
@@ -45,106 +46,31 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	}
 
 	if backend::is_markdown(&file.path) {
-		let slash = file.draft.lines().last().unwrap_or("").to_string();
+		let preview = app.data.overlay.md_preview;
+		let draft = file.draft.clone();
 		return v_flex()
 			.id("markdown-viewer")
 			.size_full()
-			.child(
-				h_flex()
-					.w_full()
-					.px_2()
-					.py_1()
-					.gap_1()
-					.border_b_1()
-					.border_color(theme.border)
-					.child(md_btn("md-h1", "H1", "# ", "", &view, &app.t("notesFormatHeading1")))
-					.child(md_btn("md-h2", "H2", "## ", "", &view, &app.t("notesFormatHeading2")))
-					.child(md_btn("md-h3", "H3", "### ", "", &view, &app.t("notesFormatHeading3")))
-					.child(md_btn("md-p", "P", "", "\n\n", &view, &app.t("notesFormatParagraph")))
-					.child(md_btn("md-b", "B", "**", "**", &view, &app.t("notesFormatBold")))
-					.child(md_btn("md-i", "I", "*", "*", &view, &app.t("notesFormatItalic")))
-					.child(md_btn("md-s", "S", "~~", "~~", &view, &app.t("notesFormatStrike")))
-					.child(md_btn("md-code", "`", "`", "`", &view, &app.t("notesFormatCode")))
-					.child(md_btn(
-						"md-pre",
-						"</>",
-						"```\n",
-						"\n```",
-						&view,
-						&app.t("notesFormatCodeBlock"),
-					))
-					.child(md_btn("md-ul", "•", "- ", "", &view, &app.t("notesFormatBulletList")))
-					.child(md_btn(
-						"md-ol",
-						"1.",
-						"1. ",
-						"",
-						&view,
-						&app.t("notesFormatOrderedList"),
-					))
-					.child(md_btn("md-q", ">", "> ", "", &view, &app.t("notesFormatQuote")))
-					.child(md_btn("md-link", "[]", "[", "](url)", &view, &app.t("notesFormatLink")))
-					.child(md_btn(
-						"md-img",
-						"img",
-						"![",
-						"](src)",
-						&view,
-						&app.t("notesFormatLink"),
-					))
-					.child(md_btn(
-						"md-table",
-						"tbl",
-						"| A | B |\n| --- | --- |\n|   |   |\n",
-						"",
-						&view,
-						&app.t("notesInsertTable"),
-					))
-					.child(md_btn("md-hr", "—", "---\n", "", &view, &app.t("notesInsertDivider")))
-					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(if file.dirty() {
-								app.t("notesSaving")
-							} else {
-								app.t("notesSaved")
-							}),
-					)
-					.child(
-						Button::new("md-save")
-							.xsmall()
-							.primary()
-							.label(app.t("save"))
-							.on_click({
-								let view = view.clone();
-								move |_, window, cx| {
-									view.update(cx, |app, cx| {
-										app.save_active_file(window, cx);
-										cx.notify();
-									});
-								}
-							}),
-					),
-			)
-			.when(slash.starts_with('/'), |el| {
-				el.child(slash_menu(&slash, &view, app.data.locale))
-			})
-			.child(
-				h_flex()
+			.font(markdown::editor_font(app.data.prefs.font_family.clone()))
+			.text_size(px(app.data.prefs.font_size))
+			.child(markdown::toolbar(app, MarkupTarget::File, window, cx))
+			.child(if preview {
+				div()
+					.id("markdown-preview")
 					.flex_1()
 					.min_h_0()
-					.child(div().flex_1().h_full().child(Input::new(&app.inputs.file_editor)))
-					.child(
-						div()
-							.flex_1()
-							.h_full()
-							.p_3()
-							.border_l_1()
-							.border_color(theme.border)
-							.child(TextView::markdown("md-preview", file.draft.clone(), window, cx)),
-					),
-			)
+					.p_3()
+					.child(TextView::markdown("md-preview", draft, window, cx))
+					.into_any_element()
+			} else {
+				div()
+					.id("markdown-editor")
+					.flex_1()
+					.min_h_0()
+					.p_2()
+					.child(Input::new(&app.inputs.file_editor))
+					.into_any_element()
+			})
 			.into_any_element();
 	}
 
@@ -159,7 +85,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	v_flex()
 		.id("text-viewer")
 		.size_full()
-		.font_family(app.data.prefs.font_family.clone())
+		.font(markdown::editor_font(app.data.prefs.font_family.clone()))
 		.text_size(px(app.data.prefs.font_size))
 		.child(
 			h_flex()
@@ -380,9 +306,7 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 				h_flex()
 					.gap_1()
 					.pl(px(4. + 12. * depth as f32))
-					.child(
-						crate::ui::file_icons::file_glyph(path, is_dir, false, 13.),
-					)
+					.child(crate::ui::file_icons::file_glyph(path, is_dir, false, 13.))
 					.child(div().text_size(px(13.)).child(path.clone()))
 			}))
 			.into_any_element();
@@ -435,78 +359,6 @@ fn checkerboard() -> impl IntoElement {
 					.bg(if (row + col) % 2 == 0 { light } else { dark })
 			}))
 		}))
-}
-
-fn slash_menu(query: &str, view: &gpui::Entity<AppView>, locale: crate::i18n::Locale) -> impl IntoElement {
-	let q = query.trim_start_matches('/').to_ascii_lowercase();
-	let items: [(&str, &str, &str); 9] = [
-		("h1", "# ", ""),
-		("h2", "## ", ""),
-		("h3", "### ", ""),
-		("ul", "- ", ""),
-		("quote", "> ", ""),
-		("code", "```\n", "\n```"),
-		("link", "[", "](url)"),
-		("table", "| A | B |\n| --- | --- |\n|   |   |\n", ""),
-		("hr", "---\n", ""),
-	];
-	v_flex()
-		.id("md-slash")
-		.px_2()
-		.py_1()
-		.gap_1()
-		.w(px(180.))
-		.max_h(px(280.))
-		.child(
-			div()
-				.text_xs()
-				.text_color(gpui::hsla(0., 0., 0.5, 1.))
-				.child(crate::i18n::t(locale, "notesCommandMenu")),
-		)
-		.child(
-			h_flex().gap_1().flex_wrap().children(
-				items
-					.into_iter()
-					.filter(|(name, _, _)| q.is_empty() || name.contains(&q))
-					.map(|(name, prefix, suffix)| {
-						let view = view.clone();
-						Button::new(crate::ui::eid(format!("slash-{name}")))
-							.ghost()
-							.xsmall()
-							.label(format!("/{name}"))
-							.on_click(move |_, window, cx| {
-								view.update(cx, |app, cx| {
-									let text = app.inputs.file_editor.read(cx).value().to_string();
-									let next = crate::app::apply_slash_command(&text, prefix, suffix);
-									app.inputs.file_editor.update(cx, |s, cx| {
-										s.set_value(next, window, cx);
-									});
-								});
-							})
-					}),
-			),
-		)
-}
-
-fn md_btn(
-	id: &'static str,
-	label: &'static str,
-	prefix: &'static str,
-	suffix: &'static str,
-	view: &gpui::Entity<AppView>,
-	tooltip: &str,
-) -> impl IntoElement {
-	let view = view.clone();
-	Button::new(id)
-		.ghost()
-		.xsmall()
-		.label(label)
-		.tooltip(tooltip.to_string())
-		.on_click(move |_, window, cx| {
-			view.update(cx, |app, cx| {
-				crate::app::wrap_markup(&app.inputs.file_editor, prefix, suffix, window, cx);
-			});
-		})
 }
 
 #[cfg(test)]

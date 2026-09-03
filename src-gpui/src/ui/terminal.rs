@@ -39,7 +39,7 @@ pub fn render(
 		.relative()
 		.bg(rgb(theme.bg))
 		.text_color(rgb(theme.fg))
-		.font_family(app.data.prefs.font_family.clone())
+		.font(crate::ui::markdown::editor_font(app.data.prefs.font_family.clone()))
 		.text_size(px(app.data.prefs.font_size))
 		.when(!interactive, |el| el.invisible().absolute().inset_0())
 		.when(interactive, |el| {
@@ -90,7 +90,7 @@ pub fn render(
 				.id(crate::ui::eid(format!("pty-body-{id}")))
 				.size_full()
 				.p_2()
-				.font_family(app.data.prefs.font_family.clone())
+				.font(crate::ui::markdown::editor_font(app.data.prefs.font_family.clone()))
 				.overflow_hidden()
 				.child(grid);
 			if interactive {
