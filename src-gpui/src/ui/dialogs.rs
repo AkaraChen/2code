@@ -8,9 +8,10 @@ use gpui_component::{Disableable, Selectable};
 use crate::app::AppView;
 use crate::backend;
 use crate::state::{
-	leftover_dialog_width, leftover_file_menu_flags, leftover_file_menu_rows, leftover_rename_disabled,
-	leftover_template_rows, project_group_menu_rows, ContextMenu, DialogKind, GroupMenuRow, LeftoverFileMenuRow,
-	LeftoverTemplateRow,
+	leftover_command_preview, leftover_dialog_width, leftover_file_menu_flags, leftover_file_menu_rows,
+	leftover_rename_disabled, leftover_template_display_name, leftover_template_draft_can_save,
+	leftover_template_draft_width, leftover_template_rows, project_group_menu_rows,
+	ContextMenu, DialogKind, GroupMenuRow, LeftoverFileMenuRow, LeftoverTemplateRow,
 };
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -20,6 +21,156 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.inset_0()
 		.child(context_menu(app, cx))
 		.child(dialog(app, window, cx))
+		.child(leftover_project_template_draft(app, window, cx))
+}
+
+fn leftover_project_template_draft(
+	app: &mut AppView,
+	_window: &mut Window,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
+	if !app.data.overlay.template_dialog_open || app.data.overlay.dialog != Some(DialogKind::ProjectSettings) {
+		return div().id("no-ptpl-draft").into_any_element();
+	}
+	let view = cx.entity();
+	let theme = cx.theme().clone();
+	let editing = app.data.overlay.editing_template.is_some();
+	let can_save = leftover_template_draft_can_save(&app.inputs.template_name.read(cx).value());
+	div()
+		.id("ptpl-draft-mask")
+		.absolute()
+		.inset_0()
+		.flex()
+		.items_center()
+		.justify_center()
+		.bg(gpui::hsla(0., 0., 0., 0.12))
+		.on_click({
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					app.close_project_template_draft();
+					cx.notify();
+				});
+			}
+		})
+		.child(
+			v_flex()
+				.id("ptpl-draft-panel")
+				.w(px(leftover_template_draft_width()))
+				.p_4()
+				.gap_4()
+				.rounded_xl()
+				.bg(theme.popover)
+				.border_1()
+				.border_color(theme.border)
+				.shadow_lg()
+				.on_click(|_, _, _| {})
+				.child(
+					h_flex()
+						.gap_2()
+						.items_center()
+						.child(Icon::new(IconName::SquareTerminal).w(px(16.)))
+						.child(
+							div().font_semibold().child(if editing {
+								app.t("editTerminalTemplate")
+							} else {
+								app.t("addTerminalTemplate")
+							}),
+						),
+				)
+				.child(
+					v_flex()
+						.gap_4()
+						.child(
+							v_flex()
+								.gap_1()
+								.child(div().font_medium().text_sm().child(app.t("terminalTemplateName")))
+								.child(Input::new(&app.inputs.template_name)),
+						)
+						.child(
+							v_flex()
+								.gap_1()
+								.child(div().font_medium().text_sm().child(app.t("terminalTemplateCwd")))
+								.child(
+									div()
+										.text_xs()
+										.text_color(theme.muted_foreground)
+										.child(app.t("terminalTemplateCwdDescription")),
+								)
+								.child(Input::new(&app.inputs.template_cwd)),
+						)
+						.child(
+							v_flex()
+								.gap_1()
+								.child(div().font_medium().text_sm().child(app.t("terminalTemplateCommands")))
+								.child(
+									div()
+										.text_xs()
+										.text_color(theme.muted_foreground)
+										.child(app.t("terminalTemplateCommandsDescription")),
+								)
+								.child(Input::new(&app.inputs.template_commands)),
+						),
+				)
+				.child(
+					h_flex()
+						.justify_between()
+						.child(
+							h_flex()
+								.gap_2()
+								.child(
+									Button::new("ptpl-cancel")
+										.outline()
+										.small()
+										.label(app.t("cancel"))
+										.on_click({
+											let view = view.clone();
+											move |_, _, cx| {
+												view.update(cx, |app, cx| {
+													app.close_project_template_draft();
+													cx.notify();
+												});
+											}
+										}),
+								)
+								.when(editing, |el| {
+									el.child(
+										Button::new("ptpl-delete")
+											.danger()
+											.small()
+											.label(app.t("delete"))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													view.update(cx, |app, cx| {
+														app.delete_editing_project_template();
+														cx.notify();
+													});
+												}
+											}),
+									)
+								}),
+						)
+						.child(
+							Button::new("ptpl-save")
+								.primary()
+								.small()
+								.label(app.t("save"))
+								.disabled(!can_save)
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.add_project_template(cx);
+											app.data.overlay.template_dialog_open = false;
+											cx.notify();
+										});
+									}
+								}),
+						),
+				),
+		)
+		.into_any_element()
 }
 
 fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -39,7 +190,13 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 		DialogKind::SwitchBranch => app.t("switchBranchTitle"),
 		DialogKind::OpenLink => app.t("terminalOpenLink"),
 		DialogKind::ChooseFile => app.t("terminalChooseFilePath"),
-		DialogKind::EditTemplate => app.t("editTerminalTemplate"),
+		DialogKind::EditTemplate => {
+			if app.data.overlay.editing_template.is_some() {
+				app.t("editTerminalTemplate")
+			} else {
+				app.t("addTerminalTemplate")
+			}
+		}
 		DialogKind::ReviewQueue => app.t("reviewQueue"),
 		DialogKind::DebugLog => app.t("debugLog"),
 		DialogKind::CreateGroup => app.t("createProjectGroup"),
@@ -58,6 +215,7 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 			move |_, _, cx| {
 				view.update(cx, |app, cx| {
 					app.data.overlay.dialog = None;
+					app.data.overlay.template_dialog_open = false;
 					cx.notify();
 				});
 			}
@@ -124,6 +282,7 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 							move |_, _, cx| {
 								view.update(cx, |app, cx| {
 									app.data.overlay.dialog = None;
+									app.data.overlay.template_dialog_open = false;
 									cx.notify();
 								});
 							}
@@ -337,104 +496,137 @@ fn dialog_body(
 					})
 					.map(|w| w.config.terminal_templates.clone())
 					.unwrap_or_default();
+				let fallback = app.t("terminalTemplate");
 				v_flex()
-					.gap_2()
-					.child(div().text_sm().child(app.t("projectTerminalTemplates")))
+					.gap_4()
 					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(app.t("projectTerminalTemplatesDescription")),
+						h_flex()
+							.items_start()
+							.justify_between()
+							.gap_4()
+							.child(
+								v_flex()
+									.gap_1()
+									.child(div().font_semibold().text_sm().child(app.t("projectTerminalTemplates")))
+									.child(
+										div()
+											.text_sm()
+											.text_color(theme.muted_foreground)
+											.child(app.t("projectTerminalTemplatesDescription")),
+									),
+							)
+							.child(
+								Button::new("add-project-tpl")
+									.outline()
+									.small()
+									.label(app.t("addTerminalTemplate"))
+									.on_click({
+										let view = view.clone();
+										move |_, window, cx| {
+											view.update(cx, |app, cx| {
+												app.open_project_template_create(window, cx);
+												cx.notify();
+											});
+										}
+									}),
+							),
 					)
 					.child(if templates.is_empty() {
-						div()
-							.p_2()
-							.text_sm()
-							.child(app.t("noTerminalTemplates"))
+						v_flex()
+							.min_h(px(96.))
+							.items_center()
+							.justify_center()
+							.gap_1()
+							.child(div().font_medium().text_sm().child(app.t("noTerminalTemplates")))
+							.child(
+								div()
+									.text_sm()
+									.text_color(theme.muted_foreground)
+									.child(app.t("projectTerminalTemplatesDescription")),
+							)
 							.into_any_element()
 					} else {
 						v_flex()
-							.gap_1()
+							.gap_2()
 							.children(templates.into_iter().map(|t| {
 								let id = t.id.clone();
+								let preview = leftover_command_preview(&t.commands.join("\n"));
+								let name = leftover_template_display_name(&t.name, &fallback);
 								h_flex()
 									.id(crate::ui::eid(format!("ptpl-{id}")))
+									.items_center()
 									.justify_between()
+									.gap_4()
+									.rounded_lg()
+									.border_1()
+									.border_color(theme.border)
+									.px_4()
+									.py_3()
 									.child(
 										v_flex()
-											.id(crate::ui::eid(format!("ptpl-edit-{id}")))
-											.cursor(gpui::CursorStyle::PointingHand)
-											.child(div().font_medium().text_sm().child(t.name.clone()))
-											.child(
-												div().text_xs().text_color(theme.muted_foreground).child(t.cwd.clone()),
-											)
-											.on_click({
-												let view = view.clone();
-												let id = id.clone();
-												move |_, window, cx| {
-													view.update(cx, |app, cx| {
-														app.load_project_template(&id, window, cx);
-														cx.notify();
-													});
-												}
+											.min_w_0()
+											.gap_1()
+											.child(div().font_medium().truncate().child(name))
+											.when(!preview.is_empty(), |el| {
+												el.child(
+													div()
+														.font_family("monospace")
+														.text_sm()
+														.text_color(theme.muted_foreground)
+														.child(preview),
+												)
+											})
+											.when(!t.cwd.trim().is_empty(), |el| {
+												el.child(
+													div()
+														.font_family("monospace")
+														.text_xs()
+														.text_color(theme.muted_foreground)
+														.child(t.cwd.clone()),
+												)
 											}),
 									)
 									.child(
-										Button::new(crate::ui::eid(format!("ptpl-del-{id}")))
-											.danger()
-											.xsmall()
-											.label(app.t("delete"))
-											.tooltip(app.t("deleteTerminalTemplate"))
-											.on_click({
-												let view = view.clone();
-												move |_, _, cx| {
-													view.update(cx, |app, cx| {
-														app.remove_project_template(&id);
-														cx.notify();
-													});
-												}
-											}),
+										h_flex()
+											.flex_shrink_0()
+											.gap_1()
+											.child(
+												Button::new(crate::ui::eid(format!("ptpl-edit-{id}")))
+													.ghost()
+													.xsmall()
+													.tooltip(app.t("editTerminalTemplate"))
+													.child(crate::ui::leftover_pencil_glyph(theme.muted_foreground))
+													.on_click({
+														let view = view.clone();
+														let id = id.clone();
+														move |_, window, cx| {
+															view.update(cx, |app, cx| {
+																app.load_project_template(&id, window, cx);
+																cx.notify();
+															});
+														}
+													}),
+											)
+											.child(
+												Button::new(crate::ui::eid(format!("ptpl-del-{id}")))
+													.ghost()
+													.xsmall()
+													.tooltip(app.t("deleteTerminalTemplate"))
+													.child(Icon::new(IconName::Delete).w(px(14.)).text_color(theme.danger))
+													.on_click({
+														let view = view.clone();
+														move |_, _, cx| {
+															view.update(cx, |app, cx| {
+																app.remove_project_template(&id);
+																cx.notify();
+															});
+														}
+													}),
+											),
 									)
 							}))
 							.into_any_element()
 					})
-					.child(div().text_xs().child(app.t("terminalTemplateName")))
-					.child(Input::new(&app.inputs.template_name))
-					.child(div().text_xs().child(app.t("terminalTemplateCwd")))
-					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(app.t("terminalTemplateCwdDescription")),
-					)
-					.child(Input::new(&app.inputs.template_cwd))
-					.child(div().text_xs().child(app.t("terminalTemplateCommands")))
-					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(app.t("terminalTemplateCommandsDescription")),
-					)
-					.child(Input::new(&app.inputs.template_commands))
-					.child(
-						Button::new("add-project-tpl")
-							.xsmall()
-							.primary()
-							.label(if app.data.overlay.editing_template.is_some() {
-								app.t("save")
-							} else {
-								app.t("addTerminalTemplate")
-							})
-							.on_click({
-								let view = view.clone();
-								move |_, _, cx| {
-									view.update(cx, |app, cx| {
-										app.add_project_template(cx);
-										cx.notify();
-									});
-								}
-							}),
-					)
 					.into_any_element()
 			})
 			.into_any_element(),
@@ -912,6 +1104,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 								view.update(cx, |app, cx| {
 									app.data.overlay.dialog = None;
 									app.data.overlay.open_link_menu = false;
+									app.data.overlay.template_dialog_open = false;
 									cx.notify();
 								});
 							}

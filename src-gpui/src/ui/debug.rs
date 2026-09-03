@@ -40,9 +40,9 @@ pub fn render_fab(app: &AppView, _window: &mut Window, cx: &mut Context<AppView>
 		.child(
 			Button::new("debug-toggle")
 				.primary()
-				.icon(IconName::Inspector)
 				.rounded(ButtonRounded::Size(px(16.)))
 				.tooltip(app.t("debugLog"))
+				.child(crate::ui::leftover_wrench_glyph(cx.theme().primary_foreground))
 				.on_click(move |_, window, cx| {
 					view.update(cx, |app, cx| {
 						app.open_debug_log(window, cx);

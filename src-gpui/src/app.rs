@@ -2051,6 +2051,26 @@ impl AppView {
 		self.upsert_project_template(cx);
 	}
 
+	pub fn open_project_template_create(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		self.data.overlay.editing_template = None;
+		self.inputs.template_name.update(cx, |s, cx| s.set_value("", window, cx));
+		self.inputs.template_cwd.update(cx, |s, cx| s.set_value("", window, cx));
+		self.inputs.template_commands.update(cx, |s, cx| s.set_value("", window, cx));
+		self.data.overlay.template_dialog_open = true;
+	}
+
+	pub fn close_project_template_draft(&mut self) {
+		self.data.overlay.template_dialog_open = false;
+		self.data.overlay.editing_template = None;
+	}
+
+	pub fn delete_editing_project_template(&mut self) {
+		if let Some(id) = self.data.overlay.editing_template.clone() {
+			self.remove_project_template(&id);
+		}
+		self.close_project_template_draft();
+	}
+
 	pub fn load_project_template(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
 		let Some(template) = self
 			.data
@@ -2065,6 +2085,7 @@ impl AppView {
 			return;
 		};
 		self.data.overlay.editing_template = Some(id.to_string());
+		self.data.overlay.template_dialog_open = true;
 		self.inputs.template_name.update(cx, |s, cx| {
 			s.set_value(template.name.clone(), window, cx);
 		});
@@ -2143,7 +2164,10 @@ impl AppView {
 			self.persist_prefs();
 		}
 		self.data.overlay.editing_template = None;
-		self.data.overlay.dialog = None;
+		self.data.overlay.template_dialog_open = false;
+		if self.data.overlay.dialog == Some(crate::state::DialogKind::EditTemplate) {
+			self.data.overlay.dialog = None;
+		}
 	}
 
 	pub fn remove_project_template(&mut self, id: &str) {

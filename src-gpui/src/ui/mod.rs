@@ -13,6 +13,10 @@ pub fn leftover_pencil_glyph(color: gpui::Hsla) -> gpui::Div {
 	div().text_color(color).child("✎")
 }
 
+pub fn leftover_wrench_glyph(color: gpui::Hsla) -> gpui::Div {
+	div().text_color(color).child("🔧")
+}
+
 pub fn leftover_house_glyph(color: gpui::Hsla) -> gpui::Div {
 	div().text_color(color).child("⌂")
 }

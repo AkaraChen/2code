@@ -620,6 +620,7 @@ pub struct OverlayState {
 	pub collapsed_projects: HashSet<String>,
 	pub pending_close_file: Option<String>,
 	pub editing_template: Option<String>,
+	pub template_dialog_open: bool,
 	pub project_settings_tab: usize,
 	pub sidebar_drag: Option<(f32, f32)>,
 	pub profile_sidebar_drag: Option<(f32, f32)>,
@@ -775,10 +776,52 @@ pub fn leftover_dialog_width(kind: DialogKind) -> f32 {
 	match kind {
 		DialogKind::ReviewQueue => 896.0,
 		DialogKind::SwitchBranch => 448.0,
-		DialogKind::ProjectSettings => 512.0,
-		DialogKind::DebugLog => 512.0,
+		DialogKind::ProjectSettings | DialogKind::DebugLog | DialogKind::EditTemplate => 512.0,
 		DialogKind::ChooseFile => 576.0,
 		_ => 384.0,
+	}
+}
+
+pub fn leftover_template_draft_width() -> f32 {
+	512.0
+}
+
+pub fn leftover_text_to_commands(text: &str) -> Vec<String> {
+	text.lines()
+		.map(|line| line.trim())
+		.filter(|line| !line.is_empty())
+		.map(|line| line.to_string())
+		.collect()
+}
+
+pub fn leftover_command_preview(commands_text: &str) -> String {
+	let lines = leftover_text_to_commands(commands_text);
+	match lines.as_slice() {
+		[] => String::new(),
+		[one] => one.clone(),
+		[first, rest @ ..] => format!("{} +{}", first, rest.len()),
+	}
+}
+
+pub fn leftover_template_draft_can_save(name: &str) -> bool {
+	!name.trim().is_empty()
+}
+
+pub fn leftover_normalize_global_template(name: &str, commands_text: &str) -> Option<(String, Vec<String>)> {
+	let name = name.trim();
+	let commands = leftover_text_to_commands(commands_text);
+	if name.is_empty() || commands.is_empty() {
+		None
+	} else {
+		Some((name.to_string(), commands))
+	}
+}
+
+pub fn leftover_template_display_name(name: &str, fallback: &str) -> String {
+	if name.is_empty() {
+		fallback.to_string()
+	} else {
+		name.to_string()
 	}
 }
 
@@ -1100,6 +1143,8 @@ mod tests {
 		assert_eq!(leftover_dialog_width(DialogKind::CreateProject), 384.0);
 		assert_eq!(leftover_dialog_width(DialogKind::CreateProfile), 384.0);
 		assert_eq!(leftover_dialog_width(DialogKind::ProjectSettings), 512.0);
+		assert_eq!(leftover_dialog_width(DialogKind::EditTemplate), 512.0);
+		assert_eq!(leftover_template_draft_width(), 512.0);
 		assert_eq!(leftover_dialog_width(DialogKind::SwitchBranch), 448.0);
 		assert_eq!(leftover_dialog_width(DialogKind::DebugLog), 512.0);
 		assert_eq!(leftover_dialog_width(DialogKind::ReviewQueue), 896.0);
@@ -1178,6 +1223,29 @@ mod tests {
 				.count(),
 			4
 		);
+	}
+
+	#[test]
+	fn leftover_template_preview_matches_inventory() {
+		assert_eq!(leftover_command_preview(""), "");
+		assert_eq!(leftover_command_preview("bun test"), "bun test");
+		assert_eq!(
+			leftover_command_preview("bun install\nbun test\nbun lint"),
+			"bun install +2"
+		);
+		assert_eq!(
+			leftover_text_to_commands("  bun test  \n\n  bun lint\n"),
+			vec!["bun test".to_string(), "bun lint".to_string()]
+		);
+		assert!(leftover_template_draft_can_save("Dev"));
+		assert!(!leftover_template_draft_can_save("   "));
+		assert_eq!(
+			leftover_normalize_global_template(" Dev ", "bun test\n"),
+			Some(("Dev".into(), vec!["bun test".into()]))
+		);
+		assert_eq!(leftover_normalize_global_template("Dev", ""), None);
+		assert_eq!(leftover_template_display_name("", "Terminal Template"), "Terminal Template");
+		assert_eq!(leftover_template_display_name("Dev", "Terminal Template"), "Dev");
 	}
 
 	#[test]

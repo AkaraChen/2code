@@ -17,7 +17,10 @@ use gpui_component::tab::Tab;
 use crate::app::AppView;
 use crate::i18n::Locale;
 use crate::prefs::{term_theme_by_name, RadiusPref, TERM_THEMES, ThemePref};
-use crate::state::{DialogKind, SettingsTab};
+use crate::state::{
+	leftover_command_preview, leftover_normalize_global_template, leftover_template_draft_can_save,
+	leftover_template_draft_width, DialogKind, SettingsTab,
+};
 
 pub fn open_update_page(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) {
 	open_settings_at(app, window, cx, Some(SettingsTab::About));
@@ -106,6 +109,7 @@ pub struct SettingsView {
 	fonts: Vec<String>,
 	sounds: Vec<String>,
 	editing_template_id: Option<String>,
+	template_dialog_open: bool,
 	preview_theme: Option<String>,
 	open_select: Option<String>,
 }
@@ -164,6 +168,7 @@ impl SettingsView {
 			fonts: crate::platform::list_mono_fonts(),
 			sounds: crate::platform::list_system_sounds(),
 			editing_template_id: None,
+			template_dialog_open: false,
 			preview_theme: None,
 			open_select: None,
 		}
@@ -212,6 +217,7 @@ impl gpui::Render for SettingsView {
 		v_flex()
 			.id("settings-window")
 			.size_full()
+			.relative()
 			.bg(theme.background)
 			.child(
 				h_flex()
@@ -244,6 +250,7 @@ impl gpui::Render for SettingsView {
 						SettingsTab::About => self.about(cx).into_any_element(),
 					}),
 			)
+			.child(self.leftover_template_draft_overlay(window, cx))
 	}
 }
 
@@ -698,133 +705,318 @@ impl SettingsView {
 	fn templates(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 		let _ = window;
 		let view = cx.entity();
+		let theme = cx.theme().clone();
 		v_flex()
 			.id("settings-templates")
 			.max_w(px(672.))
-			.gap_3()
-			.child(div().font_semibold().child(self.t("globalTerminalTemplates")))
-			.child(div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("globalTerminalTemplatesDescription")))
+			.gap_4()
+			.child(
+				h_flex()
+					.items_start()
+					.justify_between()
+					.gap_4()
+					.child(
+						v_flex()
+							.gap_1()
+							.child(div().font_semibold().child(self.t("globalTerminalTemplates")))
+							.child(
+								div()
+									.text_sm()
+									.text_color(theme.muted_foreground)
+									.child(self.t("globalTerminalTemplatesDescription")),
+							),
+					)
+					.child(
+						Button::new("add-tpl")
+							.outline()
+							.small()
+							.label(self.t("addTerminalTemplate"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |this, cx| {
+										this.open_template_draft(None, window, cx);
+									});
+								}
+							}),
+					),
+			)
 			.child(if self.prefs.templates.is_empty() {
-				div().p_4().child(self.t("noTerminalTemplates")).into_any_element()
+				div()
+					.rounded_lg()
+					.border_1()
+					.border_color(theme.border)
+					.px_4()
+					.py_3()
+					.child(
+						div()
+							.text_sm()
+							.text_color(theme.muted_foreground)
+							.child(self.t("noTerminalTemplates")),
+					)
+					.into_any_element()
 			} else {
 				v_flex()
 					.gap_2()
 					.children(self.prefs.templates.iter().cloned().map(|t| {
-						let selected = self.editing_template_id.as_deref() == Some(t.id.as_str());
+						let preview = leftover_command_preview(&t.commands.join("\n"));
 						h_flex()
 							.id(crate::ui::eid(format!("tpl-{}", t.id)))
+							.items_center()
 							.justify_between()
-							.p_2()
-							.rounded_md()
+							.gap_4()
+							.rounded_lg()
 							.border_1()
-							.border_color(if selected {
-								cx.theme().accent
-							} else {
-								cx.theme().border
-							})
+							.border_color(theme.border)
+							.px_4()
+							.py_3()
 							.child(
 								v_flex()
-									.id(crate::ui::eid(format!("tpl-edit-{}", t.id)))
-									.cursor(gpui::CursorStyle::PointingHand)
+									.min_w_0()
+									.gap_1()
 									.child(div().font_medium().child(t.name.clone()))
-									.child(div().text_xs().child(format!("{} · {}", t.shell, t.cwd)))
-									.on_click({
-										let view = view.clone();
-										let t = t.clone();
-										move |_, window, cx| {
-											view.update(cx, |this, cx| {
-												this.editing_template_id = Some(t.id.clone());
-												this.template_name.update(cx, |s, cx| {
-													s.set_value(t.name.clone(), window, cx);
-												});
-												this.template_shell.update(cx, |s, cx| {
-													s.set_value(t.shell.clone(), window, cx);
-												});
-												this.template_cwd.update(cx, |s, cx| {
-													s.set_value(t.cwd.clone(), window, cx);
-												});
-												this.template_cmds.update(cx, |s, cx| {
-													s.set_value(t.commands.join("\n"), window, cx);
-												});
-												cx.notify();
-											});
-										}
+									.when(!preview.is_empty(), |el| {
+										el.child(
+											div()
+												.font_family("monospace")
+												.text_sm()
+												.text_color(theme.muted_foreground)
+												.child(preview),
+										)
 									}),
 							)
 							.child(
-								Button::new(crate::ui::eid(format!("del-{}", t.id)))
-									.danger()
-									.xsmall()
-									.label(self.t("delete"))
-									.tooltip(self.t("deleteTerminalTemplate"))
-									.on_click({
-										let view = view.clone();
-										let id = t.id.clone();
-										move |_, _, cx| {
-											view.update(cx, |this, cx| {
-												this.prefs.templates.retain(|x| x.id != id);
-												if this.editing_template_id.as_deref() == Some(id.as_str()) {
-													this.editing_template_id = None;
+								h_flex()
+									.flex_shrink_0()
+									.gap_1()
+									.child(
+										Button::new(crate::ui::eid(format!("tpl-edit-{}", t.id)))
+											.ghost()
+											.xsmall()
+											.tooltip(self.t("editTerminalTemplate"))
+											.child(crate::ui::leftover_pencil_glyph(theme.muted_foreground))
+											.on_click({
+												let view = view.clone();
+												let t = t.clone();
+												move |_, window, cx| {
+													view.update(cx, |this, cx| {
+														this.open_template_draft(Some(&t), window, cx);
+													});
 												}
-												this.persist(cx);
-												cx.notify();
-											});
-										}
-									}),
+											}),
+									)
+									.child(
+										Button::new(crate::ui::eid(format!("del-{}", t.id)))
+											.ghost()
+											.xsmall()
+											.tooltip(self.t("deleteTerminalTemplate"))
+											.child(Icon::new(IconName::Delete).w(px(14.)).text_color(theme.danger))
+											.on_click({
+												let view = view.clone();
+												let id = t.id.clone();
+												move |_, _, cx| {
+													view.update(cx, |this, cx| {
+														this.prefs.templates.retain(|x| x.id != id);
+														if this.editing_template_id.as_deref() == Some(id.as_str()) {
+															this.close_template_draft();
+														}
+														this.persist(cx);
+														cx.notify();
+													});
+												}
+											}),
+									),
 							)
 					}))
 					.into_any_element()
 			})
-			.child(field_label(&self.t("terminalTemplateName")))
-			.child(Input::new(&self.template_name))
-			.child(field_label(&self.t("terminalTemplateShell")))
-			.child(Input::new(&self.template_shell))
-			.child(field_label(&self.t("terminalTemplateCwd")))
-			.child(Input::new(&self.template_cwd))
-			.child(field_label(&self.t("terminalTemplateCommands")))
-			.child(Input::new(&self.template_cmds))
+	}
+
+	fn leftover_template_draft_overlay(
+		&mut self,
+		_window: &mut Window,
+		cx: &mut Context<Self>,
+	) -> impl IntoElement {
+		if !self.template_dialog_open {
+			return div().id("no-tpl-draft").into_any_element();
+		}
+		let view = cx.entity();
+		let theme = cx.theme().clone();
+		let editing = self.editing_template_id.is_some();
+		let name = self.template_name.read(cx).value().to_string();
+		let can_save = leftover_template_draft_can_save(&name);
+		div()
+			.id("tpl-draft-mask")
+			.absolute()
+			.inset_0()
+			.flex()
+			.items_center()
+			.justify_center()
+			.bg(gpui::hsla(0., 0., 0., 0.12))
+			.on_click({
+				let view = view.clone();
+				move |_, _, cx| {
+					view.update(cx, |this, cx| {
+						this.close_template_draft();
+						cx.notify();
+					});
+				}
+			})
 			.child(
-				Button::new("add-tpl")
-					.primary()
-					.label(if self.editing_template_id.is_some() {
-						self.t("save")
-					} else {
-						self.t("addTerminalTemplate")
-					})
-					.on_click({
-						let view = view.clone();
-						move |_, window, cx| {
-							view.update(cx, |this, cx| {
-								let name = this.template_name.read(cx).value().to_string();
-								if name.trim().is_empty() {
-									return;
-								}
-								crate::prefs::upsert_template(
-									&mut this.prefs.templates,
-									this.editing_template_id.as_deref(),
-									name,
-									this.template_shell.read(cx).value().to_string(),
-									this.template_cwd.read(cx).value().to_string(),
-									this
-										.template_cmds
-										.read(cx)
-										.value()
-										.lines()
-										.map(|l| l.to_string())
-										.filter(|l| !l.is_empty())
-										.collect(),
-								);
-								this.editing_template_id = None;
-								this.template_name.update(cx, |s, cx| s.set_value("", window, cx));
-								this.template_shell.update(cx, |s, cx| s.set_value("", window, cx));
-								this.template_cwd.update(cx, |s, cx| s.set_value("", window, cx));
-								this.template_cmds.update(cx, |s, cx| s.set_value("", window, cx));
-								this.persist(cx);
-								cx.notify();
-							});
-						}
-					}),
+				v_flex()
+					.id("tpl-draft-panel")
+					.w(px(leftover_template_draft_width()))
+					.p_4()
+					.gap_4()
+					.rounded_xl()
+					.bg(theme.popover)
+					.border_1()
+					.border_color(theme.border)
+					.shadow_lg()
+					.on_click(|_, _, _| {})
+					.child(
+						h_flex()
+							.gap_2()
+							.items_center()
+							.child(Icon::new(IconName::SquareTerminal).w(px(16.)))
+							.child(
+								div().font_semibold().child(if editing {
+									self.t("editTerminalTemplate")
+								} else {
+									self.t("addTerminalTemplate")
+								}),
+							),
+					)
+					.child(
+						v_flex()
+							.gap_4()
+							.child(
+								v_flex()
+									.gap_1()
+									.child(field_label(&self.t("terminalTemplateName")))
+									.child(Input::new(&self.template_name)),
+							)
+							.child(
+								v_flex()
+									.gap_1()
+									.child(field_label(&self.t("terminalTemplateCommands")))
+									.child(
+										div()
+											.text_xs()
+											.text_color(theme.muted_foreground)
+											.child(self.t("terminalTemplateCommandsDescription")),
+									)
+									.child(Input::new(&self.template_cmds)),
+							),
+					)
+					.child(
+						h_flex()
+							.justify_between()
+							.child(
+								h_flex()
+									.gap_2()
+									.child(
+										Button::new("tpl-cancel")
+											.outline()
+											.small()
+											.label(self.t("cancel"))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													view.update(cx, |this, cx| {
+														this.close_template_draft();
+														cx.notify();
+													});
+												}
+											}),
+									)
+									.when(editing, |el| {
+										el.child(
+											Button::new("tpl-delete")
+												.danger()
+												.small()
+												.label(self.t("delete"))
+												.on_click({
+													let view = view.clone();
+													move |_, _, cx| {
+														view.update(cx, |this, cx| {
+															if let Some(id) = this.editing_template_id.clone() {
+																this.prefs.templates.retain(|x| x.id != id);
+																this.persist(cx);
+															}
+															this.close_template_draft();
+															cx.notify();
+														});
+													}
+												}),
+										)
+									}),
+							)
+							.child(
+								Button::new("tpl-save")
+									.primary()
+									.small()
+									.label(self.t("save"))
+									.disabled(!can_save)
+									.on_click({
+										let view = view.clone();
+										move |_, _, cx| {
+											view.update(cx, |this, cx| {
+												this.save_template_draft(cx);
+											});
+										}
+									}),
+							),
+					),
 			)
+			.into_any_element()
+	}
+
+	fn open_template_draft(
+		&mut self,
+		template: Option<&crate::prefs::TerminalTemplatePref>,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		if let Some(t) = template {
+			self.editing_template_id = Some(t.id.clone());
+			self.template_name.update(cx, |s, cx| {
+				s.set_value(t.name.clone(), window, cx);
+			});
+			self.template_cmds.update(cx, |s, cx| {
+				s.set_value(t.commands.join("\n"), window, cx);
+			});
+		} else {
+			self.editing_template_id = None;
+			self.template_name.update(cx, |s, cx| s.set_value("", window, cx));
+			self.template_cmds.update(cx, |s, cx| s.set_value("", window, cx));
+		}
+		self.template_dialog_open = true;
+		cx.notify();
+	}
+
+	fn close_template_draft(&mut self) {
+		self.template_dialog_open = false;
+		self.editing_template_id = None;
+	}
+
+	fn save_template_draft(&mut self, cx: &mut Context<Self>) {
+		let name = self.template_name.read(cx).value().to_string();
+		let commands_text = self.template_cmds.read(cx).value().to_string();
+		let Some((name, commands)) = leftover_normalize_global_template(&name, &commands_text) else {
+			return;
+		};
+		crate::prefs::upsert_template(
+			&mut self.prefs.templates,
+			self.editing_template_id.as_deref(),
+			name,
+			String::new(),
+			String::new(),
+			commands,
+		);
+		self.close_template_draft();
+		self.persist(cx);
+		cx.notify();
 	}
 
 	fn notification(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1441,6 +1633,7 @@ fn set_tab(
 			view.update(cx, |this, cx| {
 				this.tab = tab;
 				this.open_select = None;
+				this.template_dialog_open = false;
 				cx.notify();
 			});
 		})
