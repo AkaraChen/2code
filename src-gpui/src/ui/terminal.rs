@@ -6,10 +6,17 @@ use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
 use crate::app::AppView;
 use crate::prefs::TermTheme;
 
-pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+pub fn render(
+	app: &mut AppView,
+	profile_id: &str,
+	index: usize,
+	interactive: bool,
+	_window: &mut Window,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
 	let theme = app.current_term_theme();
 	let view = cx.entity();
-	let Some(term) = app.data.current_ws().and_then(|w| w.terminals.get(index)) else {
+	let Some(term) = app.data.workspaces.get(profile_id).and_then(|w| w.terminals.get(index)) else {
 		return div().id("term-missing").into_any_element();
 	};
 	let search_open = term.search_open;
@@ -32,25 +39,30 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 		.text_color(rgb(theme.fg))
 		.font_family(app.data.prefs.font_family.clone())
 		.text_size(px(app.data.prefs.font_size))
-		.on_mouse_up(gpui::MouseButton::Left, {
-			let view = view.clone();
-			move |_, _, cx| {
-				view.update(cx, |app, cx| {
-					if app.data.overlay.drag_file.is_some() {
-						app.drop_file_on_terminal();
-						cx.notify();
-					}
-				});
-			}
+		.when(!interactive, |el| el.invisible().absolute().inset_0())
+		.when(interactive, |el| {
+			el.on_mouse_up(gpui::MouseButton::Left, {
+				let view = view.clone();
+				move |_, _, cx| {
+					view.update(cx, |app, cx| {
+						if app.data.overlay.drag_file.is_some() {
+							app.drop_file_on_terminal();
+							cx.notify();
+						}
+					});
+				}
+			})
 		})
-		.child(
-			div()
+		.child({
+			let body = div()
 				.id(crate::ui::eid(format!("pty-body-{id}")))
 				.size_full()
 				.p_2()
 				.font_family(app.data.prefs.font_family.clone())
 				.overflow_hidden()
-				.on_key_down({
+				.child(grid);
+			if interactive {
+				body.on_key_down({
 					let view = view.clone();
 					move |ev: &KeyDownEvent, window, cx| {
 						if ev.keystroke.modifiers.control && ev.keystroke.key == "f"
@@ -93,9 +105,12 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 						}
 					}
 				})
-				.child(grid),
-		)
-		.when(search_open, |el| {
+				.into_any_element()
+			} else {
+				body.into_any_element()
+			}
+		})
+		.when(search_open && interactive, |el| {
 			el.child(
 				h_flex()
 					.id("term-search")
@@ -178,10 +193,10 @@ pub fn render(app: &mut AppView, index: usize, _window: &mut Window, cx: &mut Co
 					),
 			)
 		})
-		.when(!clickables.is_empty(), |el| {
+		.when(interactive && !clickables.is_empty(), |el| {
 			el.child(
 				h_flex()
-					.id("pty-links")
+					.id(crate::ui::eid(format!("pty-links-{id}")))
 					.absolute()
 					.bottom(px(8.))
 					.left(px(8.))

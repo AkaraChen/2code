@@ -246,7 +246,23 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 			.into_any_element();
 	}
 	if backend::is_document_preview(&file.preview_kind, &file.path) {
-		let path = file.path.clone();
+		let path = if file.preview_path.is_empty() {
+			file.path.clone()
+		} else {
+			file.preview_path.clone()
+		};
+		if let Some(png) = backend::rasterize_pdf_preview(&path) {
+			return div()
+				.id("document-preview")
+				.size_full()
+				.bg(rgb(0xffffff))
+				.flex()
+				.items_center()
+				.justify_center()
+				.child(img(png).id("pdf-preview-img").max_w_full().max_h_full())
+				.into_any_element();
+		}
+		let open_path = path.clone();
 		return v_flex()
 			.id("document-preview")
 			.size_full()
@@ -263,7 +279,7 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 				},
 			))
 			.child(Button::new("doc-open").small().label("Open").on_click(move |_, _, _| {
-				let _ = open::that(&path);
+				let _ = open::that(&open_path);
 			}))
 			.into_any_element();
 	}

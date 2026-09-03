@@ -115,6 +115,16 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.border_color(theme.border)
 				.bg(bg)
 				.shadow_md()
+				.on_click({
+					let view = view.clone();
+					let id = toast.id;
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.data.toasts.retain(|t| t.id != id);
+							cx.notify();
+						});
+					}
+				})
 				.child(div().text_sm().font_semibold().child(toast.title.clone()))
 				.when(!toast.body.is_empty(), |el| {
 					el.child(

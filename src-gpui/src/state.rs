@@ -160,6 +160,20 @@ pub struct Toast {
 	pub created: Instant,
 }
 
+impl Toast {
+	pub fn ttl_secs(&self) -> u64 {
+		if self.action.is_some() {
+			12
+		} else {
+			5
+		}
+	}
+
+	pub fn alive(&self) -> bool {
+		self.created.elapsed().as_secs() < self.ttl_secs()
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastKind {
 	Success,
@@ -468,8 +482,7 @@ impl AppData {
 	}
 
 	pub fn expire_toasts(&mut self) {
-		self.toasts
-			.retain(|t| t.created.elapsed().as_secs() < if t.action.is_some() { 12 } else { 5 });
+		self.toasts.retain(Toast::alive);
 	}
 }
 
@@ -532,5 +545,29 @@ mod tests {
 			collect_sidebar_nav_items(&[], &[], &[], &HashSet::new(), None),
 			vec![SidebarNavItem::Home]
 		);
+	}
+
+	#[test]
+	fn update_toasts_live_twelve_seconds() {
+		let update = Toast {
+			id: 1,
+			kind: ToastKind::Info,
+			title: "update".into(),
+			body: String::new(),
+			action: Some(ToastAction::OpenAbout),
+			created: Instant::now(),
+		};
+		let plain = Toast {
+			id: 2,
+			kind: ToastKind::Success,
+			title: "ok".into(),
+			body: String::new(),
+			action: None,
+			created: Instant::now(),
+		};
+		assert_eq!(update.ttl_secs(), 12);
+		assert_eq!(plain.ttl_secs(), 5);
+		assert!(update.alive());
+		assert!(plain.alive());
 	}
 }

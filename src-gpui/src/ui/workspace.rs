@@ -423,10 +423,17 @@ fn visible(show: bool, child: impl IntoElement) -> impl IntoElement {
 
 fn main_column(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let Some(ws) = app.data.current_ws() else {
-		return div().id("no-main").flex_1().into_any_element();
+		return persistent_terminals(app, window, cx).into_any_element();
 	};
 	if !ws.has_tabs() {
-		return empty_cta(app, cx).into_any_element();
+		return v_flex()
+			.id("workspace-empty")
+			.flex_1()
+			.min_h_0()
+			.relative()
+			.child(empty_cta(app, cx))
+			.child(persistent_terminals(app, window, cx))
+			.into_any_element();
 	}
 	v_flex()
 		.id("workspace-main")
@@ -712,12 +719,10 @@ fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 }
 
 fn tab_bodies(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
-	let Some(ws) = app.data.current_ws() else {
-		return div().into_any_element();
-	};
-	let active = ws.active;
-	let term_count = ws.terminals.len();
-	let file_active = matches!(active, Some(UnifiedTab::File { .. }));
+	let file_active = app
+		.data
+		.current_ws()
+		.is_some_and(|ws| matches!(ws.active, Some(UnifiedTab::File { .. })));
 
 	div()
 		.id("tab-bodies")
@@ -732,13 +737,34 @@ fn tab_bodies(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.when(!file_active, |el| el.invisible().h(px(0.)))
 				.child(file_viewer::render(app, window, cx)),
 		)
-		.children((0..term_count).map(|ix| {
-			let show = matches!(active, Some(UnifiedTab::Terminal { index }) if index == ix);
-			div()
-				.id(crate::ui::eid(format!("term-slot-{ix}")))
-				.size_full()
-				.when(!show, |el| el.invisible())
-				.child(terminal::render(app, ix, window, cx))
-		}))
+		.child(persistent_terminals(app, window, cx))
 		.into_any_element()
+}
+
+fn persistent_terminals(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	let current = app.data.current_profile.clone();
+	let mut slots = app
+		.data
+		.workspaces
+		.iter()
+		.flat_map(|(profile_id, ws)| {
+			ws.terminals.iter().enumerate().map(|(index, term)| {
+				let visible = current.as_deref() == Some(profile_id.as_str())
+					&& matches!(ws.active, Some(UnifiedTab::Terminal { index: active }) if active == index);
+				(profile_id.clone(), index, term.id.clone(), visible)
+			})
+		})
+		.collect::<Vec<_>>();
+	slots.sort_by(|a, b| a.2.cmp(&b.2));
+
+	div()
+		.id("pty-layer")
+		.size_full()
+		.relative()
+		.children(slots.into_iter().map(|(profile_id, index, id, visible)| {
+			div()
+				.id(crate::ui::eid(format!("term-slot-{id}")))
+				.size_full()
+				.child(terminal::render(app, &profile_id, index, visible, window, cx))
+		}))
 }

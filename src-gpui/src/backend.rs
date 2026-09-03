@@ -582,6 +582,38 @@ pub fn is_document_preview(kind: &str, path: &str) -> bool {
 	matches!(kind, "pdf" | "office-pdf" | "office") || is_pdf(path) || is_office(path)
 }
 
+pub fn rasterize_pdf_preview(pdf: &str) -> Option<PathBuf> {
+	let pdf = Path::new(pdf);
+	if !pdf.is_file() {
+		return None;
+	}
+	let dest = pdf.with_file_name(format!("{}.preview-page1.png", pdf.file_stem()?.to_string_lossy()));
+	if dest.is_file() {
+		let png_mtime = dest.metadata().ok().and_then(|m| m.modified().ok());
+		let pdf_mtime = pdf.metadata().ok().and_then(|m| m.modified().ok());
+		if match (png_mtime, pdf_mtime) {
+			(Some(png), Some(src)) => png >= src,
+			_ => true,
+		} {
+			return Some(dest);
+		}
+	}
+	let prefix = dest.with_extension("");
+	for bin in ["pdftoppm", "pdftocairo"] {
+		let ok = std::process::Command::new(bin)
+			.args(["-png", "-f", "1", "-l", "1", "-singlefile"])
+			.arg(pdf)
+			.arg(&prefix)
+			.status()
+			.map(|status| status.success())
+			.unwrap_or(false);
+		if ok && dest.is_file() {
+			return Some(dest);
+		}
+	}
+	None
+}
+
 pub fn language_from_path(path: &str) -> &'static str {
 	let ext = Path::new(path)
 		.extension()
@@ -642,5 +674,10 @@ mod tests {
 		assert_eq!(language_from_path("app.tsx"), "tsx");
 		assert_eq!(language_from_path("notes.md"), "markdown");
 		assert_eq!(language_from_path("unknown.xyz"), "text");
+	}
+
+	#[test]
+	fn rasterize_missing_pdf_is_none() {
+		assert!(rasterize_pdf_preview("/no/such/file.pdf").is_none());
 	}
 }
