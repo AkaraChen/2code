@@ -130,10 +130,12 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	}
 
 	let q = app.inputs.file_search.read(cx).value().to_string();
-	let hits = if q.is_empty() {
+	let hits = crate::app::search_match_offsets(&file.draft, &q);
+	let hit_count = hits.len();
+	let hit_ix = if hit_count == 0 {
 		0
 	} else {
-		file.draft.matches(&q).count()
+		app.data.overlay.file_search_ix % hit_count + 1
 	};
 	v_flex()
 		.id("text-viewer")
@@ -156,8 +158,42 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 								.text_color(theme.muted_foreground)
 								.child(if q.is_empty() {
 									app.t("fileViewerFindInFile")
+								} else if hit_count == 0 {
+									app.t("terminalSearchNoResults")
 								} else {
-									format!("{hits}")
+									format!("{hit_ix}/{hit_count}")
+								}),
+						)
+						.child(
+							Button::new("file-find-prev")
+								.ghost()
+								.xsmall()
+								.icon(IconName::ChevronUp)
+								.tooltip(app.t("fileViewerPreviousMatch"))
+								.on_click({
+									let view = view.clone();
+									move |_, window, cx| {
+										view.update(cx, |app, cx| {
+											app.cycle_file_search(window, cx, false);
+											cx.notify();
+										});
+									}
+								}),
+						)
+						.child(
+							Button::new("file-find-next")
+								.ghost()
+								.xsmall()
+								.icon(IconName::ChevronDown)
+								.tooltip(app.t("fileViewerNextMatch"))
+								.on_click({
+									let view = view.clone();
+									move |_, window, cx| {
+										view.update(cx, |app, cx| {
+											app.cycle_file_search(window, cx, true);
+											cx.notify();
+										});
+									}
 								}),
 						)
 						.child(

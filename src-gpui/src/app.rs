@@ -122,6 +122,7 @@ impl AppView {
 			notes_dirty_since: None,
 			notes_bound_profile: None,
 			file_dirty_since: None,
+			avatars: HashMap::new(),
 		};
 
 		let inputs = Inputs {
@@ -302,6 +303,12 @@ impl AppView {
 			Err(err) => self.data.sidebar_error = Some(err.to_string()),
 		}
 		self.data.groups = self.backend.list_groups().unwrap_or_default();
+		self.data.avatars = self
+			.data
+			.projects
+			.iter()
+			.filter_map(|p| self.backend.github_avatar(&p.id).map(|url| (p.id.clone(), url)))
+			.collect();
 	}
 
 	pub fn open_profile(&mut self, project_id: &str, profile_id: &str) {
@@ -1038,6 +1045,7 @@ impl AppView {
 			.is_some_and(|tab| matches!(tab, UnifiedTab::File { .. }));
 		if file_tab {
 			self.data.overlay.file_search_open = true;
+			self.data.overlay.file_search_ix = 0;
 			self.inputs.file_search.update(cx, |input, cx| {
 				input.focus(window, cx);
 			});
@@ -1062,6 +1070,30 @@ impl AppView {
 				self.write_to_active_pty(text.as_bytes());
 			}
 		}
+	}
+
+	pub fn cycle_file_search(&mut self, window: &mut Window, cx: &mut Context<Self>, next: bool) {
+		let query = self.inputs.file_search.read(cx).value().to_string();
+		let draft = self.inputs.file_editor.read(cx).value().to_string();
+		let hits = search_match_offsets(&draft, &query);
+		if hits.is_empty() {
+			self.data.overlay.file_search_ix = 0;
+			return;
+		}
+		if next {
+			self.data.overlay.file_search_ix = (self.data.overlay.file_search_ix + 1) % hits.len();
+		} else {
+			self.data.overlay.file_search_ix = if self.data.overlay.file_search_ix == 0 {
+				hits.len() - 1
+			} else {
+				self.data.overlay.file_search_ix - 1
+			};
+		}
+		let offset = hits[self.data.overlay.file_search_ix];
+		self.inputs.file_editor.update(cx, |state, cx| {
+			let (line, character) = offset_line_col(&draft, offset);
+			state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+		});
 	}
 
 	pub fn cycle_term_search(&mut self, cx: &mut Context<Self>, next: bool) {
@@ -2178,6 +2210,10 @@ impl AppView {
 				}
 			}
 		}
+		if self.data.overlay.file_search_open && key == "enter" {
+			self.cycle_file_search(window, cx, !shift);
+			return true;
+		}
 		if self.data.overlay.palette_open {
 			return match key {
 				"up" => {
@@ -2470,6 +2506,13 @@ pub fn suggested_project_name(folder: &str, current_name: &str) -> String {
 	}
 }
 
+pub fn search_match_offsets(text: &str, query: &str) -> Vec<usize> {
+	if query.is_empty() {
+		return Vec::new();
+	}
+	text.match_indices(query).map(|(ix, _)| ix).collect()
+}
+
 pub fn offset_line_col(text: &str, offset: usize) -> (u32, u32) {
 	let mut cursor = offset.min(text.len());
 	while cursor > 0 && !text.is_char_boundary(cursor) {
@@ -2505,7 +2548,8 @@ pub fn wrap_markup(
 #[cfg(test)]
 mod tests {
 	use super::{
-		file_status_badge, git_status_kind, offset_line_col, suggested_project_name, unique_tree_name, GitStatusKind,
+		file_status_badge, git_status_kind, offset_line_col, search_match_offsets, suggested_project_name,
+		unique_tree_name, GitStatusKind,
 	};
 
 	#[test]
@@ -2542,5 +2586,12 @@ mod tests {
 		assert_eq!(offset_line_col("abc", 2), (0, 2));
 		assert_eq!(offset_line_col("ab\ncd", 4), (1, 1));
 		assert_eq!(offset_line_col("", 0), (0, 0));
+	}
+
+	#[test]
+	fn search_match_offsets_finds_each_hit() {
+		assert_eq!(search_match_offsets("abcabc", "bc"), vec![1, 4]);
+		assert!(search_match_offsets("abc", "").is_empty());
+		assert!(search_match_offsets("abc", "z").is_empty());
 	}
 }

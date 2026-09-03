@@ -867,7 +867,13 @@ impl SettingsView {
 						.rounded_md()
 						.border_1()
 						.border_color(cx.theme().border)
-						.child(div().flex_1().child(id.clone()))
+						.child(div().flex_1().child(match id.as_str() {
+							"github-desktop" => self.t("topbarGithubDesktop"),
+							"editor" => self.t("topbarEditor"),
+							"terminal" => self.t("topbarTerminal"),
+							"pr-status" => self.t("topbarPrStatus"),
+							_ => id.clone(),
+						}))
 						.child(
 							Button::new(crate::ui::eid(format!("tb-up-{id}")))
 								.ghost()
@@ -906,8 +912,24 @@ impl SettingsView {
 						)
 				})),
 			)
+			.when(self.prefs.topbar_controls.is_empty(), |el| {
+				el.child(
+					div()
+						.text_xs()
+						.text_color(cx.theme().muted_foreground)
+						.child(self.t("topbarNoControls")),
+				)
+			})
 			.child(div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDragHint")))
 			.child(div().font_semibold().child(self.t("topbarAvailable")))
+			.when(all.iter().all(|id| self.prefs.topbar_controls.iter().any(|x| x == *id)), |el| {
+				el.child(
+					div()
+						.text_xs()
+						.text_color(cx.theme().muted_foreground)
+						.child(self.t("topbarAllControlsActive")),
+				)
+			})
 			.children(all.into_iter().map(|id| {
 				let on = self.prefs.topbar_controls.iter().any(|x| x == id);
 				switch_row(

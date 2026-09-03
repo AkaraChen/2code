@@ -972,7 +972,12 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 			if !project.is_empty() {
 				items.push(header("proj-templates", app.t("projectTerminalTemplates")));
 				for (i, t) in project.iter().enumerate() {
-					items.push(item(format!("pt-{i}"), t.name.clone(), MenuAction::ProjectTemplate(i)));
+					let label = if t.cwd.is_empty() {
+						t.name.clone()
+					} else {
+						format!("{name} — {cwd}", name = t.name, cwd = t.cwd)
+					};
+					items.push(item(format!("pt-{i}"), label, MenuAction::ProjectTemplate(i)));
 				}
 			}
 			if !app.data.prefs.templates.is_empty() {

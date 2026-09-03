@@ -417,6 +417,7 @@ pub struct OverlayState {
 	pub update_checked: bool,
 	pub group_menu_creating: bool,
 	pub file_search_open: bool,
+	pub file_search_ix: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -472,6 +473,7 @@ pub struct AppData {
 	pub notes_dirty_since: Option<Instant>,
 	pub notes_bound_profile: Option<String>,
 	pub file_dirty_since: Option<Instant>,
+	pub avatars: HashMap<String, String>,
 }
 
 impl AppData {

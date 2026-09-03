@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, Context, KeyDownEvent, MouseButton, Window};
+use gpui::{div, img, prelude::*, px, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use gpui_component::{Disableable, Selectable};
@@ -634,8 +634,13 @@ fn project_row(
 							.flex()
 							.items_center()
 							.justify_center()
+							.overflow_hidden()
 							.text_xs()
-							.child(letter.to_string()),
+							.child(if let Some(url) = app.data.avatars.get(&project.id).cloned() {
+								img(url).size(px(16.)).into_any_element()
+							} else {
+								div().child(letter.to_string()).into_any_element()
+							}),
 					)
 				})
 				.child(
