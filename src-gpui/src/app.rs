@@ -1052,17 +1052,23 @@ impl AppView {
 		self.reload_projects();
 	}
 
+	pub fn apply_picked_folder(&mut self, folder: String, window: &mut Window, cx: &mut Context<Self>) {
+		let empty = self.inputs.project_name.read(cx).value().trim().is_empty();
+		self.data.overlay.dialog_folder = Some(folder.clone());
+		if empty {
+			let name = suggested_project_name(&folder, "");
+			self.inputs.project_name.update(cx, |s, cx| {
+				s.set_value(name, window, cx);
+			});
+		}
+	}
+
 	pub fn create_project_from_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
 		let folder = match self.data.overlay.dialog_folder.clone() {
 			Some(f) => f,
 			None => return,
 		};
-		let name = self.inputs.project_name.read(cx).value().to_string();
-		let name = if name.trim().is_empty() {
-			backend::file_name(&folder)
-		} else {
-			name
-		};
+		let name = suggested_project_name(&folder, &self.inputs.project_name.read(cx).value());
 		self.data.overlay.dialog_busy = true;
 		match self.backend.create_project(&name, &folder) {
 			Ok(project) => {
@@ -1369,6 +1375,35 @@ impl AppView {
 	}
 
 	pub fn add_project_template(&mut self, cx: &mut Context<Self>) {
+		self.upsert_project_template(cx);
+	}
+
+	pub fn load_project_template(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+		let Some(template) = self
+			.data
+			.workspaces
+			.values()
+			.find(|w| {
+				Some(w.project_id.as_str()) == self.data.overlay.dialog_project.as_deref()
+					|| Some(w.project_id.as_str()) == self.data.current_project.as_deref()
+			})
+			.and_then(|w| w.config.terminal_templates.iter().find(|t| t.id == id).cloned())
+		else {
+			return;
+		};
+		self.data.overlay.editing_template = Some(id.to_string());
+		self.inputs.template_name.update(cx, |s, cx| {
+			s.set_value(template.name.clone(), window, cx);
+		});
+		self.inputs.template_cwd.update(cx, |s, cx| {
+			s.set_value(template.cwd.clone(), window, cx);
+		});
+		self.inputs.template_commands.update(cx, |s, cx| {
+			s.set_value(template.commands.join("\n"), window, cx);
+		});
+	}
+
+	pub fn upsert_project_template(&mut self, cx: &mut Context<Self>) {
 		let name = self.inputs.template_name.read(cx).value().to_string();
 		if name.trim().is_empty() {
 			return;
@@ -1382,15 +1417,60 @@ impl AppView {
 		else {
 			return;
 		};
-		let template = model::project::ProjectTerminalTemplate {
-			id: uuid::Uuid::new_v4().to_string(),
-			name,
-			cwd: self.inputs.template_cwd.read(cx).value().to_string(),
-			commands: lines(&self.inputs.template_commands.read(cx).value()),
-		};
+		let editing = self.data.overlay.editing_template.clone();
+		let cwd = self.inputs.template_cwd.read(cx).value().to_string();
+		let commands = lines(&self.inputs.template_commands.read(cx).value());
 		if let Some(ws) = self.data.workspaces.values_mut().find(|w| w.project_id == project_id) {
-			ws.config.terminal_templates.push(template);
+			if let Some(id) = editing.as_deref() {
+				if let Some(template) = ws.config.terminal_templates.iter_mut().find(|t| t.id == id) {
+					template.name = name;
+					template.cwd = cwd;
+					template.commands = commands;
+					self.data.overlay.editing_template = None;
+					return;
+				}
+			}
+			ws.config
+				.terminal_templates
+				.push(model::project::ProjectTerminalTemplate {
+					id: uuid::Uuid::new_v4().to_string(),
+					name,
+					cwd,
+					commands,
+				});
 		}
+		self.data.overlay.editing_template = None;
+	}
+
+	pub fn save_editing_template(&mut self, cx: &mut Context<Self>) {
+		let name = self.inputs.template_name.read(cx).value().to_string();
+		if name.trim().is_empty() {
+			return;
+		}
+		let id = self.data.overlay.editing_template.clone();
+		let shell = self.inputs.template_shell.read(cx).value().to_string();
+		let cwd = self.inputs.template_cwd.read(cx).value().to_string();
+		let commands = lines(&self.inputs.template_commands.read(cx).value());
+		if id.as_ref().is_some_and(|id| {
+			self.data
+				.workspaces
+				.values()
+				.any(|w| w.config.terminal_templates.iter().any(|t| t.id == *id))
+		}) {
+			self.upsert_project_template(cx);
+		} else {
+			crate::prefs::upsert_template(
+				&mut self.data.prefs.templates,
+				id.as_deref(),
+				name,
+				shell,
+				cwd,
+				commands,
+			);
+			self.persist_prefs();
+		}
+		self.data.overlay.editing_template = None;
+		self.data.overlay.dialog = None;
 	}
 
 	pub fn remove_project_template(&mut self, id: &str) {
@@ -2146,9 +2226,17 @@ pub fn input_el(state: &Entity<InputState>) -> Input {
 	Input::new(state)
 }
 
+pub fn suggested_project_name(folder: &str, current_name: &str) -> String {
+	if current_name.trim().is_empty() {
+		backend::file_name(folder)
+	} else {
+		current_name.to_string()
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::unique_tree_name;
+	use super::{suggested_project_name, unique_tree_name};
 
 	#[test]
 	fn unique_tree_name_adds_numbers() {
@@ -2158,5 +2246,12 @@ mod tests {
 			unique_tree_name(&["New File".into(), "New File 2".into()], "New File"),
 			"New File 3"
 		);
+	}
+
+	#[test]
+	fn suggested_project_name_uses_basename_when_empty() {
+		assert_eq!(suggested_project_name("/tmp/my-app", ""), "my-app");
+		assert_eq!(suggested_project_name("/tmp/my-app", "   "), "my-app");
+		assert_eq!(suggested_project_name("/tmp/my-app", "Custom"), "Custom");
 	}
 }

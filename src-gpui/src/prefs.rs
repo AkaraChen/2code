@@ -88,6 +88,8 @@ pub struct Prefs {
 	pub accept_beta: bool,
 	pub templates: Vec<TerminalTemplatePref>,
 	pub collapsed_projects: Vec<String>,
+	#[serde(default)]
+	pub show_all_fonts: bool,
 }
 
 impl Default for Prefs {
@@ -125,6 +127,7 @@ impl Default for Prefs {
 			accept_beta: false,
 			templates: Vec::new(),
 			collapsed_projects: Vec::new(),
+			show_all_fonts: false,
 		}
 	}
 }
@@ -156,6 +159,73 @@ impl Prefs {
 	}
 }
 
+pub fn upsert_template(
+	templates: &mut Vec<TerminalTemplatePref>,
+	id: Option<&str>,
+	name: String,
+	shell: String,
+	cwd: String,
+	commands: Vec<String>,
+) {
+	if let Some(id) = id {
+		if let Some(template) = templates.iter_mut().find(|t| t.id == id) {
+			template.name = name;
+			template.shell = shell;
+			template.cwd = cwd;
+			template.commands = commands;
+			return;
+		}
+	}
+	templates.push(TerminalTemplatePref {
+		id: uuid::Uuid::new_v4().to_string(),
+		name,
+		shell,
+		cwd,
+		commands,
+	});
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn upsert_template_adds_then_updates() {
+		let mut templates = Vec::new();
+		upsert_template(
+			&mut templates,
+			None,
+			"Dev".into(),
+			"/bin/zsh".into(),
+			".".into(),
+			vec!["npm run dev".into()],
+		);
+		assert_eq!(templates.len(), 1);
+		let id = templates[0].id.clone();
+		upsert_template(
+			&mut templates,
+			Some(&id),
+			"Dev Server".into(),
+			"/bin/bash".into(),
+			"apps/web".into(),
+			vec!["pnpm dev".into()],
+		);
+		assert_eq!(templates.len(), 1);
+		assert_eq!(templates[0].name, "Dev Server");
+		assert_eq!(templates[0].shell, "/bin/bash");
+		assert_eq!(templates[0].cwd, "apps/web");
+		assert_eq!(templates[0].commands, vec!["pnpm dev".to_string()]);
+	}
+
+	#[test]
+	fn missing_show_all_fonts_defaults_false() {
+		let raw = r#"{"language":"en","theme":"system","radius":"medium","worktree_dir":"","debug_mode":false,"performance_profile":false,"show_avatars":true,"sidebar_width":250.0,"sidebar_collapsed":false,"collapsed_groups":[],"profile_sidebar_width":208.0,"profile_sidebar_open":true,"terminal_theme_dark":"GitHub Dark","terminal_theme_light":"GitHub Light","sync_terminal_theme":false,"font_family":"Menlo","font_size":13.0,"default_shell":"","custom_shell":"","notifications":true,"notification_sound":"","topbar_controls":[],"editor_app":"","terminal_app":"","accept_beta":false,"templates":[],"collapsed_projects":[]}"#;
+		let prefs: Prefs = serde_json::from_str(raw).expect("old prefs still load");
+		assert!(!prefs.show_all_fonts);
+		assert_eq!(prefs.font_family, "Menlo");
+	}
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct TermTheme {
 	pub name: &'static str,
@@ -166,20 +236,71 @@ pub struct TermTheme {
 }
 
 pub const TERM_THEMES: &[TermTheme] = &[
-	TermTheme { name: "GitHub Dark", bg: 0x0d1117, fg: 0xc9d1d9, cursor: 0x58a6ff, is_light: false },
-	TermTheme { name: "GitHub Light", bg: 0xffffff, fg: 0x1f2328, cursor: 0x0969da, is_light: true },
-	TermTheme { name: "Dracula", bg: 0x282a36, fg: 0xf8f8f2, cursor: 0xff79c6, is_light: false },
-	TermTheme { name: "Ayu Dark", bg: 0x0a0e14, fg: 0xb3b1ad, cursor: 0xffb454, is_light: false },
-	TermTheme { name: "Ayu Light", bg: 0xfafafa, fg: 0x5c6773, cursor: 0xff6a00, is_light: true },
-	TermTheme { name: "Solarized Dark", bg: 0x002b36, fg: 0x839496, cursor: 0x268bd2, is_light: false },
-	TermTheme { name: "Solarized Light", bg: 0xfdf6e3, fg: 0x657b83, cursor: 0x268bd2, is_light: true },
-	TermTheme { name: "One Dark", bg: 0x282c34, fg: 0xabb2bf, cursor: 0x61afef, is_light: false },
-	TermTheme { name: "One Light", bg: 0xfafafa, fg: 0x383a42, cursor: 0x4078f2, is_light: true },
+	TermTheme {
+		name: "GitHub Dark",
+		bg: 0x0d1117,
+		fg: 0xc9d1d9,
+		cursor: 0x58a6ff,
+		is_light: false,
+	},
+	TermTheme {
+		name: "GitHub Light",
+		bg: 0xffffff,
+		fg: 0x1f2328,
+		cursor: 0x0969da,
+		is_light: true,
+	},
+	TermTheme {
+		name: "Dracula",
+		bg: 0x282a36,
+		fg: 0xf8f8f2,
+		cursor: 0xff79c6,
+		is_light: false,
+	},
+	TermTheme {
+		name: "Ayu Dark",
+		bg: 0x0a0e14,
+		fg: 0xb3b1ad,
+		cursor: 0xffb454,
+		is_light: false,
+	},
+	TermTheme {
+		name: "Ayu Light",
+		bg: 0xfafafa,
+		fg: 0x5c6773,
+		cursor: 0xff6a00,
+		is_light: true,
+	},
+	TermTheme {
+		name: "Solarized Dark",
+		bg: 0x002b36,
+		fg: 0x839496,
+		cursor: 0x268bd2,
+		is_light: false,
+	},
+	TermTheme {
+		name: "Solarized Light",
+		bg: 0xfdf6e3,
+		fg: 0x657b83,
+		cursor: 0x268bd2,
+		is_light: true,
+	},
+	TermTheme {
+		name: "One Dark",
+		bg: 0x282c34,
+		fg: 0xabb2bf,
+		cursor: 0x61afef,
+		is_light: false,
+	},
+	TermTheme {
+		name: "One Light",
+		bg: 0xfafafa,
+		fg: 0x383a42,
+		cursor: 0x4078f2,
+		is_light: true,
+	},
 ];
 
 pub fn term_theme_by_name(name: &str) -> &'static TermTheme {
-	TERM_THEMES
-		.iter()
-		.find(|t| t.name == name)
-		.unwrap_or(&TERM_THEMES[0])
+	TERM_THEMES.iter().find(|t| t.name == name).unwrap_or(&TERM_THEMES[0])
 }

@@ -140,7 +140,13 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						}),
 				),
 		)
-		.child(div().flex_1().min_h_0().child(Input::new(&app.inputs.file_editor)))
+		.child(
+			h_flex()
+				.flex_1()
+				.min_h_0()
+				.child(line_gutter(&file.draft, app.data.prefs.font_size, &theme))
+				.child(div().flex_1().min_h_0().child(Input::new(&app.inputs.file_editor))),
+		)
 		.into_any_element()
 }
 
@@ -162,11 +168,16 @@ fn preview_pane(_app: &AppView, file: &crate::state::OpenFileTab, cx: &mut Conte
 				.child(
 					h_flex()
 						.gap_2()
-						.child(div().text_xs().child(if file.preview_kind == "office" {
-							"Office Preview".to_string()
-						} else {
-							"Preview".to_string()
-						}))
+						.child(div().text_xs().child(
+							if backend::is_document_preview(&file.preview_kind, &file.path)
+								&& !backend::is_pdf(&file.path)
+								&& file.preview_kind != "pdf"
+							{
+								"Office Preview".to_string()
+							} else {
+								"Preview".to_string()
+							},
+						))
 						.child(Button::new("open-external").xsmall().label("Open").on_click({
 							let view = view.clone();
 							let path = path.clone();
@@ -190,16 +201,38 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 		return div()
 			.id("image-preview")
 			.size_full()
-			.flex()
+			.relative()
+			.child(checkerboard())
+			.child(
+				div().absolute().inset_0().flex().items_center().justify_center().child(
+					img(PathBuf::from(src))
+						.id("image-preview-img")
+						.max_w_full()
+						.max_h_full(),
+				),
+			)
+			.into_any_element();
+	}
+	if backend::is_document_preview(&file.preview_kind, &file.path) {
+		let path = file.path.clone();
+		return v_flex()
+			.id("document-preview")
+			.size_full()
+			.bg(rgb(0xffffff))
 			.items_center()
 			.justify_center()
-			.bg(rgb(0x1b1f23))
-			.child(
-				img(PathBuf::from(src))
-					.id("image-preview-img")
-					.max_w_full()
-					.max_h_full(),
-			)
+			.gap_2()
+			.child(div().text_sm().text_color(rgb(0x1f2328)).child(file.title.clone()))
+			.child(div().text_xs().text_color(rgb(0x656d76)).child(
+				if file.preview_kind == "office-pdf" || backend::is_office(&file.path) {
+					"Office Preview".to_string()
+				} else {
+					"Preview".to_string()
+				},
+			))
+			.child(Button::new("doc-open").small().label("Open").on_click(move |_, _, _| {
+				let _ = open::that(&path);
+			}))
 			.into_any_element();
 	}
 	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
@@ -245,6 +278,57 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 				}),
 		)
 		.into_any_element()
+}
+
+pub fn line_number_count(text: &str) -> usize {
+	if text.is_empty() {
+		1
+	} else {
+		text.lines().count().max(1)
+	}
+}
+
+fn line_gutter(text: &str, font_size: f32, theme: &gpui_component::Theme) -> impl IntoElement {
+	let count = line_number_count(text);
+	let line_h = px((font_size * 1.4).max(16.0));
+	v_flex()
+		.id("line-gutter")
+		.w(px(48.))
+		.h_full()
+		.py(px(12.))
+		.px_1()
+		.bg(theme.muted)
+		.text_color(theme.muted_foreground)
+		.text_xs()
+		.font_family("monospace")
+		.children((1..=count).map(move |n| {
+			div()
+				.h(line_h)
+				.w_full()
+				.flex()
+				.justify_end()
+				.pr_1()
+				.child(format!("{n}"))
+		}))
+}
+
+fn checkerboard() -> impl IntoElement {
+	let light = rgb(0x2a2e33);
+	let dark = rgb(0x1b1f23);
+	let cell = px(16.);
+	v_flex()
+		.id("image-checkerboard")
+		.absolute()
+		.inset_0()
+		.overflow_hidden()
+		.children((0..24).map(move |row| {
+			h_flex().children((0..40).map(move |col| {
+				div()
+					.w(cell)
+					.h(cell)
+					.bg(if (row + col) % 2 == 0 { light } else { dark })
+			}))
+		}))
 }
 
 fn slash_menu(query: &str, view: &gpui::Entity<AppView>) -> impl IntoElement {
@@ -326,4 +410,21 @@ fn md_btn(
 				});
 			});
 		})
+}
+
+#[cfg(test)]
+mod tests {
+	use super::line_number_count;
+
+	#[test]
+	fn line_number_count_empty_is_one() {
+		assert_eq!(line_number_count(""), 1);
+	}
+
+	#[test]
+	fn line_number_count_counts_lines() {
+		assert_eq!(line_number_count("a"), 1);
+		assert_eq!(line_number_count("a\nb"), 2);
+		assert_eq!(line_number_count("a\nb\nc"), 3);
+	}
 }

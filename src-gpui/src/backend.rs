@@ -569,9 +569,36 @@ pub fn is_markdown(path: &str) -> bool {
 	lower.ends_with(".md") || lower.ends_with(".mdx")
 }
 
+pub fn is_pdf(path: &str) -> bool {
+	path.to_ascii_lowercase().ends_with(".pdf")
+}
+
+pub fn is_office(path: &str) -> bool {
+	let lower = path.to_ascii_lowercase();
+	lower.ends_with(".docx") || lower.ends_with(".xlsx") || lower.ends_with(".pptx")
+}
+
+pub fn is_document_preview(kind: &str, path: &str) -> bool {
+	matches!(kind, "pdf" | "office-pdf" | "office") || is_pdf(path) || is_office(path)
+}
+
 pub fn file_name(path: &str) -> String {
 	Path::new(path)
 		.file_name()
 		.map(|s| s.to_string_lossy().into_owned())
 		.unwrap_or_else(|| path.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn document_preview_kinds() {
+		assert!(is_document_preview("pdf", "notes.txt"));
+		assert!(is_document_preview("office-pdf", "slide.pptx"));
+		assert!(is_document_preview("", "spec.pdf"));
+		assert!(is_document_preview("", "brief.docx"));
+		assert!(!is_document_preview("", "readme.md"));
+	}
 }

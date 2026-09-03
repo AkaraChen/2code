@@ -1,6 +1,7 @@
 use gpui::{div, prelude::*, px, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
+use gpui_component::spinner::Spinner;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use gpui_component::{Disableable, Selectable};
 
@@ -82,7 +83,22 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 				.child(
 					h_flex()
 						.justify_between()
-						.child(div().font_semibold().child(title))
+						.child(
+							h_flex()
+								.gap_2()
+								.items_center()
+								.when(kind == DialogKind::CreateProject, |el| {
+									el.child(Icon::new(IconName::Folder).w(px(18.)))
+								})
+								.when(kind == DialogKind::ProjectSettings, |el| {
+									el.child(Icon::new(IconName::Settings).w(px(18.)))
+								})
+								.when(
+									kind == DialogKind::DeleteProfile || kind == DialogKind::DeleteProject,
+									|el| el.child(Icon::new(IconName::TriangleAlert).w(px(18.))),
+								)
+								.child(div().font_semibold().child(title)),
+						)
 						.child(Button::new("dlg-x").ghost().xsmall().icon(IconName::Close).on_click({
 							let view = view.clone();
 							move |_, _, cx| {
@@ -128,10 +144,10 @@ fn dialog_body(
 								.child(div().text_sm().child(app.t("folder")))
 								.child(Button::new("rechoose").xsmall().label(app.t("chooseFolder")).on_click({
 									let view = view.clone();
-									move |_, _, cx| {
+									move |_, window, cx| {
 										view.update(cx, |app, cx| {
 											if let Some(p) = backend::pick_folder() {
-												app.data.overlay.dialog_folder = Some(p);
+												app.apply_picked_folder(p, window, cx);
 											}
 											cx.notify();
 										});
@@ -155,6 +171,7 @@ fn dialog_body(
 						.h(px(88.))
 						.rounded_lg()
 						.border_1()
+						.border_dashed()
 						.border_color(theme.border)
 						.flex()
 						.flex_col()
@@ -164,10 +181,10 @@ fn dialog_body(
 						.hover(|el| el.bg(theme.muted))
 						.on_click({
 							let view = view.clone();
-							move |_, _, cx| {
+							move |_, window, cx| {
 								view.update(cx, |app, cx| {
 									if let Some(p) = backend::pick_folder() {
-										app.data.overlay.dialog_folder = Some(p);
+										app.apply_picked_folder(p, window, cx);
 									}
 									cx.notify();
 								});
@@ -280,10 +297,22 @@ fn dialog_body(
 									.justify_between()
 									.child(
 										v_flex()
+											.id(crate::ui::eid(format!("ptpl-edit-{id}")))
+											.cursor(gpui::CursorStyle::PointingHand)
 											.child(div().font_medium().text_sm().child(t.name.clone()))
 											.child(
 												div().text_xs().text_color(theme.muted_foreground).child(t.cwd.clone()),
-											),
+											)
+											.on_click({
+												let view = view.clone();
+												let id = id.clone();
+												move |_, window, cx| {
+													view.update(cx, |app, cx| {
+														app.load_project_template(&id, window, cx);
+														cx.notify();
+													});
+												}
+											}),
 									)
 									.child(
 										Button::new(crate::ui::eid(format!("ptpl-del-{id}")))
@@ -313,7 +342,11 @@ fn dialog_body(
 						Button::new("add-project-tpl")
 							.xsmall()
 							.primary()
-							.label(app.t("addTerminalTemplate"))
+							.label(if app.data.overlay.editing_template.is_some() {
+								app.t("save")
+							} else {
+								app.t("addTerminalTemplate")
+							})
 							.on_click({
 								let view = view.clone();
 								move |_, _, cx| {
@@ -336,7 +369,13 @@ fn dialog_body(
 			.gap_2()
 			.child(div().text_sm().child(app.t("confirmDeleteProfile")))
 			.when(app.data.overlay.dialog_busy, |el| {
-				el.child(div().text_xs().child(app.t("deleteProfileCheckingGitStatus")))
+				el.child(
+					h_flex()
+						.gap_2()
+						.items_center()
+						.child(Spinner::new().with_size(gpui_component::Size::Small))
+						.child(div().text_xs().child(app.t("deleteProfileCheckingGitStatus"))),
+				)
 			})
 			.when_some(app.data.overlay.delete_warning.clone(), |el, warn| {
 				el.child(
@@ -531,6 +570,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		DialogKind::OpenLink => app.t("browserOpenDefault"),
 		DialogKind::CreateGroup => app.t("create"),
 		DialogKind::ReviewQueue => app.t("reviewCommentsCopied"),
+		DialogKind::EditTemplate => app.t("save"),
 		_ => app.t("cancel"),
 	};
 	let show_ok = !matches!(
@@ -566,6 +606,9 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 					}),
 			)
 		})
+		.when(app.data.overlay.dialog_busy && show_ok, |el| {
+			el.child(Spinner::new().with_size(gpui_component::Size::Small))
+		})
 		.when(show_ok, |el| {
 			el.child(
 				Button::new("dlg-ok")
@@ -573,7 +616,17 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 					.when(danger, |b| b.danger())
 					.when(!danger, |b| b.primary())
 					.label(ok)
-					.disabled(matches!(kind, DialogKind::CreateProject) && app.data.overlay.dialog_folder.is_none())
+					.disabled(
+						(matches!(kind, DialogKind::CreateProject)
+							&& (app.data.overlay.dialog_folder.is_none() || app.data.overlay.dialog_busy))
+							|| (app.data.overlay.dialog_busy
+								&& matches!(
+									kind,
+									DialogKind::DeleteProject
+										| DialogKind::DeleteProfile | DialogKind::ProjectSettings
+										| DialogKind::CreateProfile
+								)),
+					)
 					.on_click({
 						let view = view.clone();
 						move |_, window, cx| {
@@ -585,6 +638,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 									DialogKind::ProjectSettings => app.save_project_settings(cx),
 									DialogKind::CreateProfile => app.create_profile_from_dialog(cx),
 									DialogKind::DeleteProfile => app.delete_dialog_profile(),
+									DialogKind::EditTemplate => app.save_editing_template(cx),
 									DialogKind::CloseUnsaved => {
 										if let (Some(pid), Some(path)) = (
 											app.data.current_profile.clone(),

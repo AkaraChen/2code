@@ -3,7 +3,7 @@ gpui:
     cd src-gpui && cargo run
 
 gpui-check:
-    cd src-gpui && cargo check
+    cd src-gpui && cargo check --tests
 
 start:
     just gpui

@@ -145,15 +145,27 @@ pub fn list_system_fonts() -> Vec<SystemFont> {
 }
 
 pub fn list_mono_fonts() -> Vec<String> {
-	let mut fonts: Vec<String> = list_system_fonts()
-		.into_iter()
-		.filter(|f| f.is_mono)
-		.map(|f| f.family)
-		.collect();
+	let mut fonts: Vec<String> = filter_fonts(&list_system_fonts(), false);
 	if fonts.is_empty() {
 		fonts = list_system_fonts().into_iter().map(|f| f.family).collect();
 	}
 	fonts
+}
+
+pub fn visible_font_families(show_all: bool) -> Vec<String> {
+	if show_all {
+		list_system_fonts().into_iter().map(|f| f.family).collect()
+	} else {
+		list_mono_fonts()
+	}
+}
+
+pub fn filter_fonts(fonts: &[SystemFont], show_all: bool) -> Vec<String> {
+	fonts
+		.iter()
+		.filter(|font| show_all || font.is_mono)
+		.map(|font| font.family.clone())
+		.collect()
 }
 
 fn load_fonts() -> Vec<SystemFont> {
@@ -483,6 +495,25 @@ mod tests {
 				.iter()
 				.any(|s| s.ends_with("/sh") || s.ends_with("/bash") || s.ends_with("/zsh")),
 			"{shells:?}"
+		);
+	}
+
+	#[test]
+	fn filter_fonts_respects_show_all() {
+		let fonts = [
+			SystemFont {
+				family: "Menlo".into(),
+				is_mono: true,
+			},
+			SystemFont {
+				family: "Inter".into(),
+				is_mono: false,
+			},
+		];
+		assert_eq!(filter_fonts(&fonts, false), vec!["Menlo".to_string()]);
+		assert_eq!(
+			filter_fonts(&fonts, true),
+			vec!["Menlo".to_string(), "Inter".to_string()]
 		);
 	}
 }

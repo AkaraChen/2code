@@ -101,6 +101,7 @@ pub struct SettingsView {
 	latest_url: String,
 	fonts: Vec<String>,
 	sounds: Vec<String>,
+	editing_template_id: Option<String>,
 }
 
 impl SettingsView {
@@ -154,6 +155,7 @@ impl SettingsView {
 			latest_url: crate::updater::releases_page().to_string(),
 			fonts: crate::platform::list_mono_fonts(),
 			sounds: crate::platform::list_system_sounds(),
+			editing_template_id: None,
 		}
 	}
 
@@ -448,12 +450,33 @@ impl SettingsView {
 					.child(Input::new(&self.custom_shell))
 					.child(field_label(&self.t("terminalFont")))
 					.child(div().text_sm().child(self.prefs.font_family.clone()))
+					.child(switch_row(
+						"show-all-fonts",
+						self.t("showAllFonts"),
+						String::new(),
+						self.prefs.show_all_fonts,
+						{
+							let view = view.clone();
+							move |val, cx| {
+								view.update(cx, |this, cx| {
+									this.prefs.show_all_fonts = val;
+									this.persist(cx);
+									cx.notify();
+								});
+							}
+						},
+					))
 					.child(
 						div()
-							.max_h(px(140.))
+							.max_h(px(180.))
 							.overflow_y_hidden()
-							.child(
-								h_flex().gap_1().flex_wrap().children(self.fonts.iter().cloned().take(48).map(|family| {
+							.child({
+								let fonts = if self.prefs.show_all_fonts {
+									crate::platform::visible_font_families(true)
+								} else {
+									self.fonts.clone()
+								};
+								h_flex().gap_1().flex_wrap().children(fonts.into_iter().map(|family| {
 									let selected = self.prefs.font_family == family;
 									choice(format!("font-{family}"), &family, selected, {
 										let view = view.clone();
@@ -466,8 +489,8 @@ impl SettingsView {
 											});
 										}
 									})
-								})),
-							),
+								}))
+							}),
 					)
 					.child(field_label(&self.t("fontSize")))
 					.child(
@@ -521,7 +544,8 @@ impl SettingsView {
 			)
 	}
 
-	fn templates(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+	fn templates(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+		let _ = window;
 		let view = cx.entity();
 		v_flex()
 			.id("settings-templates")
@@ -535,17 +559,46 @@ impl SettingsView {
 				v_flex()
 					.gap_2()
 					.children(self.prefs.templates.iter().cloned().map(|t| {
+						let selected = self.editing_template_id.as_deref() == Some(t.id.as_str());
 						h_flex()
 							.id(crate::ui::eid(format!("tpl-{}", t.id)))
 							.justify_between()
 							.p_2()
 							.rounded_md()
 							.border_1()
-							.border_color(cx.theme().border)
+							.border_color(if selected {
+								cx.theme().accent
+							} else {
+								cx.theme().border
+							})
 							.child(
 								v_flex()
+									.id(crate::ui::eid(format!("tpl-edit-{}", t.id)))
+									.cursor(gpui::CursorStyle::PointingHand)
 									.child(div().font_medium().child(t.name.clone()))
-									.child(div().text_xs().child(format!("{} · {}", t.shell, t.cwd))),
+									.child(div().text_xs().child(format!("{} · {}", t.shell, t.cwd)))
+									.on_click({
+										let view = view.clone();
+										let t = t.clone();
+										move |_, window, cx| {
+											view.update(cx, |this, cx| {
+												this.editing_template_id = Some(t.id.clone());
+												this.template_name.update(cx, |s, cx| {
+													s.set_value(t.name.clone(), window, cx);
+												});
+												this.template_shell.update(cx, |s, cx| {
+													s.set_value(t.shell.clone(), window, cx);
+												});
+												this.template_cwd.update(cx, |s, cx| {
+													s.set_value(t.cwd.clone(), window, cx);
+												});
+												this.template_cmds.update(cx, |s, cx| {
+													s.set_value(t.commands.join("\n"), window, cx);
+												});
+												cx.notify();
+											});
+										}
+									}),
 							)
 							.child(
 								Button::new(crate::ui::eid(format!("del-{}", t.id)))
@@ -558,6 +611,9 @@ impl SettingsView {
 										move |_, _, cx| {
 											view.update(cx, |this, cx| {
 												this.prefs.templates.retain(|x| x.id != id);
+												if this.editing_template_id.as_deref() == Some(id.as_str()) {
+													this.editing_template_id = None;
+												}
 												this.persist(cx);
 												cx.notify();
 											});
@@ -578,21 +634,26 @@ impl SettingsView {
 			.child(
 				Button::new("add-tpl")
 					.primary()
-					.label(self.t("addTerminalTemplate"))
+					.label(if self.editing_template_id.is_some() {
+						self.t("save")
+					} else {
+						self.t("addTerminalTemplate")
+					})
 					.on_click({
 						let view = view.clone();
-						move |_, _, cx| {
+						move |_, window, cx| {
 							view.update(cx, |this, cx| {
 								let name = this.template_name.read(cx).value().to_string();
 								if name.trim().is_empty() {
 									return;
 								}
-								this.prefs.templates.push(crate::prefs::TerminalTemplatePref {
-									id: uuid::Uuid::new_v4().to_string(),
+								crate::prefs::upsert_template(
+									&mut this.prefs.templates,
+									this.editing_template_id.as_deref(),
 									name,
-									shell: this.template_shell.read(cx).value().to_string(),
-									cwd: this.template_cwd.read(cx).value().to_string(),
-									commands: this
+									this.template_shell.read(cx).value().to_string(),
+									this.template_cwd.read(cx).value().to_string(),
+									this
 										.template_cmds
 										.read(cx)
 										.value()
@@ -600,7 +661,12 @@ impl SettingsView {
 										.map(|l| l.to_string())
 										.filter(|l| !l.is_empty())
 										.collect(),
-								});
+								);
+								this.editing_template_id = None;
+								this.template_name.update(cx, |s, cx| s.set_value("", window, cx));
+								this.template_shell.update(cx, |s, cx| s.set_value("", window, cx));
+								this.template_cwd.update(cx, |s, cx| s.set_value("", window, cx));
+								this.template_cmds.update(cx, |s, cx| s.set_value("", window, cx));
 								this.persist(cx);
 								cx.notify();
 							});
@@ -636,33 +702,47 @@ impl SettingsView {
 			} else {
 				self.prefs.notification_sound.clone()
 			}))
-			.child(
-				h_flex().gap_1().flex_wrap().children(
-					std::iter::once(String::new())
-						.chain(self.sounds.iter().cloned())
-						.take(36)
-						.map(|name| {
-							let selected = self.prefs.notification_sound == name;
-							let label = if name.is_empty() {
-								self.t("notificationSoundNone")
-							} else {
-								name.clone()
-							};
-							choice(format!("snd-{name}"), &label, selected, {
-								let view = view.clone();
-								let name = name.clone();
-								move |cx| {
-									view.update(cx, |this, cx| {
-										this.prefs.notification_sound = name.clone();
-										let _ = crate::platform::play_system_sound(&name);
-										this.persist(cx);
-										cx.notify();
-									});
-								}
-							})
-						}),
-				),
-			)
+			.child(if self.sounds.is_empty() {
+				v_flex()
+					.gap_1()
+					.p_3()
+					.rounded_md()
+					.border_1()
+					.border_color(cx.theme().border)
+					.child(div().text_sm().child(self.t("soundPickerUnavailable")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(cx.theme().muted_foreground)
+							.child(self.t("soundPickerUnavailableDescription")),
+					)
+					.into_any_element()
+			} else {
+				h_flex()
+					.gap_1()
+					.flex_wrap()
+					.children(std::iter::once(String::new()).chain(self.sounds.iter().cloned()).map(|name| {
+						let selected = self.prefs.notification_sound == name;
+						let label = if name.is_empty() {
+							self.t("notificationSoundNone")
+						} else {
+							name.clone()
+						};
+						choice(format!("snd-{name}"), &label, selected, {
+							let view = view.clone();
+							let name = name.clone();
+							move |cx| {
+								view.update(cx, |this, cx| {
+									this.prefs.notification_sound = name.clone();
+									let _ = crate::platform::play_system_sound(&name);
+									this.persist(cx);
+									cx.notify();
+								});
+							}
+						})
+					}))
+					.into_any_element()
+			})
 	}
 
 	fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
