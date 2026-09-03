@@ -5,11 +5,14 @@ use gpui::{
 	ParentElement, Render, Styled, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, Theme, ThemeMode, TitleBar, h_flex, input::InputState,
+	ActiveTheme, Theme, ThemeMode, TitleBar, WindowExt, h_flex, input::InputState,
 	v_flex,
 };
 
+use std::collections::HashMap;
+
 use crate::backend::{Backend, ProfileVm, ProjectVm};
+use crate::detector::{AgentStatus, AgentStatusDetector, DetectionInput};
 use crate::i18n;
 use crate::settings::AppSettings;
 use crate::theme::TwoCodePalette;
@@ -29,6 +32,7 @@ pub enum Route {
 pub enum SettingsTab {
 	General,
 	Terminal,
+	Notifications,
 	About,
 }
 
@@ -49,6 +53,7 @@ pub enum GitPane {
 pub struct TerminalTab {
 	pub id: String,
 	pub title: String,
+	pub status: Option<AgentStatus>,
 }
 
 pub struct AppRoot {
@@ -79,6 +84,8 @@ pub struct AppRoot {
 	pub selected_file: Option<String>,
 	pub file_preview: String,
 	pub file_is_markdown: bool,
+	pub detectors: HashMap<String, AgentStatusDetector>,
+	pub pending_notification: Option<String>,
 	#[allow(dead_code)]
 	pub focus: FocusHandle,
 }
@@ -127,6 +134,8 @@ impl AppRoot {
 			selected_file: None,
 			file_preview: String::new(),
 			file_is_markdown: false,
+			detectors: HashMap::new(),
+			pending_notification: None,
 			focus: cx.focus_handle(),
 		};
 		app.apply_theme(window, cx);
@@ -357,6 +366,35 @@ impl AppRoot {
 	pub fn refresh_terminal(&mut self) {
 		if let Some(session_id) = &self.active_session {
 			self.terminal_output = self.backend.take_output(session_id);
+			let title = self.backend.session_title(session_id);
+			let detector = self
+				.detectors
+				.entry(session_id.clone())
+				.or_insert_with(AgentStatusDetector::new);
+			let previous = self
+				.terminals
+				.iter()
+				.find(|tab| tab.id == *session_id)
+				.and_then(|tab| tab.status);
+			let result = detector.detect(DetectionInput {
+				screen: self.terminal_output.clone(),
+				osc_title: title,
+			});
+			if let Some(tab) = self
+				.terminals
+				.iter_mut()
+				.find(|tab| tab.id == *session_id)
+			{
+				tab.status = result.status;
+			}
+			if self.settings.notifications_enabled
+				&& previous != Some(AgentStatus::Waiting)
+				&& result.status == Some(AgentStatus::Waiting)
+			{
+				let agent = result.agent_id.unwrap_or_else(|| "agent".into());
+				self.pending_notification =
+					Some(format!("{agent} is waiting for input"));
+			}
 		}
 	}
 
@@ -467,6 +505,7 @@ impl AppRoot {
 				self.terminals.push(TerminalTab {
 					id: session_id.clone(),
 					title,
+					status: None,
 				});
 				self.active_session = Some(session_id);
 				self.workspace_pane = WorkspacePane::Terminal;
@@ -512,6 +551,7 @@ impl AppRoot {
 		if let Some(session_id) = self.active_session.take() {
 			let _ = self.backend.close_terminal(&session_id);
 			self.terminals.retain(|tab| tab.id != session_id);
+			self.detectors.remove(&session_id);
 		}
 		self.active_session = self.terminals.last().map(|tab| tab.id.clone());
 		self.terminal_output.clear();
@@ -540,6 +580,9 @@ impl AppRoot {
 
 impl Render for AppRoot {
 	fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+		if let Some(message) = self.pending_notification.take() {
+			window.push_notification(message, cx);
+		}
 		let palette = TwoCodePalette::for_mode(self.settings.is_dark(false));
 		v_flex()
 			.size_full()

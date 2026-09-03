@@ -1248,6 +1248,7 @@ dependencies = [
  "diesel_migrations",
  "fix-path-env",
  "fontdb",
+ "gpui-app",
  "infra",
  "libsqlite3-sys",
  "model",
@@ -3200,6 +3201,7 @@ dependencies = [
  "gpui_platform",
  "infra",
  "model",
+ "regex",
  "repo",
  "rfd 0.15.4",
  "serde",
@@ -3208,6 +3210,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+ "vt100",
 ]
 
 [[package]]

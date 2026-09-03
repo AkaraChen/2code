@@ -28,18 +28,21 @@ impl AppRoot {
 					.selected_index(match tab {
 						SettingsTab::General => 0,
 						SettingsTab::Terminal => 1,
-						SettingsTab::About => 2,
+						SettingsTab::Notifications => 2,
+						SettingsTab::About => 3,
 					})
 					.on_click(cx.listener(|this, index: &usize, _, cx| {
 						this.settings_tab = match index {
 							0 => SettingsTab::General,
 							1 => SettingsTab::Terminal,
+							2 => SettingsTab::Notifications,
 							_ => SettingsTab::About,
 						};
 						cx.notify();
 					}))
 					.child(Tab::new().icon(IconName::Settings).label(self.t("General", "通用")))
 					.child(Tab::new().icon(IconName::SquareTerminal).label(self.t("Terminal", "终端")))
+					.child(Tab::new().icon(IconName::Info).label(self.t("Notifications", "通知")))
 					.child(Tab::new().icon(IconName::Info).label(self.t("About", "关于"))),
 			)
 			.child(match tab {
@@ -48,6 +51,9 @@ impl AppRoot {
 					.into_any_element(),
 				SettingsTab::Terminal => self
 					.render_terminal_settings(cx)
+					.into_any_element(),
+				SettingsTab::Notifications => self
+					.render_notification_settings(cx)
 					.into_any_element(),
 				SettingsTab::About => self.render_about().into_any_element(),
 			})
@@ -225,6 +231,47 @@ impl AppRoot {
 					.font_family("monospace")
 					.text_sm()
 					.child("$ 2code — native GPUI terminal preview"),
+			)
+	}
+
+	fn render_notification_settings(
+		&mut self,
+		cx: &mut Context<Self>,
+	) -> impl IntoElement {
+		v_flex()
+			.max_w(px(448.))
+			.gap_4()
+			.child(
+				h_flex()
+					.justify_between()
+					.items_center()
+					.child(
+						v_flex()
+							.child(
+								div()
+									.text_sm()
+									.font_medium()
+									.child(self.t("Agent notifications", "代理通知")),
+							)
+							.child(
+								div()
+									.text_sm()
+									.text_color(cx.theme().muted_foreground)
+									.child(self.t(
+										"Notify when a coding agent is waiting for input.",
+										"当编码代理等待输入时发送通知。",
+									)),
+							),
+					)
+					.child(
+						Switch::new("notify-agents")
+							.checked(self.settings.notifications_enabled)
+							.on_click(cx.listener(|this, checked, _, cx| {
+								this.settings.notifications_enabled = *checked;
+								this.persist_settings();
+								cx.notify();
+							})),
+					),
 			)
 	}
 

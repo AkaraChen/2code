@@ -1,6 +1,8 @@
 # 2code GPUI shell
 
-2code’s primary desktop UI is a native [GPUI](https://gpui.rs) application in `src-tauri/crates/gpui-app`. It uses [gpui-component](https://github.com/longbridge/gpui-component) widgets (Sidebar, Button, Input, Switch, TabBar, TitleBar, Icon) and calls the existing `service` / `repo` / `infra` crates directly.
+2code’s shipped desktop process is a native [GPUI](https://gpui.rs) application (`gpui_app::run()`, binary `2code`). `cargo run` in `src-tauri` starts GPUI, not Tauri. It uses [gpui-component](https://github.com/longbridge/gpui-component) widgets and talks to `service` / `repo` / `infra` directly.
+
+The old Tauri/React webview is behind `--features legacy-tauri`.
 
 ## Style baseline
 
@@ -32,4 +34,6 @@ cd src-tauri && cargo run -p gpui-app
 - Workspace panes via native `TabBar`: Files (preview + markdown `TextView`), Git (Changes / History), Terminal tabs + PTY
 - Settings (language, theme, debug, terminal font) via `Switch` / `TabBar`
 - Native `Dialog` / `AlertDialog` for create project, create profile, delete, and command palette
+- vt100-backed PTY screen + agent status detector (Claude / Codex / Cursor)
+- In-app notifications when an agent is waiting
 - Tokens from `src/app.css` are applied onto the gpui-component `Theme`

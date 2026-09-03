@@ -2,5 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-	code_lib::run()
+	#[cfg(feature = "legacy-tauri")]
+	{
+		code_lib::run();
+	}
+	#[cfg(not(feature = "legacy-tauri"))]
+	{
+		gpui_app::run();
+	}
 }

@@ -62,7 +62,13 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            libsqlite3-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libfontconfig-dev \
+            libfreetype-dev
 
       - name: Install just (macOS)
         if: runner.os == 'macOS'
@@ -110,6 +116,9 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
           chmod 600 "$key_path"
           echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Build native GPUI binary
+        run: cargo build -p gpui-app --release --manifest-path src-tauri/Cargo.toml
 
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0

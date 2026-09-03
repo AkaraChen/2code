@@ -3,9 +3,15 @@ members = [ "crates/*" ]
 
 [package]
 name = "code"
-description = "A Tauri App"
+description = "2code desktop application"
 authors = [ "you" ]
 edition = "2021"
+default-run = "code"
+
+[features]
+default = []
+# Build the old Tauri/React webview instead of the native GPUI app.
+legacy-tauri = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -25,6 +31,7 @@ model = { path = "crates/model" }
 repo = { path = "crates/repo" }
 infra = { path = "crates/infra" }
 service = { path = "crates/service" }
+gpui-app = { path = "crates/gpui-app" }
 
 # Tauri framework
 tauri = { version = "2", features = ["protocol-asset"] }

@@ -12,6 +12,8 @@ pub struct AppSettings {
 	pub terminal_font: String,
 	pub terminal_font_size: f32,
 	pub worktree_dir: String,
+	#[serde(default)]
+	pub notifications_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -24,6 +26,7 @@ impl Default for AppSettings {
 			terminal_font: "JetBrains Mono".into(),
 			terminal_font_size: 13.0,
 			worktree_dir: String::new(),
+			notifications_enabled: false,
 		}
 	}
 }

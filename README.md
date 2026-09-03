@@ -66,15 +66,19 @@ bun install
 ### Run the native GPUI app
 
 ```bash
-cd src-tauri && cargo run -p gpui-app
+cd src-tauri && cargo run
+# or
+bun start
 ```
 
-This opens the 2code workstation as a native GPUI window: sidebar, home, workspaces, settings, dialogs, Git status, and PTY terminals. It talks to the existing Rust service layer directly — there is no webview.
+This opens the 2code workstation as a native GPUI window. The process is GPUI — there is no webview.
 
 ### Run the legacy Tauri/React shell
 
 ```bash
-bun tauri dev
+cargo run --manifest-path src-tauri/Cargo.toml --features legacy-tauri
+# or
+bun tauri:dev
 ```
 
 ### Run only the legacy frontend

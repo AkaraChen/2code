@@ -1,5 +1,5 @@
 start:
-    ./start.sh
+    cargo run -p gpui-app --manifest-path src-tauri/Cargo.toml
 
 fmt:
     fama "./src/**/*.{ts,tsx}"

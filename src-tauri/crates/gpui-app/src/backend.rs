@@ -61,9 +61,36 @@ impl ProjectVm {
 	}
 }
 
+pub struct TermSession {
+	pub raw: Vec<u8>,
+	parser: vt100::Parser,
+}
+
+impl TermSession {
+	fn new() -> Self {
+		Self {
+			raw: Vec::new(),
+			parser: vt100::Parser::new(32, 120, 2_000),
+		}
+	}
+
+	fn write(&mut self, bytes: &[u8]) {
+		self.raw.extend_from_slice(bytes);
+		self.parser.process(bytes);
+	}
+
+	fn screen(&self) -> String {
+		self.parser.screen().contents()
+	}
+
+	fn title(&self) -> String {
+		crate::detector::last_osc_title(&self.raw)
+	}
+}
+
 #[derive(Default)]
 pub struct PtyBuffers {
-	pub output: HashMap<String, String>,
+	pub sessions: HashMap<String, TermSession>,
 	pub exited: Vec<String>,
 }
 
@@ -73,13 +100,12 @@ pub struct GpuiPtyEmitter {
 
 impl PtyEventEmitter for GpuiPtyEmitter {
 	fn emit_output(&self, session_id: &str, bytes: &[u8]) -> bool {
-		let text = String::from_utf8_lossy(bytes);
 		if let Ok(mut buffers) = self.buffers.lock() {
 			buffers
-				.output
+				.sessions
 				.entry(session_id.to_string())
-				.or_default()
-				.push_str(&text);
+				.or_insert_with(TermSession::new)
+				.write(bytes);
 			true
 		} else {
 			false
@@ -237,7 +263,15 @@ impl Backend {
 		self.buffers
 			.lock()
 			.ok()
-			.and_then(|buffers| buffers.output.get(session_id).cloned())
+			.and_then(|buffers| buffers.sessions.get(session_id).map(TermSession::screen))
+			.unwrap_or_default()
+	}
+
+	pub fn session_title(&self, session_id: &str) -> String {
+		self.buffers
+			.lock()
+			.ok()
+			.and_then(|buffers| buffers.sessions.get(session_id).map(TermSession::title))
 			.unwrap_or_default()
 	}
 
@@ -339,7 +373,7 @@ mod tests {
 		assert!(emitter.emit_output("s1", b"world"));
 		emitter.emit_exit("s1");
 		let buffers = buffers.lock().unwrap();
-		assert_eq!(buffers.output.get("s1").unwrap(), "hello world");
+		assert!(buffers.sessions.get("s1").unwrap().screen().contains("hello world"));
 		assert_eq!(buffers.exited, vec!["s1".to_string()]);
 	}
 }

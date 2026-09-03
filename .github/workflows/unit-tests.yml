@@ -88,7 +88,13 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libsqlite3-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libfontconfig-dev \
+            libfreetype-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

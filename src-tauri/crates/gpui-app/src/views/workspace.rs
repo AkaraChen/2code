@@ -393,7 +393,16 @@ impl AppRoot {
 									}
 								}))
 								.children(terminals.into_iter().map(|tab| {
-									Tab::new().label(tab.title)
+									let label = match tab.status {
+										Some(crate::detector::AgentStatus::Running) => {
+											format!("● {}", tab.title)
+										}
+										Some(crate::detector::AgentStatus::Waiting) => {
+											format!("◐ {}", tab.title)
+										}
+										_ => tab.title,
+									};
+									Tab::new().label(label)
 								})),
 						)
 						.child(
