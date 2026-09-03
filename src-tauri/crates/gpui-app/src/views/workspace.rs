@@ -1,16 +1,18 @@
 use gpui::{
 	Context, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
-	Styled, Window, div, prelude::FluentBuilder, px,
+	Styled, Window, div, prelude::FluentBuilder, px, relative,
 };
 use gpui_component::{
 	ActiveTheme, Icon, IconName, Sizable, StyledExt,
 	button::{Button, ButtonVariants},
-	h_flex, input::Input,
+	h_flex,
+	input::{Editor, Input},
 	text::TextView,
 	v_flex,
 };
 
 use crate::app::{AppRoot, GitPane, WorkspacePane};
+use crate::files::{self, DiffKind};
 
 impl AppRoot {
 	pub(crate) fn render_workspace(
@@ -191,18 +193,52 @@ impl AppRoot {
 		}
 	}
 
+	fn render_diff_view(
+		&self,
+		id: &'static str,
+		diff: String,
+		cx: &mut Context<Self>,
+	) -> impl IntoElement {
+		let lines = files::color_diff(&diff);
+		div()
+			.id(id)
+			.flex_1()
+			.p_3()
+			.font_family("monospace")
+			.text_xs()
+			.overflow_y_scroll()
+			.child(
+				v_flex().gap_0().children(lines.into_iter().map(|line| {
+					let color: gpui::Hsla = match line.kind {
+						DiffKind::Add => gpui::rgb(0x0d_bc_79).into(),
+						DiffKind::Del => gpui::rgb(0xcd_31_31).into(),
+						DiffKind::Hunk => gpui::rgb(0x24_72_c8).into(),
+						DiffKind::Meta => cx.theme().muted_foreground,
+						DiffKind::Context => cx.theme().foreground,
+					};
+					div().text_color(color).child(line.text)
+				})),
+			)
+	}
+
 	fn render_files_pane(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-		let files = self.files.clone();
+		let rows = self.visible_files();
 		let preview = self.file_preview.clone();
 		let selected = self.selected_file.clone();
-		let parent = self.file_parent.clone();
 		let is_markdown = self.file_is_markdown;
+		let show_preview = self.file_show_preview;
+		let editor = self.file_editor.clone();
+		let badges: Vec<(String, String)> = self
+			.changed_files
+			.iter()
+			.map(|entry| (entry.path.clone(), entry.status.clone()))
+			.collect();
 		h_flex()
 			.flex_1()
 			.min_h_0()
 			.child(
 				v_flex()
-					.w(px(240.))
+					.w(px(260.))
 					.h_full()
 					.border_r_1()
 					.border_color(cx.theme().border)
@@ -215,7 +251,7 @@ impl AppRoot {
 								div()
 									.text_xs()
 									.text_color(cx.theme().muted_foreground)
-									.child(parent.clone().unwrap_or_else(|| ".".into())),
+									.child(self.t("Files", "文件")),
 							)
 							.child(
 								h_flex()
@@ -256,44 +292,51 @@ impl AppRoot {
 												this.delete_selected_file(cx);
 											})),
 									),
-							)
-							.when(parent.is_some(), |this| {
-								this.child(
-									Button::new("files-up")
-										.ghost()
-										.xsmall()
-										.label("Up")
-										.on_click(cx.listener(|this, _, _, cx| {
-											this.open_parent_dir(cx);
-										})),
-								)
-							}),
+							),
 					)
 					.child(
 						v_flex()
 							.flex_1()
 							.px_2()
-							.gap_1()
+							.gap_0()
 							.id("file-list")
 							.overflow_y_scroll()
-							.children(files.into_iter().map(|path| {
-								let active = selected.as_deref() == Some(path.as_str());
-								let row_id = format!("file-{path}");
-								let open_path = path.clone();
+							.children(rows.into_iter().map(|row| {
+								let active = selected.as_deref() == Some(row.path.as_str());
+								let row_id = format!("file-{}", row.path);
+								let open_path = row.path.clone();
+								let badge = files::git_badge_for(&row.path, &badges);
+								let pad = 8.0 + (row.depth as f32 * 12.0);
 								h_flex()
 									.id(row_id)
-									.h(px(28.))
+									.h(px(26.))
 									.px_2()
+									.pl(px(pad))
 									.gap_2()
 									.rounded(px(6.))
 									.when(active, |this| this.bg(cx.theme().muted))
 									.hover(|this| this.bg(cx.theme().muted))
 									.cursor_pointer()
-									.on_click(cx.listener(move |this, _, _, cx| {
-										this.open_path(&open_path, cx);
+									.on_click(cx.listener(move |this, _, window, cx| {
+										this.open_path(&open_path, window, cx);
 									}))
-									.child(Icon::new(IconName::File).size_3())
-									.child(div().text_xs().child(path))
+									.child(
+										Icon::new(if row.is_dir {
+											IconName::Folder
+										} else {
+											IconName::File
+										})
+										.size_3(),
+									)
+									.child(div().text_xs().flex_1().child(row.name))
+									.when_some(badge, |this, status| {
+										this.child(
+											div()
+												.text_xs()
+												.text_color(cx.theme().muted_foreground)
+												.child(status),
+										)
+									})
 							})),
 					),
 			)
@@ -302,7 +345,60 @@ impl AppRoot {
 					.flex_1()
 					.min_w_0()
 					.h_full()
-					.child(if preview.is_empty() {
+					.when(selected.is_some(), |this| {
+						this.child(
+							h_flex()
+								.flex_none()
+								.h(px(28.))
+								.px_3()
+								.gap_2()
+								.items_center()
+								.border_b_1()
+								.border_color(cx.theme().border)
+								.child(
+									div()
+										.text_xs()
+										.text_color(cx.theme().muted_foreground)
+										.child(
+											selected
+												.as_deref()
+												.map(files::language_for_path)
+												.unwrap_or("plaintext"),
+										),
+								)
+								.when(is_markdown, |this| {
+									this.child({
+										let button = Button::new("file-edit")
+											.xsmall()
+											.label(self.t("Edit", "编辑"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.file_show_preview = false;
+												cx.notify();
+											}));
+										if show_preview {
+											button.ghost()
+										} else {
+											button.primary()
+										}
+									})
+									.child({
+										let button = Button::new("file-preview-md")
+											.xsmall()
+											.label(self.t("Preview", "预览"))
+											.on_click(cx.listener(|this, _, _, cx| {
+												this.file_show_preview = true;
+												cx.notify();
+											}));
+										if show_preview {
+											button.primary()
+										} else {
+											button.ghost()
+										}
+									})
+								}),
+						)
+					})
+					.child(if selected.is_none() {
 						v_flex()
 							.size_full()
 							.items_center()
@@ -312,12 +408,12 @@ impl AppRoot {
 									.text_sm()
 									.text_color(cx.theme().muted_foreground)
 									.child(self.t(
-										"Select a file to preview it.",
-										"选择一个文件进行预览。",
+										"Select a file to edit it.",
+										"选择一个文件进行编辑。",
 									)),
 							)
 							.into_any_element()
-					} else if is_markdown {
+					} else if is_markdown && show_preview {
 						div()
 							.id("file-preview")
 							.size_full()
@@ -327,13 +423,14 @@ impl AppRoot {
 							.into_any_element()
 					} else {
 						div()
-							.id("file-preview")
+							.id("file-editor")
 							.size_full()
-							.p_4()
-							.overflow_y_scroll()
-							.font_family("monospace")
-							.text_xs()
-							.child(preview)
+							.child(
+								Editor::new(&editor)
+									.bordered(false)
+									.appearance(true)
+									.h(relative(1.)),
+							)
 							.into_any_element()
 					}),
 			)
@@ -421,21 +518,19 @@ impl AppRoot {
 									)
 							})),
 					)
-					.child(
-						div()
-							.id("commit-diff")
-							.flex_1()
-							.p_3()
-							.font_family("monospace")
-							.text_xs()
-							.overflow_y_scroll()
-							.child(if commit_diff.is_empty() {
-								self.t("Select a commit to see its diff.", "选择一个提交查看 diff。")
-									.to_string()
-							} else {
-								commit_diff
-							}),
-					)
+					.child(self.render_diff_view(
+						"commit-diff",
+						if commit_diff.is_empty() {
+							self.t(
+								"Select a commit to see its diff.",
+								"选择一个提交查看 diff。",
+							)
+							.to_string()
+						} else {
+							commit_diff
+						},
+						cx,
+					))
 					.into_any_element(),
 			})
 	}
@@ -539,21 +634,16 @@ impl AppRoot {
 							),
 					),
 			)
-			.child(
-				div()
-					.id("git-diff")
-					.flex_1()
-					.p_3()
-					.font_family("monospace")
-					.text_xs()
-					.overflow_y_scroll()
-					.child(if diff.is_empty() {
-						self.t("Working tree is clean.", "工作区是干净的。")
-							.to_string()
-					} else {
-						diff
-					}),
-			)
+			.child(self.render_diff_view(
+				"git-diff",
+				if diff.is_empty() {
+					self.t("Working tree is clean.", "工作区是干净的。")
+						.to_string()
+				} else {
+					files::filter_unified_diff(&diff, self.selected_change.as_deref())
+				},
+				cx,
+			))
 	}
 
 	fn render_terminal_pane(&mut self, cx: &mut Context<Self>) -> impl IntoElement {

@@ -37,5 +37,7 @@ cd src-tauri && cargo run -p gpui-app
 - vt100-backed PTY screen + raw key input, color spans, resize, and session restore
 - Agent status detector (Claude / Codex / Cursor) with in-app + system-sound notifications
 - Git changes list with commit / discard / push / branch checkout
-- File create, delete, reveal, and markdown preview
+- Hierarchical file tree with git badges, native `Editor` for source, and markdown preview/edit
+- Colored unified diffs for changes and commit history
+- Project groups in the sidebar
 - Tokens from `legacy/web/src/app.css` are applied onto the gpui-component `Theme`

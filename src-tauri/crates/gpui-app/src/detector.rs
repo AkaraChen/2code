@@ -306,6 +306,75 @@ fn rules() -> Vec<Rule> {
 			},
 			aliases: &["cursor"],
 		},
+		Rule {
+			id: "gemini_apply_change",
+			agent: "gemini",
+			state: AgentState::Blocked,
+			priority: 300,
+			region: "whole_recent",
+			skip_state: false,
+			visible_idle: false,
+			gate: Gate {
+				any_contains: &[
+					&["│ Apply this change"],
+					&["│ Allow execution"],
+					&["waiting for user confirmation"],
+					&["│ Do you want to proceed"],
+				],
+				..Gate::empty()
+			},
+			aliases: &["gemini"],
+		},
+		Rule {
+			id: "gemini_esc_cancel",
+			agent: "gemini",
+			state: AgentState::Working,
+			priority: 100,
+			region: "whole_recent",
+			skip_state: false,
+			visible_idle: false,
+			gate: Gate {
+				contains: &["esc to cancel"],
+				..Gate::empty()
+			},
+			aliases: &["gemini"],
+		},
+		Rule {
+			id: "copilot_selection_blocker",
+			agent: "copilot",
+			state: AgentState::Blocked,
+			priority: 300,
+			region: "whole_recent",
+			skip_state: false,
+			visible_idle: false,
+			gate: Gate {
+				any_contains: &[
+					&["esc to cancel", "enter to select"],
+					&["esc to cancel", "enter to confirm"],
+					&["esc cancel", "enter accept"],
+				],
+				..Gate::empty()
+			},
+			aliases: &["copilot", "github-copilot", "ghcs"],
+		},
+		Rule {
+			id: "copilot_working_cancel",
+			agent: "copilot",
+			state: AgentState::Working,
+			priority: 100,
+			region: "whole_recent",
+			skip_state: false,
+			visible_idle: false,
+			gate: Gate {
+				any_contains: &[
+					&["esc to cancel"],
+					&["esc cancel"],
+					&["esc again to cancel"],
+				],
+				..Gate::empty()
+			},
+			aliases: &["copilot", "github-copilot"],
+		},
 	]
 }
 
@@ -590,5 +659,25 @@ mod tests {
 	fn extracts_osc_title_from_raw_bytes() {
 		let bytes = b"\x1b]0;Action Required\x07hello";
 		assert_eq!(last_osc_title(bytes), "Action Required");
+	}
+
+	#[test]
+	fn detects_gemini_apply_change() {
+		let result = detect_agent_status(DetectionInput {
+			screen: "gemini\n│ Apply this change".into(),
+			osc_title: String::new(),
+		});
+		assert_eq!(result.agent_id.as_deref(), Some("gemini"));
+		assert_eq!(result.status, Some(AgentStatus::Waiting));
+	}
+
+	#[test]
+	fn detects_copilot_selection_blocker() {
+		let result = detect_agent_status(DetectionInput {
+			screen: "github-copilot\nesc to cancel\nenter to select".into(),
+			osc_title: String::new(),
+		});
+		assert_eq!(result.agent_id.as_deref(), Some("copilot"));
+		assert_eq!(result.status, Some(AgentStatus::Waiting));
 	}
 }

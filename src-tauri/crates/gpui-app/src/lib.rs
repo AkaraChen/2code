@@ -2,6 +2,7 @@ mod actions;
 mod app;
 mod backend;
 mod detector;
+mod files;
 mod i18n;
 mod settings;
 mod sound;

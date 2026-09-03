@@ -6,6 +6,7 @@ use infra::pty::{create_session_map, create_thread_tracker, PtyReadThreads, PtyS
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
 use model::project::{GitBranchInfo, GitCommit, GitDiffStats, ProjectWithProfiles};
+use model::project_group::ProjectGroup;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
 use service::pty::{create_flush_senders, PtyContext, PtyFlushSenders};
 use service::PtyEventEmitter;
@@ -26,7 +27,6 @@ pub struct ProjectVm {
 	pub folder: String,
 	#[allow(dead_code)]
 	pub pinned_order: Option<i32>,
-	#[allow(dead_code)]
 	pub group_id: Option<String>,
 	pub profiles: Vec<ProfileVm>,
 }
@@ -58,6 +58,21 @@ impl ProjectVm {
 			.iter()
 			.find(|profile| profile.is_default)
 			.or_else(|| self.profiles.first())
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct GroupVm {
+	pub id: String,
+	pub name: String,
+}
+
+impl GroupVm {
+	fn from_group(group: ProjectGroup) -> Self {
+		Self {
+			id: group.id,
+			name: group.name,
+		}
 	}
 }
 
@@ -186,6 +201,17 @@ impl Backend {
 			.into_iter()
 			.map(ProjectVm::from_project)
 			.collect())
+	}
+
+	pub fn list_groups(&self) -> Vec<GroupVm> {
+		let Ok(mut conn) = self.db.lock() else {
+			return Vec::new();
+		};
+		service::project::list_groups(&mut conn)
+			.unwrap_or_default()
+			.into_iter()
+			.map(GroupVm::from_group)
+			.collect()
 	}
 
 	pub fn create_project(

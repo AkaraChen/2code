@@ -6,14 +6,16 @@ use gpui::{
 	prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, StyledExt, Theme, ThemeMode, WindowExt, h_flex, input::InputState,
+	ActiveTheme, StyledExt, Theme, ThemeMode, WindowExt, h_flex,
+	input::{EditorState, InputState},
 	v_flex,
 };
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::actions::{commit_paths, discard_paths};
-use crate::backend::{Backend, ProfileVm, ProjectVm};
+use crate::backend::{Backend, GroupVm, ProfileVm, ProjectVm};
+use crate::files;
 use crate::detector::{AgentStatus, AgentStatusDetector, DetectionInput};
 use crate::i18n;
 use crate::settings::AppSettings;
@@ -69,6 +71,7 @@ pub struct AppRoot {
 	pub settings: AppSettings,
 	pub route: Route,
 	pub projects: Vec<ProjectVm>,
+	pub groups: Vec<GroupVm>,
 	pub sidebar_collapsed: bool,
 	pub settings_tab: SettingsTab,
 	pub workspace_pane: WorkspacePane,
@@ -80,6 +83,7 @@ pub struct AppRoot {
 	pub terminal_input: Entity<InputState>,
 	pub commit_message: Entity<InputState>,
 	pub new_file_name: Entity<InputState>,
+	pub file_editor: Entity<EditorState>,
 	pub terminals: Vec<TerminalTab>,
 	pub active_session: Option<String>,
 	pub terminal_output: String,
@@ -97,10 +101,13 @@ pub struct AppRoot {
 	pub selected_commit: Option<String>,
 	pub commit_diff: String,
 	pub files: Vec<String>,
+	pub file_tree: HashMap<String, Vec<String>>,
+	pub expanded_dirs: HashSet<String>,
 	pub file_parent: Option<String>,
 	pub selected_file: Option<String>,
 	pub file_preview: String,
 	pub file_is_markdown: bool,
+	pub file_show_preview: bool,
 	pub detectors: HashMap<String, AgentStatusDetector>,
 	pub pending_notification: Option<String>,
 	#[allow(dead_code)]
@@ -129,11 +136,13 @@ impl AppRoot {
 		let new_file_name = cx.new(|cx| {
 			InputState::new(window, cx).placeholder("src/new-file.rs")
 		});
+		let file_editor = cx.new(|cx| EditorState::new(window, cx));
 		let mut app = Self {
 			backend,
 			settings,
 			route: Route::Home,
 			projects: Vec::new(),
+			groups: Vec::new(),
 			sidebar_collapsed: false,
 			settings_tab: SettingsTab::General,
 			workspace_pane: WorkspacePane::Files,
@@ -145,6 +154,7 @@ impl AppRoot {
 			terminal_input,
 			commit_message,
 			new_file_name,
+			file_editor,
 			terminals: Vec::new(),
 			active_session: None,
 			terminal_output: String::new(),
@@ -162,10 +172,13 @@ impl AppRoot {
 			selected_commit: None,
 			commit_diff: String::new(),
 			files: Vec::new(),
+			file_tree: HashMap::new(),
+			expanded_dirs: HashSet::new(),
 			file_parent: None,
 			selected_file: None,
 			file_preview: String::new(),
 			file_is_markdown: false,
+			file_show_preview: true,
 			detectors: HashMap::new(),
 			pending_notification: None,
 			focus: cx.focus_handle(),
@@ -252,6 +265,7 @@ impl AppRoot {
 		match self.backend.list_projects() {
 			Ok(projects) => {
 				self.projects = projects;
+				self.groups = self.backend.list_groups();
 				self.error = None;
 			}
 			Err(error) => self.error = Some(error.to_string()),
@@ -298,6 +312,8 @@ impl AppRoot {
 			profile_id: profile_id.to_string(),
 		};
 		self.file_parent = None;
+		self.file_tree.clear();
+		self.expanded_dirs.clear();
 		self.selected_file = None;
 		self.file_preview.clear();
 		self.selected_commit = None;
@@ -330,67 +346,94 @@ impl AppRoot {
 					.pull_request_status(&project.folder, Some(&self.git_branch))
 			});
 			self.commits = self.backend.git_log(&profile_id);
-			self.files = self
-				.backend
-				.list_files(&profile_id, self.file_parent.as_deref());
+			self.reload_file_tree(&profile_id);
 			if let Some(hash) = self.selected_commit.clone() {
 				self.commit_diff = self.backend.git_commit_diff(&profile_id, &hash);
-			}
-			if let Some(path) = self.selected_file.clone() {
-				self.load_file_preview(&profile_id, &path);
 			}
 		}
 		self.refresh_terminal();
 	}
 
-	fn load_file_preview(&mut self, profile_id: &str, path: &str) {
+	fn reload_file_tree(&mut self, profile_id: &str) {
+		self.file_tree
+			.insert(String::new(), self.backend.list_files(profile_id, None));
+		let expanded: Vec<String> = self.expanded_dirs.iter().cloned().collect();
+		for dir in expanded {
+			let parent = dir.trim_end_matches('/').to_string();
+			self.file_tree.insert(
+				dir,
+				self.backend.list_files(profile_id, Some(&parent)),
+			);
+		}
+		self.files = self
+			.file_tree
+			.get("")
+			.cloned()
+			.unwrap_or_default();
+	}
+
+	pub fn visible_files(&self) -> Vec<files::FileRow> {
+		files::visible_file_rows(&self.file_tree, &self.expanded_dirs)
+	}
+
+	fn load_file_into_editor(
+		&mut self,
+		profile_id: &str,
+		path: &str,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
 		match self.backend.read_file(profile_id, path) {
 			Ok(content) => {
-				self.file_preview = content;
+				self.file_preview = content.clone();
 				self.file_is_markdown = path.ends_with(".md") || path.ends_with(".mdx");
+				self.file_show_preview = self.file_is_markdown;
+				self.file_editor.update(cx, |state, cx| {
+					state.set_value(content, window, cx);
+				});
 				self.error = None;
 			}
 			Err(error) => {
 				self.file_preview = error.to_string();
 				self.file_is_markdown = false;
+				self.file_show_preview = false;
 			}
 		}
 	}
 
-	pub fn open_path(&mut self, path: &str, cx: &mut Context<Self>) {
+	pub fn toggle_dir(&mut self, path: &str, cx: &mut Context<Self>) {
+		let key = if files::is_dir_path(path) {
+			path.to_string()
+		} else {
+			format!("{path}/")
+		};
+		if self.expanded_dirs.contains(&key) {
+			self.expanded_dirs.remove(&key);
+		} else {
+			self.expanded_dirs.insert(key.clone());
+			self.file_parent = Some(key.trim_end_matches('/').to_string());
+			if let Some(profile_id) =
+				self.current_profile().map(|profile| profile.id.clone())
+			{
+				self.reload_file_tree(&profile_id);
+			}
+		}
+		self.workspace_pane = WorkspacePane::Files;
+		cx.notify();
+	}
+
+	pub fn open_path(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
+		if files::is_dir_path(path) {
+			self.toggle_dir(path, cx);
+			return;
+		}
 		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
 		else {
 			return;
 		};
-		let children = self.backend.list_files(&profile_id, Some(path));
-		if !children.is_empty() && self.backend.read_file(&profile_id, path).is_err() {
-			self.file_parent = Some(path.to_string());
-			self.files = children;
-			self.selected_file = None;
-			self.file_preview.clear();
-			self.workspace_pane = WorkspacePane::Files;
-			cx.notify();
-			return;
-		}
 		self.selected_file = Some(path.to_string());
 		self.workspace_pane = WorkspacePane::Files;
-		self.load_file_preview(&profile_id, path);
-		cx.notify();
-	}
-
-	pub fn open_parent_dir(&mut self, cx: &mut Context<Self>) {
-		let Some(current) = self.file_parent.clone() else {
-			return;
-		};
-		let parent = std::path::Path::new(&current)
-			.parent()
-			.and_then(|path| path.to_str())
-			.filter(|path| !path.is_empty())
-			.map(str::to_string);
-		self.file_parent = parent;
-		self.selected_file = None;
-		self.file_preview.clear();
-		self.refresh_workspace();
+		self.load_file_into_editor(&profile_id, path, window, cx);
 		cx.notify();
 	}
 
@@ -859,7 +902,7 @@ impl AppRoot {
 				self.new_file_name.update(cx, |state, cx| {
 					state.set_value("", window, cx);
 				});
-				self.open_path(&path, cx);
+				self.open_path(&path, window, cx);
 			}
 			Err(error) => self.error = Some(error.to_string()),
 		}
@@ -898,11 +941,10 @@ impl AppRoot {
 			cx.notify();
 			return;
 		};
-		match self
-			.backend
-			.write_file(&profile_id, &path, &self.file_preview)
-		{
+		let content = self.file_editor.read(cx).value().to_string();
+		match self.backend.write_file(&profile_id, &path, &content) {
 			Ok(()) => {
+				self.file_preview = content;
 				self.error = None;
 				self.refresh_workspace();
 			}

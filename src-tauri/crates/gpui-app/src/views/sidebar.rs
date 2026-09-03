@@ -12,6 +12,7 @@ use gpui_component::{
 };
 
 use crate::app::{AppRoot, Route, WorkspacePane};
+use crate::backend::ProjectVm;
 use crate::theme::TwoCodePalette;
 
 impl AppRoot {
@@ -22,6 +23,12 @@ impl AppRoot {
 		let collapsed = self.sidebar_collapsed;
 		let route = self.route.clone();
 		let projects = self.projects.clone();
+		let groups = self.groups.clone();
+		let ungrouped: Vec<ProjectVm> = projects
+			.iter()
+			.filter(|project| project.group_id.is_none())
+			.cloned()
+			.collect();
 
 		Sidebar::new("app-sidebar")
 			.w(px(TwoCodePalette::SIDEBAR_WIDTH))
@@ -51,59 +58,33 @@ impl AppRoot {
 				),
 			)
 			.child(
-				SidebarGroup::new("Projects").child(
+				SidebarGroup::new(self.t("Projects", "项目")).child(
 					SidebarMenu::new()
 						.child(
-							SidebarMenuItem::new("Home")
+							SidebarMenuItem::new(self.t("Home", "主页"))
 								.icon(Icon::new(IconName::LayoutDashboard).size_4())
 								.active(matches!(route, Route::Home))
 								.on_click(cx.listener(|this, _, _, cx| {
 									this.open_home(cx);
 								})),
 						)
-						.children(projects.iter().map(|project| {
-							let project_id = project.id.clone();
-							let profile_id = project
-								.default_profile()
-								.map(|profile| profile.id.clone())
-								.unwrap_or_default();
-							let active = matches!(
-								&route,
-								Route::Workspace { project_id: current, .. }
-									if current == &project_id
-							);
-							SidebarMenuItem::new(project.name.clone())
-								.icon(Icon::new(IconName::Folder).size_4())
-								.active(active)
-								.default_open(active)
-								.click_to_toggle(true)
-								.children(project.profiles.iter().map(|profile| {
-									let project_id = project_id.clone();
-									let profile_id = profile.id.clone();
-									let selected = matches!(
-										&route,
-										Route::Workspace { profile_id: current, .. }
-											if current == &profile_id
-									);
-									SidebarMenuItem::new(profile.branch_name.clone())
-										.icon(Icon::new(IconName::Folder).size_4())
-										.active(selected)
-										.on_click(cx.listener(move |this, _, _, cx| {
-											this.open_workspace(
-												&project_id,
-												&profile_id,
-												cx,
-											);
-										}))
-								}))
-								.on_click(cx.listener(move |this, _, _, cx| {
-									if !profile_id.is_empty() {
-										this.open_workspace(&project_id, &profile_id, cx);
-									}
-								}))
+						.children(ungrouped.iter().map(|project| {
+							self.project_menu_item(project, &route, cx)
 						})),
 				),
 			)
+			.children(groups.into_iter().map(|group| {
+				let members: Vec<ProjectVm> = projects
+					.iter()
+					.filter(|project| project.group_id.as_deref() == Some(group.id.as_str()))
+					.cloned()
+					.collect();
+				SidebarGroup::new(group.name).child(
+					SidebarMenu::new().children(members.iter().map(|project| {
+						self.project_menu_item(project, &route, cx)
+					})),
+				)
+			}))
 			.footer(
 				v_flex()
 					.w_full()
@@ -117,7 +98,7 @@ impl AppRoot {
 									Button::new("side-files")
 										.ghost()
 										.icon(IconName::File)
-										.label("Files")
+										.label(self.t("Files", "文件"))
 										.selected(self.workspace_pane == WorkspacePane::Files)
 										.on_click(cx.listener(|this, _, _, cx| {
 											this.set_workspace_pane(WorkspacePane::Files, cx);
@@ -137,7 +118,7 @@ impl AppRoot {
 									Button::new("side-terminal")
 										.ghost()
 										.icon(IconName::SquareTerminal)
-										.label("Terminal")
+										.label(self.t("Terminal", "终端"))
 										.selected(
 											self.workspace_pane == WorkspacePane::Terminal,
 										)
@@ -154,7 +135,7 @@ impl AppRoot {
 						Button::new("new-project")
 							.ghost()
 							.icon(IconName::Plus)
-							.label("New Project")
+							.label(self.t("New Project", "新建项目"))
 							.on_click(cx.listener(|this, _, window, cx| {
 								this.open_create_project_dialog(window, cx);
 							})),
@@ -163,7 +144,7 @@ impl AppRoot {
 						Button::new("open-settings")
 							.ghost()
 							.icon(IconName::Settings)
-							.label("Settings")
+							.label(self.t("Settings", "设置"))
 							.selected(matches!(route, Route::Settings))
 							.on_click(cx.listener(|this, _, _, cx| {
 								this.open_settings(cx);
@@ -173,7 +154,7 @@ impl AppRoot {
 						Button::new("open-commands")
 							.ghost()
 							.icon(IconName::Info)
-							.label("Commands")
+							.label(self.t("Commands", "命令"))
 							.on_click(cx.listener(|this, _, window, cx| {
 								this.open_command_palette(window, cx);
 							})),
@@ -183,12 +164,55 @@ impl AppRoot {
 							Button::new("open-debug")
 								.ghost()
 								.icon(IconName::Info)
-								.label("Debug")
+								.label(self.t("Debug", "调试"))
 								.on_click(cx.listener(|this, _, _, cx| {
 									this.toggle_debug(cx);
 								})),
 						)
 					}),
 			)
+	}
+
+	fn project_menu_item(
+		&self,
+		project: &ProjectVm,
+		route: &Route,
+		cx: &mut Context<Self>,
+	) -> SidebarMenuItem {
+		let project_id = project.id.clone();
+		let profile_id = project
+			.default_profile()
+			.map(|profile| profile.id.clone())
+			.unwrap_or_default();
+		let active = matches!(
+			route,
+			Route::Workspace { project_id: current, .. }
+				if current == &project_id
+		);
+		SidebarMenuItem::new(project.name.clone())
+			.icon(Icon::new(IconName::Folder).size_4())
+			.active(active)
+			.default_open(active)
+			.click_to_toggle(true)
+			.children(project.profiles.iter().map(|profile| {
+				let project_id = project_id.clone();
+				let profile_id = profile.id.clone();
+				let selected = matches!(
+					route,
+					Route::Workspace { profile_id: current, .. }
+						if current == &profile_id
+				);
+				SidebarMenuItem::new(profile.branch_name.clone())
+					.icon(Icon::new(IconName::Folder).size_4())
+					.active(selected)
+					.on_click(cx.listener(move |this, _, _, cx| {
+						this.open_workspace(&project_id, &profile_id, cx);
+					}))
+			}))
+			.on_click(cx.listener(move |this, _, _, cx| {
+				if !profile_id.is_empty() {
+					this.open_workspace(&project_id, &profile_id, cx);
+				}
+			}))
 	}
 }
