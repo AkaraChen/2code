@@ -6,13 +6,14 @@ use vt100::Color;
 pub struct TermSpan {
 	pub text: String,
 	pub fg: u32,
+	pub bg: u32,
 }
 
-pub fn ansi_color_rgb(color: Color) -> u32 {
+pub fn ansi_color_rgb(color: Color, default: u32) -> u32 {
 	match color {
-		Color::Default => 0xE8E8E8,
+		Color::Default => default,
 		Color::Rgb(r, g, b) => u32::from_be_bytes([0, r, g, b]),
-		Color::Idx(index) => ANSI_16.get(index as usize).copied().unwrap_or(0xE8E8E8),
+		Color::Idx(index) => ANSI_16.get(index as usize).copied().unwrap_or(default),
 	}
 }
 
@@ -21,6 +22,9 @@ const ANSI_16: [u32; 16] = [
 	0x666666, 0xF14C4C, 0x23D18B, 0xF5F543, 0x3B8EEA, 0xD670D6, 0x29B8DB, 0xFFFFFF,
 ];
 
+const DEFAULT_FG: u32 = 0xE8E8E8;
+const DEFAULT_BG: u32 = 0x1E1E1E;
+
 pub fn screen_spans(parser: &vt100::Parser) -> Vec<Vec<TermSpan>> {
 	let screen = parser.screen();
 	let (rows, cols) = screen.size();
@@ -28,32 +32,39 @@ pub fn screen_spans(parser: &vt100::Parser) -> Vec<Vec<TermSpan>> {
 	for row in 0..rows {
 		let mut spans: Vec<TermSpan> = Vec::new();
 		let mut current_fg = None::<u32>;
+		let mut current_bg = None::<u32>;
 		let mut current = String::new();
+		let mut saw_glyph = false;
 		for col in 0..cols {
 			let Some(cell) = screen.cell(row, col) else {
 				continue;
 			};
 			let ch = cell.contents();
-			if ch.is_empty() {
-				continue;
-			}
-			let fg = ansi_color_rgb(cell.fgcolor());
-			if current_fg != Some(fg) && !current.is_empty() {
+			let glyph = if ch.is_empty() {
+				" ".to_string()
+			} else {
+				saw_glyph = true;
+				ch.to_string()
+			};
+			let fg = ansi_color_rgb(cell.fgcolor(), DEFAULT_FG);
+			let bg = ansi_color_rgb(cell.bgcolor(), DEFAULT_BG);
+			if (current_fg != Some(fg) || current_bg != Some(bg)) && !current.is_empty() {
 				spans.push(TermSpan {
 					text: std::mem::take(&mut current),
-					fg: current_fg.unwrap_or(0xE8E8E8),
+					fg: current_fg.unwrap_or(DEFAULT_FG),
+					bg: current_bg.unwrap_or(DEFAULT_BG),
 				});
 			}
 			current_fg = Some(fg);
-			current.push_str(&ch);
+			current_bg = Some(bg);
+			current.push_str(&glyph);
 		}
-		if !current.is_empty() {
+		if !current.is_empty() && saw_glyph {
 			spans.push(TermSpan {
 				text: current,
-				fg: current_fg.unwrap_or(0xE8E8E8),
+				fg: current_fg.unwrap_or(DEFAULT_FG),
+				bg: current_bg.unwrap_or(DEFAULT_BG),
 			});
-		}
-		if !spans.is_empty() {
 			lines.push(spans);
 		}
 	}
@@ -114,6 +125,7 @@ mod tests {
 		let lines = screen_spans(&parser);
 		assert!(!lines.is_empty());
 		assert!(lines[0].iter().any(|span| span.text.contains("red")));
-		assert_eq!(ansi_color_rgb(Color::Idx(1)), 0xCD3131);
+		assert_eq!(ansi_color_rgb(Color::Idx(1), DEFAULT_FG), 0xCD3131);
+		assert!(lines[0].iter().any(|span| span.fg == 0xCD3131));
 	}
 }

@@ -20,8 +20,9 @@ use crate::settings::AppSettings;
 use crate::sound;
 use crate::terminal::{TermSpan, keystroke_to_bytes};
 use crate::theme::TwoCodePalette;
+use crate::topbar;
 use model::filesystem::FileTreeGitStatusEntry;
-use model::project::{GitBranchInfo, GitCommit};
+use model::project::{GitBranchInfo, GitCommit, GitPullRequestStatus};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {
@@ -38,6 +39,7 @@ pub enum SettingsTab {
 	General,
 	Terminal,
 	Notifications,
+	Topbar,
 	About,
 }
 
@@ -89,6 +91,7 @@ pub struct AppRoot {
 	pub changed_files: Vec<FileTreeGitStatusEntry>,
 	pub selected_change: Option<String>,
 	pub git_ahead: u32,
+	pub pr_status: Option<GitPullRequestStatus>,
 	pub branches: Vec<GitBranchInfo>,
 	pub commits: Vec<GitCommit>,
 	pub selected_commit: Option<String>,
@@ -153,6 +156,7 @@ impl AppRoot {
 			changed_files: Vec::new(),
 			selected_change: None,
 			git_ahead: 0,
+			pr_status: None,
 			branches: Vec::new(),
 			commits: Vec::new(),
 			selected_commit: None,
@@ -321,6 +325,10 @@ impl AppRoot {
 			self.git_diff = self.backend.git_diff(&profile_id);
 			self.changed_files = self.backend.git_status(&profile_id);
 			self.git_ahead = self.backend.git_ahead(&profile_id);
+			self.pr_status = self.current_project().and_then(|project| {
+				self.backend
+					.pull_request_status(&project.folder, Some(&self.git_branch))
+			});
 			self.commits = self.backend.git_log(&profile_id);
 			self.files = self
 				.backend
@@ -923,6 +931,31 @@ impl AppRoot {
 		for tab in &self.terminals {
 			let _ = self.backend.resize_pty(&tab.id, rows, cols);
 		}
+	}
+
+	pub fn launch_topbar_app(&mut self, app_id: &str, cx: &mut Context<Self>) {
+		let Some(path) = self
+			.current_profile()
+			.map(|profile| profile.worktree_path.clone())
+			.or_else(|| self.current_project().map(|project| project.folder.clone()))
+		else {
+			self.error = Some("Open a project first.".into());
+			cx.notify();
+			return;
+		};
+		match topbar::open_app(app_id, &path) {
+			Ok(()) => self.error = None,
+			Err(error) => self.error = Some(error),
+		}
+		cx.notify();
+	}
+
+	pub fn set_workspace_pane(&mut self, pane: WorkspacePane, cx: &mut Context<Self>) {
+		self.workspace_pane = pane;
+		if pane == WorkspacePane::Terminal && self.profile_terminals().is_empty() {
+			self.ensure_profile_terminals();
+		}
+		cx.notify();
 	}
 }
 

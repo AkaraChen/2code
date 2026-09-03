@@ -455,6 +455,14 @@ impl Backend {
 	pub fn checkout_branch(&self, folder: &str, branch: &str) -> Result<(), AppError> {
 		infra::git::checkout_branch(folder, branch)
 	}
+
+	pub fn pull_request_status(
+		&self,
+		folder: &str,
+		branch: Option<&str>,
+	) -> Option<model::project::GitPullRequestStatus> {
+		service::project::get_pull_request_status_for_folder(folder, branch).ok().flatten()
+	}
 }
 
 #[cfg(test)]

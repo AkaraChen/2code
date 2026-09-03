@@ -20,6 +20,10 @@ pub struct AppSettings {
 	pub terminal_rows: u16,
 	#[serde(default = "default_terminal_cols")]
 	pub terminal_cols: u16,
+	#[serde(default = "default_editor_app")]
+	pub editor_app: String,
+	#[serde(default = "default_terminal_app")]
+	pub terminal_app: String,
 }
 
 impl Default for AppSettings {
@@ -36,6 +40,8 @@ impl Default for AppSettings {
 			notification_sound: default_notification_sound(),
 			terminal_rows: default_terminal_rows(),
 			terminal_cols: default_terminal_cols(),
+			editor_app: default_editor_app(),
+			terminal_app: default_terminal_app(),
 		}
 	}
 }
@@ -50,6 +56,14 @@ fn default_terminal_rows() -> u16 {
 
 fn default_terminal_cols() -> u16 {
 	120
+}
+
+fn default_editor_app() -> String {
+	"vscode".into()
+}
+
+fn default_terminal_app() -> String {
+	"ghostty".into()
 }
 
 impl AppSettings {

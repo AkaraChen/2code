@@ -6,13 +6,11 @@ use gpui_component::{
 	ActiveTheme, Icon, IconName, Sizable, StyledExt,
 	button::{Button, ButtonVariants},
 	h_flex, input::Input,
-	tab::{Tab, TabBar},
 	text::TextView,
 	v_flex,
 };
 
 use crate::app::{AppRoot, GitPane, WorkspacePane};
-use crate::theme::TwoCodePalette;
 
 impl AppRoot {
 	pub(crate) fn render_workspace(
@@ -32,114 +30,161 @@ impl AppRoot {
 		let pane = self.workspace_pane;
 		let stats = self.git_stats_label.clone();
 
+		let pr_label = self
+			.pr_status
+			.as_ref()
+			.map(|status| {
+				format!(
+					"#{} {}",
+					status.number,
+					if status.is_draft {
+						"draft"
+					} else {
+						status.state.as_str()
+					}
+				)
+			})
+			.unwrap_or_else(|| self.t("No PR", "无 PR").to_string());
+
 		v_flex()
 			.size_full()
 			.child(
 				h_flex()
-					.h(px(TwoCodePalette::HEADER_HEIGHT))
+					.flex_none()
+					.h(px(40.))
 					.px_3()
 					.gap_2()
-					.justify_between()
+					.items_center()
 					.border_b_1()
 					.border_color(cx.theme().border)
+					.child(div().text_sm().font_semibold().child(project_name))
 					.child(
-						h_flex()
-							.gap_2()
-							.items_center()
-							.child(div().text_sm().font_semibold().child(project_name))
-							.child(
-								h_flex()
-									.h(px(24.))
-									.px_2()
-									.rounded(px(6.))
-									.bg(cx.theme().muted)
-									.gap_1()
-									.child(Icon::new(IconName::Folder).size_3())
-									.child(
-										div()
-											.text_xs()
-											.text_color(cx.theme().muted_foreground)
-											.child(branch),
-									),
-							),
+						Button::new("switch-branch")
+							.ghost()
+							.xsmall()
+							.icon(IconName::Folder)
+							.label(branch)
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_branch_dialog(window, cx);
+							})),
 					)
 					.child(
-						h_flex()
-							.gap_2()
-							.child(
-								div()
-									.h(px(24.))
-									.px_2()
-									.rounded(px(6.))
-									.bg(cx.theme().muted)
-									.text_xs()
-									.text_color(cx.theme().muted_foreground)
-									.child(stats),
-							)
-							.child(
-								Button::new("switch-branch")
-									.ghost()
-									.label(self.t("Branch", "分支"))
-									.on_click(cx.listener(|this, _, window, cx| {
-										this.open_branch_dialog(window, cx);
-									})),
-							)
-							.child(
-								Button::new("new-profile")
-									.ghost()
-									.icon(IconName::Plus)
-									.label(self.t("New Profile", "新建配置"))
-									.on_click(cx.listener(|this, _, window, cx| {
-										this.open_create_profile_dialog(window, cx);
-									})),
-							)
-							.child(
-								Button::new("delete-profile")
-									.ghost()
-									.label(self.t("Delete Profile", "删除配置"))
-									.on_click(cx.listener(|this, _, window, cx| {
-										this.open_delete_profile_dialog(window, cx);
-									})),
-							)
-							.child(
-								Button::new("delete-project")
-									.ghost()
-									.icon(IconName::Delete)
-									.label(self.t("Delete", "删除"))
-									.on_click(cx.listener(|this, _, window, cx| {
-										this.open_delete_project_dialog(window, cx);
-									})),
-							),
+						div()
+							.text_xs()
+							.text_color(cx.theme().muted_foreground)
+							.child(stats),
+					)
+					.child(
+						div()
+							.text_xs()
+							.text_color(cx.theme().muted_foreground)
+							.child(pr_label),
+					)
+					.child(div().flex_1())
+					.child(
+						Button::new("topbar-editor")
+							.ghost()
+							.xsmall()
+							.icon(IconName::File)
+							.label(self.t("Editor", "编辑器"))
+							.on_click(cx.listener(|this, _, _, cx| {
+								let app = this.settings.editor_app.clone();
+								this.launch_topbar_app(&app, cx);
+							})),
+					)
+					.child(
+						Button::new("topbar-ext-term")
+							.ghost()
+							.xsmall()
+							.icon(IconName::SquareTerminal)
+							.label(self.t("App Term", "外部终端"))
+							.on_click(cx.listener(|this, _, _, cx| {
+								let app = this.settings.terminal_app.clone();
+								this.launch_topbar_app(&app, cx);
+							})),
+					)
+					.child(
+						Button::new("topbar-github")
+							.ghost()
+							.xsmall()
+							.label("GitHub")
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.launch_topbar_app("github-desktop", cx);
+							})),
+					)
+					.child(
+						Button::new("new-profile")
+							.ghost()
+							.xsmall()
+							.icon(IconName::Plus)
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_create_profile_dialog(window, cx);
+							})),
+					)
+					.child(
+						Button::new("delete-profile")
+							.ghost()
+							.xsmall()
+							.icon(IconName::Delete)
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_delete_profile_dialog(window, cx);
+							})),
+					)
+					.child(
+						Button::new("delete-project")
+							.ghost()
+							.xsmall()
+							.label(self.t("Project", "项目"))
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_delete_project_dialog(window, cx);
+							})),
 					),
 			)
 			.child(
-				TabBar::new("workspace-panes")
-					.selected_index(match pane {
-						WorkspacePane::Files => 0,
-						WorkspacePane::Git => 1,
-						WorkspacePane::Terminal => 2,
-					})
-					.on_click(cx.listener(|this, index: &usize, _, cx| {
-						this.workspace_pane = match index {
-							0 => WorkspacePane::Files,
-							1 => WorkspacePane::Git,
-							_ => WorkspacePane::Terminal,
-						};
-						cx.notify();
-					}))
-					.child(Tab::new().icon(IconName::File).label(self.t("Files", "文件")))
-					.child(Tab::new().icon(IconName::Folder).label("Git"))
-					.child(
-						Tab::new()
-							.icon(IconName::SquareTerminal)
-							.label(self.t("Terminal", "终端")),
-					),
+				h_flex()
+					.flex_none()
+					.h(px(36.))
+					.px_2()
+					.gap_1()
+					.items_center()
+					.bg(cx.theme().muted)
+					.border_b_1()
+					.border_color(cx.theme().border)
+					.child(self.pane_button("pane-files", self.t("Files", "文件"), pane == WorkspacePane::Files, WorkspacePane::Files, cx))
+					.child(self.pane_button("pane-git", "Git", pane == WorkspacePane::Git, WorkspacePane::Git, cx))
+					.child(self.pane_button(
+						"pane-terminal",
+						self.t("Terminal", "终端"),
+						pane == WorkspacePane::Terminal,
+						WorkspacePane::Terminal,
+						cx,
+					)),
 			)
 			.child(match pane {
 				WorkspacePane::Files => self.render_files_pane(cx).into_any_element(),
 				WorkspacePane::Git => self.render_git_pane(cx).into_any_element(),
 				WorkspacePane::Terminal => self.render_terminal_pane(cx).into_any_element(),
 			})
+	}
+
+	fn pane_button(
+		&self,
+		id: &'static str,
+		label: &str,
+		selected: bool,
+		pane: WorkspacePane,
+		cx: &mut Context<Self>,
+	) -> impl IntoElement {
+		let button = Button::new(id).label(label.to_string()).on_click(
+			cx.listener(move |this, _, _, cx| {
+				this.set_workspace_pane(pane, cx);
+			}),
+		);
+		if selected {
+			button.primary()
+		} else {
+			button.ghost()
+		}
 	}
 
 	fn render_files_pane(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -300,21 +345,38 @@ impl AppRoot {
 			.flex_1()
 			.min_h_0()
 			.child(
-				TabBar::new("git-panes")
-					.selected_index(match git_pane {
-						GitPane::Changes => 0,
-						GitPane::History => 1,
-					})
-					.on_click(cx.listener(|this, index: &usize, _, cx| {
-						this.git_pane = if *index == 0 {
-							GitPane::Changes
+				h_flex()
+					.flex_none()
+					.h(px(32.))
+					.px_2()
+					.gap_1()
+					.bg(cx.theme().muted)
+					.child({
+						let button = Button::new("git-changes")
+							.label(self.t("Changes", "变更"))
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.git_pane = GitPane::Changes;
+								cx.notify();
+							}));
+						if git_pane == GitPane::Changes {
+							button.primary()
 						} else {
-							GitPane::History
-						};
-						cx.notify();
-					}))
-					.child(Tab::new().label(self.t("Changes", "变更")))
-					.child(Tab::new().label(self.t("History", "历史"))),
+							button.ghost()
+						}
+					})
+					.child({
+						let button = Button::new("git-history")
+							.label(self.t("History", "历史"))
+							.on_click(cx.listener(|this, _, _, cx| {
+								this.git_pane = GitPane::History;
+								cx.notify();
+							}));
+						if git_pane == GitPane::History {
+							button.primary()
+						} else {
+							button.ghost()
+						}
+					}),
 			)
 			.child(match git_pane {
 				GitPane::Changes => self.render_git_changes(cx, diff).into_any_element(),
@@ -542,27 +604,35 @@ impl AppRoot {
 			} else {
 				this.child(
 					h_flex()
+						.flex_none()
+						.h(px(32.))
+						.px_2()
+						.gap_1()
+						.items_center()
 						.justify_between()
 						.child(
-							TabBar::new("terminal-tabs")
-								.selected_index(selected)
-								.on_click(cx.listener(|this, index: &usize, _, cx| {
-									if let Some(tab) = this.terminals.get(*index).cloned() {
-										this.activate_terminal(&tab.id, cx);
+							h_flex().gap_1().children(terminals.into_iter().enumerate().map(|(index, tab)| {
+								let label = match tab.status {
+									Some(crate::detector::AgentStatus::Running) => {
+										format!("● {}", tab.title)
 									}
-								}))
-								.children(terminals.into_iter().map(|tab| {
-									let label = match tab.status {
-										Some(crate::detector::AgentStatus::Running) => {
-											format!("● {}", tab.title)
-										}
-										Some(crate::detector::AgentStatus::Waiting) => {
-											format!("◐ {}", tab.title)
-										}
-										_ => tab.title,
-									};
-									Tab::new().label(label)
-								})),
+									Some(crate::detector::AgentStatus::Waiting) => {
+										format!("◐ {}", tab.title)
+									}
+									_ => tab.title,
+								};
+								let session_id = tab.id;
+								let button = Button::new(format!("term-tab-{index}"))
+									.label(label)
+									.on_click(cx.listener(move |this, _, _, cx| {
+										this.activate_terminal(&session_id, cx);
+									}));
+								if selected == index {
+									button.primary()
+								} else {
+									button.ghost()
+								}
+							})),
 						)
 						.child(
 							h_flex()
@@ -614,6 +684,7 @@ impl AppRoot {
 								.children(spans.into_iter().map(|line| {
 									h_flex().children(line.into_iter().map(|span| {
 										div()
+											.bg(gpui::rgb(span.bg))
 											.text_color(gpui::rgb(span.fg))
 											.child(span.text)
 									}))

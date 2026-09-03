@@ -296,6 +296,33 @@ impl AppRoot {
 								});
 							}
 						}))
+						.child(palette_action("cmd-files", "Files Pane", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| {
+									this.set_workspace_pane(crate::app::WorkspacePane::Files, cx);
+								});
+							}
+						}))
+						.child(palette_action("cmd-git", "Git Pane", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| {
+									this.set_workspace_pane(crate::app::WorkspacePane::Git, cx);
+								});
+							}
+						}))
+						.child(palette_action("cmd-terminal-pane", "Terminal Pane", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| {
+									this.set_workspace_pane(
+										crate::app::WorkspacePane::Terminal,
+										cx,
+									);
+								});
+							}
+						}))
 						.child(palette_action("cmd-new-terminal", "New Terminal", {
 							let view = view.clone();
 							move |_, _, cx| {

@@ -29,13 +29,15 @@ impl AppRoot {
 						SettingsTab::General => 0,
 						SettingsTab::Terminal => 1,
 						SettingsTab::Notifications => 2,
-						SettingsTab::About => 3,
+						SettingsTab::Topbar => 3,
+						SettingsTab::About => 4,
 					})
 					.on_click(cx.listener(|this, index: &usize, _, cx| {
 						this.settings_tab = match index {
 							0 => SettingsTab::General,
 							1 => SettingsTab::Terminal,
 							2 => SettingsTab::Notifications,
+							3 => SettingsTab::Topbar,
 							_ => SettingsTab::About,
 						};
 						cx.notify();
@@ -43,6 +45,7 @@ impl AppRoot {
 					.child(Tab::new().icon(IconName::Settings).label(self.t("General", "通用")))
 					.child(Tab::new().icon(IconName::SquareTerminal).label(self.t("Terminal", "终端")))
 					.child(Tab::new().icon(IconName::Info).label(self.t("Notifications", "通知")))
+					.child(Tab::new().icon(IconName::Folder).label(self.t("Top Bar", "顶栏")))
 					.child(Tab::new().icon(IconName::Info).label(self.t("About", "关于"))),
 			)
 			.child(match tab {
@@ -55,6 +58,7 @@ impl AppRoot {
 				SettingsTab::Notifications => self
 					.render_notification_settings(cx)
 					.into_any_element(),
+				SettingsTab::Topbar => self.render_topbar_settings(cx).into_any_element(),
 				SettingsTab::About => self.render_about().into_any_element(),
 			})
 	}
@@ -312,6 +316,72 @@ impl AppRoot {
 				"Sound",
 				div().text_sm().child(self.settings.notification_sound.clone()),
 			))
+	}
+
+	fn render_topbar_settings(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+		let editor = self.settings.editor_app.clone();
+		let terminal = self.settings.terminal_app.clone();
+		v_flex()
+			.max_w(px(448.))
+			.gap_6()
+			.child(self.setting_field(
+				"Editor",
+				h_flex().gap_2().children(crate::topbar::EDITOR_APPS.iter().map(|spec| {
+					let id = spec.id;
+					let selected = editor == spec.id;
+					let button = Button::new(format!("editor-{id}"))
+						.label(spec.label)
+						.on_click(cx.listener(move |this, _, _, cx| {
+							this.settings.editor_app = id.to_string();
+							this.persist_settings();
+							cx.notify();
+						}));
+					if selected {
+						button.primary()
+					} else {
+						button.ghost()
+					}
+				})),
+			))
+			.child(self.setting_field(
+				"External terminal",
+				h_flex().gap_2().children(crate::topbar::TERMINAL_APPS.iter().map(|spec| {
+					let id = spec.id;
+					let selected = terminal == spec.id;
+					let button = Button::new(format!("termapp-{id}"))
+						.label(spec.label)
+						.on_click(cx.listener(move |this, _, _, cx| {
+							this.settings.terminal_app = id.to_string();
+							this.persist_settings();
+							cx.notify();
+						}));
+					if selected {
+						button.primary()
+					} else {
+						button.ghost()
+					}
+				})),
+			))
+			.child(
+				div()
+					.text_xs()
+					.text_color(cx.theme().muted_foreground)
+					.child(format!(
+						"{} {}",
+						self.t("Detected:", "已检测："),
+						crate::topbar::list_available_ids(crate::topbar::EDITOR_APPS)
+							.into_iter()
+							.chain(crate::topbar::list_available_ids(
+								crate::topbar::TERMINAL_APPS,
+							))
+							.chain(
+								crate::topbar::is_available("github-desktop")
+									.then_some("github-desktop"),
+							)
+							.collect::<Vec<_>>()
+							.join(", ")
+					)),
+			)
 	}
 
 	fn render_about(&self) -> impl IntoElement {

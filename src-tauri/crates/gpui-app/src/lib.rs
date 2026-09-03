@@ -7,6 +7,7 @@ mod settings;
 mod sound;
 mod terminal;
 mod theme;
+mod topbar;
 mod views;
 
 use gpui::{

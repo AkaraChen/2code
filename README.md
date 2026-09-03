@@ -111,7 +111,7 @@ cd src-tauri && cargo build -p gpui-app --release
 
 ```text
 2code/
-├── src/                        # React + Vite frontend
+├── src/                        # Leftover Tauri/React UI (legacy-tauri only)
 │   ├── features/               # Feature-first app modules
 │   ├── shared/                 # Shared lib, providers, components, hooks
 │   ├── layout/                 # App shell and sidebar

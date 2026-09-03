@@ -31,7 +31,7 @@ cd src-tauri && cargo run -p gpui-app
 
 - Home empty state and project cards
 - Project sidebar with profiles
-- Workspace panes via native `TabBar`: Files (preview + markdown `TextView`), Git (Changes / History), Terminal tabs + PTY
+- Workspace chrome: Files / Git / Terminal pane switcher, native top bar (editor / external terminal / GitHub Desktop / PR status)
 - Settings (language, theme, debug, terminal font) via `Switch` / `TabBar`
 - Native `Dialog` / `AlertDialog` for create project, create profile, delete, and command palette
 - vt100-backed PTY screen + raw key input, color spans, resize, and session restore
