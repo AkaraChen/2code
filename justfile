@@ -4,6 +4,13 @@ start:
 fmt:
     fama "./src/**/*.{ts,tsx}"
     cd src-tauri && cargo fmt
+    cd src-gpui && cargo fmt
+
+gpui:
+    cd src-gpui && cargo run
+
+gpui-check:
+    cd src-gpui && cargo check
 
 test-frontend:
     bun run test

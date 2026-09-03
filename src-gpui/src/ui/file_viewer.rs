@@ -1,0 +1,167 @@
+use gpui::{div, prelude::*, px, Context, Window};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::Input;
+use gpui_component::text::TextView;
+use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable, StyledExt};
+
+use crate::app::AppView;
+use crate::backend;
+use crate::state::UnifiedTab;
+
+pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let Some(ws) = app.data.current_ws() else {
+		return div().id("file-viewer-none").into_any_element();
+	};
+	let Some(UnifiedTab::File { index }) = ws.active else {
+		return div().id("file-viewer-hidden").into_any_element();
+	};
+	let Some(file) = ws.files.get(index).cloned() else {
+		return div().id("file-viewer-missing").into_any_element();
+	};
+
+	if file.preview {
+		return v_flex()
+			.id("binary-preview")
+			.size_full()
+			.child(
+				h_flex()
+					.w_full()
+					.min_h(px(36.))
+					.px_3()
+					.bg(theme.muted)
+					.justify_between()
+					.child(div().text_sm().child(file.title.clone()))
+					.child(div().text_xs().child("Preview")),
+			)
+			.child(
+				v_flex()
+					.flex_1()
+					.items_center()
+					.justify_center()
+					.gap_2()
+					.child(div().text_color(theme.muted_foreground).child(file.preview_kind.clone()))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(if file.binary_note.is_empty() {
+								"Preview unavailable".to_string()
+							} else {
+								file.binary_note
+							}),
+					),
+			)
+			.into_any_element();
+	}
+
+	if backend::is_markdown(&file.path) {
+		return v_flex()
+			.id("markdown-viewer")
+			.size_full()
+			.child(
+				h_flex()
+					.w_full()
+					.px_2()
+					.py_1()
+					.gap_1()
+					.border_b_1()
+					.border_color(theme.border)
+					.child(md_btn("md-h1", "H1", "# ", &view))
+					.child(md_btn("md-h2", "H2", "## ", &view))
+					.child(md_btn("md-h3", "H3", "### ", &view))
+					.child(md_btn("md-b", "B", "**", &view))
+					.child(md_btn("md-i", "I", "*", &view))
+					.child(md_btn("md-code", "`", "`", &view))
+					.child(
+						Button::new("md-save")
+							.xsmall()
+							.primary()
+							.label(app.t("save"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										app.save_active_file(window, cx);
+										cx.notify();
+									});
+								}
+							}),
+					),
+			)
+			.child(
+				h_flex()
+					.flex_1()
+					.min_h_0()
+					.child(
+						div()
+							.flex_1()
+							.h_full()
+							.child(Input::new(&app.inputs.file_editor)),
+					)
+					.child(
+						div()
+							.flex_1()
+							.h_full()
+							.p_3()
+							.border_l_1()
+							.border_color(theme.border)
+							.child(TextView::markdown(
+								"md-preview",
+								file.draft.clone(),
+								window,
+								cx,
+							)),
+					),
+			)
+			.into_any_element();
+	}
+
+	v_flex()
+		.id("text-viewer")
+		.size_full()
+		.child(
+			h_flex()
+				.w_full()
+				.px_2()
+				.py_1()
+				.justify_end()
+				.border_b_1()
+				.border_color(theme.border)
+				.child(
+					Button::new("file-save")
+						.xsmall()
+						.primary()
+						.label(app.t("save"))
+						.on_click({
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									app.save_active_file(window, cx);
+									cx.notify();
+								});
+							}
+						}),
+				),
+		)
+		.child(div().flex_1().min_h_0().child(Input::new(&app.inputs.file_editor)))
+		.into_any_element()
+}
+
+fn md_btn(id: &'static str, label: &'static str, wrap: &'static str, view: &gpui::Entity<AppView>) -> impl IntoElement {
+	let view = view.clone();
+	Button::new(id)
+		.ghost()
+		.xsmall()
+		.label(label)
+		.on_click(move |_, window, cx| {
+			view.update(cx, |app, cx| {
+				let mut text = app.inputs.file_editor.read(cx).value().to_string();
+				text.push_str(wrap);
+				app.inputs.file_editor.update(cx, |s, cx| {
+					s.set_value(text, window, cx);
+				});
+			});
+		})
+}

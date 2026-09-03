@@ -1,0 +1,131 @@
+use gpui::{div, prelude::*, px, Context, Window};
+use gpui_component::input::Input;
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, StyledExt};
+
+use crate::app::AppView;
+
+pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	if !app.data.overlay.palette_open {
+		return div().id("palette-closed").into_any_element();
+	}
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let q = app.inputs.palette.read(cx).value().to_string();
+	let results = app.data.overlay.palette_results.clone();
+	let selected = app.data.overlay.palette_index;
+
+	div()
+		.id("palette-mask")
+		.absolute()
+		.inset_0()
+		.bg(gpui::hsla(0., 0., 0., 0.4))
+		.on_click({
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					app.data.overlay.palette_open = false;
+					cx.notify();
+				});
+			}
+		})
+		.child(
+			v_flex()
+				.id("command-palette")
+				.absolute()
+				.top(px(72.))
+				.left_0()
+				.right_0()
+				.mx_auto()
+				.w(px(640.))
+				.max_h(px(520.))
+				.rounded_lg()
+				.bg(theme.background)
+				.border_1()
+				.border_color(theme.border)
+				.shadow_lg()
+				.on_click(|_, _, _| {})
+				.child(
+					div()
+						.px_4()
+						.py_3()
+						.border_b_1()
+						.border_color(theme.border)
+						.child(Input::new(&app.inputs.palette)),
+				)
+				.child(if q.is_empty() {
+					div()
+						.p_4()
+						.text_sm()
+						.text_color(theme.muted_foreground)
+						.child(app.t("commandPaletteEmpty"))
+						.into_any_element()
+				} else if results.is_empty() {
+					v_flex()
+						.p_4()
+						.gap_1()
+						.child(div().child(app.t("commandPaletteNoResults")))
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("commandPaletteNoResultsHint")),
+						)
+						.into_any_element()
+				} else {
+					v_flex()
+						.max_h(px(360.))
+						.children(results.iter().enumerate().map(|(ix, r)| {
+							h_flex()
+								.id(crate::ui::eid(format!("pal-{ix}")))
+								.px_3()
+								.py_2()
+								.gap_2()
+								.when(ix == selected, |el| el.bg(theme.muted))
+								.on_click({
+									let view = view.clone();
+									move |_, window, cx| {
+										view.update(cx, |app, cx| {
+											app.data.overlay.palette_index = ix;
+											app.open_palette_selection(window, cx);
+											cx.notify();
+										});
+									}
+								})
+								.child(Icon::new(IconName::File).w(px(16.)))
+								.child(div().text_sm().child(r.name.clone()))
+								.child(
+									div()
+										.text_xs()
+										.text_color(theme.muted_foreground)
+										.child(r.relative_path.clone()),
+								)
+						}))
+						.into_any_element()
+				})
+				.child(
+					h_flex()
+						.px_3()
+						.py_2()
+						.border_t_1()
+						.border_color(theme.border)
+						.justify_between()
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(crate::i18n::tf(
+									app.data.locale,
+									"commandPaletteResultCount",
+									&[("count", &results.len().to_string())],
+								)),
+						)
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("commandPaletteFooterHint")),
+						),
+				),
+		)
+		.into_any_element()
+}

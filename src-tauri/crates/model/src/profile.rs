@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::project::GitDiffStats;
 
-#[derive(Queryable, Selectable, Serialize)]
+#[derive(Queryable, Selectable, Serialize, Clone, Debug)]
 #[diesel(table_name = profiles)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Profile {

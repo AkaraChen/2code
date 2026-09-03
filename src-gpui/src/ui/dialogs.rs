@@ -1,0 +1,700 @@
+use gpui::{div, prelude::*, px, Context, Window};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::{Disableable, Selectable};
+use gpui_component::input::Input;
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+
+use crate::app::AppView;
+use crate::backend;
+use crate::state::{ContextMenu, DialogKind};
+
+pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	div()
+		.id("overlays")
+		.absolute()
+		.inset_0()
+		.child(context_menu(app, cx))
+		.child(dialog(app, window, cx))
+}
+
+fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+	let Some(kind) = app.data.overlay.dialog else {
+		return div().id("no-dialog").into_any_element();
+	};
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let title = match kind {
+		DialogKind::CreateProject => app.t("createProject"),
+		DialogKind::DeleteProject => app.t("deleteProject"),
+		DialogKind::RenameProject => app.t("rename"),
+		DialogKind::ProjectSettings => app.t("projectSettings"),
+		DialogKind::CreateProfile => app.t("createProfile"),
+		DialogKind::DeleteProfile => app.t("deleteProfile"),
+		DialogKind::CloseUnsaved => app.t("closeUnsavedFileTitle"),
+		DialogKind::SwitchBranch => app.t("switchBranchTitle"),
+		DialogKind::OpenLink => app.t("terminalOpenLink"),
+		DialogKind::ChooseFile => app.t("terminalChooseFilePath"),
+		DialogKind::EditTemplate => app.t("editTerminalTemplate"),
+		DialogKind::ReviewQueue => app.t("reviewQueue"),
+		DialogKind::DebugLog => app.t("debugLog"),
+		DialogKind::CreateGroup => app.t("createProjectGroup"),
+	};
+
+	div()
+		.id("dialog-mask")
+		.absolute()
+		.inset_0()
+		.flex()
+		.items_center()
+		.justify_center()
+		.bg(gpui::hsla(0., 0., 0., 0.12))
+		.on_click({
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					app.data.overlay.dialog = None;
+					cx.notify();
+				});
+			}
+		})
+		.child(
+			v_flex()
+				.id("dialog-panel")
+				.w(px(if matches!(kind, DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog) {
+					560.
+				} else {
+					380.
+				}))
+				.max_h(px(640.))
+				.p_4()
+				.gap_3()
+				.rounded_xl()
+				.bg(theme.background)
+				.border_1()
+				.border_color(theme.border)
+				.shadow_lg()
+				.on_click(|_, _, _| {})
+				.child(
+					h_flex()
+						.justify_between()
+						.child(div().font_semibold().child(title))
+						.child(
+							Button::new("dlg-x")
+								.ghost()
+								.xsmall()
+								.icon(IconName::Close)
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.data.overlay.dialog = None;
+											cx.notify();
+										});
+									}
+								}),
+						),
+				)
+				.child(dialog_body(app, kind, window, cx))
+				.child(dialog_footer(app, kind, cx)),
+		)
+		.into_any_element()
+}
+
+fn dialog_body(
+	app: &mut AppView,
+	kind: DialogKind,
+	_window: &mut Window,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	match kind {
+		DialogKind::CreateProject => {
+			let folder = app.data.overlay.dialog_folder.clone();
+			let hint = if folder.is_none() {
+				app.t("createProjectChooseFolderHint")
+			} else if app.inputs.project_name.read(cx).value().is_empty() {
+				app.t("createProjectHintFolderEmpty")
+			} else {
+				app.t("createProjectHintFolderNamed")
+			};
+			v_flex()
+				.gap_3()
+				.child(if let Some(folder) = folder.clone() {
+					v_flex()
+						.gap_1()
+						.child(
+							h_flex()
+								.justify_between()
+								.child(div().text_sm().child(app.t("folder")))
+								.child(
+									Button::new("rechoose")
+										.xsmall()
+										.label(app.t("chooseFolder"))
+										.on_click({
+											let view = view.clone();
+											move |_, _, cx| {
+												view.update(cx, |app, cx| {
+													if let Some(p) = backend::pick_folder() {
+														app.data.overlay.dialog_folder = Some(p);
+													}
+													cx.notify();
+												});
+											}
+										}),
+								),
+						)
+						.child(
+							div()
+								.p_2()
+								.rounded_md()
+								.bg(theme.muted)
+								.font_family("monospace")
+								.text_xs()
+								.child(folder),
+						)
+						.into_any_element()
+				} else {
+					div()
+						.id("choose-folder-big")
+						.w_full()
+						.h(px(88.))
+						.rounded_lg()
+						.border_1()
+						.border_color(theme.border)
+						.flex()
+						.flex_col()
+						.items_center()
+						.justify_center()
+						.gap_2()
+						.hover(|el| el.bg(theme.muted))
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									if let Some(p) = backend::pick_folder() {
+										app.data.overlay.dialog_folder = Some(p);
+									}
+									cx.notify();
+								});
+							}
+						})
+						.child(Icon::new(IconName::Folder).w(px(24.)))
+						.child(div().text_sm().child(app.t("chooseFolder")))
+						.into_any_element()
+				})
+				.child(div().text_sm().child(app.t("projectName")))
+				.child(Input::new(&app.inputs.project_name))
+				.child(div().text_xs().text_color(theme.muted_foreground).child(hint))
+				.into_any_element()
+		}
+		DialogKind::DeleteProject => div()
+			.text_sm()
+			.child(app.t("confirmDeleteProject"))
+			.into_any_element(),
+		DialogKind::RenameProject => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("newName")))
+			.child(Input::new(&app.inputs.rename))
+			.into_any_element(),
+		DialogKind::ProjectSettings => v_flex()
+			.gap_2()
+			.child(
+				h_flex()
+					.gap_2()
+					.child(
+						Button::new("ps-scripts")
+							.small()
+							.selected(app.data.overlay.project_settings_tab == 0)
+							.icon(IconName::ALargeSmall)
+							.label(app.t("scripts"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.data.overlay.project_settings_tab = 0;
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("ps-templates")
+							.small()
+							.selected(app.data.overlay.project_settings_tab == 1)
+							.icon(IconName::SquareTerminal)
+							.label(app.t("templates"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.data.overlay.project_settings_tab = 1;
+										cx.notify();
+									});
+								}
+							}),
+					),
+			)
+			.child(if app.data.overlay.project_settings_tab == 0 {
+				v_flex()
+					.gap_2()
+					.child(div().text_sm().child(app.t("projectWorktreeDir")))
+					.child(div().text_xs().text_color(theme.muted_foreground).child(app.t("projectWorktreeDirDesc")))
+					.child(Input::new(&app.inputs.worktree))
+					.child(div().text_sm().child(app.t("initScript")))
+					.child(Input::new(&app.inputs.init_script))
+					.child(div().text_sm().child(app.t("setupScript")))
+					.child(Input::new(&app.inputs.setup_script))
+					.child(div().text_sm().child(app.t("teardownScript")))
+					.child(Input::new(&app.inputs.teardown_script))
+					.into_any_element()
+			} else {
+				v_flex()
+					.gap_2()
+					.child(div().text_sm().child(app.t("projectTerminalTemplates")))
+					.child(div().text_xs().text_color(theme.muted_foreground).child(app.t("projectTerminalTemplatesDescription")))
+					.into_any_element()
+			})
+			.into_any_element(),
+		DialogKind::CreateProfile => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("branchName")))
+			.child(Input::new(&app.inputs.profile_branch))
+			.into_any_element(),
+		DialogKind::DeleteProfile => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("confirmDeleteProfile")))
+			.when(app.data.overlay.dialog_busy, |el| {
+				el.child(div().text_xs().child(app.t("deleteProfileCheckingGitStatus")))
+			})
+			.when_some(app.data.overlay.delete_warning.clone(), |el, warn| {
+				el.child(
+					div()
+						.p_2()
+						.rounded_md()
+						.bg(theme.warning)
+						.child(div().font_semibold().child(app.t("deleteProfileGitWarningTitle")))
+						.child(div().text_sm().child(warn)),
+				)
+			})
+			.into_any_element(),
+		DialogKind::CloseUnsaved => div().text_sm().child(crate::i18n::tf(
+			app.data.locale,
+			"closeUnsavedFileDescription",
+			&[("file", app.data.overlay.dialog_file.as_deref().unwrap_or(""))],
+		)).into_any_element(),
+		DialogKind::SwitchBranch => {
+			let q = app.inputs.branch_search.read(cx).value().to_string();
+			let branches: Vec<_> = app
+				.data
+				.overlay
+				.branches
+				.iter()
+				.filter(|b| q.is_empty() || b.name.to_ascii_lowercase().contains(&q.to_ascii_lowercase()))
+				.cloned()
+				.collect();
+			v_flex()
+				.gap_2()
+				.child(Input::new(&app.inputs.branch_search))
+				.child(if branches.is_empty() {
+					div().p_3().child(app.t("noBranchesFound")).into_any_element()
+				} else {
+					v_flex()
+						.max_h(px(320.))
+						.children(branches.into_iter().map(|b| {
+							let name = b.name.clone();
+							let disabled = b.is_current || b.is_used;
+							h_flex()
+								.id(crate::ui::eid(format!("br-{name}")))
+								.px_2()
+								.py_1()
+								.gap_2()
+								.rounded_md()
+								.when(b.is_current, |el| el.bg(theme.muted))
+								.hover(|el| el.bg(theme.muted))
+								.on_click({
+									let view = view.clone();
+									let name = name.clone();
+									move |_, _, cx| {
+										if disabled {
+											return;
+										}
+										view.update(cx, |app, cx| {
+											app.checkout_branch(&name);
+											cx.notify();
+										});
+									}
+								})
+								.child(div().flex_1().child(name))
+								.when(b.is_current, |el| el.child(badge(&app.t("branchCurrentLabel"), theme.muted_foreground)))
+								.when(b.is_trunk, |el| el.child(badge(&app.t("branchTrunkLabel"), theme.muted_foreground)))
+								.when(b.is_used, |el| el.child(badge(&app.t("branchUsedLabel"), theme.warning)))
+								.when(b.ahead > 0, |el| el.child(div().text_xs().child(format!("↑{}", b.ahead))))
+								.when(b.behind > 0, |el| el.child(div().text_xs().child(format!("↓{}", b.behind))))
+						}))
+						.into_any_element()
+				})
+				.into_any_element()
+		}
+		DialogKind::OpenLink => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("terminalOpenLinkConfirmDescription")))
+			.child(div().font_family("monospace").text_xs().child(app.data.overlay.dialog_url.clone().unwrap_or_default()))
+			.into_any_element(),
+		DialogKind::ChooseFile => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("terminalChooseFilePathDescription")))
+			.children(app.data.overlay.fuzzy_files.iter().map(|f| {
+				let path = f.path.clone();
+				div()
+					.id(crate::ui::eid(format!("fuzzy-{path}")))
+					.px_2()
+					.py_1()
+					.on_click({
+						let view = view.clone();
+						let path = path.clone();
+						move |_, window, cx| {
+							view.update(cx, |app, cx| {
+								if let Some(pid) = app.data.current_profile.clone() {
+									app.open_file(&pid, &path, window, cx);
+								}
+								app.data.overlay.dialog = None;
+								cx.notify();
+							});
+						}
+					})
+					.child(f.name.clone())
+			}))
+			.into_any_element(),
+		DialogKind::EditTemplate => v_flex()
+			.gap_2()
+			.child(Input::new(&app.inputs.template_name))
+			.child(Input::new(&app.inputs.template_shell))
+			.child(Input::new(&app.inputs.template_cwd))
+			.child(Input::new(&app.inputs.template_commands))
+			.into_any_element(),
+		DialogKind::ReviewQueue => v_flex()
+			.gap_2()
+			.children(app.data.overlay.review_comments.iter().map(|c| div().child(c.clone())))
+			.when(app.data.overlay.review_comments.is_empty(), |el| {
+				el.child(div().text_color(theme.muted_foreground).child("—"))
+			})
+			.into_any_element(),
+		DialogKind::DebugLog => crate::ui::debug::render_panel(app, _window, cx).into_any_element(),
+		DialogKind::CreateGroup => v_flex()
+			.gap_2()
+			.child(div().text_sm().child(app.t("projectGroupName")))
+			.child(Input::new(&app.inputs.group_name))
+			.into_any_element(),
+	}
+}
+
+fn badge(text: &str, color: gpui::Hsla) -> impl IntoElement {
+	div()
+		.px_1()
+		.text_xs()
+		.rounded_md()
+		.bg(color)
+		.child(text.to_string())
+}
+
+fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> impl IntoElement {
+	let view = cx.entity();
+	let danger = matches!(
+		kind,
+		DialogKind::DeleteProject | DialogKind::DeleteProfile | DialogKind::CloseUnsaved
+	);
+	let ok = match kind {
+		DialogKind::CreateProject => app.t("create"),
+		DialogKind::DeleteProject => app.t("delete"),
+		DialogKind::RenameProject => app.t("rename"),
+		DialogKind::ProjectSettings => app.t("save"),
+		DialogKind::CreateProfile => app.t("create"),
+		DialogKind::DeleteProfile => {
+			if app.data.overlay.delete_warning.is_some() {
+				app.t("deleteProfileAnyway")
+			} else {
+				app.t("delete")
+			}
+		}
+		DialogKind::CloseUnsaved => app.t("discardChanges"),
+		DialogKind::OpenLink => app.t("browserOpenDefault"),
+		DialogKind::CreateGroup => app.t("create"),
+		DialogKind::ReviewQueue => app.t("reviewCommentsCopied"),
+		_ => app.t("cancel"),
+	};
+	let show_ok = !matches!(kind, DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile);
+
+	h_flex()
+		.justify_end()
+		.gap_2()
+		.child(
+			Button::new("dlg-cancel")
+				.small()
+				.label(app.t("cancel"))
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.data.overlay.dialog = None;
+							cx.notify();
+						});
+					}
+				}),
+		)
+		.when(show_ok, |el| {
+			el.child(
+				Button::new("dlg-ok")
+					.small()
+					.when(danger, |b| b.danger())
+					.when(!danger, |b| b.primary())
+					.label(ok)
+					.disabled(matches!(kind, DialogKind::CreateProject) && app.data.overlay.dialog_folder.is_none())
+					.on_click({
+						let view = view.clone();
+						move |_, window, cx| {
+							view.update(cx, |app, cx| {
+								match kind {
+									DialogKind::CreateProject => app.create_project_from_dialog(window, cx),
+									DialogKind::DeleteProject => app.delete_current_dialog_project(),
+									DialogKind::RenameProject => app.rename_dialog_project(cx),
+									DialogKind::ProjectSettings => app.save_project_settings(cx),
+									DialogKind::CreateProfile => app.create_profile_from_dialog(cx),
+									DialogKind::DeleteProfile => app.delete_dialog_profile(),
+									DialogKind::CloseUnsaved => {
+										if let (Some(pid), Some(path)) = (
+											app.data.current_profile.clone(),
+											app.data.overlay.pending_close_file.clone(),
+										) {
+											app.close_file(&pid, &path);
+										}
+										app.data.overlay.dialog = None;
+									}
+									DialogKind::OpenLink => {
+										if let Some(url) = app.data.overlay.dialog_url.clone() {
+											let _ = open::that(url);
+										}
+										app.data.overlay.dialog = None;
+									}
+									DialogKind::CreateGroup => {
+										let name = app.inputs.group_name.read(cx).value().to_string();
+										if let Ok(group) = app.backend.create_group(&name) {
+											if let Some(pid) = app.data.overlay.dialog_project.clone() {
+												let _ = app.backend.assign_to_group(&pid, Some(group.id));
+											}
+											app.reload_projects();
+										}
+										app.data.overlay.dialog = None;
+									}
+									DialogKind::ReviewQueue => {
+										let text = app.data.overlay.review_comments.join("\n");
+										cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+										app.data.push_toast(
+											crate::state::ToastKind::Success,
+											app.t("reviewCommentsCopied"),
+											"",
+										);
+									}
+									_ => app.data.overlay.dialog = None,
+								}
+								cx.notify();
+							});
+						}
+					}),
+			)
+		})
+}
+
+fn context_menu(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
+	let Some((menu, x, y)) = app.data.overlay.context_menu.clone() else {
+		return div().id("no-ctx").into_any_element();
+	};
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let items = menu_items(app, &menu);
+
+	div()
+		.id("ctx-mask")
+		.absolute()
+		.inset_0()
+		.on_click({
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					app.data.overlay.context_menu = None;
+					cx.notify();
+				});
+			}
+		})
+		.child(
+			v_flex()
+				.id("ctx-menu")
+				.absolute()
+				.left(px(x))
+				.top(px(y))
+				.min_w(px(220.))
+				.py_1()
+				.rounded_lg()
+				.bg(theme.background)
+				.border_1()
+				.border_color(theme.border)
+				.shadow_md()
+				.children(items.into_iter().map(|(label, danger, action)| {
+					div()
+						.id(crate::ui::eid(format!("ctx-{label}")))
+						.px_3()
+						.py_1()
+						.text_sm()
+						.when(danger, |el| el.text_color(theme.danger))
+						.hover(|el| el.bg(theme.muted))
+						.on_click({
+							let view = view.clone();
+							let menu = menu.clone();
+							move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									run_menu(app, &menu, action, window, cx);
+									app.data.overlay.context_menu = None;
+									cx.notify();
+								});
+							}
+						})
+						.child(label)
+				})),
+		)
+		.into_any_element()
+}
+
+#[derive(Clone, Copy)]
+enum MenuAction {
+	AddToGroup,
+	CreateGroup,
+	RemoveGroup,
+	ProjectSettings,
+	Rename,
+	DeleteProject,
+	DeleteProfile,
+	Open,
+	OpenDefault,
+	Reveal,
+	Refresh,
+	NewFile,
+	NewFolder,
+	RenamePath,
+	CopyRel,
+	CopyAbs,
+	DeletePath,
+	Template(usize),
+	NewTerm,
+}
+
+fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuAction)> {
+	match menu {
+		ContextMenu::Project { .. } => vec![
+			(app.t("addToProjectGroup"), false, MenuAction::AddToGroup),
+			(app.t("createProjectGroup"), false, MenuAction::CreateGroup),
+			(app.t("removeFromProjectGroup"), false, MenuAction::RemoveGroup),
+			(app.t("projectSettings"), false, MenuAction::ProjectSettings),
+			(app.t("renameProject"), false, MenuAction::Rename),
+			(app.t("deleteProject"), true, MenuAction::DeleteProject),
+		],
+		ContextMenu::Profile { .. } => vec![(app.t("deleteProfile"), true, MenuAction::DeleteProfile)],
+		ContextMenu::File { .. } => vec![
+			(app.t("fileTreeContextMenuOpen"), false, MenuAction::Open),
+			(app.t("fileTreeContextMenuOpenInDefaultApp"), false, MenuAction::OpenDefault),
+			(app.t("fileTreeContextMenuRevealInFileManager"), false, MenuAction::Reveal),
+			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
+			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
+			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
+			(app.t("rename"), false, MenuAction::RenamePath),
+			(app.t("fileTreeContextMenuCopyRelativePath"), false, MenuAction::CopyRel),
+			(app.t("fileTreeContextMenuCopyAbsolutePath"), false, MenuAction::CopyAbs),
+			(app.t("delete"), true, MenuAction::DeletePath),
+		],
+		ContextMenu::TreeBlank => vec![
+			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
+			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
+			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
+			(app.t("fileTreeContextMenuRevealInFileManager"), false, MenuAction::Reveal),
+		],
+		ContextMenu::NewTerminal => {
+			let mut items = vec![(app.t("newTerminal"), false, MenuAction::NewTerm)];
+			for (i, t) in app.data.prefs.templates.iter().enumerate() {
+				items.push((t.name.clone(), false, MenuAction::Template(i)));
+			}
+			items
+		}
+	}
+}
+
+fn run_menu(
+	app: &mut AppView,
+	menu: &ContextMenu,
+	action: MenuAction,
+	window: &mut Window,
+	cx: &mut Context<AppView>,
+) {
+	match (menu, action) {
+		(ContextMenu::Project { id }, MenuAction::DeleteProject) => {
+			app.data.overlay.dialog = Some(DialogKind::DeleteProject);
+			app.data.overlay.dialog_project = Some(id.clone());
+		}
+		(ContextMenu::Project { id }, MenuAction::Rename) => {
+			app.data.overlay.dialog = Some(DialogKind::RenameProject);
+			app.data.overlay.dialog_project = Some(id.clone());
+			if let Some(p) = app.data.project(id) {
+				app.inputs.rename.update(cx, |s, cx| {
+					s.set_value(p.name.clone(), window, cx);
+				});
+			}
+		}
+		(ContextMenu::Project { id }, MenuAction::ProjectSettings) => {
+			app.data.overlay.dialog = Some(DialogKind::ProjectSettings);
+			app.data.overlay.dialog_project = Some(id.clone());
+		}
+		(ContextMenu::Project { id }, MenuAction::CreateGroup) => {
+			app.data.overlay.dialog = Some(DialogKind::CreateGroup);
+			app.data.overlay.dialog_project = Some(id.clone());
+		}
+		(ContextMenu::Project { id }, MenuAction::RemoveGroup) => {
+			let _ = app.backend.assign_to_group(id, None);
+			app.reload_projects();
+		}
+		(ContextMenu::Project { id }, MenuAction::AddToGroup) => {
+			if let Some(g) = app.data.groups.first() {
+				let _ = app.backend.assign_to_group(id, Some(g.id.clone()));
+				app.reload_projects();
+			} else {
+				app.data.overlay.dialog = Some(DialogKind::CreateGroup);
+				app.data.overlay.dialog_project = Some(id.clone());
+			}
+		}
+		(ContextMenu::Profile { id, .. }, MenuAction::DeleteProfile) => {
+			app.prepare_delete_profile(id);
+		}
+		(ContextMenu::File { path }, MenuAction::Open) => {
+			if let Some(pid) = app.data.current_profile.clone() {
+				app.open_file(&pid, path, window, cx);
+			}
+		}
+		(ContextMenu::File { path }, MenuAction::OpenDefault) => app.open_external(path),
+		(ContextMenu::File { path }, MenuAction::Reveal) => app.reveal(Some(path)),
+		(_, MenuAction::Reveal) => app.reveal(None),
+		(_, MenuAction::Refresh) => {
+			if let Some(pid) = app.data.current_profile.clone() {
+				app.load_tree_root(&pid);
+			}
+		}
+		(_, MenuAction::NewFile) => app.create_path(false, cx),
+		(_, MenuAction::NewFolder) => app.create_path(true, cx),
+		(ContextMenu::File { path }, MenuAction::CopyRel) => app.copy_path(path, false, cx),
+		(ContextMenu::File { path }, MenuAction::CopyAbs) => app.copy_path(path, true, cx),
+		(ContextMenu::File { path }, MenuAction::DeletePath) => app.delete_tree_path(path),
+		(_, MenuAction::NewTerm) => app.create_terminal(&app.t("newTerminal"), "", Vec::new()),
+		(_, MenuAction::Template(i)) => {
+			if let Some(t) = app.data.prefs.templates.get(i).cloned() {
+				app.create_terminal(&t.name, &t.cwd, t.commands);
+			}
+		}
+		_ => {}
+	}
+}

@@ -10,7 +10,8 @@
 
 | Layer          | Technology                                 |
 | -------------- | ------------------------------------------ |
-| Frontend       | React 19, TypeScript, Vite 8, shadcn/ui    |
+| Native UI      | GPUI + gpui-component (`src-gpui/`)        |
+| Frontend       | React 19, TypeScript, Vite 8, shadcn/ui (legacy Tauri shell)    |
 | State (client) | Zustand 5 + immer                          |
 | State (server) | TanStack Query 5                           |
 | Routing        | react-router v7                            |
@@ -41,6 +42,8 @@
 │   ├── shared/                 # Query client, query keys, providers, components
 │   ├── generated/              # Auto-generated Tauri IPC bindings (gitignored)
 │   └── paraglide/              # Generated i18n code (gitignored)
+│
+├── src-gpui/                   # GPUI native rewrite (primary desktop shell)
 │
 ├── src-tauri/                  # Backend (Rust)
 │   ├── src/
@@ -74,3 +77,4 @@
 | [Sidebar UI Inventory](sidebar-ui-inventory.md) | Pixel-level appendix: app sidebar + profile sidebar |
 | [Home / Project UI Inventory](ui-inventory-home-project.md) | Pixel-level appendix: home, file tree, viewer, command palette, project dialogs |
 | [Settings / Terminal / Git UI Inventory](ui-inventory-settings-terminal-git-debug-updater.md) | Pixel-level appendix: settings window, terminal, git, debug, updater |
+| [GPUI rewrite](../src-gpui/README.md) | Native GPUI desktop shell that implements the UI inventory |
