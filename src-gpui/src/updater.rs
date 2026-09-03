@@ -14,6 +14,7 @@ pub struct UpdateInfo {
 	pub available: bool,
 	pub prerelease: bool,
 	pub html_url: String,
+	pub released_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +26,8 @@ struct GithubRelease {
 	prerelease: bool,
 	#[serde(default)]
 	html_url: String,
+	#[serde(default)]
+	published_at: Option<String>,
 	#[serde(default)]
 	assets: Vec<GithubAsset>,
 }
@@ -82,7 +85,17 @@ pub fn check_for_update(accept_beta: bool) -> Result<UpdateInfo, String> {
 		} else {
 			release.html_url.clone()
 		},
+		released_at: release.published_at.as_deref().and_then(format_release_date),
 	})
+}
+
+fn format_release_date(raw: &str) -> Option<String> {
+	let date = raw.get(..10)?;
+	if date.as_bytes().get(4) == Some(&b'-') && date.as_bytes().get(7) == Some(&b'-') {
+		Some(date.to_string())
+	} else {
+		None
+	}
 }
 
 fn pick_release(releases: &[GithubRelease], accept_beta: bool) -> Option<&GithubRelease> {
@@ -253,6 +266,7 @@ mod tests {
 				draft: false,
 				prerelease: false,
 				html_url: String::new(),
+				published_at: None,
 				assets: Vec::new(),
 			},
 			GithubRelease {
@@ -260,10 +274,20 @@ mod tests {
 				draft: false,
 				prerelease: true,
 				html_url: String::new(),
+				published_at: None,
 				assets: Vec::new(),
 			},
 		];
 		assert_eq!(pick_release(&releases, true).unwrap().tag_name, "v3.2.0-beta.1");
 		assert_eq!(pick_release(&releases, false).unwrap().tag_name, "v3.1.0");
+	}
+
+	#[test]
+	fn formats_github_release_date() {
+		assert_eq!(
+			format_release_date("2026-04-09T12:00:00Z").as_deref(),
+			Some("2026-04-09")
+		);
+		assert_eq!(format_release_date("not-a-date"), None);
 	}
 }

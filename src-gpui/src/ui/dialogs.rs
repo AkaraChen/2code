@@ -255,10 +255,28 @@ fn dialog_body(
 					)
 					.child(Input::new(&app.inputs.worktree))
 					.child(div().text_sm().child(app.t("initScript")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("initScriptDesc")),
+					)
 					.child(Input::new(&app.inputs.init_script))
 					.child(div().text_sm().child(app.t("setupScript")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("setupScriptDesc")),
+					)
 					.child(Input::new(&app.inputs.setup_script))
 					.child(div().text_sm().child(app.t("teardownScript")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("teardownScriptDesc")),
+					)
 					.child(Input::new(&app.inputs.teardown_script))
 					.into_any_element()
 			} else {
@@ -335,8 +353,20 @@ fn dialog_body(
 					.child(div().text_xs().child(app.t("terminalTemplateName")))
 					.child(Input::new(&app.inputs.template_name))
 					.child(div().text_xs().child(app.t("terminalTemplateCwd")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("terminalTemplateCwdDescription")),
+					)
 					.child(Input::new(&app.inputs.template_cwd))
 					.child(div().text_xs().child(app.t("terminalTemplateCommands")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("terminalTemplateCommandsDescription")),
+					)
 					.child(Input::new(&app.inputs.template_commands))
 					.child(
 						Button::new("add-project-tpl")
@@ -462,6 +492,13 @@ fn dialog_body(
 		DialogKind::OpenLink => v_flex()
 			.gap_2()
 			.child(div().text_sm().child(app.t("terminalOpenLinkConfirmDescription")))
+			.child(
+				div()
+					.text_xs()
+					.text_color(theme.muted_foreground)
+					.font_family("monospace")
+					.child(app.t("terminalOpenLinkUrlLabel")),
+			)
 			.child(
 				div()
 					.font_family("monospace")
@@ -985,6 +1022,12 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 				for (i, t) in app.data.prefs.templates.iter().enumerate() {
 					items.push(item(format!("gt-{i}"), t.name.clone(), MenuAction::Template(i)));
 				}
+			}
+			if project.is_empty() && app.data.prefs.templates.is_empty() {
+				items.push(header("no-tpl", app.t("noTerminalTemplates")));
+				let mut hint = item("no-tpl-hint", app.t("noTemplatesDropdownHint"), MenuAction::Header);
+				hint.muted = true;
+				items.push(hint);
 			}
 			items
 		}

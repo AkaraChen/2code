@@ -462,7 +462,7 @@ fn empty_cta(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.text_color(theme.muted_foreground)
 				.child(app.t("noTerminalsOpenDescription")),
 		)
-		.child(new_terminal_control(app, view))
+		.child(new_terminal_control(app, view, true))
 }
 
 fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -618,18 +618,18 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 					}
 				})
 		}))
-		.child(new_terminal_control(app, view))
+		.child(new_terminal_control(app, view, false))
 		.into_any_element()
 }
 
-fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>) -> impl IntoElement {
+fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, force_split: bool) -> impl IntoElement {
 	let has_templates = !app.data.prefs.templates.is_empty()
 		|| app
 			.data
 			.current_ws()
 			.map(|w| !w.config.terminal_templates.is_empty())
 			.unwrap_or(false);
-	if has_templates {
+	if force_split || has_templates {
 		h_flex()
 			.gap_0()
 			.child(

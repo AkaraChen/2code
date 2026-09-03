@@ -199,6 +199,24 @@ impl AppView {
 			s.set_placeholder(i18n::t(locale, "defaultWorktreeDirPlaceholder"), window, cx);
 			s.set_value(prefs.worktree_dir.clone(), window, cx);
 		});
+		inputs.init_script.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "scriptPlaceholder"), window, cx);
+		});
+		inputs.setup_script.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "scriptPlaceholder"), window, cx);
+		});
+		inputs.teardown_script.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "scriptPlaceholder"), window, cx);
+		});
+		inputs.template_name.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "terminalTemplateNamePlaceholder"), window, cx);
+		});
+		inputs.template_shell.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "terminalTemplateShellPlaceholder"), window, cx);
+		});
+		inputs.template_cwd.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "terminalTemplateCwdPlaceholder"), window, cx);
+		});
 		inputs.custom_shell.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "customShellPlaceholder"), window, cx);
 			s.set_value(prefs.custom_shell.clone(), window, cx);
@@ -1418,14 +1436,29 @@ impl AppView {
 						],
 					));
 				}
+				if check.total_diff.files_changed > 0 {
+					parts.push(i18n::tf(
+						self.data.locale,
+						"deleteProfileTotalDiffWarning",
+						&[
+							("files", &check.total_diff.files_changed.to_string()),
+							("insertions", &check.total_diff.insertions.to_string()),
+							("deletions", &check.total_diff.deletions.to_string()),
+						],
+					));
+				}
 				if !parts.is_empty() {
 					self.data.overlay.delete_warning = Some(parts.join("\n"));
 				}
 			}
 			Err(err) => {
 				self.data.overlay.dialog_busy = false;
-				self.data.overlay.delete_warning =
-					Some(format!("{}\n{}", self.t("deleteProfileGitCheckFailedTitle"), err));
+				self.data.overlay.delete_warning = Some(format!(
+					"{}\n{}\n{}",
+					self.t("deleteProfileGitCheckFailedTitle"),
+					self.t("deleteProfileGitCheckFailedDescription"),
+					err
+				));
 			}
 		}
 	}
@@ -1877,9 +1910,16 @@ impl AppView {
 						self.data.overlay.dialog = Some(DialogKind::ChooseFile);
 						self.data.overlay.fuzzy_files = candidates;
 					}
-					Err(err) => self
-						.data
-						.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string()),
+					Err(err) => {
+						let raw = err.to_string();
+						let body = if raw.to_ascii_lowercase().contains("outside the workspace") {
+							self.t("terminalFilePathOutsideWorkspace")
+						} else {
+							raw
+						};
+						self.data
+							.push_toast(ToastKind::Error, self.t("somethingWentWrong"), body);
+					}
 				}
 			}
 		}

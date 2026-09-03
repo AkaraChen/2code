@@ -1,10 +1,17 @@
 use gpui::{div, prelude::*, px, Context, KeyDownEvent, Window};
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, StyledExt};
 
 use crate::app::AppView;
 
-pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+pub fn parent_label(relative_path: &str, root_label: &str) -> String {
+	match relative_path.rfind('/') {
+		Some(ix) if ix > 0 => relative_path[..ix].to_string(),
+		_ => root_label.to_string(),
+	}
+}
+
+pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	if !app.data.overlay.palette_open {
 		return div().id("palette-closed").into_any_element();
 	}
@@ -60,19 +67,37 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					}
 				})
 				.child(
-					div()
+					v_flex()
 						.px_4()
 						.py_3()
+						.gap_1()
 						.border_b_1()
 						.border_color(theme.border)
+						.child(div().text_xs().font_semibold().child(app.t("commandPaletteTitle")))
 						.child(Input::new(&app.inputs.palette)),
 				)
 				.child(if q.is_empty() {
-					div()
+					v_flex()
 						.p_4()
-						.text_sm()
-						.text_color(theme.muted_foreground)
-						.child(app.t("commandPaletteEmpty"))
+						.gap_1()
+						.child(
+							div()
+								.text_sm()
+								.text_color(theme.muted_foreground)
+								.child(app.t("commandPaletteEmpty")),
+						)
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("commandPaletteHint")),
+						)
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("commandPaletteOpenHint")),
+						)
 						.into_any_element()
 				} else if results.is_empty() {
 					v_flex()
@@ -116,7 +141,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 									div()
 										.text_xs()
 										.text_color(theme.muted_foreground)
-										.child(r.relative_path.clone()),
+										.child(parent_label(&r.relative_path, &app.t("commandPaletteRoot"))),
 								)
 						}))
 						.into_any_element()
@@ -147,4 +172,16 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				),
 		)
 		.into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn parent_label_uses_directory_or_root() {
+		assert_eq!(parent_label("src/app.rs", "Project root"), "src");
+		assert_eq!(parent_label("README.md", "Project root"), "Project root");
+		assert_eq!(parent_label("src/ui/palette.rs", "根目录"), "src/ui");
+	}
 }

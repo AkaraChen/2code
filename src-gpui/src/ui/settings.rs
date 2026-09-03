@@ -98,6 +98,7 @@ pub struct SettingsView {
 	template_cmds: gpui::Entity<gpui_component::input::InputState>,
 	update_status: String,
 	latest_version: Option<String>,
+	released_at: Option<String>,
 	latest_url: String,
 	fonts: Vec<String>,
 	sounds: Vec<String>,
@@ -132,7 +133,7 @@ impl SettingsView {
 			})
 		}
 		let custom_shell = inp(window, cx, &crate::i18n::t(locale, "customShellPlaceholder"), &prefs.custom_shell, false);
-		let worktree = inp(window, cx, "", &prefs.worktree_dir, false);
+		let worktree = inp(window, cx, &crate::i18n::t(locale, "defaultWorktreeDirPlaceholder"), &prefs.worktree_dir, false);
 		custom_shell.update(cx, |s, cx| {
 			s.set_placeholder(crate::i18n::t(locale, "customShellPlaceholder"), window, cx);
 			s.set_value(prefs.custom_shell.clone(), window, cx);
@@ -148,12 +149,13 @@ impl SettingsView {
 			main,
 			custom_shell,
 			worktree,
-			template_name: inp(window, cx, "", "", false),
-			template_shell: inp(window, cx, "", "", false),
-			template_cwd: inp(window, cx, "", "", false),
-			template_cmds: inp(window, cx, "", "", true),
+			template_name: inp(window, cx, &crate::i18n::t(locale, "terminalTemplateNamePlaceholder"), "", false),
+			template_shell: inp(window, cx, &crate::i18n::t(locale, "terminalTemplateShellPlaceholder"), "", false),
+			template_cwd: inp(window, cx, &crate::i18n::t(locale, "terminalTemplateCwdPlaceholder"), "", false),
+			template_cmds: inp(window, cx, &crate::i18n::t(locale, "scriptPlaceholder"), "", true),
 			update_status: crate::i18n::t(locale, "updateIdleDescription"),
 			latest_version: None,
+			released_at: None,
 			latest_url: crate::updater::releases_page().to_string(),
 			fonts: crate::platform::list_mono_fonts(),
 			sounds: crate::platform::list_system_sounds(),
@@ -320,7 +322,51 @@ impl SettingsView {
 					.text_color(cx.theme().muted_foreground)
 					.child(self.t("defaultWorktreeDirDesc")),
 			)
-			.child(Input::new(&self.worktree))
+			.child(
+				h_flex()
+					.gap_2()
+					.child(div().flex_1().min_w_0().child(Input::new(&self.worktree)))
+					.child(
+						Button::new("pick-worktree")
+							.small()
+							.icon(IconName::Folder)
+							.label(self.t("chooseFolder"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									if let Some(folder) = crate::backend::pick_folder() {
+										view.update(cx, |this, cx| {
+											this.worktree.update(cx, |s, cx| {
+												s.set_value(folder, window, cx);
+											});
+											this.persist(cx);
+											cx.notify();
+										});
+									}
+								}
+							}),
+					)
+					.child(
+						Button::new("clear-worktree")
+							.ghost()
+							.small()
+							.icon(IconName::Close)
+							.tooltip(self.t("clearDefaultWorktreeDir"))
+							.disabled(self.worktree.read(cx).value().is_empty())
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |this, cx| {
+										this.worktree.update(cx, |s, cx| {
+											s.set_value("", window, cx);
+										});
+										this.persist(cx);
+										cx.notify();
+									});
+								}
+							}),
+					),
+			)
 			.child(switch_row(
 				"debug-mode",
 				self.t("debugMode"),
@@ -1088,6 +1134,17 @@ impl SettingsView {
 			)
 			.child(div().text_sm().child(self.update_status.clone()))
 			.child(
+				if let Some(date) = &self.released_at {
+					div()
+						.text_xs()
+						.text_color(cx.theme().muted_foreground)
+						.child(crate::i18n::tf(self.locale, "updateReleasedAt", &[("date", date)]))
+						.into_any_element()
+				} else {
+					div().into_any_element()
+				},
+			)
+			.child(
 				h_flex()
 					.gap_2()
 					.child(
@@ -1103,6 +1160,7 @@ impl SettingsView {
 										match &result {
 											Ok(info) if info.available => {
 												this.latest_version = Some(info.latest_version.clone());
+												this.released_at = info.released_at.clone();
 												this.latest_url = info.html_url.clone();
 												this.update_status = crate::i18n::tf(
 													this.locale,
@@ -1112,6 +1170,7 @@ impl SettingsView {
 											}
 											Ok(_) => {
 												this.latest_version = None;
+												this.released_at = None;
 												this.update_status =
 													this.t("updateNotAvailableDescription");
 											}
@@ -1158,7 +1217,10 @@ impl SettingsView {
 													cx.quit();
 												}
 												Err(err) => {
-													this.update_status = err;
+													this.update_status = format!(
+														"{}: {err}",
+														this.t("updateInstallFailedTitle")
+													);
 													let _ = open::that(&url);
 												}
 											}

@@ -57,6 +57,22 @@ pub fn split_rows(diff: &str) -> Vec<SplitRow> {
 	rows
 }
 
+pub fn rename_paths(diff: &str) -> Option<(String, String)> {
+	let mut from = None;
+	let mut to = None;
+	for line in diff.lines() {
+		if let Some(rest) = line.strip_prefix("rename from ") {
+			from = Some(rest.to_string());
+		} else if let Some(rest) = line.strip_prefix("rename to ") {
+			to = Some(rest.to_string());
+		}
+	}
+	match (from, to) {
+		(Some(old), Some(new)) if old != new => Some((old, new)),
+		_ => None,
+	}
+}
+
 fn is_header(line: &str) -> bool {
 	line.starts_with("diff ")
 		|| line.starts_with("index ")
@@ -122,5 +138,12 @@ mod tests {
 		assert_eq!(rows[0].right.as_ref().unwrap().0, DiffLineKind::Header);
 		assert_eq!(rows[1].left.as_ref().unwrap().0, DiffLineKind::Del);
 		assert_eq!(rows[1].right.as_ref().unwrap().0, DiffLineKind::Add);
+	}
+
+	#[test]
+	fn rename_paths_reads_git_headers() {
+		let diff = "diff --git a/old.rs b/new.rs\nrename from old.rs\nrename to new.rs\n";
+		assert_eq!(rename_paths(diff), Some(("old.rs".into(), "new.rs".into())));
+		assert_eq!(rename_paths("diff --git a/a.rs b/a.rs\n"), None);
 	}
 }

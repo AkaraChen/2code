@@ -555,6 +555,27 @@ pub fn is_previewable(path: &str) -> bool {
 	.any(|ext| lower.ends_with(ext))
 }
 
+impl Backend {
+	pub fn cached_head_blob(&self, folder: &str, path: &str) -> Option<PathBuf> {
+		let slug = path.replace(['/', '\\'], "_");
+		let dest = self.app_data_dir.join("git-preview").join(slug);
+		if dest.exists() {
+			return Some(dest);
+		}
+		std::fs::create_dir_all(dest.parent()?).ok()?;
+		let spec = format!("HEAD:{path}");
+		let out = std::process::Command::new("git")
+			.args(["-C", folder, "show", &spec])
+			.output()
+			.ok()?;
+		if !out.status.success() || out.stdout.is_empty() {
+			return None;
+		}
+		std::fs::write(&dest, &out.stdout).ok()?;
+		Some(dest)
+	}
+}
+
 pub fn is_image(path: &str) -> bool {
 	let lower = path.to_ascii_lowercase();
 	[

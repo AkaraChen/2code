@@ -400,7 +400,37 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 									})
 									.w(px(12.)),
 								)
-								.child(div().flex_1().text_sm().child(group.name.clone()))
+								.child(
+									Button::new(crate::ui::eid(format!("group-toggle-{}", group.id)))
+										.ghost()
+										.small()
+										.label(group.name.clone())
+										.tooltip(crate::i18n::tf(
+											app.data.locale,
+											"toggleProjectGroup",
+											&[("name", &group.name)],
+										))
+										.on_click({
+											let view = view.clone();
+											let gid = gid.clone();
+											move |_, _, cx| {
+												view.update(cx, |app, cx| {
+													if app.data.overlay.sort_mode {
+														return;
+													}
+													if let Some(ix) =
+														app.data.prefs.collapsed_groups.iter().position(|x| x == &gid)
+													{
+														app.data.prefs.collapsed_groups.remove(ix);
+													} else {
+														app.data.prefs.collapsed_groups.push(gid.clone());
+													}
+													app.persist_prefs();
+													cx.notify();
+												});
+											}
+										}),
+								)
 								.child(
 									div()
 										.text_xs()

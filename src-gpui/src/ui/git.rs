@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, rgb, Context, Window};
+use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::Input;
@@ -531,13 +531,22 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 									)
 									.into_any_element()
 							} else if selected.as_ref().is_some_and(|p| backend::is_image(p)) {
-								let worktree = app.data.current_ws().map(|w| w.worktree.clone()).unwrap_or_default();
-								let path =
-									std::path::PathBuf::from(worktree).join(selected.as_deref().unwrap_or_default());
-								gpui::img(path).w_full().max_h(px(480.)).into_any_element()
+								image_preview(app, selected.as_deref().unwrap_or_default(), &diff).into_any_element()
 							} else {
 								v_flex()
 									.gap_2()
+									.children(diff::rename_paths(&diff).map(|(old, new)| {
+										v_flex()
+											.gap_1()
+											.child(div().text_xs().text_color(theme.muted_foreground).child(format!(
+												"{label}: {old}",
+												label = app.t("gitDiffRenamePreviousPath")
+											)))
+											.child(div().text_xs().text_color(theme.muted_foreground).child(format!(
+												"{label}: {new}",
+												label = app.t("gitDiffRenameCurrentPath")
+											)))
+									}))
 									.child(diff_stats(&diff))
 									.child(diff_view(
 										&diff,
@@ -856,4 +865,51 @@ fn split_cell(
 			}
 		})
 		.child(shown)
+}
+
+fn image_preview(app: &AppView, path: &str, diff: &str) -> impl IntoElement {
+	let worktree = app.data.current_ws().map(|w| w.worktree.clone()).unwrap_or_default();
+	let after = std::path::PathBuf::from(&worktree).join(path);
+	let before_rel = diff::rename_paths(diff)
+		.map(|(old, _)| old)
+		.unwrap_or_else(|| path.to_string());
+	let before = app.backend.cached_head_blob(&worktree, &before_rel);
+	h_flex()
+		.id("git-image-preview")
+		.w_full()
+		.gap_4()
+		.child(
+			v_flex()
+				.flex_1()
+				.gap_1()
+				.child(
+					div()
+						.text_xs()
+						.font_semibold()
+						.child(app.t("gitDiffImagePreviewBefore")),
+				)
+				.child(if let Some(before) = before {
+					img(before).w_full().max_h(px(480.)).into_any_element()
+				} else {
+					div()
+						.text_sm()
+						.text_color(gpui::hsla(0., 0., 0.5, 1.))
+						.child(app.t("gitDiffImagePreviewUnavailable"))
+						.into_any_element()
+				}),
+		)
+		.child(
+			v_flex()
+				.flex_1()
+				.gap_1()
+				.child(div().text_xs().font_semibold().child(app.t("gitDiffImagePreviewAfter")))
+				.child(if after.exists() {
+					img(after).w_full().max_h(px(480.)).into_any_element()
+				} else {
+					div()
+						.text_sm()
+						.child(app.t("gitDiffImagePreviewUnavailable"))
+						.into_any_element()
+				}),
+		)
 }
