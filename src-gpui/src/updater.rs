@@ -85,17 +85,12 @@ pub fn check_for_update(accept_beta: bool) -> Result<UpdateInfo, String> {
 		} else {
 			release.html_url.clone()
 		},
-		released_at: release.published_at.as_deref().and_then(format_release_date),
+		released_at: release.published_at.clone(),
 	})
 }
 
-fn format_release_date(raw: &str) -> Option<String> {
-	let date = raw.get(..10)?;
-	if date.as_bytes().get(4) == Some(&b'-') && date.as_bytes().get(7) == Some(&b'-') {
-		Some(date.to_string())
-	} else {
-		None
-	}
+pub fn format_release_date_display(raw: &str, locale: crate::i18n::Locale) -> String {
+	crate::timefmt::format_release_date_display(raw, locale)
 }
 
 fn pick_release(releases: &[GithubRelease], accept_beta: bool) -> Option<&GithubRelease> {
@@ -352,10 +347,17 @@ mod tests {
 	#[test]
 	fn formats_github_release_date() {
 		assert_eq!(
-			format_release_date("2026-04-09T12:00:00Z").as_deref(),
-			Some("2026-04-09")
+			crate::timefmt::format_release_date_at(
+				"2026-04-09T12:00:00Z",
+				crate::i18n::Locale::En,
+				crate::timefmt::parse_iso8601_secs("2026-04-09T12:00:00Z").unwrap() * 1000,
+			),
+			"Apr 9, 2026 (now)"
 		);
-		assert_eq!(format_release_date("not-a-date"), None);
+		assert_eq!(
+			crate::timefmt::format_release_date_at("not-a-date", crate::i18n::Locale::En, 0),
+			"not-a-date"
+		);
 	}
 
 	#[test]

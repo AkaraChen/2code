@@ -1182,13 +1182,18 @@ impl SettingsView {
 					.child(link_btn("rel", self.t("releases"), "https://github.com/AkaraChen/2code/releases"))
 					.child(link_btn("web", self.t("website"), "https://github.com/AkaraChen/2code")),
 			)
+			.child(div().font_semibold().child(self.t("update")))
 			.child(div().text_sm().child(self.update_status.clone()))
 			.child(
 				if let Some(date) = &self.released_at {
 					div()
 						.text_xs()
 						.text_color(cx.theme().muted_foreground)
-						.child(crate::i18n::tf(self.locale, "updateReleasedAt", &[("date", date)]))
+						.child(crate::i18n::tf(
+							self.locale,
+							"updateReleasedAt",
+							&[("date", &crate::updater::format_release_date_display(date, self.locale))],
+						))
 						.into_any_element()
 				} else {
 					div().into_any_element()

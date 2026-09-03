@@ -169,6 +169,7 @@ pub enum ContextMenu {
 	Project { id: String },
 	Profile { id: String, project_id: String },
 	File { path: String },
+	GitFile { path: String },
 	TreeBlank,
 	NewTerminal,
 }

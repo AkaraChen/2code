@@ -1,4 +1,4 @@
-use gpui::{div, img, prelude::*, px, rgb, Context, Window};
+use gpui::{div, img, prelude::*, px, Context, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::Input;
@@ -8,9 +8,10 @@ use gpui_component::{Disableable, Selectable};
 use crate::app::{extract_file_hunk, file_status_badge, AppView};
 use crate::backend;
 use crate::diff::{self, DiffLineKind};
-use crate::state::{DialogKind, DiffPreviewMode, GitDiffTab};
+use crate::state::{ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab};
+use crate::timefmt;
 
-pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+pub fn render_panel(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
 	let view = cx.entity();
 	let Some(ws) = app.data.current_ws() else {
@@ -87,16 +88,84 @@ pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 						.into_any_element()
 				} else {
 					v_flex()
-						.children(
-							files
-								.iter()
-								.map(|(path, status)| file_row(app, path, status, included.contains(path), true, cx)),
-						)
+						.children(files.iter().map(|(path, status)| {
+							file_row(app, path, status, included.contains(path), true, window, cx)
+						}))
 						.into_any_element()
 				}),
 		)
 		.child(commit_composer(app, included.len(), files.len(), ahead, cx))
 		.into_any_element()
+}
+
+pub fn file_display_parts(file_name: &str) -> (String, Option<String>) {
+	match file_name.rfind('/') {
+		Some(idx) => (file_name[idx + 1..].to_string(), Some(file_name[..idx].to_string())),
+		None => (file_name.to_string(), None),
+	}
+}
+
+pub fn leftover_change_badge(status: &str) -> (&'static str, &'static str) {
+	match file_status_badge(status) {
+		"A" => ("A", "green"),
+		"D" => ("D", "red"),
+		"R" => ("R", "amber"),
+		"M" => ("M", "blue"),
+		other => (other, "muted"),
+	}
+}
+
+fn leftover_badge_color(kind: &str) -> gpui::Hsla {
+	match kind {
+		"green" => gpui::hsla(142. / 360., 0.70, 0.45, 1.),
+		"red" => gpui::hsla(0., 0.84, 0.60, 1.),
+		"blue" => gpui::hsla(217. / 360., 0.91, 0.60, 1.),
+		"amber" => gpui::hsla(38. / 360., 0.92, 0.50, 1.),
+		_ => gpui::hsla(0., 0., 0.55, 1.),
+	}
+}
+
+fn leftover_status_badge(status: &str) -> impl IntoElement {
+	let (letter, kind) = leftover_change_badge(status);
+	let color = leftover_badge_color(kind);
+	h_flex()
+		.flex_none()
+		.w(px(16.))
+		.h(px(16.))
+		.rounded(px(2.))
+		.border_1()
+		.border_color(color.opacity(0.3))
+		.bg(color.opacity(0.1))
+		.justify_center()
+		.child(div().font_family("monospace").text_xs().text_color(color).child(letter))
+}
+
+fn leftover_path_cell(path: &str, active: bool, muted: gpui::Hsla) -> impl IntoElement {
+	let (basename, parent) = file_display_parts(path);
+	h_flex()
+		.min_w_0()
+		.flex_1()
+		.gap_2()
+		.overflow_hidden()
+		.child(
+			div()
+				.min_w_0()
+				.flex_1()
+				.text_sm()
+				.overflow_hidden()
+				.when(active, |el| el.font_medium())
+				.child(basename),
+		)
+		.when_some(parent, |el, dir| {
+			el.child(
+				div()
+					.min_w(px(16.))
+					.overflow_hidden()
+					.text_xs()
+					.text_color(muted)
+					.child(dir),
+			)
+		})
 }
 
 fn file_row(
@@ -105,27 +174,58 @@ fn file_row(
 	status: &str,
 	checked: bool,
 	compact: bool,
+	_window: &mut Window,
 	cx: &mut Context<AppView>,
 ) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
-	let badge = file_status_badge(status);
-	let name = crate::backend::file_name(path);
 	let path_owned = path.to_string();
+	let status_owned = status.to_string();
+	let active = app.data.overlay.git_diff_file.as_deref() == Some(path);
 	h_flex()
 		.id(crate::ui::eid(format!("git-file-{path}")))
 		.w_full()
-		.px_2()
-		.py_1()
+		.min_w_0()
+		.items_start()
+		.px_3()
+		.py_2()
 		.gap_2()
+		.overflow_hidden()
+		.when(active, |el| el.bg(theme.muted))
+		.when(!checked, |el| el.opacity(0.7))
 		.hover(|el| el.bg(theme.muted))
 		.on_click({
 			let view = view.clone();
 			let path = path_owned.clone();
-			move |_, _, cx| {
+			let status = status_owned.clone();
+			move |ev, window, cx| {
 				view.update(cx, |app, cx| {
 					app.select_diff_file(&path);
-					app.data.overlay.git_diff_open = true;
+					if ev.click_count() >= 2 {
+						if compact {
+							app.open_git_diff();
+						} else if let Some(pid) = app.data.current_profile.clone() {
+							if crate::app::git_status_kind(&status) != crate::app::GitStatusKind::Deleted {
+								app.open_file(&pid, &path, window, cx);
+							}
+							app.data.overlay.git_diff_open = false;
+						}
+					}
+					cx.notify();
+				});
+			}
+		})
+		.on_mouse_down(MouseButton::Right, {
+			let view = view.clone();
+			let path = path_owned.clone();
+			move |ev, _, cx| {
+				view.update(cx, |app, cx| {
+					app.select_diff_file(&path);
+					app.data.overlay.context_menu = Some((
+						ContextMenu::GitFile { path: path.clone() },
+						f32::from(ev.position.x),
+						f32::from(ev.position.y),
+					));
 					cx.notify();
 				});
 			}
@@ -150,38 +250,8 @@ fn file_row(
 					}
 				}),
 		)
-		.child(crate::ui::file_icons::file_glyph(path, false, false, 13.))
-		.child(div().flex_1().text_sm().child(name))
-		.child(
-			div()
-				.text_xs()
-				.text_color(match badge {
-					"A" => theme.success,
-					"D" => theme.danger,
-					"R" | "M" => theme.warning,
-					_ => theme.muted_foreground,
-				})
-				.child(badge),
-		)
-		.when(compact, |el| {
-			el.child(
-				Button::new(crate::ui::eid(format!("discard-{path}")))
-					.ghost()
-					.xsmall()
-					.icon(IconName::Undo)
-					.tooltip(app.t("gitDiscardFileAction"))
-					.on_click({
-						let view = view.clone();
-						let path = path_owned.clone();
-						move |_, _, cx| {
-							view.update(cx, |app, cx| {
-								app.discard_file(&path);
-								cx.notify();
-							});
-						}
-					}),
-			)
-		})
+		.child(leftover_path_cell(path, active, theme.muted_foreground))
+		.child(leftover_status_badge(status))
 }
 
 fn commit_composer(
@@ -312,7 +382,7 @@ fn commit_composer(
 		)
 }
 
-pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
+pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	if !app.data.overlay.git_diff_open {
 		return div().id("git-diff-closed").into_any_element();
 	}
@@ -491,6 +561,7 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 															.map(|w| w.git_included.contains(p))
 															.unwrap_or(false),
 														false,
+														window,
 														cx,
 													)
 												}))
@@ -609,100 +680,6 @@ fn tab_btn(
 		})
 }
 
-pub fn format_relative_time(iso: &str, now_secs: i64) -> String {
-	let Some(then) = parse_iso8601_secs(iso) else {
-		return iso.to_string();
-	};
-	let diff_sec = now_secs - then;
-	if diff_sec < 60 {
-		return "just now".into();
-	}
-	let diff_min = diff_sec / 60;
-	if diff_min < 60 {
-		return format!("{diff_min}m ago");
-	}
-	let diff_hr = diff_min / 60;
-	if diff_hr < 24 {
-		return format!("{diff_hr}h ago");
-	}
-	let diff_day = diff_hr / 24;
-	if diff_day < 30 {
-		return format!("{diff_day}d ago");
-	}
-	let diff_month = diff_day / 30;
-	if diff_month < 12 {
-		return format!("{diff_month}mo ago");
-	}
-	format!("{}y ago", diff_month / 12)
-}
-
-fn parse_iso8601_secs(raw: &str) -> Option<i64> {
-	let s = raw.trim();
-	let (date, time_tz) = s.split_once('T')?;
-	let mut dp = date.split('-');
-	let year: i32 = dp.next()?.parse().ok()?;
-	let month: i32 = dp.next()?.parse().ok()?;
-	let day: i32 = dp.next()?.parse().ok()?;
-	let (time, offset) = if let Some(time) = time_tz.strip_suffix('Z').or_else(|| time_tz.strip_suffix('z')) {
-		(time, 0i64)
-	} else if let Some(idx) = time_tz.rfind('+') {
-		(&time_tz[..idx], parse_tz_offset(&time_tz[idx..])?)
-	} else if let Some(rel) = time_tz.find('-').filter(|&i| i >= 8) {
-		(&time_tz[..rel], parse_tz_offset(&time_tz[rel..])?)
-	} else {
-		(time_tz, 0)
-	};
-	let time = time.split('.').next()?;
-	let mut tp = time.split(':');
-	let hour: i64 = tp.next()?.parse().ok()?;
-	let minute: i64 = tp.next()?.parse().ok()?;
-	let second: i64 = tp.next().unwrap_or("0").parse().ok()?;
-	Some(civil_to_unix(year, month, day) + hour * 3600 + minute * 60 + second - offset)
-}
-
-fn parse_tz_offset(raw: &str) -> Option<i64> {
-	let (sign, rest) = if let Some(rest) = raw.strip_prefix('+') {
-		(1i64, rest)
-	} else if let Some(rest) = raw.strip_prefix('-') {
-		(-1, rest)
-	} else {
-		return None;
-	};
-	let compact = rest.replace(':', "");
-	if compact.len() < 2 {
-		return None;
-	}
-	let hours: i64 = compact[..2].parse().ok()?;
-	let minutes: i64 = if compact.len() >= 4 {
-		compact[2..4].parse().ok()?
-	} else {
-		0
-	};
-	Some(sign * (hours * 3600 + minutes * 60))
-}
-
-fn civil_to_unix(year: i32, month: i32, day: i32) -> i64 {
-	let (mut year, mut month) = (year, month);
-	if month <= 2 {
-		year -= 1;
-		month += 9;
-	} else {
-		month -= 3;
-	}
-	let era = if year >= 0 { year } else { year - 399 } / 400;
-	let yoe = (year - era * 400) as u32;
-	let doy = (153 * month as u32 + 2) / 5 + day as u32 - 1;
-	let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-	(era as i64 * 146097 + doe as i64 - 719468) * 86400
-}
-
-fn unix_now_secs() -> i64 {
-	std::time::SystemTime::now()
-		.duration_since(std::time::UNIX_EPOCH)
-		.map(|d| d.as_secs() as i64)
-		.unwrap_or(0)
-}
-
 fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
@@ -781,15 +758,15 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 					.children(app.data.overlay.git_commit_files.iter().map(|p| {
 						let path = p.clone();
 						let active = selected_file.as_deref() == Some(p.as_str());
-						let (name, parent) = match p.rsplit_once('/') {
-							Some((dir, base)) => (base.to_string(), Some(dir.to_string())),
-							None => (p.clone(), None),
-						};
 						h_flex()
 							.id(crate::ui::eid(format!("cfile-{p}")))
+							.w_full()
+							.min_w_0()
+							.items_start()
 							.px_3()
 							.py_2()
 							.gap_2()
+							.overflow_hidden()
 							.when(active, |el| el.bg(theme.muted))
 							.hover(|el| el.bg(theme.muted))
 							.on_click({
@@ -801,10 +778,8 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 									});
 								}
 							})
-							.child(div().text_sm().when(active, |el| el.font_medium()).child(name))
-							.when_some(parent, |el, dir| {
-								el.child(div().text_xs().text_color(theme.muted_foreground).child(dir))
-							})
+							.child(leftover_path_cell(p, active, theme.muted_foreground))
+							.child(leftover_status_badge("M"))
 					}))
 					.into_any_element()
 			})
@@ -818,7 +793,7 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			.child(app.t("noCommitsFound"))
 			.into_any_element();
 	}
-	let now = unix_now_secs();
+	let now = timefmt::unix_now_secs();
 	v_flex()
 		.id("commit-list")
 		.children(app.data.overlay.git_commits.iter().map(|c| {
@@ -847,7 +822,7 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 						.text_color(theme.muted_foreground)
 						.child(div().font_family("monospace").child(hash.clone()))
 						.child(div().min_w_0().flex_1().child(c.author.name.clone()))
-						.child(div().child(format_relative_time(&c.date, now))),
+						.child(div().child(timefmt::format_relative_time(&c.date, now))),
 				)
 				.child(
 					h_flex()
@@ -1211,35 +1186,24 @@ fn image_preview(app: &AppView, path: &str, diff: &str) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-	use super::{civil_to_unix, format_relative_time, parse_iso8601_secs};
+	use super::{file_display_parts, leftover_change_badge};
 
 	#[test]
-	fn format_relative_time_matches_leftover_commit_list() {
-		let then = parse_iso8601_secs("2026-04-09T12:00:00Z").unwrap();
-		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 30), "just now");
-		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 5 * 60), "5m ago");
-		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 3 * 3600), "3h ago");
-		assert_eq!(format_relative_time("2026-04-09T12:00:00Z", then + 2 * 86400), "2d ago");
+	fn leftover_file_display_parts_split_git_paths() {
 		assert_eq!(
-			format_relative_time("2026-04-09T12:00:00Z", then + 30 * 86400),
-			"1mo ago"
+			file_display_parts("src/features/git/FileListItem.tsx"),
+			("FileListItem.tsx".into(), Some("src/features/git".into()))
 		);
-		assert_eq!(
-			format_relative_time("2026-04-09T12:00:00Z", then + 400 * 86400),
-			"1y ago"
-		);
+		assert_eq!(file_display_parts("README.md"), ("README.md".into(), None));
 	}
 
 	#[test]
-	fn parse_iso8601_respects_timezone_offset() {
-		let utc = parse_iso8601_secs("2026-04-09T12:00:00Z").unwrap();
-		let plus8 = parse_iso8601_secs("2026-04-09T20:00:00+08:00").unwrap();
-		assert_eq!(utc, plus8);
-		assert_eq!(utc, civil_to_unix(2026, 4, 9) + 12 * 3600);
-	}
-
-	#[test]
-	fn format_relative_time_falls_back_to_raw_date() {
-		assert_eq!(format_relative_time("not-a-date", 0), "not-a-date");
+	fn leftover_change_badge_matches_file_list_item() {
+		assert_eq!(leftover_change_badge("added"), ("A", "green"));
+		assert_eq!(leftover_change_badge("deleted"), ("D", "red"));
+		assert_eq!(leftover_change_badge("change"), ("M", "blue"));
+		assert_eq!(leftover_change_badge("renamed"), ("R", "amber"));
+		assert_eq!(leftover_change_badge("A"), ("A", "green"));
+		assert_eq!(leftover_change_badge("M"), ("M", "blue"));
 	}
 }

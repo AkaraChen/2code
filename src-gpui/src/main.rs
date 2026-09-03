@@ -7,6 +7,7 @@ mod platform;
 mod prefs;
 mod review;
 mod state;
+mod timefmt;
 mod ui;
 mod updater;
 

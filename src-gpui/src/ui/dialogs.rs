@@ -963,6 +963,7 @@ enum MenuAction {
 	ProjectTemplate(usize),
 	NewTerm,
 	Header,
+	DiscardGitFile,
 }
 
 struct MenuItem {
@@ -1079,6 +1080,11 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 			"del-prof",
 			app.t("deleteProfile"),
 			MenuAction::DeleteProfile,
+		))],
+		ContextMenu::GitFile { .. } => vec![danger(item(
+			"discard-git-file",
+			app.t("gitDiscardFileAction"),
+			MenuAction::DiscardGitFile,
 		))],
 		ContextMenu::File { .. } => vec![
 			item("open", app.t("fileTreeContextMenuOpen"), MenuAction::Open),
@@ -1213,6 +1219,9 @@ fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &
 		}
 		(ContextMenu::Profile { id, .. }, MenuAction::DeleteProfile) => {
 			app.prepare_delete_profile(id);
+		}
+		(ContextMenu::GitFile { path }, MenuAction::DiscardGitFile) => {
+			app.discard_file(path);
 		}
 		(ContextMenu::File { path }, MenuAction::Open) => {
 			if let Some(pid) = app.data.current_profile.clone() {
