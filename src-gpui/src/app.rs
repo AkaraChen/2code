@@ -970,6 +970,21 @@ impl AppView {
 		self.reload_projects();
 	}
 
+	pub fn drop_tree_paths(&mut self, sources: &[String], target_dir: Option<&str>) {
+		let Some(profile_id) = self.data.current_profile.clone() else {
+			return;
+		};
+		if sources.is_empty() {
+			return;
+		}
+		if let Err(err) = self.backend.move_paths(&profile_id, sources, target_dir) {
+			self.data
+				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+			return;
+		}
+		self.load_tree_root(&profile_id);
+	}
+
 	pub fn drop_sidebar_project(&mut self, dragged: &str, target: Option<&str>, unpin: bool) {
 		if let Err(err) = self.backend.drop_project(dragged, target, unpin) {
 			self.data

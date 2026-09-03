@@ -8,6 +8,12 @@ use crate::backend;
 use crate::state::{AgentStatus, ContextMenu, DialogKind, Route};
 use crate::ui::settings;
 
+#[derive(Clone)]
+struct SidebarDrag {
+	id: String,
+	name: String,
+}
+
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	if app.data.prefs.sidebar_collapsed {
 		return div().id("app-sidebar-collapsed").into_any_element();
@@ -148,6 +154,28 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.into_any_element()
 }
 
+fn drop_zone(
+	id: &'static str,
+	label: String,
+	border: gpui::Hsla,
+	muted: gpui::Hsla,
+	on_drop: impl Fn(&SidebarDrag, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+	div()
+		.id(id)
+		.mt_2()
+		.px_2()
+		.py_3()
+		.rounded_md()
+		.border_1()
+		.border_dashed()
+		.border_color(border)
+		.text_xs()
+		.text_color(muted)
+		.child(label)
+		.on_drop(move |drag: &SidebarDrag, _, cx| on_drop(drag, cx))
+}
+
 pub(crate) fn resize_handle(
 	id: &'static str,
 	view: gpui::Entity<AppView>,
@@ -214,11 +242,30 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 		.w_full()
 		.gap_2()
 		.when(!pinned.is_empty() || app.data.overlay.sort_mode, |el| {
-			el.child(section_label(&app.t("pinnedProjects"))).child(
-				v_flex()
-					.gap_1()
-					.children(pinned.into_iter().map(|p| project_row(app, &p, cx))),
-			)
+			el.child(section_label(&app.t("pinnedProjects")))
+				.child(
+					v_flex()
+						.gap_1()
+						.children(pinned.into_iter().map(|p| project_row(app, &p, cx))),
+				)
+				.when(app.data.overlay.sort_mode, |el| {
+					el.child(drop_zone(
+						"sidebar-drop-pin",
+						app.t("dropHereToPin"),
+						theme.border,
+						theme.muted_foreground,
+						{
+							let view = view.clone();
+							move |drag: &SidebarDrag, cx| {
+								view.update(cx, |app, cx| {
+									let _ = app.backend.set_pinned(&drag.id, true);
+									app.reload_projects();
+									cx.notify();
+								});
+							}
+						},
+					))
+				})
 		})
 		.child(
 			h_flex()
@@ -303,6 +350,9 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 									let gid = gid.clone();
 									move |_, _, cx| {
 										view.update(cx, |app, cx| {
+											if app.data.overlay.sort_mode {
+												return;
+											}
 											if let Some(ix) =
 												app.data.prefs.collapsed_groups.iter().position(|x| x == &gid)
 											{
@@ -314,6 +364,19 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 											cx.notify();
 										});
 									}
+								})
+								.when(app.data.overlay.sort_mode, |el| {
+									el.on_drop({
+										let view = view.clone();
+										let gid = gid.clone();
+										move |drag: &SidebarDrag, _, cx| {
+											view.update(cx, |app, cx| {
+												let _ = app.backend.assign_to_group(&drag.id, Some(gid.clone()));
+												app.reload_projects();
+												cx.notify();
+											});
+										}
+									})
 								})
 								.child(
 									Icon::new(if collapsed {
@@ -342,31 +405,21 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 				.children(ungrouped.into_iter().map(|p| project_row(app, &p, cx))),
 		)
 		.when(app.data.overlay.sort_mode, |el| {
-			el.child(
-				div()
-					.id("sidebar-drop-unpin")
-					.mt_2()
-					.px_2()
-					.py_3()
-					.rounded_md()
-					.border_1()
-					.border_dashed()
-					.border_color(theme.border)
-					.text_xs()
-					.text_color(theme.muted_foreground)
-					.child(app.t("dropHereToUnpinOrMoveOut"))
-					.on_mouse_up(MouseButton::Left, {
-						let view = view.clone();
-						move |_, _, cx| {
-							view.update(cx, |app, cx| {
-								if let Some(id) = app.data.overlay.drag_project.take() {
-									app.drop_sidebar_project(&id, None, true);
-									cx.notify();
-								}
-							});
-						}
-					}),
-			)
+			el.child(drop_zone(
+				"sidebar-drop-unpin",
+				app.t("dropHereToUnpinOrMoveOut"),
+				theme.border,
+				theme.muted_foreground,
+				{
+					let view = view.clone();
+					move |drag: &SidebarDrag, cx| {
+						view.update(cx, |app, cx| {
+							app.drop_sidebar_project(&drag.id, None, true);
+							cx.notify();
+						});
+					}
+				},
+			))
 		})
 		.when(app.data.overlay.onboarding && !has_any_projects(app), |el| {
 			el.child(
@@ -483,6 +536,33 @@ fn project_row(
 							cx.notify();
 						});
 					}
+				})
+				.when(app.data.overlay.sort_mode, |el| {
+					el.cursor(gpui::CursorStyle::OpenHand)
+						.opacity(0.95)
+						.on_drag(
+							SidebarDrag {
+								id: id.clone(),
+								name: project.name.clone(),
+							},
+							|info, _, _, cx| {
+								cx.new(|_| crate::ui::DragGhost {
+									label: info.name.clone(),
+								})
+							},
+						)
+						.on_drop({
+							let view = view.clone();
+							let target = id.clone();
+							move |drag: &SidebarDrag, _, cx| {
+								view.update(cx, |app, cx| {
+									if drag.id != target {
+										app.drop_sidebar_project(&drag.id, Some(&target), false);
+										cx.notify();
+									}
+								});
+							}
+						})
 				})
 				.when(app.data.prefs.show_avatars, |el| {
 					el.child(

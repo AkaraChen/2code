@@ -303,6 +303,10 @@ impl Backend {
 		service::filesystem::delete_file_tree_paths(&self.db, profile_id, paths)
 	}
 
+	pub fn move_paths(&self, profile_id: &str, sources: &[String], target_dir: Option<&str>) -> Result<(), AppError> {
+		service::filesystem::move_file_tree_paths(&self.db, profile_id, sources, target_dir)
+	}
+
 	pub fn reveal_path(&self, profile_id: &str, path: Option<&str>) -> Result<(), AppError> {
 		service::filesystem::reveal_path_in_file_manager(&self.db, profile_id, path)
 	}

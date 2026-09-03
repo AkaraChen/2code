@@ -6,6 +6,11 @@ use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Style
 use crate::app::AppView;
 use crate::state::ContextMenu;
 
+#[derive(Clone)]
+struct TreeDrag {
+	path: String,
+}
+
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
 	let view = cx.entity();
@@ -31,6 +36,15 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						f32::from(ev.position.x),
 						f32::from(ev.position.y),
 					));
+					cx.notify();
+				});
+			}
+		})
+		.on_drop({
+			let view = view.clone();
+			move |drag: &TreeDrag, _, cx| {
+				view.update(cx, |app, cx| {
+					app.drop_tree_paths(&[drag.path.clone()], None);
 					cx.notify();
 				});
 			}
@@ -122,6 +136,30 @@ fn node_view(
 							app.data.overlay.drag_file = Some(path.clone());
 						});
 					}
+				})
+				.on_drag(
+					TreeDrag {
+						path: path_owned.clone(),
+					},
+					|info, _, _, cx| {
+						cx.new(|_| crate::ui::DragGhost {
+							label: info.path.clone(),
+						})
+					},
+				)
+				.when(node.is_dir, |el| {
+					el.on_drop({
+						let view = view.clone();
+						let dest = path_owned.clone();
+						move |drag: &TreeDrag, _, cx| {
+							view.update(cx, |app, cx| {
+								if drag.path != dest {
+									app.drop_tree_paths(&[drag.path.clone()], Some(&dest));
+									cx.notify();
+								}
+							});
+						}
+					})
 				})
 				.on_mouse_down(MouseButton::Right, {
 					let view = view.clone();
