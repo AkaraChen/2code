@@ -5,12 +5,18 @@ import tailwindcss from "@tailwindcss/vite";
 import babel from "@rolldown/plugin-babel";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { localFileIconsPlugin } from "./scripts/vite-plugin-local-file-icons";
+import { localFileIconsPlugin } from "../../scripts/vite-plugin-local-file-icons";
 
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  root: path.resolve(__dirname),
+  publicDir: path.resolve(__dirname, "public"),
+  build: {
+    outDir: path.resolve(__dirname, "dist"),
+    emptyOutDir: true,
+  },
   plugins: [
     localFileIconsPlugin(),
     tailwindcss(),
@@ -51,7 +57,7 @@ export default defineConfig(async () => ({
       : undefined,
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/legacy/**"],
     },
   },
 }));

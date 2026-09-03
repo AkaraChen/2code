@@ -29,7 +29,7 @@
 		"beforeBuildCommand": "bun run tauri:before-build",
 		"beforeDevCommand": "bun run tauri:before-dev",
 		"devUrl": "http://localhost:1420",
-		"frontendDist": "../dist"
+		"frontendDist": "../legacy/web/dist"
 	},
 	"bundle": {
 		"active": true,
@@ -53,7 +53,7 @@
 			"force": false,
 			"includePatterns": null,
 			"includePrivate": false,
-			"outputPath": "./src/generated",
+			"outputPath": "./legacy/web/src/generated",
 			"projectPath": "./src-tauri",
 			"typeMappings": null,
 			"validationLibrary": "none",

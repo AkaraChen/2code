@@ -30,11 +30,11 @@ jobs:
       - name: Run node tooling typecheck
         run: node ./node_modules/@typescript/native/bin/tsc -p tsconfig.node.json --noEmit
 
-      - name: Run app typecheck
-        run: bun run typecheck
+      - name: Run leftover React typecheck
+        run: bun run legacy:typecheck
 
-      - name: Run Vitest
-        run: bun run test
+      - name: Run leftover React Vitest
+        run: bun run legacy:test
 
   website:
     name: Website

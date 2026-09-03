@@ -35,7 +35,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
 - **Project management**: organize local code projects and launch focused workspaces quickly.
 - **Agent status awareness**: detect running/waiting agent state from terminal output, titles, and progress sequences.
-- **Localized UI**: native GPUI copy is bilingual (English / Chinese); leftover React messages still live in `messages/`.
+- **Localized UI**: native GPUI copy is bilingual (English / Chinese); leftover React messages still live in `legacy/web/messages/`.
 
 ## Tech Stack
 
@@ -84,7 +84,7 @@ bun tauri:dev
 ### Run only the legacy frontend
 
 ```bash
-bun run dev
+bun run legacy:dev
 ```
 
 ### Build the native app
@@ -99,7 +99,7 @@ cd src-tauri && cargo build -p gpui-app --release
 | --- | --- |
 | `cargo run -p gpui-app` | Run the native GPUI desktop app |
 | `bun tauri dev` | Run the legacy Tauri/React desktop shell |
-| `bun run dev` | Run the Vite frontend only |
+| `bun run legacy:dev` | Run the leftover Vite frontend only |
 | `cargo build -p gpui-app --release` | Build the production GPUI desktop app |
 | `bun tauri build` | Build the legacy Tauri/React app |
 | `cd src-tauri && cargo test` | Run Rust tests |
@@ -111,30 +111,21 @@ cd src-tauri && cargo build -p gpui-app --release
 
 ```text
 2code/
-├── src/                        # Leftover Tauri/React UI (legacy-tauri only)
-│   ├── features/               # Feature-first app modules
-│   ├── shared/                 # Shared lib, providers, components, hooks
-│   ├── layout/                 # App shell and sidebar
-│   ├── generated/              # Generated Tauri IPC bindings
-│   └── paraglide/              # Generated i18n messages
 ├── src-tauri/
-│   ├── src/handler/            # Tauri command entry points
+│   ├── crates/gpui-app/        # Native GPUI desktop app (the product)
 │   ├── crates/infra/           # DB, PTY, Git, watcher infrastructure
 │   ├── crates/service/         # Business logic
 │   ├── crates/repo/            # Diesel repositories
-│   ├── crates/gpui-app/        # Native GPUI desktop shell
 │   ├── crates/model/           # DTOs, Diesel models, error types
+│   ├── src/handler/            # Leftover Tauri commands (legacy-tauri)
 │   └── migrations/             # Embedded Diesel migrations
-├── messages/                   # i18n source messages
+├── legacy/                     # Leftover Tauri/React UI + e2e
 └── justfile                    # Development helper commands
 ```
 
 ## Development Notes
 
-- Add Tauri commands in `src-tauri/src/handler/*.rs`, register them in `src-tauri/src/lib.rs`, then run `cargo tauri-typegen generate`.
-- Consume IPC from `src/generated/`; do not hand-write frontend API clients for Tauri commands.
-- Use `src/shared/lib/queryKeys.ts` for TanStack Query keys.
-- Keep terminal components mounted. Terminal tab switching should hide inactive terminals with CSS instead of unmounting them.
+- The shipped UI is `src-tauri/crates/gpui-app`. Do not add product features to `legacy/web`.
 - Database access uses a single `Arc<Mutex<SqliteConnection>>`; keep lock scopes short and never hold the lock across `await`.
 - Diesel migrations in `src-tauri/migrations/` are embedded and applied on startup.
 - Worktree profiles are created under `~/.2code/workspace/{id}`.

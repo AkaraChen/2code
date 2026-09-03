@@ -1,15 +1,13 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-	project: ["src/**/*.{ts,tsx}"],
+	project: ["legacy/web/src/**/*.{ts,tsx}"],
 	ignore: [
-		"src/generated/**",
-		"src/paraglide/**",
-		"src/vite-env.d.ts",
-		// shadcn/ui primitives are intentionally kept regenerable.
-		"src/components/ui/**",
-		// Vite aliases node:diagnostics_channel to this browser stub.
-		"src/shared/lib/node-stubs/diagnostics-channel.ts",
+		"legacy/web/src/generated/**",
+		"legacy/web/src/paraglide/**",
+		"legacy/web/src/vite-env.d.ts",
+		"legacy/web/src/components/ui/**",
+		"legacy/web/src/shared/lib/node-stubs/diagnostics-channel.ts",
 	],
 	ignoreDependencies: [
 		"react-grab",

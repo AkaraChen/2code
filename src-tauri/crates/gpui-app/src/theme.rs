@@ -1,4 +1,4 @@
-//! 2code visual tokens extracted from `src/app.css`.
+//! 2code visual tokens extracted from `legacy/web/src/app.css`.
 //!
 //! These match the current shadcn/OKLCH theme so the GPUI shell can stay
 //! visually aligned with the screenshots of the existing app.

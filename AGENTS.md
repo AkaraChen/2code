@@ -3,25 +3,21 @@
 **Generated:** 2026-04-09 | **Commit:** 93661da | **Branch:** dev
 
 ## OVERVIEW
-Tauri 2 desktop app for managing code projects with integrated PTY terminals. React 19 + TS frontend, Rust workspace backend, SQLite via Diesel.
+Native GPUI desktop app for managing code projects with integrated PTY terminals. Rust workspace backend, SQLite via Diesel. Leftover Tauri/React UI is in `legacy/`.
 
 ## STRUCTURE
 ```
 2code/
-├── src/                        # React 19 + Vite frontend
-│   ├── features/               # Feature-first: debug git home profiles projects settings terminal topbar watcher
-│   ├── shared/                 # lib/ providers/ components/ hooks/
-│   ├── layout/                 # AppSidebar + sidebar/ sub-components
-│   ├── generated/              # AUTO-GENERATED Tauri IPC bindings (DO NOT EDIT, gitignored)
-│   └── paraglide/              # AUTO-GENERATED i18n messages (DO NOT EDIT, gitignored)
 ├── src-tauri/
 │   ├── src/handler/            # #[tauri::command] entry points (8 files)
 │   ├── crates/infra/src/       # DB, PTY, git, shell init, watcher, logger, slug
 │   ├── crates/service/src/     # Business logic: project, profile, pty, watcher
 │   ├── crates/repo/src/        # Diesel CRUD: project, profile, pty
 │   ├── crates/model/src/       # DTOs, Diesel models, error types
+│   ├── crates/gpui-app/        # Native GPUI desktop app (the product)
 │   └── migrations/             # Diesel SQL migrations (embedded at compile time)
-├── messages/                   # i18n source: en.json zh.json
+├── legacy/web/                 # Leftover React 19 + Vite UI
+├── legacy/e2e/                 # Leftover Tauri-driver smoke tests
 └── justfile                    # Build helpers: coverage, fmt
 ```
 
@@ -30,25 +26,26 @@ Tauri 2 desktop app for managing code projects with integrated PTY terminals. Re
 | Task | Location |
 |------|----------|
 | Add Tauri command | `src-tauri/src/handler/*.rs` → register in `lib.rs` → run `cargo tauri-typegen generate` |
-| Consume IPC in frontend | Import from `@/generated` → wrap in TanStack Query hook |
-| Query keys | `src/shared/lib/queryKeys.ts` — always use this, never inline strings |
-| Terminal tabs/state | `src/features/terminal/store.ts` (Zustand + Immer) |
+| Consume leftover IPC | Import from `legacy/web/src/generated` → TanStack Query hook |
+| Query keys | `legacy/web/src/shared/lib/queryKeys.ts` |
+| Terminal tabs/state | `src-tauri/crates/gpui-app` (`AppRoot.terminals`); leftover Zustand in `legacy/web/src/features/terminal/store.ts` |
 | PTY session lifecycle | `src-tauri/crates/infra/src/pty.rs` + `crates/service/src/pty.rs` |
 | DB migrations | `src-tauri/migrations/` (Diesel; auto-applied on startup) |
 | Git operations | `src-tauri/crates/infra/src/git.rs` + `src-tauri/src/handler/debug.rs` |
 | Context ID resolution | `crates/repo/src/project.rs::resolve_context_folder` (polymorphic project/profile) |
 | Worktree profiles | `crates/service/src/profile.rs` — creates `~/.2code/workspace/{id}` |
-| Agent status detection | `src/features/terminal/detector/` → `Terminal.tsx` → terminalStore |
-| i18n messages | `messages/en.json` + `messages/zh.json` → `import * as m from "@/paraglide/messages.js"` |
+| Agent status detection | `src-tauri/crates/gpui-app/src/detector.rs`; leftover React in `legacy/web/src/features/terminal/detector/` |
+| i18n messages | GPUI: `gpui-app/src/i18n.rs`; leftover React: `legacy/web/messages/{en,zh}.json` |
 | Shell init injection | `infra/shell_init.rs` (ZDOTDIR-based) |
 
 ## COMMANDS
 ```bash
-bun tauri dev                    # full dev (frontend + Rust hot reload)
-bun run dev                      # frontend only
-bun tauri build                  # production build
+bun start                        # native GPUI desktop app
+bun run build                    # production GPUI binary
 cd src-tauri && cargo test       # Rust tests
-cargo tauri-typegen generate     # regenerate src/generated/ after Rust command changes
+bun run legacy:dev               # leftover Vite webview
+bun tauri:dev                    # leftover Tauri/React shell
+cargo tauri-typegen generate     # regenerate leftover legacy/web/src/generated/
 just fmt                         # format TS + Rust
 just coverage                    # llvm-cov HTML report
 ```
@@ -80,9 +77,9 @@ just coverage                    # llvm-cov HTML report
 - `topbar` feature is NOT part of `git` feature despite CLAUDE.md proximity — it's a separate customizable control bar system
 - Immer `MapSet` plugin must be enabled before any store using `Set`/`Map` (already done in `store.ts`)
 - `noUnusedLocals` + `noUnusedParameters` enforced in tsconfig — TS will error on unused vars
-- CI: `.github/workflows/tauri-smoke.yml` — smoke test on `ubuntu-24.04` using `xvfb-run` (virtual display) + `webkit2gtk-driver` + Tauri driver. Not a full test suite.
-- E2E: `e2e-tests/` uses Mocha + Selenium WebDriver via Tauri driver (not Playwright/Cypress)
-- Frontend uses Vitest (`npm test` = `vitest run`); test files colocated as `*.test.ts` — Zustand store tests use `resetStore()` helper pattern
+- CI: `.github/workflows/tauri-smoke.yml` — native GPUI smoke on `ubuntu-24.04` using `xvfb-run` (virtual display). Not a full test suite.
+- E2E leftover: `legacy/e2e/` uses Mocha + Selenium WebDriver via Tauri driver
+- Leftover React uses Vitest (`bun run legacy:test`); test files colocated as `*.test.ts`
 - ESLint uses `@antfu/eslint-config` with React flat config — configuration lives in `eslint.config.js` at the repo root
 - `openspec/` dir at root is OpenSpec workflow tooling — not application code
 - `src-tauri/src/bridge.rs` — trait impls (`TauriPtyEmitter`, `TauriWatchSender`) that decouple service layer from Tauri

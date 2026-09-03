@@ -6,5 +6,5 @@
 		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true
 	},
-	"include": ["vite.config.ts", "scripts/**/*.ts"]
+	"include": ["legacy/web/vite.config.ts", "scripts/**/*.ts"]
 }

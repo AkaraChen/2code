@@ -6,7 +6,7 @@ The old Tauri/React webview is behind `--features legacy-tauri`. Default `code` 
 
 ## Style baseline
 
-Tokens were copied from `src/app.css` and checked against the current product screens:
+Tokens were copied from `legacy/web/src/app.css` and checked against the current product screens:
 
 | Token | Light | Dark |
 | --- | --- | --- |
@@ -38,4 +38,4 @@ cd src-tauri && cargo run -p gpui-app
 - Agent status detector (Claude / Codex / Cursor) with in-app + system-sound notifications
 - Git changes list with commit / discard / push / branch checkout
 - File create, delete, reveal, and markdown preview
-- Tokens from `src/app.css` are applied onto the gpui-component `Theme`
+- Tokens from `legacy/web/src/app.css` are applied onto the gpui-component `Theme`

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**2code** is a Tauri 2 desktop application for managing code projects with integrated terminal sessions. It combines a React 19 frontend with a Rust backend, featuring:
+**2code** is a native GPUI desktop application for managing code projects with integrated terminal sessions. The leftover Tauri/React webview lives in `legacy/` behind `--features legacy-tauri`. The product features:
 
 - Project management with folder selection and metadata
 - Profile management via git worktrees (branch-isolated workspaces)
@@ -12,22 +12,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - SQLite database for project/session/profile storage
 - Project-level configuration (`2code.json`) for setup/teardown scripts
 - Git diff/commit history browsing
-- i18n support via Paraglide.js (English + Chinese)
+- i18n: native GPUI bilingual copy (English / Chinese); leftover React still uses Paraglide.js
 
 ## Commands
 
 ```bash
-# Dev server (frontend + backend hot-reload)
-bun tauri dev
+# Native GPUI app
+bun start
+# or
+cd src-tauri && cargo run
 
-# Frontend-only dev
-bun run dev
-
-# Production build
-bun tauri build
-
-# Frontend-only build (runs paraglide compile → tsc → vite build)
+# Production GPUI binary
 bun run build
+
+# Leftover Tauri/React webview
+cargo run --manifest-path src-tauri/Cargo.toml --features legacy-tauri
 
 # Rust tests
 cd src-tauri && cargo test
@@ -42,40 +41,17 @@ just fmt               # runs 'fama'
 
 ## Architecture
 
-### Frontend (`/src`)
+### Native shell (`src-tauri/crates/gpui-app`)
 
-React 19 + TypeScript + Vite. Provider stack (outermost → innermost): `QueryClientProvider` → `ThemeProvider` → `TooltipProvider` → `BrowserRouter` → `AppRoot`, with the shadcn `Toaster` mounted inside `TooltipProvider`.
+Zed GPUI + gpui-component widgets. Entry: `gpui_app::run()` from `src-tauri/src/main.rs` (unless `--features legacy-tauri`). Talks to `service` / `repo` / `infra` in-process — no webview, no Tauri IPC on the product path.
 
-**Routing** (react-router v7): `/` → HomePage, `/projects/:id/profiles/:profileId` → ProjectDetailPage, `/settings` → SettingsPage, `*` → redirect to `/`.
+**Surfaces:** Home, project sidebar + profiles, workspace (Files / Git / Terminal), settings, dialogs, debug overlay.
 
-**Key directories (feature-based organization):**
+**State:** `AppRoot` owns projects, workspace pane, PTY tabs, git/file buffers, and settings JSON under the app data dir.
 
-- `generated/` — Auto-generated Tauri IPC bindings via `tauri-typegen` (gitignored, do not edit)
-- `features/home/` — HomePage
-- `features/projects/` — ProjectDetailPage, project hooks (`useProjects`, `useCreateProject`, `useProjectProfiles`, etc.) and dialogs (Create/Delete/Rename)
-- `features/profiles/` — Profile hooks (`useCreateProfile`, `useDeleteProfile`) and dialogs
-- `features/terminal/` — Terminal store, hooks (`useCreateTerminalTab`, `useCloseTerminalTab`, `useRestoreTerminals`, `useTerminalTheme`), themes, and components (Terminal, TerminalTabs, TerminalLayer, TerminalPreview)
-- `features/git/` — GitDiffDialog, ProjectTopBar (git branch display + diff trigger), and components (ChangesFileList, CommitList, GitDiffPane, HistoryFileList)
-- `features/settings/` — SettingsPage, picker components, and Zustand stores (`stores/terminalSettingsStore`, `stores/themeStore`, `stores/notificationStore`)
-- `features/watcher/` — File system watcher hook (`useFileWatcher`) for live project updates via Tauri events
-- `features/debug/` — Debug panel (Cmd+Shift+D toggle), debug logger, and stores (`debugStore`, `debugLogStore`)
-- `shared/lib/` — Query client config, centralized query keys, cached promise utility
-- `shared/providers/` — ThemeProvider
-- `shared/components/` — Fallbacks (PageSkeleton, PageError, SidebarSkeleton), SidebarLink. ErrorBoundary is from `react-error-boundary` package.
-- `layout/` — AppSidebar and `sidebar/` sub-components (ProjectMenuItem, ProfileList, ProfileItem)
+### Leftover React (`legacy/web`)
 
-**State management:**
-
-- Zustand for client state (terminal tabs per project, font preferences, notification settings)
-- TanStack Query for server state (projects, sessions, profiles)
-- Query keys centralized in `shared/lib/queryKeys.ts` — always use `queryKeys.projects.all` / `queryKeys.git.diff(profileId)` pattern
-- `terminalSettingsStore`, `notificationStore`, and `themeStore` use persist middleware (localStorage). Terminal store is rebuilt from DB on startup.
-
-**UI Framework:**
-
-- shadcn/ui primitives in `src/components/ui` (Base UI + Tailwind CSS v4)
-- `next-themes` for dark/light mode (wrapped in custom ThemeProvider)
-- `sonner` for toast notifications
+The old Tauri/React webview. Do not add product features here. Vite + React 19 + shadcn, Paraglide i18n, and `legacy/web/src/generated/` Tauri bindings. Enabled only with `--features legacy-tauri`.
 
 ### Backend (`/src-tauri`)
 
@@ -98,11 +74,11 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 
 **Workspace crates:** `model/`, `repo/`, `service/`, and `infra/`.
 
-**Agent status detection:** `Terminal.tsx` detects coding-agent state from xterm screen text, OSC title, and OSC progress after live output writes. Rules live in `src/features/terminal/detector/rules/`, one manifest per agent. The detector publishes `running|waiting|idle` to `terminalStore`; waiting status can play the configured system sound via the generated `playSystemSound` Tauri command.
+**Agent status detection:** the GPUI shell (`gpui-app/src/detector.rs`) reads vt100 screen text and OSC titles. Leftover React rules still live in `legacy/web/src/features/terminal/detector/rules/`.
 
 ### IPC Pattern (Frontend ↔ Backend)
 
-The project uses **tauri-typegen** to auto-generate typed TypeScript bindings from Rust commands. Config in `tauri.conf.json` under `plugins.typegen` (output: `src/generated/`).
+The leftover webview uses **tauri-typegen** to auto-generate typed TypeScript bindings from Rust commands. Config in `tauri.conf.json` under `plugins.typegen` (output: `legacy/web/src/generated/`). The GPUI product talks to Rust services in-process.
 
 **Adding a new command:**
 
@@ -110,7 +86,7 @@ The project uses **tauri-typegen** to auto-generate typed TypeScript bindings fr
 2. Register in `lib.rs` via `tauri::generate_handler![]`
 3. Run `cargo tauri-typegen generate` to regenerate TypeScript bindings
 4. Import generated function directly: `import { myCommand } from "@/generated"`
-5. Consume via TanStack Query hook in the relevant `src/features/*/hooks.ts` with query invalidation on mutations
+5. Consume via TanStack Query hook in the relevant `legacy/web/src/features/*/hooks.ts` with query invalidation on mutations
 
 **Do not** create manual API wrappers in `src/api/` — all IPC bindings are auto-generated.
 
@@ -174,7 +150,7 @@ Tests are colocated with implementation in `#[cfg(test)]` modules.
 
 ## Internationalization (i18n)
 
-Paraglide.js v2 with inlang message format plugin. Source messages in `messages/{locale}.json`. Generated code in `src/paraglide/` (gitignored, do not edit).
+Leftover React uses Paraglide.js v2. Source messages in `legacy/web/messages/{locale}.json`. Generated code in `legacy/web/src/paraglide/` (gitignored, do not edit). Native GPUI copy lives in `gpui-app/src/i18n.rs`.
 
 **Usage:** `import * as m from "@/paraglide/messages.js"` → `m.home()`
 
@@ -195,12 +171,12 @@ Without this, paraglide compiles but generates empty message files. Also require
 - **Database is single-connection** (`Arc<Mutex<SqliteConnection>>`), not a pool — avoid long-held locks
 - **Terminals use CSS display for show/hide** — do not refactor to conditional rendering or they lose xterm state
 - **PTY output sends `&[u8]` over a per-session IPC `Channel`** (not global events; frontend receives `ArrayBuffer`) — xterm.js handles UTF-8 decoding across chunk boundaries, so no backend boundary splitting is done
-- **Terminal font metrics must be measured on an attached canvas** — WebKit only resolves locally installed fonts for canvases that are in the document; detached canvases and `OffscreenCanvas` silently report fallback metrics. xterm 6 measures offscreen but paints via the DOM, so `src/features/terminal/lib/xtermMetricsPatch.ts` redirects both of its measurement surfaces (`CharSizeService` and `WidthCache`) to attached canvases. Without it the terminal leaves ~1/6 of its width empty with any font whose advance ratio differs from the fallback's (e.g. Sarasa's 0.5 em vs Menlo's 0.6 em). See `src/features/terminal/AGENTS.md`.
+- **Leftover xterm font metrics** — WebKit only resolves locally installed fonts for canvases that are in the document. See `legacy/web/src/features/terminal/AGENTS.md`. The GPUI terminal uses a vt100 cell grid, not xterm.
 - **Font listing and sound playback are platform-backed**: macOS uses `core-text` + `/System/Library/Sounds` + `afplay`; Linux uses `fontdb` + XDG sound dirs + desktop audio players; Windows uses `fontdb` + `C:\Windows\Media` + PowerShell `Media.SoundPlayer`.
 - **UI components** should use shadcn/ui primitives from `src/components/ui`; do not add legacy UI-library APIs back
 - **Directory/branch name generation** uses `pinyin` crate for CJK → romanized slugs — well-tested, don't simplify
 - **macOS title bar** uses overlay style with custom traffic light positioning — window chrome is defined in `tauri.conf.json`
 - **Tauri plugins**: `tauri-plugin-opener`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-store` — all registered in `lib.rs`
-- **Generated bindings** (`src/generated/`) are gitignored — run `cargo tauri-typegen generate` after changing Rust commands
+- **Leftover generated bindings** (`legacy/web/src/generated/`) — run `cargo tauri-typegen generate` after changing Rust commands used by the webview
 - **Diesel schema** (`src-tauri/src/schema.rs`) is auto-generated — do not edit manually; run `diesel print-schema` or migrations
 - **Immer MapSet plugin** — terminal store uses `Set<string>` for `notifiedTabs`, requires `enableMapSet()` from immer before store creation. Already called at module level in `store.ts`; if adding `Set`/`Map` to other immer stores, enable it there too

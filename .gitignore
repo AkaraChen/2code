@@ -9,10 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
-src/paraglide
+legacy/web/src/paraglide
 dist-ssr
 *.local
 public/file-icons/
+legacy/web/public/file-icons/
 
 # Editor directories and files
 .vscode/*
@@ -28,7 +29,7 @@ public/file-icons/
 # Coverage reports
 src-tauri/coverage/
 /coverage
-e2e-tests/artifacts/
+legacy/e2e/artifacts/
 
 # Local planning notes
 /plans/

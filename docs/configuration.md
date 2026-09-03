@@ -6,23 +6,23 @@
 | ------------------------------ | ---------------- | ------------------------------------------------------------------------------------------- |
 | `tauri.conf.json`              | `src-tauri/`     | Tauri app config: window, build commands, bundling, typegen plugin                          |
 | `Cargo.toml`                   | `src-tauri/`     | Rust workspace config, dependencies, workspace members                                      |
-| `package.json`                 | Root             | Frontend dependencies, scripts (`dev`, `build`, `lint`, `start`)                            |
-| `vite.config.ts`               | Root             | Vite config: React plugin (with React Compiler), Paraglide plugin, path aliases, dev server |
-| `tsconfig.json`                | Root             | TypeScript config: path aliases (`@/` → `src/`), `allowJs: true` for Paraglide              |
-| `eslint.config.js`             | Root             | ESLint config (flat config format)                                                          |
+| `package.json`                 | Root             | Product scripts (`start` / `build` = GPUI) plus `legacy:*` leftover React scripts           |
+| `vite.config.ts`               | `legacy/web/`    | Leftover Vite config for `--features legacy-tauri`                                          |
+| `tsconfig.json`                | `legacy/web/`    | Leftover TypeScript config (`@/` → `legacy/web/src/`)                                       |
+| `eslint.config.js`             | Root             | ESLint config (flat config format), scoped to `legacy/web`                                  |
 | `knip.config.ts`               | Root             | Dead code detection config                                                                  |
-| `justfile`                     | Root             | Build recipes: `fmt`, `build-helper`, `build-helper-dev`, `start`                           |
-| `project.inlang/settings.json` | Root             | Paraglide.js i18n config, must include message format plugin module                         |
+| `justfile`                     | Root             | Build recipes: `start` (GPUI), `fmt`, `verify`                                              |
+| `project.inlang/settings.json` | `legacy/web/`    | Leftover Paraglide.js i18n config                                                           |
 | `2code.json`                   | Per-project root | Project-level setup/teardown scripts                                                        |
 
 ## Build Commands
 
 | Command                        | What it does                                                                                    |
 | ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `bun tauri dev`                | Full dev server (frontend + Rust hot-reload). Runs `just build-helper-dev && bun run dev` first |
-| `bun tauri build`              | Production build. Runs `just build-helper && bun run build` first                               |
-| `bun run dev`                  | Frontend-only Vite dev server on port 1420                                                      |
-| `bun run build`                | `paraglide-js compile` → `tsc` → `vite build`                                                   |
+| `bun start` / `bun run dev`    | Native GPUI desktop app                                                                         |
+| `bun run build`                | Production GPUI binary (`cargo build -p gpui-app --release`)                                    |
+| `bun run legacy:dev`           | Leftover Vite webview on port 1420                                                              |
+| `bun tauri:dev`                | Leftover Tauri/React shell (`--features legacy-tauri`)                                          |
 | `just fmt`                     | Run `fama` code formatter                                                                       |
 | `just build-helper`            | Build sidecar in release mode, copy to `binaries/`                                              |
 | `just build-helper-dev`        | Build sidecar in debug mode, copy to `binaries/`                                                |

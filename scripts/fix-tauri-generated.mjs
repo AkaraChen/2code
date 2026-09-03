@@ -2,13 +2,13 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const replacements = [
 	{
-		path: new URL("../src/generated/types.ts", import.meta.url),
+		path: new URL("../legacy/web/src/generated/types.ts", import.meta.url),
 		pairs: [
 			["onOutput: Channel<unknown>;", "onOutput: Channel<ArrayBuffer>;"],
 		],
 	},
 	{
-		path: new URL("../src/generated/commands.ts", import.meta.url),
+		path: new URL("../legacy/web/src/generated/commands.ts", import.meta.url),
 		pairs: [
 			[
 				"import { invoke, Channel } from '@tauri-apps/api/core';",

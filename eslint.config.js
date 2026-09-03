@@ -3,8 +3,8 @@ import eslintReact from "@eslint-react/eslint-plugin";
 import reactCompiler from "eslint-plugin-react-compiler";
 import reactRefresh from "eslint-plugin-react-refresh";
 
-const reactFiles = ["src/**/*.ts", "src/**/*.tsx"];
-const reactComponentFiles = ["src/**/*.tsx"];
+const reactFiles = ["legacy/web/src/**/*.ts", "legacy/web/src/**/*.tsx"];
+const reactComponentFiles = ["legacy/web/src/**/*.tsx"];
 
 export default antfu({
 	stylistic: false,
@@ -15,9 +15,9 @@ export default antfu({
 		ignores: [
 			"**/*.md",
 			"./src-tauri/target/**",
-			"./src/components/ui/**",
-			"./src/generated/**",
-			"./src/paraglide/**",
+			"./legacy/web/src/components/ui/**",
+			"./legacy/web/src/generated/**",
+			"./legacy/web/src/paraglide/**",
 			"./website/**",
 		],
 	})

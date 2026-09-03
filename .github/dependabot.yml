@@ -9,7 +9,7 @@ updates:
       timezone: Asia/Shanghai
 
   - package-ecosystem: bun
-    directory: /e2e-tests
+    directory: /legacy/e2e
     schedule:
       interval: weekly
       day: monday
