@@ -7,7 +7,10 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
-use crate::state::{project_group_menu_rows, ContextMenu, DialogKind, GroupMenuRow};
+use crate::state::{
+	leftover_dialog_width, leftover_rename_disabled, leftover_template_rows, project_group_menu_rows, ContextMenu,
+	DialogKind, GroupMenuRow, LeftoverTemplateRow,
+};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	div()
@@ -27,7 +30,7 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 	let title = match kind {
 		DialogKind::CreateProject => app.t("createProject"),
 		DialogKind::DeleteProject => app.t("deleteProject"),
-		DialogKind::RenameProject => app.t("rename"),
+		DialogKind::RenameProject => app.t("renameProject"),
 		DialogKind::ProjectSettings => app.t("projectSettings"),
 		DialogKind::CreateProfile => app.t("createProfile"),
 		DialogKind::DeleteProfile => app.t("deleteProfile"),
@@ -61,22 +64,16 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 		.child(
 			v_flex()
 				.id("dialog-panel")
-				.w(px(if matches!(kind, DialogKind::ReviewQueue) {
-					720.
-				} else if matches!(kind, DialogKind::SwitchBranch) {
-					448.
-				} else if matches!(kind, DialogKind::ProjectSettings) {
-					560.
-				} else if matches!(kind, DialogKind::DebugLog) {
-					512.
+				.w(px(leftover_dialog_width(kind)))
+				.max_h(px(if matches!(kind, DialogKind::DebugLog) {
+					630.
 				} else {
-					380.
+					640.
 				}))
-				.max_h(px(if matches!(kind, DialogKind::DebugLog) { 630. } else { 640. }))
 				.p_4()
-				.gap_3()
+				.gap_4()
 				.rounded_xl()
-				.bg(theme.background)
+				.bg(theme.popover)
 				.border_1()
 				.border_color(theme.border)
 				.shadow_lg()
@@ -89,17 +86,23 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 								.gap_2()
 								.items_center()
 								.when(kind == DialogKind::CreateProject, |el| {
-									el.child(Icon::new(IconName::Folder).w(px(18.)))
+									el.child(crate::ui::leftover_folder_plus_mark(16., 9.))
+								})
+								.when(kind == DialogKind::CreateProfile, |el| {
+									el.child(crate::ui::leftover_branch_glyph(theme.muted_foreground))
+								})
+								.when(kind == DialogKind::RenameProject, |el| {
+									el.child(crate::ui::leftover_pencil_glyph(theme.muted_foreground))
 								})
 								.when(kind == DialogKind::ProjectSettings, |el| {
-									el.child(Icon::new(IconName::Settings).w(px(18.)))
+									el.child(Icon::new(IconName::Settings).w(px(16.)))
 								})
 								.when(
 									kind == DialogKind::DeleteProfile || kind == DialogKind::DeleteProject,
-									|el| el.child(Icon::new(IconName::TriangleAlert).w(px(18.))),
+									|el| el.child(Icon::new(IconName::Delete).w(px(16.))),
 								)
 								.when(kind == DialogKind::ReviewQueue, |el| {
-									el.child(Icon::new(IconName::Inbox).w(px(18.)))
+									el.child(Icon::new(IconName::Inbox).w(px(16.)))
 								})
 								.when(kind == DialogKind::SwitchBranch, |el| {
 									el.child(crate::ui::leftover_branch_glyph(theme.muted_foreground))
@@ -141,33 +144,51 @@ fn dialog_body(
 				app.t("createProjectHintFolderNamed")
 			};
 			v_flex()
-				.gap_3()
+				.gap(px(20.))
 				.child(if let Some(folder) = folder.clone() {
 					v_flex()
-						.gap_1()
+						.gap(px(6.))
 						.child(
 							h_flex()
 								.justify_between()
-								.child(div().text_sm().child(app.t("folder")))
-								.child(Button::new("rechoose").xsmall().label(app.t("chooseFolder")).on_click({
-									let view = view.clone();
-									move |_, window, cx| {
-										view.update(cx, |app, cx| {
-											if let Some(p) = backend::pick_folder() {
-												app.apply_picked_folder(p, window, cx);
+								.gap_3()
+								.child(
+									div()
+										.text_xs()
+										.font_medium()
+										.text_color(theme.muted_foreground)
+										.child(app.t("folder")),
+								)
+								.child(
+									Button::new("rechoose")
+										.outline()
+										.xsmall()
+										.label(format!("✎ {}", app.t("chooseFolder")))
+										.on_click({
+											let view = view.clone();
+											move |_, window, cx| {
+												view.update(cx, |app, cx| {
+													if let Some(p) = backend::pick_folder() {
+														app.apply_picked_folder(p, window, cx);
+													}
+													cx.notify();
+												});
 											}
-											cx.notify();
-										});
-									}
-								})),
+										}),
+								),
 						)
 						.child(
 							div()
-								.p_2()
+								.px_3()
+								.py_2()
 								.rounded_md()
+								.border_1()
+								.border_color(theme.border)
 								.bg(theme.muted)
 								.font_family("monospace")
-								.text_xs()
+								.text_sm()
+								.whitespace_nowrap()
+								.overflow_hidden()
 								.child(folder),
 						)
 						.into_any_element()
@@ -175,7 +196,8 @@ fn dialog_body(
 					div()
 						.id("choose-folder-big")
 						.w_full()
-						.h(px(88.))
+						.px_4()
+						.py(px(24.))
 						.rounded_lg()
 						.border_1()
 						.border_dashed()
@@ -197,8 +219,17 @@ fn dialog_body(
 								});
 							}
 						})
-						.child(Icon::new(IconName::Folder).w(px(24.)))
-						.child(div().text_sm().child(app.t("chooseFolder")))
+						.child(
+							Icon::new(IconName::Folder)
+								.w(px(24.))
+								.text_color(theme.muted_foreground),
+						)
+						.child(
+							div()
+								.text_sm()
+								.text_color(theme.muted_foreground)
+								.child(app.t("chooseFolder")),
+						)
 						.into_any_element()
 				})
 				.child(div().text_sm().child(app.t("projectName")))
@@ -221,8 +252,7 @@ fn dialog_body(
 						Button::new("ps-scripts")
 							.small()
 							.selected(app.data.overlay.project_settings_tab == 0)
-							.icon(IconName::ALargeSmall)
-							.label(app.t("scripts"))
+							.label(format!("</> {}", app.t("scripts")))
 							.on_click({
 								let view = view.clone();
 								move |_, _, cx| {
@@ -404,27 +434,31 @@ fn dialog_body(
 			.child(Input::new(&app.inputs.profile_branch))
 			.into_any_element(),
 		DialogKind::DeleteProfile => v_flex()
-			.gap_2()
+			.gap_3()
 			.child(div().text_sm().child(app.t("confirmDeleteProfile")))
 			.when(app.data.overlay.dialog_busy, |el| {
 				el.child(
 					h_flex()
 						.gap_2()
 						.items_center()
+						.text_color(theme.muted_foreground)
 						.child(Spinner::new().with_size(gpui_component::Size::Small))
-						.child(div().text_xs().child(app.t("deleteProfileCheckingGitStatus"))),
+						.child(div().text_sm().child(app.t("deleteProfileCheckingGitStatus"))),
 				)
 			})
 			.when_some(app.data.overlay.delete_warning.clone(), |el, warn| {
-				el.child(
-					div()
-						.p_2()
-						.rounded_md()
-						.bg(theme.warning)
-						.child(div().font_semibold().child(app.t("deleteProfileGitWarningTitle")))
-						.child(div().text_sm().child(warn)),
-				)
+				el.child(leftover_alert(app.t("deleteProfileGitWarningTitle"), warn, &theme))
 			})
+			.when(
+				app.data.overlay.delete_check_failed && !app.data.overlay.dialog_busy,
+				|el| {
+					el.child(leftover_alert(
+						app.t("deleteProfileGitCheckFailedTitle"),
+						app.t("deleteProfileGitCheckFailedDescription"),
+						&theme,
+					))
+				},
+			)
 			.into_any_element(),
 		DialogKind::CloseUnsaved => div()
 			.text_sm()
@@ -683,6 +717,20 @@ fn review_queue_body(app: &AppView, muted: gpui::Hsla, cx: &mut Context<AppView>
 		})
 }
 
+fn leftover_alert(title: String, body: String, theme: &gpui_component::Theme) -> impl IntoElement {
+	v_flex()
+		.w_full()
+		.gap(px(2.))
+		.rounded_lg()
+		.border_1()
+		.border_color(theme.border)
+		.bg(theme.background)
+		.px(px(10.))
+		.py_2()
+		.child(div().font_medium().text_sm().child(title))
+		.child(div().text_sm().text_color(theme.muted_foreground).child(body))
+}
+
 fn leftover_chip(text: &str, fg: gpui::Hsla, bg: gpui::Hsla, border: gpui::Hsla) -> impl IntoElement {
 	div()
 		.h(px(16.))
@@ -817,30 +865,46 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile | DialogKind::ReviewQueue
 	);
 	let review_empty = app.data.overlay.review_comments.is_empty();
+	let rename_init = app
+		.data
+		.overlay
+		.dialog_project
+		.as_ref()
+		.and_then(|id| app.data.projects.iter().find(|p| p.id == *id))
+		.map(|p| p.name.clone())
+		.unwrap_or_default();
+	let rename_disabled = kind == DialogKind::RenameProject
+		&& leftover_rename_disabled(&app.inputs.rename.read(cx).value(), &rename_init);
 
 	h_flex()
 		.justify_end()
 		.gap_2()
 		.when(
-			kind != DialogKind::ReviewQueue
-				&& kind != DialogKind::SwitchBranch
-				&& kind != DialogKind::DebugLog,
+			kind != DialogKind::ReviewQueue && kind != DialogKind::SwitchBranch && kind != DialogKind::DebugLog,
 			|el| {
-				el.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
-					let view = view.clone();
-					move |_, _, cx| {
-						view.update(cx, |app, cx| {
-							app.data.overlay.dialog = None;
-							cx.notify();
-						});
-					}
-				}))
+				el.child(
+					Button::new("dlg-cancel")
+						.outline()
+						.small()
+						.label(app.t("cancel"))
+						.on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									app.data.overlay.dialog = None;
+									cx.notify();
+								});
+							}
+						}),
+				)
 			},
 		)
 		.when(kind == DialogKind::ReviewQueue, |el| {
 			el.child(
 				Button::new("dlg-copy")
+					.outline()
 					.small()
+					.icon(IconName::Copy)
 					.label("Copy".to_string())
 					.disabled(review_empty)
 					.on_click({
@@ -857,6 +921,7 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 				Button::new("dlg-copy-clear")
 					.small()
 					.danger()
+					.icon(IconName::Copy)
 					.label("Copy and clear all".to_string())
 					.disabled(review_empty)
 					.on_click({
@@ -881,8 +946,9 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 					.when(!danger, |b| b.primary())
 					.label(ok)
 					.disabled(
-						(matches!(kind, DialogKind::CreateProject)
-							&& (app.data.overlay.dialog_folder.is_none() || app.data.overlay.dialog_busy))
+						rename_disabled
+							|| (matches!(kind, DialogKind::CreateProject)
+								&& (app.data.overlay.dialog_folder.is_none() || app.data.overlay.dialog_busy))
 							|| (app.data.overlay.dialog_busy
 								&& matches!(
 									kind,
@@ -1230,38 +1296,49 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 				MenuAction::CopyAbs,
 			),
 		],
-		ContextMenu::NewTerminal => {
-			let mut items = vec![item("new-term", app.t("newTerminal"), MenuAction::NewTerm)];
-			let project = app
-				.data
+		ContextMenu::NewTerminal => leftover_template_rows(
+			&app.data
 				.current_ws()
-				.map(|w| w.config.terminal_templates.clone())
-				.unwrap_or_default();
-			if !project.is_empty() {
-				items.push(header("proj-templates", app.t("projectTerminalTemplates")));
-				for (i, t) in project.iter().enumerate() {
-					let label = if t.cwd.is_empty() {
-						t.name.clone()
-					} else {
-						format!("{name} — {cwd}", name = t.name, cwd = t.cwd)
-					};
-					items.push(item(format!("pt-{i}"), label, MenuAction::ProjectTemplate(i)));
-				}
-			}
-			if !app.data.prefs.templates.is_empty() {
-				items.push(header("global-templates", app.t("globalTerminalTemplates")));
-				for (i, t) in app.data.prefs.templates.iter().enumerate() {
-					items.push(item(format!("gt-{i}"), t.name.clone(), MenuAction::Template(i)));
-				}
-			}
-			if project.is_empty() && app.data.prefs.templates.is_empty() {
-				items.push(header("no-tpl", app.t("noTerminalTemplates")));
+				.map(|w| {
+					w.config
+						.terminal_templates
+						.iter()
+						.map(|t| (t.name.clone(), t.cwd.clone()))
+						.collect::<Vec<_>>()
+				})
+				.unwrap_or_default(),
+			&app.data
+				.prefs
+				.templates
+				.iter()
+				.map(|t| t.name.clone())
+				.collect::<Vec<_>>(),
+			true,
+		)
+		.into_iter()
+		.map(|row| match row {
+			LeftoverTemplateRow::EmptyTitle => header("no-tpl", app.t("noTerminalTemplates")),
+			LeftoverTemplateRow::EmptyHint => {
 				let mut hint = item("no-tpl-hint", app.t("noTemplatesDropdownHint"), MenuAction::Header);
 				hint.muted = true;
-				items.push(hint);
+				hint
 			}
-			items
-		}
+			LeftoverTemplateRow::ProjectHeader => header("proj-templates", app.t("projectTerminalTemplates")),
+			LeftoverTemplateRow::Project { index, name, cwd } => item(
+				format!("pt-{index}"),
+				if cwd.is_empty() {
+					name
+				} else {
+					format!("{name} — {cwd}")
+				},
+				MenuAction::ProjectTemplate(index),
+			),
+			LeftoverTemplateRow::GlobalHeader => header("global-templates", app.t("globalTerminalTemplates")),
+			LeftoverTemplateRow::Global { index, name } => {
+				item(format!("gt-{index}"), name, MenuAction::Template(index))
+			}
+		})
+		.collect(),
 	}
 }
 

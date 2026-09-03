@@ -633,6 +633,8 @@ pub struct OverlayState {
 	pub file_search_ix: usize,
 	pub md_menu: Option<MdMenu>,
 	pub md_preview: bool,
+	pub new_terminal_hover: bool,
+	pub delete_check_failed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -750,6 +752,78 @@ pub fn leftover_project_row_active(has_extras: bool, default_is_current: bool) -
 	!has_extras && default_is_current
 }
 
+pub fn leftover_rename_disabled(name: &str, init: &str) -> bool {
+	let trimmed = name.trim();
+	trimmed.is_empty() || trimmed == init
+}
+
+pub fn leftover_delete_profile_warning(parts: &[String]) -> Option<String> {
+	if parts.is_empty() {
+		None
+	} else {
+		Some(parts.join(" "))
+	}
+}
+
+pub fn leftover_new_terminal_split(has_templates: bool, empty_cta: bool) -> bool {
+	empty_cta && has_templates
+}
+
+pub fn leftover_dialog_width(kind: DialogKind) -> f32 {
+	match kind {
+		DialogKind::ReviewQueue => 896.0,
+		DialogKind::SwitchBranch => 448.0,
+		DialogKind::ProjectSettings => 512.0,
+		DialogKind::DebugLog => 512.0,
+		_ => 384.0,
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeftoverTemplateRow {
+	EmptyTitle,
+	EmptyHint,
+	ProjectHeader,
+	Project { index: usize, name: String, cwd: String },
+	GlobalHeader,
+	Global { index: usize, name: String },
+}
+
+pub fn leftover_template_rows(
+	project: &[(String, String)],
+	global: &[String],
+	show_empty: bool,
+) -> Vec<LeftoverTemplateRow> {
+	if project.is_empty() && global.is_empty() {
+		return if show_empty {
+			vec![LeftoverTemplateRow::EmptyTitle, LeftoverTemplateRow::EmptyHint]
+		} else {
+			Vec::new()
+		};
+	}
+	let mut rows = Vec::new();
+	if !project.is_empty() {
+		rows.push(LeftoverTemplateRow::ProjectHeader);
+		for (index, (name, cwd)) in project.iter().enumerate() {
+			rows.push(LeftoverTemplateRow::Project {
+				index,
+				name: name.clone(),
+				cwd: cwd.clone(),
+			});
+		}
+	}
+	if !global.is_empty() {
+		rows.push(LeftoverTemplateRow::GlobalHeader);
+		for (index, name) in global.iter().enumerate() {
+			rows.push(LeftoverTemplateRow::Global {
+				index,
+				name: name.clone(),
+			});
+		}
+	}
+	rows
+}
+
 pub fn collect_sidebar_nav_items(
 	projects: &[ProjectWithProfiles],
 	groups: &[ProjectGroup],
@@ -852,6 +926,53 @@ mod tests {
 		assert!(leftover_project_row_active(false, true));
 		assert!(!leftover_project_row_active(true, true));
 		assert!(!leftover_project_row_active(false, false));
+	}
+
+	#[test]
+	fn leftover_dialog_chrome_matches_inventory() {
+		assert_eq!(leftover_dialog_width(DialogKind::CreateProject), 384.0);
+		assert_eq!(leftover_dialog_width(DialogKind::CreateProfile), 384.0);
+		assert_eq!(leftover_dialog_width(DialogKind::ProjectSettings), 512.0);
+		assert_eq!(leftover_dialog_width(DialogKind::SwitchBranch), 448.0);
+		assert_eq!(leftover_dialog_width(DialogKind::DebugLog), 512.0);
+		assert_eq!(leftover_dialog_width(DialogKind::ReviewQueue), 896.0);
+		assert!(leftover_rename_disabled("", "App"));
+		assert!(leftover_rename_disabled("App", "App"));
+		assert!(leftover_rename_disabled("  App  ", "App"));
+		assert!(!leftover_rename_disabled("Next", "App"));
+		assert_eq!(leftover_delete_profile_warning(&[]), None);
+		assert_eq!(
+			leftover_delete_profile_warning(&["local".into(), "ahead".into()]),
+			Some("local ahead".into())
+		);
+		assert!(!leftover_new_terminal_split(true, false));
+		assert!(leftover_new_terminal_split(true, true));
+		assert!(!leftover_new_terminal_split(false, true));
+	}
+
+	#[test]
+	fn leftover_template_dropdown_matches_inventory() {
+		assert_eq!(
+			leftover_template_rows(&[], &[], true),
+			vec![LeftoverTemplateRow::EmptyTitle, LeftoverTemplateRow::EmptyHint]
+		);
+		assert!(leftover_template_rows(&[], &[], false).is_empty());
+		assert_eq!(
+			leftover_template_rows(&[("Dev".into(), "apps/web".into())], &["zsh".into()], true),
+			vec![
+				LeftoverTemplateRow::ProjectHeader,
+				LeftoverTemplateRow::Project {
+					index: 0,
+					name: "Dev".into(),
+					cwd: "apps/web".into(),
+				},
+				LeftoverTemplateRow::GlobalHeader,
+				LeftoverTemplateRow::Global {
+					index: 0,
+					name: "zsh".into(),
+				},
+			]
+		);
 	}
 
 	#[test]

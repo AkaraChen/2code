@@ -1,4 +1,5 @@
-use gpui::{div, prelude::*, AnyView, App, Context, SharedString, Window};
+use gpui::{div, prelude::*, px, AnyView, App, Context, SharedString, Window};
+use gpui_component::{Icon, IconName};
 
 pub fn eid(s: impl Into<String>) -> SharedString {
 	SharedString::from(s.into())
@@ -6,6 +7,33 @@ pub fn eid(s: impl Into<String>) -> SharedString {
 
 pub fn leftover_branch_glyph(color: gpui::Hsla) -> gpui::Div {
 	div().text_color(color).child("⎇")
+}
+
+pub fn leftover_pencil_glyph(color: gpui::Hsla) -> gpui::Div {
+	div().text_color(color).child("✎")
+}
+
+pub fn leftover_folder_plus_mark(folder: f32, plus: f32) -> gpui::Div {
+	div()
+		.relative()
+		.size(px(folder))
+		.flex()
+		.items_center()
+		.justify_center()
+		.flex_shrink_0()
+		.child(Icon::new(IconName::Folder).w(px(folder)))
+		.child(
+			div()
+				.absolute()
+				.bottom(px(-2.))
+				.right(px(-3.))
+				.size(px(plus))
+				.rounded_full()
+				.flex()
+				.items_center()
+				.justify_center()
+				.child(Icon::new(IconName::Plus).w(px((plus * 0.75).max(8.)))),
+		)
 }
 
 pub fn tip(text: impl Into<String>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {

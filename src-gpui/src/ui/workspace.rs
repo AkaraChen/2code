@@ -5,7 +5,10 @@ use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Style
 use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
-use crate::state::{AgentKind, DialogKind, SidebarMode, UnifiedTab};
+use crate::state::{
+	leftover_new_terminal_split, leftover_template_rows, AgentKind, DialogKind, LeftoverTemplateRow, SidebarMode,
+	UnifiedTab,
+};
 use crate::ui::{file_tree, file_viewer, git, leftover_branch_glyph, notes, sidebar, terminal, tip};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -498,7 +501,7 @@ fn empty_cta(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.text_color(theme.muted_foreground)
 				.child(app.t("noTerminalsOpenDescription")),
 		)
-		.child(new_terminal_control(app, view, false))
+		.child(new_terminal_control(app, view.clone(), true))
 }
 
 fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -656,23 +659,191 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 					}
 				})
 		}))
-		.child(new_terminal_control(app, view, false))
+		.child(leftover_new_terminal_tab(app, view, cx))
 		.into_any_element()
 }
 
-fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, force_split: bool) -> impl IntoElement {
+fn leftover_new_terminal_tab(
+	app: &AppView,
+	view: gpui::Entity<AppView>,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let hover = app.data.overlay.new_terminal_hover;
+	let project: Vec<(String, String)> = app
+		.data
+		.current_ws()
+		.map(|w| {
+			w.config
+				.terminal_templates
+				.iter()
+				.map(|t| (t.name.clone(), t.cwd.clone()))
+				.collect()
+		})
+		.unwrap_or_default();
+	let global: Vec<String> = app.data.prefs.templates.iter().map(|t| t.name.clone()).collect();
+	let rows = leftover_template_rows(&project, &global, true);
+	div()
+		.id("new-term-tab")
+		.relative()
+		.ml_2()
+		.max_w(px(224.))
+		.on_hover({
+			let view = view.clone();
+			move |hovered, _, cx| {
+				view.update(cx, |app, cx| {
+					if app.data.overlay.new_terminal_hover != *hovered {
+						app.data.overlay.new_terminal_hover = *hovered;
+						cx.notify();
+					}
+				});
+			}
+		})
+		.child(
+			Button::new("new-term")
+				.ghost()
+				.small()
+				.icon(IconName::Plus)
+				.label(app.t("newTerminal"))
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.create_terminal(&app.t("newTerminal"), "", Vec::new());
+							app.data.overlay.new_terminal_hover = false;
+							cx.notify();
+						});
+					}
+				}),
+		)
+		.when(hover, |el| {
+			el.child(leftover_template_dropdown(app, &rows, view.clone(), theme.clone()))
+		})
+}
+
+fn leftover_template_dropdown(
+	app: &AppView,
+	rows: &[LeftoverTemplateRow],
+	view: gpui::Entity<AppView>,
+	theme: gpui_component::Theme,
+) -> impl IntoElement {
+	let border = theme.border;
+	let popover = theme.popover;
+	let muted = theme.muted;
+	let muted_fg = theme.muted_foreground;
+	v_flex()
+		.id("new-term-hover-menu")
+		.absolute()
+		.top(px(36.))
+		.left_0()
+		.min_w(px(224.))
+		.p_1()
+		.gap_1()
+		.rounded_lg()
+		.border_1()
+		.border_color(border)
+		.bg(popover)
+		.shadow_md()
+		.children(rows.iter().cloned().map(|row| {
+			match row {
+				LeftoverTemplateRow::EmptyTitle => div()
+					.px_2()
+					.py_1()
+					.text_sm()
+					.text_color(muted_fg)
+					.child(app.t("noTerminalTemplates"))
+					.into_any_element(),
+				LeftoverTemplateRow::EmptyHint => div()
+					.px_2()
+					.py_1()
+					.text_xs()
+					.text_color(muted_fg)
+					.child(app.t("noTemplatesDropdownHint"))
+					.into_any_element(),
+				LeftoverTemplateRow::ProjectHeader => div()
+					.px_2()
+					.py_1()
+					.text_xs()
+					.font_medium()
+					.text_color(muted_fg)
+					.child(app.t("projectTerminalTemplates"))
+					.into_any_element(),
+				LeftoverTemplateRow::GlobalHeader => div()
+					.px_2()
+					.py_1()
+					.text_xs()
+					.font_medium()
+					.text_color(muted_fg)
+					.child(app.t("globalTerminalTemplates"))
+					.into_any_element(),
+				LeftoverTemplateRow::Project { index, name, cwd } => div()
+					.id(crate::ui::eid(format!("hover-pt-{index}")))
+					.px_2()
+					.py_2()
+					.rounded_md()
+					.hover(|el| el.bg(muted))
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								if let Some(t) = app
+									.data
+									.current_ws()
+									.and_then(|w| w.config.terminal_templates.get(index).cloned())
+								{
+									app.create_terminal(&t.name, &t.cwd, t.commands);
+								}
+								app.data.overlay.new_terminal_hover = false;
+								cx.notify();
+							});
+						}
+					})
+					.child(
+						v_flex()
+							.gap(px(2.))
+							.child(div().text_sm().child(name))
+							.when(!cwd.is_empty(), |el| {
+								el.child(div().text_xs().text_color(muted_fg).child(cwd))
+							}),
+					)
+					.into_any_element(),
+				LeftoverTemplateRow::Global { index, name } => div()
+					.id(crate::ui::eid(format!("hover-gt-{index}")))
+					.px_2()
+					.py_2()
+					.rounded_md()
+					.hover(|el| el.bg(muted))
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								if let Some(t) = app.data.prefs.templates.get(index).cloned() {
+									app.create_terminal(&t.name, &t.cwd, t.commands);
+								}
+								app.data.overlay.new_terminal_hover = false;
+								cx.notify();
+							});
+						}
+					})
+					.child(div().text_sm().child(name))
+					.into_any_element(),
+			}
+		}))
+}
+
+fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, empty_cta: bool) -> impl IntoElement {
 	let has_templates = !app.data.prefs.templates.is_empty()
 		|| app
 			.data
 			.current_ws()
 			.map(|w| !w.config.terminal_templates.is_empty())
 			.unwrap_or(false);
-	if force_split || has_templates {
+	if leftover_new_terminal_split(has_templates, empty_cta) {
 		h_flex()
 			.gap_0()
 			.child(
 				Button::new("new-term")
-					.ghost()
+					.primary()
 					.small()
 					.icon(IconName::Plus)
 					.label(app.t("newTerminal"))
@@ -688,7 +859,7 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, force_split:
 			)
 			.child(
 				Button::new("new-term-split")
-					.ghost()
+					.primary()
 					.small()
 					.icon(IconName::ChevronDown)
 					.tooltip("Choose template".to_string())
@@ -706,7 +877,7 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, force_split:
 			.into_any_element()
 	} else {
 		Button::new("new-term")
-			.ghost()
+			.primary()
 			.small()
 			.icon(IconName::Plus)
 			.label(app.t("newTerminal"))

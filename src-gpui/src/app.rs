@@ -1621,7 +1621,15 @@ impl AppView {
 			return;
 		};
 		let name = self.inputs.rename.read(cx).value().to_string();
-		if name.trim().is_empty() {
+		let init = self
+			.data
+			.projects
+			.iter()
+			.find(|p| p.id == id)
+			.map(|p| p.name.clone())
+			.unwrap_or_default();
+		if crate::state::leftover_rename_disabled(&name, &init) {
+			self.data.overlay.dialog = None;
 			return;
 		}
 		if let Err(err) = self.backend.rename_project(&id, &name) {
@@ -1678,6 +1686,7 @@ impl AppView {
 		self.data.overlay.dialog_profile = Some(id.to_string());
 		self.data.overlay.dialog_busy = true;
 		self.data.overlay.delete_warning = None;
+		self.data.overlay.delete_check_failed = false;
 		match self.backend.delete_profile_check(id) {
 			Ok(check) => {
 				self.data.overlay.dialog_busy = false;
@@ -1716,18 +1725,11 @@ impl AppView {
 						],
 					));
 				}
-				if !parts.is_empty() {
-					self.data.overlay.delete_warning = Some(parts.join("\n"));
-				}
+				self.data.overlay.delete_warning = crate::state::leftover_delete_profile_warning(&parts);
 			}
-			Err(err) => {
+			Err(_) => {
 				self.data.overlay.dialog_busy = false;
-				self.data.overlay.delete_warning = Some(format!(
-					"{}\n{}\n{}",
-					self.t("deleteProfileGitCheckFailedTitle"),
-					self.t("deleteProfileGitCheckFailedDescription"),
-					err
-				));
+				self.data.overlay.delete_check_failed = true;
 			}
 		}
 	}
