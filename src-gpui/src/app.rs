@@ -2758,7 +2758,7 @@ impl AppView {
 			&self.data.projects,
 			&self.data.groups,
 			&self.data.prefs.collapsed_groups,
-			&self.data.overlay.expanded_projects,
+			&self.data.overlay.collapsed_projects,
 			self.data.current_project.as_deref(),
 		)
 	}

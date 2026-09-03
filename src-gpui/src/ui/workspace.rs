@@ -480,16 +480,25 @@ fn empty_cta(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 		.flex_1()
 		.items_center()
 		.justify_center()
-		.gap_3()
-		.child(Icon::new(IconName::SquareTerminal).w(px(28.)))
-		.child(div().font_semibold().child(app.t("noTerminalsOpen")))
+		.gap_4()
+		.child(
+			div()
+				.size(px(32.))
+				.rounded_lg()
+				.bg(theme.muted)
+				.flex()
+				.items_center()
+				.justify_center()
+				.child(Icon::new(IconName::SquareTerminal).w(px(16.))),
+		)
+		.child(div().text_sm().font_medium().child(app.t("noTerminalsOpen")))
 		.child(
 			div()
 				.text_sm()
 				.text_color(theme.muted_foreground)
 				.child(app.t("noTerminalsOpenDescription")),
 		)
-		.child(new_terminal_control(app, view, true))
+		.child(new_terminal_control(app, view, false))
 }
 
 fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {

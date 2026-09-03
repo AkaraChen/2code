@@ -7,8 +7,11 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
-use crate::state::{AgentStatus, ContextMenu, DialogKind, Route, SidebarNavItem};
-use crate::ui::settings;
+use crate::state::{
+	leftover_profile_sublist_open, leftover_project_row_active, AgentStatus, ContextMenu, DialogKind, Route,
+	SidebarNavItem,
+};
+use crate::ui::{leftover_branch_glyph, settings};
 
 #[derive(Clone)]
 struct SidebarDrag {
@@ -553,10 +556,16 @@ fn project_row(
 ) -> impl IntoElement {
 	let theme = cx.theme().clone();
 	let view = cx.entity();
-	let selected = app.data.current_project.as_deref() == Some(project.id.as_str());
 	let nav_focus = app.data.overlay.sidebar_nav.as_ref() == Some(&SidebarNavItem::Project(project.id.clone()));
 	let extras: Vec<_> = project.profiles.iter().filter(|p| !p.is_default).cloned().collect();
-	let expanded = app.data.overlay.expanded_projects.contains(&project.id) || extras.is_empty() || selected;
+	let has_extras = !extras.is_empty();
+	let collapsed = app.data.overlay.collapsed_projects.contains(&project.id);
+	let expanded = leftover_profile_sublist_open(has_extras, collapsed);
+	let default_profile = project.profiles.iter().find(|p| p.is_default).map(|p| p.id.clone());
+	let default_current = default_profile
+		.as_deref()
+		.is_some_and(|id| app.data.current_profile.as_deref() == Some(id));
+	let row_active = leftover_project_row_active(has_extras, default_current);
 	let agent = app.agent_for_project(&project.id);
 	let letter = project
 		.name
@@ -565,7 +574,6 @@ fn project_row(
 		.map(|c| c.to_ascii_uppercase())
 		.unwrap_or('?');
 	let id = project.id.clone();
-	let default_profile = project.profiles.iter().find(|p| p.is_default).map(|p| p.id.clone());
 
 	v_flex()
 		.id(crate::ui::eid(format!("proj-{}", project.id)))
@@ -577,8 +585,8 @@ fn project_row(
 				.py_1()
 				.rounded_md()
 				.gap_2()
-				.when(selected, |el| el.bg(theme.sidebar_accent))
-				.when(nav_focus && !selected, |el| el.border_1().border_color(theme.border))
+				.when(row_active, |el| el.bg(theme.sidebar_accent))
+				.when(nav_focus && !row_active, |el| el.border_1().border_color(theme.border))
 				.hover(|el| el.bg(theme.sidebar_accent))
 				.on_click({
 					let view = view.clone();
@@ -744,12 +752,13 @@ fn project_row(
 							}),
 					)
 				})
-				.when(!app.data.overlay.sort_mode && extras.is_empty(), |el| {
+				.when(!app.data.overlay.sort_mode && !has_extras, |el| {
 					el.child(agent_dot(agent)).child(
 						Button::new(crate::ui::eid(format!("add-prof-{}", project.id)))
 							.ghost()
 							.xsmall()
 							.icon(IconName::Plus)
+							.tooltip(app.t("createProfile"))
 							.on_click({
 								let view = view.clone();
 								let id = id.clone();
@@ -763,14 +772,35 @@ fn project_row(
 							}),
 					)
 				})
-				.when(!extras.is_empty(), |el| {
+				.when(!app.data.overlay.sort_mode && has_extras, |el| {
 					el.child(
-						Icon::new(if expanded {
-							IconName::ChevronDown
-						} else {
-							IconName::ChevronRight
-						})
-						.w(px(12.)),
+						Button::new(crate::ui::eid(format!("expand-prof-{}", project.id)))
+							.ghost()
+							.xsmall()
+							.icon(if expanded {
+								IconName::ChevronDown
+							} else {
+								IconName::ChevronRight
+							})
+							.tooltip(crate::i18n::tf(
+								app.data.locale,
+								"toggleProjectGroup",
+								&[("name", &project.name)],
+							))
+							.on_click({
+								let view = view.clone();
+								let id = id.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										if app.data.overlay.collapsed_projects.contains(&id) {
+											app.data.overlay.collapsed_projects.remove(&id);
+										} else {
+											app.data.overlay.collapsed_projects.insert(id.clone());
+										}
+										cx.notify();
+									});
+								}
+							}),
 					)
 				}),
 		)
@@ -849,14 +879,11 @@ fn project_row(
 									});
 								}
 							})
-							.child(
-								Icon::new(if profile.is_default {
-									IconName::SquareTerminal
-								} else {
-									IconName::GitHub
-								})
-								.w(px(14.)),
-							)
+							.child(if profile.is_default {
+								Icon::new(IconName::SquareTerminal).w(px(14.)).into_any_element()
+							} else {
+								leftover_branch_glyph(theme.muted_foreground).into_any_element()
+							})
 							.child(div().flex_1().text_sm().child(label))
 							.child(agent_dot(app.agent_for_profile(&profile.id)))
 					}))

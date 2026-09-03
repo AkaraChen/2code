@@ -616,7 +616,7 @@ pub struct OverlayState {
 	pub settings_tab: SettingsTab,
 	pub debug_open: bool,
 	pub debug_logs: Vec<LogEntry>,
-	pub expanded_projects: HashSet<String>,
+	pub collapsed_projects: HashSet<String>,
 	pub pending_close_file: Option<String>,
 	pub editing_template: Option<String>,
 	pub project_settings_tab: usize,
@@ -742,12 +742,20 @@ impl AppData {
 	}
 }
 
+pub fn leftover_profile_sublist_open(has_extras: bool, collapsed: bool) -> bool {
+	has_extras && !collapsed
+}
+
+pub fn leftover_project_row_active(has_extras: bool, default_is_current: bool) -> bool {
+	!has_extras && default_is_current
+}
+
 pub fn collect_sidebar_nav_items(
 	projects: &[ProjectWithProfiles],
 	groups: &[ProjectGroup],
 	collapsed_groups: &[String],
-	expanded_projects: &HashSet<String>,
-	current_project: Option<&str>,
+	collapsed_projects: &HashSet<String>,
+	_current_project: Option<&str>,
 ) -> Vec<SidebarNavItem> {
 	let mut items = Vec::new();
 	if projects.is_empty() {
@@ -756,10 +764,8 @@ pub fn collect_sidebar_nav_items(
 	}
 	let mut push_project = |project: &ProjectWithProfiles| {
 		items.push(SidebarNavItem::Project(project.id.clone()));
-		let extras: Vec<_> = project.profiles.iter().filter(|p| !p.is_default).collect();
-		let selected = current_project == Some(project.id.as_str());
-		let expanded = expanded_projects.contains(&project.id) || extras.is_empty() || selected;
-		if expanded {
+		let has_extras = project.profiles.iter().any(|p| !p.is_default);
+		if leftover_profile_sublist_open(has_extras, collapsed_projects.contains(&project.id)) {
 			for profile in &project.profiles {
 				items.push(SidebarNavItem::Profile {
 					project_id: project.id.clone(),
@@ -835,6 +841,17 @@ mod tests {
 			collect_sidebar_nav_items(&[], &[], &[], &HashSet::new(), None),
 			vec![SidebarNavItem::Home]
 		);
+	}
+
+	#[test]
+	fn leftover_profile_sublist_only_when_extras_exist() {
+		assert!(!leftover_profile_sublist_open(false, false));
+		assert!(!leftover_profile_sublist_open(false, true));
+		assert!(leftover_profile_sublist_open(true, false));
+		assert!(!leftover_profile_sublist_open(true, true));
+		assert!(leftover_project_row_active(false, true));
+		assert!(!leftover_project_row_active(true, true));
+		assert!(!leftover_project_row_active(false, false));
 	}
 
 	#[test]
