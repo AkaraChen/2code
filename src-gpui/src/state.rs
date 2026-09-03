@@ -245,6 +245,8 @@ pub struct TermSession {
 	pub completed_hidden: bool,
 	pub cols: u16,
 	pub rows: u16,
+	pub selection: Option<((u16, usize), (u16, usize))>,
+	pub selecting: bool,
 }
 
 impl TermSession {
@@ -263,6 +265,8 @@ impl TermSession {
 			completed_hidden: false,
 			cols: 120,
 			rows: 32,
+			selection: None,
+			selecting: false,
 		}
 	}
 
@@ -302,6 +306,68 @@ impl TermSession {
 		self.parser.screen().contents()
 	}
 
+	pub fn begin_selection(&mut self, row: u16, col: usize, extend: bool) {
+		if extend {
+			if let Some((anchor, _)) = self.selection {
+				self.selection = Some((anchor, (row, col)));
+				self.selecting = true;
+				return;
+			}
+		}
+		self.selection = Some(((row, col), (row, col)));
+		self.selecting = true;
+	}
+
+	pub fn extend_selection(&mut self, row: u16, col: usize) {
+		if !self.selecting {
+			return;
+		}
+		if let Some((anchor, _)) = self.selection {
+			self.selection = Some((anchor, (row, col)));
+		}
+	}
+
+	pub fn finish_selection(&mut self) -> bool {
+		self.selecting = false;
+		!self.selected_text().is_empty()
+	}
+
+	pub fn has_selection(&self) -> bool {
+		!self.selected_text().is_empty()
+	}
+
+	pub fn cell_selected(&self, row: u16, col: usize) -> bool {
+		let Some(((ar, ac), (br, bc))) = self.normalized_selection() else {
+			return false;
+		};
+		if row < ar || row > br {
+			return false;
+		}
+		if ar == br {
+			return col >= ac && col < bc;
+		}
+		if row == ar {
+			return col >= ac;
+		}
+		if row == br {
+			return col < bc;
+		}
+		true
+	}
+
+	pub fn normalized_selection(&self) -> Option<((u16, usize), (u16, usize))> {
+		let (a, b) = self.selection?;
+		if (a.0, a.1) <= (b.0, b.1) {
+			Some((a, b))
+		} else {
+			Some((b, a))
+		}
+	}
+
+	pub fn selected_text(&self) -> String {
+		selected_from_lines(&self.screen_text(), self.selection)
+	}
+
 	pub fn search_hits(&self, query: &str) -> Vec<(u16, usize, usize)> {
 		if query.is_empty() {
 			return Vec::new();
@@ -318,6 +384,34 @@ impl TermSession {
 			})
 			.collect()
 	}
+}
+
+pub fn selected_from_lines(text: &str, sel: Option<((u16, usize), (u16, usize))>) -> String {
+	let Some((a, b)) = sel else {
+		return String::new();
+	};
+	let (start, end) = if (a.0, a.1) <= (b.0, b.1) { (a, b) } else { (b, a) };
+	if start == end {
+		return String::new();
+	}
+	let lines: Vec<&str> = text.lines().collect();
+	let mut out = String::new();
+	for row in start.0..=end.0 {
+		let line = lines.get(row as usize).copied().unwrap_or("");
+		let from = if row == start.0 { start.1.min(line.len()) } else { 0 };
+		let to = if row == end.0 {
+			end.1.min(line.len())
+		} else {
+			line.len()
+		};
+		if row > start.0 {
+			out.push('\n');
+		}
+		if from < to {
+			out.extend(line.chars().skip(from).take(to - from));
+		}
+	}
+	out
 }
 
 #[derive(Debug, Clone)]
@@ -764,5 +858,21 @@ mod tests {
 		assert_eq!(AgentKind::from_tab_title("zsh"), None);
 		assert_eq!(AgentKind::tab_icon_kind("zsh", AgentKind::Cursor), AgentKind::Cursor);
 		assert_eq!(AgentKind::tab_icon_kind("claude", AgentKind::Codex), AgentKind::Claude);
+	}
+
+	#[test]
+	fn terminal_selection_extracts_range_and_normalizes() {
+		assert_eq!(selected_from_lines("hello\nworld", None), "");
+		assert_eq!(selected_from_lines("hello\nworld", Some(((0, 1), (0, 4)))), "ell");
+		assert_eq!(selected_from_lines("hello\nworld", Some(((0, 3), (1, 3)))), "lo\nwor");
+		assert_eq!(selected_from_lines("hello\nworld", Some(((1, 3), (0, 3)))), "lo\nwor");
+		assert_eq!(selected_from_lines("hello", Some(((0, 2), (0, 2)))), "");
+		let mut term = TermSession::new("1".into(), "t".into(), "p".into());
+		term.begin_selection(0, 1, false);
+		term.extend_selection(0, 4);
+		assert!(term.cell_selected(0, 1));
+		assert!(term.cell_selected(0, 3));
+		assert!(!term.cell_selected(0, 4));
+		assert!(!term.cell_selected(1, 0));
 	}
 }

@@ -3,8 +3,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui::{
-	div, prelude::*, px, Action, App, Context, Entity, EntityInputHandler, FocusHandle, KeyBinding, Timer, Window,
-	WindowHandle,
+	div, prelude::*, px, Action, App, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle, KeyBinding,
+	Timer, Window, WindowHandle,
 };
 
 #[derive(Clone, PartialEq, Default, Debug, Action)]
@@ -46,6 +46,12 @@ pub struct IncreaseFontSize;
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
 pub struct DecreaseFontSize;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct WrapBold;
+#[derive(Clone, PartialEq, Default, Debug, Action)]
+#[action(namespace = twocode, no_json)]
+pub struct WrapItalic;
 use crate::backend::{self, Backend};
 use crate::i18n::{self, Locale};
 use crate::prefs::{term_theme_by_name, Prefs, ThemePref};
@@ -1099,6 +1105,53 @@ impl AppView {
 		}
 	}
 
+	pub fn copy_term_selection(&mut self, cx: &mut Context<Self>) -> bool {
+		let Some(text) = self
+			.data
+			.current_ws()
+			.and_then(|w| w.active_terminal())
+			.map(|t| t.selected_text())
+		else {
+			return false;
+		};
+		if text.is_empty() {
+			return false;
+		}
+		cx.write_to_clipboard(ClipboardItem::new_string(text));
+		true
+	}
+
+	pub fn copy_term_or_interrupt(&mut self, cx: &mut Context<Self>) {
+		if self
+			.data
+			.current_ws()
+			.and_then(|w| w.active_terminal())
+			.is_some_and(|t| t.has_selection())
+		{
+			self.copy_term_selection(cx);
+		} else {
+			self.write_to_active_pty(&[0x03]);
+		}
+	}
+
+	pub fn wrap_active_markup(&mut self, prefix: &str, suffix: &str, window: &mut Window, cx: &mut Context<Self>) {
+		let markdown_file = self.data.current_ws().and_then(|w| match w.active {
+			Some(UnifiedTab::File { index }) => w.files.get(index).map(|f| backend::is_markdown(&f.path)),
+			_ => None,
+		});
+		if markdown_file == Some(true) {
+			wrap_markup(&self.inputs.file_editor, prefix, suffix, window, cx);
+			return;
+		}
+		if self
+			.data
+			.current_ws()
+			.is_some_and(|w| w.sidebar_open && w.sidebar_mode == SidebarMode::Notes)
+		{
+			wrap_markup(&self.inputs.notes, prefix, suffix, window, cx);
+		}
+	}
+
 	pub fn cycle_file_search(&mut self, window: &mut Window, cx: &mut Context<Self>, next: bool) {
 		let query = self.inputs.file_search.read(cx).value().to_string();
 		let draft = self.inputs.file_editor.read(cx).value().to_string();
@@ -2102,6 +2155,10 @@ impl AppView {
 			KeyBinding::new("ctrl-=", IncreaseFontSize, None),
 			KeyBinding::new("cmd--", DecreaseFontSize, None),
 			KeyBinding::new("ctrl--", DecreaseFontSize, None),
+			KeyBinding::new("cmd-b", WrapBold, None),
+			KeyBinding::new("ctrl-b", WrapBold, None),
+			KeyBinding::new("cmd-i", WrapItalic, None),
+			KeyBinding::new("ctrl-i", WrapItalic, None),
 		]);
 	}
 
@@ -2536,6 +2593,14 @@ impl gpui::Render for AppView {
 			}))
 			.on_action(cx.listener(|this, _: &DecreaseFontSize, _, cx| {
 				this.bump_font_size(-1.0);
+				cx.notify();
+			}))
+			.on_action(cx.listener(|this, _: &WrapBold, window, cx| {
+				this.wrap_active_markup("**", "**", window, cx);
+				cx.notify();
+			}))
+			.on_action(cx.listener(|this, _: &WrapItalic, window, cx| {
+				this.wrap_active_markup("*", "*", window, cx);
 				cx.notify();
 			}))
 			.child(ui::shell::render(self, window, cx))

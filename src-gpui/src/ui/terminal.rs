@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, rgb, Context, KeyDownEvent, Window};
+use gpui::{div, prelude::*, px, rgb, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
@@ -29,7 +29,7 @@ pub fn render(
 	let hit_ix = term.search_ix;
 	let id = term.id.clone();
 	let clickables = crate::detector::clickable_tokens(&term.screen_text());
-	let grid = render_grid(term, theme, &search_query, hit_ix);
+	let grid = render_grid(term, theme, &search_query, hit_ix, interactive, &view);
 
 	div()
 		.id(crate::ui::eid(format!("pty-{id}")))
@@ -41,14 +41,22 @@ pub fn render(
 		.text_size(px(app.data.prefs.font_size))
 		.when(!interactive, |el| el.invisible().absolute().inset_0())
 		.when(interactive, |el| {
-			el.on_mouse_up(gpui::MouseButton::Left, {
+			el.on_mouse_up(MouseButton::Left, {
 				let view = view.clone();
 				move |_, _, cx| {
 					view.update(cx, |app, cx| {
 						if app.data.overlay.drag_file.is_some() {
 							app.drop_file_on_terminal();
-							cx.notify();
 						}
+						let copied = app
+							.data
+							.current_ws_mut()
+							.and_then(|w| w.active_terminal_mut())
+							.is_some_and(|term| term.finish_selection());
+						if copied {
+							app.copy_term_selection(cx);
+						}
+						cx.notify();
 					});
 				}
 			})
@@ -80,6 +88,20 @@ pub fn render(
 						{
 							view.update(cx, |app, cx| {
 								app.paste_to_pty(cx);
+							});
+							return;
+						}
+						if ev.keystroke.key == "c"
+							&& !ev.keystroke.modifiers.alt
+							&& !ev.keystroke.modifiers.shift
+							&& (ev.keystroke.modifiers.platform || ev.keystroke.modifiers.control)
+						{
+							view.update(cx, |app, cx| {
+								if ev.keystroke.modifiers.platform {
+									app.copy_term_selection(cx);
+								} else {
+									app.copy_term_or_interrupt(cx);
+								}
 							});
 							return;
 						}
@@ -229,7 +251,14 @@ pub fn render(
 		.into_any_element()
 }
 
-fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str, hit_ix: usize) -> impl IntoElement {
+fn render_grid(
+	term: &crate::state::TermSession,
+	theme: &TermTheme,
+	query: &str,
+	hit_ix: usize,
+	interactive: bool,
+	view: &gpui::Entity<AppView>,
+) -> impl IntoElement {
 	let screen = term.parser.screen();
 	let (rows, cols) = screen.size();
 	let hits = term.search_hits(query);
@@ -237,7 +266,7 @@ fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str,
 	let query_len = query.len();
 
 	v_flex().id("pty-grid").children((0..rows).map(|row| {
-		let mut spans: Vec<(String, u32, u32, bool)> = Vec::new();
+		let mut spans: Vec<(String, u32, u32, bool, bool, usize)> = Vec::new();
 		for col in 0..cols {
 			let cell = screen.cell(row, col);
 			let ch = cell
@@ -262,6 +291,7 @@ fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str,
 			let highlight = hits
 				.iter()
 				.any(|&(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len);
+			let selected = term.cell_selected(row, col as usize);
 			if highlight {
 				bg = if active == Some((row, col as usize, query_len))
 					|| active.is_some_and(|(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len)
@@ -271,20 +301,52 @@ fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str,
 					0x5f4b16
 				};
 				fg = 0xffffff;
+			} else if selected {
+				bg = 0x264f78;
+				fg = 0xffffff;
 			}
-			if let Some((text, last_fg, last_bg, last_hi)) = spans.last_mut() {
-				if *last_fg == fg && *last_bg == bg && *last_hi == highlight {
+			if let Some((text, last_fg, last_bg, last_hi, last_sel, _)) = spans.last_mut() {
+				if *last_fg == fg && *last_bg == bg && *last_hi == highlight && *last_sel == selected {
 					text.push_str(&ch);
 					continue;
 				}
 			}
-			spans.push((ch, fg, bg, highlight));
+			spans.push((ch, fg, bg, highlight, selected, col as usize));
 		}
-		h_flex().children(
-			spans
-				.into_iter()
-				.map(|(text, fg, bg, _)| div().bg(rgb(bg)).text_color(rgb(fg)).whitespace_nowrap().child(text)),
-		)
+		h_flex().children(spans.into_iter().map(|(text, fg, bg, _, _, start_col)| {
+			let end_col = start_col + text.chars().count();
+			let view = view.clone();
+			let span = div().bg(rgb(bg)).text_color(rgb(fg)).whitespace_nowrap().child(text);
+			if !interactive {
+				return span.into_any_element();
+			}
+			span.on_mouse_down(MouseButton::Left, {
+				let view = view.clone();
+				move |ev, _, cx| {
+					let extend = ev.modifiers.shift;
+					view.update(cx, |app, cx| {
+						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+							term.begin_selection(row, start_col, extend);
+						}
+						cx.notify();
+					});
+				}
+			})
+			.on_mouse_move({
+				let view = view.clone();
+				move |_, _, cx| {
+					view.update(cx, |app, cx| {
+						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+							if term.selecting {
+								term.extend_selection(row, end_col);
+								cx.notify();
+							}
+						}
+					});
+				}
+			})
+			.into_any_element()
+		}))
 	}))
 }
 
