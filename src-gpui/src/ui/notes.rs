@@ -40,25 +40,41 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.gap_1()
 				.border_b_1()
 				.border_color(theme.border)
-				.child(note_md("n-h1", "H1", "# ", "", &view))
-				.child(note_md("n-h2", "H2", "## ", "", &view))
-				.child(note_md("n-h3", "H3", "### ", "", &view))
-				.child(note_md("n-b", "B", "**", "**", &view))
-				.child(note_md("n-i", "I", "*", "*", &view))
-				.child(note_md("n-s", "S", "~~", "~~", &view))
-				.child(note_md("n-code", "`", "`", "`", &view))
-				.child(note_md("n-pre", "</>", "```\n", "\n```", &view))
-				.child(note_md("n-ul", "•", "- ", "", &view))
-				.child(note_md("n-q", ">", "> ", "", &view))
-				.child(note_md("n-link", "[]", "[", "](url)", &view))
+				.child(note_md("n-h1", "H1", "# ", "", &view, &app.t("notesFormatHeading1")))
+				.child(note_md("n-h2", "H2", "## ", "", &view, &app.t("notesFormatHeading2")))
+				.child(note_md("n-h3", "H3", "### ", "", &view, &app.t("notesFormatHeading3")))
+				.child(note_md("n-b", "B", "**", "**", &view, &app.t("notesFormatBold")))
+				.child(note_md("n-i", "I", "*", "*", &view, &app.t("notesFormatItalic")))
+				.child(note_md("n-s", "S", "~~", "~~", &view, &app.t("notesFormatStrike")))
+				.child(note_md("n-code", "`", "`", "`", &view, &app.t("notesFormatCode")))
+				.child(note_md(
+					"n-pre",
+					"</>",
+					"```\n",
+					"\n```",
+					&view,
+					&app.t("notesFormatCodeBlock"),
+				))
+				.child(note_md("n-ul", "•", "- ", "", &view, &app.t("notesFormatBulletList")))
+				.child(note_md(
+					"n-ol",
+					"1.",
+					"1. ",
+					"",
+					&view,
+					&app.t("notesFormatOrderedList"),
+				))
+				.child(note_md("n-q", ">", "> ", "", &view, &app.t("notesFormatQuote")))
+				.child(note_md("n-link", "[]", "[", "](url)", &view, &app.t("notesFormatLink")))
 				.child(note_md(
 					"n-table",
 					"tbl",
 					"| A | B |\n| --- | --- |\n|   |   |\n",
 					"",
 					&view,
+					&app.t("notesTableMenu"),
 				))
-				.child(note_md("n-hr", "—", "---\n", "", &view)),
+				.child(note_md("n-hr", "—", "---\n", "", &view, &app.t("notesInsertDivider"))),
 		)
 		.child(
 			v_flex()
@@ -90,12 +106,14 @@ fn note_md(
 	prefix: &'static str,
 	suffix: &'static str,
 	view: &gpui::Entity<AppView>,
+	tooltip: &str,
 ) -> impl IntoElement {
 	let view = view.clone();
 	Button::new(id)
 		.ghost()
 		.xsmall()
 		.label(label)
+		.tooltip(tooltip.to_string())
 		.on_click(move |_, window, cx| {
 			view.update(cx, |app, cx| {
 				let mut text = app.inputs.notes.read(cx).value().to_string();

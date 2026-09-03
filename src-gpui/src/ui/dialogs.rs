@@ -798,6 +798,8 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuActio
 				false,
 				MenuAction::Reveal,
 			),
+			(app.t("fileTreeContextMenuCopyRelativePath"), false, MenuAction::CopyRel),
+			(app.t("fileTreeContextMenuCopyAbsolutePath"), false, MenuAction::CopyAbs),
 		],
 		ContextMenu::NewTerminal => {
 			let mut items = vec![(app.t("newTerminal"), false, MenuAction::NewTerm)];
@@ -864,7 +866,16 @@ fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &
 		}
 		(ContextMenu::File { path }, MenuAction::Open) => {
 			if let Some(pid) = app.data.current_profile.clone() {
-				app.open_file(&pid, path, window, cx);
+				if crate::app::git_status_kind(
+					&app.data
+						.workspaces
+						.get(&pid)
+						.and_then(|w| w.git_files.iter().find(|(p, _)| p == path).map(|(_, s)| s.clone()))
+						.unwrap_or_default(),
+				) != crate::app::GitStatusKind::Deleted
+				{
+					app.open_file(&pid, path, window, cx);
+				}
 			}
 		}
 		(ContextMenu::File { path }, MenuAction::OpenDefault) => app.open_external(path),
@@ -882,6 +893,8 @@ fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &
 		(_, MenuAction::NewFolder) => app.create_path(true, window, cx),
 		(ContextMenu::File { path }, MenuAction::CopyRel) => app.copy_path(path, false, cx),
 		(ContextMenu::File { path }, MenuAction::CopyAbs) => app.copy_path(path, true, cx),
+		(ContextMenu::TreeBlank, MenuAction::CopyRel) => app.copy_path(".", false, cx),
+		(ContextMenu::TreeBlank, MenuAction::CopyAbs) => app.copy_path(".", true, cx),
 		(ContextMenu::File { path }, MenuAction::DeletePath) => app.delete_tree_path(path),
 		(_, MenuAction::NewTerm) => app.create_terminal(&app.t("newTerminal"), "", Vec::new()),
 		(_, MenuAction::Template(i)) => {
