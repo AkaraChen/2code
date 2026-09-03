@@ -216,6 +216,7 @@ pub struct OpenFileTab {
 	pub binary_note: String,
 	pub preview_path: String,
 	pub archive_entries: Vec<(String, String)>,
+	pub load_error: Option<String>,
 }
 
 impl OpenFileTab {

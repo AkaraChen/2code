@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use gpui::{div, prelude::*, px, Action, App, Context, Entity, FocusHandle, KeyBinding, Timer, Window, WindowHandle};
+use gpui::{
+	div, prelude::*, px, Action, App, Context, Entity, EntityInputHandler, FocusHandle, KeyBinding, Timer, Window,
+	WindowHandle,
+};
 
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
@@ -547,10 +550,13 @@ impl AppView {
 
 	pub fn open_file(&mut self, profile_id: &str, path: &str, window: &mut Window, cx: &mut Context<Self>) {
 		let previewable = backend::is_previewable(path);
-		let content = if previewable {
-			String::new()
+		let (content, load_error) = if previewable {
+			(String::new(), None)
 		} else {
-			self.backend.read_file(profile_id, path).unwrap_or_default()
+			match self.backend.read_file(profile_id, path) {
+				Ok(content) => (content, None),
+				Err(err) => (String::new(), Some(err.to_string())),
+			}
 		};
 		let preview = if previewable {
 			self.backend.file_preview(profile_id, path).ok()
@@ -587,6 +593,7 @@ impl AppView {
 			binary_note: preview.map(|p| p.mime_type).unwrap_or_default(),
 			preview_path,
 			archive_entries,
+			load_error,
 		};
 		ws.files.push(tab);
 		ws.active = Some(UnifiedTab::File {
@@ -2597,6 +2604,53 @@ pub fn offset_line_col(text: &str, offset: usize) -> (u32, u32) {
 	(line, character)
 }
 
+pub fn wrap_markup_text(text: &str, start: usize, end: usize, prefix: &str, suffix: &str) -> (String, usize) {
+	let start = snap_char_boundary(text, start.min(text.len()));
+	let end = snap_char_boundary(text, end.min(text.len()));
+	let (a, b) = if start <= end { (start, end) } else { (end, start) };
+	let mut out = String::with_capacity(text.len() + prefix.len() + suffix.len());
+	out.push_str(&text[..a]);
+	out.push_str(prefix);
+	out.push_str(&text[a..b]);
+	out.push_str(suffix);
+	out.push_str(&text[b..]);
+	(out, a + prefix.len() + (b - a))
+}
+
+fn snap_char_boundary(text: &str, mut offset: usize) -> usize {
+	while offset > 0 && !text.is_char_boundary(offset) {
+		offset -= 1;
+	}
+	offset
+}
+
+fn utf16_offset_to_bytes(text: &str, utf16: usize) -> usize {
+	let mut seen = 0;
+	for (byte, ch) in text.char_indices() {
+		if seen >= utf16 {
+			return byte;
+		}
+		seen += ch.len_utf16();
+	}
+	text.len()
+}
+
+pub fn apply_slash_command(text: &str, prefix: &str, suffix: &str) -> String {
+	let mut lines: Vec<&str> = text.lines().collect();
+	if let Some(last) = lines.last_mut() {
+		if last.starts_with('/') {
+			*last = "";
+		}
+	}
+	let mut next = lines.join("\n");
+	if !next.is_empty() && !next.ends_with('\n') {
+		next.push('\n');
+	}
+	next.push_str(prefix);
+	next.push_str(suffix);
+	next
+}
+
 pub fn wrap_markup(
 	input: &Entity<InputState>,
 	prefix: &str,
@@ -2606,12 +2660,17 @@ pub fn wrap_markup(
 ) {
 	input.update(cx, |state, cx| {
 		let text = state.value().to_string();
-		let mut cursor = state.cursor().min(text.len());
-		while cursor > 0 && !text.is_char_boundary(cursor) {
-			cursor -= 1;
-		}
-		let new_text = format!("{}{prefix}{suffix}{}", &text[..cursor], &text[cursor..]);
-		let caret = cursor + prefix.len();
+		let (start, end) = match state.selected_text_range(true, window, cx) {
+			Some(sel) => (
+				utf16_offset_to_bytes(&text, sel.range.start),
+				utf16_offset_to_bytes(&text, sel.range.end),
+			),
+			None => {
+				let cursor = snap_char_boundary(&text, state.cursor().min(text.len()));
+				(cursor, cursor)
+			}
+		};
+		let (new_text, caret) = wrap_markup_text(&text, start, end, prefix, suffix);
 		state.set_value(new_text.clone(), window, cx);
 		let (line, character) = offset_line_col(&new_text, caret);
 		state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
@@ -2621,8 +2680,8 @@ pub fn wrap_markup(
 #[cfg(test)]
 mod tests {
 	use super::{
-		file_status_badge, git_status_kind, offset_line_col, search_match_offsets, suggested_project_name,
-		unique_tree_name, GitStatusKind,
+		apply_slash_command, file_status_badge, git_status_kind, offset_line_col, search_match_offsets,
+		suggested_project_name, unique_tree_name, wrap_markup_text, GitStatusKind,
 	};
 
 	#[test]
@@ -2666,5 +2725,21 @@ mod tests {
 		assert_eq!(search_match_offsets("abcabc", "bc"), vec![1, 4]);
 		assert!(search_match_offsets("abc", "").is_empty());
 		assert!(search_match_offsets("abc", "z").is_empty());
+	}
+
+	#[test]
+	fn wrap_markup_text_wraps_selection_or_caret() {
+		assert_eq!(wrap_markup_text("hello", 2, 2, "**", "**"), ("he****llo".into(), 4));
+		assert_eq!(wrap_markup_text("hello", 1, 4, "*", "*"), ("h*ell*o".into(), 5));
+		assert_eq!(wrap_markup_text("hello", 4, 1, "*", "*"), ("h*ell*o".into(), 5));
+	}
+
+	#[test]
+	fn apply_slash_command_replaces_the_slash_line() {
+		assert_eq!(apply_slash_command("/h1", "# ", ""), "# ");
+		assert_eq!(
+			apply_slash_command("intro\n/code", "```\n", "\n```"),
+			"intro\n```\n\n```"
+		);
 	}
 }

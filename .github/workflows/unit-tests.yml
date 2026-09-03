@@ -8,10 +8,12 @@ on:
   pull_request:
     branches:
       - dev
+  workflow_dispatch:
 
 jobs:
   frontend:
-    name: Legacy frontend
+    name: Leftover React (manual)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
 
     steps:

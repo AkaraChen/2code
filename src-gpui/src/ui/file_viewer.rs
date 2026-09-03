@@ -23,6 +23,23 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		return div().id("file-viewer-missing").into_any_element();
 	};
 
+	if let Some(err) = file.load_error.clone() {
+		return v_flex()
+			.id("file-viewer-error")
+			.size_full()
+			.items_center()
+			.justify_center()
+			.h(px(128.))
+			.gap_2()
+			.child(
+				div()
+					.text_color(theme.muted_foreground)
+					.child(app.t("somethingWentWrong")),
+			)
+			.child(div().text_xs().text_color(theme.muted_foreground).child(err))
+			.into_any_element();
+	}
+
 	if file.preview {
 		return preview_pane(app, &file, cx).into_any_element();
 	}
@@ -462,18 +479,7 @@ fn slash_menu(query: &str, view: &gpui::Entity<AppView>, locale: crate::i18n::Lo
 							.on_click(move |_, window, cx| {
 								view.update(cx, |app, cx| {
 									let text = app.inputs.file_editor.read(cx).value().to_string();
-									let mut lines: Vec<&str> = text.lines().collect();
-									if let Some(last) = lines.last_mut() {
-										if last.starts_with('/') {
-											*last = "";
-										}
-									}
-									let mut next = lines.join("\n");
-									if !next.is_empty() && !next.ends_with('\n') {
-										next.push('\n');
-									}
-									next.push_str(prefix);
-									next.push_str(suffix);
+									let next = crate::app::apply_slash_command(&text, prefix, suffix);
 									app.inputs.file_editor.update(cx, |s, cx| {
 										s.set_value(next, window, cx);
 									});

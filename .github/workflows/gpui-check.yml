@@ -39,5 +39,5 @@ jobs:
           workspaces: |
             src-gpui -> target
 
-      - name: Check GPUI crate
-        run: cargo check --tests --manifest-path src-gpui/Cargo.toml
+      - name: Test GPUI crate
+        run: cargo test --manifest-path src-gpui/Cargo.toml
