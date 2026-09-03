@@ -63,10 +63,9 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 				.id("dialog-panel")
 				.w(px(if matches!(kind, DialogKind::ReviewQueue) {
 					720.
-				} else if matches!(
-					kind,
-					DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog
-				) {
+				} else if matches!(kind, DialogKind::SwitchBranch) {
+					448.
+				} else if matches!(kind, DialogKind::ProjectSettings | DialogKind::DebugLog) {
 					560.
 				} else {
 					380.
@@ -99,6 +98,9 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 								)
 								.when(kind == DialogKind::ReviewQueue, |el| {
 									el.child(Icon::new(IconName::Inbox).w(px(18.)))
+								})
+								.when(kind == DialogKind::SwitchBranch, |el| {
+									el.child(crate::ui::leftover_branch_glyph(theme.muted_foreground))
 								})
 								.child(div().font_semibold().child(title)),
 						)
@@ -444,51 +446,21 @@ fn dialog_body(
 				.gap_2()
 				.child(Input::new(&app.inputs.branch_search))
 				.child(if branches.is_empty() {
-					div().p_3().child(app.t("noBranchesFound")).into_any_element()
+					div()
+						.py_8()
+						.text_sm()
+						.text_color(theme.muted_foreground)
+						.child(app.t("noBranchesFound"))
+						.into_any_element()
 				} else {
 					v_flex()
-						.max_h(px(320.))
-						.children(branches.into_iter().map(|b| {
-							let name = b.name.clone();
-							let disabled = b.is_current || b.is_used;
-							h_flex()
-								.id(crate::ui::eid(format!("br-{name}")))
-								.px_2()
-								.py_1()
-								.gap_2()
-								.rounded_md()
-								.when(b.is_current, |el| el.bg(theme.muted))
-								.hover(|el| el.bg(theme.muted))
-								.on_click({
-									let view = view.clone();
-									let name = name.clone();
-									move |_, _, cx| {
-										if disabled {
-											return;
-										}
-										view.update(cx, |app, cx| {
-											app.checkout_branch(&name);
-											cx.notify();
-										});
-									}
-								})
-								.child(div().flex_1().child(name))
-								.when(b.is_current, |el| {
-									el.child(badge(&app.t("branchCurrentLabel"), theme.muted_foreground))
-								})
-								.when(b.is_trunk, |el| {
-									el.child(badge(&app.t("branchTrunkLabel"), theme.muted_foreground))
-								})
-								.when(b.is_used, |el| {
-									el.child(badge(&app.t("branchUsedLabel"), theme.warning))
-								})
-								.when(b.ahead > 0, |el| {
-									el.child(div().text_xs().child(format!("↑{}", b.ahead)))
-								})
-								.when(b.behind > 0, |el| {
-									el.child(div().text_xs().child(format!("↓{}", b.behind)))
-								})
-						}))
+						.max_h(px(384.))
+						.gap_0()
+						.children(
+							branches
+								.into_iter()
+								.map(|b| leftover_branch_row(app, &b, theme.muted, theme.muted_foreground, &view)),
+						)
 						.into_any_element()
 				})
 				.into_any_element()
@@ -709,8 +681,105 @@ fn review_queue_body(app: &AppView, muted: gpui::Hsla, cx: &mut Context<AppView>
 		})
 }
 
-fn badge(text: &str, color: gpui::Hsla) -> impl IntoElement {
-	div().px_1().text_xs().rounded_md().bg(color).child(text.to_string())
+fn leftover_chip(text: &str, fg: gpui::Hsla, bg: gpui::Hsla, border: gpui::Hsla) -> impl IntoElement {
+	div()
+		.h(px(16.))
+		.px(px(6.))
+		.rounded_sm()
+		.border_1()
+		.border_color(border)
+		.bg(bg)
+		.text_color(fg)
+		.text_xs()
+		.child(text.to_string())
+}
+
+fn leftover_branch_row(
+	app: &AppView,
+	branch: &model::project::GitBranchInfo,
+	muted: gpui::Hsla,
+	muted_fg: gpui::Hsla,
+	view: &gpui::Entity<AppView>,
+) -> impl IntoElement {
+	let name = branch.name.clone();
+	let disabled = branch.is_current || branch.is_used;
+	let amber = gpui::hsla(38. / 360., 0.92, 0.50, 1.);
+	h_flex()
+		.id(crate::ui::eid(format!("br-{name}")))
+		.w_full()
+		.min_w_0()
+		.px_3()
+		.py_2()
+		.gap_2()
+		.rounded_md()
+		.when(branch.is_current, |el| el.bg(muted))
+		.when(disabled && !branch.is_current, |el| el.opacity(0.6))
+		.hover(|el| el.bg(muted))
+		.on_click({
+			let view = view.clone();
+			let name = name.clone();
+			move |_, _, cx| {
+				if disabled {
+					return;
+				}
+				view.update(cx, |app, cx| {
+					app.checkout_branch(&name);
+					cx.notify();
+				});
+			}
+		})
+		.child(crate::ui::leftover_branch_glyph(muted_fg))
+		.child(
+			div()
+				.min_w_0()
+				.flex_1()
+				.text_sm()
+				.overflow_hidden()
+				.when(branch.is_current, |el| el.font_medium())
+				.child(name),
+		)
+		.when(branch.is_current, |el| {
+			el.child(leftover_chip(&app.t("branchCurrentLabel"), muted_fg, muted, muted))
+		})
+		.when(branch.is_trunk, |el| {
+			el.child(leftover_chip(
+				&app.t("branchTrunkLabel"),
+				muted_fg,
+				gpui::hsla(0., 0., 0., 0.),
+				muted_fg.opacity(0.3),
+			))
+		})
+		.when(branch.is_used, |el| {
+			el.child(leftover_chip(
+				&app.t("branchUsedLabel"),
+				amber,
+				amber.opacity(0.1),
+				amber.opacity(0.3),
+			))
+		})
+		.when(!branch.is_current && (branch.ahead > 0 || branch.behind > 0), |el| {
+			el.child(
+				h_flex()
+					.flex_none()
+					.gap_1()
+					.font_family("monospace")
+					.text_xs()
+					.when(branch.ahead > 0, |row| {
+						row.child(
+							div()
+								.text_color(gpui::hsla(0.38, 0.7, 0.45, 1.))
+								.child(format!("↑{}", branch.ahead)),
+						)
+					})
+					.when(branch.behind > 0, |row| {
+						row.child(
+							div()
+								.text_color(gpui::hsla(0.02, 0.75, 0.5, 1.))
+								.child(format!("↓{}", branch.behind)),
+						)
+					}),
+			)
+		})
 }
 
 fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -747,17 +816,20 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 	h_flex()
 		.justify_end()
 		.gap_2()
-		.when(kind != DialogKind::ReviewQueue, |el| {
-			el.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
-				let view = view.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, cx| {
-						app.data.overlay.dialog = None;
-						cx.notify();
-					});
-				}
-			}))
-		})
+		.when(
+			kind != DialogKind::ReviewQueue && kind != DialogKind::SwitchBranch,
+			|el| {
+				el.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.data.overlay.dialog = None;
+							cx.notify();
+						});
+					}
+				}))
+			},
+		)
 		.when(kind == DialogKind::ReviewQueue, |el| {
 			el.child(
 				Button::new("dlg-copy")

@@ -2,7 +2,7 @@ use gpui::{div, img, prelude::*, px, Context, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
 use gpui_component::{Disableable, Selectable};
 
 use crate::app::{extract_file_hunk, file_status_badge, AppView};
@@ -451,8 +451,8 @@ pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Conte
 		.child(
 			v_flex()
 				.id("git-diff-dialog")
-				.w(px(1100.))
-				.h(px(720.))
+				.w(px(1408.))
+				.h(px(896.))
 				.bg(theme.background)
 				.rounded_xl()
 				.border_1()
@@ -469,9 +469,11 @@ pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Conte
 						.justify_between()
 						.child(
 							h_flex()
-								.gap_2()
-								.child(Icon::new(IconName::GitHub).w(px(16.)))
-								.child(div().font_semibold().child(branch)),
+								.min_w_0()
+								.flex_1()
+								.gap(px(6.))
+								.child(crate::ui::leftover_branch_glyph(theme.muted_foreground))
+								.child(div().min_w_0().flex_1().text_sm().overflow_hidden().child(branch)),
 						)
 						.child(
 							h_flex()
@@ -517,6 +519,7 @@ pub fn render_diff_dialog(app: &mut AppView, window: &mut Window, cx: &mut Conte
 										.ghost()
 										.xsmall()
 										.icon(IconName::Close)
+										.tooltip("Close".to_string())
 										.on_click({
 											let view = view.clone();
 											move |_, _, cx| {

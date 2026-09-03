@@ -4,6 +4,10 @@ pub fn eid(s: impl Into<String>) -> SharedString {
 	SharedString::from(s.into())
 }
 
+pub fn leftover_branch_glyph(color: gpui::Hsla) -> gpui::Div {
+	div().text_color(color).child("⎇")
+}
+
 pub fn tip(text: impl Into<String>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
 	let text = text.into();
 	move |window, cx| gpui_component::tooltip::Tooltip::new(text.clone()).build(window, cx)
