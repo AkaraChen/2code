@@ -114,8 +114,8 @@ impl Default for Prefs {
 			font_size: 13.0,
 			default_shell: String::new(),
 			custom_shell: String::new(),
-			notifications: true,
-			notification_sound: String::new(),
+			notifications: false,
+			notification_sound: "Ping".into(),
 			topbar_controls: default_topbar_controls(),
 			editor_app: "code".into(),
 			terminal_app: String::new(),
@@ -250,6 +250,13 @@ mod tests {
 		controls.retain(|id| id != "terminal");
 		move_topbar_control(&mut controls, "terminal", 1);
 		assert_eq!(controls[1], "terminal");
+	}
+
+	#[test]
+	fn leftover_notification_defaults_match_inventory() {
+		let prefs = Prefs::default();
+		assert!(!prefs.notifications);
+		assert_eq!(prefs.notification_sound, "Ping");
 	}
 
 	#[test]

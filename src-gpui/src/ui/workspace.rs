@@ -54,7 +54,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 	} else {
 		px(16.)
 	};
-	let pad_right = if cfg!(target_os = "windows") { px(118.) } else { px(16.) };
+	let pad_right = px(leftover_topbar_pad_right(cfg!(target_os = "windows")));
 	let controls = app.data.prefs.topbar_controls.clone();
 
 	div()
@@ -198,6 +198,10 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 
 pub fn leftover_show_git_diff_stats(insertions: u32, deletions: u32) -> bool {
 	insertions != 0 || deletions != 0
+}
+
+pub fn leftover_topbar_pad_right(windows: bool) -> f32 {
+	if windows { 118.0 } else { 20.0 }
 }
 
 fn mode_switch(
@@ -1001,7 +1005,7 @@ fn persistent_terminals(app: &mut AppView, window: &mut Window, cx: &mut Context
 
 #[cfg(test)]
 mod tests {
-	use super::leftover_show_git_diff_stats;
+	use super::{leftover_show_git_diff_stats, leftover_topbar_pad_right};
 
 	#[test]
 	fn leftover_git_stats_hide_clean_trees() {
@@ -1009,5 +1013,11 @@ mod tests {
 		assert!(leftover_show_git_diff_stats(1, 0));
 		assert!(leftover_show_git_diff_stats(0, 4));
 		assert!(leftover_show_git_diff_stats(2, 3));
+	}
+
+	#[test]
+	fn leftover_topbar_pad_right_matches_inventory() {
+		assert_eq!(leftover_topbar_pad_right(true), 118.0);
+		assert_eq!(leftover_topbar_pad_right(false), 20.0);
 	}
 }
