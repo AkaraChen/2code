@@ -50,6 +50,21 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.when_some(err, |el, err| {
 			el.child(div().text_xs().text_color(theme.danger).opacity(0.8).child(err))
 		})
+		.when_some(sticky_folder(app), |el, crumb| {
+			el.child(
+				div()
+					.id("tree-sticky-folder")
+					.w_full()
+					.px_1()
+					.py_0p5()
+					.mb_1()
+					.rounded_md()
+					.bg(theme.muted)
+					.text_xs()
+					.font_semibold()
+					.child(crumb),
+			)
+		})
 		.child(match root {
 			None => div()
 				.p_3()
@@ -261,4 +276,19 @@ fn node_view(
 			)
 		})
 		.into_any_element()
+}
+
+fn sticky_folder(app: &AppView) -> Option<String> {
+	let ws = app.data.current_ws()?;
+	if let Some(selected) = ws.tree_selected.iter().next() {
+		let parent = selected.rsplit_once('/').map(|(dir, _)| dir).unwrap_or(selected);
+		if !parent.is_empty() {
+			return Some(parent.to_string());
+		}
+	}
+	ws.tree
+		.values()
+		.filter(|node| node.is_dir && node.expanded && !node.path.is_empty())
+		.max_by_key(|node| node.path.matches('/').count())
+		.map(|node| node.path.clone())
 }

@@ -531,16 +531,36 @@ impl SettingsView {
 			)
 			.child(
 				v_flex()
+					.id("terminal-preview")
 					.flex_1()
 					.h(px(220.))
 					.rounded_lg()
-					.p_3()
+					.px(px(16.))
+					.py(px(12.))
+					.gap_0()
 					.bg(gpui::rgb(theme.bg))
 					.text_color(gpui::rgb(theme.fg))
-					.font_family("monospace")
-					.child("$ echo 2code")
-					.child("2code")
-					.child(format!("theme: {}", theme.name)),
+					.font_family(self.prefs.font_family.clone())
+					.text_size(px(self.prefs.font_size))
+					.border_1()
+					.border_color(cx.theme().border)
+					.child(preview_line(0x3fb950, "$", theme.fg, "whoami"))
+					.child(div().child("2code"))
+					.child(preview_line(0x3fb950, "$", theme.fg, "ls"))
+					.child(div().child("src-gpui  docs  messages"))
+					.child(preview_line(0x3fb950, "$", theme.fg, "echo \"Hello, 2code!\""))
+					.child(div().child("Hello, 2code!"))
+					.child(
+						h_flex()
+							.gap_1()
+							.child(div().text_color(gpui::rgb(0x3fb950)).child("$"))
+							.child(
+								div()
+									.w(px(8.))
+									.h(px(self.prefs.font_size))
+									.bg(gpui::rgb(theme.cursor)),
+							),
+					),
 			)
 	}
 
@@ -1126,4 +1146,11 @@ fn link_btn(id: &'static str, label: String, url: &'static str) -> impl IntoElem
 	Button::new(id).small().label(label).on_click(move |_, _, _| {
 		let _ = open::that(url);
 	})
+}
+
+fn preview_line(prompt_color: u32, prompt: &str, fg: u32, cmd: &str) -> impl IntoElement {
+	h_flex()
+		.gap_1()
+		.child(div().text_color(gpui::rgb(prompt_color)).child(prompt.to_string()))
+		.child(div().text_color(gpui::rgb(fg)).child(cmd.to_string()))
 }

@@ -248,11 +248,11 @@ fn render_grid(term: &crate::state::TermSession, theme: &TermTheme, query: &str,
 				bg = if active == Some((row, col as usize, query_len))
 					|| active.is_some_and(|(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len)
 				{
-					0xe3b341
+					0x1f6feb
 				} else {
-					0x3b6ea8
+					0x5f4b16
 				};
-				fg = 0x0d1117;
+				fg = 0xffffff;
 			}
 			if let Some((text, last_fg, last_bg, last_hi)) = spans.last_mut() {
 				if *last_fg == fg && *last_bg == bg && *last_hi == highlight {

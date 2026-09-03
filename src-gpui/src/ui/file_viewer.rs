@@ -40,28 +40,50 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					.gap_1()
 					.border_b_1()
 					.border_color(theme.border)
-					.child(md_btn("md-h1", "H1", "# ", "", &view))
-					.child(md_btn("md-h2", "H2", "## ", "", &view))
-					.child(md_btn("md-h3", "H3", "### ", "", &view))
-					.child(md_btn("md-p", "P", "", "\n\n", &view))
-					.child(md_btn("md-b", "B", "**", "**", &view))
-					.child(md_btn("md-i", "I", "*", "*", &view))
-					.child(md_btn("md-s", "S", "~~", "~~", &view))
-					.child(md_btn("md-code", "`", "`", "`", &view))
-					.child(md_btn("md-pre", "</>", "```\n", "\n```", &view))
-					.child(md_btn("md-ul", "•", "- ", "", &view))
-					.child(md_btn("md-ol", "1.", "1. ", "", &view))
-					.child(md_btn("md-q", ">", "> ", "", &view))
-					.child(md_btn("md-link", "[]", "[", "](url)", &view))
-					.child(md_btn("md-img", "img", "![", "](src)", &view))
+					.child(md_btn("md-h1", "H1", "# ", "", &view, &app.t("notesFormatHeading1")))
+					.child(md_btn("md-h2", "H2", "## ", "", &view, &app.t("notesFormatHeading2")))
+					.child(md_btn("md-h3", "H3", "### ", "", &view, &app.t("notesFormatHeading3")))
+					.child(md_btn("md-p", "P", "", "\n\n", &view, &app.t("notesFormatParagraph")))
+					.child(md_btn("md-b", "B", "**", "**", &view, &app.t("notesFormatBold")))
+					.child(md_btn("md-i", "I", "*", "*", &view, &app.t("notesFormatItalic")))
+					.child(md_btn("md-s", "S", "~~", "~~", &view, &app.t("notesFormatStrike")))
+					.child(md_btn("md-code", "`", "`", "`", &view, &app.t("notesFormatCode")))
+					.child(md_btn(
+						"md-pre",
+						"</>",
+						"```\n",
+						"\n```",
+						&view,
+						&app.t("notesFormatCodeBlock"),
+					))
+					.child(md_btn("md-ul", "•", "- ", "", &view, &app.t("notesFormatBulletList")))
+					.child(md_btn(
+						"md-ol",
+						"1.",
+						"1. ",
+						"",
+						&view,
+						&app.t("notesFormatOrderedList"),
+					))
+					.child(md_btn("md-q", ">", "> ", "", &view, &app.t("notesFormatQuote")))
+					.child(md_btn("md-link", "[]", "[", "](url)", &view, &app.t("notesFormatLink")))
+					.child(md_btn(
+						"md-img",
+						"img",
+						"![",
+						"](src)",
+						&view,
+						&app.t("notesFormatLink"),
+					))
 					.child(md_btn(
 						"md-table",
 						"tbl",
 						"| A | B |\n| --- | --- |\n|   |   |\n",
 						"",
 						&view,
+						&app.t("notesTableMenu"),
 					))
-					.child(md_btn("md-hr", "—", "---\n", "", &view))
+					.child(md_btn("md-hr", "—", "---\n", "", &view, &app.t("notesInsertDivider")))
 					.child(
 						div()
 							.text_xs()
@@ -384,23 +406,17 @@ fn md_btn(
 	prefix: &'static str,
 	suffix: &'static str,
 	view: &gpui::Entity<AppView>,
+	tooltip: &str,
 ) -> impl IntoElement {
 	let view = view.clone();
 	Button::new(id)
 		.ghost()
 		.xsmall()
 		.label(label)
+		.tooltip(tooltip.to_string())
 		.on_click(move |_, window, cx| {
 			view.update(cx, |app, cx| {
-				let mut text = app.inputs.file_editor.read(cx).value().to_string();
-				if !text.is_empty() && !text.ends_with('\n') && (prefix.ends_with(' ') || prefix.ends_with('\n')) {
-					text.push('\n');
-				}
-				text.push_str(prefix);
-				text.push_str(suffix);
-				app.inputs.file_editor.update(cx, |s, cx| {
-					s.set_value(text, window, cx);
-				});
+				crate::app::wrap_markup(&app.inputs.file_editor, prefix, suffix, window, cx);
 			});
 		})
 }

@@ -2387,9 +2387,43 @@ pub fn suggested_project_name(folder: &str, current_name: &str) -> String {
 	}
 }
 
+pub fn offset_line_col(text: &str, offset: usize) -> (u32, u32) {
+	let mut cursor = offset.min(text.len());
+	while cursor > 0 && !text.is_char_boundary(cursor) {
+		cursor -= 1;
+	}
+	let before = &text[..cursor];
+	let line = before.matches('\n').count() as u32;
+	let character = before.rsplit('\n').next().unwrap_or("").chars().count() as u32;
+	(line, character)
+}
+
+pub fn wrap_markup(
+	input: &Entity<InputState>,
+	prefix: &str,
+	suffix: &str,
+	window: &mut Window,
+	cx: &mut Context<AppView>,
+) {
+	input.update(cx, |state, cx| {
+		let text = state.value().to_string();
+		let mut cursor = state.cursor().min(text.len());
+		while cursor > 0 && !text.is_char_boundary(cursor) {
+			cursor -= 1;
+		}
+		let new_text = format!("{}{prefix}{suffix}{}", &text[..cursor], &text[cursor..]);
+		let caret = cursor + prefix.len();
+		state.set_value(new_text.clone(), window, cx);
+		let (line, character) = offset_line_col(&new_text, caret);
+		state.set_cursor_position(gpui_component::input::Position::new(line, character), window, cx);
+	});
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{file_status_badge, git_status_kind, suggested_project_name, unique_tree_name, GitStatusKind};
+	use super::{
+		file_status_badge, git_status_kind, offset_line_col, suggested_project_name, unique_tree_name, GitStatusKind,
+	};
 
 	#[test]
 	fn unique_tree_name_adds_numbers() {
@@ -2418,5 +2452,12 @@ mod tests {
 		assert_eq!(file_status_badge("modified"), "M");
 		assert_eq!(git_status_kind("deleted"), GitStatusKind::Deleted);
 		assert_eq!(git_status_kind("??"), GitStatusKind::Untracked);
+	}
+
+	#[test]
+	fn offset_line_col_tracks_lines() {
+		assert_eq!(offset_line_col("abc", 2), (0, 2));
+		assert_eq!(offset_line_col("ab\ncd", 4), (1, 1));
+		assert_eq!(offset_line_col("", 0), (0, 0));
 	}
 }

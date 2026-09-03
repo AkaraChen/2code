@@ -371,10 +371,9 @@ fn profile_sidebar(app: &mut AppView, window: &mut Window, cx: &mut Context<AppV
 	let Some(ws) = app.data.current_ws() else {
 		return div().id("no-profile-sidebar").into_any_element();
 	};
-	if !ws.sidebar_open {
-		return div().id("profile-sidebar-closed").into_any_element();
-	}
-	let width = app.data.prefs.profile_sidebar_width.clamp(180.0, 560.0);
+	let open = ws.sidebar_open;
+	let stored_width = app.data.prefs.profile_sidebar_width.clamp(180.0, 560.0);
+	let width = if open { stored_width } else { 0.0 };
 	let mode = ws.sidebar_mode;
 	let theme = cx.theme().clone();
 
@@ -383,16 +382,19 @@ fn profile_sidebar(app: &mut AppView, window: &mut Window, cx: &mut Context<AppV
 		.id("profile-sidebar-wrap")
 		.relative()
 		.h_full()
+		.w(px(width))
+		.overflow_hidden()
+		.when(!open, |el| el.invisible())
 		.child(
 			div()
 				.id("profile-sidebar")
-				.w(px(width))
+				.w(px(stored_width))
 				.h_full()
 				.border_r_1()
 				.border_color(theme.border)
 				.min_w_0()
 				.child(
-					// Keep all three mounted; hide inactive ones.
+					// Keep all three mounted across Files/Git/Notes and while the sidebar is closed.
 					v_flex()
 						.size_full()
 						.child(visible(mode == SidebarMode::Files, file_tree::render(app, window, cx)))
@@ -400,12 +402,14 @@ fn profile_sidebar(app: &mut AppView, window: &mut Window, cx: &mut Context<AppV
 						.child(visible(mode == SidebarMode::Notes, notes::render(app, window, cx))),
 				),
 		)
-		.child(sidebar::resize_handle(
-			"profile-sidebar-resize",
-			view,
-			true,
-			app.data.overlay.sidebar_resize_focus == Some(true),
-		))
+		.when(open, |el| {
+			el.child(sidebar::resize_handle(
+				"profile-sidebar-resize",
+				view,
+				true,
+				app.data.overlay.sidebar_resize_focus == Some(true),
+			))
+		})
 		.into_any_element()
 }
 

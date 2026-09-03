@@ -116,15 +116,7 @@ fn note_md(
 		.tooltip(tooltip.to_string())
 		.on_click(move |_, window, cx| {
 			view.update(cx, |app, cx| {
-				let mut text = app.inputs.notes.read(cx).value().to_string();
-				if !text.is_empty() && !text.ends_with('\n') && prefix.ends_with(' ') {
-					text.push('\n');
-				}
-				text.push_str(prefix);
-				text.push_str(suffix);
-				app.inputs.notes.update(cx, |s, cx| {
-					s.set_value(text, window, cx);
-				});
+				crate::app::wrap_markup(&app.inputs.notes, prefix, suffix, window, cx);
 			});
 		})
 }
