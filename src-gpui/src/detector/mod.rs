@@ -379,17 +379,77 @@ fn regex_is_match(pat: &str, text: &str) -> bool {
 }
 
 pub fn clickable_tokens(screen: &str) -> Vec<Clickable> {
-	let mut out = Vec::new();
-	for token in screen.split_whitespace() {
-		let clean = token.trim_matches(|c: char| matches!(c, ',' | ';' | ')' | '(' | '[' | ']' | '"' | '\'' | '`'));
-		if clean.starts_with("http://") || clean.starts_with("https://") {
-			out.push(Clickable::Url(clean.to_string()));
-		} else if looks_like_path(clean) {
-			out.push(Clickable::Path(clean.to_string()));
-		}
-	}
+	let mut out: Vec<Clickable> = clickable_hits(screen).into_iter().map(|h| h.token).collect();
 	out.dedup();
 	out.into_iter().take(8).collect()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClickHit {
+	pub token: Clickable,
+	pub row: u16,
+	pub col: usize,
+	pub len: usize,
+}
+
+impl ClickHit {
+	pub fn contains(&self, row: u16, col: usize) -> bool {
+		self.row == row && col >= self.col && col < self.col + self.len
+	}
+}
+
+pub fn clickable_hits(screen: &str) -> Vec<ClickHit> {
+	let mut out = Vec::new();
+	for (row, line) in screen.lines().enumerate() {
+		let mut col = 0usize;
+		for part in line.split_inclusive(char::is_whitespace) {
+			let token = part.trim_end_matches(char::is_whitespace);
+			let clean = token.trim_matches(|c: char| matches!(c, ',' | ';' | ')' | '(' | '[' | ']' | '"' | '\'' | '`'));
+			if let Some(extra) = token.find(clean).filter(|_| !clean.is_empty()) {
+				let hit = if clean.starts_with("http://") || clean.starts_with("https://") {
+					Some(Clickable::Url(clean.to_string()))
+				} else if looks_like_path(clean) {
+					Some(Clickable::Path(clean.to_string()))
+				} else {
+					None
+				};
+				if let Some(token) = hit {
+					out.push(ClickHit {
+						token,
+						row: row as u16,
+						col: col + extra,
+						len: clean.chars().count(),
+					});
+				}
+			}
+			col += part.chars().count();
+		}
+	}
+	out
+}
+
+/// OSC 9;4 progress used by xterm's ProgressAddon: `(state, value)`.
+/// state 0 hide, 1 set, 2 error, 3 indeterminate, 4 pause.
+pub fn parse_osc_progress(raw: &str) -> Option<(u8, u8)> {
+	if raw.is_empty() {
+		return None;
+	}
+	let parts: Vec<&str> = raw.split(';').collect();
+	for i in 0..parts.len() {
+		if parts[i] == "9" && parts.get(i + 1) == Some(&"4") {
+			let state = parts.get(i + 2)?.parse().ok()?;
+			let value = parts.get(i + 3).and_then(|v| v.parse().ok()).unwrap_or(0);
+			return Some((state, value));
+		}
+	}
+	if parts.len() >= 2 {
+		if let (Ok(state), Ok(value)) = (parts[0].parse::<u8>(), parts[1].parse::<u8>()) {
+			if state <= 4 {
+				return Some((state, value));
+			}
+		}
+	}
+	None
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -435,5 +495,17 @@ mod tests {
 		let tokens = clickable_tokens("see https://example.com and src/app.rs please");
 		assert!(tokens.contains(&Clickable::Url("https://example.com".into())));
 		assert!(tokens.contains(&Clickable::Path("src/app.rs".into())));
+		let hits = clickable_hits("see https://example.com and src/app.rs please");
+		assert_eq!(hits[0].col, 4);
+		assert_eq!(hits[0].len, "https://example.com".len());
+		assert_eq!(hits[1].col, 4 + "https://example.com".len() + 5);
+	}
+
+	#[test]
+	fn parses_xterm_osc_progress() {
+		assert_eq!(parse_osc_progress("9;4;1;40"), Some((1, 40)));
+		assert_eq!(parse_osc_progress("1;80"), Some((1, 80)));
+		assert_eq!(parse_osc_progress("0;0"), Some((0, 0)));
+		assert_eq!(parse_osc_progress(""), None);
 	}
 }

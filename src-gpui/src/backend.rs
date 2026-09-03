@@ -364,6 +364,10 @@ impl Backend {
 		pty_infra::write_to_pty(&self.sessions, session_id, data)
 	}
 
+	pub fn clear_pty_output(&self, session_id: &str) -> Result<(), AppError> {
+		service::pty::clear_output(&self.output_dir, &self.flush_senders, session_id)
+	}
+
 	pub fn resize_pty(&self, session_id: &str, rows: u16, cols: u16) -> Result<(), AppError> {
 		pty_infra::resize_pty(&self.sessions, session_id, rows, cols)
 	}

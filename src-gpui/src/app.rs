@@ -730,6 +730,22 @@ impl AppView {
 		}
 	}
 
+	pub fn clear_active_terminal(&mut self) {
+		let Some(id) = self
+			.data
+			.current_ws()
+			.and_then(|w| w.active_terminal())
+			.map(|t| t.id.clone())
+		else {
+			return;
+		};
+		let _ = self.backend.clear_pty_output(&id);
+		if let Some(term) = self.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+			term.clear_screen();
+		}
+		self.write_to_active_pty(&[0x0c]);
+	}
+
 	pub fn tick(&mut self, cx: &mut Context<Self>) {
 		let started = std::time::Instant::now();
 		self.data.expire_toasts();

@@ -247,6 +247,7 @@ pub struct TermSession {
 	pub rows: u16,
 	pub selection: Option<((u16, usize), (u16, usize))>,
 	pub selecting: bool,
+	pub click_cell: Option<(u16, usize)>,
 }
 
 impl TermSession {
@@ -267,7 +268,20 @@ impl TermSession {
 			rows: 32,
 			selection: None,
 			selecting: false,
+			click_cell: None,
 		}
+	}
+
+	pub fn osc_progress(&self) -> String {
+		self.parser.callbacks().progress.clone()
+	}
+
+	pub fn clear_screen(&mut self) {
+		self.parser =
+			vt100::Parser::new_with_callbacks(self.rows, self.cols, 10_000, crate::detector::OscSink::default());
+		self.selection = None;
+		self.selecting = false;
+		self.click_cell = None;
 	}
 
 	pub fn feed(&mut self, bytes: &[u8]) {

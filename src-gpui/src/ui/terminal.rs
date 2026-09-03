@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, rgb, Context, KeyDownEvent, MouseButton, Window};
+use gpui::{div, prelude::*, px, relative, rgb, Context, CursorStyle, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
@@ -29,7 +29,9 @@ pub fn render(
 	let hit_ix = term.search_ix;
 	let id = term.id.clone();
 	let clickables = crate::detector::clickable_tokens(&term.screen_text());
-	let grid = render_grid(term, theme, &search_query, hit_ix, interactive, &view);
+	let link_hits = crate::detector::clickable_hits(&term.screen_text());
+	let osc_bar = crate::detector::parse_osc_progress(&term.osc_progress());
+	let grid = render_grid(term, theme, &search_query, hit_ix, interactive, &view, &link_hits);
 
 	div()
 		.id(crate::ui::eid(format!("pty-{id}")))
@@ -43,7 +45,8 @@ pub fn render(
 		.when(interactive, |el| {
 			el.on_mouse_up(MouseButton::Left, {
 				let view = view.clone();
-				move |_, _, cx| {
+				move |ev, window, cx| {
+					let skip = ev.modifiers.platform || ev.modifiers.control;
 					view.update(cx, |app, cx| {
 						if app.data.overlay.drag_file.is_some() {
 							app.drop_file_on_terminal();
@@ -55,6 +58,27 @@ pub fn render(
 							.is_some_and(|term| term.finish_selection());
 						if copied {
 							app.copy_term_selection(cx);
+						} else if let Some((row, col)) = app
+							.data
+							.current_ws()
+							.and_then(|w| w.active_terminal())
+							.and_then(|t| t.click_cell)
+						{
+							let screen = app
+								.data
+								.current_ws()
+								.and_then(|w| w.active_terminal())
+								.map(|t| t.screen_text())
+								.unwrap_or_default();
+							if let Some(hit) = crate::detector::clickable_hits(&screen)
+								.into_iter()
+								.find(|h| h.contains(row, col))
+							{
+								app.open_clickable(&hit.token, skip, window, cx);
+							}
+						}
+						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+							term.click_cell = None;
 						}
 						cx.notify();
 					});
@@ -105,6 +129,18 @@ pub fn render(
 							});
 							return;
 						}
+						if ev.keystroke.key == "l"
+							&& ev.keystroke.modifiers.control
+							&& !ev.keystroke.modifiers.platform
+							&& !ev.keystroke.modifiers.alt
+							&& !ev.keystroke.modifiers.shift
+						{
+							view.update(cx, |app, cx| {
+								app.clear_active_terminal();
+								cx.notify();
+							});
+							return;
+						}
 						let handled = view.update(cx, |app, cx| {
 							let handled = app.handle_overlay_key(
 								ev.keystroke.key.as_str(),
@@ -131,6 +167,32 @@ pub fn render(
 			} else {
 				body.into_any_element()
 			}
+		})
+		.when_some(osc_bar.filter(|(state, _)| *state != 0), |el, (state, value)| {
+			el.child(
+				div()
+					.id("pty-osc-progress")
+					.absolute()
+					.top_0()
+					.left_0()
+					.right_0()
+					.h(px(3.))
+					.bg(rgb(0x21262d))
+					.child(
+						div()
+							.h_full()
+							.bg(rgb(match state {
+								2 => 0xda3633,
+								3 => 0x8b949e,
+								_ => 0x1f6feb,
+							}))
+							.w(relative(if state == 3 {
+								1.0
+							} else {
+								(value as f32 / 100.0).clamp(0.02, 1.0)
+							})),
+					),
+			)
 		})
 		.when(search_open && interactive, |el| {
 			el.child(
@@ -258,6 +320,7 @@ fn render_grid(
 	hit_ix: usize,
 	interactive: bool,
 	view: &gpui::Entity<AppView>,
+	link_hits: &[crate::detector::ClickHit],
 ) -> impl IntoElement {
 	let screen = term.parser.screen();
 	let (rows, cols) = screen.size();
@@ -266,7 +329,7 @@ fn render_grid(
 	let query_len = query.len();
 
 	v_flex().id("pty-grid").children((0..rows).map(|row| {
-		let mut spans: Vec<(String, u32, u32, bool, bool, usize)> = Vec::new();
+		let mut spans: Vec<(String, u32, u32, bool, bool, bool, usize)> = Vec::new();
 		for col in 0..cols {
 			let cell = screen.cell(row, col);
 			let ch = cell
@@ -292,6 +355,7 @@ fn render_grid(
 				.iter()
 				.any(|&(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len);
 			let selected = term.cell_selected(row, col as usize);
+			let linked = link_hits.iter().any(|h| h.contains(row, col as usize));
 			if highlight {
 				bg = if active == Some((row, col as usize, query_len))
 					|| active.is_some_and(|(r, c, len)| r == row && (col as usize) >= c && (col as usize) < c + len)
@@ -305,18 +369,28 @@ fn render_grid(
 				bg = 0x264f78;
 				fg = 0xffffff;
 			}
-			if let Some((text, last_fg, last_bg, last_hi, last_sel, _)) = spans.last_mut() {
-				if *last_fg == fg && *last_bg == bg && *last_hi == highlight && *last_sel == selected {
+			if let Some((text, last_fg, last_bg, last_hi, last_sel, last_link, _)) = spans.last_mut() {
+				if *last_fg == fg
+					&& *last_bg == bg
+					&& *last_hi == highlight
+					&& *last_sel == selected
+					&& *last_link == linked
+				{
 					text.push_str(&ch);
 					continue;
 				}
 			}
-			spans.push((ch, fg, bg, highlight, selected, col as usize));
+			spans.push((ch, fg, bg, highlight, selected, linked, col as usize));
 		}
-		h_flex().children(spans.into_iter().map(|(text, fg, bg, _, _, start_col)| {
+		h_flex().children(spans.into_iter().map(|(text, fg, bg, _, _, linked, start_col)| {
 			let end_col = start_col + text.chars().count();
 			let view = view.clone();
-			let span = div().bg(rgb(bg)).text_color(rgb(fg)).whitespace_nowrap().child(text);
+			let span = div()
+				.bg(rgb(bg))
+				.text_color(rgb(fg))
+				.whitespace_nowrap()
+				.when(linked, |el| el.underline().cursor(CursorStyle::PointingHand))
+				.child(text);
 			if !interactive {
 				return span.into_any_element();
 			}
@@ -327,6 +401,7 @@ fn render_grid(
 					view.update(cx, |app, cx| {
 						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
 							term.begin_selection(row, start_col, extend);
+							term.click_cell = Some((row, start_col));
 						}
 						cx.notify();
 					});
