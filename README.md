@@ -43,7 +43,7 @@ AI-assisted development creates more parallel state than a normal coding session
 - **Domain backend**: Rust workspace crates in `src-tauri/crates/` (model, repo, service, infra)
 - **Database**: SQLite via Diesel migrations
 - **Terminal runtime**: integrated PTY service + vt100
-- **Legacy reference shell**: Tauri 2 + React 19 (kept in `src/` / `src-tauri/` while the GPUI rewrite lands)
+- **Leftover reference shell**: Tauri 2 + React 19 in `src/` / `src-tauri/` — not the shipping product UI. Domain crates under `src-tauri/crates/` are still used by GPUI.
 
 ## Getting Started
 
@@ -66,11 +66,11 @@ cd src-gpui && cargo run
 
 The GPUI app uses the same SQLite database as the old Tauri shell: `$XDG_DATA_HOME/com.akrc.code/app.db` (or the platform equivalent). Preferences live in `gpui-prefs.json` next to the DB.
 
-### Legacy Tauri + React shell
+### Leftover Tauri + React shell
 
 ```bash
 bun install
-bun tauri dev
+bun run legacy:tauri:dev
 ```
 
 ### Build
@@ -79,7 +79,7 @@ bun tauri dev
 cd src-gpui && cargo build --release
 ```
 
-The legacy Tauri bundle is still `bun tauri build`.
+Release CI builds GPUI binaries (`2code`) for Linux, macOS, and Windows. The leftover Tauri bundle is `bun run legacy:tauri:build`.
 
 ## Useful Commands
 
@@ -91,7 +91,7 @@ The legacy Tauri bundle is still `bun tauri build`.
 | `cd src-tauri && cargo test` | Run Rust domain tests |
 | `just fmt` | Format TypeScript and Rust |
 | `just coverage` | Generate Rust coverage report |
-| `bun tauri dev` | Run the legacy Tauri + React shell |
+| `bun run legacy:tauri:dev` | Run the leftover Tauri + React shell |
 
 ## Project Structure
 

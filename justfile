@@ -27,6 +27,7 @@ test-all:
     just test-rust
 
 verify:
+    just gpui-check
     bun run lint:check
     bun run typecheck
     bun run test

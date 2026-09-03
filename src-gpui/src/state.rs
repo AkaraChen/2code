@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
+use model::debug::LogEntry;
 use model::filesystem::FileSearchResult;
 use model::profile::Profile;
 use model::project::{
@@ -403,7 +404,7 @@ pub struct OverlayState {
 	pub settings_open: bool,
 	pub settings_tab: SettingsTab,
 	pub debug_open: bool,
-	pub debug_logs: Vec<String>,
+	pub debug_logs: Vec<LogEntry>,
 	pub expanded_projects: HashSet<String>,
 	pub pending_close_file: Option<String>,
 	pub editing_template: Option<String>,

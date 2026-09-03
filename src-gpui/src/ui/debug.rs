@@ -55,13 +55,19 @@ pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 
 fn debug_body(app: &mut AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	let view = cx.entity();
+	let theme = cx.theme().clone();
 	let q = app.inputs.debug_search.read(cx).value().to_string();
 	let logs: Vec<_> = app
 		.data
 		.overlay
 		.debug_logs
 		.iter()
-		.filter(|l| q.is_empty() || l.to_ascii_lowercase().contains(&q.to_ascii_lowercase()))
+		.filter(|l| {
+			q.is_empty()
+				|| crate::backend::format_debug_log(l)
+					.to_ascii_lowercase()
+					.contains(&q.to_ascii_lowercase())
+		})
 		.cloned()
 		.collect();
 	v_flex()
@@ -89,17 +95,39 @@ fn debug_body(app: &mut AppView, cx: &mut Context<AppView>) -> impl IntoElement 
 				),
 		)
 		.child(if logs.is_empty() {
-			div()
-				.flex_1()
-				.p_4()
-				.child(app.t("debugNoLogs"))
-				.into_any_element()
+			div().flex_1().p_4().child(app.t("debugNoLogs")).into_any_element()
 		} else {
 			v_flex()
 				.flex_1()
 				.p_2()
 				.children(logs.into_iter().map(|l| {
-					div().text_xs().font_family("monospace").child(l)
+					let level_color = match l.level.as_str() {
+						"ERROR" => gpui::rgb(0xef4444),
+						"WARN" => gpui::rgb(0xf59e0b),
+						_ => gpui::rgb(0x22c55e),
+					};
+					h_flex()
+						.gap_2()
+						.child(
+							div()
+								.text_xs()
+								.font_family("monospace")
+								.text_color(theme.muted_foreground)
+								.child(crate::backend::format_debug_time(l.timestamp)),
+						)
+						.child(
+							div()
+								.text_xs()
+								.font_family("monospace")
+								.text_color(level_color)
+								.child(l.level.clone()),
+						)
+						.child(
+							div()
+								.text_xs()
+								.font_family("monospace")
+								.child(format!("{} {}", l.source, l.message)),
+						)
 				}))
 				.into_any_element()
 		})

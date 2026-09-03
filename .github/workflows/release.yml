@@ -13,11 +13,88 @@ on:
 
 jobs:
   smoke:
-    name: Linux Smoke Gate
-    uses: ./.github/workflows/tauri-smoke.yml
+    name: GPUI Gate
+    uses: ./.github/workflows/gpui-check.yml
+
+  gpui-binaries:
+    name: GPUI binary (${{ matrix.name }})
+    needs: smoke
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-24.04
+            target: ""
+            bin: 2code
+          - name: macos-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+            bin: 2code
+          - name: windows-x64
+            os: windows-latest
+            target: ""
+            bin: 2code.exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libsqlite3-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            libvulkan-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxrandr-dev
+
+      - name: Setup Rust
+        if: matrix.target == ''
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust with target
+        if: matrix.target != ''
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+          workspaces: |
+            src-gpui -> target
+
+      - name: Build GPUI app
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            cargo build --release --manifest-path src-gpui/Cargo.toml --target "${{ matrix.target }}"
+            echo "GPUI_BIN=src-gpui/target/${{ matrix.target }}/release/${{ matrix.bin }}" >> "$GITHUB_ENV"
+          else
+            cargo build --release --manifest-path src-gpui/Cargo.toml
+            echo "GPUI_BIN=src-gpui/target/release/${{ matrix.bin }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Upload GPUI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2code-gpui-${{ matrix.name }}
+          path: ${{ env.GPUI_BIN }}
+          if-no-files-found: error
 
   publish:
-    name: Publish (${{ matrix.name }})
+    name: Legacy Tauri publish (${{ matrix.name }})
     needs: smoke
     runs-on: ${{ matrix.platform }}
     permissions:

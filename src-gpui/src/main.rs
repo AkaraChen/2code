@@ -11,19 +11,22 @@ mod updater;
 
 use gpui::{point, prelude::*, px, size, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions};
 use gpui_component::Root;
+use tracing_subscriber::prelude::*;
 
 use crate::app::AppView;
 use crate::backend::Backend;
 
 fn main() {
-	tracing_subscriber::fmt()
-		.with_env_filter(
-			tracing_subscriber::EnvFilter::try_from_default_env()
-				.unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-		)
+	let (log_layer, log_handle) = infra::logger::ChannelLayer::new();
+	let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+		.unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+	tracing_subscriber::registry()
+		.with(filter)
+		.with(tracing_subscriber::fmt::layer())
+		.with(log_layer)
 		.init();
 
-	let backend = match Backend::init() {
+	let backend = match Backend::init(log_handle) {
 		Ok(b) => b,
 		Err(err) => {
 			eprintln!("failed to init 2code backend: {err}");

@@ -785,8 +785,21 @@ impl AppView {
 			let _ = exits.len();
 		}
 		self.drain_watch_events();
+		self.drain_debug_logs();
 		self.autosave_notes(cx);
 		self.sync_file_draft(cx);
+	}
+
+	fn drain_debug_logs(&mut self) {
+		let incoming = self.backend.take_debug_logs();
+		if incoming.is_empty() {
+			return;
+		}
+		self.data.overlay.debug_logs.extend(incoming);
+		if self.data.overlay.debug_logs.len() > crate::backend::DEBUG_LOG_CAP {
+			let extra = self.data.overlay.debug_logs.len() - crate::backend::DEBUG_LOG_CAP;
+			self.data.overlay.debug_logs.drain(0..extra);
+		}
 	}
 
 	fn notify_agent_waiting(&self) {

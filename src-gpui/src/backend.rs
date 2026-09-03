@@ -19,6 +19,9 @@ use service::{PtyEventEmitter, WatchEventSender};
 pub type TerminalBuffers = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 pub type TerminalExits = Arc<Mutex<Vec<String>>>;
 pub type WatchInbox = Arc<Mutex<Vec<model::watcher::WatchEvent>>>;
+pub type DebugInbox = Arc<Mutex<Vec<model::debug::LogEntry>>>;
+
+pub const DEBUG_LOG_CAP: usize = 1000;
 
 pub struct GpuiPtyEmitter {
 	buffers: TerminalBuffers,
@@ -72,10 +75,11 @@ pub struct Backend {
 	pub buffers: TerminalBuffers,
 	pub exits: TerminalExits,
 	pub watch_events: WatchInbox,
+	pub debug_logs: DebugInbox,
 }
 
 impl Backend {
-	pub fn init() -> Result<Self, String> {
+	pub fn init(log_handle: infra::logger::ChannelLayerHandle) -> Result<Self, String> {
 		let app_data_dir = app_data_dir();
 		std::fs::create_dir_all(&app_data_dir).map_err(|e| format!("create app data dir: {e}"))?;
 
@@ -87,6 +91,21 @@ impl Backend {
 		let buffers = Arc::new(Mutex::new(HashMap::new()));
 		let exits = Arc::new(Mutex::new(Vec::new()));
 		let watch_events = Arc::new(Mutex::new(Vec::new()));
+		let debug_logs = Arc::new(Mutex::new(Vec::new()));
+		{
+			let inbox = debug_logs.clone();
+			log_handle.attach(move |entry| {
+				if let Ok(mut queue) = inbox.lock() {
+					queue.push(entry);
+					if queue.len() > DEBUG_LOG_CAP * 2 {
+						let extra = queue.len() - DEBUG_LOG_CAP;
+						queue.drain(0..extra);
+					}
+				}
+				true
+			});
+		}
+		tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
 		service::watcher::start(
 			Box::new(GpuiWatchSender {
 				events: watch_events.clone(),
@@ -105,6 +124,7 @@ impl Backend {
 			buffers,
 			exits,
 			watch_events,
+			debug_logs,
 		})
 	}
 
@@ -497,6 +517,14 @@ impl Backend {
 		service::filesystem::resolve_terminal_file_path(&self.db, profile_id, path)
 	}
 
+	pub fn take_debug_logs(&self) -> Vec<model::debug::LogEntry> {
+		self.debug_logs
+			.lock()
+			.ok()
+			.map(|mut q| q.drain(..).collect())
+			.unwrap_or_default()
+	}
+
 	pub fn take_output(&self, session_id: &str) -> Vec<u8> {
 		self.buffers
 			.lock()
@@ -669,6 +697,25 @@ pub fn language_from_path(path: &str) -> &'static str {
 	}
 }
 
+pub fn format_debug_time(timestamp_ms: u64) -> String {
+	let total_secs = timestamp_ms / 1000;
+	let ms = timestamp_ms % 1000;
+	let s = total_secs % 60;
+	let m = (total_secs / 60) % 60;
+	let h = (total_secs / 3600) % 24;
+	format!("{h:02}:{m:02}:{s:02}.{ms:03}")
+}
+
+pub fn format_debug_log(entry: &model::debug::LogEntry) -> String {
+	format!(
+		"{} {} {} {}",
+		format_debug_time(entry.timestamp),
+		entry.level,
+		entry.source,
+		entry.message
+	)
+}
+
 pub fn file_name(path: &str) -> String {
 	Path::new(path)
 		.file_name()
@@ -700,5 +747,22 @@ mod tests {
 	#[test]
 	fn rasterize_missing_pdf_is_none() {
 		assert!(rasterize_pdf_preview("/no/such/file.pdf").is_none());
+	}
+
+	#[test]
+	fn formats_debug_clock_in_utc() {
+		assert_eq!(format_debug_time(0), "00:00:00.000");
+		assert_eq!(format_debug_time(3_661_123), "01:01:01.123");
+	}
+
+	#[test]
+	fn formats_debug_log_row() {
+		let line = format_debug_log(&model::debug::LogEntry {
+			timestamp: 1_000,
+			level: "INFO".into(),
+			source: "pty".into(),
+			message: "ready".into(),
+		});
+		assert_eq!(line, "00:00:01.000 INFO pty ready");
 	}
 }
