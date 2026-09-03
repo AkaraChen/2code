@@ -61,16 +61,16 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 		.child(
 			v_flex()
 				.id("dialog-panel")
-				.w(px(
-					if matches!(
-						kind,
-						DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog
-					) {
-						560.
-					} else {
-						380.
-					},
-				))
+				.w(px(if matches!(kind, DialogKind::ReviewQueue) {
+					720.
+				} else if matches!(
+					kind,
+					DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog
+				) {
+					560.
+				} else {
+					380.
+				}))
 				.max_h(px(640.))
 				.p_4()
 				.gap_3()
@@ -97,6 +97,9 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 									kind == DialogKind::DeleteProfile || kind == DialogKind::DeleteProject,
 									|el| el.child(Icon::new(IconName::TriangleAlert).w(px(18.))),
 								)
+								.when(kind == DialogKind::ReviewQueue, |el| {
+									el.child(Icon::new(IconName::Inbox).w(px(18.)))
+								})
 								.child(div().font_semibold().child(title)),
 						)
 						.child(Button::new("dlg-x").ghost().xsmall().icon(IconName::Close).on_click({
@@ -565,13 +568,7 @@ fn dialog_body(
 			.child(Input::new(&app.inputs.template_cwd))
 			.child(Input::new(&app.inputs.template_commands))
 			.into_any_element(),
-		DialogKind::ReviewQueue => v_flex()
-			.gap_2()
-			.children(app.data.overlay.review_comments.iter().map(|c| div().child(c.clone())))
-			.when(app.data.overlay.review_comments.is_empty(), |el| {
-				el.child(div().text_color(theme.muted_foreground).child("—"))
-			})
-			.into_any_element(),
+		DialogKind::ReviewQueue => review_queue_body(app, theme.muted_foreground, cx).into_any_element(),
 		DialogKind::DebugLog => crate::ui::debug::render_panel(app, _window, cx).into_any_element(),
 		DialogKind::CreateGroup => v_flex()
 			.gap_2()
@@ -579,6 +576,137 @@ fn dialog_body(
 			.child(Input::new(&app.inputs.group_name))
 			.into_any_element(),
 	}
+}
+
+fn review_queue_body(app: &AppView, muted: gpui::Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+	let view = cx.entity();
+	let theme = cx.theme().clone();
+	let editing = app.data.overlay.review_edit_id.clone();
+	v_flex()
+		.id("review-queue")
+		.gap_3()
+		.max_h(px(480.))
+		.children(app.data.overlay.review_comments.iter().cloned().map(|comment| {
+			let id = comment.id.clone();
+			let editing_this = editing.as_deref() == Some(id.as_str());
+			v_flex()
+				.id(crate::ui::eid(format!("review-card-{id}")))
+				.gap_2()
+				.rounded_lg()
+				.border_1()
+				.border_color(theme.border)
+				.child(
+					h_flex()
+						.px_3()
+						.py_2()
+						.gap_2()
+						.border_b_1()
+						.border_color(theme.border)
+						.bg(theme.muted)
+						.child(
+							v_flex()
+								.flex_1()
+								.min_w_0()
+								.gap_1()
+								.child(
+									div()
+										.font_family("monospace")
+										.font_semibold()
+										.text_sm()
+										.child(comment.display_name.clone()),
+								)
+								.child(
+									h_flex()
+										.gap_2()
+										.child(
+											div()
+												.px_1()
+												.text_xs()
+												.font_family("monospace")
+												.rounded_md()
+												.bg(gpui::hsla(0.58, 0.4, 0.5, 0.18))
+												.child(crate::review::format_review_range(comment.range)),
+										)
+										.child(div().text_xs().text_color(muted).child("Selected diff")),
+								),
+						)
+						.child(
+							Button::new(crate::ui::eid(format!("review-del-{id}")))
+								.ghost()
+								.xsmall()
+								.icon(IconName::Close)
+								.tooltip("Delete review comment".to_string())
+								.on_click({
+									let view = view.clone();
+									let id = id.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.delete_review_comment(&id);
+											cx.notify();
+										});
+									}
+								}),
+						),
+				)
+				.child(
+					div()
+						.mx_3()
+						.max_h(px(128.))
+						.overflow_hidden()
+						.rounded_md()
+						.border_1()
+						.border_color(theme.border)
+						.p_2()
+						.font_family("monospace")
+						.text_xs()
+						.child(if comment.selected_text.is_empty() {
+							"(no selected text available)".to_string()
+						} else {
+							comment.selected_text.clone()
+						}),
+				)
+				.child(
+					div()
+						.px_3()
+						.text_xs()
+						.font_semibold()
+						.text_color(muted)
+						.child("Comment"),
+				)
+				.child(if editing_this {
+					div()
+						.px_3()
+						.pb_3()
+						.child(Input::new(&app.inputs.review_comment))
+						.into_any_element()
+				} else {
+					div()
+						.id(crate::ui::eid(format!("review-body-{id}")))
+						.px_3()
+						.pb_3()
+						.text_sm()
+						.cursor(gpui::CursorStyle::PointingHand)
+						.on_click({
+							let view = view.clone();
+							let id = id.clone();
+							move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									app.begin_review_edit(&id, window, cx);
+									cx.notify();
+								});
+							}
+						})
+						.child(if comment.body.is_empty() {
+							" ".to_string()
+						} else {
+							comment.body
+						})
+						.into_any_element()
+				})
+		}))
+		.when(app.data.overlay.review_comments.is_empty(), |el| {
+			el.child(div().text_color(muted).child("—"))
+		})
 }
 
 fn badge(text: &str, color: gpui::Hsla) -> impl IntoElement {
@@ -607,37 +735,56 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		DialogKind::CloseUnsaved => app.t("discardChanges"),
 		DialogKind::OpenLink => app.t("browserOpenDefault"),
 		DialogKind::CreateGroup => app.t("create"),
-		DialogKind::ReviewQueue => app.t("reviewCommentsCopied"),
 		DialogKind::EditTemplate => app.t("save"),
 		_ => app.t("cancel"),
 	};
 	let show_ok = !matches!(
 		kind,
-		DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile
+		DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile | DialogKind::ReviewQueue
 	);
+	let review_empty = app.data.overlay.review_comments.is_empty();
 
 	h_flex()
 		.justify_end()
 		.gap_2()
-		.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
-			let view = view.clone();
-			move |_, _, cx| {
-				view.update(cx, |app, cx| {
-					app.data.overlay.dialog = None;
-					cx.notify();
-				});
-			}
-		}))
+		.when(kind != DialogKind::ReviewQueue, |el| {
+			el.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
+				let view = view.clone();
+				move |_, _, cx| {
+					view.update(cx, |app, cx| {
+						app.data.overlay.dialog = None;
+						cx.notify();
+					});
+				}
+			}))
+		})
 		.when(kind == DialogKind::ReviewQueue, |el| {
 			el.child(
-				Button::new("dlg-copy-clear")
+				Button::new("dlg-copy")
 					.small()
-					.label(app.t("reviewCommentsCopiedAndCleared"))
+					.label("Copy".to_string())
+					.disabled(review_empty)
 					.on_click({
 						let view = view.clone();
-						move |_, _, cx| {
+						move |_, window, cx| {
 							view.update(cx, |app, cx| {
-								app.copy_review_comments(true, cx);
+								app.copy_review_comments(false, window, cx);
+								cx.notify();
+							});
+						}
+					}),
+			)
+			.child(
+				Button::new("dlg-copy-clear")
+					.small()
+					.danger()
+					.label("Copy and clear all".to_string())
+					.disabled(review_empty)
+					.on_click({
+						let view = view.clone();
+						move |_, window, cx| {
+							view.update(cx, |app, cx| {
+								app.copy_review_comments(true, window, cx);
 								cx.notify();
 							});
 						}
@@ -691,9 +838,6 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 									}
 									DialogKind::CreateGroup => {
 										app.submit_create_group(None, cx);
-									}
-									DialogKind::ReviewQueue => {
-										app.copy_review_comments(false, cx);
 									}
 									_ => app.data.overlay.dialog = None,
 								}

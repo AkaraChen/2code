@@ -557,6 +557,7 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 										mode,
 										theme.muted_foreground,
 										selected.clone().unwrap_or_default(),
+										app.data.overlay.review_selection.clone(),
 										&view,
 									))
 									.child(review_composer(app, cx))
@@ -570,11 +571,7 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 							Button::new("open-review")
 								.primary()
 								.small()
-								.label(format!(
-									"{} ({})",
-									app.t("reviewQueue"),
-									app.data.overlay.review_comments.len()
-								))
+								.label(format!("Review Queue ({})", app.data.overlay.review_comments.len()))
 								.on_click({
 									let view = view.clone();
 									move |_, _, cx| {
@@ -717,38 +714,76 @@ fn diff_stats(diff: &str) -> impl IntoElement {
 
 fn review_composer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	let view = cx.entity();
-	let selected = app
-		.data
-		.overlay
-		.review_line
-		.as_ref()
-		.map(|(_, line)| line.clone())
-		.unwrap_or_default();
+	let Some(sel) = app.data.overlay.review_selection.clone() else {
+		return div().id("review-composer-idle").into_any_element();
+	};
+	let theme = cx.theme().clone();
 	v_flex()
-		.gap_1()
-		.pt_2()
-		.border_t_1()
-		.border_color(cx.theme().border)
-		.when(!selected.is_empty(), |el| {
-			el.child(div().text_xs().font_family("monospace").child(selected))
-		})
-		.child(Input::new(&app.inputs.review_comment))
+		.id("review-composer")
+		.w(px(448.))
+		.mt_2()
+		.rounded_lg()
+		.border_1()
+		.border_color(theme.border)
+		.bg(theme.popover)
+		.shadow_lg()
 		.child(
-			Button::new("add-review")
-				.small()
-				.primary()
-				.label(app.t("reviewQueue"))
-				.disabled(app.data.overlay.review_line.is_none())
-				.on_click({
-					let view = view.clone();
-					move |_, window, cx| {
-						view.update(cx, |app, cx| {
-							app.add_review_comment(window, cx);
-							cx.notify();
-						});
-					}
-				}),
+			h_flex()
+				.px_3()
+				.py_2()
+				.justify_between()
+				.border_b_1()
+				.border_color(theme.border)
+				.child(
+					div()
+						.text_xs()
+						.font_semibold()
+						.text_color(theme.muted_foreground)
+						.child(format!("Comment on {}", crate::review::format_review_range(sel.range))),
+				)
+				.child(
+					Button::new("cancel-review")
+						.ghost()
+						.xsmall()
+						.icon(IconName::Close)
+						.tooltip("Cancel review comment".to_string())
+						.on_click({
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									app.cancel_review_comment(window, cx);
+									cx.notify();
+								});
+							}
+						}),
+				),
 		)
+		.child(div().px_1().child(Input::new(&app.inputs.review_comment)))
+		.child(
+			h_flex()
+				.justify_end()
+				.px_3()
+				.py_2()
+				.border_t_1()
+				.border_color(theme.border)
+				.child(
+					Button::new("add-review")
+						.small()
+						.primary()
+						.label("Add to queue".to_string())
+						.disabled(app.inputs.review_comment.read(cx).value().trim().is_empty())
+						.on_click({
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									app.add_review_comment(window, cx);
+									cx.notify();
+								});
+							}
+						}),
+				),
+		)
+		.into_any_element()
 }
 
 fn diff_view(
@@ -756,49 +791,66 @@ fn diff_view(
 	mode: DiffPreviewMode,
 	muted: gpui::Hsla,
 	file: String,
+	selection: Option<crate::review::ReviewSelection>,
 	view: &gpui::Entity<AppView>,
 ) -> impl IntoElement {
 	if diff.trim().is_empty() {
 		return div().text_color(muted).child("").into_any_element();
 	}
 	if mode == DiffPreviewMode::Split {
-		return split_diff_view(diff, muted, file, view).into_any_element();
+		return split_diff_view(diff, muted, file, selection, view).into_any_element();
 	}
+	let annotated = diff::annotate_unified(diff);
 	v_flex()
 		.id("diff-lines")
 		.gap_0()
 		.font_family("monospace")
 		.text_sm()
 		.children(
-			diff.lines()
+			annotated
+				.into_iter()
 				.enumerate()
-				.map(|(ix, line)| unified_line(line, muted, file.clone(), ix, view)),
+				.map(|(ix, line)| unified_line(line, muted, file.clone(), selection.as_ref(), ix, view)),
 		)
 		.into_any_element()
 }
 
 fn unified_line(
-	line: &str,
+	line: diff::AnnotatedLine,
 	muted: gpui::Hsla,
 	file: String,
+	selection: Option<&crate::review::ReviewSelection>,
 	ix: usize,
 	view: &gpui::Entity<AppView>,
 ) -> impl IntoElement {
-	let (bg, color) = line_colors(line, muted);
-	let text = line.to_string();
+	let (mut bg, color) = line_colors(&line.raw, muted);
+	let target = match line.kind {
+		DiffLineKind::Add => line.new_no.map(|no| (crate::review::ReviewSide::Additions, no)),
+		DiffLineKind::Del => line.old_no.map(|no| (crate::review::ReviewSide::Deletions, no)),
+		_ => None,
+	};
+	if let Some((side, no)) = target {
+		if selection.is_some_and(|s| s.file == file && crate::review::line_in_range(s.range, side, no)) {
+			bg = gpui::hsla(0.58, 0.55, 0.45, 0.22);
+		}
+	}
 	let view = view.clone();
+	let text = line.raw;
 	div()
 		.id(crate::ui::eid(format!("udiff-{ix}")))
 		.px_2()
 		.bg(bg)
 		.text_color(color)
-		.on_click(move |_, _, cx| {
-			view.update(cx, |app, cx| {
-				app.data.overlay.review_line = Some((file.clone(), text.clone()));
-				cx.notify();
-			});
+		.when_some(target, |el, (side, no)| {
+			el.on_click(move |ev, _, cx| {
+				let extend = ev.modifiers().shift;
+				view.update(cx, |app, cx| {
+					app.select_review_line(&file, side, no, extend);
+					cx.notify();
+				});
+			})
 		})
-		.child(line.to_string())
+		.child(text)
 }
 
 fn line_colors(line: &str, muted: gpui::Hsla) -> (gpui::Hsla, gpui::Hsla) {
@@ -820,7 +872,14 @@ fn kind_colors(kind: DiffLineKind, muted: gpui::Hsla) -> (gpui::Hsla, gpui::Hsla
 	}
 }
 
-fn split_diff_view(diff: &str, muted: gpui::Hsla, file: String, view: &gpui::Entity<AppView>) -> impl IntoElement {
+fn split_diff_view(
+	diff: &str,
+	muted: gpui::Hsla,
+	file: String,
+	selection: Option<crate::review::ReviewSelection>,
+	view: &gpui::Entity<AppView>,
+) -> impl IntoElement {
+	let annotated = diff::annotate_unified(diff);
 	v_flex()
 		.id("diff-split")
 		.gap_0()
@@ -830,10 +889,41 @@ fn split_diff_view(diff: &str, muted: gpui::Hsla, file: String, view: &gpui::Ent
 			h_flex()
 				.id(crate::ui::eid(format!("split-row-{ix}")))
 				.w_full()
-				.child(split_cell(row.left, muted, ix, "l", file.clone(), view))
+				.child(split_cell(
+					row.left,
+					muted,
+					ix,
+					"l",
+					file.clone(),
+					selection.as_ref(),
+					&annotated,
+					view,
+				))
 				.child(div().w(px(1.)).h_full().bg(gpui::hsla(0., 0., 0.5, 0.2)))
-				.child(split_cell(row.right, muted, ix, "r", file.clone(), view))
+				.child(split_cell(
+					row.right,
+					muted,
+					ix,
+					"r",
+					file.clone(),
+					selection.as_ref(),
+					&annotated,
+					view,
+				))
 		}))
+}
+
+fn split_target(
+	kind: DiffLineKind,
+	text: &str,
+	annotated: &[diff::AnnotatedLine],
+) -> Option<(crate::review::ReviewSide, u32)> {
+	let line = annotated.iter().find(|l| l.kind == kind && l.raw == text)?;
+	match kind {
+		DiffLineKind::Add => Some((crate::review::ReviewSide::Additions, line.new_no?)),
+		DiffLineKind::Del => Some((crate::review::ReviewSide::Deletions, line.old_no?)),
+		_ => None,
+	}
 }
 
 fn split_cell(
@@ -842,17 +932,25 @@ fn split_cell(
 	ix: usize,
 	side: &'static str,
 	file: String,
+	selection: Option<&crate::review::ReviewSelection>,
+	annotated: &[diff::AnnotatedLine],
 	view: &gpui::Entity<AppView>,
 ) -> impl IntoElement {
 	let (kind, text) = match cell {
 		Some((kind, text)) => (Some(kind), text),
 		None => (None, String::new()),
 	};
-	let (bg, color) = kind
+	let (mut bg, color) = kind
 		.map(|k| kind_colors(k, muted))
 		.unwrap_or((gpui::hsla(0., 0., 0., 0.), muted));
+	let target = kind.and_then(|k| split_target(k, &text, annotated));
+	if let Some((review_side, no)) = target {
+		if selection.is_some_and(|s| s.file == file && crate::review::line_in_range(s.range, review_side, no)) {
+			bg = gpui::hsla(0.58, 0.55, 0.45, 0.22);
+		}
+	}
 	let view = view.clone();
-	let shown = if text.is_empty() { " ".to_string() } else { text.clone() };
+	let shown = if text.is_empty() { " ".to_string() } else { text };
 	div()
 		.id(crate::ui::eid(format!("split-{side}-{ix}")))
 		.flex_1()
@@ -860,13 +958,14 @@ fn split_cell(
 		.px_2()
 		.bg(bg)
 		.text_color(color)
-		.on_click(move |_, _, cx| {
-			if !text.is_empty() {
+		.when_some(target, |el, (review_side, no)| {
+			el.on_click(move |ev, _, cx| {
+				let extend = ev.modifiers().shift;
 				view.update(cx, |app, cx| {
-					app.data.overlay.review_line = Some((file.clone(), text.clone()));
+					app.select_review_line(&file, review_side, no, extend);
 					cx.notify();
 				});
-			}
+			})
 		})
 		.child(shown)
 }

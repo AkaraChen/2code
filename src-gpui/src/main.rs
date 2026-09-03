@@ -5,6 +5,7 @@ mod diff;
 mod i18n;
 mod platform;
 mod prefs;
+mod review;
 mod state;
 mod ui;
 mod updater;

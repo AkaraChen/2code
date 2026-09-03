@@ -1818,18 +1818,110 @@ impl AppView {
 		}
 	}
 
+	pub fn select_review_line(&mut self, file: &str, side: crate::review::ReviewSide, line_no: u32, extend: bool) {
+		if line_no == 0 {
+			return;
+		}
+		let hunk = extract_file_hunk(&self.data.overlay.git_diff_text, file);
+		let prev_name = crate::diff::rename_paths(&hunk).map(|(old, _)| old);
+		let display_name = match &prev_name {
+			Some(prev) if prev != file => format!("{prev} -> {file}"),
+			_ => file.to_string(),
+		};
+		let range = if extend {
+			if let Some(sel) = self.data.overlay.review_selection.as_ref().filter(|s| s.file == file) {
+				crate::review::ReviewRange {
+					start: sel.range.start,
+					end: line_no,
+					side: sel.range.side,
+					end_side: side,
+				}
+			} else {
+				crate::review::ReviewRange {
+					start: line_no,
+					end: line_no,
+					side,
+					end_side: side,
+				}
+			}
+		} else {
+			crate::review::ReviewRange {
+				start: line_no,
+				end: line_no,
+				side,
+				end_side: side,
+			}
+		};
+		self.data.overlay.review_selection = Some(crate::review::ReviewSelection {
+			file: file.to_string(),
+			display_name,
+			prev_name,
+			range,
+		});
+	}
+
+	pub fn cancel_review_comment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		self.data.overlay.review_selection = None;
+		self.inputs.review_comment.update(cx, |s, cx| {
+			s.set_value("", window, cx);
+		});
+	}
+
 	pub fn add_review_comment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
 		let body = self.inputs.review_comment.read(cx).value().to_string();
-		let Some((file, line)) = self.data.overlay.review_line.clone() else {
+		let Some(sel) = self.data.overlay.review_selection.clone() else {
 			return;
 		};
 		if body.trim().is_empty() {
 			return;
 		}
+		let hunk = extract_file_hunk(&self.data.overlay.git_diff_text, &sel.file);
+		let selected_text = crate::review::selected_text_from_hunk(&hunk, sel.range);
 		self.data
 			.overlay
 			.review_comments
-			.push(format!("{file}: {line}\n{body}"));
+			.push(crate::review::create_review_comment(
+				sel.file,
+				sel.prev_name,
+				sel.range,
+				selected_text,
+				body.trim(),
+			));
+		self.cancel_review_comment(window, cx);
+	}
+
+	pub fn delete_review_comment(&mut self, id: &str) {
+		self.data.overlay.review_comments.retain(|c| c.id != id);
+		if self.data.overlay.review_edit_id.as_deref() == Some(id) {
+			self.data.overlay.review_edit_id = None;
+		}
+	}
+
+	pub fn begin_review_edit(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+		self.flush_review_edit(window, cx);
+		let body = self
+			.data
+			.overlay
+			.review_comments
+			.iter()
+			.find(|c| c.id == id)
+			.map(|c| c.body.clone())
+			.unwrap_or_default();
+		self.data.overlay.review_edit_id = Some(id.to_string());
+		self.inputs.review_comment.update(cx, |s, cx| {
+			s.set_value(&body, window, cx);
+		});
+	}
+
+	fn flush_review_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let Some(id) = self.data.overlay.review_edit_id.clone() else {
+			return;
+		};
+		let body = self.inputs.review_comment.read(cx).value().to_string();
+		if let Some(comment) = self.data.overlay.review_comments.iter_mut().find(|c| c.id == id) {
+			comment.body = body;
+		}
+		self.data.overlay.review_edit_id = None;
 		self.inputs.review_comment.update(cx, |s, cx| {
 			s.set_value("", window, cx);
 		});
@@ -2125,8 +2217,9 @@ impl AppView {
 		self.write_to_active_pty(quoted.as_bytes());
 	}
 
-	pub fn copy_review_comments(&mut self, clear: bool, cx: &mut App) {
-		let text = self.data.overlay.review_comments.join("\n");
+	pub fn copy_review_comments(&mut self, clear: bool, window: &mut Window, cx: &mut Context<Self>) {
+		self.flush_review_edit(window, cx);
+		let text = crate::review::format_review_comments_for_agent(&self.data.overlay.review_comments);
 		cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
 		if clear {
 			self.data.overlay.review_comments.clear();
