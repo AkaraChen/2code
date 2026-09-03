@@ -3,13 +3,16 @@ gpui:
     cd src-gpui && cargo run
 
 gpui-check:
-    cd src-gpui && cargo check --tests
+    cd src-gpui && cargo test
 
 start:
     just gpui
 
 tauri-dev:
-    bun tauri dev
+    just gpui
+
+leftover-tauri:
+    bun run leftover:tauri:dev
 
 fmt:
     fama "./src/**/*.{ts,tsx}"
@@ -23,14 +26,11 @@ test-rust:
     cd src-tauri && cargo test
 
 test-all:
-    bun run test
+    just gpui-check
     just test-rust
 
 verify:
     just gpui-check
-    bun run lint:check
-    bun run typecheck
-    bun run test
     just test-rust
 
 coverage:

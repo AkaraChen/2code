@@ -330,6 +330,43 @@ pub struct TreeNode {
 	pub children: Vec<String>,
 }
 
+/// Inventory §8.1: dirty/untracked paths show even when their parent was never scanned.
+pub fn inject_git_paths(tree: &mut HashMap<String, TreeNode>, files: impl IntoIterator<Item = impl AsRef<str>>) {
+	if !tree.contains_key("") {
+		return;
+	}
+	for path in files {
+		let path = path.as_ref();
+		if path.is_empty() || tree.contains_key(path) {
+			continue;
+		}
+		let mut parent = String::new();
+		let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+		for (i, part) in parts.iter().enumerate() {
+			let current = if parent.is_empty() {
+				(*part).to_string()
+			} else {
+				format!("{parent}/{part}")
+			};
+			let is_last = i + 1 == parts.len();
+			tree.entry(current.clone()).or_insert_with(|| TreeNode {
+				path: current.clone(),
+				name: (*part).to_string(),
+				is_dir: !is_last,
+				expanded: false,
+				children_loaded: is_last,
+				children: Vec::new(),
+			});
+			if let Some(pnode) = tree.get_mut(&parent) {
+				if !pnode.children.contains(&current) {
+					pnode.children.push(current.clone());
+				}
+			}
+			parent = current;
+		}
+	}
+}
+
 pub struct Workspace {
 	pub project_id: String,
 	pub profile_id: String,
@@ -604,6 +641,40 @@ pub fn collect_sidebar_nav_items(
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn inject_git_paths_adds_unscanned_dirty_files() {
+		let mut tree = HashMap::new();
+		tree.insert(
+			String::new(),
+			TreeNode {
+				path: String::new(),
+				name: String::new(),
+				is_dir: true,
+				expanded: true,
+				children_loaded: true,
+				children: vec!["src".into()],
+			},
+		);
+		tree.insert(
+			"src".into(),
+			TreeNode {
+				path: "src".into(),
+				name: "src".into(),
+				is_dir: true,
+				expanded: false,
+				children_loaded: false,
+				children: Vec::new(),
+			},
+		);
+		inject_git_paths(&mut tree, ["src/new.rs", "notes.md"]);
+		assert!(tree.contains_key("src/new.rs"));
+		assert!(tree.contains_key("notes.md"));
+		assert!(tree["src"].children.contains(&"src/new.rs".to_string()));
+		assert!(tree[""].children.contains(&"notes.md".to_string()));
+		assert!(!tree["src/new.rs"].is_dir);
+		assert!(tree["src"].is_dir);
+	}
 
 	#[test]
 	fn empty_sidebar_starts_at_home() {

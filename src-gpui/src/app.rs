@@ -489,39 +489,8 @@ impl AppView {
 		let Some(ws) = self.data.workspaces.get_mut(profile_id) else {
 			return;
 		};
-		if !ws.tree.contains_key("") {
-			return;
-		}
 		let files: Vec<String> = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
-		for path in files {
-			if path.is_empty() || ws.tree.contains_key(&path) {
-				continue;
-			}
-			let mut parent = String::new();
-			let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
-			for (i, part) in parts.iter().enumerate() {
-				let current = if parent.is_empty() {
-					(*part).to_string()
-				} else {
-					format!("{parent}/{part}")
-				};
-				let is_last = i + 1 == parts.len();
-				ws.tree.entry(current.clone()).or_insert_with(|| TreeNode {
-					path: current.clone(),
-					name: (*part).to_string(),
-					is_dir: !is_last,
-					expanded: false,
-					children_loaded: is_last,
-					children: Vec::new(),
-				});
-				if let Some(pnode) = ws.tree.get_mut(&parent) {
-					if !pnode.children.contains(&current) {
-						pnode.children.push(current.clone());
-					}
-				}
-				parent = current;
-			}
-		}
+		crate::state::inject_git_paths(&mut ws.tree, files);
 	}
 
 	pub fn toggle_dir(&mut self, profile_id: &str, path: &str) {

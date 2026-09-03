@@ -70,7 +70,8 @@ The GPUI app uses the same SQLite database as the old Tauri shell: `$XDG_DATA_HO
 
 ```bash
 bun install
-bun run legacy:tauri:dev
+just leftover-tauri
+# or: bun run leftover:tauri:dev
 ```
 
 ### Build
@@ -87,11 +88,11 @@ Tagged releases publish GPUI binaries (`2code-linux-x64`, `2code-macos-arm64`, `
 | --- | --- |
 | `just start` / `./start.sh` | Run the GPUI desktop app |
 | `just gpui` | Run the GPUI desktop app |
-| `just gpui-check` | Type-check the GPUI crate |
+| `just gpui-check` / `just verify` | Run GPUI unit tests, then domain crate tests |
 | `cd src-tauri && cargo test` | Run Rust domain tests |
 | `just fmt` | Format TypeScript and Rust |
 | `just coverage` | Generate Rust coverage report |
-| `bun run legacy:tauri:dev` | Run the leftover Tauri + React shell |
+| `just leftover-tauri` | Run the leftover Tauri + React shell |
 
 ## Project Structure
 

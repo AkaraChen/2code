@@ -174,8 +174,73 @@ pub fn download_and_install(accept_beta: bool) -> Result<String, String> {
 	let mut reader = response.into_reader();
 	std::io::copy(&mut reader, &mut file).map_err(|e| e.to_string())?;
 	file.flush().map_err(|e| e.to_string())?;
-	open::that(&dest).map_err(|e| e.to_string())?;
-	Ok(dest.display().to_string())
+	match install_kind(name) {
+		InstallKind::ReplaceRunningBinary => {
+			replace_running_binary(&dest)?;
+			Ok(dest.display().to_string())
+		}
+		InstallKind::OpenInstaller => {
+			open::that(&dest).map_err(|e| e.to_string())?;
+			Ok(dest.display().to_string())
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallKind {
+	ReplaceRunningBinary,
+	OpenInstaller,
+}
+
+pub fn install_kind(asset_name: &str) -> InstallKind {
+	let name = asset_name.to_ascii_lowercase();
+	if name.contains("2code-linux") || name.contains("2code-macos") || name.contains("2code-windows") {
+		return InstallKind::ReplaceRunningBinary;
+	}
+	if name.ends_with(".dmg")
+		|| name.ends_with(".pkg")
+		|| name.ends_with(".msi")
+		|| name.ends_with(".appimage")
+		|| name.ends_with(".deb")
+		|| name.ends_with(".rpm")
+	{
+		return InstallKind::OpenInstaller;
+	}
+	InstallKind::ReplaceRunningBinary
+}
+
+fn replace_running_binary(downloaded: &std::path::Path) -> Result<(), String> {
+	let current = std::env::current_exe().map_err(|e| e.to_string())?;
+	#[cfg(unix)]
+	{
+		use std::os::unix::fs::PermissionsExt;
+		let mut perms = std::fs::metadata(downloaded).map_err(|e| e.to_string())?.permissions();
+		perms.set_mode(0o755);
+		std::fs::set_permissions(downloaded, perms).map_err(|e| e.to_string())?;
+	}
+	let staged = current.with_file_name(format!(
+		"{}.update",
+		current.file_name().and_then(|n| n.to_str()).unwrap_or("2code")
+	));
+	std::fs::copy(downloaded, &staged).map_err(|e| e.to_string())?;
+	#[cfg(unix)]
+	{
+		use std::os::unix::fs::PermissionsExt;
+		let mut perms = std::fs::metadata(&staged).map_err(|e| e.to_string())?.permissions();
+		perms.set_mode(0o755);
+		std::fs::set_permissions(&staged, perms).map_err(|e| e.to_string())?;
+	}
+	match std::fs::rename(&staged, &current) {
+		Ok(()) => Ok(()),
+		Err(_) => {
+			let backup = current.with_extension("old");
+			std::fs::rename(&current, &backup).map_err(|e| e.to_string())?;
+			std::fs::rename(&staged, &current).map_err(|e| {
+				let _ = std::fs::rename(&backup, &current);
+				e.to_string()
+			})
+		}
+	}
 }
 
 fn asset_url(accept_beta: bool) -> Result<String, String> {
@@ -303,5 +368,14 @@ mod tests {
 		} else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
 			assert!(names.iter().any(|n| *n == "macos-arm64"));
 		}
+	}
+
+	#[test]
+	fn gpui_binaries_replace_in_place() {
+		assert_eq!(install_kind("2code-linux-x64"), InstallKind::ReplaceRunningBinary);
+		assert_eq!(install_kind("2code-macos-arm64"), InstallKind::ReplaceRunningBinary);
+		assert_eq!(install_kind("2code-windows-x64.exe"), InstallKind::ReplaceRunningBinary);
+		assert_eq!(install_kind("2code_3.0.1_aarch64.dmg"), InstallKind::OpenInstaller);
+		assert_eq!(install_kind("2code-setup.msi"), InstallKind::OpenInstaller);
 	}
 }
