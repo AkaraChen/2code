@@ -2211,10 +2211,20 @@ impl AppView {
 		self.data.overlay.palette_query = q.clone();
 		if q.trim().is_empty() {
 			self.data.overlay.palette_results.clear();
+			self.data.overlay.palette_error = None;
 			self.data.overlay.palette_index = 0;
 			return;
 		}
-		self.data.overlay.palette_results = self.backend.search_files(&profile_id, &q).unwrap_or_default();
+		match self.backend.search_files(&profile_id, &q) {
+			Ok(results) => {
+				self.data.overlay.palette_results = results;
+				self.data.overlay.palette_error = None;
+			}
+			Err(err) => {
+				self.data.overlay.palette_results.clear();
+				self.data.overlay.palette_error = Some(err.to_string());
+			}
+		}
 		self.data.overlay.palette_index = 0;
 	}
 
@@ -2572,7 +2582,7 @@ impl AppView {
 				"cursor" => "cursor",
 				"windsurf" => "windsurf",
 				"zed" => "zed",
-				"sublime" | "subl" => "subl",
+				"sublime" | "subl" | "sublime-text" => "subl",
 				_ => "code",
 			},
 			"terminal" => match self.data.prefs.terminal_app.as_str() {
@@ -2712,6 +2722,7 @@ impl AppView {
 			self.data.overlay.palette_open = false;
 			self.data.overlay.palette_results.clear();
 			self.data.overlay.palette_query.clear();
+			self.data.overlay.palette_error = None;
 			return true;
 		}
 		if let Some(term) = self.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
@@ -3196,6 +3207,7 @@ impl gpui::Render for AppView {
 					if !this.data.overlay.palette_open {
 						this.data.overlay.palette_results.clear();
 						this.data.overlay.palette_query.clear();
+						this.data.overlay.palette_error = None;
 					}
 					cx.notify();
 				}

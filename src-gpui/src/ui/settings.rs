@@ -857,11 +857,29 @@ impl SettingsView {
 				},
 			))
 			.child(field_label(&self.t("notificationSound")))
-			.child(div().text_sm().child(if self.prefs.notification_sound.is_empty() {
-				self.t("notificationSoundNone")
-			} else {
-				self.prefs.notification_sound.clone()
-			}))
+			.child(
+				h_flex()
+					.gap_2()
+					.items_center()
+					.child(div().text_sm().child(if self.prefs.notification_sound.is_empty() {
+						self.t("notificationSoundNone")
+					} else {
+						self.prefs.notification_sound.clone()
+					}))
+					.child(
+						Button::new("preview-sound")
+							.ghost()
+							.small()
+							.icon(IconName::Bell)
+							.disabled(self.prefs.notification_sound.is_empty())
+							.on_click({
+								let sound = self.prefs.notification_sound.clone();
+								move |_, _, _| {
+									let _ = crate::platform::play_system_sound(&sound);
+								}
+							}),
+					),
+			)
 			.child(if self.sounds.is_empty() {
 				v_flex()
 					.gap_1()
@@ -1310,6 +1328,14 @@ impl SettingsView {
 					}
 				},
 			))
+			.child(
+				div()
+					.text_xs()
+					.text_color(cx.theme().muted_foreground)
+					.child(crate::state::leftover_about_copyright(
+						crate::timefmt::leftover_utc_year(crate::timefmt::unix_now_secs()),
+					)),
+			)
 	}
 }
 

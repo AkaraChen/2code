@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DetectedApp {
 	pub id: &'static str,
+	pub name: &'static str,
 	pub command: &'static str,
 }
 
@@ -30,6 +31,11 @@ pub fn command_exists(command: &str) -> bool {
 			("firefox", "/Applications/Firefox.app"),
 			("chrome", "/Applications/Google Chrome.app"),
 			("safari", "/Applications/Safari.app"),
+			("edge", "/Applications/Microsoft Edge.app"),
+			("brave", "/Applications/Brave Browser.app"),
+			("arc", "/Applications/Arc.app"),
+			("vivaldi", "/Applications/Vivaldi.app"),
+			("orion", "/Applications/Orion.app"),
 			("github", "/Applications/GitHub Desktop.app"),
 		];
 		if let Some((_, path)) = apps.iter().find(|(id, _)| *id == command) {
@@ -43,22 +49,27 @@ pub fn installed_editors() -> Vec<DetectedApp> {
 	[
 		DetectedApp {
 			id: "vscode",
+			name: "VS Code",
 			command: "code",
 		},
 		DetectedApp {
 			id: "cursor",
+			name: "Cursor",
 			command: "cursor",
 		},
 		DetectedApp {
 			id: "windsurf",
+			name: "Windsurf",
 			command: "windsurf",
 		},
 		DetectedApp {
 			id: "zed",
+			name: "Zed",
 			command: "zed",
 		},
 		DetectedApp {
-			id: "sublime",
+			id: "sublime-text",
+			name: "Sublime Text",
 			command: "subl",
 		},
 	]
@@ -71,18 +82,22 @@ pub fn installed_terminals() -> Vec<DetectedApp> {
 	[
 		DetectedApp {
 			id: "ghostty",
+			name: "Ghostty",
 			command: "ghostty",
 		},
 		DetectedApp {
 			id: "iterm2",
+			name: "iTerm2",
 			command: "iterm2",
 		},
 		DetectedApp {
 			id: "kitty",
+			name: "Kitty",
 			command: "kitty",
 		},
 		DetectedApp {
 			id: "warp",
+			name: "Warp",
 			command: "warp",
 		},
 	]
@@ -94,20 +109,54 @@ pub fn installed_terminals() -> Vec<DetectedApp> {
 pub fn installed_browsers() -> Vec<DetectedApp> {
 	[
 		DetectedApp {
-			id: "firefox",
-			command: "firefox",
+			id: "safari",
+			name: "Safari",
+			command: "safari",
 		},
 		DetectedApp {
 			id: "chrome",
+			name: "Google Chrome",
 			command: "google-chrome",
 		},
 		DetectedApp {
-			id: "chromium",
-			command: "chromium",
+			id: "chrome-canary",
+			name: "Google Chrome Canary",
+			command: "google-chrome-canary",
 		},
 		DetectedApp {
-			id: "safari",
-			command: "safari",
+			id: "edge",
+			name: "Microsoft Edge",
+			command: "microsoft-edge",
+		},
+		DetectedApp {
+			id: "firefox",
+			name: "Firefox",
+			command: "firefox",
+		},
+		DetectedApp {
+			id: "arc",
+			name: "Arc",
+			command: "arc",
+		},
+		DetectedApp {
+			id: "brave",
+			name: "Brave Browser",
+			command: "brave",
+		},
+		DetectedApp {
+			id: "vivaldi",
+			name: "Vivaldi",
+			command: "vivaldi",
+		},
+		DetectedApp {
+			id: "orion",
+			name: "Orion",
+			command: "orion",
+		},
+		DetectedApp {
+			id: "chromium",
+			name: "Chromium",
+			command: "chromium",
 		},
 	]
 	.into_iter()

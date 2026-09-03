@@ -44,10 +44,14 @@ pub fn render_panel(app: &mut AppView, window: &mut Window, cx: &mut Context<App
 						)
 						.into_any_element()
 				} else {
-					v_flex()
-						.children(files.iter().map(|(path, status)| {
+					div()
+						.id("git-changes-list")
+						.flex_1()
+						.min_h_0()
+						.overflow_y_scroll()
+						.child(v_flex().children(files.iter().map(|(path, status)| {
 							file_row(app, path, status, included.contains(path), true, window, cx)
-						}))
+						})))
 						.into_any_element()
 				}),
 		)

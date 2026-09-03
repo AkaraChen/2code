@@ -8,8 +8,9 @@ use gpui_component::{Disableable, Selectable};
 use crate::app::AppView;
 use crate::backend;
 use crate::state::{
-	leftover_dialog_width, leftover_rename_disabled, leftover_template_rows, project_group_menu_rows, ContextMenu,
-	DialogKind, GroupMenuRow, LeftoverTemplateRow,
+	leftover_dialog_width, leftover_file_menu_flags, leftover_file_menu_rows, leftover_rename_disabled,
+	leftover_template_rows, project_group_menu_rows, ContextMenu, DialogKind, GroupMenuRow, LeftoverFileMenuRow,
+	LeftoverTemplateRow,
 };
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -1056,7 +1057,11 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 											});
 										}
 									})
-									.child(div().text_sm().child(browser.id))
+									.child(div().text_sm().child(if browser.name.is_empty() {
+										crate::state::leftover_browser_name(browser.id)
+									} else {
+										browser.name
+									}))
 							})),
 					)
 				})
@@ -1102,6 +1107,15 @@ fn context_menu(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.shadow_md()
 				.on_click(|_, _, _| {})
 				.children(items.into_iter().map(|item| {
+					if item.header && item.label.is_empty() {
+						return div()
+							.id(crate::ui::eid(item.id.clone()))
+							.h(px(1.))
+							.mx_1()
+							.my_1()
+							.bg(theme.border)
+							.into_any_element();
+					}
 					if item.input {
 						return div()
 							.id(crate::ui::eid(item.id.clone()))
@@ -1222,6 +1236,72 @@ fn header(id: impl Into<String>, label: impl Into<String>) -> MenuItem {
 	item
 }
 
+fn leftover_sep(id: impl Into<String>) -> MenuItem {
+	header(id, "")
+}
+
+fn leftover_disabled(mut item: MenuItem, disabled: bool) -> MenuItem {
+	item.disabled = disabled;
+	item
+}
+
+fn leftover_file_context_items(app: &AppView, path: &str) -> Vec<MenuItem> {
+	let node = app.data.current_ws().and_then(|ws| ws.tree.get(path));
+	let flags = leftover_file_menu_flags(node.is_some_and(|n| !n.is_dir), node.is_some());
+	leftover_file_menu_rows()
+		.iter()
+		.enumerate()
+		.map(|(ix, row)| match row {
+			LeftoverFileMenuRow::Open => leftover_disabled(
+				item("open", app.t("fileTreeContextMenuOpen"), MenuAction::Open),
+				!flags.can_open,
+			),
+			LeftoverFileMenuRow::OpenDefault => leftover_disabled(
+				item(
+					"open-default",
+					app.t("fileTreeContextMenuOpenInDefaultApp"),
+					MenuAction::OpenDefault,
+				),
+				!flags.can_open_default,
+			),
+			LeftoverFileMenuRow::Reveal => leftover_disabled(
+				item(
+					"reveal",
+					app.t("fileTreeContextMenuRevealInFileManager"),
+					MenuAction::Reveal,
+				),
+				!flags.can_reveal,
+			),
+			LeftoverFileMenuRow::Refresh => item("refresh", app.t("fileTreeContextMenuRefresh"), MenuAction::Refresh),
+			LeftoverFileMenuRow::NewFile => item("new-file", app.t("fileTreeContextMenuNewFile"), MenuAction::NewFile),
+			LeftoverFileMenuRow::NewFolder => item(
+				"new-folder",
+				app.t("fileTreeContextMenuNewFolder"),
+				MenuAction::NewFolder,
+			),
+			LeftoverFileMenuRow::Rename => leftover_disabled(
+				item("rename-path", app.t("rename"), MenuAction::RenamePath),
+				!flags.can_rename,
+			),
+			LeftoverFileMenuRow::CopyRel => item(
+				"copy-rel",
+				app.t("fileTreeContextMenuCopyRelativePath"),
+				MenuAction::CopyRel,
+			),
+			LeftoverFileMenuRow::CopyAbs => item(
+				"copy-abs",
+				app.t("fileTreeContextMenuCopyAbsolutePath"),
+				MenuAction::CopyAbs,
+			),
+			LeftoverFileMenuRow::Delete => leftover_disabled(
+				danger(item("del-path", app.t("delete"), MenuAction::DeletePath)),
+				!flags.can_delete,
+			),
+			LeftoverFileMenuRow::Separator => leftover_sep(format!("file-sep-{ix}")),
+		})
+		.collect()
+}
+
 fn project_menu_items(app: &AppView, project_id: &str) -> Vec<MenuItem> {
 	let current = app
 		.data
@@ -1302,38 +1382,7 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<MenuItem> {
 			app.t("gitDiscardFileAction"),
 			MenuAction::DiscardGitFile,
 		))],
-		ContextMenu::File { .. } => vec![
-			item("open", app.t("fileTreeContextMenuOpen"), MenuAction::Open),
-			item(
-				"open-default",
-				app.t("fileTreeContextMenuOpenInDefaultApp"),
-				MenuAction::OpenDefault,
-			),
-			item(
-				"reveal",
-				app.t("fileTreeContextMenuRevealInFileManager"),
-				MenuAction::Reveal,
-			),
-			item("refresh", app.t("fileTreeContextMenuRefresh"), MenuAction::Refresh),
-			item("new-file", app.t("fileTreeContextMenuNewFile"), MenuAction::NewFile),
-			item(
-				"new-folder",
-				app.t("fileTreeContextMenuNewFolder"),
-				MenuAction::NewFolder,
-			),
-			item("rename-path", app.t("rename"), MenuAction::RenamePath),
-			item(
-				"copy-rel",
-				app.t("fileTreeContextMenuCopyRelativePath"),
-				MenuAction::CopyRel,
-			),
-			item(
-				"copy-abs",
-				app.t("fileTreeContextMenuCopyAbsolutePath"),
-				MenuAction::CopyAbs,
-			),
-			danger(item("del-path", app.t("delete"), MenuAction::DeletePath)),
-		],
+		ContextMenu::File { path } => leftover_file_context_items(app, path),
 		ContextMenu::TreeBlank => vec![
 			item(
 				"blank-new-file",

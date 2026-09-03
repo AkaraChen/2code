@@ -6,8 +6,9 @@ use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::state::{
-	leftover_new_terminal_split, leftover_template_rows, AgentKind, DialogKind, LeftoverTemplateRow, SidebarMode,
-	UnifiedTab,
+	leftover_configured_app, leftover_launch_app_i18n, leftover_new_terminal_split, leftover_pr_label,
+	leftover_pr_visible, leftover_template_rows, leftover_topbar_app_tooltip, AgentKind, DialogKind,
+	LeftoverTemplateRow, SidebarMode, UnifiedTab, LEFTOVER_EDITOR_APP_IDS, LEFTOVER_TERMINAL_APP_IDS,
 };
 use crate::ui::{file_tree, file_viewer, git, leftover_branch_glyph, notes, sidebar, terminal, tip};
 
@@ -324,61 +325,73 @@ fn topbar_control(
 				}
 			})
 			.into_any_element(),
-		"editor" => Button::new("tb-ed")
-			.small()
-			.icon(IconName::ALargeSmall)
-			.tooltip(app.t("topbarEditor"))
-			.on_click({
-				let view = view.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, _| app.open_topbar_app("editor"));
-				}
-			})
-			.into_any_element(),
-		"terminal" => Button::new("tb-term")
-			.small()
-			.icon(IconName::SquareTerminal)
-			.tooltip(app.t("topbarTerminal"))
-			.on_click({
-				let view = view.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, _| app.open_topbar_app("terminal"));
-				}
-			})
-			.into_any_element(),
-		"pr-status" => {
-			let (label, tip) = match pr {
-				None if pr_error.is_some() => (app.t("topbarPrNoPr"), app.t("topbarPrCheckFailedDescription")),
-				None => (app.t("topbarPrNoPr"), app.t("topbarPrNoPrTooltip")),
-				Some(p) if p.is_draft => (
-					app.t("topbarPrDraft"),
-					crate::i18n::tf(
-						app.data.locale,
-						"topbarPrTooltip",
-						&[
-							("number", &p.number.to_string()),
-							("title", &p.title),
-							("state", "draft"),
-						],
-					),
-				),
-				Some(p) => (
-					match p.state.as_str() {
-						"MERGED" => app.t("topbarPrMerged"),
-						"CLOSED" => app.t("topbarPrClosed"),
-						_ => app.t("topbarPrOpen"),
-					},
-					crate::i18n::tf(
-						app.data.locale,
-						"topbarPrTooltip",
-						&[
-							("number", &p.number.to_string()),
-							("title", &p.title),
-							("state", &p.state),
-						],
-					),
-				),
+		"editor" => {
+			let installed: Vec<_> = crate::platform::installed_editors();
+			let ids: Vec<&str> = installed.iter().map(|app| app.id).collect();
+			let Some(app_id) = leftover_configured_app(&app.data.prefs.editor_app, LEFTOVER_EDITOR_APP_IDS, &ids)
+			else {
+				return div().into_any_element();
 			};
+			let tip = leftover_topbar_app_tooltip(&app.t("topbarEditor"), &app.t(leftover_launch_app_i18n(app_id)));
+			Button::new("tb-ed")
+				.small()
+				.icon(IconName::ALargeSmall)
+				.tooltip(tip)
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, _| app.open_topbar_app("editor"));
+					}
+				})
+				.into_any_element()
+		}
+		"terminal" => {
+			let installed: Vec<_> = crate::platform::installed_terminals();
+			let ids: Vec<&str> = installed.iter().map(|app| app.id).collect();
+			let Some(app_id) = leftover_configured_app(&app.data.prefs.terminal_app, LEFTOVER_TERMINAL_APP_IDS, &ids)
+			else {
+				return div().into_any_element();
+			};
+			let tip = leftover_topbar_app_tooltip(&app.t("topbarTerminal"), &app.t(leftover_launch_app_i18n(app_id)));
+			Button::new("tb-term")
+				.small()
+				.icon(IconName::SquareTerminal)
+				.tooltip(tip)
+				.on_click({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, _| app.open_topbar_app("terminal"));
+					}
+				})
+				.into_any_element()
+		}
+		"pr-status" => {
+			if !leftover_pr_visible(pr.is_some()) {
+				let _ = pr_error;
+				return div().into_any_element();
+			}
+			let Some(p) = pr else {
+				return div().into_any_element();
+			};
+			let state = if p.is_draft {
+				app.t("topbarPrDraft")
+			} else {
+				match p.state.as_str() {
+					"MERGED" => app.t("topbarPrMerged"),
+					"CLOSED" => app.t("topbarPrClosed"),
+					_ => app.t("topbarPrOpen"),
+				}
+			};
+			let label = leftover_pr_label(p.number, &state);
+			let tip = crate::i18n::tf(
+				app.data.locale,
+				"topbarPrTooltip",
+				&[
+					("number", &p.number.to_string()),
+					("title", &p.title),
+					("state", &state),
+				],
+			);
 			Button::new("tb-pr")
 				.small()
 				.icon(IconName::GitHub)

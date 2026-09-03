@@ -20,6 +20,7 @@ pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>
 	let q = app.inputs.palette.read(cx).value().to_string();
 	let results = app.data.overlay.palette_results.clone();
 	let selected = app.data.overlay.palette_index;
+	let error = app.data.overlay.palette_error.clone();
 
 	div()
 		.id("palette-mask")
@@ -46,7 +47,7 @@ pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>
 				.w(px(640.))
 				.max_h(px(520.))
 				.rounded_lg()
-				.bg(theme.background)
+				.bg(theme.popover)
 				.border_1()
 				.border_color(theme.border)
 				.shadow_lg()
@@ -74,7 +75,15 @@ pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>
 						.border_color(theme.border)
 						.child(Input::new(&app.inputs.palette)),
 				)
-				.child(if results.is_empty() {
+				.child(if let Some(error) = error.filter(|_| results.is_empty()) {
+					div()
+						.flex()
+						.justify_center()
+						.px_4()
+						.py_8()
+						.child(div().text_sm().text_color(theme.danger).child(error))
+						.into_any_element()
+				} else if results.is_empty() {
 					div()
 						.flex()
 						.justify_center()

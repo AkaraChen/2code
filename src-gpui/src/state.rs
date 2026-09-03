@@ -593,6 +593,7 @@ pub struct OverlayState {
 	pub palette_results: Vec<FileSearchResult>,
 	pub palette_index: usize,
 	pub palette_query: String,
+	pub palette_error: Option<String>,
 	pub git_diff_open: bool,
 	pub git_diff_tab: GitDiffTab,
 	pub git_diff_mode: DiffPreviewMode,
@@ -826,6 +827,131 @@ pub fn leftover_template_rows(
 	rows
 }
 
+pub fn leftover_browser_name(id: &str) -> &'static str {
+	match leftover_normalize_app_id(id) {
+		"safari" => "Safari",
+		"chrome" => "Google Chrome",
+		"chrome-canary" => "Google Chrome Canary",
+		"edge" => "Microsoft Edge",
+		"firefox" => "Firefox",
+		"arc" => "Arc",
+		"brave" => "Brave Browser",
+		"vivaldi" => "Vivaldi",
+		"orion" => "Orion",
+		"chromium" => "Chromium",
+		_ => "",
+	}
+}
+
+pub fn leftover_normalize_app_id(id: &str) -> &str {
+	match id {
+		"code" | "vscode" => "vscode",
+		"sublime" | "subl" | "sublime-text" => "sublime-text",
+		"google-chrome" | "chrome" => "chrome",
+		other => other,
+	}
+}
+
+pub const LEFTOVER_EDITOR_APP_IDS: &[&str] = &["vscode", "windsurf", "cursor", "zed", "sublime-text"];
+pub const LEFTOVER_TERMINAL_APP_IDS: &[&str] = &["ghostty", "iterm2", "kitty", "warp"];
+
+pub fn leftover_configured_app<'a>(preferred: &str, category: &[&'a str], installed: &[&str]) -> Option<&'a str> {
+	let preferred = leftover_normalize_app_id(preferred);
+	if installed.iter().any(|id| leftover_normalize_app_id(id) == preferred) {
+		return category.iter().copied().find(|id| *id == preferred);
+	}
+	category.iter().copied().find(|id| {
+		installed
+			.iter()
+			.any(|installed| leftover_normalize_app_id(installed) == *id)
+	})
+}
+
+pub fn leftover_launch_app_i18n(id: &str) -> &'static str {
+	match leftover_normalize_app_id(id) {
+		"vscode" => "topbarVscode",
+		"windsurf" => "topbarWindsurf",
+		"cursor" => "topbarCursor",
+		"zed" => "topbarZed",
+		"sublime-text" => "topbarSublimeText",
+		"ghostty" => "topbarGhostty",
+		"iterm2" => "topbarIterm2",
+		"kitty" => "topbarKitty",
+		"warp" => "topbarWarp",
+		"github-desktop" => "topbarGithubDesktop",
+		_ => "topbarEditor",
+	}
+}
+
+pub fn leftover_topbar_app_tooltip(kind: &str, app_label: &str) -> String {
+	format!("{kind} · {app_label}")
+}
+
+pub fn leftover_pr_visible(has_pr: bool) -> bool {
+	has_pr
+}
+
+pub fn leftover_pr_label(number: u32, state_label: &str) -> String {
+	format!("#{number} {state_label}")
+}
+
+pub fn leftover_about_copyright(year: i32) -> String {
+	format!("© {year} AkaraChen")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LeftoverFileMenuFlags {
+	pub can_open: bool,
+	pub can_open_default: bool,
+	pub can_reveal: bool,
+	pub can_rename: bool,
+	pub can_delete: bool,
+}
+
+pub fn leftover_file_menu_flags(is_file: bool, exists: bool) -> LeftoverFileMenuFlags {
+	LeftoverFileMenuFlags {
+		can_open: is_file && exists,
+		can_open_default: exists,
+		can_reveal: exists,
+		can_rename: exists,
+		can_delete: exists,
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeftoverFileMenuRow {
+	Open,
+	OpenDefault,
+	Reveal,
+	Refresh,
+	NewFile,
+	NewFolder,
+	Rename,
+	CopyRel,
+	CopyAbs,
+	Delete,
+	Separator,
+}
+
+pub fn leftover_file_menu_rows() -> &'static [LeftoverFileMenuRow] {
+	&[
+		LeftoverFileMenuRow::Open,
+		LeftoverFileMenuRow::OpenDefault,
+		LeftoverFileMenuRow::Reveal,
+		LeftoverFileMenuRow::Separator,
+		LeftoverFileMenuRow::Refresh,
+		LeftoverFileMenuRow::Separator,
+		LeftoverFileMenuRow::NewFile,
+		LeftoverFileMenuRow::NewFolder,
+		LeftoverFileMenuRow::Rename,
+		LeftoverFileMenuRow::Separator,
+		LeftoverFileMenuRow::CopyRel,
+		LeftoverFileMenuRow::CopyAbs,
+		LeftoverFileMenuRow::Separator,
+		LeftoverFileMenuRow::Delete,
+	]
+}
+
 pub fn collect_sidebar_nav_items(
 	projects: &[ProjectWithProfiles],
 	groups: &[ProjectGroup],
@@ -951,6 +1077,51 @@ mod tests {
 		assert!(!leftover_new_terminal_split(true, false));
 		assert!(leftover_new_terminal_split(true, true));
 		assert!(!leftover_new_terminal_split(false, true));
+	}
+
+	#[test]
+	fn leftover_topbar_and_browser_chrome_match_inventory() {
+		assert_eq!(leftover_browser_name("chrome"), "Google Chrome");
+		assert_eq!(leftover_browser_name("google-chrome"), "Google Chrome");
+		assert_eq!(leftover_browser_name("firefox"), "Firefox");
+		assert_eq!(leftover_browser_name("safari"), "Safari");
+		assert_eq!(leftover_browser_name("brave"), "Brave Browser");
+		assert_eq!(leftover_normalize_app_id("code"), "vscode");
+		assert_eq!(leftover_normalize_app_id("sublime"), "sublime-text");
+		assert_eq!(
+			leftover_configured_app("code", LEFTOVER_EDITOR_APP_IDS, &["cursor", "vscode"]),
+			Some("vscode")
+		);
+		assert_eq!(
+			leftover_configured_app("missing", LEFTOVER_EDITOR_APP_IDS, &["zed"]),
+			Some("zed")
+		);
+		assert_eq!(leftover_configured_app("cursor", LEFTOVER_EDITOR_APP_IDS, &[]), None);
+		assert_eq!(leftover_topbar_app_tooltip("Editor", "VS Code"), "Editor · VS Code");
+		assert!(!leftover_pr_visible(false));
+		assert!(leftover_pr_visible(true));
+		assert_eq!(leftover_pr_label(12, "Open"), "#12 Open");
+		assert_eq!(leftover_launch_app_i18n("code"), "topbarVscode");
+		assert_eq!(leftover_about_copyright(2026), "© 2026 AkaraChen");
+	}
+
+	#[test]
+	fn leftover_file_menu_matches_inventory() {
+		let file = leftover_file_menu_flags(true, true);
+		assert!(file.can_open && file.can_rename && file.can_delete);
+		let folder = leftover_file_menu_flags(false, true);
+		assert!(!folder.can_open);
+		assert!(folder.can_reveal && folder.can_rename);
+		let missing = leftover_file_menu_flags(true, false);
+		assert!(!missing.can_open && !missing.can_delete);
+		assert!(leftover_file_menu_rows().contains(&LeftoverFileMenuRow::Separator));
+		assert_eq!(
+			leftover_file_menu_rows()
+				.iter()
+				.filter(|row| matches!(row, LeftoverFileMenuRow::Separator))
+				.count(),
+			4
+		);
 	}
 
 	#[test]

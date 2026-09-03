@@ -1,9 +1,8 @@
 use std::time::Duration;
 
 use gpui::{div, prelude::*, px, Animation, AnimationExt, Context, MouseButton, Window};
-use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, StyledExt};
 
 use crate::app::AppView;
 use crate::state::ContextMenu;
@@ -207,40 +206,10 @@ fn node_view(
 				})
 				.child(crate::ui::file_icons::file_glyph(path, node.is_dir, node.expanded, 13.))
 				.child(if renaming {
-					h_flex()
+					div()
 						.flex_1()
-						.gap_1()
-						.child(div().flex_1().child(Input::new(&app.inputs.rename)))
-						.child(
-							Button::new(crate::ui::eid(format!("rename-ok-{path}")))
-								.xsmall()
-								.primary()
-								.icon(IconName::Check)
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											app.commit_rename_path(cx);
-											cx.notify();
-										});
-									}
-								}),
-						)
-						.child(
-							Button::new(crate::ui::eid(format!("rename-cancel-{path}")))
-								.xsmall()
-								.ghost()
-								.icon(IconName::Close)
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											app.data.overlay.renaming_path = None;
-											cx.notify();
-										});
-									}
-								}),
-						)
+						.min_w_0()
+						.child(Input::new(&app.inputs.rename))
 						.into_any_element()
 				} else {
 					div()

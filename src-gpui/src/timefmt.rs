@@ -11,6 +11,23 @@ pub fn unix_now_secs() -> i64 {
 		.unwrap_or(0)
 }
 
+pub fn leftover_utc_year(now_secs: i64) -> i32 {
+	let mut year = 2026;
+	for _ in 0..8 {
+		let start = civil_to_unix(year, 1, 1);
+		let next = civil_to_unix(year + 1, 1, 1);
+		if now_secs >= start && now_secs < next {
+			return year;
+		}
+		if now_secs < start {
+			year -= 1;
+		} else {
+			year += 1;
+		}
+	}
+	year
+}
+
 pub fn unix_now_ms() -> i64 {
 	std::time::SystemTime::now()
 		.duration_since(std::time::UNIX_EPOCH)
@@ -271,6 +288,12 @@ mod tests {
 			"2026年5月15日 (1分钟前)"
 		);
 		assert_eq!(format_release_date_at("not-a-date", Locale::En, now), "not-a-date");
+	}
+
+	#[test]
+	fn leftover_utc_year_matches_inventory() {
+		assert_eq!(leftover_utc_year(civil_to_unix(2026, 9, 3)), 2026);
+		assert_eq!(leftover_utc_year(civil_to_unix(2027, 1, 1)), 2027);
 	}
 
 	#[test]
