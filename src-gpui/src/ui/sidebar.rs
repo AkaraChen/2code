@@ -165,6 +165,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 			view,
 			false,
 			app.data.overlay.sidebar_resize_focus == Some(false),
+			"Resize sidebar".to_string(),
 		))
 		.into_any_element()
 }
@@ -196,6 +197,7 @@ pub(crate) fn resize_handle(
 	view: gpui::Entity<AppView>,
 	profile: bool,
 	focused: bool,
+	label: String,
 ) -> impl IntoElement {
 	div()
 		.id(id)
@@ -206,6 +208,7 @@ pub(crate) fn resize_handle(
 		.h_full()
 		.tab_index(0)
 		.cursor(gpui::CursorStyle::ResizeColumn)
+		.tooltip(crate::ui::tip(label))
 		.when(focused, |el| el.bg(gpui::hsla(0., 0., 0.5, 0.3)))
 		.on_mouse_down(MouseButton::Left, {
 			let view = view.clone();

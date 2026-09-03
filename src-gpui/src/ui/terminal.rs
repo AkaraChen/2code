@@ -1,6 +1,6 @@
 use gpui::{
 	div, img, prelude::*, px, relative, rgb, Context, CursorStyle, Image, ImageFormat, KeyDownEvent, MouseButton,
-	Window,
+	TextRun, Window,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
@@ -14,7 +14,7 @@ pub fn render(
 	profile_id: &str,
 	index: usize,
 	interactive: bool,
-	_window: &mut Window,
+	window: &mut Window,
 	cx: &mut Context<AppView>,
 ) -> impl IntoElement {
 	let theme = app.current_term_theme();
@@ -36,7 +36,18 @@ pub fn render(
 	let osc_bar = crate::detector::parse_osc_progress(&term.osc_progress());
 	let images = term.images.clone();
 	let font_size = app.data.prefs.font_size;
-	let grid = render_grid(term, theme, &search_query, hit_ix, interactive, &view, &link_hits);
+	let (cell_w, cell_h) = measure_pty_cell(window, app.data.prefs.font_family.clone(), font_size);
+	let grid = render_grid(
+		term,
+		theme,
+		&search_query,
+		hit_ix,
+		interactive,
+		&view,
+		&link_hits,
+		cell_w,
+		cell_h,
+	);
 
 	div()
 		.id(crate::ui::eid(format!("pty-{id}")))
@@ -107,8 +118,8 @@ pub fn render(
 						"webp" => ImageFormat::Webp,
 						_ => ImageFormat::Png,
 					};
-					let top = 8.0 + image.row as f32 * font_size * 1.2;
-					let left = 8.0 + image.col as f32 * font_size * 0.62;
+					let top = 8.0 + image.row as f32 * cell_h;
+					let left = 8.0 + image.col as f32 * cell_w;
 					Some(
 						div()
 							.id(crate::ui::eid(format!("pty-img-{id}-{i}")))
@@ -351,6 +362,8 @@ fn render_grid(
 	interactive: bool,
 	view: &gpui::Entity<AppView>,
 	link_hits: &[crate::detector::ClickHit],
+	cell_w: f32,
+	cell_h: f32,
 ) -> impl IntoElement {
 	let screen = term.parser.screen();
 	let (rows, cols) = screen.size();
@@ -359,19 +372,20 @@ fn render_grid(
 	let query_len = query.len();
 
 	v_flex().id("pty-grid").children((0..rows).map(|row| {
-		let mut spans: Vec<(String, u32, u32, bool, bool, bool, usize)> = Vec::new();
+		let mut cells = Vec::with_capacity(cols as usize);
 		for col in 0..cols {
 			let cell = screen.cell(row, col);
-			let ch = cell
+			let (ch, wide, continuation) = cell
 				.map(|c| {
 					let text = c.contents();
-					if text.is_empty() {
+					let ch = if text.is_empty() {
 						" ".to_string()
 					} else {
 						text.to_string()
-					}
+					};
+					(ch, c.is_wide(), c.is_wide_continuation())
 				})
-				.unwrap_or_else(|| " ".into());
+				.unwrap_or_else(|| (" ".into(), false, false));
 			let (mut fg, mut bg) = cell
 				.map(|c| (map_color(c.fgcolor(), theme.fg), map_color(c.bgcolor(), theme.bg)))
 				.unwrap_or((theme.fg, theme.bg));
@@ -399,60 +413,133 @@ fn render_grid(
 				bg = 0x264f78;
 				fg = 0xffffff;
 			}
-			if let Some((text, last_fg, last_bg, last_hi, last_sel, last_link, _)) = spans.last_mut() {
-				if *last_fg == fg
-					&& *last_bg == bg
-					&& *last_hi == highlight
-					&& *last_sel == selected
-					&& *last_link == linked
-				{
-					text.push_str(&ch);
-					continue;
-				}
-			}
-			spans.push((ch, fg, bg, highlight, selected, linked, col as usize));
+			cells.push((ch, wide, continuation, (fg, bg, highlight, selected, linked)));
 		}
-		h_flex().children(spans.into_iter().map(|(text, fg, bg, _, _, linked, start_col)| {
-			let end_col = start_col + text.chars().count();
-			let view = view.clone();
-			let span = div()
-				.bg(rgb(bg))
-				.text_color(rgb(fg))
-				.whitespace_nowrap()
-				.when(linked, |el| el.underline().cursor(CursorStyle::PointingHand))
-				.child(text);
-			if !interactive {
-				return span.into_any_element();
-			}
-			span.on_mouse_down(MouseButton::Left, {
+		let spans = merge_row_spans(&cells);
+		h_flex()
+			.h(px(cell_h))
+			.children(spans.into_iter().map(|(text, span_cols, start_col, style)| {
+				let (fg, bg, _, _, linked) = style;
+				let end_col = start_col + span_cols as usize;
 				let view = view.clone();
-				move |ev, _, cx| {
-					let extend = ev.modifiers.shift;
-					view.update(cx, |app, cx| {
-						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
-							term.begin_selection(row, start_col, extend);
-							term.click_cell = Some((row, start_col));
-						}
-						cx.notify();
-					});
+				let span = div()
+					.w(px(cell_w * span_cols as f32))
+					.min_w(px(cell_w * span_cols as f32))
+					.h(px(cell_h))
+					.overflow_hidden()
+					.bg(rgb(bg))
+					.text_color(rgb(fg))
+					.whitespace_nowrap()
+					.when(linked, |el| el.underline().cursor(CursorStyle::PointingHand))
+					.child(text);
+				if !interactive {
+					return span.into_any_element();
 				}
-			})
-			.on_mouse_move({
-				let view = view.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, cx| {
-						if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
-							if term.selecting {
-								term.extend_selection(row, end_col);
-								cx.notify();
+				span.on_mouse_down(MouseButton::Left, {
+					let view = view.clone();
+					move |ev, _, cx| {
+						let extend = ev.modifiers.shift;
+						view.update(cx, |app, cx| {
+							if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+								term.begin_selection(row, start_col, extend);
+								term.click_cell = Some((row, start_col));
 							}
-						}
-					});
-				}
-			})
-			.into_any_element()
-		}))
+							cx.notify();
+						});
+					}
+				})
+				.on_mouse_move({
+					let view = view.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							if let Some(term) = app.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+								if term.selecting {
+									term.extend_selection(row, end_col);
+									cx.notify();
+								}
+							}
+						});
+					}
+				})
+				.into_any_element()
+			}))
 	}))
+}
+
+pub fn fallback_pty_cell(font_size: f32) -> (f32, f32) {
+	let font = font_size.max(10.0);
+	(font * 0.6, font * 1.35)
+}
+
+pub fn measure_pty_cell(window: &Window, font_family: impl Into<gpui::SharedString>, font_size: f32) -> (f32, f32) {
+	let font_size = font_size.max(10.0);
+	let (fallback_w, fallback_h) = fallback_pty_cell(font_size);
+	let run = TextRun {
+		len: 1,
+		font: crate::ui::markdown::editor_font(font_family),
+		color: rgb(0xffffff).into(),
+		background_color: None,
+		underline: None,
+		strikethrough: None,
+	};
+	let line = window.text_system().layout_line("W", px(font_size), &[run], None);
+	let width = f32::from(line.width);
+	let height = f32::from(line.ascent) + f32::from(line.descent);
+	(
+		if width > 0.0 { width } else { fallback_w },
+		if height > 0.0 { height } else { fallback_h },
+	)
+}
+
+pub fn pty_grid_size(
+	viewport_w: f32,
+	viewport_h: f32,
+	cell_w: f32,
+	cell_h: f32,
+	sidebar_collapsed: bool,
+	sidebar_width: f32,
+	profile_sidebar_open: bool,
+	profile_sidebar_width: f32,
+) -> (u16, u16) {
+	let mut chrome = 48.0;
+	if !sidebar_collapsed {
+		chrome += sidebar_width;
+	}
+	if profile_sidebar_open {
+		chrome += profile_sidebar_width;
+	}
+	let cols = ((viewport_w - chrome - 24.0) / cell_w.max(1.0)).floor() as i32;
+	let rows = ((viewport_h - 96.0) / cell_h.max(1.0)).floor() as i32;
+	(rows.clamp(10, 120) as u16, cols.clamp(40, 300) as u16)
+}
+
+pub fn cell_display_cols(wide: bool, continuation: bool) -> Option<u16> {
+	if continuation {
+		None
+	} else if wide {
+		Some(2)
+	} else {
+		Some(1)
+	}
+}
+
+pub fn merge_row_spans<S: PartialEq + Copy>(cells: &[(String, bool, bool, S)]) -> Vec<(String, u16, usize, S)> {
+	let mut spans: Vec<(String, u16, usize, S)> = Vec::new();
+	for (col, (text, wide, continuation, style)) in cells.iter().enumerate() {
+		let Some(cols) = cell_display_cols(*wide, *continuation) else {
+			continue;
+		};
+		let ch = if text.is_empty() { " ".to_string() } else { text.clone() };
+		if let Some((last_text, last_cols, _, last_style)) = spans.last_mut() {
+			if *last_style == *style {
+				last_text.push_str(&ch);
+				*last_cols += cols;
+				continue;
+			}
+		}
+		spans.push((ch, cols, col, *style));
+	}
+	spans
 }
 
 fn map_color(color: vt100::Color, fallback: u32) -> u32 {
@@ -539,5 +626,54 @@ fn key_to_bytes(ev: &KeyDownEvent) -> Option<Vec<u8>> {
 		"delete" => Some(b"\x1b[3~".to_vec()),
 		other if other.len() == 1 => Some(other.as_bytes().to_vec()),
 		_ => None,
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{cell_display_cols, fallback_pty_cell, merge_row_spans, pty_grid_size};
+
+	#[test]
+	fn fallback_pty_cell_matches_xterm_advance_ratio() {
+		assert_eq!(fallback_pty_cell(10.0), (6.0, 13.5));
+		assert_eq!(fallback_pty_cell(20.0), (12.0, 27.0));
+	}
+
+	#[test]
+	fn pty_grid_size_uses_measured_cell_and_chrome() {
+		assert_eq!(pty_grid_size(800.0, 600.0, 8.0, 16.0, true, 0.0, false, 0.0), (31, 91));
+		assert_eq!(
+			pty_grid_size(800.0, 600.0, 8.0, 16.0, false, 250.0, true, 208.0),
+			(31, 40)
+		);
+	}
+
+	#[test]
+	fn cell_display_cols_skips_wide_continuation() {
+		assert_eq!(cell_display_cols(false, false), Some(1));
+		assert_eq!(cell_display_cols(true, false), Some(2));
+		assert_eq!(cell_display_cols(false, true), None);
+		assert_eq!(cell_display_cols(true, true), None);
+	}
+
+	#[test]
+	fn merge_row_spans_skips_continuation_and_spans_wide_glyphs() {
+		let cells = [
+			("a".into(), false, false, 1),
+			("你".into(), true, false, 1),
+			("".into(), false, true, 1),
+			("b".into(), false, false, 1),
+		];
+		assert_eq!(merge_row_spans(&cells), vec![("a你b".into(), 4, 0, 1)]);
+
+		let split = [
+			("你".into(), true, false, 1),
+			("".into(), false, true, 1),
+			("x".into(), false, false, 2),
+		];
+		assert_eq!(
+			merge_row_spans(&split),
+			vec![("你".into(), 2, 0, 1), ("x".into(), 1, 2, 2)]
+		);
 	}
 }

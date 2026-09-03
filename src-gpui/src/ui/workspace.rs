@@ -415,6 +415,7 @@ fn profile_sidebar(app: &mut AppView, window: &mut Window, cx: &mut Context<AppV
 				view,
 				true,
 				app.data.overlay.sidebar_resize_focus == Some(true),
+				app.t("profileSidebarResizeSeparator"),
 			))
 		})
 		.into_any_element()
@@ -514,6 +515,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 									.rounded_full()
 									.bg(gpui::rgb(0x22c55e))
 									.cursor(gpui::CursorStyle::PointingHand)
+									.tooltip(crate::ui::tip("Dismiss completion notification"))
 									.on_click({
 										let view = view.clone();
 										let id = id.clone();

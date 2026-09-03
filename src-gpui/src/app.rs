@@ -1420,17 +1420,18 @@ impl AppView {
 
 	fn estimate_pty_size(&self, window: &Window) -> (u16, u16) {
 		let size = window.viewport_size();
-		let mut chrome = 48.0;
-		if !self.data.prefs.sidebar_collapsed {
-			chrome += self.data.prefs.sidebar_width;
-		}
-		if self.data.current_ws().map(|w| w.sidebar_open).unwrap_or(false) {
-			chrome += self.data.prefs.profile_sidebar_width;
-		}
-		let font = self.data.prefs.font_size.max(10.0);
-		let cols = ((f32::from(size.width) - chrome - 24.0) / (font * 0.62)).floor() as i32;
-		let rows = ((f32::from(size.height) - 96.0) / (font * 1.35)).floor() as i32;
-		(rows.clamp(10, 120) as u16, cols.clamp(40, 300) as u16)
+		let (cell_w, cell_h) =
+			ui::terminal::measure_pty_cell(window, self.data.prefs.font_family.clone(), self.data.prefs.font_size);
+		ui::terminal::pty_grid_size(
+			f32::from(size.width),
+			f32::from(size.height),
+			cell_w,
+			cell_h,
+			self.data.prefs.sidebar_collapsed,
+			self.data.prefs.sidebar_width,
+			self.data.current_ws().map(|w| w.sidebar_open).unwrap_or(false),
+			self.data.prefs.profile_sidebar_width,
+		)
 	}
 
 	pub fn apply_update_result(&mut self, result: Result<crate::updater::UpdateInfo, String>, silent: bool) {

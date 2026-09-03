@@ -1,7 +1,12 @@
-use gpui::{div, prelude::*, Context, SharedString, Window};
+use gpui::{div, prelude::*, AnyView, App, Context, SharedString, Window};
 
 pub fn eid(s: impl Into<String>) -> SharedString {
 	SharedString::from(s.into())
+}
+
+pub fn tip(text: impl Into<String>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+	let text = text.into();
+	move |window, cx| gpui_component::tooltip::Tooltip::new(text.clone()).build(window, cx)
 }
 
 pub struct DragGhost {
