@@ -1095,13 +1095,34 @@ fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &
 		(ContextMenu::File { path }, MenuAction::RenamePath) => {
 			app.start_rename_path(path, window, cx);
 		}
-		(_, MenuAction::NewFile) => app.create_path(false, window, cx),
-		(_, MenuAction::NewFolder) => app.create_path(true, window, cx),
+		(ContextMenu::File { path }, MenuAction::NewFile) => {
+			let parent = app
+				.data
+				.current_ws()
+				.and_then(|w| crate::app::create_target_directory(&w.tree, Some(path)));
+			app.create_path(false, parent.as_deref(), window, cx)
+		}
+		(ContextMenu::File { path }, MenuAction::NewFolder) => {
+			let parent = app
+				.data
+				.current_ws()
+				.and_then(|w| crate::app::create_target_directory(&w.tree, Some(path)));
+			app.create_path(true, parent.as_deref(), window, cx)
+		}
+		(_, MenuAction::NewFile) => app.create_path(false, None, window, cx),
+		(_, MenuAction::NewFolder) => app.create_path(true, None, window, cx),
 		(ContextMenu::File { path }, MenuAction::CopyRel) => app.copy_path(path, false, cx),
 		(ContextMenu::File { path }, MenuAction::CopyAbs) => app.copy_path(path, true, cx),
 		(ContextMenu::TreeBlank, MenuAction::CopyRel) => app.copy_path(".", false, cx),
 		(ContextMenu::TreeBlank, MenuAction::CopyAbs) => app.copy_path(".", true, cx),
-		(ContextMenu::File { path }, MenuAction::DeletePath) => app.delete_tree_path(path),
+		(ContextMenu::File { path }, MenuAction::DeletePath) => {
+			let paths = app
+				.data
+				.current_ws()
+				.map(|w| crate::app::context_action_paths(&w.tree_selected, path))
+				.unwrap_or_else(|| vec![path.clone()]);
+			app.delete_tree_paths(&paths);
+		}
 		(_, MenuAction::NewTerm) => app.create_terminal(&app.t("newTerminal"), "", Vec::new()),
 		(_, MenuAction::Template(i)) => {
 			if let Some(t) = app.data.prefs.templates.get(i).cloned() {

@@ -1,4 +1,7 @@
-use gpui::{div, prelude::*, px, relative, rgb, Context, CursorStyle, KeyDownEvent, MouseButton, Window};
+use gpui::{
+	div, img, prelude::*, px, relative, rgb, Context, CursorStyle, Image, ImageFormat, KeyDownEvent, MouseButton,
+	Window,
+};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, IconName, Sizable, StyledExt};
@@ -31,6 +34,8 @@ pub fn render(
 	let clickables = crate::detector::clickable_tokens(&term.screen_text());
 	let link_hits = crate::detector::clickable_hits(&term.screen_text());
 	let osc_bar = crate::detector::parse_osc_progress(&term.osc_progress());
+	let images = term.images.clone();
+	let font_size = app.data.prefs.font_size;
 	let grid = render_grid(term, theme, &search_query, hit_ix, interactive, &view, &link_hits);
 
 	div()
@@ -92,7 +97,32 @@ pub fn render(
 				.p_2()
 				.font(crate::ui::markdown::editor_font(app.data.prefs.font_family.clone()))
 				.overflow_hidden()
-				.child(grid);
+				.relative()
+				.child(grid)
+				.children(images.into_iter().enumerate().filter_map(|(i, image)| {
+					let kind = crate::detector::image_format(&image.bytes)?;
+					let format = match kind {
+						"jpeg" => ImageFormat::Jpeg,
+						"gif" => ImageFormat::Gif,
+						"webp" => ImageFormat::Webp,
+						_ => ImageFormat::Png,
+					};
+					let top = 8.0 + image.row as f32 * font_size * 1.2;
+					let left = 8.0 + image.col as f32 * font_size * 0.62;
+					Some(
+						div()
+							.id(crate::ui::eid(format!("pty-img-{id}-{i}")))
+							.absolute()
+							.top(px(top))
+							.left(px(left))
+							.child(
+								img(std::sync::Arc::new(Image::from_bytes(format, image.bytes)))
+									.id(crate::ui::eid(format!("pty-img-src-{id}-{i}")))
+									.max_w(px(480.))
+									.max_h(px(280.)),
+							),
+					)
+				}));
 			if interactive {
 				body.on_key_down({
 					let view = view.clone();

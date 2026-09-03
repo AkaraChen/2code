@@ -208,7 +208,9 @@ fn commit_composer(
 				.font_semibold()
 				.child(app.t("gitCommitSectionTitle").to_ascii_uppercase()),
 		)
+		.child(div().text_xs().child(app.t("gitCommitSummary")))
 		.child(Input::new(&app.inputs.commit_summary))
+		.child(div().text_xs().child(app.t("gitCommitBody")))
 		.child(Input::new(&app.inputs.commit_body))
 		.child(
 			h_flex()
@@ -386,6 +388,12 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 						.child(
 							h_flex()
 								.gap_2()
+								.child(
+									div()
+										.text_xs()
+										.text_color(theme.muted_foreground)
+										.child(app.t("gitDiffPreviewMode")),
+								)
 								.child(
 									Button::new("unified")
 										.xsmall()

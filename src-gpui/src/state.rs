@@ -255,6 +255,15 @@ pub struct TermSession {
 	pub selection: Option<((u16, usize), (u16, usize))>,
 	pub selecting: bool,
 	pub click_cell: Option<(u16, usize)>,
+	pub osc_carry: Vec<u8>,
+	pub images: Vec<TermImage>,
+}
+
+#[derive(Clone)]
+pub struct TermImage {
+	pub row: u16,
+	pub col: u16,
+	pub bytes: Vec<u8>,
 }
 
 impl TermSession {
@@ -276,6 +285,8 @@ impl TermSession {
 			selection: None,
 			selecting: false,
 			click_cell: None,
+			osc_carry: Vec::new(),
+			images: Vec::new(),
 		}
 	}
 
@@ -289,10 +300,23 @@ impl TermSession {
 		self.selection = None;
 		self.selecting = false;
 		self.click_cell = None;
+		self.osc_carry.clear();
+		self.images.clear();
 	}
 
 	pub fn feed(&mut self, bytes: &[u8]) {
+		let images = crate::detector::extract_iterm2_images(&mut self.osc_carry, bytes);
 		self.parser.process(bytes);
+		if !images.is_empty() {
+			let (row, col) = self.parser.screen().cursor_position();
+			for data in images {
+				self.images.push(TermImage { row, col, bytes: data });
+			}
+			if self.images.len() > 16 {
+				let extra = self.images.len() - 16;
+				self.images.drain(0..extra);
+			}
+		}
 		self.detect_agent();
 	}
 

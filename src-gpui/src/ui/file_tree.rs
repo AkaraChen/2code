@@ -25,6 +25,17 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.px_1()
 		.py_1()
 		.text_size(px(13.))
+		.tab_index(0)
+		.on_key_down({
+			let view = view.clone();
+			move |ev: &gpui::KeyDownEvent, window, cx| {
+				view.update(cx, |app, cx| {
+					if app.tree_key(ev.keystroke.key.as_str(), ev.keystroke.modifiers.shift, window, cx) {
+						cx.notify();
+					}
+				});
+			}
+		})
 		.on_mouse_down(MouseButton::Right, {
 			let view = view.clone();
 			move |ev, _, cx| {
@@ -296,5 +307,5 @@ fn sticky_folder(app: &AppView) -> Option<String> {
 			.max_by_key(|node| node.path.matches('/').count())
 			.map(|node| node.path.clone())
 	}?;
-	Some(path.rsplit('/').next().unwrap_or(path.as_str()).to_string())
+	Some(path)
 }

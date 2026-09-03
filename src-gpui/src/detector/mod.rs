@@ -452,6 +452,115 @@ pub fn parse_osc_progress(raw: &str) -> Option<(u8, u8)> {
 	None
 }
 
+/// iTerm2 inline images (`OSC 1337 ; File=…`). Leftover xterm ImageAddon.
+pub fn extract_iterm2_images(carry: &mut Vec<u8>, incoming: &[u8]) -> Vec<Vec<u8>> {
+	carry.extend_from_slice(incoming);
+	if carry.len() > 4 * 1024 * 1024 {
+		carry.drain(..carry.len() - 64);
+	}
+	let mut images = Vec::new();
+	loop {
+		let Some(start) = carry.windows(2).position(|w| w == [0x1b, b']']) else {
+			if !carry.is_empty() && carry[carry.len() - 1] != 0x1b {
+				carry.clear();
+			} else if carry.len() > 1 {
+				carry.drain(..carry.len() - 1);
+			}
+			break;
+		};
+		if start > 0 {
+			carry.drain(..start);
+		}
+		let Some(end) = osc_terminator(carry) else {
+			break;
+		};
+		let seq: Vec<u8> = carry.drain(..end).collect();
+		if let Some(img) = parse_iterm2_osc(&seq) {
+			images.push(img);
+		}
+	}
+	images
+}
+
+fn osc_terminator(buf: &[u8]) -> Option<usize> {
+	for i in 2..buf.len() {
+		if buf[i] == 0x07 {
+			return Some(i + 1);
+		}
+		if buf[i] == b'\\' && buf[i - 1] == 0x1b {
+			return Some(i + 1);
+		}
+	}
+	None
+}
+
+pub fn parse_iterm2_file(payload: &str) -> Option<Vec<u8>> {
+	let body = payload.strip_prefix("1337;").unwrap_or(payload);
+	let rest = body.strip_prefix("File=")?;
+	let (meta, data) = rest.rsplit_once(':')?;
+	if meta.split(';').any(|part| part.eq_ignore_ascii_case("inline=0")) {
+		return None;
+	}
+	decode_base64(data)
+}
+
+fn parse_iterm2_osc(seq: &[u8]) -> Option<Vec<u8>> {
+	let inner = seq.strip_prefix(&[0x1b, b']'])?;
+	let inner = inner
+		.strip_suffix(&[0x07])
+		.or_else(|| inner.strip_suffix(&[0x1b, b'\\']))?;
+	parse_iterm2_file(&String::from_utf8_lossy(inner))
+}
+
+fn decode_base64(input: &str) -> Option<Vec<u8>> {
+	fn val(c: u8) -> Option<u8> {
+		match c {
+			b'A'..=b'Z' => Some(c - b'A'),
+			b'a'..=b'z' => Some(c - b'a' + 26),
+			b'0'..=b'9' => Some(c - b'0' + 52),
+			b'+' => Some(62),
+			b'/' => Some(63),
+			_ => None,
+		}
+	}
+	let bytes: Vec<u8> = input
+		.bytes()
+		.filter(|b| !b.is_ascii_whitespace() && *b != b'=')
+		.collect();
+	if bytes.is_empty() {
+		return None;
+	}
+	let mut out = Vec::with_capacity(bytes.len() * 3 / 4 + 1);
+	for chunk in bytes.chunks(4) {
+		let a = val(chunk[0])?;
+		let b = val(*chunk.get(1)?)?;
+		out.push((a << 2) | (b >> 4));
+		if chunk.len() >= 3 {
+			let c = val(chunk[2])?;
+			out.push((b << 4) | (c >> 2));
+			if chunk.len() == 4 {
+				let d = val(chunk[3])?;
+				out.push((c << 6) | d);
+			}
+		}
+	}
+	Some(out)
+}
+
+pub fn image_format(bytes: &[u8]) -> Option<&'static str> {
+	if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+		Some("png")
+	} else if bytes.starts_with(&[0xFF, 0xD8]) {
+		Some("jpeg")
+	} else if bytes.starts_with(b"GIF8") {
+		Some("gif")
+	} else if bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+		Some("webp")
+	} else {
+		None
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Clickable {
 	Url(String),
@@ -507,5 +616,23 @@ mod tests {
 		assert_eq!(parse_osc_progress("1;80"), Some((1, 80)));
 		assert_eq!(parse_osc_progress("0;0"), Some((0, 0)));
 		assert_eq!(parse_osc_progress(""), None);
+	}
+
+	#[test]
+	fn parses_iterm2_inline_png() {
+		const PNG: &str =
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+		let decoded = parse_iterm2_file(&format!("1337;File=inline=1;name=dot:{PNG}")).unwrap();
+		assert_eq!(image_format(&decoded), Some("png"));
+		assert!(parse_iterm2_file(&format!("1337;File=inline=0:{PNG}")).is_none());
+
+		let mut carry = Vec::new();
+		let mut seq = vec![0x1b, b']'];
+		seq.extend(format!("1337;File=inline=1:{PNG}").bytes());
+		seq.push(0x07);
+		let imgs = extract_iterm2_images(&mut carry, &seq);
+		assert_eq!(imgs.len(), 1);
+		assert_eq!(image_format(&imgs[0]), Some("png"));
+		assert!(carry.is_empty());
 	}
 }

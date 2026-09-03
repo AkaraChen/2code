@@ -3,8 +3,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui::{
-	div, prelude::*, px, Action, App, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle, KeyBinding,
-	Timer, Window, WindowHandle,
+	div, prelude::*, px, Action, App, ClipboardEntry, ClipboardItem, Context, Entity, EntityInputHandler, FocusHandle,
+	KeyBinding, Timer, Window, WindowHandle,
 };
 
 #[derive(Clone, PartialEq, Default, Debug, Action)]
@@ -794,6 +794,23 @@ impl AppView {
 			let tick_ms = started.elapsed().as_millis();
 			if tick_ms >= 8 {
 				tracing::info!(target: "perf", tick_ms, "ui tick");
+				let dir = self.backend.app_data_dir.join("profiles");
+				let _ = std::fs::create_dir_all(&dir);
+				let line = format!(
+					"{{\"tick_ms\":{tick_ms},\"ts\":{}}}\n",
+					std::time::SystemTime::now()
+						.duration_since(std::time::UNIX_EPOCH)
+						.unwrap_or_default()
+						.as_millis()
+				);
+				if let Ok(mut file) = std::fs::OpenOptions::new()
+					.create(true)
+					.append(true)
+					.open(dir.join("frontend-perf.jsonl"))
+				{
+					use std::io::Write;
+					let _ = file.write_all(line.as_bytes());
+				}
 			}
 		}
 	}
@@ -1117,10 +1134,19 @@ impl AppView {
 	}
 
 	pub fn paste_to_pty(&mut self, cx: &mut Context<Self>) {
-		if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-			if !text.is_empty() {
-				self.write_to_active_pty(text.as_bytes());
-			}
+		let Some(item) = cx.read_from_clipboard() else {
+			return;
+		};
+		if let Some(text) = item.text().filter(|t| !t.is_empty()) {
+			self.write_to_active_pty(text.as_bytes());
+			return;
+		}
+		if item
+			.entries()
+			.iter()
+			.any(|entry| matches!(entry, ClipboardEntry::Image(_)))
+		{
+			self.write_to_active_pty(&[0x16]);
 		}
 	}
 
@@ -2167,51 +2193,190 @@ impl AppView {
 		}
 	}
 
-	pub fn create_path(&mut self, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
+	pub fn create_path(&mut self, is_dir: bool, parent: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
 		let Some(profile_id) = self.data.current_profile.clone() else {
 			return;
 		};
+		if let Some(parent) = parent {
+			let loaded = self
+				.data
+				.workspaces
+				.get(&profile_id)
+				.and_then(|w| w.tree.get(parent))
+				.is_some_and(|n| n.children_loaded);
+			if !loaded {
+				self.load_tree_children(&profile_id, Some(parent));
+			}
+		}
 		let name = self.inputs.new_path.read(cx).value().to_string();
-		let existing: Vec<String> = self
+		let existing = self
 			.data
 			.workspaces
 			.get(&profile_id)
-			.map(|w| {
-				w.tree
-					.get("")
-					.map(|root| {
-						root.children
-							.iter()
-							.filter_map(|p| w.tree.get(p).map(|n| n.name.clone()))
-							.collect()
-					})
-					.unwrap_or_default()
-			})
+			.map(|w| sibling_names(&w.tree, parent))
 			.unwrap_or_default();
 		let name = if name.trim().is_empty() {
 			unique_tree_name(&existing, if is_dir { "New Folder" } else { "New File" })
 		} else {
 			name
 		};
-		if let Err(err) = self.backend.create_path(&profile_id, &name, is_dir) {
+		let path = join_tree_path(parent, &name);
+		if let Err(err) = self.backend.create_path(&profile_id, &path, is_dir) {
 			self.data
 				.push_toast(ToastKind::Error, self.t("fileTreeCreateErrorTitle"), err.to_string());
 			return;
 		}
-		self.load_tree_root(&profile_id);
-		self.start_rename_path(&name, window, cx);
+		if let Some(parent) = parent {
+			self.load_tree_children(&profile_id, Some(parent));
+		} else {
+			self.load_tree_root(&profile_id);
+		}
+		self.start_rename_path(&path, window, cx);
 	}
 
-	pub fn delete_tree_path(&mut self, path: &str) {
+	pub fn delete_tree_paths(&mut self, paths: &[String]) {
 		let Some(profile_id) = self.data.current_profile.clone() else {
 			return;
 		};
-		if let Err(err) = self.backend.delete_paths(&profile_id, &[path.to_string()]) {
+		if paths.is_empty() {
+			return;
+		}
+		if let Err(err) = self.backend.delete_paths(&profile_id, paths) {
 			self.data
 				.push_toast(ToastKind::Error, self.t("fileTreeDeleteErrorTitle"), err.to_string());
 			return;
 		}
+		if let Some(ws) = self.data.workspaces.get_mut(&profile_id) {
+			ws.files.retain(|f| !paths.iter().any(|p| p == &f.path));
+			if let Some(UnifiedTab::File { index }) = ws.active {
+				if index >= ws.files.len() {
+					ws.active = ws.files.last().map(|_| UnifiedTab::File {
+						index: ws.files.len() - 1,
+					});
+				}
+			}
+			ws.tree_selected.retain(|p| !paths.iter().any(|gone| gone == p));
+		}
 		self.load_tree_root(&profile_id);
+	}
+
+	pub fn tree_key(&mut self, key: &str, shift: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+		if self.data.overlay.renaming_path.is_some()
+			|| self.data.overlay.palette_open
+			|| self.data.overlay.dialog.is_some()
+			|| self.data.overlay.context_menu.is_some()
+		{
+			return false;
+		}
+		let Some(profile) = self.data.current_profile.clone() else {
+			return false;
+		};
+		let Some(ws) = self.data.workspaces.get(&profile) else {
+			return false;
+		};
+		if ws.sidebar_mode != SidebarMode::Files {
+			return false;
+		}
+		let paths = visible_tree_paths(ws);
+		if paths.is_empty() {
+			return false;
+		}
+		let current = ws
+			.tree_anchor
+			.clone()
+			.or_else(|| ws.tree_selected.iter().next().cloned())
+			.unwrap_or_else(|| paths[0].clone());
+		let ix = paths.iter().position(|p| p == &current).unwrap_or(0);
+		let is_dir = ws.tree.get(&current).is_some_and(|n| n.is_dir);
+		let expanded = ws.tree.get(&current).is_some_and(|n| n.expanded);
+		let parent = create_target_directory(&ws.tree, Some(&current));
+		let next_child = paths
+			.get(ix + 1)
+			.filter(|p| p.starts_with(&format!("{current}/")))
+			.cloned();
+		match key {
+			"up" | "down" => {
+				let next = if key == "up" {
+					ix.saturating_sub(1)
+				} else {
+					(ix + 1).min(paths.len() - 1)
+				};
+				self.select_tree_path(&paths[next], shift);
+				true
+			}
+			"left" => {
+				if is_dir && expanded {
+					self.toggle_dir(&profile, &current);
+				} else if let Some(parent) = parent {
+					if parent != current {
+						self.select_tree_path(&parent, false);
+					}
+				}
+				true
+			}
+			"right" => {
+				if is_dir && !expanded {
+					self.toggle_dir(&profile, &current);
+				} else if let Some(child) = next_child {
+					self.select_tree_path(&child, false);
+				}
+				true
+			}
+			"enter" => {
+				let is_dir = self
+					.data
+					.workspaces
+					.get(&profile)
+					.and_then(|w| w.tree.get(&current))
+					.is_some_and(|n| n.is_dir);
+				if is_dir {
+					self.toggle_dir(&profile, &current);
+				} else if !self.is_deleted_tree_path(&profile, &current) {
+					self.open_file(&profile, &current, window, cx);
+				}
+				true
+			}
+			"delete" | "backspace" => {
+				let selected = self
+					.data
+					.workspaces
+					.get(&profile)
+					.map(|w| context_action_paths(&w.tree_selected, &current))
+					.unwrap_or_else(|| vec![current]);
+				self.delete_tree_paths(&selected);
+				true
+			}
+			"f2" => {
+				self.start_rename_path(&current, window, cx);
+				true
+			}
+			_ => false,
+		}
+	}
+
+	fn select_tree_path(&mut self, path: &str, range: bool) {
+		let Some(profile) = self.data.current_profile.clone() else {
+			return;
+		};
+		let Some(ws) = self.data.workspaces.get_mut(&profile) else {
+			return;
+		};
+		if range {
+			let paths = visible_tree_paths(ws);
+			let anchor = ws.tree_anchor.clone().unwrap_or_else(|| path.to_string());
+			if let (Some(a), Some(b)) = (
+				paths.iter().position(|p| p == &anchor),
+				paths.iter().position(|p| p == path),
+			) {
+				let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+				ws.tree_selected = paths[lo..=hi].iter().cloned().collect();
+				ws.tree_anchor = Some(anchor);
+				return;
+			}
+		}
+		ws.tree_selected.clear();
+		ws.tree_selected.insert(path.to_string());
+		ws.tree_anchor = Some(path.to_string());
 	}
 
 	pub fn reveal(&mut self, path: Option<&str>) {
@@ -2557,6 +2722,46 @@ impl AppView {
 	}
 }
 
+pub fn create_target_directory(tree: &HashMap<String, TreeNode>, context: Option<&str>) -> Option<String> {
+	let path = context?.trim_end_matches('/');
+	if path.is_empty() {
+		return None;
+	}
+	if tree.get(path).is_some_and(|node| node.is_dir) {
+		return Some(path.to_string());
+	}
+	path.rfind('/').map(|i| path[..i].to_string()).filter(|p| !p.is_empty())
+}
+
+pub fn join_tree_path(parent: Option<&str>, name: &str) -> String {
+	match parent.map(str::trim).filter(|p| !p.is_empty()) {
+		Some(parent) => format!("{parent}/{name}"),
+		None => name.to_string(),
+	}
+}
+
+pub fn sibling_names(tree: &HashMap<String, TreeNode>, parent: Option<&str>) -> Vec<String> {
+	let key = parent.unwrap_or("");
+	tree.get(key)
+		.map(|node| {
+			node.children
+				.iter()
+				.filter_map(|child| tree.get(child).map(|n| n.name.clone()))
+				.collect()
+		})
+		.unwrap_or_default()
+}
+
+pub fn context_action_paths(selected: &HashSet<String>, clicked: &str) -> Vec<String> {
+	if selected.contains(clicked) {
+		let mut paths: Vec<String> = selected.iter().cloned().collect();
+		paths.sort();
+		paths
+	} else {
+		vec![clicked.to_string()]
+	}
+}
+
 pub fn unique_tree_name(existing: &[String], base: &str) -> String {
 	if !existing.iter().any(|n| n == base) {
 		return base.to_string();
@@ -2882,9 +3087,12 @@ pub fn wrap_markup(
 #[cfg(test)]
 mod tests {
 	use super::{
-		apply_slash_command, file_status_badge, git_status_kind, offset_line_col, search_match_offsets,
-		suggested_project_name, unique_tree_name, wrap_markup_text, GitStatusKind,
+		apply_slash_command, context_action_paths, create_target_directory, file_status_badge, git_status_kind,
+		join_tree_path, offset_line_col, search_match_offsets, sibling_names, suggested_project_name, unique_tree_name,
+		wrap_markup_text, GitStatusKind,
 	};
+	use crate::state::TreeNode;
+	use std::collections::{HashMap, HashSet};
 
 	#[test]
 	fn unique_tree_name_adds_numbers() {
@@ -2894,6 +3102,46 @@ mod tests {
 			unique_tree_name(&["New File".into(), "New File 2".into()], "New File"),
 			"New File 3"
 		);
+	}
+
+	fn node(path: &str, is_dir: bool, children: Vec<String>) -> TreeNode {
+		TreeNode {
+			path: path.into(),
+			name: path.rsplit('/').next().unwrap_or(path).into(),
+			is_dir,
+			expanded: is_dir,
+			children_loaded: true,
+			children,
+		}
+	}
+
+	#[test]
+	fn create_target_directory_uses_folder_or_parent() {
+		let mut tree = HashMap::new();
+		tree.insert("".into(), node("", true, vec!["src".into(), "README.md".into()]));
+		tree.insert("src".into(), node("src", true, vec!["src/main.rs".into()]));
+		tree.insert("src/main.rs".into(), node("src/main.rs", false, Vec::new()));
+		tree.insert("README.md".into(), node("README.md", false, Vec::new()));
+		assert_eq!(create_target_directory(&tree, Some("src")).as_deref(), Some("src"));
+		assert_eq!(
+			create_target_directory(&tree, Some("src/main.rs")).as_deref(),
+			Some("src")
+		);
+		assert_eq!(create_target_directory(&tree, Some("README.md")), None);
+		assert_eq!(create_target_directory(&tree, None), None);
+		assert_eq!(join_tree_path(Some("src"), "New File"), "src/New File");
+		assert_eq!(join_tree_path(None, "New File"), "New File");
+		assert_eq!(sibling_names(&tree, Some("src")), vec!["main.rs".to_string()]);
+	}
+
+	#[test]
+	fn context_action_paths_uses_selection_when_clicked_is_selected() {
+		let selected = HashSet::from(["a".into(), "b".into()]);
+		assert_eq!(
+			context_action_paths(&selected, "a"),
+			vec!["a".to_string(), "b".to_string()]
+		);
+		assert_eq!(context_action_paths(&selected, "c"), vec!["c".to_string()]);
 	}
 
 	#[test]
