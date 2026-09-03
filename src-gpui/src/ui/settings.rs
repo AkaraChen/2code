@@ -1120,9 +1120,14 @@ impl SettingsView {
 
 	fn about(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
 		let view = cx.entity();
+		let theme = cx.theme().clone();
+		let badge = crate::state::leftover_update_badge(
+			self.latest_version.is_some(),
+			self.update_status == self.t("updateNotAvailableDescription"),
+		);
 		v_flex()
-			.gap_3()
-			.max_w(px(480.))
+			.gap_8()
+			.max_w(px(crate::state::leftover_about_max_width()))
 			.child(
 				h_flex()
 					.gap_5()
@@ -1138,200 +1143,292 @@ impl SettingsView {
 					)
 					.child(
 						v_flex()
-							.gap_1()
+							.gap(px(6.))
 							.min_w_0()
-							.child(div().text_xl().font_semibold().child("2Code"))
+							.child(
+								h_flex()
+									.gap(px(10.))
+									.items_center()
+									.child(div().text_xl().font_semibold().child("2code"))
+									.child(
+										Button::new("ver")
+											.xsmall()
+											.label(crate::i18n::tf(
+												self.locale,
+												"currentVersion",
+												&[("version", env!("CARGO_PKG_VERSION"))],
+											))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+														env!("CARGO_PKG_VERSION").into(),
+													));
+													view.update(cx, |this, cx| {
+														if let Some(main) = this.main.upgrade() {
+															main.update(cx, |app, cx| {
+																app.data.push_toast(
+																	crate::state::ToastKind::Success,
+																	app.t("aboutVersionCopied"),
+																	"",
+																);
+																cx.notify();
+															});
+														}
+													});
+												}
+											}),
+									),
+							)
 							.child(
 								div()
 									.text_sm()
-									.text_color(cx.theme().muted_foreground)
+									.text_color(theme.muted_foreground)
 									.child(self.t("aboutAppDescription")),
 							),
 					),
 			)
 			.child(
-				Button::new("ver")
-					.label(crate::i18n::tf(
-						self.locale,
-						"currentVersion",
-						&[("version", env!("CARGO_PKG_VERSION"))],
-					))
-					.on_click({
-						let view = view.clone();
-						move |_, _, cx| {
-							cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-								env!("CARGO_PKG_VERSION").into(),
-							));
-							view.update(cx, |this, cx| {
-								if let Some(main) = this.main.upgrade() {
-									main.update(cx, |app, cx| {
-										app.data.push_toast(
-											crate::state::ToastKind::Success,
-											app.t("aboutVersionCopied"),
-											"",
-										);
-										cx.notify();
-									});
-								}
-							});
-						}
-					}),
-			)
-			.child(div().font_semibold().child(self.t("contributors")))
-			.child(
 				h_flex()
 					.gap_2()
+					.flex_wrap()
+					.child(
+						Button::new("repo")
+							.outline()
+							.small()
+							.label(self.t("repository"))
+							.on_click(|_, _, _| {
+								let _ = open::that("https://github.com/AkaraChen/2code");
+							}),
+					)
+					.child(
+						Button::new("rel")
+							.outline()
+							.small()
+							.label(self.t("releases"))
+							.on_click(|_, _, _| {
+								let _ = open::that("https://github.com/AkaraChen/2code/releases");
+							}),
+					),
+			)
+			.child(
+				v_flex()
+					.id("about-update-card")
+					.w_full()
+					.overflow_hidden()
+					.rounded_xl()
+					.border_1()
+					.border_color(theme.border)
+					.child(
+						h_flex()
+							.min_h(px(44.))
+							.w_full()
+							.px_4()
+							.py_2()
+							.gap_2()
+							.justify_between()
+							.border_b_1()
+							.border_color(theme.border)
+							.bg(theme.muted.opacity(0.4))
+							.child(div().text_sm().font_medium().child(self.t("update")))
+							.when(badge != crate::state::LeftoverUpdateBadge::Hidden, |el| {
+								el.child(
+									div()
+										.px_2()
+										.py(px(2.))
+										.rounded_full()
+										.when(badge == crate::state::LeftoverUpdateBadge::Available, |el| {
+											el.bg(theme.primary).text_color(theme.primary_foreground)
+										})
+										.when(badge == crate::state::LeftoverUpdateBadge::NotAvailable, |el| {
+											el.border_1().border_color(theme.border).text_color(theme.muted_foreground)
+										})
+										.child(div().text_xs().child(if badge == crate::state::LeftoverUpdateBadge::Available {
+											if let Some(ver) = &self.latest_version {
+												crate::i18n::tf(
+													self.locale,
+													"updateAvailableTitle",
+													&[("version", ver)],
+												)
+											} else {
+												self.t("updateAvailableTitle")
+											}
+										} else {
+											self.t("updateNotAvailableTitle")
+										})),
+								)
+							}),
+					)
+					.child(
+						v_flex()
+							.gap_4()
+							.p_4()
+							.child(switch_row(
+								"beta",
+								self.t("acceptBetaUpdates"),
+								self.t("acceptBetaUpdatesDescription"),
+								self.prefs.accept_beta,
+								{
+									let view = view.clone();
+									move |val, cx| {
+										view.update(cx, |this, cx| {
+											this.prefs.accept_beta = val;
+											this.persist(cx);
+											cx.notify();
+										});
+									}
+								},
+							))
+							.child(
+								v_flex()
+									.gap_1()
+									.child(
+										div()
+											.text_sm()
+											.when(self.latest_version.is_none(), |el| {
+												el.text_color(theme.muted_foreground)
+											})
+											.child(self.update_status.clone()),
+									)
+									.when_some(self.released_at.clone(), |el, date| {
+										el.child(
+											div()
+												.text_sm()
+												.text_color(theme.muted_foreground)
+												.child(crate::i18n::tf(
+													self.locale,
+													"updateReleasedAt",
+													&[("date", &crate::updater::format_release_date_display(&date, self.locale))],
+												)),
+										)
+									}),
+							)
+							.child(
+								h_flex()
+									.gap_2()
+									.flex_wrap()
+									.child(
+										Button::new("check-upd")
+											.outline()
+											.small()
+											.label(self.t("checkForUpdates"))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													view.update(cx, |this, cx| {
+														this.update_status = this.t("checkForUpdates");
+														let result =
+															crate::updater::check_for_update(this.prefs.accept_beta);
+														match &result {
+															Ok(info) if info.available => {
+																this.latest_version = Some(info.latest_version.clone());
+																this.released_at = info.released_at.clone();
+																this.latest_url = info.html_url.clone();
+																this.update_status = crate::i18n::tf(
+																	this.locale,
+																	"updateAvailableDescription",
+																	&[
+																		("currentVersion", env!("CARGO_PKG_VERSION")),
+																		("version", &info.latest_version),
+																	],
+																);
+															}
+															Ok(_) => {
+																this.latest_version = None;
+																this.released_at = None;
+																this.update_status =
+																	this.t("updateNotAvailableDescription");
+															}
+															Err(err) => {
+																this.update_status = format!(
+																	"{}: {err}",
+																	this.t("updateCheckFailedTitle")
+																);
+															}
+														}
+														if let Some(main) = this.main.upgrade() {
+															main.update(cx, |app, cx| {
+																app.apply_update_result(result, false);
+																cx.notify();
+															});
+														}
+														cx.notify();
+													});
+												}
+											}),
+									)
+									.when(self.latest_version.is_some(), |el| {
+										el.child(
+											Button::new("open-upd")
+												.small()
+												.label(if let Some(ver) = &self.latest_version {
+													crate::i18n::tf(
+														self.locale,
+														"installUpdate",
+														&[("version", ver)],
+													)
+												} else {
+													self.t("openUpdatePage")
+												})
+												.on_click({
+													let view = view.clone();
+													let url = self.latest_url.clone();
+													move |_, _, cx| {
+														view.update(cx, |this, cx| {
+															this.update_status = this.t("checkForUpdates");
+															match crate::updater::download_and_install(this.prefs.accept_beta) {
+																Ok(path) => {
+																	this.update_status = path;
+																	cx.quit();
+																}
+																Err(err) => {
+																	this.update_status = format!(
+																		"{}: {err}",
+																		this.t("updateInstallFailedTitle")
+																	);
+																	let _ = open::that(&url);
+																}
+															}
+															cx.notify();
+														});
+													}
+												}),
+										)
+									}),
+							),
+					),
+			)
+			.child(div().text_sm().font_medium().child(self.t("contributors")))
+			.child(
+				h_flex()
+					.gap_3()
 					.items_center()
+					.px_3()
+					.py_2()
+					.rounded_lg()
+					.border_1()
+					.border_color(theme.border)
 					.child(
 						img("https://github.com/AkaraChen.png?size=96")
 							.id("about-maintainer-avatar")
-							.size(px(32.))
+							.size(px(36.))
 							.rounded_full(),
 					)
 					.child(
 						v_flex()
-							.child(div().text_sm().child("AkaraChen"))
+							.child(div().text_sm().font_medium().child("AkaraChen"))
 							.child(
 								div()
 									.text_xs()
-									.text_color(cx.theme().muted_foreground)
+									.text_color(theme.muted_foreground)
 									.child(self.t("primaryContributorDescription")),
 							),
 					),
 			)
 			.child(
-				h_flex()
-					.gap_2()
-					.child(link_btn("repo", self.t("repository"), "https://github.com/AkaraChen/2code"))
-					.child(link_btn("rel", self.t("releases"), "https://github.com/AkaraChen/2code/releases"))
-					.child(link_btn("web", self.t("website"), "https://github.com/AkaraChen/2code")),
-			)
-			.child(div().font_semibold().child(self.t("update")))
-			.child(div().text_sm().child(self.update_status.clone()))
-			.child(
-				if let Some(date) = &self.released_at {
-					div()
-						.text_xs()
-						.text_color(cx.theme().muted_foreground)
-						.child(crate::i18n::tf(
-							self.locale,
-							"updateReleasedAt",
-							&[("date", &crate::updater::format_release_date_display(date, self.locale))],
-						))
-						.into_any_element()
-				} else {
-					div().into_any_element()
-				},
-			)
-			.child(
-				h_flex()
-					.gap_2()
-					.child(
-						Button::new("check-upd")
-							.label(self.t("checkForUpdates"))
-							.on_click({
-								let view = view.clone();
-								move |_, _, cx| {
-									view.update(cx, |this, cx| {
-										this.update_status = this.t("checkForUpdates");
-										let result =
-											crate::updater::check_for_update(this.prefs.accept_beta);
-										match &result {
-											Ok(info) if info.available => {
-												this.latest_version = Some(info.latest_version.clone());
-												this.released_at = info.released_at.clone();
-												this.latest_url = info.html_url.clone();
-												this.update_status = crate::i18n::tf(
-													this.locale,
-													"updateAvailableTitle",
-													&[("version", &info.latest_version)],
-												);
-											}
-											Ok(_) => {
-												this.latest_version = None;
-												this.released_at = None;
-												this.update_status =
-													this.t("updateNotAvailableDescription");
-											}
-											Err(err) => {
-												this.update_status = format!(
-													"{}: {err}",
-													this.t("updateCheckFailedTitle")
-												);
-											}
-										}
-										if let Some(main) = this.main.upgrade() {
-											main.update(cx, |app, cx| {
-												app.apply_update_result(result, false);
-												cx.notify();
-											});
-										}
-										cx.notify();
-									});
-								}
-							}),
-					)
-					.child(
-						Button::new("open-upd")
-							.label(if let Some(ver) = &self.latest_version {
-								crate::i18n::tf(
-									self.locale,
-									"installUpdate",
-									&[("version", ver)],
-								)
-							} else {
-								self.t("openUpdatePage")
-							})
-							.on_click({
-								let view = view.clone();
-								let url = self.latest_url.clone();
-								let has_update = self.latest_version.is_some();
-								move |_, _, cx| {
-									if has_update {
-										view.update(cx, |this, cx| {
-											this.update_status = this.t("checkForUpdates");
-											match crate::updater::download_and_install(this.prefs.accept_beta) {
-												Ok(path) => {
-													this.update_status = path;
-													cx.quit();
-												}
-												Err(err) => {
-													this.update_status = format!(
-														"{}: {err}",
-														this.t("updateInstallFailedTitle")
-													);
-													let _ = open::that(&url);
-												}
-											}
-											cx.notify();
-										});
-									} else {
-										let _ = open::that(&url);
-									}
-								}
-							}),
-					),
-			)
-			.child(switch_row(
-				"beta",
-				self.t("acceptBetaUpdates"),
-				self.t("acceptBetaUpdatesDescription"),
-				self.prefs.accept_beta,
-				{
-					let view = view.clone();
-					move |val, cx| {
-						view.update(cx, |this, cx| {
-							this.prefs.accept_beta = val;
-							this.persist(cx);
-							cx.notify();
-						});
-					}
-				},
-			))
-			.child(
 				div()
 					.text_xs()
-					.text_color(cx.theme().muted_foreground)
+					.text_color(theme.muted_foreground)
 					.child(crate::state::leftover_about_copyright(
 						crate::timefmt::leftover_utc_year(crate::timefmt::unix_now_secs()),
 					)),
@@ -1416,12 +1513,6 @@ fn switch_row(
 				}),
 		)
 		.child(Switch::new(id).checked(checked).on_click(move |val, _, cx| on(*val, cx)))
-}
-
-fn link_btn(id: &'static str, label: String, url: &'static str) -> impl IntoElement {
-	Button::new(id).small().label(label).on_click(move |_, _, _| {
-		let _ = open::that(url);
-	})
 }
 
 fn preview_line(prompt_color: u32, prompt: &str, fg: u32, cmd: &str) -> impl IntoElement {

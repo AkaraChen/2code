@@ -899,6 +899,27 @@ pub fn leftover_about_copyright(year: i32) -> String {
 	format!("© {year} AkaraChen")
 }
 
+pub fn leftover_about_max_width() -> f32 {
+	672.0
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeftoverUpdateBadge {
+	Hidden,
+	Available,
+	NotAvailable,
+}
+
+pub fn leftover_update_badge(has_update: bool, checked_not_available: bool) -> LeftoverUpdateBadge {
+	if has_update {
+		LeftoverUpdateBadge::Available
+	} else if checked_not_available {
+		LeftoverUpdateBadge::NotAvailable
+	} else {
+		LeftoverUpdateBadge::Hidden
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LeftoverFileMenuFlags {
 	pub can_open: bool,
@@ -1103,6 +1124,10 @@ mod tests {
 		assert_eq!(leftover_pr_label(12, "Open"), "#12 Open");
 		assert_eq!(leftover_launch_app_i18n("code"), "topbarVscode");
 		assert_eq!(leftover_about_copyright(2026), "© 2026 AkaraChen");
+		assert_eq!(leftover_about_max_width(), 672.0);
+		assert_eq!(leftover_update_badge(true, false), LeftoverUpdateBadge::Available);
+		assert_eq!(leftover_update_badge(false, true), LeftoverUpdateBadge::NotAvailable);
+		assert_eq!(leftover_update_badge(false, false), LeftoverUpdateBadge::Hidden);
 	}
 
 	#[test]
