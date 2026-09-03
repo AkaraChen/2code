@@ -391,6 +391,88 @@ impl Backend {
 		}])
 	}
 
+	pub fn move_project(&self, project_id: &str, delta: i32) -> Result<(), AppError> {
+		let projects = self.list_projects()?;
+		let Some(project) = projects.iter().find(|p| p.id == project_id).cloned() else {
+			return Ok(());
+		};
+		let mut bucket: Vec<_> = projects
+			.into_iter()
+			.filter(|p| {
+				if project.pinned_at.is_some() {
+					p.pinned_at.is_some()
+				} else {
+					p.pinned_at.is_none() && p.group_id == project.group_id
+				}
+			})
+			.collect();
+		if project.pinned_at.is_some() {
+			bucket.sort_by_key(|p| p.pinned_order.unwrap_or(0));
+		} else {
+			bucket.sort_by_key(|p| p.sort_order);
+		}
+		let Some(ix) = bucket.iter().position(|p| p.id == project_id) else {
+			return Ok(());
+		};
+		let next = (ix as i32 + delta).clamp(0, bucket.len() as i32 - 1) as usize;
+		if next == ix {
+			return Ok(());
+		}
+		bucket.swap(ix, next);
+		let updates = bucket
+			.iter()
+			.enumerate()
+			.map(|(i, p)| ProjectSidebarLayoutUpdate {
+				kind: "project".into(),
+				id: p.id.clone(),
+				group_id: p.group_id.clone(),
+				sort_order: Some(if p.pinned_at.is_some() {
+					p.sort_order
+				} else {
+					i as i32
+				}),
+				pinned_order: if p.pinned_at.is_some() {
+					Some(i as i32)
+				} else {
+					None
+				},
+			})
+			.collect();
+		self.update_sidebar_layout(updates)
+	}
+
+	pub fn drop_project(
+		&self,
+		dragged: &str,
+		target: Option<&str>,
+		unpin: bool,
+	) -> Result<(), AppError> {
+		let project = self.find_project(dragged)?;
+		if unpin {
+			return self.update_sidebar_layout(vec![ProjectSidebarLayoutUpdate {
+				kind: "project".into(),
+				id: project.id,
+				group_id: None,
+				sort_order: Some(project.sort_order),
+				pinned_order: None,
+			}]);
+		}
+		let Some(target) = target else {
+			return Ok(());
+		};
+		if target == dragged {
+			return Ok(());
+		}
+		let dest = self.find_project(target)?;
+		self.update_sidebar_layout(vec![ProjectSidebarLayoutUpdate {
+			kind: "project".into(),
+			id: project.id,
+			group_id: dest.group_id,
+			sort_order: Some(dest.sort_order.saturating_sub(1)),
+			pinned_order: dest.pinned_order,
+		}])
+	}
+
 	pub fn list_sessions(&self, project_id: &str) -> Result<Vec<PtySessionRecord>, AppError> {
 		self.with_db(|conn| service::pty::list_project_sessions(conn, project_id))
 	}
@@ -448,6 +530,15 @@ pub fn is_previewable(path: &str) -> bool {
 	[
 		".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".pdf",
 		".zip", ".tar", ".gz", ".tgz", ".docx", ".xlsx", ".pptx",
+	]
+	.iter()
+	.any(|ext| lower.ends_with(ext))
+}
+
+pub fn is_image(path: &str) -> bool {
+	let lower = path.to_ascii_lowercase();
+	[
+		".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico", ".tif", ".tiff",
 	]
 	.iter()
 	.any(|ext| lower.ends_with(ext))

@@ -4,6 +4,7 @@ mod i18n;
 mod prefs;
 mod state;
 mod ui;
+mod updater;
 
 use gpui::{
 	point, prelude::*, px, size, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions,

@@ -1,17 +1,53 @@
-use gpui::{div, prelude::*, px, rgb, Context, Window};
-use gpui_component::{ActiveTheme, StyledExt};
+use gpui::{div, prelude::*, px, rgb, Context, MouseButton, Window};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::{ActiveTheme, Sizable, StyledExt};
 
 use crate::app::AppView;
-use crate::state::Route;
-use crate::ui::{debug, dialogs, palette, sidebar, workspace};
+use crate::state::{Route, ToastAction};
+use crate::ui::{debug, dialogs, palette, settings, sidebar, workspace};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
+	let view = cx.entity();
 	div()
 		.flex()
 		.size_full()
 		.bg(theme.background)
 		.text_color(theme.foreground)
+		.on_mouse_move({
+			let view = view.clone();
+			move |ev, _, cx| {
+				view.update(cx, |app, cx| {
+					let x = f32::from(ev.position.x);
+					let mut changed = false;
+					if let Some((start_x, start_w)) = app.data.overlay.sidebar_drag {
+						app.data.prefs.sidebar_width = (start_w + x - start_x).clamp(220.0, 420.0);
+						changed = true;
+					}
+					if let Some((start_x, start_w)) = app.data.overlay.profile_sidebar_drag {
+						app.data.prefs.profile_sidebar_width =
+							(start_w + x - start_x).clamp(180.0, 560.0);
+						changed = true;
+					}
+					if changed {
+						cx.notify();
+					}
+				});
+			}
+		})
+		.on_mouse_up(MouseButton::Left, {
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					if app.data.overlay.sidebar_drag.take().is_some()
+						|| app.data.overlay.profile_sidebar_drag.take().is_some()
+					{
+						app.persist_prefs();
+						cx.notify();
+					}
+				});
+			}
+		})
 		.child(sidebar::render(app, window, cx))
 		.child(
 			div()
@@ -46,6 +82,7 @@ fn home_or_empty(
 
 fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
+	let view = cx.entity();
 	div()
 		.id("toasts")
 		.absolute()
@@ -56,6 +93,7 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 		.gap_2()
 		.children(app.data.toasts.iter().rev().take(4).map(|toast| {
 			let bg = theme.background;
+			let action = toast.action;
 			div()
 				.id(crate::ui::eid(format!("toast-{}", toast.id)))
 				.w(px(320.))
@@ -80,6 +118,21 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 							.child(toast.body.clone()),
 					)
 				})
+				.when(action == Some(ToastAction::OpenAbout), |el| {
+					el.child(
+						Button::new(crate::ui::eid(format!("toast-act-{}", toast.id)))
+							.xsmall()
+							.label(app.t("openUpdatePage"))
+							.on_click({
+								let view = view.clone();
+								move |_, window, cx| {
+									view.update(cx, |app, cx| {
+										settings::open_update_page(app, window, cx);
+									});
+								}
+							}),
+					)
+				})
 		}))
 }
 
@@ -91,12 +144,17 @@ fn window_controls() -> impl IntoElement {
 		.right_0()
 		.h(px(28.))
 		.flex()
-		.child(win_btn("min", "–", false))
-		.child(win_btn("max", "□", false))
-		.child(win_btn("close", "×", true))
+		.child(win_btn("min", "–", false, |window| window.minimize_window()))
+		.child(win_btn("max", "□", false, |window| window.zoom_window()))
+		.child(win_btn("close", "×", true, |window| window.remove_window()))
 }
 
-fn win_btn(id: &'static str, label: &'static str, close: bool) -> impl IntoElement {
+fn win_btn(
+	id: &'static str,
+	label: &'static str,
+	close: bool,
+	on: impl Fn(&mut Window) + 'static,
+) -> impl IntoElement {
 	div()
 		.id(id)
 		.h(px(28.))
@@ -112,5 +170,6 @@ fn win_btn(id: &'static str, label: &'static str, close: bool) -> impl IntoEleme
 				el.bg(gpui::hsla(0., 0., 0.5, 0.12))
 			}
 		})
+		.on_mouse_down(MouseButton::Left, move |_, window, _| on(window))
 		.child(label)
 }

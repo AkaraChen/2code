@@ -28,6 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 vt100 = "0.16"
 uuid = { version = "1", features = ["v4"] }
 open = "5"
+ureq = { version = "2", features = ["json"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 libsqlite3-sys = { version = "0.37", features = ["bundled"] }

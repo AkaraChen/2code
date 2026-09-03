@@ -5,7 +5,7 @@ use gpui_component::tab::Tab;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
-use crate::state::{DialogKind, SidebarMode, UnifiedTab};
+use crate::state::{AgentKind, DialogKind, SidebarMode, UnifiedTab};
 use crate::ui::{file_tree, file_viewer, git, notes, sidebar, terminal};
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -374,21 +374,29 @@ fn profile_sidebar(
 	let mode = ws.sidebar_mode;
 	let theme = cx.theme().clone();
 
+	let view = cx.entity();
 	div()
-		.id("profile-sidebar")
-		.w(px(width))
+		.id("profile-sidebar-wrap")
+		.relative()
 		.h_full()
-		.border_r_1()
-		.border_color(theme.border)
-		.min_w_0()
 		.child(
-			// Keep all three mounted; hide inactive ones.
-			v_flex()
-				.size_full()
-				.child(visible(mode == SidebarMode::Files, file_tree::render(app, window, cx)))
-				.child(visible(mode == SidebarMode::Git, git::render_panel(app, window, cx)))
-				.child(visible(mode == SidebarMode::Notes, notes::render(app, window, cx))),
+			div()
+				.id("profile-sidebar")
+				.w(px(width))
+				.h_full()
+				.border_r_1()
+				.border_color(theme.border)
+				.min_w_0()
+				.child(
+					// Keep all three mounted; hide inactive ones.
+					v_flex()
+						.size_full()
+						.child(visible(mode == SidebarMode::Files, file_tree::render(app, window, cx)))
+						.child(visible(mode == SidebarMode::Git, git::render_panel(app, window, cx)))
+						.child(visible(mode == SidebarMode::Notes, notes::render(app, window, cx))),
+				),
 		)
+		.child(sidebar::resize_handle("profile-sidebar-resize", view, true))
 		.into_any_element()
 }
 
@@ -466,6 +474,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.suffix(
 					h_flex()
 						.gap_1()
+						.child(agent_kind_mark(term.agent_kind))
 						.child(sidebar::agent_dot(term.agent))
 						.child(
 							Button::new(crate::ui::eid(format!("close-term-{id}")))
@@ -594,6 +603,26 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>) -> impl Into
 			})
 			.into_any_element()
 	}
+}
+
+fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
+	let (label, color) = match kind {
+		AgentKind::Claude => ("C", gpui::rgb(0xd97757)),
+		AgentKind::Codex => ("X", gpui::rgb(0x6b7280)),
+		AgentKind::Gemini => ("G", gpui::rgb(0x4285f4)),
+		AgentKind::Unknown => return div().into_any_element(),
+	};
+	div()
+		.size(px(14.))
+		.rounded_sm()
+		.bg(color)
+		.text_color(gpui::white())
+		.flex()
+		.items_center()
+		.justify_center()
+		.text_xs()
+		.child(label)
+		.into_any_element()
 }
 
 fn tab_bodies(

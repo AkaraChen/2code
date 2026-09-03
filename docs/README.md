@@ -1,10 +1,10 @@
 # 2code Architecture Documentation
 
-> Auto-generated structural documentation for the **2code** Tauri 2 desktop application.
+> Structural documentation for **2code**. The current product UI is the GPUI native shell in `src-gpui/`. The Tauri + React tree remains as a reference implementation.
 
 ## Overview
 
-**2code** is a macOS desktop app for managing code projects with integrated persistent terminal sessions. It pairs a React 19 frontend with a Rust backend, connected via Tauri 2 IPC with auto-generated TypeScript bindings.
+**2code** is a desktop app for managing code projects with integrated persistent terminal sessions. The GPUI rewrite in `src-gpui/` owns the windows and UI; it reuses the existing Rust domain crates (`model`, `repo`, `service`, `infra`) without Tauri IPC.
 
 ### Tech Stack
 

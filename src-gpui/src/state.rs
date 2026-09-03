@@ -58,6 +58,20 @@ pub enum AgentStatus {
 	Completed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AgentKind {
+	#[default]
+	Unknown,
+	Claude,
+	Codex,
+	Gemini,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastAction {
+	OpenAbout,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogKind {
 	CreateProject,
@@ -91,7 +105,7 @@ pub struct Toast {
 	pub kind: ToastKind,
 	pub title: String,
 	pub body: String,
-	pub action: Option<String>,
+	pub action: Option<ToastAction>,
 	pub created: Instant,
 }
 
@@ -112,6 +126,8 @@ pub struct OpenFileTab {
 	pub preview: bool,
 	pub preview_kind: String,
 	pub binary_note: String,
+	pub preview_path: String,
+	pub archive_entries: Vec<(String, String)>,
 }
 
 impl OpenFileTab {
@@ -133,7 +149,9 @@ pub struct TermSession {
 	pub parser: vt100::Parser,
 	pub search_open: bool,
 	pub search_ix: usize,
+	pub search_query: String,
 	pub agent: AgentStatus,
+	pub agent_kind: AgentKind,
 	pub completed_hidden: bool,
 	pub cols: u16,
 	pub rows: u16,
@@ -148,7 +166,9 @@ impl TermSession {
 			parser: vt100::Parser::new(32, 120, 10_000),
 			search_open: false,
 			search_ix: 0,
+			search_query: String::new(),
 			agent: AgentStatus::Idle,
+			agent_kind: AgentKind::Unknown,
 			completed_hidden: false,
 			cols: 120,
 			rows: 32,
@@ -160,9 +180,28 @@ impl TermSession {
 		self.detect_agent();
 	}
 
+	pub fn set_size(&mut self, rows: u16, cols: u16) -> bool {
+		if self.rows == rows && self.cols == cols {
+			return false;
+		}
+		self.rows = rows;
+		self.cols = cols;
+		self.parser.screen_mut().set_size(rows, cols);
+		true
+	}
+
 	fn detect_agent(&mut self) {
 		let text = self.parser.screen().contents();
-		let lower = text.to_ascii_lowercase();
+		let lower = format!("{} {}", self.title, text).to_ascii_lowercase();
+		self.agent_kind = if lower.contains("claude") {
+			AgentKind::Claude
+		} else if lower.contains("codex") {
+			AgentKind::Codex
+		} else if lower.contains("gemini") {
+			AgentKind::Gemini
+		} else {
+			self.agent_kind
+		};
 		if lower.contains("waiting for") || lower.contains("waiting on") {
 			self.agent = AgentStatus::Waiting;
 		} else if lower.contains("running") || lower.contains("thinking") {
@@ -175,6 +214,23 @@ impl TermSession {
 
 	pub fn screen_text(&self) -> String {
 		self.parser.screen().contents()
+	}
+
+	pub fn search_hits(&self, query: &str) -> Vec<(u16, usize, usize)> {
+		if query.is_empty() {
+			return Vec::new();
+		}
+		let needle = query.to_ascii_lowercase();
+		self.screen_text()
+			.lines()
+			.enumerate()
+			.flat_map(|(row, line)| {
+				let hay = line.to_ascii_lowercase();
+				hay.match_indices(&needle)
+					.map(|(col, _)| (row as u16, col, needle.len()))
+					.collect::<Vec<_>>()
+			})
+			.collect()
 	}
 }
 
@@ -278,6 +334,10 @@ pub struct OverlayState {
 	pub pending_close_file: Option<String>,
 	pub editing_template: Option<String>,
 	pub project_settings_tab: usize,
+	pub sidebar_drag: Option<(f32, f32)>,
+	pub profile_sidebar_drag: Option<(f32, f32)>,
+	pub drag_project: Option<String>,
+	pub update_checked: bool,
 }
 
 pub struct AppData {
@@ -293,6 +353,7 @@ pub struct AppData {
 	pub toast_seq: u64,
 	pub sidebar_error: Option<String>,
 	pub locale: Locale,
+	pub notes_dirty_since: Option<Instant>,
 }
 
 impl AppData {
@@ -325,13 +386,23 @@ impl AppData {
 	}
 
 	pub fn push_toast(&mut self, kind: ToastKind, title: impl Into<String>, body: impl Into<String>) {
+		self.push_toast_action(kind, title, body, None);
+	}
+
+	pub fn push_toast_action(
+		&mut self,
+		kind: ToastKind,
+		title: impl Into<String>,
+		body: impl Into<String>,
+		action: Option<ToastAction>,
+	) {
 		self.toast_seq += 1;
 		self.toasts.push(Toast {
 			id: self.toast_seq,
 			kind,
 			title: title.into(),
 			body: body.into(),
-			action: None,
+			action,
 			created: Instant::now(),
 		});
 	}

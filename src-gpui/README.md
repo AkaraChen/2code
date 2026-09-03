@@ -1,6 +1,6 @@
 # 2code GPUI
 
-Native desktop rewrite of 2code using [GPUI](https://gpui.rs) and [gpui-component](https://github.com/longbridge/gpui-component). The React/Tauri UI is still in the repo; this crate is the new primary shell and calls the existing `model` / `repo` / `service` / `infra` crates directly (no IPC).
+Native desktop rewrite of 2code using [GPUI](https://gpui.rs) and [gpui-component](https://github.com/longbridge/gpui-component). This crate is the primary product shell. It calls the existing `model` / `repo` / `service` / `infra` crates directly (no IPC). The React/Tauri UI remains in the repo as a reference implementation.
 
 ## Run
 

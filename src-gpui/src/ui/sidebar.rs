@@ -19,6 +19,11 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	let has_projects = !app.data.projects.is_empty();
 	let pad_top = if cfg!(target_os = "macos") { px(32.) } else { px(8.) };
 
+	div()
+		.id("app-sidebar-wrap")
+		.relative()
+		.h_full()
+		.child(
 	v_flex()
 		.id("app-sidebar")
 		.w(px(width))
@@ -138,7 +143,32 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						}),
 				),
 		)
+		)
+		.child(resize_handle("app-sidebar-resize", view, false))
 		.into_any_element()
+}
+
+pub(crate) fn resize_handle(id: &'static str, view: gpui::Entity<AppView>, profile: bool) -> impl IntoElement {
+	div()
+		.id(id)
+		.absolute()
+		.top_0()
+		.right_0()
+		.w(px(8.))
+		.h_full()
+		.cursor(gpui::CursorStyle::ResizeColumn)
+		.on_mouse_down(MouseButton::Left, move |ev, _, cx| {
+			view.update(cx, |app, cx| {
+				let start = f32::from(ev.position.x);
+				if profile {
+					app.data.overlay.profile_sidebar_drag =
+						Some((start, app.data.prefs.profile_sidebar_width));
+				} else {
+					app.data.overlay.sidebar_drag = Some((start, app.data.prefs.sidebar_width));
+				}
+				cx.notify();
+			});
+		})
 }
 
 fn project_sections(
@@ -295,6 +325,7 @@ fn project_sections(
 		.when(app.data.overlay.sort_mode, |el| {
 			el.child(
 				div()
+					.id("sidebar-drop-unpin")
 					.mt_2()
 					.px_2()
 					.py_3()
@@ -304,7 +335,18 @@ fn project_sections(
 					.border_color(theme.border)
 					.text_xs()
 					.text_color(theme.muted_foreground)
-					.child(app.t("dropHereToUnpinOrMoveOut")),
+					.child(app.t("dropHereToUnpinOrMoveOut"))
+					.on_mouse_up(MouseButton::Left, {
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								if let Some(id) = app.data.overlay.drag_project.take() {
+									app.drop_sidebar_project(&id, None, true);
+									cx.notify();
+								}
+							});
+						}
+					}),
 			)
 		})
 		.when(app.data.overlay.onboarding && !has_any_projects(app), |el| {
@@ -385,10 +427,38 @@ fn project_row(
 					let default_profile = default_profile.clone();
 					move |_, _, cx| {
 						view.update(cx, |app, cx| {
+							if app.data.overlay.sort_mode {
+								return;
+							}
 							if let Some(pid) = default_profile.clone() {
 								app.open_profile(&id, &pid);
 							}
 							cx.notify();
+						});
+					}
+				})
+				.on_mouse_down(MouseButton::Left, {
+					let view = view.clone();
+					let id = id.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, _| {
+							if app.data.overlay.sort_mode {
+								app.data.overlay.drag_project = Some(id.clone());
+							}
+						});
+					}
+				})
+				.on_mouse_up(MouseButton::Left, {
+					let view = view.clone();
+					let id = id.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							if let Some(dragged) = app.data.overlay.drag_project.take() {
+								if dragged != id {
+									app.drop_sidebar_project(&dragged, Some(&id), false);
+									cx.notify();
+								}
+							}
 						});
 					}
 				})
@@ -429,6 +499,38 @@ fn project_row(
 				.when(app.data.overlay.sort_mode, |el| {
 					let pinned = project.pinned_at.is_some();
 					el.child(
+						Button::new(crate::ui::eid(format!("up-{}", project.id)))
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronUp)
+							.on_click({
+								let view = view.clone();
+								let id = id.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.move_sidebar_project(&id, -1);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new(crate::ui::eid(format!("down-{}", project.id)))
+							.ghost()
+							.xsmall()
+							.icon(IconName::ChevronDown)
+							.on_click({
+								let view = view.clone();
+								let id = id.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.move_sidebar_project(&id, 1);
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
 						Button::new(crate::ui::eid(format!("pin-{}", project.id)))
 							.ghost()
 							.xsmall()

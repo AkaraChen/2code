@@ -7,7 +7,6 @@ use crate::state::NotesStatus;
 
 pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
-	let view = cx.entity();
 	let status = app
 		.data
 		.current_ws()
@@ -44,14 +43,6 @@ pub fn render(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>
 				.flex_1()
 				.min_h_0()
 				.p_2()
-				.on_mouse_up(gpui::MouseButton::Left, {
-					let view = view.clone();
-					move |_, _, cx| {
-						view.update(cx, |app, cx| {
-							app.save_notes(cx);
-						});
-					}
-				})
 				.child(Input::new(&app.inputs.notes)),
 		)
 }

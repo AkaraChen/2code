@@ -16,11 +16,33 @@ use crate::i18n::Locale;
 use crate::prefs::{term_theme_by_name, RadiusPref, TERM_THEMES, ThemePref};
 use crate::state::SettingsTab;
 
+pub fn open_update_page(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) {
+	open_settings_at(app, window, cx, Some(SettingsTab::About));
+}
+
 pub fn open_settings_window(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) {
-	if let Some(handle) = app.settings_window.clone() {
-		if handle.update(cx, |_, win, _| win.activate_window()).is_ok() {
-			app.data.overlay.settings_open = true;
-			return;
+	open_settings_at(app, window, cx, None);
+}
+
+fn open_settings_at(
+	app: &mut AppView,
+	window: &mut Window,
+	cx: &mut Context<AppView>,
+	tab: Option<SettingsTab>,
+) {
+	if let Some(existing) = app.settings_view.as_ref().and_then(|w| w.upgrade()) {
+		if let Some(tab) = tab {
+			existing.update(cx, |this, cx| {
+				this.tab = tab;
+				cx.notify();
+			});
+		}
+		if let Some(handle) = app.settings_window.clone() {
+			if handle.update(cx, |_, win, _| win.activate_window()).is_ok() {
+				app.data.overlay.settings_open = true;
+				app.data.overlay.settings_tab = tab.unwrap_or(app.data.overlay.settings_tab);
+				return;
+			}
 		}
 	}
 	let backend = app.backend.clone();
@@ -40,7 +62,19 @@ pub fn open_settings_window(app: &mut AppView, window: &mut Window, cx: &mut Con
 			..Default::default()
 		},
 		move |window, cx| {
-			let view = cx.new(|cx| SettingsView::new(backend.clone(), prefs.clone(), locale, main.clone(), window, cx));
+			let initial = tab.unwrap_or(SettingsTab::General);
+			let view = cx.new(|cx| {
+				let mut settings =
+					SettingsView::new(backend.clone(), prefs.clone(), locale, main.clone(), window, cx);
+				settings.tab = initial;
+				if let Some(main) = settings.main.upgrade() {
+					let weak = cx.entity().downgrade();
+					main.update(cx, |app, _| {
+						app.settings_view = Some(weak);
+					});
+				}
+				settings
+			});
 			cx.new(|cx| Root::new(view, window, cx))
 		},
 	) {
@@ -63,6 +97,8 @@ pub struct SettingsView {
 	template_cwd: gpui::Entity<gpui_component::input::InputState>,
 	template_cmds: gpui::Entity<gpui_component::input::InputState>,
 	update_status: String,
+	latest_version: Option<String>,
+	latest_url: String,
 }
 
 impl SettingsView {
@@ -112,6 +148,8 @@ impl SettingsView {
 			template_cwd: inp(window, cx, "", "", false),
 			template_cmds: inp(window, cx, "", "", true),
 			update_status: crate::i18n::t(locale, "updateIdleDescription"),
+			latest_version: None,
+			latest_url: crate::updater::releases_page().to_string(),
 		}
 	}
 
@@ -124,6 +162,10 @@ impl SettingsView {
 		self.prefs.worktree_dir = self.worktree.read(cx).value().to_string();
 		self.prefs.language = self.locale;
 		self.prefs.save(&self.backend.app_data_dir);
+		let scale = self.prefs.radius.scale();
+		let theme = gpui_component::Theme::global_mut(cx);
+		theme.radius = px(6.0 * scale);
+		theme.radius_lg = px(8.0 * scale);
 		if let Some(main) = self.main.upgrade() {
 			let prefs = self.prefs.clone();
 			let locale = self.locale;
@@ -648,17 +690,69 @@ impl SettingsView {
 			)
 			.child(div().text_sm().child(self.update_status.clone()))
 			.child(
-				Button::new("check-upd")
-					.label(self.t("checkForUpdates"))
-					.on_click({
-						let view = view.clone();
-						move |_, _, cx| {
-							view.update(cx, |this, cx| {
-								this.update_status = this.t("updateNotAvailableDescription");
-								cx.notify();
-							});
-						}
-					}),
+				h_flex()
+					.gap_2()
+					.child(
+						Button::new("check-upd")
+							.label(self.t("checkForUpdates"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |this, cx| {
+										this.update_status = this.t("checkForUpdates");
+										let result =
+											crate::updater::check_for_update(this.prefs.accept_beta);
+										match &result {
+											Ok(info) if info.available => {
+												this.latest_version = Some(info.latest_version.clone());
+												this.latest_url = info.html_url.clone();
+												this.update_status = crate::i18n::tf(
+													this.locale,
+													"updateAvailableTitle",
+													&[("version", &info.latest_version)],
+												);
+											}
+											Ok(_) => {
+												this.latest_version = None;
+												this.update_status =
+													this.t("updateNotAvailableDescription");
+											}
+											Err(err) => {
+												this.update_status = format!(
+													"{}: {err}",
+													this.t("updateCheckFailedTitle")
+												);
+											}
+										}
+										if let Some(main) = this.main.upgrade() {
+											main.update(cx, |app, cx| {
+												app.apply_update_result(result, false);
+												cx.notify();
+											});
+										}
+										cx.notify();
+									});
+								}
+							}),
+					)
+					.child(
+						Button::new("open-upd")
+							.label(if let Some(ver) = &self.latest_version {
+								crate::i18n::tf(
+									self.locale,
+									"installUpdate",
+									&[("version", ver)],
+								)
+							} else {
+								self.t("openUpdatePage")
+							})
+							.on_click({
+								let url = self.latest_url.clone();
+								move |_, _, _| {
+									let _ = open::that(&url);
+								}
+							}),
+					),
 			)
 			.child(switch_row(
 				"beta",

@@ -1,4 +1,6 @@
-use gpui::{div, prelude::*, px, Context, Window};
+use std::path::PathBuf;
+
+use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
@@ -22,38 +24,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	};
 
 	if file.preview {
-		return v_flex()
-			.id("binary-preview")
-			.size_full()
-			.child(
-				h_flex()
-					.w_full()
-					.min_h(px(36.))
-					.px_3()
-					.bg(theme.muted)
-					.justify_between()
-					.child(div().text_sm().child(file.title.clone()))
-					.child(div().text_xs().child("Preview")),
-			)
-			.child(
-				v_flex()
-					.flex_1()
-					.items_center()
-					.justify_center()
-					.gap_2()
-					.child(div().text_color(theme.muted_foreground).child(file.preview_kind.clone()))
-					.child(
-						div()
-							.text_xs()
-							.text_color(theme.muted_foreground)
-							.child(if file.binary_note.is_empty() {
-								"Preview unavailable".to_string()
-							} else {
-								file.binary_note
-							}),
-					),
-			)
-			.into_any_element();
+		return preview_pane(app, &file, cx).into_any_element();
 	}
 
 	if backend::is_markdown(&file.path) {
@@ -146,6 +117,107 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				),
 		)
 		.child(div().flex_1().min_h_0().child(Input::new(&app.inputs.file_editor)))
+		.into_any_element()
+}
+
+fn preview_pane(
+	_app: &AppView,
+	file: &crate::state::OpenFileTab,
+	cx: &mut Context<AppView>,
+) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	let view = cx.entity();
+	let path = file.path.clone();
+	v_flex()
+		.id("binary-preview")
+		.size_full()
+		.child(
+			h_flex()
+				.w_full()
+				.min_h(px(36.))
+				.px_3()
+				.bg(theme.muted)
+				.justify_between()
+				.child(div().text_sm().child(file.title.clone()))
+				.child(
+					h_flex()
+						.gap_2()
+						.child(div().text_xs().child(file.preview_kind.clone()))
+						.child(
+							Button::new("open-external")
+								.xsmall()
+								.label("Open")
+								.on_click({
+									let view = view.clone();
+									let path = path.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, _| app.open_external(&path));
+									}
+								}),
+						),
+				),
+		)
+		.child(preview_body(file, cx))
+}
+
+fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> impl IntoElement {
+	let theme = cx.theme().clone();
+	if file.preview_kind == "image" || backend::is_image(&file.path) {
+		let src = if file.preview_path.is_empty() {
+			file.path.clone()
+		} else {
+			file.preview_path.clone()
+		};
+		return div()
+			.id("image-preview")
+			.size_full()
+			.flex()
+			.items_center()
+			.justify_center()
+			.bg(rgb(0x1b1f23))
+			.child(
+				img(PathBuf::from(src))
+					.id("image-preview-img")
+					.max_w_full()
+					.max_h_full(),
+			)
+			.into_any_element();
+	}
+	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
+		return v_flex()
+			.id("archive-preview")
+			.size_full()
+			.p_3()
+			.gap_1()
+			.overflow_y_scroll()
+			.children(file.archive_entries.iter().map(|(path, kind)| {
+				h_flex()
+					.gap_2()
+					.child(div().text_xs().text_color(theme.muted_foreground).child(kind.clone()))
+					.child(div().text_sm().child(path.clone()))
+			}))
+			.into_any_element();
+	}
+	v_flex()
+		.flex_1()
+		.items_center()
+		.justify_center()
+		.gap_2()
+		.child(
+			div()
+				.text_color(theme.muted_foreground)
+				.child(file.preview_kind.clone()),
+		)
+		.child(
+			div()
+				.text_xs()
+				.text_color(theme.muted_foreground)
+				.child(if file.binary_note.is_empty() {
+					"Preview unavailable".to_string()
+				} else {
+					file.binary_note.clone()
+				}),
+		)
 		.into_any_element()
 }
 

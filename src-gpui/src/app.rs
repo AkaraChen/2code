@@ -79,6 +79,7 @@ pub struct AppView {
 	pub inputs: Inputs,
 	pub focus: FocusHandle,
 	pub settings_window: Option<WindowHandle<Root>>,
+	pub settings_view: Option<gpui::WeakEntity<ui::settings::SettingsView>>,
 }
 
 impl AppView {
@@ -114,6 +115,7 @@ impl AppView {
 			toasts: Vec::new(),
 			toast_seq: 0,
 			sidebar_error: None,
+			notes_dirty_since: None,
 		};
 
 		let inputs = Inputs {
@@ -188,6 +190,7 @@ impl AppView {
 			inputs,
 			focus: cx.focus_handle(),
 			settings_window: None,
+			settings_view: None,
 		};
 
 		cx.spawn(async move |this, cx| loop {
@@ -201,6 +204,19 @@ impl AppView {
 			{
 				break;
 			}
+		})
+		.detach();
+
+		cx.spawn(async move |this, cx| {
+			Timer::after(Duration::from_secs(1)).await;
+			let accept_beta = this
+				.update(cx, |app, _| app.data.prefs.accept_beta)
+				.unwrap_or(false);
+			let result = crate::updater::check_for_update(accept_beta);
+			let _ = this.update(cx, |app, cx| {
+				app.apply_update_result(result, true);
+				cx.notify();
+			});
 		})
 		.detach();
 
@@ -240,6 +256,14 @@ impl AppView {
 			ThemePref::System => cx.window_appearance().into(),
 		};
 		gpui_component::Theme::change(mode, Some(window), cx);
+		let scale = self.data.prefs.radius.scale();
+		let theme = gpui_component::Theme::global_mut(cx);
+		theme.radius = px(6.0 * scale);
+		theme.radius_lg = px(8.0 * scale);
+		if !self.data.prefs.font_family.is_empty() {
+			theme.mono_font_family = self.data.prefs.font_family.clone().into();
+			theme.mono_font_size = px(self.data.prefs.font_size);
+		}
 	}
 
 	pub fn reload_projects(&mut self) {
@@ -429,6 +453,17 @@ impl AppView {
 		} else {
 			None
 		};
+		let preview_path = preview
+			.as_ref()
+			.map(|p| p.file_path.clone())
+			.unwrap_or_default();
+		let archive_entries = preview
+			.as_ref()
+			.and_then(|p| p.archive_entries.clone())
+			.unwrap_or_default()
+			.into_iter()
+			.map(|e| (e.path, e.kind))
+			.collect();
 		let Some(ws) = self.data.workspaces.get_mut(profile_id) else {
 			return;
 		};
@@ -452,6 +487,8 @@ impl AppView {
 				.map(|p| p.kind.clone())
 				.unwrap_or_default(),
 			binary_note: preview.map(|p| p.mime_type).unwrap_or_default(),
+			preview_path,
+			archive_entries,
 		};
 		ws.files.push(tab);
 		ws.active = Some(UnifiedTab::File {
@@ -597,7 +634,7 @@ impl AppView {
 		}
 	}
 
-	pub fn tick(&mut self, _cx: &mut Context<Self>) {
+	pub fn tick(&mut self, cx: &mut Context<Self>) {
 		self.data.expire_toasts();
 		let ids: Vec<(String, String)> = self
 			.data
@@ -627,6 +664,141 @@ impl AppView {
 		if let Ok(exits) = self.backend.exits.lock() {
 			let _ = exits.len();
 		}
+		self.autosave_notes(cx);
+	}
+
+	fn autosave_notes(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.data.current_profile.clone() else {
+			return;
+		};
+		let live = self.inputs.notes.read(cx).value().to_string();
+		let Some(ws) = self.data.workspaces.get_mut(&profile_id) else {
+			return;
+		};
+		if live == ws.notes {
+			return;
+		}
+		ws.notes_status = NotesStatus::Saving;
+		match self.data.notes_dirty_since {
+			None => self.data.notes_dirty_since = Some(std::time::Instant::now()),
+			Some(since) if since.elapsed() < Duration::from_millis(800) => {}
+			Some(_) => {
+				self.data.notes_dirty_since = None;
+				self.save_notes(cx);
+			}
+		}
+	}
+
+	pub fn cycle_term_search(&mut self, cx: &mut Context<Self>, next: bool) {
+		let query = self.inputs.term_search.read(cx).value().to_string();
+		if let Some(term) = self.data.current_ws_mut().and_then(|w| w.active_terminal_mut()) {
+			term.search_query = query.clone();
+			let hits = term.search_hits(&query);
+			if hits.is_empty() {
+				term.search_ix = 0;
+				return;
+			}
+			if next {
+				term.search_ix = (term.search_ix + 1) % hits.len();
+			} else {
+				term.search_ix = if term.search_ix == 0 {
+					hits.len() - 1
+				} else {
+					term.search_ix - 1
+				};
+			}
+		}
+	}
+
+	pub fn sync_pty_size(&mut self, window: &Window) {
+		let (rows, cols) = self.estimate_pty_size(window);
+		let mut resized = Vec::new();
+		if let Some(ws) = self.data.current_ws_mut() {
+			for term in &mut ws.terminals {
+				if term.set_size(rows, cols) {
+					resized.push(term.id.clone());
+				}
+			}
+		}
+		for id in resized {
+			let _ = self.backend.resize_pty(&id, rows, cols);
+		}
+	}
+
+	fn estimate_pty_size(&self, window: &Window) -> (u16, u16) {
+		let size = window.viewport_size();
+		let mut chrome = 48.0;
+		if !self.data.prefs.sidebar_collapsed {
+			chrome += self.data.prefs.sidebar_width;
+		}
+		if self.data.current_ws().map(|w| w.sidebar_open).unwrap_or(false) {
+			chrome += self.data.prefs.profile_sidebar_width;
+		}
+		let font = self.data.prefs.font_size.max(10.0);
+		let cols = ((f32::from(size.width) - chrome - 24.0) / (font * 0.62)).floor() as i32;
+		let rows = ((f32::from(size.height) - 96.0) / (font * 1.35)).floor() as i32;
+		(rows.clamp(10, 120) as u16, cols.clamp(40, 300) as u16)
+	}
+
+	pub fn apply_update_result(&mut self, result: Result<crate::updater::UpdateInfo, String>, silent: bool) {
+		match result {
+			Ok(info) if info.available => {
+				let title = self.tf(
+					"updateAvailableTitle",
+					&[("version", &info.latest_version)],
+				);
+				let body = self.tf(
+					"updateAvailableDescription",
+					&[
+						("currentVersion", &info.current_version),
+						("version", &info.latest_version),
+					],
+				);
+				self.data.push_toast_action(
+					ToastKind::Info,
+					title,
+					body,
+					Some(crate::state::ToastAction::OpenAbout),
+				);
+			}
+			Ok(_) => {
+				if !silent {
+					self.data.push_toast(
+						ToastKind::Info,
+						self.t("updateNotAvailableTitle"),
+						self.t("updateNotAvailableDescription"),
+					);
+				}
+			}
+			Err(err) => {
+				if !silent {
+					self.data.push_toast(
+						ToastKind::Error,
+						self.t("updateCheckFailedTitle"),
+						err,
+					);
+				}
+			}
+		}
+		self.data.overlay.update_checked = true;
+	}
+
+	pub fn move_sidebar_project(&mut self, id: &str, delta: i32) {
+		if let Err(err) = self.backend.move_project(id, delta) {
+			self.data
+				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+			return;
+		}
+		self.reload_projects();
+	}
+
+	pub fn drop_sidebar_project(&mut self, dragged: &str, target: Option<&str>, unpin: bool) {
+		if let Err(err) = self.backend.drop_project(dragged, target, unpin) {
+			self.data
+				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+			return;
+		}
+		self.reload_projects();
 	}
 
 	pub fn create_project_from_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1238,6 +1410,7 @@ pub fn extract_file_hunk(diff: &str, path: &str) -> String {
 impl gpui::Render for AppView {
 	fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 		self.apply_theme(window, cx);
+		self.sync_pty_size(window);
 		if self.data.overlay.palette_open {
 			let q = self.inputs.palette.read(cx).value().to_string();
 			if self.data.overlay.palette_results.is_empty() && !q.is_empty() {

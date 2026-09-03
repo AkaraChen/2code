@@ -39,67 +39,63 @@ AI-assisted development creates more parallel state than a normal coding session
 
 ## Tech Stack
 
-- **Desktop shell**: Tauri 2
-- **Frontend**: React 19, TypeScript, Vite
-- **UI state**: Zustand + Immer
-- **Server state**: TanStack Query
-- **Backend**: Rust workspace
+- **Desktop shell**: GPUI + gpui-component (`src-gpui/`) — this is the current product UI
+- **Domain backend**: Rust workspace crates in `src-tauri/crates/` (model, repo, service, infra)
 - **Database**: SQLite via Diesel migrations
-- **Terminal runtime**: integrated PTY service
-- **Package manager**: Bun
+- **Terminal runtime**: integrated PTY service + vt100
+- **Legacy reference shell**: Tauri 2 + React 19 (kept in `src/` / `src-tauri/` while the GPUI rewrite lands)
 
 ## Getting Started
 
 ### Prerequisites
 
-- macOS
-- Bun
-- Rust stable toolchain
-- Tauri 2 development prerequisites
+- Rust 1.87+ (GPUI)
 - `just` for development helper commands
-- `fama` on `PATH` for `just fmt` TypeScript formatting
-
-### Install dependencies
-
-```bash
-bun install
-```
+- On Linux: `libxkbcommon`, Vulkan, and Wayland/X11 development libraries
+- The previous Tauri + React shell also needs Bun and Tauri 2 if you still run that path
 
 ### Run the desktop app
 
 ```bash
-bun tauri dev
+just gpui
+# or
+cd src-gpui && cargo run
 ```
 
-### Run only the frontend
+The GPUI app uses the same SQLite database as the old Tauri shell: `$XDG_DATA_HOME/com.akrc.code/app.db` (or the platform equivalent). Preferences live in `gpui-prefs.json` next to the DB.
+
+### Legacy Tauri + React shell
 
 ```bash
-bun run dev
+bun install
+bun tauri dev
 ```
 
 ### Build
 
 ```bash
-bun tauri build
+cd src-gpui && cargo build --release
 ```
+
+The legacy Tauri bundle is still `bun tauri build`.
 
 ## Useful Commands
 
 | Command | Description |
 | --- | --- |
-| `bun tauri dev` | Run the full desktop app with frontend and Rust hot reload |
-| `bun run dev` | Run the Vite frontend only |
-| `bun tauri build` | Build the production desktop app |
-| `cd src-tauri && cargo test` | Run Rust tests |
-| `cargo tauri-typegen generate` | Regenerate frontend IPC bindings after Rust command changes |
+| `just gpui` | Run the GPUI desktop app |
+| `just gpui-check` | Type-check the GPUI crate |
+| `cd src-tauri && cargo test` | Run Rust domain tests |
 | `just fmt` | Format TypeScript and Rust |
 | `just coverage` | Generate Rust coverage report |
+| `bun tauri dev` | Run the legacy Tauri + React shell |
 
 ## Project Structure
 
 ```text
 2code/
-├── src/                        # React + Vite frontend
+├── src-gpui/                   # GPUI native desktop shell (primary)
+├── src/                        # Legacy React + Vite frontend
 │   ├── features/               # Feature-first app modules
 │   ├── shared/                 # Shared lib, providers, components, hooks
 │   ├── layout/                 # App shell and sidebar
