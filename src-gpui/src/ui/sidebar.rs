@@ -774,6 +774,16 @@ fn project_row(
 				v_flex()
 					.pl_6()
 					.gap_0()
+					.when(project.profiles.is_empty(), |el| {
+						el.child(
+							div()
+								.px_2()
+								.py_1()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(app.t("noProfiles")),
+						)
+					})
 					.children(project.profiles.iter().map(|profile| {
 						let pid = profile.id.clone();
 						let proj = project.id.clone();

@@ -329,6 +329,7 @@ pub struct Workspace {
 	pub notes: String,
 	pub notes_status: NotesStatus,
 	pub pr: Option<GitPullRequestStatus>,
+	pub pr_error: Option<String>,
 	pub avatar: Option<String>,
 	pub config: ProjectConfig,
 }

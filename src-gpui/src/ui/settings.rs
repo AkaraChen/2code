@@ -756,6 +756,7 @@ impl SettingsView {
 									.danger()
 									.xsmall()
 									.label(self.t("delete"))
+									.tooltip(self.t("deleteTerminalTemplate"))
 									.on_click({
 										let view = view.clone();
 										let id = t.id.clone();

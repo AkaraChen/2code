@@ -195,6 +195,9 @@ impl AppView {
 		inputs.review_comment.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "gitReviewCommentPlaceholder"), window, cx);
 		});
+		inputs.worktree.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "projectWorktreeDirPlaceholder"), window, cx);
+		});
 		inputs.default_worktree.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "defaultWorktreeDirPlaceholder"), window, cx);
 			s.set_value(prefs.worktree_dir.clone(), window, cx);
@@ -382,6 +385,7 @@ impl AppView {
 				notes: profile.notes.clone(),
 				notes_status: NotesStatus::Saved,
 				pr: None,
+				pr_error: None,
 				avatar: self.backend.github_avatar(project_id),
 				config,
 			},
@@ -401,7 +405,16 @@ impl AppView {
 				.map(|e| (e.path, e.status))
 				.collect();
 			ws.git_included = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
-			ws.pr = self.backend.pr_status(&ws.worktree, Some(&ws.branch)).ok().flatten();
+			match self.backend.pr_status(&ws.worktree, Some(&ws.branch)) {
+				Ok(pr) => {
+					ws.pr = pr;
+					ws.pr_error = None;
+				}
+				Err(err) => {
+					ws.pr = None;
+					ws.pr_error = Some(err.to_string());
+				}
+			}
 			if ws.is_default {
 				if let Ok(branch) = self.backend.git_branch(&ws.worktree) {
 					ws.branch = branch;

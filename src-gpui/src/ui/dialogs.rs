@@ -337,6 +337,7 @@ fn dialog_body(
 											.danger()
 											.xsmall()
 											.label(app.t("delete"))
+											.tooltip(app.t("deleteTerminalTemplate"))
 											.on_click({
 												let view = view.clone();
 												move |_, _, cx| {

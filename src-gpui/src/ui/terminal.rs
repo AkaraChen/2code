@@ -211,7 +211,11 @@ pub fn render(
 						let view = view.clone();
 						Button::new(crate::ui::eid(format!("pty-link-{label}")))
 							.xsmall()
-							.label(label)
+							.label(label.clone())
+							.tooltip(match &token {
+								crate::detector::Clickable::Path(_) => app.t("terminalFilePathTooltip"),
+								crate::detector::Clickable::Url(_) => app.t("terminalOpenLink"),
+							})
 							.on_click(move |ev, window, cx| {
 								let token = token.clone();
 								let skip = ev.modifiers().platform || ev.modifiers().control;

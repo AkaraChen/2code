@@ -43,6 +43,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 	};
 	let worktree = ws.worktree.clone();
 	let pr = ws.pr.clone();
+	let pr_error = ws.pr_error.clone();
 	let collapsed = app.data.prefs.sidebar_collapsed;
 	let pad_left = if cfg!(target_os = "macos") && collapsed {
 		px(84.)
@@ -147,7 +148,11 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 		.child(
 			h_flex()
 				.gap_1()
-				.children(controls.into_iter().map(|id| topbar_control(app, &id, pr.as_ref(), cx)))
+				.children(
+					controls
+						.into_iter()
+						.map(|id| topbar_control(app, &id, pr.as_ref(), pr_error.as_deref(), cx)),
+				)
 				.child(
 					Button::new("project-settings")
 						.small()
@@ -277,6 +282,7 @@ fn topbar_control(
 	app: &AppView,
 	id: &str,
 	pr: Option<&model::project::GitPullRequestStatus>,
+	pr_error: Option<&str>,
 	cx: &mut Context<AppView>,
 ) -> impl IntoElement {
 	let view = cx.entity();
@@ -319,6 +325,7 @@ fn topbar_control(
 			.into_any_element(),
 		"pr-status" => {
 			let (label, tip) = match pr {
+				None if pr_error.is_some() => (app.t("topbarPrNoPr"), app.t("topbarPrCheckFailedDescription")),
 				None => (app.t("topbarPrNoPr"), app.t("topbarPrNoPrTooltip")),
 				Some(p) if p.is_draft => (
 					app.t("topbarPrDraft"),

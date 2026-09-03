@@ -72,7 +72,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					"| A | B |\n| --- | --- |\n|   |   |\n",
 					"",
 					&view,
-					&app.t("notesTableMenu"),
+					&app.t("notesInsertTable"),
 				))
 				.child(note_md("n-hr", "—", "---\n", "", &view, &app.t("notesInsertDivider"))),
 		)

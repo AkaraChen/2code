@@ -81,7 +81,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						"| A | B |\n| --- | --- |\n|   |   |\n",
 						"",
 						&view,
-						&app.t("notesTableMenu"),
+						&app.t("notesInsertTable"),
 					))
 					.child(md_btn("md-hr", "—", "---\n", "", &view, &app.t("notesInsertDivider")))
 					.child(
@@ -110,7 +110,9 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 							}),
 					),
 			)
-			.when(slash.starts_with('/'), |el| el.child(slash_menu(&slash, &view)))
+			.when(slash.starts_with('/'), |el| {
+				el.child(slash_menu(&slash, &view, app.data.locale))
+			})
 			.child(
 				h_flex()
 					.flex_1()
@@ -420,9 +422,9 @@ fn checkerboard() -> impl IntoElement {
 		}))
 }
 
-fn slash_menu(query: &str, view: &gpui::Entity<AppView>) -> impl IntoElement {
+fn slash_menu(query: &str, view: &gpui::Entity<AppView>, locale: crate::i18n::Locale) -> impl IntoElement {
 	let q = query.trim_start_matches('/').to_ascii_lowercase();
-	let items: [(&str, &str, &str); 8] = [
+	let items: [(&str, &str, &str); 9] = [
 		("h1", "# ", ""),
 		("h2", "## ", ""),
 		("h3", "### ", ""),
@@ -430,47 +432,55 @@ fn slash_menu(query: &str, view: &gpui::Entity<AppView>) -> impl IntoElement {
 		("quote", "> ", ""),
 		("code", "```\n", "\n```"),
 		("link", "[", "](url)"),
+		("table", "| A | B |\n| --- | --- |\n|   |   |\n", ""),
 		("hr", "---\n", ""),
 	];
-	h_flex()
+	v_flex()
 		.id("md-slash")
 		.px_2()
 		.py_1()
 		.gap_1()
 		.w(px(180.))
 		.max_h(px(280.))
-		.flex_wrap()
-		.children(
-			items
-				.into_iter()
-				.filter(|(name, _, _)| q.is_empty() || name.contains(&q))
-				.map(|(name, prefix, suffix)| {
-					let view = view.clone();
-					Button::new(crate::ui::eid(format!("slash-{name}")))
-						.ghost()
-						.xsmall()
-						.label(format!("/{name}"))
-						.on_click(move |_, window, cx| {
-							view.update(cx, |app, cx| {
-								let text = app.inputs.file_editor.read(cx).value().to_string();
-								let mut lines: Vec<&str> = text.lines().collect();
-								if let Some(last) = lines.last_mut() {
-									if last.starts_with('/') {
-										*last = "";
+		.child(
+			div()
+				.text_xs()
+				.text_color(gpui::hsla(0., 0., 0.5, 1.))
+				.child(crate::i18n::t(locale, "notesCommandMenu")),
+		)
+		.child(
+			h_flex().gap_1().flex_wrap().children(
+				items
+					.into_iter()
+					.filter(|(name, _, _)| q.is_empty() || name.contains(&q))
+					.map(|(name, prefix, suffix)| {
+						let view = view.clone();
+						Button::new(crate::ui::eid(format!("slash-{name}")))
+							.ghost()
+							.xsmall()
+							.label(format!("/{name}"))
+							.on_click(move |_, window, cx| {
+								view.update(cx, |app, cx| {
+									let text = app.inputs.file_editor.read(cx).value().to_string();
+									let mut lines: Vec<&str> = text.lines().collect();
+									if let Some(last) = lines.last_mut() {
+										if last.starts_with('/') {
+											*last = "";
+										}
 									}
-								}
-								let mut next = lines.join("\n");
-								if !next.is_empty() && !next.ends_with('\n') {
-									next.push('\n');
-								}
-								next.push_str(prefix);
-								next.push_str(suffix);
-								app.inputs.file_editor.update(cx, |s, cx| {
-									s.set_value(next, window, cx);
+									let mut next = lines.join("\n");
+									if !next.is_empty() && !next.ends_with('\n') {
+										next.push('\n');
+									}
+									next.push_str(prefix);
+									next.push_str(suffix);
+									app.inputs.file_editor.update(cx, |s, cx| {
+										s.set_value(next, window, cx);
+									});
 								});
-							});
-						})
-				}),
+							})
+					}),
+			),
 		)
 }
 
