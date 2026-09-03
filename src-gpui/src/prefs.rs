@@ -116,12 +116,7 @@ impl Default for Prefs {
 			custom_shell: String::new(),
 			notifications: true,
 			notification_sound: String::new(),
-			topbar_controls: vec![
-				"github-desktop".into(),
-				"editor".into(),
-				"terminal".into(),
-				"pr-status".into(),
-			],
+			topbar_controls: default_topbar_controls(),
 			editor_app: "code".into(),
 			terminal_app: String::new(),
 			accept_beta: false,
@@ -157,6 +152,25 @@ impl Prefs {
 		}
 		crate::backend::default_shell()
 	}
+}
+
+pub fn default_topbar_controls() -> Vec<String> {
+	vec![
+		"github-desktop".into(),
+		"editor".into(),
+		"terminal".into(),
+		"pr-status".into(),
+	]
+}
+
+pub fn move_topbar_control(controls: &mut Vec<String>, id: &str, to: usize) {
+	if let Some(from) = controls.iter().position(|item| item == id) {
+		let item = controls.remove(from);
+		let to = to.min(controls.len());
+		controls.insert(to, item);
+		return;
+	}
+	controls.insert(to.min(controls.len()), id.to_string());
 }
 
 pub fn upsert_template(
@@ -215,6 +229,27 @@ mod tests {
 		assert_eq!(templates[0].shell, "/bin/bash");
 		assert_eq!(templates[0].cwd, "apps/web");
 		assert_eq!(templates[0].commands, vec!["pnpm dev".to_string()]);
+	}
+
+	#[test]
+	fn topbar_defaults_and_drag_move() {
+		assert_eq!(
+			default_topbar_controls(),
+			vec![
+				"github-desktop".to_string(),
+				"editor".to_string(),
+				"terminal".to_string(),
+				"pr-status".to_string()
+			]
+		);
+		let mut controls = default_topbar_controls();
+		move_topbar_control(&mut controls, "pr-status", 0);
+		assert_eq!(controls[0], "pr-status");
+		move_topbar_control(&mut controls, "editor", 3);
+		assert_eq!(controls.last().map(String::as_str), Some("editor"));
+		controls.retain(|id| id != "terminal");
+		move_topbar_control(&mut controls, "terminal", 1);
+		assert_eq!(controls[1], "terminal");
 	}
 
 	#[test]

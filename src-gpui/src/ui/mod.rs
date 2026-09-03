@@ -13,6 +13,11 @@ pub struct TreeDrag {
 	pub path: String,
 }
 
+#[derive(Clone)]
+pub struct TopbarDrag {
+	pub id: String,
+}
+
 impl gpui::Render for DragGhost {
 	fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
 		div().px_2().py_1().rounded_md().opacity(0.45).child(self.label.clone())

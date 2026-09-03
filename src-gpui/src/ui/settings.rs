@@ -1,6 +1,8 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
+
 use gpui::{
-	div, point, prelude::*, px, size, App, Bounds, Context, SharedString, Window, WindowBounds,
-	WindowOptions,
+	div, img, point, prelude::*, px, size, App, Bounds, Context, Image, ImageFormat, SharedString,
+	Window, WindowBounds, WindowOptions,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Disableable, Selectable};
@@ -914,6 +916,33 @@ impl SettingsView {
 						.rounded_md()
 						.border_1()
 						.border_color(cx.theme().border)
+						.child(
+							div()
+								.text_xs()
+								.text_color(cx.theme().muted_foreground)
+								.child("⠿"),
+						)
+						.on_drag(
+							crate::ui::TopbarDrag { id: id.clone() },
+							|info, _, _, cx| {
+								cx.new(|_| crate::ui::DragGhost {
+									label: info.id.clone(),
+								})
+							},
+						)
+						.on_drop({
+							let view = view.clone();
+							let target = id.clone();
+							move |drag: &crate::ui::TopbarDrag, _, cx| {
+								view.update(cx, |this, cx| {
+									if let Some(to) = this.prefs.topbar_controls.iter().position(|x| x == &target) {
+										crate::prefs::move_topbar_control(&mut this.prefs.topbar_controls, &drag.id, to);
+										this.persist(cx);
+										cx.notify();
+									}
+								});
+							}
+						})
 						.child(div().flex_1().child(match id.as_str() {
 							"github-desktop" => self.t("topbarGithubDesktop"),
 							"editor" => self.t("topbarEditor"),
@@ -968,7 +997,25 @@ impl SettingsView {
 				)
 			})
 			.child(div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDragHint")))
-			.child(div().font_semibold().child(self.t("topbarAvailable")))
+			.child(
+				v_flex()
+					.id("tb-available-drop")
+					.gap_2()
+					.w_full()
+					.min_h(px(40.))
+					.rounded_md()
+					.on_drop({
+						let view = view.clone();
+						move |drag: &crate::ui::TopbarDrag, _, cx| {
+							view.update(cx, |this, cx| {
+								this.prefs.topbar_controls.retain(|x| x != &drag.id);
+								this.persist(cx);
+								cx.notify();
+							});
+						}
+					})
+					.child(div().font_semibold().child(self.t("topbarAvailable"))),
+			)
 			.when(all.iter().all(|id| self.prefs.topbar_controls.iter().any(|x| x == *id)), |el| {
 				el.child(
 					div()
@@ -1074,12 +1121,7 @@ impl SettingsView {
 						let view = view.clone();
 						move |_, _, cx| {
 							view.update(cx, |this, cx| {
-								this.prefs.topbar_controls = vec![
-									"github-desktop".into(),
-									"editor".into(),
-									"terminal".into(),
-									"pr-status".into(),
-								];
+								this.prefs.topbar_controls = crate::prefs::default_topbar_controls();
 								this.persist(cx);
 								cx.notify();
 							});
@@ -1093,8 +1135,32 @@ impl SettingsView {
 		v_flex()
 			.gap_3()
 			.max_w(px(480.))
-			.child(div().text_xl().font_semibold().child("2Code"))
-			.child(div().text_sm().child(self.t("aboutAppDescription")))
+			.child(
+				h_flex()
+					.gap_5()
+					.items_center()
+					.child(
+						img(std::sync::Arc::new(Image::from_bytes(
+							ImageFormat::Png,
+							include_bytes!("../../assets/app-icon.png").to_vec(),
+						)))
+						.id("about-app-icon")
+						.size(px(80.))
+						.rounded_lg(),
+					)
+					.child(
+						v_flex()
+							.gap_1()
+							.min_w_0()
+							.child(div().text_xl().font_semibold().child("2Code"))
+							.child(
+								div()
+									.text_sm()
+									.text_color(cx.theme().muted_foreground)
+									.child(self.t("aboutAppDescription")),
+							),
+					),
+			)
 			.child(
 				Button::new("ver")
 					.label(crate::i18n::tf(
@@ -1124,8 +1190,27 @@ impl SettingsView {
 					}),
 			)
 			.child(div().font_semibold().child(self.t("contributors")))
-			.child(div().text_sm().child("AkaraChen"))
-			.child(div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("primaryContributorDescription")))
+			.child(
+				h_flex()
+					.gap_2()
+					.items_center()
+					.child(
+						img("https://github.com/AkaraChen.png?size=96")
+							.id("about-maintainer-avatar")
+							.size(px(32.))
+							.rounded_full(),
+					)
+					.child(
+						v_flex()
+							.child(div().text_sm().child("AkaraChen"))
+							.child(
+								div()
+									.text_xs()
+									.text_color(cx.theme().muted_foreground)
+									.child(self.t("primaryContributorDescription")),
+							),
+					),
+			)
 			.child(
 				h_flex()
 					.gap_2()

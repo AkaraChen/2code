@@ -749,6 +749,7 @@ impl AppView {
 	}
 
 	pub fn tick(&mut self, cx: &mut Context<Self>) {
+		let started = std::time::Instant::now();
 		self.data.expire_toasts();
 		let ids: Vec<(String, String)> = self
 			.data
@@ -788,6 +789,12 @@ impl AppView {
 		self.drain_debug_logs();
 		self.autosave_notes(cx);
 		self.sync_file_draft(cx);
+		if self.data.prefs.performance_profile {
+			let tick_ms = started.elapsed().as_millis();
+			if tick_ms >= 8 {
+				tracing::info!(target: "perf", tick_ms, "ui tick");
+			}
+		}
 	}
 
 	fn drain_debug_logs(&mut self) {

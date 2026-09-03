@@ -246,6 +246,7 @@ fn kind_name(kind: AgentKind) -> &'static str {
 		AgentKind::Pi => "pi",
 		AgentKind::Qoder => "qodercli",
 		AgentKind::Agy => "agy",
+		AgentKind::OpenClaw => "openclaw",
 		AgentKind::Other | AgentKind::Unknown => "",
 	}
 }

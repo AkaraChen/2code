@@ -1,4 +1,6 @@
-use gpui::{div, img, prelude::*, px, Context, KeyDownEvent, MouseButton, Window};
+use std::time::Duration;
+
+use gpui::{div, img, prelude::*, px, Animation, AnimationExt, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use gpui_component::{Disableable, Selectable};
@@ -913,12 +915,20 @@ pub fn agent_dot(status: AgentStatus) -> impl IntoElement {
 		AgentStatus::Completed => (gpui::rgb(0x22c55e), false),
 		AgentStatus::Idle => (gpui::rgb(0x000000), false),
 	};
-	div()
-		.size(px(8.))
-		.rounded_full()
-		.bg(color)
-		.when(pulse, |el| el.opacity(0.85))
+	let dot = div().size(px(8.)).rounded_full().bg(color);
+	if pulse {
+		dot.with_animation(
+			"agent-dot-running",
+			Animation::new(Duration::from_millis(1400)).repeat(),
+			|this, delta| {
+				let t = (delta * std::f32::consts::PI).sin().abs();
+				this.opacity(1.0 - 0.28 * t)
+			},
+		)
 		.into_any_element()
+	} else {
+		dot.into_any_element()
+	}
 }
 
 #[allow(dead_code)]

@@ -497,12 +497,12 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			);
 			Tab::new()
 				.label(term.title.clone())
-				.icon(IconName::SquareTerminal)
+				.prefix(terminal_tab_icon(&term.title, term.agent_kind))
+				.max_w(px(224.))
 				.selected(selected)
 				.suffix(
 					h_flex()
 						.gap_1()
-						.child(agent_kind_mark(term.agent_kind))
 						.when(show_live, |el| el.child(sidebar::agent_dot(term.agent)))
 						.when(show_completed, |el| {
 							let view = view.clone();
@@ -580,6 +580,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			Tab::new()
 				.label(file.title.clone())
 				.icon(crate::ui::file_icons::file_icon(&file.path, false, false))
+				.max_w(px(224.))
 				.selected(selected)
 				.suffix(
 					h_flex()
@@ -689,6 +690,13 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>, force_split:
 	}
 }
 
+fn terminal_tab_icon(title: &str, detected: AgentKind) -> impl IntoElement {
+	match AgentKind::tab_icon_kind(title, detected) {
+		AgentKind::Unknown => Icon::new(IconName::SquareTerminal).w(px(14.)).into_any_element(),
+		kind => agent_kind_mark(kind).into_any_element(),
+	}
+}
+
 fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 	let (label, color) = match kind {
 		AgentKind::Claude => ("C", gpui::rgb(0xd97757)),
@@ -709,8 +717,9 @@ fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 		AgentKind::Pi => ("π", gpui::rgb(0x64748b)),
 		AgentKind::Qoder => ("Q", gpui::rgb(0x6366f1)),
 		AgentKind::Agy => ("Y", gpui::rgb(0xec4899)),
+		AgentKind::OpenClaw => ("C", gpui::rgb(0x334155)),
 		AgentKind::Other => ("•", gpui::rgb(0x9ca3af)),
-		AgentKind::Unknown => return div().into_any_element(),
+		AgentKind::Unknown => return Icon::new(IconName::SquareTerminal).w(px(14.)).into_any_element(),
 	};
 	div()
 		.size(px(14.))

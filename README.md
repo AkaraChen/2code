@@ -79,7 +79,7 @@ bun run legacy:tauri:dev
 cd src-gpui && cargo build --release
 ```
 
-Release CI builds GPUI binaries (`2code`) for Linux, macOS, and Windows. The leftover Tauri bundle is `bun run legacy:tauri:build`.
+Tagged releases publish GPUI binaries (`2code-linux-x64`, `2code-macos-arm64`, `2code-windows-x64.exe`). The leftover Tauri bundle is only `bun run legacy:tauri:build`.
 
 ## Useful Commands
 

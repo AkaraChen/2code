@@ -83,6 +83,7 @@ pub enum AgentKind {
 	Pi,
 	Qoder,
 	Agy,
+	OpenClaw,
 	Other,
 }
 
@@ -107,8 +108,29 @@ impl AgentKind {
 			Self::Pi => "Pi",
 			Self::Qoder => "Qoder",
 			Self::Agy => "Agy",
+			Self::OpenClaw => "OpenClaw",
 			Self::Other | Self::Unknown => "Agent",
 		}
+	}
+
+	/// Inventory §9.1: tab icons come from the title keywords, then the detector.
+	pub fn from_tab_title(title: &str) -> Option<Self> {
+		let lower = title.to_ascii_lowercase();
+		const KEYS: &[(&str, AgentKind)] = &[
+			("openclaw", AgentKind::OpenClaw),
+			("opencode", AgentKind::OpenCode),
+			("claude", AgentKind::Claude),
+			("codex", AgentKind::Codex),
+			("gemini", AgentKind::Gemini),
+			("kimi", AgentKind::Kimi),
+			("cline", AgentKind::Cline),
+			("qoder", AgentKind::Qoder),
+		];
+		KEYS.iter().find(|(key, _)| lower.contains(key)).map(|(_, kind)| *kind)
+	}
+
+	pub fn tab_icon_kind(title: &str, detected: Self) -> Self {
+		Self::from_tab_title(title).unwrap_or(detected)
 	}
 }
 
@@ -655,5 +677,20 @@ mod tests {
 		assert_eq!(plain.ttl_secs(), 5);
 		assert!(update.alive());
 		assert!(plain.alive());
+	}
+
+	#[test]
+	fn terminal_tab_icon_follows_title_keywords() {
+		assert_eq!(AgentKind::from_tab_title("claude --resume"), Some(AgentKind::Claude));
+		assert_eq!(AgentKind::from_tab_title("Codex"), Some(AgentKind::Codex));
+		assert_eq!(AgentKind::from_tab_title("gemini-cli"), Some(AgentKind::Gemini));
+		assert_eq!(AgentKind::from_tab_title("kimi"), Some(AgentKind::Kimi));
+		assert_eq!(AgentKind::from_tab_title("cline agent"), Some(AgentKind::Cline));
+		assert_eq!(AgentKind::from_tab_title("openclaw"), Some(AgentKind::OpenClaw));
+		assert_eq!(AgentKind::from_tab_title("opencode"), Some(AgentKind::OpenCode));
+		assert_eq!(AgentKind::from_tab_title("qoder"), Some(AgentKind::Qoder));
+		assert_eq!(AgentKind::from_tab_title("zsh"), None);
+		assert_eq!(AgentKind::tab_icon_kind("zsh", AgentKind::Cursor), AgentKind::Cursor);
+		assert_eq!(AgentKind::tab_icon_kind("claude", AgentKind::Codex), AgentKind::Claude);
 	}
 }

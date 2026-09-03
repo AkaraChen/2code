@@ -237,12 +237,14 @@ fn platform_latest_key() -> &'static str {
 }
 
 fn platform_asset_needle() -> &'static [&'static str] {
-	if cfg!(target_os = "macos") {
-		&["dmg", "darwin", "macos", "app.tar.gz"]
+	if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+		&["macos-arm64", "darwin-aarch64", "dmg", "darwin", "macos"]
+	} else if cfg!(target_os = "macos") {
+		&["macos-x64", "darwin-x86", "dmg", "darwin", "macos"]
 	} else if cfg!(target_os = "windows") {
-		&["msi", "exe", "windows"]
+		&["windows-x64", "windows", "msi", "exe"]
 	} else {
-		&["appimage", "deb", "rpm", "linux"]
+		&["linux-x64", "linux", "appimage", "deb", "rpm"]
 	}
 }
 
@@ -289,5 +291,17 @@ mod tests {
 			Some("2026-04-09")
 		);
 		assert_eq!(format_release_date("not-a-date"), None);
+	}
+
+	#[test]
+	fn gpui_release_asset_names_match_platform() {
+		let names = platform_asset_needle();
+		if cfg!(target_os = "linux") {
+			assert!(names.iter().any(|n| *n == "linux-x64"));
+		} else if cfg!(target_os = "windows") {
+			assert!(names.iter().any(|n| *n == "windows-x64"));
+		} else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+			assert!(names.iter().any(|n| *n == "macos-arm64"));
+		}
 	}
 }
