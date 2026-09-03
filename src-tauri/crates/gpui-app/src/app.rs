@@ -6,7 +6,7 @@ use gpui::{
 	prelude::FluentBuilder, px,
 };
 use gpui_component::{
-	ActiveTheme, Theme, ThemeMode, TitleBar, WindowExt, h_flex, input::InputState,
+	ActiveTheme, StyledExt, Theme, ThemeMode, WindowExt, h_flex, input::InputState,
 	v_flex,
 };
 
@@ -970,8 +970,15 @@ impl Render for AppRoot {
 			.bg(cx.theme().background)
 			.text_color(cx.theme().foreground)
 			.child(
-				TitleBar::new()
-					.child("2code")
+				h_flex()
+					.flex_none()
+					.h(px(36.))
+					.px_3()
+					.gap_2()
+					.items_center()
+					.border_b_1()
+					.border_color(cx.theme().border)
+					.child(div().text_sm().font_semibold().child("2code"))
 					.child(div().text_xs().text_color(cx.theme().muted_foreground).child(
 						match &self.route {
 							Route::Home => "Home".to_string(),
@@ -1025,17 +1032,24 @@ impl Render for AppRoot {
 										.child(error),
 								)
 							})
-							.child(match self.route {
-								Route::Home => {
-									self.render_home(window, cx).into_any_element()
-								}
-								Route::Settings => {
-									self.render_settings(window, cx).into_any_element()
-								}
-								Route::Workspace { .. } => {
-									self.render_workspace(window, cx).into_any_element()
-								}
-							}),
+							.child(
+								div()
+									.id("route")
+									.flex_1()
+									.min_h_0()
+									.min_w_0()
+									.child(match self.route {
+										Route::Home => {
+											self.render_home(window, cx).into_any_element()
+										}
+										Route::Settings => {
+											self.render_settings(window, cx).into_any_element()
+										}
+										Route::Workspace { .. } => {
+											self.render_workspace(window, cx).into_any_element()
+										}
+									}),
+							),
 					),
 			)
 			.child(

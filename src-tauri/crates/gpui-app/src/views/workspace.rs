@@ -47,11 +47,14 @@ impl AppRoot {
 			.unwrap_or_else(|| self.t("No PR", "无 PR").to_string());
 
 		v_flex()
-			.size_full()
+			.flex_1()
+			.min_h_0()
+			.w_full()
 			.child(
 				h_flex()
 					.flex_none()
 					.h(px(40.))
+					.min_h(px(40.))
 					.px_3()
 					.gap_2()
 					.items_center()
@@ -144,6 +147,7 @@ impl AppRoot {
 				h_flex()
 					.flex_none()
 					.h(px(36.))
+					.min_h(px(36.))
 					.px_2()
 					.gap_1()
 					.items_center()

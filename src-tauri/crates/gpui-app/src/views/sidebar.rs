@@ -11,7 +11,7 @@ use gpui_component::{
 	v_flex,
 };
 
-use crate::app::{AppRoot, Route};
+use crate::app::{AppRoot, Route, WorkspacePane};
 use crate::theme::TwoCodePalette;
 
 impl AppRoot {
@@ -108,6 +108,48 @@ impl AppRoot {
 				v_flex()
 					.w_full()
 					.gap_1()
+					.when(matches!(route, Route::Workspace { .. }), |this| {
+						this.child(
+							v_flex()
+								.w_full()
+								.gap_1()
+								.child(
+									Button::new("side-files")
+										.ghost()
+										.icon(IconName::File)
+										.label("Files")
+										.selected(self.workspace_pane == WorkspacePane::Files)
+										.on_click(cx.listener(|this, _, _, cx| {
+											this.set_workspace_pane(WorkspacePane::Files, cx);
+										})),
+								)
+								.child(
+									Button::new("side-git")
+										.ghost()
+										.icon(IconName::Folder)
+										.label("Git")
+										.selected(self.workspace_pane == WorkspacePane::Git)
+										.on_click(cx.listener(|this, _, _, cx| {
+											this.set_workspace_pane(WorkspacePane::Git, cx);
+										})),
+								)
+								.child(
+									Button::new("side-terminal")
+										.ghost()
+										.icon(IconName::SquareTerminal)
+										.label("Terminal")
+										.selected(
+											self.workspace_pane == WorkspacePane::Terminal,
+										)
+										.on_click(cx.listener(|this, _, _, cx| {
+											this.set_workspace_pane(
+												WorkspacePane::Terminal,
+												cx,
+											);
+										})),
+								),
+						)
+					})
 					.child(
 						Button::new("new-project")
 							.ghost()
