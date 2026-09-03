@@ -113,9 +113,8 @@ impl AppRoot {
 							.ghost()
 							.icon(IconName::Plus)
 							.label("New Project")
-							.on_click(cx.listener(|this, _, _, cx| {
-								this.show_create_project = true;
-								cx.notify();
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_create_project_dialog(window, cx);
 							})),
 					)
 					.child(
@@ -126,6 +125,15 @@ impl AppRoot {
 							.selected(matches!(route, Route::Settings))
 							.on_click(cx.listener(|this, _, _, cx| {
 								this.open_settings(cx);
+							})),
+					)
+					.child(
+						Button::new("open-commands")
+							.ghost()
+							.icon(IconName::Info)
+							.label("Commands")
+							.on_click(cx.listener(|this, _, window, cx| {
+								this.open_command_palette(window, cx);
 							})),
 					),
 			)

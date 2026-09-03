@@ -38,9 +38,9 @@ impl AppRoot {
 						};
 						cx.notify();
 					}))
-					.child(Tab::new().icon(IconName::Settings).label("General"))
-					.child(Tab::new().icon(IconName::SquareTerminal).label("Terminal"))
-					.child(Tab::new().icon(IconName::Info).label("About")),
+					.child(Tab::new().icon(IconName::Settings).label(self.t("General", "通用")))
+					.child(Tab::new().icon(IconName::SquareTerminal).label(self.t("Terminal", "终端")))
+					.child(Tab::new().icon(IconName::Info).label(self.t("About", "关于"))),
 			)
 			.child(match tab {
 				SettingsTab::General => self

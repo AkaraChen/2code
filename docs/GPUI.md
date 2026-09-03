@@ -27,8 +27,9 @@ cd src-tauri && cargo run -p gpui-app
 
 ## Surfaces
 
-- Home empty state
+- Home empty state and project cards
 - Project sidebar with profiles
-- Workspace top bar, file list, Git stats/diff, PTY terminal
-- Settings (language, theme, debug, terminal font)
-- Create project / create profile / delete project dialogs
+- Workspace panes via native `TabBar`: Files (preview + markdown `TextView`), Git (Changes / History), Terminal tabs + PTY
+- Settings (language, theme, debug, terminal font) via `Switch` / `TabBar`
+- Native `Dialog` / `AlertDialog` for create project, create profile, delete, and command palette
+- Tokens from `src/app.css` are applied onto the gpui-component `Theme`

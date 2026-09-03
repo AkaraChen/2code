@@ -75,6 +75,50 @@ impl TwoCodePalette {
 	pub fn background_hsla(&self) -> Hsla {
 		self.background.into()
 	}
+
+	/// Paint these tokens onto the active gpui-component theme.
+	pub fn apply(&self, cx: &mut gpui::App) {
+		use gpui::px;
+		use gpui_component::Theme;
+
+		let theme = Theme::global_mut(cx);
+		theme.colors.background = self.background.into();
+		theme.colors.foreground = self.foreground.into();
+		theme.colors.muted = self.muted.into();
+		theme.colors.muted_foreground = self.muted_foreground.into();
+		theme.colors.border = self.border.into();
+		theme.colors.primary = self.primary.into();
+		theme.colors.primary_foreground = self.primary_foreground.into();
+		theme.colors.primary_hover = self.primary.into();
+		theme.colors.primary_active = self.primary.into();
+		theme.colors.button_primary = self.primary.into();
+		theme.colors.button_primary_foreground = self.primary_foreground.into();
+		theme.colors.secondary = self.muted.into();
+		theme.colors.secondary_foreground = self.foreground.into();
+		theme.colors.popover = self.card.into();
+		theme.colors.popover_foreground = self.foreground.into();
+		theme.colors.list = self.background.into();
+		theme.colors.list_hover = self.muted.into();
+		theme.colors.list_active = self.muted.into();
+		theme.colors.tab = self.background.into();
+		theme.colors.tab_bar = self.background.into();
+		theme.colors.tab_active = self.muted.into();
+		theme.colors.tab_active_foreground = self.foreground.into();
+		theme.colors.tab_foreground = self.muted_foreground.into();
+		theme.colors.sidebar = self.sidebar.into();
+		theme.colors.sidebar_foreground = self.sidebar_foreground.into();
+		theme.colors.sidebar_accent = self.sidebar_accent.into();
+		theme.colors.sidebar_accent_foreground = self.sidebar_foreground.into();
+		theme.colors.sidebar_border = self.border.into();
+		theme.colors.sidebar_primary = self.primary.into();
+		theme.colors.sidebar_primary_foreground = self.primary_foreground.into();
+		theme.colors.title_bar = self.background.into();
+		theme.colors.title_bar_border = self.border.into();
+		theme.colors.input = self.border.into();
+		theme.radius = px(Self::RADIUS);
+		theme.radius_lg = px(Self::RADIUS);
+		Theme::sync_base(cx);
+	}
 }
 
 #[cfg(test)]

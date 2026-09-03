@@ -1,5 +1,6 @@
 mod app;
 mod backend;
+mod i18n;
 mod settings;
 mod theme;
 mod views;
@@ -30,13 +31,16 @@ fn main() {
 				origin: point(px(80.), px(80.)),
 				size: size(px(1280.), px(800.)),
 			};
+			let mut titlebar = TitleBar::title_bar_options();
+			titlebar.title = Some("2code".into());
 			cx.open_window(
 				WindowOptions {
 					window_bounds: Some(WindowBounds::Windowed(bounds)),
-					titlebar: Some(TitleBar::title_bar_options()),
+					titlebar: Some(titlebar),
 					..Default::default()
 				},
 				|window, cx| {
+					window.set_window_title("2code");
 					let view = cx.new(|cx| AppRoot::new(window, cx));
 					cx.new(|cx| Root::new(view, window, cx).bg(cx.theme().background))
 				},

@@ -1,159 +1,229 @@
 use gpui::{
-	Context, IntoElement, ParentElement, Styled, Window, div, prelude::FluentBuilder,
-	px,
+	Context, ParentElement, Styled, Window, div, px,
 };
 use gpui_component::{
-	ActiveTheme, StyledExt,
-	button::{Button, ButtonVariants},
+	ActiveTheme, WindowExt,
+	button::{Button, ButtonVariant, ButtonVariants},
+	dialog::DialogButtonProps,
 	h_flex, input::Input, v_flex,
 };
 
 use crate::app::AppRoot;
 
 impl AppRoot {
-	pub(crate) fn render_dialogs(
+	pub(crate) fn open_create_project_dialog(
 		&mut self,
-		_window: &mut Window,
+		window: &mut Window,
 		cx: &mut Context<Self>,
-	) -> impl IntoElement {
-		let show_create = self.show_create_project;
-		let show_profile = self.show_create_profile;
-		let show_delete = self.show_delete_project.clone();
+	) {
 		let name = self.create_name.clone();
 		let folder = self.create_folder.clone();
-		let branch = self.profile_branch.clone();
-
-		div().absolute().inset_0().when(
-			show_create || show_profile || show_delete.is_some(),
-			|this| {
-				this.flex()
-					.items_center()
-					.justify_center()
-					.bg(gpui::rgba(0x00000066))
-					.child(if show_create {
-						self.dialog_card(
-							"Create Project",
-							"Choose a folder first. 2code will use that folder as the project root.",
-							v_flex()
-								.gap_3()
-								.child(Input::new(&name).cleanable(true))
-								.child(Input::new(&folder).cleanable(true))
+		let view = cx.entity();
+		window.open_dialog(cx, move |dialog, _, cx| {
+			dialog
+				.title("Create Project")
+				.width(px(448.))
+				.child(
+					v_flex()
+						.gap_3()
+						.child(
+							div()
+								.text_sm()
+								.text_color(cx.theme().muted_foreground)
 								.child(
-									h_flex()
-										.gap_2()
-										.child(
-											Button::new("pick-folder")
-												.ghost()
-												.label("Choose Folder")
-												.on_click(cx.listener(|this, _, window, cx| {
-													this.pick_folder(window, cx);
-												})),
-										)
-										.child(
-											Button::new("cancel-create")
-												.ghost()
-												.label("Cancel")
-												.on_click(cx.listener(|this, _, _, cx| {
-													this.show_create_project = false;
-													cx.notify();
-												})),
-										)
-										.child(
-											Button::new("confirm-create")
-												.primary()
-												.label("Create")
-												.on_click(cx.listener(|this, _, window, cx| {
-													this.submit_create_project(window, cx);
-												})),
-										),
+									"Choose a folder first. 2code will use that folder as the project root.",
 								),
-							cx,
 						)
-						.into_any_element()
-					} else if show_profile {
-						self.dialog_card(
-							"New Profile",
-							"Leave the branch empty to auto-generate a worktree lane.",
-							v_flex()
-								.gap_3()
-								.child(Input::new(&branch).cleanable(true))
-								.child(
-									h_flex()
-										.gap_2()
-										.child(
-											Button::new("cancel-profile")
-												.ghost()
-												.label("Cancel")
-												.on_click(cx.listener(|this, _, _, cx| {
-													this.show_create_profile = false;
-													cx.notify();
-												})),
-										)
-										.child(
-											Button::new("confirm-profile")
-												.primary()
-												.label("Create")
-												.on_click(cx.listener(|this, _, window, cx| {
-													this.submit_create_profile(window, cx);
-												})),
-										),
-								),
-							cx,
-						)
-						.into_any_element()
-					} else {
-						self.dialog_card(
-							"Delete Project",
-							"Are you sure you want to delete this project? This action cannot be undone.",
-							h_flex()
-								.gap_2()
-								.child(
-									Button::new("cancel-delete")
-										.ghost()
-										.label("Cancel")
-										.on_click(cx.listener(|this, _, _, cx| {
-											this.show_delete_project = None;
-											cx.notify();
-										})),
-								)
-								.child(
-									Button::new("confirm-delete")
-										.danger()
-										.label("Delete")
-										.on_click(cx.listener(|this, _, _, cx| {
-											this.confirm_delete_project(cx);
-										})),
-								),
-							cx,
-						)
-						.into_any_element()
-					})
-			},
-		)
+						.child(Input::new(&name).cleanable(true))
+						.child(Input::new(&folder).cleanable(true))
+						.child(
+							Button::new("pick-folder")
+								.ghost()
+								.label("Choose Folder")
+								.on_click({
+									let view = view.clone();
+									move |_, window, cx| {
+										view.update(cx, |this, cx| {
+											this.pick_folder(window, cx);
+										});
+									}
+								}),
+						),
+				)
+				.button_props(
+					DialogButtonProps::default()
+						.ok_text("Create")
+						.cancel_text("Cancel")
+						.show_cancel(true),
+				)
+				.on_ok({
+					let view = view.clone();
+					move |_, window, cx| {
+						view.update(cx, |this, cx| {
+							this.submit_create_project(window, cx);
+						});
+						true
+					}
+				})
+		});
 	}
 
-	fn dialog_card(
-		&self,
-		title: &'static str,
-		description: &'static str,
-		body: impl IntoElement,
+	pub(crate) fn open_create_profile_dialog(
+		&mut self,
+		window: &mut Window,
 		cx: &mut Context<Self>,
-	) -> impl IntoElement {
-		v_flex()
-			.w(px(420.))
-			.p_5()
-			.gap_3()
-			.rounded(px(10.))
-			.border_1()
-			.border_color(cx.theme().border)
-			.bg(cx.theme().background)
-			.child(div().text_sm().font_semibold().child(title))
-			.child(
-				div()
-					.text_sm()
-					.text_color(cx.theme().muted_foreground)
-					.child(description),
-			)
-			.child(body)
+	) {
+		let branch = self.profile_branch.clone();
+		let view = cx.entity();
+		window.open_dialog(cx, move |dialog, _, cx| {
+			dialog
+				.title("New Profile")
+				.width(px(420.))
+				.child(
+					v_flex()
+						.gap_3()
+						.child(
+							div()
+								.text_sm()
+								.text_color(cx.theme().muted_foreground)
+								.child(
+									"Leave the branch empty to auto-generate a worktree lane.",
+								),
+						)
+						.child(Input::new(&branch).cleanable(true)),
+				)
+				.button_props(
+					DialogButtonProps::default()
+						.ok_text("Create")
+						.cancel_text("Cancel")
+						.show_cancel(true),
+				)
+				.on_ok({
+					let view = view.clone();
+					move |_, window, cx| {
+						view.update(cx, |this, cx| {
+							this.submit_create_profile(window, cx);
+						});
+						true
+					}
+				})
+		});
 	}
+
+	pub(crate) fn open_delete_project_dialog(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let Some(project_id) = self
+			.current_project()
+			.map(|project| project.id.clone())
+		else {
+			return;
+		};
+		let view = cx.entity();
+		window.open_alert_dialog(cx, move |alert, _, _| {
+			alert
+				.title("Delete Project")
+				.description(
+					"Are you sure you want to delete this project? This action cannot be undone.",
+				)
+				.show_cancel(true)
+				.button_props(
+					DialogButtonProps::default()
+						.ok_text("Delete")
+						.ok_variant(ButtonVariant::Danger)
+						.cancel_text("Cancel")
+						.show_cancel(true),
+				)
+				.on_ok({
+					let view = view.clone();
+					let project_id = project_id.clone();
+					move |_, _, cx| {
+						view.update(cx, |this, cx| {
+							this.confirm_delete_project(&project_id, cx);
+						});
+						true
+					}
+				})
+		});
+	}
+
+	pub(crate) fn open_command_palette(
+		&mut self,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let view = cx.entity();
+		window.open_dialog(cx, move |dialog, _, _| {
+			dialog
+				.title("Command Palette")
+				.width(px(420.))
+				.child(
+					v_flex()
+						.gap_2()
+						.child(palette_action("cmd-home", "Go Home", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| this.open_home(cx));
+							}
+						}))
+						.child(palette_action("cmd-settings", "Open Settings", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| this.open_settings(cx));
+							}
+						}))
+						.child(palette_action("cmd-new-project", "New Project", {
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |this, cx| {
+									this.open_create_project_dialog(window, cx);
+								});
+							}
+						}))
+						.child(palette_action("cmd-new-profile", "New Profile", {
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |this, cx| {
+									this.open_create_profile_dialog(window, cx);
+								});
+							}
+						}))
+						.child(palette_action("cmd-new-terminal", "New Terminal", {
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |this, cx| this.new_terminal(cx));
+							}
+						}))
+						.child(palette_action("cmd-theme", "Toggle Theme", {
+							let view = view.clone();
+							move |_, window, cx| {
+								view.update(cx, |this, cx| {
+									let next = if this.settings.is_dark(false) {
+										"light"
+									} else {
+										"dark"
+									};
+									this.set_theme_mode(next, window, cx);
+								});
+							}
+						})),
+				)
+				.button_props(DialogButtonProps::default().ok_text("Close"))
+		});
+	}
+}
+
+fn palette_action(
+	id: &'static str,
+	label: &'static str,
+	on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> impl gpui::IntoElement {
+	h_flex().child(
+		Button::new(id)
+			.ghost()
+			.label(label)
+			.on_click(on_click),
+	)
 }

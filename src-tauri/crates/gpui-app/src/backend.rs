@@ -259,20 +259,41 @@ impl Backend {
 		service::project::get_diff(&mut conn, profile_id).unwrap_or_default()
 	}
 
-	#[allow(dead_code)]
 	pub fn git_log(&self, profile_id: &str) -> Vec<GitCommit> {
 		let Ok(mut conn) = self.db.lock() else {
 			return Vec::new();
 		};
-		service::project::get_log(&mut conn, profile_id, 20).unwrap_or_default()
+		service::project::get_log(&mut conn, profile_id, 40).unwrap_or_default()
 	}
 
-	pub fn list_files(&self, profile_id: &str) -> Vec<String> {
-		service::filesystem::list_file_tree_child_paths(&self.db, profile_id, None)
+	pub fn git_commit_diff(&self, profile_id: &str, commit_hash: &str) -> String {
+		let Ok(mut conn) = self.db.lock() else {
+			return String::new();
+		};
+		service::project::get_commit_diff(&mut conn, profile_id, commit_hash)
+			.unwrap_or_default()
+	}
+
+	pub fn list_files(&self, profile_id: &str, parent: Option<&str>) -> Vec<String> {
+		service::filesystem::list_file_tree_child_paths(&self.db, profile_id, parent)
 			.unwrap_or_default()
 			.into_iter()
-			.take(80)
+			.take(120)
 			.collect()
+	}
+
+	pub fn read_file(&self, profile_id: &str, path: &str) -> Result<String, AppError> {
+		let content = service::filesystem::read_file_content(&self.db, profile_id, path)?;
+		const LIMIT: usize = 48_000;
+		if content.len() > LIMIT {
+			Ok(format!(
+				"{}\n\n… truncated ({} bytes)",
+				&content[..LIMIT],
+				content.len()
+			))
+		} else {
+			Ok(content)
+		}
 	}
 }
 

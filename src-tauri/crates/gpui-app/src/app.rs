@@ -10,8 +10,10 @@ use gpui_component::{
 };
 
 use crate::backend::{Backend, ProfileVm, ProjectVm};
+use crate::i18n;
 use crate::settings::AppSettings;
 use crate::theme::TwoCodePalette;
+use model::project::GitCommit;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Route {
@@ -30,6 +32,25 @@ pub enum SettingsTab {
 	About,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkspacePane {
+	Files,
+	Git,
+	Terminal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitPane {
+	Changes,
+	History,
+}
+
+#[derive(Clone, Debug)]
+pub struct TerminalTab {
+	pub id: String,
+	pub title: String,
+}
+
 pub struct AppRoot {
 	pub backend: Backend,
 	pub settings: AppSettings,
@@ -37,20 +58,27 @@ pub struct AppRoot {
 	pub projects: Vec<ProjectVm>,
 	pub sidebar_collapsed: bool,
 	pub settings_tab: SettingsTab,
+	pub workspace_pane: WorkspacePane,
+	pub git_pane: GitPane,
 	pub error: Option<String>,
-	pub show_create_project: bool,
-	pub show_create_profile: bool,
-	pub show_delete_project: Option<String>,
 	pub create_name: Entity<InputState>,
 	pub create_folder: Entity<InputState>,
 	pub profile_branch: Entity<InputState>,
 	pub terminal_input: Entity<InputState>,
+	pub terminals: Vec<TerminalTab>,
 	pub active_session: Option<String>,
 	pub terminal_output: String,
 	pub git_branch: String,
 	pub git_stats_label: String,
 	pub git_diff: String,
+	pub commits: Vec<GitCommit>,
+	pub selected_commit: Option<String>,
+	pub commit_diff: String,
 	pub files: Vec<String>,
+	pub file_parent: Option<String>,
+	pub selected_file: Option<String>,
+	pub file_preview: String,
+	pub file_is_markdown: bool,
 	#[allow(dead_code)]
 	pub focus: FocusHandle,
 }
@@ -78,24 +106,32 @@ impl AppRoot {
 			projects: Vec::new(),
 			sidebar_collapsed: false,
 			settings_tab: SettingsTab::General,
+			workspace_pane: WorkspacePane::Files,
+			git_pane: GitPane::Changes,
 			error: None,
-			show_create_project: false,
-			show_create_profile: false,
-			show_delete_project: None,
 			create_name,
 			create_folder,
 			profile_branch,
 			terminal_input,
+			terminals: Vec::new(),
 			active_session: None,
 			terminal_output: String::new(),
 			git_branch: String::new(),
 			git_stats_label: String::new(),
 			git_diff: String::new(),
+			commits: Vec::new(),
+			selected_commit: None,
+			commit_diff: String::new(),
 			files: Vec::new(),
+			file_parent: None,
+			selected_file: None,
+			file_preview: String::new(),
+			file_is_markdown: false,
 			focus: cx.focus_handle(),
 		};
 		app.apply_theme(window, cx);
 		app.reload_projects(cx);
+		app.seed_project_if_requested(cx);
 		if let Some(project) = app.projects.first().cloned() {
 			if let Some(profile) = project.default_profile().cloned() {
 				app.open_workspace(&project.id, &profile.id, cx);
@@ -136,6 +172,35 @@ impl AppRoot {
 			Some(window),
 			cx,
 		);
+		TwoCodePalette::for_mode(dark).apply(cx);
+		window.refresh();
+	}
+
+	pub fn t<'a>(&self, en: &'a str, zh: &'a str) -> &'a str {
+		i18n::t(&self.settings.locale, en, zh)
+	}
+
+	fn seed_project_if_requested(&mut self, cx: &mut Context<Self>) {
+		if !self.projects.is_empty() {
+			return;
+		}
+		let Ok(folder) = std::env::var("TWOCODE_SEED_FOLDER") else {
+			return;
+		};
+		if folder.trim().is_empty() {
+			return;
+		}
+		let name = std::path::Path::new(&folder)
+			.file_name()
+			.and_then(|name| name.to_str())
+			.unwrap_or("Seed")
+			.to_string();
+		if let Ok(project) = self.backend.create_project(&name, &folder) {
+			self.reload_projects(cx);
+			if let Some(profile) = project.default_profile() {
+				self.open_workspace(&project.id, &profile.id, cx);
+			}
+		}
 	}
 
 	pub fn persist_settings(&self) {
@@ -191,6 +256,11 @@ impl AppRoot {
 			project_id: project_id.to_string(),
 			profile_id: profile_id.to_string(),
 		};
+		self.file_parent = None;
+		self.selected_file = None;
+		self.file_preview.clear();
+		self.selected_commit = None;
+		self.commit_diff.clear();
 		self.refresh_workspace();
 		cx.notify();
 	}
@@ -204,12 +274,84 @@ impl AppRoot {
 			self.current_profile().map(|profile| profile.id.clone())
 		{
 			let stats = self.backend.git_diff_stats(&profile_id);
-			self.git_stats_label =
-				format!("+{} −{}", stats.insertions, stats.deletions);
+			self.git_stats_label = format!(
+				"+{} −{} · {} files",
+				stats.insertions, stats.deletions, stats.files_changed
+			);
 			self.git_diff = self.backend.git_diff(&profile_id);
-			self.files = self.backend.list_files(&profile_id);
+			self.commits = self.backend.git_log(&profile_id);
+			self.files = self
+				.backend
+				.list_files(&profile_id, self.file_parent.as_deref());
+			if let Some(hash) = self.selected_commit.clone() {
+				self.commit_diff = self.backend.git_commit_diff(&profile_id, &hash);
+			}
+			if let Some(path) = self.selected_file.clone() {
+				self.load_file_preview(&profile_id, &path);
+			}
 		}
 		self.refresh_terminal();
+	}
+
+	fn load_file_preview(&mut self, profile_id: &str, path: &str) {
+		match self.backend.read_file(profile_id, path) {
+			Ok(content) => {
+				self.file_preview = content;
+				self.file_is_markdown = path.ends_with(".md") || path.ends_with(".mdx");
+				self.error = None;
+			}
+			Err(error) => {
+				self.file_preview = error.to_string();
+				self.file_is_markdown = false;
+			}
+		}
+	}
+
+	pub fn open_path(&mut self, path: &str, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		else {
+			return;
+		};
+		let children = self.backend.list_files(&profile_id, Some(path));
+		if !children.is_empty() && self.backend.read_file(&profile_id, path).is_err() {
+			self.file_parent = Some(path.to_string());
+			self.files = children;
+			self.selected_file = None;
+			self.file_preview.clear();
+			self.workspace_pane = WorkspacePane::Files;
+			cx.notify();
+			return;
+		}
+		self.selected_file = Some(path.to_string());
+		self.workspace_pane = WorkspacePane::Files;
+		self.load_file_preview(&profile_id, path);
+		cx.notify();
+	}
+
+	pub fn open_parent_dir(&mut self, cx: &mut Context<Self>) {
+		let Some(current) = self.file_parent.clone() else {
+			return;
+		};
+		let parent = std::path::Path::new(&current)
+			.parent()
+			.and_then(|path| path.to_str())
+			.filter(|path| !path.is_empty())
+			.map(str::to_string);
+		self.file_parent = parent;
+		self.selected_file = None;
+		self.file_preview.clear();
+		self.refresh_workspace();
+		cx.notify();
+	}
+
+	pub fn select_commit(&mut self, hash: &str, cx: &mut Context<Self>) {
+		self.selected_commit = Some(hash.to_string());
+		self.git_pane = GitPane::History;
+		if let Some(profile_id) = self.current_profile().map(|profile| profile.id.clone())
+		{
+			self.commit_diff = self.backend.git_commit_diff(&profile_id, hash);
+		}
+		cx.notify();
 	}
 
 	pub fn refresh_terminal(&mut self) {
@@ -251,7 +393,6 @@ impl AppRoot {
 		};
 		match self.backend.create_project(&display_name, &folder) {
 			Ok(project) => {
-				self.show_create_project = false;
 				self.reload_projects(cx);
 				if let Some(profile) = project.default_profile() {
 					self.open_workspace(&project.id, &profile.id, cx);
@@ -284,7 +425,6 @@ impl AppRoot {
 			.create_profile(&project.id, &branch, worktree)
 		{
 			Ok(profile) => {
-				self.show_create_profile = false;
 				self.reload_projects(cx);
 				self.open_workspace(&project.id, &profile.id, cx);
 			}
@@ -296,22 +436,20 @@ impl AppRoot {
 		cx.notify();
 	}
 
-	pub fn confirm_delete_project(&mut self, cx: &mut Context<Self>) {
-		if let Some(id) = self.show_delete_project.take() {
-			if let Err(error) = self.backend.delete_project(&id) {
-				self.error = Some(error.to_string());
-			}
-			self.reload_projects(cx);
-			if self.projects.is_empty() {
-				self.route = Route::Home;
-			} else if let Some((project_id, profile_id)) =
-				self.projects.first().and_then(|project| {
-					project.default_profile().map(|profile| {
-						(project.id.clone(), profile.id.clone())
-					})
-				}) {
-				self.open_workspace(&project_id, &profile_id, cx);
-			}
+	pub fn confirm_delete_project(&mut self, project_id: &str, cx: &mut Context<Self>) {
+		if let Err(error) = self.backend.delete_project(project_id) {
+			self.error = Some(error.to_string());
+		}
+		self.reload_projects(cx);
+		if self.projects.is_empty() {
+			self.route = Route::Home;
+		} else if let Some((next_project, next_profile)) =
+			self.projects.first().and_then(|project| {
+				project.default_profile().map(|profile| {
+					(project.id.clone(), profile.id.clone())
+				})
+			}) {
+			self.open_workspace(&next_project, &next_profile, cx);
 		}
 		cx.notify();
 	}
@@ -325,7 +463,13 @@ impl AppRoot {
 			.create_terminal(&profile.id, &profile.worktree_path, "Terminal")
 		{
 			Ok(session_id) => {
+				let title = format!("Terminal {}", self.terminals.len() + 1);
+				self.terminals.push(TerminalTab {
+					id: session_id.clone(),
+					title,
+				});
 				self.active_session = Some(session_id);
+				self.workspace_pane = WorkspacePane::Terminal;
 				self.terminal_output.clear();
 				self.error = None;
 			}
@@ -357,11 +501,21 @@ impl AppRoot {
 		cx.notify();
 	}
 
+	pub fn activate_terminal(&mut self, session_id: &str, cx: &mut Context<Self>) {
+		self.active_session = Some(session_id.to_string());
+		self.workspace_pane = WorkspacePane::Terminal;
+		self.refresh_terminal();
+		cx.notify();
+	}
+
 	pub fn close_terminal(&mut self, cx: &mut Context<Self>) {
 		if let Some(session_id) = self.active_session.take() {
 			let _ = self.backend.close_terminal(&session_id);
+			self.terminals.retain(|tab| tab.id != session_id);
 		}
+		self.active_session = self.terminals.last().map(|tab| tab.id.clone());
 		self.terminal_output.clear();
+		self.refresh_terminal();
 		cx.notify();
 	}
 
@@ -429,7 +583,7 @@ impl Render for AppRoot {
 							})
 							.child(match self.route {
 								Route::Home => {
-									self.render_home(cx).into_any_element()
+									self.render_home(window, cx).into_any_element()
 								}
 								Route::Settings => {
 									self.render_settings(window, cx).into_any_element()
@@ -440,7 +594,6 @@ impl Render for AppRoot {
 							}),
 					),
 			)
-			.child(self.render_dialogs(window, cx))
 			.child(
 				div()
 					.h(px(0.))
