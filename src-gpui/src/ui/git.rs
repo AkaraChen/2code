@@ -13,7 +13,6 @@ use crate::timefmt;
 
 pub fn render_panel(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();
-	let view = cx.entity();
 	let Some(ws) = app.data.current_ws() else {
 		return div().id("git-panel-empty").into_any_element();
 	};
