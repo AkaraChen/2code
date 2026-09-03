@@ -8,8 +8,9 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Disableable, Selectable};
 use gpui_component::input::Input;
 use gpui_component::switch::Switch;
+use gpui_component::checkbox::Checkbox;
 use gpui_component::{
-	h_flex, v_flex, ActiveTheme, IconName, Root, Sizable, StyledExt, ThemeMode,
+	h_flex, v_flex, ActiveTheme, Icon, IconName, Root, Sizable, StyledExt, ThemeMode,
 };
 use gpui_component::tab::Tab;
 
@@ -106,6 +107,7 @@ pub struct SettingsView {
 	sounds: Vec<String>,
 	editing_template_id: Option<String>,
 	preview_theme: Option<String>,
+	open_select: Option<String>,
 }
 
 impl SettingsView {
@@ -163,6 +165,7 @@ impl SettingsView {
 			sounds: crate::platform::list_system_sounds(),
 			editing_template_id: None,
 			preview_theme: None,
+			open_select: None,
 		}
 	}
 
@@ -231,6 +234,7 @@ impl gpui::Render for SettingsView {
 					.flex_1()
 					.min_h_0()
 					.p_5()
+					.overflow_y_scroll()
 					.child(match self.tab {
 						SettingsTab::General => self.general(window, cx).into_any_element(),
 						SettingsTab::Terminal => self.terminal(window, cx).into_any_element(),
@@ -251,62 +255,57 @@ impl SettingsView {
 			.max_w(px(448.))
 			.gap_6()
 			.child(field_label(&self.t("language")))
-			.child(
-				h_flex()
-					.gap_2()
-					.child(choice("lang-en", "English", self.locale == Locale::En, {
-						let view = view.clone();
-						move |cx| {
-							view.update(cx, |this, cx| {
-								this.locale = Locale::En;
-								this.persist(cx);
-								cx.notify();
-							});
-						}
-					}))
-					.child(choice("lang-zh", "中文", self.locale == Locale::Zh, {
-						let view = view.clone();
-						move |cx| {
-							view.update(cx, |this, cx| {
-								this.locale = Locale::Zh;
-								this.persist(cx);
-								cx.notify();
-							});
-						}
-					})),
-			)
+			.child(leftover_select(
+				"language",
+				match self.locale {
+					Locale::En => "English",
+					Locale::Zh => "中文",
+				},
+				self.open_select.as_deref() == Some("language"),
+				false,
+				vec![
+					("en".into(), "English".into()),
+					("zh".into(), "中文".into()),
+				],
+				view.clone(),
+				cx.theme().clone(),
+				|this, value, cx| {
+					this.locale = if value == "zh" { Locale::Zh } else { Locale::En };
+					this.persist(cx);
+				},
+			))
 			.child(field_label(&self.t("theme")))
-			.child(
-				h_flex()
-					.gap_2()
-					.children(
-						[
-							(ThemePref::System, self.t("themeSystem")),
-							(ThemePref::Light, self.t("themeLight")),
-							(ThemePref::Dark, self.t("themeDark")),
-						]
-						.into_iter()
-						.map(|(pref, label)| {
-							let selected = self.prefs.theme == pref;
-							choice(format!("theme-{label}"), &label, selected, {
-								let view = view.clone();
-								move |cx| {
-									view.update(cx, |this, cx| {
-										this.prefs.theme = pref;
-										let mode = match pref {
-											ThemePref::Dark => ThemeMode::Dark,
-											ThemePref::Light => ThemeMode::Light,
-											ThemePref::System => cx.window_appearance().into(),
-										};
-										gpui_component::Theme::change(mode, None, cx);
-										this.persist(cx);
-										cx.notify();
-									});
-								}
-							})
-						}),
-					),
-			)
+			.child(leftover_select(
+				"theme",
+				&match self.prefs.theme {
+					ThemePref::System => self.t("themeSystem"),
+					ThemePref::Light => self.t("themeLight"),
+					ThemePref::Dark => self.t("themeDark"),
+				},
+				self.open_select.as_deref() == Some("theme"),
+				false,
+				vec![
+					("system".into(), self.t("themeSystem")),
+					("light".into(), self.t("themeLight")),
+					("dark".into(), self.t("themeDark")),
+				],
+				view.clone(),
+				cx.theme().clone(),
+				|this, value, cx| {
+					this.prefs.theme = match value.as_str() {
+						"light" => ThemePref::Light,
+						"dark" => ThemePref::Dark,
+						_ => ThemePref::System,
+					};
+					let mode = match this.prefs.theme {
+						ThemePref::Dark => ThemeMode::Dark,
+						ThemePref::Light => ThemeMode::Light,
+						ThemePref::System => cx.window_appearance().into(),
+					};
+					gpui_component::Theme::change(mode, None, cx);
+					this.persist(cx);
+				},
+			))
 			.child(field_label(&self.t("borderRadius")))
 			.child(
 				h_flex().gap_2().children(RadiusPref::all().into_iter().map(|r| {
@@ -470,39 +469,21 @@ impl SettingsView {
 							});
 						}
 					}))
-					.child(
-						v_flex().gap_1().children(TERM_THEMES.iter().map(|t| {
-							let selected = self.prefs.terminal_theme_dark == t.name;
-							choice(t.name, t.name, selected, {
-								let view = view.clone();
-								let name = t.name.to_string();
-								move |cx| {
-									view.update(cx, |this, cx| {
-										this.prefs.terminal_theme_dark = name.clone();
-										if this.prefs.sync_terminal_theme {
-											this.prefs.terminal_theme_light = name.clone();
-										}
-										this.persist(cx);
-										cx.notify();
-									});
-								}
-							})
-						})),
-					)
-					.child(switch_row(
-						"sync-term",
-						self.t("syncTerminalTheme"),
-						String::new(),
-						self.prefs.sync_terminal_theme,
-						{
-							let view = view.clone();
-							move |val, cx| {
-								view.update(cx, |this, cx| {
-									this.prefs.sync_terminal_theme = val;
-									this.persist(cx);
-									cx.notify();
-								});
+					.child(leftover_select(
+						"term-theme-dark",
+						&self.prefs.terminal_theme_dark,
+						self.open_select.as_deref() == Some("term-theme-dark"),
+						false,
+						TERM_THEMES.iter().map(|t| (t.name.to_string(), t.name.to_string())).collect(),
+						view.clone(),
+						cx.theme().clone(),
+						|this, value, cx| {
+							this.prefs.terminal_theme_dark = value.clone();
+							if this.prefs.sync_terminal_theme {
+								this.prefs.terminal_theme_light = value;
 							}
+							this.preview_theme = None;
+							this.persist(cx);
 						},
 					))
 					.when(!self.prefs.sync_terminal_theme, |el| {
@@ -516,78 +497,120 @@ impl SettingsView {
 								});
 							}
 						}))
-							.child(
-								v_flex().gap_1().children(TERM_THEMES.iter().map(|t| {
-									let selected = self.prefs.terminal_theme_light == t.name;
-									choice(format!("light-{name}", name = t.name), t.name, selected, {
-										let view = view.clone();
-										let name = t.name.to_string();
-										move |cx| {
-											view.update(cx, |this, cx| {
-												this.prefs.terminal_theme_light = name.clone();
-												this.persist(cx);
-												cx.notify();
-											});
-										}
-									})
-								})),
-							)
+							.child(leftover_select(
+								"term-theme-light",
+								&self.prefs.terminal_theme_light,
+								self.open_select.as_deref() == Some("term-theme-light"),
+								false,
+								TERM_THEMES.iter().map(|t| (t.name.to_string(), t.name.to_string())).collect(),
+								view.clone(),
+								cx.theme().clone(),
+								|this, value, cx| {
+									this.prefs.terminal_theme_light = value;
+									this.preview_theme = None;
+									this.persist(cx);
+								},
+							))
 					})
+					.child(leftover_check_row(
+						"sync-term",
+						self.t("syncTerminalTheme"),
+						self.prefs.sync_terminal_theme,
+						{
+							let view = view.clone();
+							move |val, cx| {
+								view.update(cx, |this, cx| {
+									this.prefs.sync_terminal_theme = val;
+									this.persist(cx);
+									cx.notify();
+								});
+							}
+						},
+					))
 					.child(field_label(&self.t("defaultShell")))
+					.child(leftover_select(
+						"shell",
+						&if custom_selected {
+							self.t("customShell")
+						} else if self.prefs.custom_shell == default_shell {
+							format!("{} ({})", self.prefs.custom_shell, self.t("defaultOption"))
+						} else {
+							self.prefs.custom_shell.clone()
+						},
+						self.open_select.as_deref() == Some("shell"),
+						false,
+						{
+							let mut options: Vec<(String, String)> = shells
+								.into_iter()
+								.map(|shell| {
+									let label = if shell == default_shell {
+										format!("{shell} ({})", self.t("defaultOption"))
+									} else {
+										shell.clone()
+									};
+									(shell, label)
+								})
+								.collect();
+							options.push(("__custom__".into(), self.t("customShell")));
+							options
+						},
+						view.clone(),
+						cx.theme().clone(),
+						|this, value, cx| {
+							if value == "__custom__" {
+								if crate::platform::list_shells().iter().any(|s| s == &this.prefs.custom_shell) {
+									this.prefs.custom_shell.clear();
+								}
+							} else {
+								this.prefs.custom_shell = value;
+							}
+							this.persist(cx);
+						},
+					))
 					.child(
 						div()
 							.text_xs()
 							.text_color(cx.theme().muted_foreground)
 							.child(self.t("defaultShellDescription")),
 					)
-					.child({
-						let mut chips: Vec<gpui::AnyElement> = shells
-							.into_iter()
-							.map(|shell| {
-								let selected = self.prefs.custom_shell == shell;
-								let label = if shell == default_shell {
-									format!("{shell} ({})", self.t("defaultOption"))
-								} else {
-									shell.clone()
-								};
-								choice(format!("shell-{shell}"), &label, selected, {
-									let view = view.clone();
-									let shell = shell.clone();
-									move |cx| {
-										view.update(cx, |this, cx| {
-											this.prefs.custom_shell = shell.clone();
-											this.persist(cx);
-											cx.notify();
-										});
-									}
-								})
-								.into_any_element()
-							})
-							.collect();
-						chips.push(
-							choice("shell-custom", &self.t("customShell"), custom_selected, {
-								let view = view.clone();
-								move |cx| {
-									view.update(cx, |this, cx| {
-										if crate::platform::list_shells().iter().any(|s| s == &this.prefs.custom_shell) {
-											this.prefs.custom_shell.clear();
-										}
-										this.persist(cx);
-										cx.notify();
-									});
-								}
-							})
-							.into_any_element(),
-						);
-						h_flex().gap_1().flex_wrap().children(chips)
-					})
 					.when(custom_selected, |el| el.child(Input::new(&self.custom_shell)))
 					.child(field_label(&self.t("terminalFont")))
-					.child(div().text_sm().child(self.prefs.font_family.clone()))
-					.child(switch_row(
+					.when(fonts.is_empty(), |el| {
+						el.child(leftover_select(
+							"font",
+							&self.t("fontPickerUnavailable"),
+							false,
+							true,
+							vec![("".into(), self.t("fontPickerUnavailable"))],
+							view.clone(),
+							cx.theme().clone(),
+							|_, _, _| {},
+						))
+						.child(
+							div()
+								.text_xs()
+								.text_color(cx.theme().muted_foreground)
+								.child(self.t("fontPickerUnavailableDescription")),
+						)
+					})
+					.when(!fonts.is_empty(), |el| {
+						el.child(leftover_select(
+							"font",
+							&self.prefs.font_family,
+							self.open_select.as_deref() == Some("font"),
+							false,
+							fonts.into_iter().map(|family| (family.clone(), family)).collect(),
+							view.clone(),
+							cx.theme().clone(),
+							|this, value, cx| {
+								this.prefs.font_family = value;
+								this.persist(cx);
+							},
+						))
+					})
+					.child(leftover_check_row(
 						"show-all-fonts",
 						self.t("showAllFonts"),
-						String::new(),
 						self.prefs.show_all_fonts,
 						{
 							let view = view.clone();
@@ -600,37 +623,6 @@ impl SettingsView {
 							}
 						},
 					))
-					.when(fonts.is_empty(), |el| {
-						el.child(div().text_sm().child(self.t("fontPickerUnavailable"))).child(
-							div()
-								.text_xs()
-								.text_color(cx.theme().muted_foreground)
-								.child(self.t("fontPickerUnavailableDescription")),
-						)
-					})
-					.when(!fonts.is_empty(), |el| {
-						el.child(
-							div()
-								.max_h(px(180.))
-								.overflow_y_hidden()
-								.child(
-									h_flex().gap_1().flex_wrap().children(fonts.into_iter().map(|family| {
-										let selected = self.prefs.font_family == family;
-										choice(format!("font-{family}"), &family, selected, {
-											let view = view.clone();
-											let family = family.clone();
-											move |cx| {
-												view.update(cx, |this, cx| {
-													this.prefs.font_family = family.clone();
-													this.persist(cx);
-													cx.notify();
-												});
-											}
-										})
-									})),
-								),
-						)
-					})
 					.child(field_label(&self.t("fontSize")))
 					.child(
 						h_flex()
@@ -856,22 +848,18 @@ impl SettingsView {
 					}
 				},
 			))
-			.child(field_label(&self.t("notificationSound")))
 			.child(
 				h_flex()
-					.gap_2()
+					.w_full()
 					.items_center()
-					.child(div().text_sm().child(if self.prefs.notification_sound.is_empty() {
-						self.t("notificationSoundNone")
-					} else {
-						self.prefs.notification_sound.clone()
-					}))
+					.gap_2()
+					.child(div().flex_1().child(field_label(&self.t("notificationSound"))))
 					.child(
 						Button::new("preview-sound")
 							.ghost()
-							.small()
+							.xsmall()
 							.icon(IconName::Bell)
-							.disabled(self.prefs.notification_sound.is_empty())
+							.disabled(!self.prefs.notifications || self.prefs.notification_sound.is_empty() || self.sounds.is_empty())
 							.on_click({
 								let sound = self.prefs.notification_sound.clone();
 								move |_, _, _| {
@@ -883,11 +871,16 @@ impl SettingsView {
 			.child(if self.sounds.is_empty() {
 				v_flex()
 					.gap_1()
-					.p_3()
-					.rounded_md()
-					.border_1()
-					.border_color(cx.theme().border)
-					.child(div().text_sm().child(self.t("soundPickerUnavailable")))
+					.child(leftover_select(
+						"sound",
+						&self.t("soundPickerUnavailable"),
+						false,
+						true,
+						vec![("".into(), self.t("soundPickerUnavailable"))],
+						view.clone(),
+						cx.theme().clone(),
+						|_, _, _| {},
+					))
 					.child(
 						div()
 							.text_xs()
@@ -896,30 +889,26 @@ impl SettingsView {
 					)
 					.into_any_element()
 			} else {
-				h_flex()
-					.gap_1()
-					.flex_wrap()
-					.children(std::iter::once(String::new()).chain(self.sounds.iter().cloned()).map(|name| {
-						let selected = self.prefs.notification_sound == name;
-						let label = if name.is_empty() {
-							self.t("notificationSoundNone")
-						} else {
-							name.clone()
-						};
-						choice(format!("snd-{name}"), &label, selected, {
-							let view = view.clone();
-							let name = name.clone();
-							move |cx| {
-								view.update(cx, |this, cx| {
-									this.prefs.notification_sound = name.clone();
-									let _ = crate::platform::play_system_sound(&name);
-									this.persist(cx);
-									cx.notify();
-								});
-							}
-						})
-					}))
-					.into_any_element()
+				leftover_select(
+					"sound",
+					if self.prefs.notification_sound.is_empty() {
+						self.t("notificationSoundNone")
+					} else {
+						self.prefs.notification_sound.clone()
+					},
+					self.open_select.as_deref() == Some("sound"),
+					!self.prefs.notifications,
+					std::iter::once(("".into(), self.t("notificationSoundNone")))
+						.chain(self.sounds.iter().cloned().map(|name| (name.clone(), name)))
+						.collect(),
+					view.clone(),
+					cx.theme().clone(),
+					|this, value, cx| {
+						this.prefs.notification_sound = value;
+						this.persist(cx);
+					},
+				)
+				.into_any_element()
 			})
 	}
 
@@ -1047,60 +1036,59 @@ impl SettingsView {
 			.child(if crate::platform::installed_editors().is_empty() {
 				div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDetectingApps")).into_any_element()
 			} else {
-				h_flex()
-					.gap_1()
-					.flex_wrap()
-					.children(crate::platform::installed_editors().into_iter().map(|app| {
-						let selected = self.prefs.editor_app == app.id || self.prefs.editor_app == app.command;
-						let label = match app.id {
-							"vscode" => self.t("topbarVscode"),
-							"cursor" => self.t("topbarCursor"),
-							"windsurf" => self.t("topbarWindsurf"),
-							"zed" => self.t("topbarZed"),
-							_ => self.t("topbarSublimeText"),
-						};
-						choice(format!("ed-{id}", id = app.id), &label, selected, {
-							let view = view.clone();
-							let id = app.id.to_string();
-							move |cx| {
-								view.update(cx, |this, cx| {
-									this.prefs.editor_app = id.clone();
-									this.persist(cx);
-									cx.notify();
-								});
-							}
-						})
-					}))
-					.into_any_element()
+				let editors = crate::platform::installed_editors();
+				let current = crate::state::leftover_configured_app(
+					&self.prefs.editor_app,
+					crate::state::LEFTOVER_EDITOR_APP_IDS,
+					&editors.iter().map(|app| app.id).collect::<Vec<_>>(),
+				)
+				.unwrap_or(editors[0].id);
+				leftover_select(
+					"editor-app",
+					&self.t(crate::state::leftover_launch_app_i18n(current)),
+					self.open_select.as_deref() == Some("editor-app"),
+					false,
+					editors
+						.iter()
+						.map(|app| (app.id.to_string(), self.t(crate::state::leftover_launch_app_i18n(app.id))))
+						.collect(),
+					view.clone(),
+					cx.theme().clone(),
+					|this, value, cx| {
+						this.prefs.editor_app = value;
+						this.persist(cx);
+					},
+				)
+				.into_any_element()
 			})
 			.child(field_label(&self.t("topbarTerminalApp")))
 			.child(if crate::platform::installed_terminals().is_empty() {
 				div().text_xs().text_color(cx.theme().muted_foreground).child(self.t("topbarDetectingApps")).into_any_element()
 			} else {
-				h_flex()
-					.gap_1()
-					.flex_wrap()
-					.children(crate::platform::installed_terminals().into_iter().map(|app| {
-						let selected = self.prefs.terminal_app == app.id;
-						let label = match app.id {
-							"ghostty" => self.t("topbarGhostty"),
-							"iterm2" => self.t("topbarIterm2"),
-							"kitty" => self.t("topbarKitty"),
-							_ => self.t("topbarWarp"),
-						};
-						choice(format!("termapp-{id}", id = app.id), &label, selected, {
-							let view = view.clone();
-							let id = app.id.to_string();
-							move |cx| {
-								view.update(cx, |this, cx| {
-									this.prefs.terminal_app = id.clone();
-									this.persist(cx);
-									cx.notify();
-								});
-							}
-						})
-					}))
-					.into_any_element()
+				let terminals = crate::platform::installed_terminals();
+				let current = crate::state::leftover_configured_app(
+					&self.prefs.terminal_app,
+					crate::state::LEFTOVER_TERMINAL_APP_IDS,
+					&terminals.iter().map(|app| app.id).collect::<Vec<_>>(),
+				)
+				.unwrap_or(terminals[0].id);
+				leftover_select(
+					"terminal-app",
+					&self.t(crate::state::leftover_launch_app_i18n(current)),
+					self.open_select.as_deref() == Some("terminal-app"),
+					false,
+					terminals
+						.iter()
+						.map(|app| (app.id.to_string(), self.t(crate::state::leftover_launch_app_i18n(app.id))))
+						.collect(),
+					view.clone(),
+					cx.theme().clone(),
+					|this, value, cx| {
+						this.prefs.terminal_app = value;
+						this.persist(cx);
+					},
+				)
+				.into_any_element()
 			})
 			.child(
 				Button::new("reset-topbar")
@@ -1452,6 +1440,7 @@ fn set_tab(
 		.on_click(move |_, _, cx| {
 			view.update(cx, |this, cx| {
 				this.tab = tab;
+				this.open_select = None;
 				cx.notify();
 			});
 		})
@@ -1479,6 +1468,113 @@ fn theme_label_row(
 				.tooltip(preview_label)
 				.on_click(move |_, _, cx| on_preview(cx)),
 		)
+}
+
+fn leftover_select(
+	id: &str,
+	current: impl Into<String>,
+	open: bool,
+	disabled: bool,
+	options: Vec<(String, String)>,
+	view: gpui::Entity<SettingsView>,
+	theme: gpui_component::Theme,
+	on_pick: impl Fn(&mut SettingsView, String, &mut Context<SettingsView>) + Clone + 'static,
+) -> impl IntoElement {
+	let current = current.into();
+	let selected_label = current.clone();
+	let height = crate::state::leftover_native_select_height();
+	div()
+		.id(crate::ui::eid(format!("sel-{id}")))
+		.relative()
+		.w_full()
+		.child(
+			h_flex()
+				.id(crate::ui::eid(format!("sel-btn-{id}")))
+				.h(px(height))
+				.w_full()
+				.px_3()
+				.gap_2()
+				.items_center()
+				.rounded_md()
+				.border_1()
+				.border_color(theme.border)
+				.bg(theme.background)
+				.when(disabled, |el| el.opacity(0.5))
+				.on_click({
+					let view = view.clone();
+					let id = id.to_string();
+					move |_, _, cx| {
+						if disabled {
+							return;
+						}
+						view.update(cx, |this, cx| {
+							this.open_select = if this.open_select.as_deref() == Some(id.as_str()) {
+								None
+							} else {
+								Some(id.clone())
+							};
+							cx.notify();
+						});
+					}
+				})
+				.child(div().flex_1().min_w_0().text_sm().child(current))
+				.child(Icon::new(IconName::ChevronDown).w(px(14.))),
+		)
+		.when(open && !disabled, |el| {
+			el.child(
+				div()
+					.id(crate::ui::eid(format!("sel-menu-{id}")))
+					.absolute()
+					.top(px(height + 4.))
+					.left_0()
+					.right_0()
+					.max_h(px(240.))
+					.overflow_y_scroll()
+					.p_1()
+					.rounded_lg()
+					.border_1()
+					.border_color(theme.border)
+					.bg(theme.popover)
+					.shadow_md()
+					.children(options.into_iter().map(|(value, label)| {
+						let selected = label == selected_label;
+						div()
+							.id(crate::ui::eid(format!("sel-{id}-{value}")))
+							.w_full()
+							.px_2()
+							.py(px(6.))
+							.rounded_md()
+							.text_sm()
+							.when(selected, |row| row.bg(theme.muted))
+							.hover(|row| row.bg(theme.muted))
+							.on_click({
+								let view = view.clone();
+								let on_pick = on_pick.clone();
+								move |_, _, cx| {
+									view.update(cx, |this, cx| {
+										on_pick(this, value.clone(), cx);
+										this.open_select = None;
+										cx.notify();
+									});
+								}
+							})
+							.child(label)
+					})),
+			)
+		})
+}
+
+fn leftover_check_row(
+	id: &'static str,
+	label: String,
+	checked: bool,
+	on: impl Fn(bool, &mut App) + 'static,
+) -> impl IntoElement {
+	h_flex()
+		.gap_2()
+		.items_center()
+		.child(Checkbox::new(id).checked(checked).on_click(move |val, _, cx| on(*val, cx)))
+		.child(div().text_sm().child(label))
 }
 
 fn choice(

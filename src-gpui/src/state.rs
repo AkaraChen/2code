@@ -910,6 +910,24 @@ pub enum LeftoverUpdateBadge {
 	NotAvailable,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftoverSelectOption {
+	pub value: String,
+	pub label: String,
+}
+
+pub fn leftover_select_label<'a>(options: &'a [LeftoverSelectOption], value: &'a str) -> &'a str {
+	options
+		.iter()
+		.find(|option| option.value == value)
+		.map(|option| option.label.as_str())
+		.unwrap_or(value)
+}
+
+pub fn leftover_native_select_height() -> f32 {
+	32.0
+}
+
 pub fn leftover_update_badge(has_update: bool, checked_not_available: bool) -> LeftoverUpdateBadge {
 	if has_update {
 		LeftoverUpdateBadge::Available
@@ -1128,6 +1146,19 @@ mod tests {
 		assert_eq!(leftover_update_badge(true, false), LeftoverUpdateBadge::Available);
 		assert_eq!(leftover_update_badge(false, true), LeftoverUpdateBadge::NotAvailable);
 		assert_eq!(leftover_update_badge(false, false), LeftoverUpdateBadge::Hidden);
+		assert_eq!(leftover_native_select_height(), 32.0);
+		let options = [
+			LeftoverSelectOption {
+				value: "en".into(),
+				label: "English".into(),
+			},
+			LeftoverSelectOption {
+				value: "zh".into(),
+				label: "中文".into(),
+			},
+		];
+		assert_eq!(leftover_select_label(&options, "zh"), "中文");
+		assert_eq!(leftover_select_label(&options, "missing"), "missing");
 	}
 
 	#[test]
