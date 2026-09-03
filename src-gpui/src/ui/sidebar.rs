@@ -833,6 +833,9 @@ fn nav_row(
 }
 
 pub fn agent_dot(status: AgentStatus) -> impl IntoElement {
+	if status == AgentStatus::Idle {
+		return div().id("agent-dot-idle").into_any_element();
+	}
 	let (color, pulse) = match status {
 		AgentStatus::Waiting => (gpui::rgb(0xfacc15), false),
 		AgentStatus::Running => (gpui::rgb(0x34d399), true),
@@ -844,6 +847,7 @@ pub fn agent_dot(status: AgentStatus) -> impl IntoElement {
 		.rounded_full()
 		.bg(color)
 		.when(pulse, |el| el.opacity(0.85))
+		.into_any_element()
 }
 
 #[allow(dead_code)]

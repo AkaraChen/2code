@@ -1,8 +1,8 @@
 use gpui::{div, prelude::*, px, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, Selectable};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
@@ -60,11 +60,16 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 		.child(
 			v_flex()
 				.id("dialog-panel")
-				.w(px(if matches!(kind, DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog) {
-					560.
-				} else {
-					380.
-				}))
+				.w(px(
+					if matches!(
+						kind,
+						DialogKind::ProjectSettings | DialogKind::SwitchBranch | DialogKind::DebugLog
+					) {
+						560.
+					} else {
+						380.
+					},
+				))
 				.max_h(px(640.))
 				.p_4()
 				.gap_3()
@@ -78,21 +83,15 @@ fn dialog(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> 
 					h_flex()
 						.justify_between()
 						.child(div().font_semibold().child(title))
-						.child(
-							Button::new("dlg-x")
-								.ghost()
-								.xsmall()
-								.icon(IconName::Close)
-								.on_click({
-									let view = view.clone();
-									move |_, _, cx| {
-										view.update(cx, |app, cx| {
-											app.data.overlay.dialog = None;
-											cx.notify();
-										});
-									}
-								}),
-						),
+						.child(Button::new("dlg-x").ghost().xsmall().icon(IconName::Close).on_click({
+							let view = view.clone();
+							move |_, _, cx| {
+								view.update(cx, |app, cx| {
+									app.data.overlay.dialog = None;
+									cx.notify();
+								});
+							}
+						})),
 				)
 				.child(dialog_body(app, kind, window, cx))
 				.child(dialog_footer(app, kind, cx)),
@@ -127,22 +126,17 @@ fn dialog_body(
 							h_flex()
 								.justify_between()
 								.child(div().text_sm().child(app.t("folder")))
-								.child(
-									Button::new("rechoose")
-										.xsmall()
-										.label(app.t("chooseFolder"))
-										.on_click({
-											let view = view.clone();
-											move |_, _, cx| {
-												view.update(cx, |app, cx| {
-													if let Some(p) = backend::pick_folder() {
-														app.data.overlay.dialog_folder = Some(p);
-													}
-													cx.notify();
-												});
+								.child(Button::new("rechoose").xsmall().label(app.t("chooseFolder")).on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											if let Some(p) = backend::pick_folder() {
+												app.data.overlay.dialog_folder = Some(p);
 											}
-										}),
-								),
+											cx.notify();
+										});
+									}
+								})),
 						)
 						.child(
 							div()
@@ -188,10 +182,7 @@ fn dialog_body(
 				.child(div().text_xs().text_color(theme.muted_foreground).child(hint))
 				.into_any_element()
 		}
-		DialogKind::DeleteProject => div()
-			.text_sm()
-			.child(app.t("confirmDeleteProject"))
-			.into_any_element(),
+		DialogKind::DeleteProject => div().text_sm().child(app.t("confirmDeleteProject")).into_any_element(),
 		DialogKind::RenameProject => v_flex()
 			.gap_2()
 			.child(div().text_sm().child(app.t("newName")))
@@ -239,7 +230,12 @@ fn dialog_body(
 				v_flex()
 					.gap_2()
 					.child(div().text_sm().child(app.t("projectWorktreeDir")))
-					.child(div().text_xs().text_color(theme.muted_foreground).child(app.t("projectWorktreeDirDesc")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("projectWorktreeDirDesc")),
+					)
 					.child(Input::new(&app.inputs.worktree))
 					.child(div().text_sm().child(app.t("initScript")))
 					.child(Input::new(&app.inputs.init_script))
@@ -249,10 +245,85 @@ fn dialog_body(
 					.child(Input::new(&app.inputs.teardown_script))
 					.into_any_element()
 			} else {
+				let templates = app
+					.data
+					.workspaces
+					.values()
+					.find(|w| {
+						Some(w.project_id.as_str()) == app.data.overlay.dialog_project.as_deref()
+							|| Some(w.project_id.as_str()) == app.data.current_project.as_deref()
+					})
+					.map(|w| w.config.terminal_templates.clone())
+					.unwrap_or_default();
 				v_flex()
 					.gap_2()
 					.child(div().text_sm().child(app.t("projectTerminalTemplates")))
-					.child(div().text_xs().text_color(theme.muted_foreground).child(app.t("projectTerminalTemplatesDescription")))
+					.child(
+						div()
+							.text_xs()
+							.text_color(theme.muted_foreground)
+							.child(app.t("projectTerminalTemplatesDescription")),
+					)
+					.child(if templates.is_empty() {
+						div()
+							.p_2()
+							.text_sm()
+							.child(app.t("noTerminalTemplates"))
+							.into_any_element()
+					} else {
+						v_flex()
+							.gap_1()
+							.children(templates.into_iter().map(|t| {
+								let id = t.id.clone();
+								h_flex()
+									.id(crate::ui::eid(format!("ptpl-{id}")))
+									.justify_between()
+									.child(
+										v_flex()
+											.child(div().font_medium().text_sm().child(t.name.clone()))
+											.child(
+												div().text_xs().text_color(theme.muted_foreground).child(t.cwd.clone()),
+											),
+									)
+									.child(
+										Button::new(crate::ui::eid(format!("ptpl-del-{id}")))
+											.danger()
+											.xsmall()
+											.label(app.t("delete"))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													view.update(cx, |app, cx| {
+														app.remove_project_template(&id);
+														cx.notify();
+													});
+												}
+											}),
+									)
+							}))
+							.into_any_element()
+					})
+					.child(div().text_xs().child(app.t("terminalTemplateName")))
+					.child(Input::new(&app.inputs.template_name))
+					.child(div().text_xs().child(app.t("terminalTemplateCwd")))
+					.child(Input::new(&app.inputs.template_cwd))
+					.child(div().text_xs().child(app.t("terminalTemplateCommands")))
+					.child(Input::new(&app.inputs.template_commands))
+					.child(
+						Button::new("add-project-tpl")
+							.xsmall()
+							.primary()
+							.label(app.t("addTerminalTemplate"))
+							.on_click({
+								let view = view.clone();
+								move |_, _, cx| {
+									view.update(cx, |app, cx| {
+										app.add_project_template(cx);
+										cx.notify();
+									});
+								}
+							}),
+					)
 					.into_any_element()
 			})
 			.into_any_element(),
@@ -278,11 +349,14 @@ fn dialog_body(
 				)
 			})
 			.into_any_element(),
-		DialogKind::CloseUnsaved => div().text_sm().child(crate::i18n::tf(
-			app.data.locale,
-			"closeUnsavedFileDescription",
-			&[("file", app.data.overlay.dialog_file.as_deref().unwrap_or(""))],
-		)).into_any_element(),
+		DialogKind::CloseUnsaved => div()
+			.text_sm()
+			.child(crate::i18n::tf(
+				app.data.locale,
+				"closeUnsavedFileDescription",
+				&[("file", app.data.overlay.dialog_file.as_deref().unwrap_or(""))],
+			))
+			.into_any_element(),
 		DialogKind::SwitchBranch => {
 			let q = app.inputs.branch_search.read(cx).value().to_string();
 			let branches: Vec<_> = app
@@ -326,11 +400,21 @@ fn dialog_body(
 									}
 								})
 								.child(div().flex_1().child(name))
-								.when(b.is_current, |el| el.child(badge(&app.t("branchCurrentLabel"), theme.muted_foreground)))
-								.when(b.is_trunk, |el| el.child(badge(&app.t("branchTrunkLabel"), theme.muted_foreground)))
-								.when(b.is_used, |el| el.child(badge(&app.t("branchUsedLabel"), theme.warning)))
-								.when(b.ahead > 0, |el| el.child(div().text_xs().child(format!("↑{}", b.ahead))))
-								.when(b.behind > 0, |el| el.child(div().text_xs().child(format!("↓{}", b.behind))))
+								.when(b.is_current, |el| {
+									el.child(badge(&app.t("branchCurrentLabel"), theme.muted_foreground))
+								})
+								.when(b.is_trunk, |el| {
+									el.child(badge(&app.t("branchTrunkLabel"), theme.muted_foreground))
+								})
+								.when(b.is_used, |el| {
+									el.child(badge(&app.t("branchUsedLabel"), theme.warning))
+								})
+								.when(b.ahead > 0, |el| {
+									el.child(div().text_xs().child(format!("↑{}", b.ahead)))
+								})
+								.when(b.behind > 0, |el| {
+									el.child(div().text_xs().child(format!("↓{}", b.behind)))
+								})
 						}))
 						.into_any_element()
 				})
@@ -339,7 +423,12 @@ fn dialog_body(
 		DialogKind::OpenLink => v_flex()
 			.gap_2()
 			.child(div().text_sm().child(app.t("terminalOpenLinkConfirmDescription")))
-			.child(div().font_family("monospace").text_xs().child(app.data.overlay.dialog_url.clone().unwrap_or_default()))
+			.child(
+				div()
+					.font_family("monospace")
+					.text_xs()
+					.child(app.data.overlay.dialog_url.clone().unwrap_or_default()),
+			)
 			.into_any_element(),
 		DialogKind::ChooseFile => v_flex()
 			.gap_2()
@@ -390,12 +479,7 @@ fn dialog_body(
 }
 
 fn badge(text: &str, color: gpui::Hsla) -> impl IntoElement {
-	div()
-		.px_1()
-		.text_xs()
-		.rounded_md()
-		.bg(color)
-		.child(text.to_string())
+	div().px_1().text_xs().rounded_md().bg(color).child(text.to_string())
 }
 
 fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -423,25 +507,23 @@ fn dialog_footer(app: &AppView, kind: DialogKind, cx: &mut Context<AppView>) -> 
 		DialogKind::ReviewQueue => app.t("reviewCommentsCopied"),
 		_ => app.t("cancel"),
 	};
-	let show_ok = !matches!(kind, DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile);
+	let show_ok = !matches!(
+		kind,
+		DialogKind::SwitchBranch | DialogKind::DebugLog | DialogKind::ChooseFile
+	);
 
 	h_flex()
 		.justify_end()
 		.gap_2()
-		.child(
-			Button::new("dlg-cancel")
-				.small()
-				.label(app.t("cancel"))
-				.on_click({
-					let view = view.clone();
-					move |_, _, cx| {
-						view.update(cx, |app, cx| {
-							app.data.overlay.dialog = None;
-							cx.notify();
-						});
-					}
-				}),
-		)
+		.child(Button::new("dlg-cancel").small().label(app.t("cancel")).on_click({
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					app.data.overlay.dialog = None;
+					cx.notify();
+				});
+			}
+		}))
 		.when(show_ok, |el| {
 			el.child(
 				Button::new("dlg-ok")
@@ -584,7 +666,9 @@ enum MenuAction {
 	CopyAbs,
 	DeletePath,
 	Template(usize),
+	ProjectTemplate(usize),
 	NewTerm,
+	Header,
 }
 
 fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuAction)> {
@@ -600,8 +684,16 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuActio
 		ContextMenu::Profile { .. } => vec![(app.t("deleteProfile"), true, MenuAction::DeleteProfile)],
 		ContextMenu::File { .. } => vec![
 			(app.t("fileTreeContextMenuOpen"), false, MenuAction::Open),
-			(app.t("fileTreeContextMenuOpenInDefaultApp"), false, MenuAction::OpenDefault),
-			(app.t("fileTreeContextMenuRevealInFileManager"), false, MenuAction::Reveal),
+			(
+				app.t("fileTreeContextMenuOpenInDefaultApp"),
+				false,
+				MenuAction::OpenDefault,
+			),
+			(
+				app.t("fileTreeContextMenuRevealInFileManager"),
+				false,
+				MenuAction::Reveal,
+			),
 			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
 			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
 			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
@@ -614,25 +706,37 @@ fn menu_items(app: &AppView, menu: &ContextMenu) -> Vec<(String, bool, MenuActio
 			(app.t("fileTreeContextMenuNewFile"), false, MenuAction::NewFile),
 			(app.t("fileTreeContextMenuNewFolder"), false, MenuAction::NewFolder),
 			(app.t("fileTreeContextMenuRefresh"), false, MenuAction::Refresh),
-			(app.t("fileTreeContextMenuRevealInFileManager"), false, MenuAction::Reveal),
+			(
+				app.t("fileTreeContextMenuRevealInFileManager"),
+				false,
+				MenuAction::Reveal,
+			),
 		],
 		ContextMenu::NewTerminal => {
 			let mut items = vec![(app.t("newTerminal"), false, MenuAction::NewTerm)];
-			for (i, t) in app.data.prefs.templates.iter().enumerate() {
-				items.push((t.name.clone(), false, MenuAction::Template(i)));
+			let project = app
+				.data
+				.current_ws()
+				.map(|w| w.config.terminal_templates.clone())
+				.unwrap_or_default();
+			if !project.is_empty() {
+				items.push((app.t("projectTerminalTemplates"), false, MenuAction::Header));
+				for (i, t) in project.iter().enumerate() {
+					items.push((t.name.clone(), false, MenuAction::ProjectTemplate(i)));
+				}
+			}
+			if !app.data.prefs.templates.is_empty() {
+				items.push((app.t("globalTerminalTemplates"), false, MenuAction::Header));
+				for (i, t) in app.data.prefs.templates.iter().enumerate() {
+					items.push((t.name.clone(), false, MenuAction::Template(i)));
+				}
 			}
 			items
 		}
 	}
 }
 
-fn run_menu(
-	app: &mut AppView,
-	menu: &ContextMenu,
-	action: MenuAction,
-	window: &mut Window,
-	cx: &mut Context<AppView>,
-) {
+fn run_menu(app: &mut AppView, menu: &ContextMenu, action: MenuAction, window: &mut Window, cx: &mut Context<AppView>) {
 	match (menu, action) {
 		(ContextMenu::Project { id }, MenuAction::DeleteProject) => {
 			app.data.overlay.dialog = Some(DialogKind::DeleteProject);
@@ -695,6 +799,16 @@ fn run_menu(
 		(_, MenuAction::NewTerm) => app.create_terminal(&app.t("newTerminal"), "", Vec::new()),
 		(_, MenuAction::Template(i)) => {
 			if let Some(t) = app.data.prefs.templates.get(i).cloned() {
+				app.create_terminal(&t.name, &t.cwd, t.commands);
+			}
+		}
+		(_, MenuAction::Header) => {}
+		(_, MenuAction::ProjectTemplate(i)) => {
+			if let Some(t) = app
+				.data
+				.current_ws()
+				.and_then(|w| w.config.terminal_templates.get(i).cloned())
+			{
 				app.create_terminal(&t.name, &t.cwd, t.commands);
 			}
 		}

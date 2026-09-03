@@ -5,11 +5,7 @@ use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, Style
 
 use crate::app::AppView;
 use crate::state::ContextMenu;
-
-#[derive(Clone)]
-struct TreeDrag {
-	path: String,
-}
+use crate::ui::TreeDrag;
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let theme = cx.theme().clone();

@@ -124,7 +124,7 @@ impl AppView {
 			notes: input(window, cx, "", true),
 			palette: input(window, cx, "", false),
 			file_editor: input(window, cx, "", true),
-			file_search: input(window, cx, "", false),
+			file_search: input(window, cx, "Find", false),
 			debug_search: input(window, cx, "", false),
 			branch_search: input(window, cx, "", false),
 			new_path: input(window, cx, "", false),
@@ -355,6 +355,7 @@ impl AppView {
 				}
 			}
 		}
+		self.inject_git_paths(profile_id);
 	}
 
 	pub fn load_tree_root(&mut self, profile_id: &str) {
@@ -411,6 +412,46 @@ impl AppView {
 				}
 			}
 			Err(err) => ws.tree_error = Some(err.to_string()),
+		}
+		self.inject_git_paths(profile_id);
+	}
+
+	fn inject_git_paths(&mut self, profile_id: &str) {
+		let Some(ws) = self.data.workspaces.get_mut(profile_id) else {
+			return;
+		};
+		if !ws.tree.contains_key("") {
+			return;
+		}
+		let files: Vec<String> = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
+		for path in files {
+			if path.is_empty() || ws.tree.contains_key(&path) {
+				continue;
+			}
+			let mut parent = String::new();
+			let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+			for (i, part) in parts.iter().enumerate() {
+				let current = if parent.is_empty() {
+					(*part).to_string()
+				} else {
+					format!("{parent}/{part}")
+				};
+				let is_last = i + 1 == parts.len();
+				ws.tree.entry(current.clone()).or_insert_with(|| TreeNode {
+					path: current.clone(),
+					name: (*part).to_string(),
+					is_dir: !is_last,
+					expanded: false,
+					children_loaded: is_last,
+					children: Vec::new(),
+				});
+				if let Some(pnode) = ws.tree.get_mut(&parent) {
+					if !pnode.children.contains(&current) {
+						pnode.children.push(current.clone());
+					}
+				}
+				parent = current;
+			}
 		}
 	}
 
@@ -611,6 +652,15 @@ impl AppView {
 				None
 			};
 		}
+	}
+
+	pub fn write_path_to_pty(&mut self, session_id: &str, path: &str) {
+		let quoted = if path.contains(' ') {
+			format!("\"{path}\" ")
+		} else {
+			format!("{path} ")
+		};
+		let _ = self.backend.write_pty(session_id, quoted.as_bytes());
 	}
 
 	pub fn write_to_active_pty(&mut self, bytes: &[u8]) {
@@ -1318,6 +1368,46 @@ impl AppView {
 		}
 	}
 
+	pub fn add_project_template(&mut self, cx: &mut Context<Self>) {
+		let name = self.inputs.template_name.read(cx).value().to_string();
+		if name.trim().is_empty() {
+			return;
+		}
+		let Some(project_id) = self
+			.data
+			.overlay
+			.dialog_project
+			.clone()
+			.or_else(|| self.data.current_project.clone())
+		else {
+			return;
+		};
+		let template = model::project::ProjectTerminalTemplate {
+			id: uuid::Uuid::new_v4().to_string(),
+			name,
+			cwd: self.inputs.template_cwd.read(cx).value().to_string(),
+			commands: lines(&self.inputs.template_commands.read(cx).value()),
+		};
+		if let Some(ws) = self.data.workspaces.values_mut().find(|w| w.project_id == project_id) {
+			ws.config.terminal_templates.push(template);
+		}
+	}
+
+	pub fn remove_project_template(&mut self, id: &str) {
+		let Some(project_id) = self
+			.data
+			.overlay
+			.dialog_project
+			.clone()
+			.or_else(|| self.data.current_project.clone())
+		else {
+			return;
+		};
+		if let Some(ws) = self.data.workspaces.values_mut().find(|w| w.project_id == project_id) {
+			ws.config.terminal_templates.retain(|t| t.id != id);
+		}
+	}
+
 	pub fn save_project_settings(&mut self, cx: &mut Context<Self>) {
 		let Some(project_id) = self
 			.data
@@ -1338,6 +1428,14 @@ impl AppView {
 		config.init_script = lines(&self.inputs.init_script.read(cx).value());
 		config.setup_script = lines(&self.inputs.setup_script.read(cx).value());
 		config.teardown_script = lines(&self.inputs.teardown_script.read(cx).value());
+		let templates = self
+			.data
+			.workspaces
+			.values()
+			.find(|w| w.project_id == project_id)
+			.map(|w| w.config.terminal_templates.clone())
+			.unwrap_or_else(|| config.terminal_templates.clone());
+		config.terminal_templates = templates;
 		if let Err(err) = self.backend.save_project_config(&project_id, &config) {
 			self.data
 				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
@@ -1460,12 +1558,24 @@ impl AppView {
 			return;
 		};
 		let name = self.inputs.new_path.read(cx).value().to_string();
+		let existing: Vec<String> = self
+			.data
+			.workspaces
+			.get(&profile_id)
+			.map(|w| {
+				w.tree
+					.get("")
+					.map(|root| {
+						root.children
+							.iter()
+							.filter_map(|p| w.tree.get(p).map(|n| n.name.clone()))
+							.collect()
+					})
+					.unwrap_or_default()
+			})
+			.unwrap_or_default();
 		let name = if name.trim().is_empty() {
-			if is_dir {
-				"New Folder".into()
-			} else {
-				"New File".into()
-			}
+			unique_tree_name(&existing, if is_dir { "New Folder" } else { "New File" })
 		} else {
 			name
 		};
@@ -1721,6 +1831,18 @@ impl AppView {
 	}
 
 	pub fn handle_overlay_key(&mut self, key: &str, shift: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+		if self.data.overlay.dialog == Some(DialogKind::CreateProject) && key == "enter" {
+			self.create_project_from_dialog(window, cx);
+			return true;
+		}
+		if self.data.overlay.dialog == Some(DialogKind::CreateProfile) && key == "enter" {
+			self.create_profile_from_dialog(cx);
+			return true;
+		}
+		if self.data.overlay.dialog == Some(DialogKind::RenameProject) && key == "enter" {
+			self.rename_dialog_project(cx);
+			return true;
+		}
 		if self.data.overlay.palette_open {
 			return match key {
 				"up" => {
@@ -1775,6 +1897,20 @@ impl AppView {
 			"enter" | "space" => self.activate_sidebar_nav(),
 			_ => false,
 		}
+	}
+}
+
+pub fn unique_tree_name(existing: &[String], base: &str) -> String {
+	if !existing.iter().any(|n| n == base) {
+		return base.to_string();
+	}
+	let mut n = 2;
+	loop {
+		let candidate = format!("{base} {n}");
+		if !existing.iter().any(|name| name == &candidate) {
+			return candidate;
+		}
+		n += 1;
 	}
 }
 
@@ -1968,4 +2104,19 @@ impl gpui::Render for AppView {
 #[allow(dead_code)]
 pub fn input_el(state: &Entity<InputState>) -> Input {
 	Input::new(state)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::unique_tree_name;
+
+	#[test]
+	fn unique_tree_name_adds_numbers() {
+		assert_eq!(unique_tree_name(&[], "New File"), "New File");
+		assert_eq!(unique_tree_name(&["New File".into()], "New File"), "New File 2");
+		assert_eq!(
+			unique_tree_name(&["New File".into(), "New File 2".into()], "New File"),
+			"New File 3"
+		);
+	}
 }

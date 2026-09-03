@@ -474,6 +474,11 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 			let selected = matches!(active, Some(UnifiedTab::Terminal { index }) if index == ix);
 			let id = term.id.clone();
 			let profile = term.profile_id.clone();
+			let show_completed = term.agent == crate::state::AgentStatus::Completed && !term.completed_hidden;
+			let show_live = matches!(
+				term.agent,
+				crate::state::AgentStatus::Running | crate::state::AgentStatus::Waiting
+			);
 			Tab::new()
 				.label(term.title.clone())
 				.icon(IconName::SquareTerminal)
@@ -482,7 +487,35 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 					h_flex()
 						.gap_1()
 						.child(agent_kind_mark(term.agent_kind))
-						.child(sidebar::agent_dot(term.agent))
+						.when(show_live, |el| el.child(sidebar::agent_dot(term.agent)))
+						.when(show_completed, |el| {
+							let view = view.clone();
+							let id = id.clone();
+							el.child(
+								div()
+									.id(crate::ui::eid(format!("done-{id}")))
+									.size(px(8.))
+									.rounded_full()
+									.bg(gpui::rgb(0x22c55e))
+									.cursor(gpui::CursorStyle::PointingHand)
+									.on_click({
+										let view = view.clone();
+										let id = id.clone();
+										move |_, _, cx| {
+											view.update(cx, |app, cx| {
+												if let Some(term) = app
+													.data
+													.current_ws_mut()
+													.and_then(|w| w.terminals.iter_mut().find(|t| t.id == id))
+												{
+													term.completed_hidden = true;
+												}
+												cx.notify();
+											});
+										}
+									}),
+							)
+						})
 						.child(
 							Button::new(crate::ui::eid(format!("close-term-{id}")))
 								.ghost()
@@ -508,6 +541,16 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 							if let Some(ws) = app.data.current_ws_mut() {
 								ws.active = Some(UnifiedTab::Terminal { index: ix });
 							}
+							cx.notify();
+						});
+					}
+				})
+				.on_drop({
+					let view = view.clone();
+					let id = id.clone();
+					move |drag: &crate::ui::TreeDrag, _, cx| {
+						view.update(cx, |app, cx| {
+							app.write_path_to_pty(&id, &drag.path);
 							cx.notify();
 						});
 					}

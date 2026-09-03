@@ -86,17 +86,32 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 			.into_any_element();
 	}
 
+	let q = app.inputs.file_search.read(cx).value().to_string();
+	let hits = if q.is_empty() {
+		0
+	} else {
+		file.draft.matches(&q).count()
+	};
 	v_flex()
 		.id("text-viewer")
 		.size_full()
+		.font_family(app.data.prefs.font_family.clone())
+		.text_size(px(app.data.prefs.font_size))
 		.child(
 			h_flex()
 				.w_full()
 				.px_2()
 				.py_1()
-				.justify_end()
+				.gap_2()
 				.border_b_1()
 				.border_color(theme.border)
+				.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
+				.child(
+					div()
+						.text_xs()
+						.text_color(theme.muted_foreground)
+						.child(if q.is_empty() { String::new() } else { format!("{hits}") }),
+				)
 				.child(
 					Button::new("file-save")
 						.xsmall()
@@ -135,7 +150,11 @@ fn preview_pane(_app: &AppView, file: &crate::state::OpenFileTab, cx: &mut Conte
 				.child(
 					h_flex()
 						.gap_2()
-						.child(div().text_xs().child(file.preview_kind.clone()))
+						.child(div().text_xs().child(if file.preview_kind == "office" {
+							"Office Preview".to_string()
+						} else {
+							"Preview".to_string()
+						}))
 						.child(Button::new("open-external").xsmall().label("Open").on_click({
 							let view = view.clone();
 							let path = path.clone();
@@ -172,12 +191,19 @@ fn preview_body(file: &crate::state::OpenFileTab, cx: &mut Context<AppView>) -> 
 			.into_any_element();
 	}
 	if file.preview_kind == "archive" && !file.archive_entries.is_empty() {
+		let files = file.archive_entries.iter().filter(|(_, k)| k != "dir").count();
+		let folders = file.archive_entries.iter().filter(|(_, k)| k == "dir").count();
 		return v_flex()
 			.id("archive-preview")
 			.size_full()
 			.p_3()
 			.gap_1()
-			.overflow_y_scroll()
+			.child(
+				div()
+					.text_xs()
+					.text_color(theme.muted_foreground)
+					.child(format!("{files} files / {folders} folders")),
+			)
 			.children(file.archive_entries.iter().map(|(path, kind)| {
 				h_flex()
 					.gap_2()
