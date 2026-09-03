@@ -271,8 +271,7 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 							let view = view.clone();
 							move |drag: &SidebarDrag, cx| {
 								view.update(cx, |app, cx| {
-									let _ = app.backend.set_pinned(&drag.id, true);
-									app.reload_projects();
+									app.set_project_pinned(&drag.id, true);
 									cx.notify();
 								});
 							}
@@ -384,8 +383,7 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 										let gid = gid.clone();
 										move |drag: &SidebarDrag, _, cx| {
 											view.update(cx, |app, cx| {
-												let _ = app.backend.assign_to_group(&drag.id, Some(gid.clone()));
-												app.reload_projects();
+												app.assign_project_to_group(&drag.id, Some(gid.clone()));
 												cx.notify();
 											});
 										}
@@ -421,8 +419,7 @@ fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 									let gid = gid.clone();
 									move |drag: &SidebarDrag, cx| {
 										view.update(cx, |app, cx| {
-											let _ = app.backend.assign_to_group(&drag.id, Some(gid.clone()));
-											app.reload_projects();
+											app.assign_project_to_group(&drag.id, Some(gid.clone()));
 											cx.notify();
 										});
 									}
@@ -700,8 +697,7 @@ fn project_row(
 								let id = id.clone();
 								move |_, _, cx| {
 									view.update(cx, |app, cx| {
-										let _ = app.backend.set_pinned(&id, !pinned);
-										app.reload_projects();
+										app.set_project_pinned(&id, !pinned);
 										cx.notify();
 									});
 								}

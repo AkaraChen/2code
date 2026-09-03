@@ -140,7 +140,7 @@ impl AppView {
 					.line_number(true)
 					.soft_wrap(false)
 			}),
-			file_search: input(window, cx, "Find", false),
+			file_search: input(window, cx, &i18n::t(locale, "fileViewerFindInFile"), false),
 			debug_search: input(window, cx, "", false),
 			branch_search: input(window, cx, "", false),
 			new_path: input(window, cx, "", false),
@@ -187,6 +187,9 @@ impl AppView {
 		});
 		inputs.term_search.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "terminalSearchPlaceholder"), window, cx);
+		});
+		inputs.file_search.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "fileViewerFindInFile"), window, cx);
 		});
 		inputs.review_comment.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "gitReviewCommentPlaceholder"), window, cx);
@@ -1034,6 +1037,7 @@ impl AppView {
 			.and_then(|w| w.active.as_ref())
 			.is_some_and(|tab| matches!(tab, UnifiedTab::File { .. }));
 		if file_tab {
+			self.data.overlay.file_search_open = true;
 			self.inputs.file_search.update(cx, |input, cx| {
 				input.focus(window, cx);
 			});
@@ -1147,7 +1151,16 @@ impl AppView {
 	pub fn move_sidebar_project(&mut self, id: &str, delta: i32) {
 		if let Err(err) = self.backend.move_project(id, delta) {
 			self.data
-				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+				.push_toast(ToastKind::Error, self.t("sidebarOrderUpdateFailed"), err.to_string());
+			return;
+		}
+		self.reload_projects();
+	}
+
+	pub fn set_project_pinned(&mut self, id: &str, pinned: bool) {
+		if let Err(err) = self.backend.set_pinned(id, pinned) {
+			self.data
+				.push_toast(ToastKind::Error, self.t("sidebarOrderUpdateFailed"), err.to_string());
 			return;
 		}
 		self.reload_projects();
@@ -1171,7 +1184,7 @@ impl AppView {
 	pub fn drop_sidebar_project(&mut self, dragged: &str, target: Option<&str>, unpin: bool) {
 		if let Err(err) = self.backend.drop_project(dragged, target, unpin) {
 			self.data
-				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
+				.push_toast(ToastKind::Error, self.t("sidebarOrderUpdateFailed"), err.to_string());
 			return;
 		}
 		self.reload_projects();
@@ -2025,6 +2038,10 @@ impl AppView {
 			return true;
 		}
 		if self.data.overlay.renaming_path.take().is_some() {
+			return true;
+		}
+		if self.data.overlay.file_search_open {
+			self.data.overlay.file_search_open = false;
 			return true;
 		}
 		if self.data.overlay.palette_open {

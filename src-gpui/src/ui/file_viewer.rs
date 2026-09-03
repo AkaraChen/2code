@@ -4,7 +4,7 @@ use gpui::{div, img, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::text::TextView;
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, Sizable, StyledExt};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
 use crate::backend;
@@ -148,13 +148,35 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.gap_2()
 				.border_b_1()
 				.border_color(theme.border)
-				.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
-				.child(
-					div()
-						.text_xs()
-						.text_color(theme.muted_foreground)
-						.child(if q.is_empty() { String::new() } else { format!("{hits}") }),
-				)
+				.when(app.data.overlay.file_search_open, |el| {
+					el.child(div().flex_1().child(Input::new(&app.inputs.file_search)))
+						.child(
+							div()
+								.text_xs()
+								.text_color(theme.muted_foreground)
+								.child(if q.is_empty() {
+									app.t("fileViewerFindInFile")
+								} else {
+									format!("{hits}")
+								}),
+						)
+						.child(
+							Button::new("file-find-close")
+								.ghost()
+								.xsmall()
+								.icon(IconName::Close)
+								.tooltip(app.t("fileViewerCloseFileSearch"))
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.data.overlay.file_search_open = false;
+											cx.notify();
+										});
+									}
+								}),
+						)
+				})
 				.child(
 					Button::new("file-save")
 						.xsmall()

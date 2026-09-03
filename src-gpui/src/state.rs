@@ -416,6 +416,7 @@ pub struct OverlayState {
 	pub renaming_path: Option<String>,
 	pub update_checked: bool,
 	pub group_menu_creating: bool,
+	pub file_search_open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

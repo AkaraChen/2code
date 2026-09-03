@@ -492,7 +492,7 @@ impl SettingsView {
 							.map(|shell| {
 								let selected = self.prefs.custom_shell == shell;
 								let label = if shell == default_shell {
-									format!("{shell} (default)")
+									format!("{shell} ({})", self.t("defaultOption"))
 								} else {
 									shell.clone()
 								};
