@@ -6,6 +6,9 @@ gpui-check:
     cd src-gpui && cargo check
 
 start:
+    just gpui
+
+tauri-dev:
     ./start.sh
 
 fmt:

@@ -652,19 +652,57 @@ impl AppView {
 			if bytes.is_empty() {
 				continue;
 			}
+			let mut became_waiting = false;
 			if let Some(term) = self
 				.data
 				.workspaces
 				.get_mut(&profile_id)
 				.and_then(|w| w.terminals.iter_mut().find(|t| t.id == session_id))
 			{
+				let before = term.agent;
 				term.feed(&bytes);
+				became_waiting = before != AgentStatus::Waiting && term.agent == AgentStatus::Waiting;
+			}
+			if became_waiting {
+				self.notify_agent_waiting();
 			}
 		}
 		if let Ok(exits) = self.backend.exits.lock() {
 			let _ = exits.len();
 		}
+		self.drain_watch_events();
 		self.autosave_notes(cx);
+	}
+
+	fn notify_agent_waiting(&self) {
+		if !self.data.prefs.notifications {
+			return;
+		}
+		let sound = self.data.prefs.notification_sound.clone();
+		if !sound.is_empty() {
+			let _ = crate::platform::play_system_sound(&sound);
+		}
+	}
+
+	fn drain_watch_events(&mut self) {
+		let events = self.backend.take_watch_events();
+		if events.is_empty() {
+			return;
+		}
+		let mut profiles = std::collections::HashSet::new();
+		for event in events {
+			if let Some(pid) = event.profile_id {
+				profiles.insert(pid);
+			} else if let Some(default) = self.data.default_profile_of(&event.project_id) {
+				profiles.insert(default.id);
+			}
+		}
+		for profile_id in profiles {
+			if self.data.workspaces.contains_key(&profile_id) {
+				self.load_tree_root(&profile_id);
+				self.refresh_workspace(&profile_id);
+			}
+		}
 	}
 
 	fn autosave_notes(&mut self, cx: &mut Context<Self>) {
@@ -1188,7 +1226,88 @@ impl AppView {
 		}
 	}
 
-	pub fn create_path(&mut self, is_dir: bool, cx: &mut Context<Self>) {
+	pub fn start_rename_path(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
+		self.data.overlay.renaming_path = Some(path.to_string());
+		let name = backend::file_name(path);
+		self.inputs.rename.update(cx, |s, cx| {
+			s.set_value(name, window, cx);
+		});
+	}
+
+	pub fn commit_rename_path(&mut self, cx: &mut Context<Self>) {
+		let Some(from) = self.data.overlay.renaming_path.clone() else {
+			return;
+		};
+		let name = self.inputs.rename.read(cx).value().to_string();
+		if name.trim().is_empty() {
+			self.data.overlay.renaming_path = None;
+			return;
+		}
+		let Some(profile_id) = self.data.current_profile.clone() else {
+			return;
+		};
+		let parent = std::path::Path::new(&from)
+			.parent()
+			.map(|p| p.to_string_lossy().into_owned())
+			.unwrap_or_default();
+		let to = if parent.is_empty() {
+			name
+		} else {
+			format!("{parent}/{name}")
+		};
+		if let Err(err) = self.backend.rename_path(&profile_id, &from, &to) {
+			self.data.push_toast(
+				ToastKind::Error,
+				self.t("fileTreeCreateErrorTitle"),
+				err.to_string(),
+			);
+			return;
+		}
+		self.data.overlay.renaming_path = None;
+		self.load_tree_root(&profile_id);
+	}
+
+	pub fn drop_file_on_terminal(&mut self) {
+		let Some(path) = self.data.overlay.drag_file.take() else {
+			return;
+		};
+		let quoted = if path.contains(' ') {
+			format!("\"{path}\" ")
+		} else {
+			format!("{path} ")
+		};
+		self.write_to_active_pty(quoted.as_bytes());
+	}
+
+	pub fn open_clickable(&mut self, token: &crate::detector::Clickable, window: &mut Window, cx: &mut Context<Self>) {
+		match token {
+			crate::detector::Clickable::Url(url) => {
+				self.data.overlay.dialog = Some(DialogKind::OpenLink);
+				self.data.overlay.dialog_url = Some(url.clone());
+			}
+			crate::detector::Clickable::Path(path) => {
+				let Some(profile_id) = self.data.current_profile.clone() else {
+					return;
+				};
+				match self.backend.resolve_file(&profile_id, path) {
+					Ok(model::filesystem::ResolvedFilePath::Exact { path }) => {
+						self.open_file(&profile_id, &path, window, cx);
+					}
+					Ok(model::filesystem::ResolvedFilePath::Fuzzy { candidates }) => {
+						self.data.overlay.dialog = Some(DialogKind::ChooseFile);
+						self.data.overlay.fuzzy_files = candidates;
+					}
+					Err(err) => self.data.push_toast(
+						ToastKind::Error,
+						self.t("somethingWentWrong"),
+						err.to_string(),
+					),
+				}
+			}
+		}
+	}
+
+	pub fn create_path(&mut self, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
 		let Some(profile_id) = self.data.current_profile.clone() else {
 			return;
 		};
@@ -1211,6 +1330,7 @@ impl AppView {
 			return;
 		}
 		self.load_tree_root(&profile_id);
+		self.start_rename_path(&name, window, cx);
 	}
 
 	pub fn delete_tree_path(&mut self, path: &str) {

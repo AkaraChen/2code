@@ -610,6 +610,14 @@ fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 		AgentKind::Claude => ("C", gpui::rgb(0xd97757)),
 		AgentKind::Codex => ("X", gpui::rgb(0x6b7280)),
 		AgentKind::Gemini => ("G", gpui::rgb(0x4285f4)),
+		AgentKind::Cursor => ("R", gpui::rgb(0xf59e0b)),
+		AgentKind::Copilot => ("P", gpui::rgb(0x818cf8)),
+		AgentKind::Amp => ("A", gpui::rgb(0x22c55e)),
+		AgentKind::Cline => ("L", gpui::rgb(0x38bdf8)),
+		AgentKind::OpenCode => ("O", gpui::rgb(0x94a3b8)),
+		AgentKind::Grok => ("K", gpui::rgb(0xe5e7eb)),
+		AgentKind::Kimi => ("M", gpui::rgb(0xf472b6)),
+		AgentKind::Other => ("•", gpui::rgb(0x9ca3af)),
 		AgentKind::Unknown => return div().into_any_element(),
 	};
 	div()

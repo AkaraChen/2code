@@ -57,6 +57,8 @@ AI-assisted development creates more parallel state than a normal coding session
 ### Run the desktop app
 
 ```bash
+just start
+# or
 just gpui
 # or
 cd src-gpui && cargo run

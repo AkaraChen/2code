@@ -1,5 +1,7 @@
 use gpui::{div, prelude::*, px, Context, MouseButton, Window};
-use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, StyledExt};
+use gpui_component::button::{Button, ButtonVariants};
+use gpui_component::input::Input;
+use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 
 use crate::app::AppView;
 use crate::state::ContextMenu;
@@ -83,6 +85,7 @@ fn node_view(
 	let indent = px(12. * depth as f32 + 4.);
 	let path_owned = path.to_string();
 	let profile_owned = profile.to_string();
+	let renaming = app.data.overlay.renaming_path.as_deref() == Some(path);
 
 	v_flex()
 		.child(
@@ -102,12 +105,28 @@ fn node_view(
 					let is_dir = node.is_dir;
 					move |_, window, cx| {
 						view.update(cx, |app, cx| {
+							if app.data.overlay.renaming_path.as_deref() == Some(path.as_str()) {
+								return;
+							}
 							if is_dir {
 								app.toggle_dir(&profile, &path);
 							} else {
 								app.open_file(&profile, &path, window, cx);
 							}
 							cx.notify();
+						});
+					}
+				})
+				.on_mouse_down(MouseButton::Left, {
+					let view = view.clone();
+					let path = path_owned.clone();
+					let is_dir = node.is_dir;
+					move |_, _, cx| {
+						if is_dir {
+							return;
+						}
+						view.update(cx, |app, _| {
+							app.data.overlay.drag_file = Some(path.clone());
 						});
 					}
 				})
@@ -134,8 +153,46 @@ fn node_view(
 				} else {
 					IconName::File
 				}).w(px(13.)))
-				.child(div().flex_1().child(node.name.clone()))
-				.when_some(status, |el, st| {
+				.child(if renaming {
+					h_flex()
+						.flex_1()
+						.gap_1()
+						.child(div().flex_1().child(Input::new(&app.inputs.rename)))
+						.child(
+							Button::new(crate::ui::eid(format!("rename-ok-{path}")))
+								.xsmall()
+								.primary()
+								.icon(IconName::Check)
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.commit_rename_path(cx);
+											cx.notify();
+										});
+									}
+								}),
+						)
+						.child(
+							Button::new(crate::ui::eid(format!("rename-cancel-{path}")))
+								.xsmall()
+								.ghost()
+								.icon(IconName::Close)
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.data.overlay.renaming_path = None;
+											cx.notify();
+										});
+									}
+								}),
+						)
+						.into_any_element()
+				} else {
+					div().flex_1().child(node.name.clone()).into_any_element()
+				})
+				.when_some(status.filter(|_| !renaming), |el, st| {
 					el.child(
 						div()
 							.text_xs()

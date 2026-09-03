@@ -18,6 +18,7 @@ use service::{PtyEventEmitter, WatchEventSender};
 
 pub type TerminalBuffers = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 pub type TerminalExits = Arc<Mutex<Vec<String>>>;
+pub type WatchInbox = Arc<Mutex<Vec<model::watcher::WatchEvent>>>;
 
 pub struct GpuiPtyEmitter {
 	buffers: TerminalBuffers,
@@ -41,6 +42,19 @@ impl PtyEventEmitter for GpuiPtyEmitter {
 	}
 }
 
+struct GpuiWatchSender {
+	events: WatchInbox,
+}
+
+impl WatchEventSender for GpuiWatchSender {
+	fn send(&self, event: model::watcher::WatchEvent) -> bool {
+		if let Ok(mut queue) = self.events.lock() {
+			queue.push(event);
+		}
+		true
+	}
+}
+
 struct NoopWatchSender;
 
 impl WatchEventSender for NoopWatchSender {
@@ -59,6 +73,7 @@ pub struct Backend {
 	pub output_dir: PathBuf,
 	pub buffers: TerminalBuffers,
 	pub exits: TerminalExits,
+	pub watch_events: WatchInbox,
 }
 
 impl Backend {
@@ -74,6 +89,14 @@ impl Backend {
 
 		let buffers = Arc::new(Mutex::new(HashMap::new()));
 		let exits = Arc::new(Mutex::new(Vec::new()));
+		let watch_events = Arc::new(Mutex::new(Vec::new()));
+		service::watcher::start(
+			Box::new(GpuiWatchSender {
+				events: watch_events.clone(),
+			}),
+			db.clone(),
+			infra::watcher::create_shutdown_flag(),
+		);
 
 		Ok(Self {
 			db,
@@ -84,6 +107,7 @@ impl Backend {
 			output_dir,
 			buffers,
 			exits,
+			watch_events,
 		})
 	}
 
@@ -475,6 +499,22 @@ impl Backend {
 
 	pub fn list_sessions(&self, project_id: &str) -> Result<Vec<PtySessionRecord>, AppError> {
 		self.with_db(|conn| service::pty::list_project_sessions(conn, project_id))
+	}
+
+	pub fn take_watch_events(&self) -> Vec<model::watcher::WatchEvent> {
+		self.watch_events
+			.lock()
+			.ok()
+			.map(|mut q| q.drain(..).collect())
+			.unwrap_or_default()
+	}
+
+	pub fn resolve_file(
+		&self,
+		profile_id: &str,
+		path: &str,
+	) -> Result<model::filesystem::ResolvedFilePath, AppError> {
+		service::filesystem::resolve_terminal_file_path(&self.db, profile_id, path)
 	}
 
 	pub fn take_output(&self, session_id: &str) -> Vec<u8> {

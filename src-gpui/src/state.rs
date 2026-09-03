@@ -65,6 +65,14 @@ pub enum AgentKind {
 	Claude,
 	Codex,
 	Gemini,
+	Cursor,
+	Copilot,
+	Amp,
+	Cline,
+	OpenCode,
+	Grok,
+	Kimi,
+	Other,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,24 +200,15 @@ impl TermSession {
 
 	fn detect_agent(&mut self) {
 		let text = self.parser.screen().contents();
-		let lower = format!("{} {}", self.title, text).to_ascii_lowercase();
-		self.agent_kind = if lower.contains("claude") {
-			AgentKind::Claude
-		} else if lower.contains("codex") {
-			AgentKind::Codex
-		} else if lower.contains("gemini") {
-			AgentKind::Gemini
-		} else {
-			self.agent_kind
-		};
-		if lower.contains("waiting for") || lower.contains("waiting on") {
-			self.agent = AgentStatus::Waiting;
-		} else if lower.contains("running") || lower.contains("thinking") {
-			self.agent = AgentStatus::Running;
-		} else if matches!(self.agent, AgentStatus::Running | AgentStatus::Waiting) {
-			self.agent = AgentStatus::Completed;
+		let prev = self.agent;
+		let (kind, status) = crate::detector::detect(&self.title, &text, prev);
+		if kind != AgentKind::Unknown {
+			self.agent_kind = kind;
+		}
+		if status != prev && matches!(status, AgentStatus::Completed) {
 			self.completed_hidden = false;
 		}
+		self.agent = status;
 	}
 
 	pub fn screen_text(&self) -> String {
@@ -337,6 +336,8 @@ pub struct OverlayState {
 	pub sidebar_drag: Option<(f32, f32)>,
 	pub profile_sidebar_drag: Option<(f32, f32)>,
 	pub drag_project: Option<String>,
+	pub drag_file: Option<String>,
+	pub renaming_path: Option<String>,
 	pub update_checked: bool,
 }
 

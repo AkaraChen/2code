@@ -1,6 +1,8 @@
 mod app;
 mod backend;
+mod detector;
 mod i18n;
+mod platform;
 mod prefs;
 mod state;
 mod ui;

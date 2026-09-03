@@ -99,6 +99,8 @@ pub struct SettingsView {
 	update_status: String,
 	latest_version: Option<String>,
 	latest_url: String,
+	fonts: Vec<String>,
+	sounds: Vec<String>,
 }
 
 impl SettingsView {
@@ -150,6 +152,8 @@ impl SettingsView {
 			update_status: crate::i18n::t(locale, "updateIdleDescription"),
 			latest_version: None,
 			latest_url: crate::updater::releases_page().to_string(),
+			fonts: crate::platform::list_mono_fonts(),
+			sounds: crate::platform::list_system_sounds(),
 		}
 	}
 
@@ -409,6 +413,27 @@ impl SettingsView {
 					.child(Input::new(&self.custom_shell))
 					.child(field_label(&self.t("terminalFont")))
 					.child(div().text_sm().child(self.prefs.font_family.clone()))
+					.child(
+						div()
+							.max_h(px(140.))
+							.overflow_y_hidden()
+							.child(
+								h_flex().gap_1().flex_wrap().children(self.fonts.iter().cloned().take(48).map(|family| {
+									let selected = self.prefs.font_family == family;
+									choice(format!("font-{family}"), &family, selected, {
+										let view = view.clone();
+										let family = family.clone();
+										move |cx| {
+											view.update(cx, |this, cx| {
+												this.prefs.font_family = family.clone();
+												this.persist(cx);
+												cx.notify();
+											});
+										}
+									})
+								})),
+							),
+					)
 					.child(field_label(&self.t("fontSize")))
 					.child(
 						h_flex()
@@ -576,6 +601,33 @@ impl SettingsView {
 			} else {
 				self.prefs.notification_sound.clone()
 			}))
+			.child(
+				h_flex().gap_1().flex_wrap().children(
+					std::iter::once(String::new())
+						.chain(self.sounds.iter().cloned())
+						.take(36)
+						.map(|name| {
+							let selected = self.prefs.notification_sound == name;
+							let label = if name.is_empty() {
+								self.t("notificationSoundNone")
+							} else {
+								name.clone()
+							};
+							choice(format!("snd-{name}"), &label, selected, {
+								let view = view.clone();
+								let name = name.clone();
+								move |cx| {
+									view.update(cx, |this, cx| {
+										this.prefs.notification_sound = name.clone();
+										let _ = crate::platform::play_system_sound(&name);
+										this.persist(cx);
+										cx.notify();
+									});
+								}
+							})
+						}),
+				),
+			)
 	}
 
 	fn topbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {

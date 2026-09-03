@@ -30,6 +30,7 @@ pub fn render(
 	let hits = term.search_hits(&search_query);
 	let hit_ix = term.search_ix;
 	let id = term.id.clone();
+	let clickables = crate::detector::clickable_tokens(&term.screen_text());
 	let grid = render_grid(term, theme, &search_query, hit_ix);
 
 	div()
@@ -40,6 +41,17 @@ pub fn render(
 		.text_color(rgb(theme.fg))
 		.font_family(app.data.prefs.font_family.clone())
 		.text_size(px(app.data.prefs.font_size))
+		.on_mouse_up(gpui::MouseButton::Left, {
+			let view = view.clone();
+			move |_, _, cx| {
+				view.update(cx, |app, cx| {
+					if app.data.overlay.drag_file.is_some() {
+						app.drop_file_on_terminal();
+						cx.notify();
+					}
+				});
+			}
+		})
 		.child(
 			div()
 				.id(crate::ui::eid(format!("pty-body-{id}")))
@@ -152,6 +164,35 @@ pub fn render(
 								}
 							}),
 					),
+			)
+		})
+		.when(!clickables.is_empty(), |el| {
+			el.child(
+				h_flex()
+					.id("pty-links")
+					.absolute()
+					.bottom(px(8.))
+					.left(px(8.))
+					.right(px(8.))
+					.gap_1()
+					.flex_wrap()
+					.children(clickables.into_iter().map(|token| {
+						let label = match &token {
+							crate::detector::Clickable::Url(u) => u.clone(),
+							crate::detector::Clickable::Path(p) => p.clone(),
+						};
+						let view = view.clone();
+						Button::new(crate::ui::eid(format!("pty-link-{label}")))
+							.xsmall()
+							.label(label)
+							.on_click(move |_, window, cx| {
+								let token = token.clone();
+								view.update(cx, |app, cx| {
+									app.open_clickable(&token, window, cx);
+									cx.notify();
+								});
+							})
+					})),
 			)
 		})
 		.into_any_element()

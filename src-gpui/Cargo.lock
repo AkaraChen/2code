@@ -950,6 +950,7 @@ dependencies = [
  "anyhow",
  "diesel",
  "dirs 6.0.0",
+ "fontdb 0.23.0",
  "gpui",
  "gpui-component",
  "infra",

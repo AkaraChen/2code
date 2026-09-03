@@ -684,8 +684,11 @@ fn run_menu(
 				app.load_tree_root(&pid);
 			}
 		}
-		(_, MenuAction::NewFile) => app.create_path(false, cx),
-		(_, MenuAction::NewFolder) => app.create_path(true, cx),
+		(ContextMenu::File { path }, MenuAction::RenamePath) => {
+			app.start_rename_path(path, window, cx);
+		}
+		(_, MenuAction::NewFile) => app.create_path(false, window, cx),
+		(_, MenuAction::NewFolder) => app.create_path(true, window, cx),
 		(ContextMenu::File { path }, MenuAction::CopyRel) => app.copy_path(path, false, cx),
 		(ContextMenu::File { path }, MenuAction::CopyAbs) => app.copy_path(path, true, cx),
 		(ContextMenu::File { path }, MenuAction::DeletePath) => app.delete_tree_path(path),
