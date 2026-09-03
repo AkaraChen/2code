@@ -202,6 +202,40 @@ pub fn play_system_sound(name: &str) -> Result<(), String> {
 	play_sound_name(name)
 }
 
+pub fn send_notification(title: &str, body: &str) {
+	if title.is_empty() {
+		return;
+	}
+	#[cfg(target_os = "macos")]
+	{
+		let script = format!(
+			"display notification {} with title {}",
+			apple_script_string(body),
+			apple_script_string(title)
+		);
+		let _ = std::process::Command::new("osascript").args(["-e", &script]).spawn();
+	}
+	#[cfg(target_os = "linux")]
+	{
+		let _ = std::process::Command::new("notify-send").args([title, body]).spawn();
+	}
+	#[cfg(target_os = "windows")]
+	{
+		let title = title.replace('\'', "''");
+		let body = body.replace('\'', "''");
+		let script = format!(
+			"[void][Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(4000, '{title}', '{body}', 'Info')"
+		);
+		let _ = std::process::Command::new("powershell")
+			.args(["-NoProfile", "-Command", &script])
+			.spawn();
+	}
+}
+
+fn apple_script_string(value: &str) -> String {
+	format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 fn is_valid_sound_name(name: &str) -> bool {
 	!name.is_empty() && !name.contains("..") && !name.contains('/') && !name.contains('\\')
 }
@@ -496,6 +530,11 @@ mod tests {
 				.any(|s| s.ends_with("/sh") || s.ends_with("/bash") || s.ends_with("/zsh")),
 			"{shells:?}"
 		);
+	}
+
+	#[test]
+	fn apple_script_string_escapes_quotes() {
+		assert_eq!(apple_script_string(r#"say "hi""#), r#""say \"hi\"""#);
 	}
 
 	#[test]

@@ -1026,7 +1026,10 @@ impl SettingsView {
 										view.update(cx, |this, cx| {
 											this.update_status = this.t("checkForUpdates");
 											match crate::updater::download_and_install(this.prefs.accept_beta) {
-												Ok(path) => this.update_status = path,
+												Ok(path) => {
+													this.update_status = path;
+													cx.quit();
+												}
 												Err(err) => {
 													this.update_status = err;
 													let _ = open::that(&url);

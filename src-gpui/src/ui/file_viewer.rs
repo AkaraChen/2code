@@ -43,6 +43,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					.child(md_btn("md-h1", "H1", "# ", "", &view))
 					.child(md_btn("md-h2", "H2", "## ", "", &view))
 					.child(md_btn("md-h3", "H3", "### ", "", &view))
+					.child(md_btn("md-p", "P", "", "\n\n", &view))
 					.child(md_btn("md-b", "B", "**", "**", &view))
 					.child(md_btn("md-i", "I", "*", "*", &view))
 					.child(md_btn("md-s", "S", "~~", "~~", &view))
@@ -53,6 +54,14 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					.child(md_btn("md-q", ">", "> ", "", &view))
 					.child(md_btn("md-link", "[]", "[", "](url)", &view))
 					.child(md_btn("md-img", "img", "![", "](src)", &view))
+					.child(md_btn(
+						"md-table",
+						"tbl",
+						"| A | B |\n| --- | --- |\n|   |   |\n",
+						"",
+						&view,
+					))
+					.child(md_btn("md-hr", "—", "---\n", "", &view))
 					.child(
 						div()
 							.text_xs()

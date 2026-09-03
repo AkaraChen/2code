@@ -112,6 +112,7 @@ impl AppView {
 			sidebar_error: None,
 			notes_dirty_since: None,
 			notes_bound_profile: None,
+			file_dirty_since: None,
 		};
 
 		let inputs = Inputs {
@@ -735,6 +736,7 @@ impl AppView {
 		}
 		self.drain_watch_events();
 		self.autosave_notes(cx);
+		self.sync_file_draft(cx);
 	}
 
 	fn notify_agent_waiting(&self) {
@@ -744,6 +746,55 @@ impl AppView {
 		let sound = self.data.prefs.notification_sound.clone();
 		if !sound.is_empty() {
 			let _ = crate::platform::play_system_sound(&sound);
+		}
+		if let Some(term) = self
+			.data
+			.workspaces
+			.values()
+			.flat_map(|ws| ws.terminals.iter())
+			.find(|t| t.agent == AgentStatus::Waiting)
+		{
+			let title = if term.agent_kind == crate::state::AgentKind::Unknown {
+				self.t("agentWaitingNotificationTitleGeneric")
+			} else {
+				i18n::tf(
+					self.data.locale,
+					"agentWaitingNotificationTitle",
+					&[("agent", term.agent_kind.label())],
+				)
+			};
+			let body = i18n::tf(
+				self.data.locale,
+				"agentWaitingNotificationBody",
+				&[("tab", term.title.as_str())],
+			);
+			crate::platform::send_notification(&title, &body);
+		}
+	}
+
+	fn sync_file_draft(&mut self, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.data.current_profile.clone() else {
+			return;
+		};
+		let live = self.inputs.file_editor.read(cx).value().to_string();
+		let Some(ws) = self.data.workspaces.get_mut(&profile_id) else {
+			return;
+		};
+		let Some(file) = ws.active_file_mut() else {
+			self.data.file_dirty_since = None;
+			return;
+		};
+		if file.preview || file.draft == live {
+			self.data.file_dirty_since = None;
+			return;
+		}
+		match self.data.file_dirty_since {
+			None => self.data.file_dirty_since = Some(std::time::Instant::now()),
+			Some(since) if since.elapsed() < Duration::from_millis(400) => {}
+			Some(_) => {
+				file.draft = live;
+				self.data.file_dirty_since = None;
+			}
 		}
 	}
 
@@ -2153,21 +2204,6 @@ impl gpui::Render for AppView {
 		if self.data.overlay.palette_open {
 			self.search_palette(cx);
 		}
-		if let Some(ws) = self.data.current_ws() {
-			if let Some(UnifiedTab::File { index }) = ws.active {
-				if let Some(file) = ws.files.get(index) {
-					if !file.preview {
-						let live = self.inputs.file_editor.read(cx).value().to_string();
-						if let Some(ws) = self.data.current_ws_mut() {
-							if let Some(file) = ws.active_file_mut() {
-								file.draft = live;
-							}
-						}
-					}
-				}
-			}
-		}
-
 		div()
 			.id("app-root")
 			.track_focus(&self.focus)

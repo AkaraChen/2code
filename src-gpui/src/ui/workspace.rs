@@ -519,6 +519,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 								.ghost()
 								.xsmall()
 								.icon(IconName::Close)
+								.tooltip(format!("Close {title}", title = term.title))
 								.on_click({
 									let view = view.clone();
 									let id = id.clone();
@@ -573,6 +574,7 @@ fn tab_bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 								.ghost()
 								.xsmall()
 								.icon(IconName::Close)
+								.tooltip(format!("Close {title}", title = file.title))
 								.on_click({
 									let view = view.clone();
 									let path = path.clone();
@@ -617,20 +619,41 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>) -> impl Into
 			.map(|w| !w.config.terminal_templates.is_empty())
 			.unwrap_or(false);
 	if has_templates {
-		Button::new("new-term-split")
-			.ghost()
-			.small()
-			.icon(IconName::Plus)
-			.label(app.t("newTerminal"))
-			.on_click({
-				let view = view.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, cx| {
-						app.data.overlay.context_menu = Some((crate::state::ContextMenu::NewTerminal, 200.0, 80.0));
-						cx.notify();
-					});
-				}
-			})
+		h_flex()
+			.gap_0()
+			.child(
+				Button::new("new-term")
+					.ghost()
+					.small()
+					.icon(IconName::Plus)
+					.label(app.t("newTerminal"))
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								app.create_terminal(&app.t("newTerminal"), "", Vec::new());
+								cx.notify();
+							});
+						}
+					}),
+			)
+			.child(
+				Button::new("new-term-split")
+					.ghost()
+					.small()
+					.icon(IconName::ChevronDown)
+					.tooltip("Choose template".to_string())
+					.on_click({
+						let view = view.clone();
+						move |_, _, cx| {
+							view.update(cx, |app, cx| {
+								app.data.overlay.context_menu =
+									Some((crate::state::ContextMenu::NewTerminal, 200.0, 80.0));
+								cx.notify();
+							});
+						}
+					}),
+			)
 			.into_any_element()
 	} else {
 		Button::new("new-term")

@@ -41,12 +41,24 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.border_b_1()
 				.border_color(theme.border)
 				.child(note_md("n-h1", "H1", "# ", "", &view))
+				.child(note_md("n-h2", "H2", "## ", "", &view))
+				.child(note_md("n-h3", "H3", "### ", "", &view))
 				.child(note_md("n-b", "B", "**", "**", &view))
 				.child(note_md("n-i", "I", "*", "*", &view))
+				.child(note_md("n-s", "S", "~~", "~~", &view))
 				.child(note_md("n-code", "`", "`", "`", &view))
+				.child(note_md("n-pre", "</>", "```\n", "\n```", &view))
 				.child(note_md("n-ul", "•", "- ", "", &view))
 				.child(note_md("n-q", ">", "> ", "", &view))
-				.child(note_md("n-link", "[]", "[", "](url)", &view)),
+				.child(note_md("n-link", "[]", "[", "](url)", &view))
+				.child(note_md(
+					"n-table",
+					"tbl",
+					"| A | B |\n| --- | --- |\n|   |   |\n",
+					"",
+					&view,
+				))
+				.child(note_md("n-hr", "—", "---\n", "", &view)),
 		)
 		.child(
 			v_flex()

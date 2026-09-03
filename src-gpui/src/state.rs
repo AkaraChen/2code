@@ -85,6 +85,32 @@ pub enum AgentKind {
 	Other,
 }
 
+impl AgentKind {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Claude => "Claude",
+			Self::Codex => "Codex",
+			Self::Gemini => "Gemini",
+			Self::Cursor => "Cursor",
+			Self::Copilot => "Copilot",
+			Self::Amp => "Amp",
+			Self::Cline => "Cline",
+			Self::OpenCode => "OpenCode",
+			Self::Grok => "Grok",
+			Self::Kimi => "Kimi",
+			Self::Devin => "Devin",
+			Self::Droid => "Droid",
+			Self::Hermes => "Hermes",
+			Self::Kilo => "Kilo",
+			Self::Kiro => "Kiro",
+			Self::Pi => "Pi",
+			Self::Qoder => "Qoder",
+			Self::Agy => "Agy",
+			Self::Other | Self::Unknown => "Agent",
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastAction {
 	OpenAbout,
@@ -392,6 +418,7 @@ pub struct AppData {
 	pub locale: Locale,
 	pub notes_dirty_since: Option<Instant>,
 	pub notes_bound_profile: Option<String>,
+	pub file_dirty_since: Option<Instant>,
 }
 
 impl AppData {

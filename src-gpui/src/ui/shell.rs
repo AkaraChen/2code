@@ -77,7 +77,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 					Route::Home => home_or_empty(app, window, cx),
 					Route::Workspace => workspace::render(app, window, cx).into_any_element(),
 				})
-				.when(cfg!(target_os = "windows"), |el| el.child(window_controls())),
+				.when(cfg!(target_os = "windows"), |el| el.child(window_controls(window))),
 		)
 		.child(dialogs::render(app, window, cx))
 		.child(palette::render(app, window, cx))
@@ -142,7 +142,8 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 		}))
 }
 
-fn window_controls() -> impl IntoElement {
+fn window_controls(window: &Window) -> impl IntoElement {
+	let maximized = window.is_maximized();
 	div()
 		.id("win-controls")
 		.absolute()
@@ -153,7 +154,13 @@ fn window_controls() -> impl IntoElement {
 		.child(win_btn("min", "–", "Minimize", false, |window| {
 			window.minimize_window()
 		}))
-		.child(win_btn("max", "□", "Maximize", false, |window| window.zoom_window()))
+		.child(win_btn(
+			"max",
+			if maximized { "❐" } else { "□" },
+			if maximized { "Restore" } else { "Maximize" },
+			false,
+			|window| window.zoom_window(),
+		))
 		.child(win_btn("close", "×", "Close", true, |window| window.remove_window()))
 }
 
