@@ -21,6 +21,16 @@ fn detect_kind(hay: &str) -> AgentKind {
 		("opencode", AgentKind::OpenCode),
 		("grok", AgentKind::Grok),
 		("kimi", AgentKind::Kimi),
+		("devin", AgentKind::Devin),
+		("droid", AgentKind::Droid),
+		("factory droid", AgentKind::Droid),
+		("hermes", AgentKind::Hermes),
+		("kilo", AgentKind::Kilo),
+		("kiro", AgentKind::Kiro),
+		("qoder", AgentKind::Qoder),
+		("qodercli", AgentKind::Qoder),
+		("agy", AgentKind::Agy),
+		("pi agent", AgentKind::Pi),
 		("aider", AgentKind::Other),
 	];
 	for (needle, kind) in RULES {
@@ -61,9 +71,14 @@ fn is_blocked(hay: &str) -> bool {
 		"esc to cancel",
 		"do you want to continue",
 		"do you want to proceed",
+		"run a dynamic workflow?",
+		"waiting for permission",
+		"allow this command",
+		"bash command",
 		"[y/n]",
 		"yes (y)",
 		"would you like to",
+		"enter to set as default",
 	];
 	PHRASES.iter().any(|p| hay.contains(p))
 }
@@ -93,16 +108,13 @@ fn is_idle_prompt(hay: &str) -> bool {
 }
 
 fn has_braille_spinner(hay: &str) -> bool {
-	hay.chars()
-		.any(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
+	hay.chars().any(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
 }
 
 pub fn clickable_tokens(screen: &str) -> Vec<Clickable> {
 	let mut out = Vec::new();
 	for token in screen.split_whitespace() {
-		let clean = token.trim_matches(|c: char| {
-			matches!(c, ',' | ';' | ')' | '(' | '[' | ']' | '"' | '\'' | '`')
-		});
+		let clean = token.trim_matches(|c: char| matches!(c, ',' | ';' | ')' | '(' | '[' | ']' | '"' | '\'' | '`'));
 		if clean.starts_with("http://") || clean.starts_with("https://") {
 			out.push(Clickable::Url(clean.to_string()));
 		} else if looks_like_path(clean) {

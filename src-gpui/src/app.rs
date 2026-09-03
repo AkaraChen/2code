@@ -2,10 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use gpui::{
-	div, prelude::*, px, Action, App, Context, Entity, FocusHandle, KeyBinding, Timer, Window,
-	WindowHandle,
-};
+use gpui::{div, prelude::*, px, Action, App, Context, Entity, FocusHandle, KeyBinding, Timer, Window, WindowHandle};
 
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
@@ -34,17 +31,16 @@ pub struct SaveFile;
 #[derive(Clone, PartialEq, Default, Debug, Action)]
 #[action(namespace = twocode, no_json)]
 pub struct CommitChanges;
-use gpui_component::input::{Input, InputState};
-use gpui_component::{Root, WindowExt};
 use crate::backend::{self, Backend};
 use crate::i18n::{self, Locale};
 use crate::prefs::{term_theme_by_name, Prefs, ThemePref};
 use crate::state::{
-	AgentStatus, AppData, ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab, NotesStatus,
-	OpenFileTab, OverlayState, Route, SettingsTab, SidebarMode, TermSession, ToastKind, TreeNode,
-	UnifiedTab, Workspace,
+	AgentStatus, AppData, ContextMenu, DialogKind, DiffPreviewMode, GitDiffTab, NotesStatus, OpenFileTab, OverlayState,
+	Route, SettingsTab, SidebarMode, TermSession, ToastKind, TreeNode, UnifiedTab, Workspace,
 };
 use crate::ui;
+use gpui_component::input::{Input, InputState};
+use gpui_component::{Root, WindowExt};
 
 pub struct Inputs {
 	pub project_name: Entity<InputState>,
@@ -84,12 +80,7 @@ pub struct AppView {
 
 impl AppView {
 	pub fn new(backend: Backend, window: &mut Window, cx: &mut Context<Self>) -> Self {
-		fn input(
-			window: &mut Window,
-			cx: &mut Context<AppView>,
-			placeholder: &str,
-			multi: bool,
-		) -> Entity<InputState> {
+		fn input(window: &mut Window, cx: &mut Context<AppView>, placeholder: &str, multi: bool) -> Entity<InputState> {
 			let ph = placeholder.to_string();
 			cx.new(|cx| {
 				let mut state = InputState::new(window, cx).placeholder(ph);
@@ -116,6 +107,7 @@ impl AppView {
 			toast_seq: 0,
 			sidebar_error: None,
 			notes_dirty_since: None,
+			notes_bound_profile: None,
 		};
 
 		let inputs = Inputs {
@@ -209,9 +201,7 @@ impl AppView {
 
 		cx.spawn(async move |this, cx| {
 			Timer::after(Duration::from_secs(1)).await;
-			let accept_beta = this
-				.update(cx, |app, _| app.data.prefs.accept_beta)
-				.unwrap_or(false);
+			let accept_beta = this.update(cx, |app, _| app.data.prefs.accept_beta).unwrap_or(false);
 			let result = crate::updater::check_for_update(accept_beta);
 			let _ = this.update(cx, |app, cx| {
 				app.apply_update_result(result, true);
@@ -222,6 +212,7 @@ impl AppView {
 
 		let mut view = view;
 		view.reload_projects();
+		view.restore_all_sessions();
 		if view.data.projects.is_empty() {
 			view.data.overlay.onboarding = true;
 		} else if let Some((project_id, profile_id)) = view.data.projects.first().and_then(|first| {
@@ -320,6 +311,8 @@ impl AppView {
 				files: Vec::new(),
 				active: None,
 				tree: HashMap::new(),
+				tree_selected: HashSet::new(),
+				tree_anchor: None,
 				tree_error: None,
 				git_files: Vec::new(),
 				git_included: HashSet::new(),
@@ -347,11 +340,7 @@ impl AppView {
 				.map(|e| (e.path, e.status))
 				.collect();
 			ws.git_included = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
-			ws.pr = self
-				.backend
-				.pr_status(&ws.worktree, Some(&ws.branch))
-				.ok()
-				.flatten();
+			ws.pr = self.backend.pr_status(&ws.worktree, Some(&ws.branch)).ok().flatten();
 			if ws.is_default {
 				if let Ok(branch) = self.backend.git_branch(&ws.worktree) {
 					ws.branch = branch;
@@ -453,10 +442,7 @@ impl AppView {
 		} else {
 			None
 		};
-		let preview_path = preview
-			.as_ref()
-			.map(|p| p.file_path.clone())
-			.unwrap_or_default();
+		let preview_path = preview.as_ref().map(|p| p.file_path.clone()).unwrap_or_default();
 		let archive_entries = preview
 			.as_ref()
 			.and_then(|p| p.archive_entries.clone())
@@ -482,10 +468,7 @@ impl AppView {
 			content: content.clone(),
 			draft: content.clone(),
 			preview: previewable,
-			preview_kind: preview
-				.as_ref()
-				.map(|p| p.kind.clone())
-				.unwrap_or_default(),
+			preview_kind: preview.as_ref().map(|p| p.kind.clone()).unwrap_or_default(),
 			binary_note: preview.map(|p| p.mime_type).unwrap_or_default(),
 			preview_path,
 			archive_entries,
@@ -530,8 +513,7 @@ impl AppView {
 					file.content = draft;
 					file.draft = file.content.clone();
 				}
-				self.data
-					.push_toast(ToastKind::Success, self.t("save"), title);
+				self.data.push_toast(ToastKind::Success, self.t("save"), title);
 			}
 			Err(err) => self
 				.data
@@ -597,8 +579,7 @@ impl AppView {
 		{
 			Ok(id) => {
 				if let Some(ws) = self.data.workspaces.get_mut(&profile_id) {
-					ws.terminals
-						.push(TermSession::new(id, title, profile_id.clone()));
+					ws.terminals.push(TermSession::new(id, title, profile_id.clone()));
 					ws.active = Some(UnifiedTab::Terminal {
 						index: ws.terminals.len() - 1,
 					});
@@ -705,10 +686,179 @@ impl AppView {
 		}
 	}
 
+	fn restore_all_sessions(&mut self) {
+		let Ok(sessions) = self.backend.list_all_sessions() else {
+			return;
+		};
+		for record in sessions {
+			let Some(project_id) = self
+				.data
+				.projects
+				.iter()
+				.find(|p| p.profiles.iter().any(|pr| pr.id == record.profile_id))
+				.map(|p| p.id.clone())
+			else {
+				continue;
+			};
+			self.ensure_workspace(&project_id, &record.profile_id);
+			match self.backend.restore_session(&record) {
+				Ok((new_id, history)) => {
+					if let Some(ws) = self.data.workspaces.get_mut(&record.profile_id) {
+						let mut term = TermSession::new(new_id, record.title.clone(), record.profile_id.clone());
+						let _ = term.set_size(record.rows.max(1) as u16, record.cols.max(1) as u16);
+						if !history.is_empty() {
+							term.feed(&history);
+						}
+						ws.terminals.push(term);
+						ws.active = Some(UnifiedTab::Terminal {
+							index: ws.terminals.len() - 1,
+						});
+					}
+				}
+				Err(err) => {
+					tracing::warn!(
+						error = %err,
+						session = %record.id,
+						"failed to restore pty session"
+					);
+				}
+			}
+		}
+	}
+
+	fn sync_notes_input(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let Some(profile_id) = self.data.current_profile.clone() else {
+			return;
+		};
+		if self.data.notes_bound_profile.as_deref() == Some(profile_id.as_str()) {
+			return;
+		}
+		if let Some(prev) = self.data.notes_bound_profile.clone() {
+			if self.data.notes_dirty_since.is_some() {
+				let notes = self.inputs.notes.read(cx).value().to_string();
+				if let Some(ws) = self.data.workspaces.get_mut(&prev) {
+					ws.notes = notes.clone();
+					ws.notes_status = NotesStatus::Saving;
+				}
+				match self.backend.update_notes(&prev, &notes) {
+					Ok(()) => {
+						if let Some(ws) = self.data.workspaces.get_mut(&prev) {
+							ws.notes_status = NotesStatus::Saved;
+						}
+					}
+					Err(_) => {
+						if let Some(ws) = self.data.workspaces.get_mut(&prev) {
+							ws.notes_status = NotesStatus::Failed;
+						}
+					}
+				}
+				self.data.notes_dirty_since = None;
+			}
+		}
+		let notes = self
+			.data
+			.workspaces
+			.get(&profile_id)
+			.map(|w| w.notes.clone())
+			.unwrap_or_default();
+		self.inputs.notes.update(cx, |s, cx| {
+			s.set_value(notes, window, cx);
+		});
+		self.data.notes_bound_profile = Some(profile_id);
+	}
+
+	pub fn click_tree_path(
+		&mut self,
+		path: &str,
+		is_dir: bool,
+		multi: bool,
+		range: bool,
+		window: &mut Window,
+		cx: &mut Context<Self>,
+	) {
+		let Some(profile) = self.data.current_profile.clone() else {
+			return;
+		};
+		if range {
+			let paths = self
+				.data
+				.workspaces
+				.get(&profile)
+				.map(visible_tree_paths)
+				.unwrap_or_default();
+			let anchor = self
+				.data
+				.workspaces
+				.get(&profile)
+				.and_then(|w| w.tree_anchor.clone())
+				.unwrap_or_else(|| path.to_string());
+			if let (Some(a), Some(b)) = (
+				paths.iter().position(|p| p == &anchor),
+				paths.iter().position(|p| p == path),
+			) {
+				let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+				if let Some(ws) = self.data.workspaces.get_mut(&profile) {
+					ws.tree_selected = paths[lo..=hi].iter().cloned().collect();
+					ws.tree_anchor = Some(anchor);
+				}
+			}
+			return;
+		}
+		if multi {
+			if let Some(ws) = self.data.workspaces.get_mut(&profile) {
+				if !ws.tree_selected.remove(path) {
+					ws.tree_selected.insert(path.to_string());
+				}
+				ws.tree_anchor = Some(path.to_string());
+			}
+			return;
+		}
+		if let Some(ws) = self.data.workspaces.get_mut(&profile) {
+			ws.tree_selected.clear();
+			ws.tree_selected.insert(path.to_string());
+			ws.tree_anchor = Some(path.to_string());
+		}
+		if is_dir {
+			self.toggle_dir(&profile, path);
+		} else {
+			self.open_file(&profile, path, window, cx);
+		}
+	}
+
+	pub fn nudge_sidebar(&mut self, profile: bool, key: &str) -> bool {
+		let (min, max) = if profile {
+			(180.0_f32, 560.0_f32)
+		} else {
+			(220.0_f32, 420.0_f32)
+		};
+		let width = if profile {
+			&mut self.data.prefs.profile_sidebar_width
+		} else {
+			&mut self.data.prefs.sidebar_width
+		};
+		let next = match key {
+			"left" => *width - 16.0,
+			"right" => *width + 16.0,
+			"home" => min,
+			"end" => max,
+			_ => return false,
+		}
+		.clamp(min, max);
+		if (*width - next).abs() < f32::EPSILON {
+			return false;
+		}
+		*width = next;
+		self.persist_prefs();
+		true
+	}
+
 	fn autosave_notes(&mut self, cx: &mut Context<Self>) {
 		let Some(profile_id) = self.data.current_profile.clone() else {
 			return;
 		};
+		if self.data.notes_bound_profile.as_deref() != Some(profile_id.as_str()) {
+			return;
+		}
 		let live = self.inputs.notes.read(cx).value().to_string();
 		let Some(ws) = self.data.workspaces.get_mut(&profile_id) else {
 			return;
@@ -781,10 +931,7 @@ impl AppView {
 	pub fn apply_update_result(&mut self, result: Result<crate::updater::UpdateInfo, String>, silent: bool) {
 		match result {
 			Ok(info) if info.available => {
-				let title = self.tf(
-					"updateAvailableTitle",
-					&[("version", &info.latest_version)],
-				);
+				let title = self.tf("updateAvailableTitle", &[("version", &info.latest_version)]);
 				let body = self.tf(
 					"updateAvailableDescription",
 					&[
@@ -792,12 +939,8 @@ impl AppView {
 						("version", &info.latest_version),
 					],
 				);
-				self.data.push_toast_action(
-					ToastKind::Info,
-					title,
-					body,
-					Some(crate::state::ToastAction::OpenAbout),
-				);
+				self.data
+					.push_toast_action(ToastKind::Info, title, body, Some(crate::state::ToastAction::OpenAbout));
 			}
 			Ok(_) => {
 				if !silent {
@@ -810,11 +953,8 @@ impl AppView {
 			}
 			Err(err) => {
 				if !silent {
-					self.data.push_toast(
-						ToastKind::Error,
-						self.t("updateCheckFailedTitle"),
-						err,
-					);
+					self.data
+						.push_toast(ToastKind::Error, self.t("updateCheckFailedTitle"), err);
 				}
 			}
 		}
@@ -989,11 +1129,8 @@ impl AppView {
 			}
 			Err(err) => {
 				self.data.overlay.dialog_busy = false;
-				self.data.overlay.delete_warning = Some(format!(
-					"{}\n{}",
-					self.t("deleteProfileGitCheckFailedTitle"),
-					err
-				));
+				self.data.overlay.delete_warning =
+					Some(format!("{}\n{}", self.t("deleteProfileGitCheckFailedTitle"), err));
 			}
 		}
 	}
@@ -1021,19 +1158,13 @@ impl AppView {
 				self.data.push_toast(
 					ToastKind::Success,
 					self.t("gitCommitSuccessTitle"),
-					i18n::tf(
-						self.data.locale,
-						"gitCommitSuccessDescription",
-						&[("hash", &hash)],
-					),
+					i18n::tf(self.data.locale, "gitCommitSuccessDescription", &[("hash", &hash)]),
 				);
 				self.refresh_workspace(&profile_id);
 			}
-			Err(err) => self.data.push_toast(
-				ToastKind::Error,
-				self.t("gitCommitErrorTitle"),
-				err.to_string(),
-			),
+			Err(err) => self
+				.data
+				.push_toast(ToastKind::Error, self.t("gitCommitErrorTitle"), err.to_string()),
 		}
 	}
 
@@ -1047,11 +1178,9 @@ impl AppView {
 					.push_toast(ToastKind::Success, self.t("gitPushSuccessTitle"), "");
 				self.refresh_workspace(&profile_id);
 			}
-			Err(err) => self.data.push_toast(
-				ToastKind::Error,
-				self.t("gitPushErrorTitle"),
-				err.to_string(),
-			),
+			Err(err) => self
+				.data
+				.push_toast(ToastKind::Error, self.t("gitPushErrorTitle"), err.to_string()),
 		}
 	}
 
@@ -1064,19 +1193,13 @@ impl AppView {
 				self.data.push_toast(
 					ToastKind::Success,
 					self.t("gitDiscardFileSuccessTitle"),
-					i18n::tf(
-						self.data.locale,
-						"gitDiscardFileSuccessDescription",
-						&[("file", path)],
-					),
+					i18n::tf(self.data.locale, "gitDiscardFileSuccessDescription", &[("file", path)]),
 				);
 				self.refresh_workspace(&profile_id);
 			}
-			Err(err) => self.data.push_toast(
-				ToastKind::Error,
-				self.t("gitDiscardFileErrorTitle"),
-				err.to_string(),
-			),
+			Err(err) => self
+				.data
+				.push_toast(ToastKind::Error, self.t("gitDiscardFileErrorTitle"), err.to_string()),
 		}
 	}
 
@@ -1124,11 +1247,9 @@ impl AppView {
 				}
 				self.data.overlay.dialog = None;
 			}
-			Err(err) => self.data.push_toast(
-				ToastKind::Error,
-				self.t("gitCheckoutErrorTitle"),
-				err.to_string(),
-			),
+			Err(err) => self
+				.data
+				.push_toast(ToastKind::Error, self.t("gitCheckoutErrorTitle"), err.to_string()),
 		}
 	}
 
@@ -1182,12 +1303,7 @@ impl AppView {
 				.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string());
 			return;
 		}
-		if let Some(ws) = self
-			.data
-			.workspaces
-			.values_mut()
-			.find(|w| w.project_id == project_id)
-		{
+		if let Some(ws) = self.data.workspaces.values_mut().find(|w| w.project_id == project_id) {
 			ws.config = config;
 		}
 		self.data.overlay.dialog = None;
@@ -1202,10 +1318,7 @@ impl AppView {
 			self.data.overlay.palette_results.clear();
 			return;
 		}
-		self.data.overlay.palette_results = self
-			.backend
-			.search_files(&profile_id, &q)
-			.unwrap_or_default();
+		self.data.overlay.palette_results = self.backend.search_files(&profile_id, &q).unwrap_or_default();
 		self.data.overlay.palette_index = 0;
 	}
 
@@ -1214,12 +1327,7 @@ impl AppView {
 			return;
 		};
 		let ix = self.data.overlay.palette_index;
-		let path = self
-			.data
-			.overlay
-			.palette_results
-			.get(ix)
-			.map(|r| r.path.clone());
+		let path = self.data.overlay.palette_results.get(ix).map(|r| r.path.clone());
 		if let Some(path) = path {
 			self.data.overlay.palette_open = false;
 			self.open_file(&profile_id, &path, window, cx);
@@ -1256,11 +1364,8 @@ impl AppView {
 			format!("{parent}/{name}")
 		};
 		if let Err(err) = self.backend.rename_path(&profile_id, &from, &to) {
-			self.data.push_toast(
-				ToastKind::Error,
-				self.t("fileTreeCreateErrorTitle"),
-				err.to_string(),
-			);
+			self.data
+				.push_toast(ToastKind::Error, self.t("fileTreeCreateErrorTitle"), err.to_string());
 			return;
 		}
 		self.data.overlay.renaming_path = None;
@@ -1297,11 +1402,9 @@ impl AppView {
 						self.data.overlay.dialog = Some(DialogKind::ChooseFile);
 						self.data.overlay.fuzzy_files = candidates;
 					}
-					Err(err) => self.data.push_toast(
-						ToastKind::Error,
-						self.t("somethingWentWrong"),
-						err.to_string(),
-					),
+					Err(err) => self
+						.data
+						.push_toast(ToastKind::Error, self.t("somethingWentWrong"), err.to_string()),
 				}
 			}
 		}
@@ -1322,11 +1425,8 @@ impl AppView {
 			name
 		};
 		if let Err(err) = self.backend.create_path(&profile_id, &name, is_dir) {
-			self.data.push_toast(
-				ToastKind::Error,
-				self.t("fileTreeCreateErrorTitle"),
-				err.to_string(),
-			);
+			self.data
+				.push_toast(ToastKind::Error, self.t("fileTreeCreateErrorTitle"), err.to_string());
 			return;
 		}
 		self.load_tree_root(&profile_id);
@@ -1338,11 +1438,8 @@ impl AppView {
 			return;
 		};
 		if let Err(err) = self.backend.delete_paths(&profile_id, &[path.to_string()]) {
-			self.data.push_toast(
-				ToastKind::Error,
-				self.t("fileTreeDeleteErrorTitle"),
-				err.to_string(),
-			);
+			self.data
+				.push_toast(ToastKind::Error, self.t("fileTreeDeleteErrorTitle"), err.to_string());
 			return;
 		}
 		self.load_tree_root(&profile_id);
@@ -1399,7 +1496,11 @@ impl AppView {
 	}
 
 	pub fn open_pr(&self) {
-		if let Some(url) = self.data.current_ws().and_then(|w| w.pr.as_ref().map(|p| p.url.clone())) {
+		if let Some(url) = self
+			.data
+			.current_ws()
+			.and_then(|w| w.pr.as_ref().map(|p| p.url.clone()))
+		{
 			let _ = open::that(url);
 		}
 	}
@@ -1527,18 +1628,33 @@ pub fn extract_file_hunk(diff: &str, path: &str) -> String {
 	}
 }
 
+fn visible_tree_paths(ws: &Workspace) -> Vec<String> {
+	let mut out = Vec::new();
+	fn walk(ws: &Workspace, path: &str, out: &mut Vec<String>) {
+		let Some(node) = ws.tree.get(path) else {
+			return;
+		};
+		for child in &node.children {
+			out.push(child.clone());
+			if ws.tree.get(child).is_some_and(|c| c.is_dir && c.expanded) {
+				walk(ws, child, out);
+			}
+		}
+	}
+	walk(ws, "", &mut out);
+	out
+}
+
 impl gpui::Render for AppView {
 	fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
 		self.apply_theme(window, cx);
 		self.sync_pty_size(window);
+		self.sync_notes_input(window, cx);
 		if self.data.overlay.palette_open {
 			let q = self.inputs.palette.read(cx).value().to_string();
 			if self.data.overlay.palette_results.is_empty() && !q.is_empty() {
 				self.search_palette(cx);
 			}
-		}
-		if matches!(self.data.current_ws().map(|w| w.sidebar_mode), Some(SidebarMode::Notes)) {
-			// keep notes editor mounted
 		}
 		if let Some(ws) = self.data.current_ws() {
 			if let Some(UnifiedTab::File { index }) = ws.active {

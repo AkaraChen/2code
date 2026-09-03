@@ -23,6 +23,6 @@ Requires Rust 1.87+ (GPUI). On Linux install `libxkbcommon`, Vulkan, and Wayland
 
 ## Surfaces
 
-App sidebar, Home empty state, Profile workspace (top bar, Files/Git/Notes, unified tabs), PTY terminals (vt100, never destroyed on tab switch), file viewer (text / markdown / binary), command palette, Git panel + large diff dialog, all product dialogs, toasts, debug FAB, settings (6 tabs), en/zh i18n from `messages/*.json`.
+App sidebar, Home empty state, Profile workspace (top bar, Files/Git/Notes, unified tabs), PTY terminals (vt100 cell grid, never destroyed on tab switch, restored from the session DB on launch, drag-to-PTY paths, clickable links), file viewer (text / markdown / image / archive), file-tree multi-select + inline rename, command palette, Git panel + unified/split two-column diff, all product dialogs, toasts, debug FAB, settings (6 tabs, system font/sound pickers), GitHub updater, filesystem watcher, en/zh i18n from `messages/*.json`.
 
 See `docs/ui-inventory.md` for the rewrite spec this crate implements.

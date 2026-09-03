@@ -36,13 +36,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 			}
 		})
 		.when_some(err, |el, err| {
-			el.child(
-				div()
-					.text_xs()
-					.text_color(theme.danger)
-					.opacity(0.8)
-					.child(err),
-			)
+			el.child(div().text_xs().text_color(theme.danger).opacity(0.8).child(err))
 		})
 		.child(match root {
 			None => div()
@@ -56,9 +50,11 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.child(app.t("fileTreeEmptyDirectory"))
 				.into_any_element(),
 			Some(root) => v_flex()
-				.children(root.children.iter().map(|path| {
-					node_view(app, path, 0, &profile, window, cx)
-				}))
+				.children(
+					root.children
+						.iter()
+						.map(|path| node_view(app, path, 0, &profile, window, cx)),
+				)
 				.into_any_element(),
 		})
 		.into_any_element()
@@ -84,8 +80,8 @@ fn node_view(
 		.map(|(_, s)| s.clone());
 	let indent = px(12. * depth as f32 + 4.);
 	let path_owned = path.to_string();
-	let profile_owned = profile.to_string();
 	let renaming = app.data.overlay.renaming_path.as_deref() == Some(path);
+	let selected = app.data.current_ws().is_some_and(|w| w.tree_selected.contains(path));
 
 	v_flex()
 		.child(
@@ -97,22 +93,19 @@ fn node_view(
 				.py_0p5()
 				.rounded_md()
 				.gap_1()
+				.when(selected, |el| el.bg(theme.muted))
 				.hover(|el| el.bg(theme.muted))
 				.on_click({
 					let view = view.clone();
 					let path = path_owned.clone();
-					let profile = profile_owned.clone();
 					let is_dir = node.is_dir;
-					move |_, window, cx| {
+					move |ev, window, cx| {
 						view.update(cx, |app, cx| {
 							if app.data.overlay.renaming_path.as_deref() == Some(path.as_str()) {
 								return;
 							}
-							if is_dir {
-								app.toggle_dir(&profile, &path);
-							} else {
-								app.open_file(&profile, &path, window, cx);
-							}
+							let mods = ev.modifiers();
+							app.click_tree_path(&path, is_dir, mods.platform || mods.control, mods.shift, window, cx);
 							cx.notify();
 						});
 					}
@@ -144,15 +137,18 @@ fn node_view(
 						});
 					}
 				})
-				.child(Icon::new(if node.is_dir {
-					if node.expanded {
-						IconName::FolderOpen
+				.child(
+					Icon::new(if node.is_dir {
+						if node.expanded {
+							IconName::FolderOpen
+						} else {
+							IconName::Folder
+						}
 					} else {
-						IconName::Folder
-					}
-				} else {
-					IconName::File
-				}).w(px(13.)))
+						IconName::File
+					})
+					.w(px(13.)),
+				)
 				.child(if renaming {
 					h_flex()
 						.flex_1()
@@ -196,19 +192,17 @@ fn node_view(
 					el.child(
 						div()
 							.text_xs()
-							.text_color(if st.contains('D') {
-								theme.danger
-							} else {
-								theme.success
-							})
+							.text_color(if st.contains('D') { theme.danger } else { theme.success })
 							.child(crate::app::file_status_badge(&st)),
 					)
 				}),
 		)
 		.when(node.is_dir && node.expanded, |el| {
-			el.children(node.children.iter().map(|child| {
-				node_view(app, child, depth + 1, profile, window, cx)
-			}))
+			el.children(
+				node.children
+					.iter()
+					.map(|child| node_view(app, child, depth + 1, profile, window, cx)),
+			)
 		})
 		.into_any_element()
 }

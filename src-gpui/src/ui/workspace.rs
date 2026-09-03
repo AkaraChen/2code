@@ -1,8 +1,8 @@
 use gpui::{div, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, Selectable};
 use gpui_component::tab::Tab;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::state::{AgentKind, DialogKind, SidebarMode, UnifiedTab};
@@ -49,11 +49,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 	} else {
 		px(16.)
 	};
-	let pad_right = if cfg!(target_os = "windows") {
-		px(118.)
-	} else {
-		px(16.)
-	};
+	let pad_right = if cfg!(target_os = "windows") { px(118.) } else { px(16.) };
 	let controls = app.data.prefs.topbar_controls.clone();
 
 	div()
@@ -91,7 +87,15 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 							}),
 					)
 				})
-				.child(mode_switch(app, mode, open, stats.files_changed, stats.insertions, stats.deletions, cx)),
+				.child(mode_switch(
+					app,
+					mode,
+					open,
+					stats.files_changed,
+					stats.insertions,
+					stats.deletions,
+					cx,
+				)),
 		)
 		.child(
 			h_flex()
@@ -110,10 +114,9 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 							let worktree = worktree.clone();
 							move |_, _, cx| {
 								view.update(cx, |app, _| {
-									let _ = app.backend.reveal_path(
-										app.data.current_profile.as_deref().unwrap_or(""),
-										None,
-									);
+									let _ = app
+										.backend
+										.reveal_path(app.data.current_profile.as_deref().unwrap_or(""), None);
 									let _ = worktree;
 								});
 							}
@@ -146,9 +149,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 		.child(
 			h_flex()
 				.gap_1()
-				.children(controls.into_iter().map(|id| {
-					topbar_control(app, &id, pr.as_ref(), cx)
-				}))
+				.children(controls.into_iter().map(|id| topbar_control(app, &id, pr.as_ref(), cx)))
 				.child(
 					Button::new("project-settings")
 						.small()
@@ -163,11 +164,7 @@ fn topbar(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) ->
 									if let Some(pid) = app.data.current_project.clone() {
 										if let Ok(cfg) = app.backend.project_config(&pid) {
 											app.inputs.worktree.update(cx, |s, cx| {
-												s.set_value(
-													cfg.worktree_dir.clone().unwrap_or_default(),
-													window,
-													cx,
-												);
+												s.set_value(cfg.worktree_dir.clone().unwrap_or_default(), window, cx);
 											});
 											app.inputs.init_script.update(cx, |s, cx| {
 												s.set_value(cfg.init_script.join("\n"), window, cx);
@@ -207,31 +204,44 @@ fn mode_switch(
 		.bg(theme.muted)
 		.p(px(2.))
 		.gap_1()
-		.child(mode_btn("files", IconName::Folder, app.t("sidebarFilesTab"), open && mode == SidebarMode::Files, SidebarMode::Files, view.clone()))
+		.child(mode_btn(
+			"files",
+			IconName::Folder,
+			app.t("sidebarFilesTab"),
+			open && mode == SidebarMode::Files,
+			SidebarMode::Files,
+			view.clone(),
+		))
 		.child(
 			h_flex()
 				.id("git-mode-btn")
-				.child(mode_btn("git", IconName::GitHub, app.t("sidebarGitTab"), open && mode == SidebarMode::Git, SidebarMode::Git, view.clone()))
+				.child(mode_btn(
+					"git",
+					IconName::GitHub,
+					app.t("sidebarGitTab"),
+					open && mode == SidebarMode::Git,
+					SidebarMode::Git,
+					view.clone(),
+				))
 				.when(files > 0, |el| {
 					el.child(
 						h_flex()
 							.gap_1()
 							.pr_1()
 							.text_xs()
-							.child(
-								div()
-									.text_color(rgb(0x22c55e))
-									.child(format!("+{ins}")),
-							)
-							.child(
-								div()
-									.text_color(rgb(0xef4444))
-									.child(format!("-{del}")),
-							),
+							.child(div().text_color(rgb(0x22c55e)).child(format!("+{ins}")))
+							.child(div().text_color(rgb(0xef4444)).child(format!("-{del}"))),
 					)
 				}),
 		)
-		.child(mode_btn("notes", IconName::BookOpen, app.t("notes"), open && mode == SidebarMode::Notes, SidebarMode::Notes, view))
+		.child(mode_btn(
+			"notes",
+			IconName::BookOpen,
+			app.t("notes"),
+			open && mode == SidebarMode::Notes,
+			SidebarMode::Notes,
+			view,
+		))
 }
 
 fn mode_btn(
@@ -359,11 +369,7 @@ fn topbar_control(
 	}
 }
 
-fn profile_sidebar(
-	app: &mut AppView,
-	window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+fn profile_sidebar(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let Some(ws) = app.data.current_ws() else {
 		return div().id("no-profile-sidebar").into_any_element();
 	};
@@ -396,7 +402,12 @@ fn profile_sidebar(
 						.child(visible(mode == SidebarMode::Notes, notes::render(app, window, cx))),
 				),
 		)
-		.child(sidebar::resize_handle("profile-sidebar-resize", view, true))
+		.child(sidebar::resize_handle(
+			"profile-sidebar-resize",
+			view,
+			true,
+			app.data.overlay.sidebar_resize_focus == Some(true),
+		))
 		.into_any_element()
 }
 
@@ -408,11 +419,7 @@ fn visible(show: bool, child: impl IntoElement) -> impl IntoElement {
 		.child(child)
 }
 
-fn main_column(
-	app: &mut AppView,
-	window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+fn main_column(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let Some(ws) = app.data.current_ws() else {
 		return div().id("no-main").flex_1().into_any_element();
 	};
@@ -579,11 +586,7 @@ fn new_terminal_control(app: &AppView, view: gpui::Entity<AppView>) -> impl Into
 				let view = view.clone();
 				move |_, _, cx| {
 					view.update(cx, |app, cx| {
-						app.data.overlay.context_menu = Some((
-							crate::state::ContextMenu::NewTerminal,
-							200.0,
-							80.0,
-						));
+						app.data.overlay.context_menu = Some((crate::state::ContextMenu::NewTerminal, 200.0, 80.0));
 						cx.notify();
 					});
 				}
@@ -617,6 +620,14 @@ fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 		AgentKind::OpenCode => ("O", gpui::rgb(0x94a3b8)),
 		AgentKind::Grok => ("K", gpui::rgb(0xe5e7eb)),
 		AgentKind::Kimi => ("M", gpui::rgb(0xf472b6)),
+		AgentKind::Devin => ("D", gpui::rgb(0x14b8a6)),
+		AgentKind::Droid => ("F", gpui::rgb(0xa855f7)),
+		AgentKind::Hermes => ("H", gpui::rgb(0xf97316)),
+		AgentKind::Kilo => ("I", gpui::rgb(0x84cc16)),
+		AgentKind::Kiro => ("W", gpui::rgb(0x06b6d4)),
+		AgentKind::Pi => ("π", gpui::rgb(0x64748b)),
+		AgentKind::Qoder => ("Q", gpui::rgb(0x6366f1)),
+		AgentKind::Agy => ("Y", gpui::rgb(0xec4899)),
 		AgentKind::Other => ("•", gpui::rgb(0x9ca3af)),
 		AgentKind::Unknown => return div().into_any_element(),
 	};
@@ -633,11 +644,7 @@ fn agent_kind_mark(kind: AgentKind) -> impl IntoElement {
 		.into_any_element()
 }
 
-fn tab_bodies(
-	app: &mut AppView,
-	window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+fn tab_bodies(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let Some(ws) = app.data.current_ws() else {
 		return div().into_any_element();
 	};

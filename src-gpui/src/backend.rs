@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 
-use infra::db::{DbPool, init_db};
+use infra::db::{init_db, DbPool};
 use infra::pty::{self as pty_infra, PtyReadThreads, PtySessionMap};
 use model::error::AppError;
 use model::filesystem::{FilePreview, FileSearchResult, FileTreeGitStatusEntry};
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::{
-	GitBranchInfo, GitCommit, GitDiffSnapshot, GitDiffStats, GitPullRequestStatus,
-	Project, ProjectConfig, ProjectSidebarLayoutUpdate, ProjectWithProfiles,
+	GitBranchInfo, GitCommit, GitDiffSnapshot, GitDiffStats, GitPullRequestStatus, Project, ProjectConfig,
+	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
@@ -28,9 +28,7 @@ pub struct GpuiPtyEmitter {
 impl PtyEventEmitter for GpuiPtyEmitter {
 	fn emit_output(&self, session_id: &str, bytes: &[u8]) -> bool {
 		if let Ok(mut map) = self.buffers.lock() {
-			map.entry(session_id.to_string())
-				.or_default()
-				.extend_from_slice(bytes);
+			map.entry(session_id.to_string()).or_default().extend_from_slice(bytes);
 		}
 		true
 	}
@@ -79,8 +77,7 @@ pub struct Backend {
 impl Backend {
 	pub fn init() -> Result<Self, String> {
 		let app_data_dir = app_data_dir();
-		std::fs::create_dir_all(&app_data_dir)
-			.map_err(|e| format!("create app data dir: {e}"))?;
+		std::fs::create_dir_all(&app_data_dir).map_err(|e| format!("create app data dir: {e}"))?;
 
 		let db = init_db(&app_data_dir)?;
 		service::pty::mark_all_closed(&db);
@@ -125,7 +122,10 @@ impl Backend {
 		}
 	}
 
-	fn with_db<T>(&self, f: impl FnOnce(&mut diesel::sqlite::SqliteConnection) -> Result<T, AppError>) -> Result<T, AppError> {
+	fn with_db<T>(
+		&self,
+		f: impl FnOnce(&mut diesel::sqlite::SqliteConnection) -> Result<T, AppError>,
+	) -> Result<T, AppError> {
 		let mut conn = self.db.lock().map_err(|_| AppError::LockError)?;
 		f(&mut conn)
 	}
@@ -143,9 +143,7 @@ impl Backend {
 	}
 
 	pub fn rename_project(&self, id: &str, name: &str) -> Result<Project, AppError> {
-		self.with_db(|conn| {
-			service::project::update(conn, id, Some(name.to_string()), None)
-		})
+		self.with_db(|conn| service::project::update(conn, id, Some(name.to_string()), None))
 	}
 
 	pub fn delete_project(&self, id: &str) -> Result<(), AppError> {
@@ -156,18 +154,11 @@ impl Backend {
 		self.with_db(|conn| service::project::create_group(conn, name))
 	}
 
-	pub fn assign_to_group(
-		&self,
-		project_id: &str,
-		group_id: Option<String>,
-	) -> Result<Project, AppError> {
+	pub fn assign_to_group(&self, project_id: &str, group_id: Option<String>) -> Result<Project, AppError> {
 		self.with_db(|conn| service::project::assign_to_group(conn, project_id, group_id))
 	}
 
-	pub fn update_sidebar_layout(
-		&self,
-		updates: Vec<ProjectSidebarLayoutUpdate>,
-	) -> Result<(), AppError> {
+	pub fn update_sidebar_layout(&self, updates: Vec<ProjectSidebarLayoutUpdate>) -> Result<(), AppError> {
 		self.with_db(|conn| service::project::update_sidebar_layout(conn, updates))
 	}
 
@@ -244,29 +235,17 @@ impl Backend {
 		infra::git::checkout_branch(folder, branch)
 	}
 
-	pub fn pr_status(
-		&self,
-		folder: &str,
-		branch: Option<&str>,
-	) -> Result<Option<GitPullRequestStatus>, AppError> {
+	pub fn pr_status(&self, folder: &str, branch: Option<&str>) -> Result<Option<GitPullRequestStatus>, AppError> {
 		service::project::get_pull_request_status_for_folder(folder, branch)
 	}
 
 	pub fn project_config(&self, project_id: &str) -> Result<ProjectConfig, AppError> {
-		let folder = self.with_db(|conn| {
-			Ok(repo::project::find_by_id(conn, project_id)?.folder)
-		})?;
+		let folder = self.with_db(|conn| Ok(repo::project::find_by_id(conn, project_id)?.folder))?;
 		Ok(infra::config::load_project_config(&folder).unwrap_or_default())
 	}
 
-	pub fn save_project_config(
-		&self,
-		project_id: &str,
-		config: &ProjectConfig,
-	) -> Result<(), AppError> {
-		let folder = self.with_db(|conn| {
-			Ok(repo::project::find_by_id(conn, project_id)?.folder)
-		})?;
+	pub fn save_project_config(&self, project_id: &str, config: &ProjectConfig) -> Result<(), AppError> {
+		let folder = self.with_db(|conn| Ok(repo::project::find_by_id(conn, project_id)?.folder))?;
 		infra::config::write_project_config(&folder, config)
 	}
 
@@ -279,11 +258,7 @@ impl Backend {
 		.flatten()
 	}
 
-	pub fn list_tree_children(
-		&self,
-		profile_id: &str,
-		relative: Option<&str>,
-	) -> Result<Vec<String>, AppError> {
+	pub fn list_tree_children(&self, profile_id: &str, relative: Option<&str>) -> Result<Vec<String>, AppError> {
 		service::filesystem::list_file_tree_child_paths(&self.db, profile_id, relative)
 	}
 
@@ -308,13 +283,7 @@ impl Backend {
 		let office_cache = self.app_data_dir.join("office-preview");
 		let _ = std::fs::create_dir_all(&file_cache);
 		let _ = std::fs::create_dir_all(&office_cache);
-		service::filesystem::get_file_preview(
-			&self.db,
-			profile_id,
-			path,
-			&file_cache,
-			&office_cache,
-		)
+		service::filesystem::get_file_preview(&self.db, profile_id, path, &file_cache, &office_cache)
 	}
 
 	pub fn create_path(&self, profile_id: &str, path: &str, is_dir: bool) -> Result<(), AppError> {
@@ -376,12 +345,7 @@ impl Backend {
 	}
 
 	pub fn close_terminal(&self, session_id: &str) -> Result<(), AppError> {
-		service::pty::close_session_full(
-			&self.sessions,
-			&self.flush_senders,
-			&self.output_dir,
-			session_id,
-		)?;
+		service::pty::close_session_full(&self.sessions, &self.flush_senders, &self.output_dir, session_id)?;
 		self.with_db(|conn| {
 			repo::pty::mark_closed(conn, session_id);
 			Ok(())
@@ -450,27 +414,14 @@ impl Backend {
 				kind: "project".into(),
 				id: p.id.clone(),
 				group_id: p.group_id.clone(),
-				sort_order: Some(if p.pinned_at.is_some() {
-					p.sort_order
-				} else {
-					i as i32
-				}),
-				pinned_order: if p.pinned_at.is_some() {
-					Some(i as i32)
-				} else {
-					None
-				},
+				sort_order: Some(if p.pinned_at.is_some() { p.sort_order } else { i as i32 }),
+				pinned_order: if p.pinned_at.is_some() { Some(i as i32) } else { None },
 			})
 			.collect();
 		self.update_sidebar_layout(updates)
 	}
 
-	pub fn drop_project(
-		&self,
-		dragged: &str,
-		target: Option<&str>,
-		unpin: bool,
-	) -> Result<(), AppError> {
+	pub fn drop_project(&self, dragged: &str, target: Option<&str>, unpin: bool) -> Result<(), AppError> {
 		let project = self.find_project(dragged)?;
 		if unpin {
 			return self.update_sidebar_layout(vec![ProjectSidebarLayoutUpdate {
@@ -501,6 +452,35 @@ impl Backend {
 		self.with_db(|conn| service::pty::list_project_sessions(conn, project_id))
 	}
 
+	pub fn list_all_sessions(&self) -> Result<Vec<PtySessionRecord>, AppError> {
+		let projects = self.list_projects()?;
+		let mut sessions = Vec::new();
+		for project in projects {
+			sessions.extend(self.list_sessions(&project.id)?);
+		}
+		Ok(sessions)
+	}
+
+	pub fn restore_session(&self, record: &PtySessionRecord) -> Result<(String, Vec<u8>), AppError> {
+		let ctx = self.pty_ctx();
+		let result = service::pty::restore_session(
+			&ctx,
+			&record.id,
+			&PtySessionMeta {
+				profile_id: record.profile_id.clone(),
+				title: record.title.clone(),
+			},
+			&PtyConfig {
+				shell: record.shell.clone(),
+				cwd: record.cwd.clone(),
+				rows: record.rows.max(1) as u16,
+				cols: record.cols.max(1) as u16,
+				startup_commands: Vec::new(),
+			},
+		)?;
+		Ok((result.new_session_id, result.history))
+	}
+
 	pub fn take_watch_events(&self) -> Vec<model::watcher::WatchEvent> {
 		self.watch_events
 			.lock()
@@ -509,11 +489,7 @@ impl Backend {
 			.unwrap_or_default()
 	}
 
-	pub fn resolve_file(
-		&self,
-		profile_id: &str,
-		path: &str,
-	) -> Result<model::filesystem::ResolvedFilePath, AppError> {
+	pub fn resolve_file(&self, profile_id: &str, path: &str) -> Result<model::filesystem::ResolvedFilePath, AppError> {
 		service::filesystem::resolve_terminal_file_path(&self.db, profile_id, path)
 	}
 
@@ -568,8 +544,8 @@ pub fn _channel<T>() -> (mpsc::Sender<T>, mpsc::Receiver<T>) {
 pub fn is_previewable(path: &str) -> bool {
 	let lower = path.to_ascii_lowercase();
 	[
-		".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".pdf",
-		".zip", ".tar", ".gz", ".tgz", ".docx", ".xlsx", ".pptx",
+		".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".pdf", ".zip", ".tar", ".gz", ".tgz", ".docx",
+		".xlsx", ".pptx",
 	]
 	.iter()
 	.any(|ext| lower.ends_with(ext))

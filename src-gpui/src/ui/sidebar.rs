@@ -1,7 +1,7 @@
-use gpui::{div, prelude::*, px, Context, MouseButton, Window};
+use gpui::{div, prelude::*, px, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, Selectable};
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{Disableable, Selectable};
 
 use crate::app::AppView;
 use crate::backend;
@@ -24,131 +24,136 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.relative()
 		.h_full()
 		.child(
-	v_flex()
-		.id("app-sidebar")
-		.w(px(width))
-		.h_full()
-		.bg(theme.sidebar)
-		.border_r_1()
-		.border_color(theme.border)
-		.child(
-			h_flex()
-				.id("sidebar-header")
-				.w_full()
-				.pt(pad_top)
-				.px_3()
-				.pb_2()
-				.justify_between()
-				.child(
-					div()
-						.font_semibold()
-						.text_sm()
-						.child("2Code"),
-				)
-				.child(
-					Button::new("collapse-sidebar")
-						.ghost()
-						.xsmall()
-						.icon(IconName::PanelLeftClose)
-						.tooltip(app.t("collapseSidebar"))
-						.on_click({
-							let view = view.clone();
-							move |_, _, cx| {
-								view.update(cx, |app, cx| {
-									app.data.prefs.sidebar_collapsed = true;
-									app.persist_prefs();
-									cx.notify();
-								});
-							}
-						}),
-				),
-		)
-		.child(
 			v_flex()
-				.id("sidebar-content")
-				.flex_1()
-				.min_h_0()
-				.px_2()
-				.py_1()
-				.gap_1()
-				.overflow_hidden()
-				.when(!has_projects, |el| {
-					el.child(nav_row(
-						"home-row",
-						IconName::Inbox,
-						app.t("home"),
-						app.data.route == Route::Home,
-						{
-							let view = view.clone();
-							move |cx| {
-								view.update(cx, |app, cx| {
-									app.data.route = Route::Home;
-									cx.notify();
-								});
-							}
-						},
-					))
-				})
-				.when_some(app.data.sidebar_error.clone(), |el, err| {
-					el.child(
-						v_flex()
-							.p_4()
-							.gap_2()
-							.child(
-								div()
-									.text_color(theme.danger)
-									.font_semibold()
-									.child(app.t("somethingWentWrong")),
-							)
-							.child(div().text_xs().child(err))
-							.child(
-								Button::new("sidebar-retry")
-									.xsmall()
-									.label(app.t("tryAgain"))
-									.on_click({
-										let view = view.clone();
-										move |_, _, cx| {
-											view.update(cx, |app, cx| {
-												app.reload_projects();
-												cx.notify();
-											});
-										}
-									}),
-							),
-					)
-				})
-				.child(project_sections(app, window, cx)),
-		)
-		.child(
-			h_flex()
-				.id("sidebar-footer")
-				.w_full()
-				.px_2()
-				.py_2()
-				.border_t_1()
+				.id("app-sidebar")
+				.w(px(width))
+				.h_full()
+				.bg(theme.sidebar)
+				.border_r_1()
 				.border_color(theme.border)
 				.child(
-					Button::new("open-settings")
-						.ghost()
-						.small()
-						.icon(IconName::Settings)
-						.label(app.t("settings"))
-						.on_click({
-							let view = view.clone();
-							move |_, window, cx| {
-								view.update(cx, |app, cx| {
-									settings::open_settings_window(app, window, cx);
-								});
-							}
-						}),
+					h_flex()
+						.id("sidebar-header")
+						.w_full()
+						.pt(pad_top)
+						.px_3()
+						.pb_2()
+						.justify_between()
+						.child(div().font_semibold().text_sm().child("2Code"))
+						.child(
+							Button::new("collapse-sidebar")
+								.ghost()
+								.xsmall()
+								.icon(IconName::PanelLeftClose)
+								.tooltip(app.t("collapseSidebar"))
+								.on_click({
+									let view = view.clone();
+									move |_, _, cx| {
+										view.update(cx, |app, cx| {
+											app.data.prefs.sidebar_collapsed = true;
+											app.persist_prefs();
+											cx.notify();
+										});
+									}
+								}),
+						),
+				)
+				.child(
+					v_flex()
+						.id("sidebar-content")
+						.flex_1()
+						.min_h_0()
+						.px_2()
+						.py_1()
+						.gap_1()
+						.overflow_hidden()
+						.when(!has_projects, |el| {
+							el.child(nav_row(
+								"home-row",
+								IconName::Inbox,
+								app.t("home"),
+								app.data.route == Route::Home,
+								{
+									let view = view.clone();
+									move |cx| {
+										view.update(cx, |app, cx| {
+											app.data.route = Route::Home;
+											cx.notify();
+										});
+									}
+								},
+							))
+						})
+						.when_some(app.data.sidebar_error.clone(), |el, err| {
+							el.child(
+								v_flex()
+									.p_4()
+									.gap_2()
+									.child(
+										div()
+											.text_color(theme.danger)
+											.font_semibold()
+											.child(app.t("somethingWentWrong")),
+									)
+									.child(div().text_xs().child(err))
+									.child(
+										Button::new("sidebar-retry")
+											.xsmall()
+											.label(app.t("tryAgain"))
+											.on_click({
+												let view = view.clone();
+												move |_, _, cx| {
+													view.update(cx, |app, cx| {
+														app.reload_projects();
+														cx.notify();
+													});
+												}
+											}),
+									),
+							)
+						})
+						.child(project_sections(app, window, cx)),
+				)
+				.child(
+					h_flex()
+						.id("sidebar-footer")
+						.w_full()
+						.px_2()
+						.py_2()
+						.border_t_1()
+						.border_color(theme.border)
+						.child(
+							Button::new("open-settings")
+								.ghost()
+								.small()
+								.icon(IconName::Settings)
+								.label(app.t("settings"))
+								.on_click({
+									let view = view.clone();
+									move |_, window, cx| {
+										view.update(cx, |app, cx| {
+											settings::open_settings_window(app, window, cx);
+										});
+									}
+								}),
+						),
 				),
 		)
-		)
-		.child(resize_handle("app-sidebar-resize", view, false))
+		.child(resize_handle(
+			"app-sidebar-resize",
+			view,
+			false,
+			app.data.overlay.sidebar_resize_focus == Some(false),
+		))
 		.into_any_element()
 }
 
-pub(crate) fn resize_handle(id: &'static str, view: gpui::Entity<AppView>, profile: bool) -> impl IntoElement {
+pub(crate) fn resize_handle(
+	id: &'static str,
+	view: gpui::Entity<AppView>,
+	profile: bool,
+	focused: bool,
+) -> impl IntoElement {
 	div()
 		.id(id)
 		.absolute()
@@ -156,26 +161,37 @@ pub(crate) fn resize_handle(id: &'static str, view: gpui::Entity<AppView>, profi
 		.right_0()
 		.w(px(8.))
 		.h_full()
+		.tab_index(0)
 		.cursor(gpui::CursorStyle::ResizeColumn)
-		.on_mouse_down(MouseButton::Left, move |ev, _, cx| {
-			view.update(cx, |app, cx| {
-				let start = f32::from(ev.position.x);
-				if profile {
-					app.data.overlay.profile_sidebar_drag =
-						Some((start, app.data.prefs.profile_sidebar_width));
-				} else {
-					app.data.overlay.sidebar_drag = Some((start, app.data.prefs.sidebar_width));
-				}
-				cx.notify();
-			});
+		.when(focused, |el| el.bg(gpui::hsla(0., 0., 0.5, 0.3)))
+		.on_mouse_down(MouseButton::Left, {
+			let view = view.clone();
+			move |ev, _, cx| {
+				view.update(cx, |app, cx| {
+					let start = f32::from(ev.position.x);
+					app.data.overlay.sidebar_resize_focus = Some(profile);
+					if profile {
+						app.data.overlay.profile_sidebar_drag = Some((start, app.data.prefs.profile_sidebar_width));
+					} else {
+						app.data.overlay.sidebar_drag = Some((start, app.data.prefs.sidebar_width));
+					}
+					cx.notify();
+				});
+			}
+		})
+		.on_key_down({
+			let view = view.clone();
+			move |ev: &KeyDownEvent, _, cx| {
+				view.update(cx, |app, cx| {
+					if app.nudge_sidebar(profile, ev.keystroke.key.as_str()) {
+						cx.notify();
+					}
+				});
+			}
 		})
 }
 
-fn project_sections(
-	app: &mut AppView,
-	_window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> impl IntoElement {
+fn project_sections(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
 	let pinned: Vec<_> = app
@@ -199,9 +215,9 @@ fn project_sections(
 		.gap_2()
 		.when(!pinned.is_empty() || app.data.overlay.sort_mode, |el| {
 			el.child(section_label(&app.t("pinnedProjects"))).child(
-				v_flex().gap_1().children(pinned.into_iter().map(|p| {
-					project_row(app, &p, cx)
-				})),
+				v_flex()
+					.gap_1()
+					.children(pinned.into_iter().map(|p| project_row(app, &p, cx))),
 			)
 		})
 		.child(
@@ -299,11 +315,14 @@ fn project_sections(
 										});
 									}
 								})
-								.child(Icon::new(if collapsed {
-									IconName::ChevronRight
-								} else {
-									IconName::ChevronDown
-								}).w(px(12.)))
+								.child(
+									Icon::new(if collapsed {
+										IconName::ChevronRight
+									} else {
+										IconName::ChevronDown
+									})
+									.w(px(12.)),
+								)
 								.child(div().flex_1().text_sm().child(group.name.clone()))
 								.child(
 									div()
@@ -375,12 +394,7 @@ fn has_any_projects(app: &AppView) -> bool {
 }
 
 fn section_label(text: &str) -> impl IntoElement {
-	div()
-		.px_2()
-		.pt_2()
-		.text_xs()
-		.font_medium()
-		.child(text.to_string())
+	div().px_2().pt_2().text_xs().font_medium().child(text.to_string())
 }
 
 fn project_row(
@@ -392,9 +406,7 @@ fn project_row(
 	let view = cx.entity();
 	let selected = app.data.current_project.as_deref() == Some(project.id.as_str());
 	let extras: Vec<_> = project.profiles.iter().filter(|p| !p.is_default).cloned().collect();
-	let expanded = app.data.overlay.expanded_projects.contains(&project.id)
-		|| extras.is_empty()
-		|| selected;
+	let expanded = app.data.overlay.expanded_projects.contains(&project.id) || extras.is_empty() || selected;
 	let agent = app.agent_for_project(&project.id);
 	let letter = project
 		.name
@@ -403,11 +415,7 @@ fn project_row(
 		.map(|c| c.to_ascii_uppercase())
 		.unwrap_or('?');
 	let id = project.id.clone();
-	let default_profile = project
-		.profiles
-		.iter()
-		.find(|p| p.is_default)
-		.map(|p| p.id.clone());
+	let default_profile = project.profiles.iter().find(|p| p.is_default).map(|p| p.id.clone());
 
 	v_flex()
 		.id(crate::ui::eid(format!("proj-{}", project.id)))
@@ -467,8 +475,11 @@ fn project_row(
 					let id = id.clone();
 					move |ev, _, cx| {
 						view.update(cx, |app, cx| {
-							app.data.overlay.context_menu =
-								Some((ContextMenu::Project { id: id.clone() }, ev.position.x.into(), ev.position.y.into()));
+							app.data.overlay.context_menu = Some((
+								ContextMenu::Project { id: id.clone() },
+								ev.position.x.into(),
+								ev.position.y.into(),
+							));
 							cx.notify();
 						});
 					}
@@ -573,11 +584,14 @@ fn project_row(
 					)
 				})
 				.when(!extras.is_empty(), |el| {
-					el.child(Icon::new(if expanded {
-						IconName::ChevronDown
-					} else {
-						IconName::ChevronRight
-					}).w(px(12.)))
+					el.child(
+						Icon::new(if expanded {
+							IconName::ChevronDown
+						} else {
+							IconName::ChevronRight
+						})
+						.w(px(12.)),
+					)
 				}),
 		)
 		.when(expanded, |el| {
@@ -635,11 +649,14 @@ fn project_row(
 									});
 								}
 							})
-							.child(Icon::new(if profile.is_default {
-								IconName::SquareTerminal
-							} else {
-								IconName::GitHub
-							}).w(px(14.)))
+							.child(
+								Icon::new(if profile.is_default {
+									IconName::SquareTerminal
+								} else {
+									IconName::GitHub
+								})
+								.w(px(14.)),
+							)
 							.child(div().flex_1().text_sm().child(label))
 							.child(agent_dot(app.agent_for_profile(&profile.id)))
 					}))

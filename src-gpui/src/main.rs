@@ -1,6 +1,7 @@
 mod app;
 mod backend;
 mod detector;
+mod diff;
 mod i18n;
 mod platform;
 mod prefs;
@@ -8,9 +9,7 @@ mod state;
 mod ui;
 mod updater;
 
-use gpui::{
-	point, prelude::*, px, size, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions,
-};
+use gpui::{point, prelude::*, px, size, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions};
 use gpui_component::Root;
 
 use crate::app::AppView;

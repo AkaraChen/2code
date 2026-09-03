@@ -3,7 +3,9 @@ use std::time::Instant;
 
 use model::filesystem::FileSearchResult;
 use model::profile::Profile;
-use model::project::{GitBranchInfo, GitCommit, GitDiffStats, GitPullRequestStatus, ProjectConfig, ProjectWithProfiles};
+use model::project::{
+	GitBranchInfo, GitCommit, GitDiffStats, GitPullRequestStatus, ProjectConfig, ProjectWithProfiles,
+};
 use model::project_group::ProjectGroup;
 
 use crate::i18n::Locale;
@@ -72,6 +74,14 @@ pub enum AgentKind {
 	OpenCode,
 	Grok,
 	Kimi,
+	Devin,
+	Droid,
+	Hermes,
+	Kilo,
+	Kiro,
+	Pi,
+	Qoder,
+	Agy,
 	Other,
 }
 
@@ -256,6 +266,8 @@ pub struct Workspace {
 	pub files: Vec<OpenFileTab>,
 	pub active: Option<UnifiedTab>,
 	pub tree: HashMap<String, TreeNode>,
+	pub tree_selected: HashSet<String>,
+	pub tree_anchor: Option<String>,
 	pub tree_error: Option<String>,
 	pub git_files: Vec<(String, String)>,
 	pub git_included: HashSet<String>,
@@ -335,6 +347,7 @@ pub struct OverlayState {
 	pub project_settings_tab: usize,
 	pub sidebar_drag: Option<(f32, f32)>,
 	pub profile_sidebar_drag: Option<(f32, f32)>,
+	pub sidebar_resize_focus: Option<bool>,
 	pub drag_project: Option<String>,
 	pub drag_file: Option<String>,
 	pub renaming_path: Option<String>,
@@ -355,13 +368,12 @@ pub struct AppData {
 	pub sidebar_error: Option<String>,
 	pub locale: Locale,
 	pub notes_dirty_since: Option<Instant>,
+	pub notes_bound_profile: Option<String>,
 }
 
 impl AppData {
 	pub fn current_ws(&self) -> Option<&Workspace> {
-		self.current_profile
-			.as_ref()
-			.and_then(|id| self.workspaces.get(id))
+		self.current_profile.as_ref().and_then(|id| self.workspaces.get(id))
 	}
 
 	pub fn current_ws_mut(&mut self) -> Option<&mut Workspace> {
@@ -370,16 +382,13 @@ impl AppData {
 	}
 
 	pub fn default_profile_of(&self, project_id: &str) -> Option<Profile> {
-		self.projects
-			.iter()
-			.find(|p| p.id == project_id)
-			.and_then(|p| {
-				p.profiles
-					.iter()
-					.find(|pr| pr.is_default)
-					.cloned()
-					.or_else(|| p.profiles.first().cloned())
-			})
+		self.projects.iter().find(|p| p.id == project_id).and_then(|p| {
+			p.profiles
+				.iter()
+				.find(|pr| pr.is_default)
+				.cloned()
+				.or_else(|| p.profiles.first().cloned())
+		})
 	}
 
 	pub fn project(&self, id: &str) -> Option<&ProjectWithProfiles> {

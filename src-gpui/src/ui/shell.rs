@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, rgb, Context, MouseButton, Window};
+use gpui::{div, prelude::*, px, rgb, Context, KeyDownEvent, MouseButton, Window};
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{ActiveTheme, Sizable, StyledExt};
 
@@ -25,12 +25,23 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 						changed = true;
 					}
 					if let Some((start_x, start_w)) = app.data.overlay.profile_sidebar_drag {
-						app.data.prefs.profile_sidebar_width =
-							(start_w + x - start_x).clamp(180.0, 560.0);
+						app.data.prefs.profile_sidebar_width = (start_w + x - start_x).clamp(180.0, 560.0);
 						changed = true;
 					}
 					if changed {
 						cx.notify();
+					}
+				});
+			}
+		})
+		.on_key_down({
+			let view = view.clone();
+			move |ev: &KeyDownEvent, _, cx| {
+				view.update(cx, |app, cx| {
+					if let Some(profile) = app.data.overlay.sidebar_resize_focus {
+						if app.nudge_sidebar(profile, ev.keystroke.key.as_str()) {
+							cx.notify();
+						}
 					}
 				});
 			}
@@ -72,11 +83,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 		.child(toasts(app, cx))
 }
 
-fn home_or_empty(
-	app: &mut AppView,
-	window: &mut Window,
-	cx: &mut Context<AppView>,
-) -> gpui::AnyElement {
+fn home_or_empty(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> gpui::AnyElement {
 	crate::ui::home::render(app, window, cx).into_any_element()
 }
 
@@ -104,12 +111,7 @@ fn toasts(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 				.border_color(theme.border)
 				.bg(bg)
 				.shadow_md()
-				.child(
-					div()
-						.text_sm()
-						.font_semibold()
-						.child(toast.title.clone()),
-				)
+				.child(div().text_sm().font_semibold().child(toast.title.clone()))
 				.when(!toast.body.is_empty(), |el| {
 					el.child(
 						div()
@@ -149,12 +151,7 @@ fn window_controls() -> impl IntoElement {
 		.child(win_btn("close", "×", true, |window| window.remove_window()))
 }
 
-fn win_btn(
-	id: &'static str,
-	label: &'static str,
-	close: bool,
-	on: impl Fn(&mut Window) + 'static,
-) -> impl IntoElement {
+fn win_btn(id: &'static str, label: &'static str, close: bool, on: impl Fn(&mut Window) + 'static) -> impl IntoElement {
 	div()
 		.id(id)
 		.h(px(28.))

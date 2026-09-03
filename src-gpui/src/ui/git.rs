@@ -1,11 +1,12 @@
 use gpui::{div, prelude::*, px, rgb, Context, Window};
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, Selectable};
 use gpui_component::checkbox::Checkbox;
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable, StyledExt};
+use gpui_component::{Disableable, Selectable};
 
 use crate::app::{extract_file_hunk, file_status_badge, AppView};
+use crate::diff::{self, DiffLineKind};
 use crate::state::{DiffPreviewMode, GitDiffTab};
 
 pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -31,28 +32,30 @@ pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 						.px_2()
 						.py_1()
 						.gap_2()
-						.child(Checkbox::new("git-all").checked(!files.is_empty() && included.len() == files.len()).on_click({
-							let view = view.clone();
-							let files = files.clone();
-							move |checked, _, cx| {
-								view.update(cx, |app, cx| {
-									if let Some(ws) = app.data.current_ws_mut() {
-										ws.git_included.clear();
-										if *checked {
-											ws.git_included.extend(files.iter().map(|(p, _)| p.clone()));
-										}
-									}
-									cx.notify();
-								});
-							}
-						}))
 						.child(
-							div().flex_1().text_xs().child(crate::i18n::tf(
-								app.data.locale,
-								"changedFiles",
-								&[("count", &files.len().to_string())],
-							)),
+							Checkbox::new("git-all")
+								.checked(!files.is_empty() && included.len() == files.len())
+								.on_click({
+									let view = view.clone();
+									let files = files.clone();
+									move |checked, _, cx| {
+										view.update(cx, |app, cx| {
+											if let Some(ws) = app.data.current_ws_mut() {
+												ws.git_included.clear();
+												if *checked {
+													ws.git_included.extend(files.iter().map(|(p, _)| p.clone()));
+												}
+											}
+											cx.notify();
+										});
+									}
+								}),
 						)
+						.child(div().flex_1().text_xs().child(crate::i18n::tf(
+							app.data.locale,
+							"changedFiles",
+							&[("count", &files.len().to_string())],
+						)))
 						.child(
 							Button::new("open-diff")
 								.ghost()
@@ -79,9 +82,11 @@ pub fn render_panel(app: &mut AppView, _window: &mut Window, cx: &mut Context<Ap
 						.into_any_element()
 				} else {
 					v_flex()
-						.children(files.iter().map(|(path, status)| {
-							file_row(app, path, status, included.contains(path), true, cx)
-						}))
+						.children(
+							files
+								.iter()
+								.map(|(path, status)| file_row(app, path, status, included.contains(path), true, cx)),
+						)
 						.into_any_element()
 				}),
 		)
@@ -120,22 +125,26 @@ fn file_row(
 				});
 			}
 		})
-		.child(Checkbox::new(crate::ui::eid(format!("chk-{path}"))).checked(checked).on_click({
-			let view = view.clone();
-			let path = path_owned.clone();
-			move |val, _, cx| {
-				view.update(cx, |app, cx| {
-					if let Some(ws) = app.data.current_ws_mut() {
-						if *val {
-							ws.git_included.insert(path.clone());
-						} else {
-							ws.git_included.remove(&path);
-						}
+		.child(
+			Checkbox::new(crate::ui::eid(format!("chk-{path}")))
+				.checked(checked)
+				.on_click({
+					let view = view.clone();
+					let path = path_owned.clone();
+					move |val, _, cx| {
+						view.update(cx, |app, cx| {
+							if let Some(ws) = app.data.current_ws_mut() {
+								if *val {
+									ws.git_included.insert(path.clone());
+								} else {
+									ws.git_included.remove(&path);
+								}
+							}
+							cx.notify();
+						});
 					}
-					cx.notify();
-				});
-			}
-		}))
+				}),
+		)
 		.child(Icon::new(IconName::File).w(px(13.)))
 		.child(div().flex_1().text_sm().child(name))
 		.child(
@@ -178,6 +187,7 @@ fn commit_composer(
 ) -> impl IntoElement {
 	let view = cx.entity();
 	let theme = cx.theme().clone();
+	let summary_empty = app.inputs.commit_summary.read(cx).value().trim().is_empty();
 	v_flex()
 		.id("commit-composer")
 		.w_full()
@@ -198,14 +208,17 @@ fn commit_composer(
 			h_flex()
 				.justify_between()
 				.child(
-					div().text_xs().text_color(theme.muted_foreground).child(crate::i18n::tf(
-						app.data.locale,
-						"gitCommitIncludedCount",
-						&[
-							("includedCount", &included.to_string()),
-							("totalCount", &total.to_string()),
-						],
-					)),
+					div()
+						.text_xs()
+						.text_color(theme.muted_foreground)
+						.child(crate::i18n::tf(
+							app.data.locale,
+							"gitCommitIncludedCount",
+							&[
+								("includedCount", &included.to_string()),
+								("totalCount", &total.to_string()),
+							],
+						)),
 				)
 				.child(
 					h_flex()
@@ -220,8 +233,7 @@ fn commit_composer(
 									move |_, _, cx| {
 										view.update(cx, |app, cx| {
 											if let Some(ws) = app.data.current_ws_mut() {
-												ws.git_included =
-													ws.git_files.iter().map(|(p, _)| p.clone()).collect();
+												ws.git_included = ws.git_files.iter().map(|(p, _)| p.clone()).collect();
 											}
 											cx.notify();
 										});
@@ -255,7 +267,7 @@ fn commit_composer(
 						.primary()
 						.small()
 						.label(app.t("gitCommitButton"))
-						.disabled(included == 0)
+						.disabled(included == 0 || summary_empty)
 						.on_click({
 							let view = view.clone();
 							move |_, _, cx| {
@@ -311,11 +323,7 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 		.unwrap_or_else(|| "main".into());
 	let tab = app.data.overlay.git_diff_tab;
 	let mode = app.data.overlay.git_diff_mode;
-	let files = app
-		.data
-		.current_ws()
-		.map(|w| w.git_files.clone())
-		.unwrap_or_default();
+	let files = app.data.current_ws().map(|w| w.git_files.clone()).unwrap_or_default();
 	let selected = app.data.overlay.git_diff_file.clone();
 	let diff = selected
 		.as_ref()
@@ -435,8 +443,20 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 										.px_2()
 										.py_1()
 										.gap_2()
-										.child(tab_btn("changes", app.t("changes"), tab == GitDiffTab::Changes, GitDiffTab::Changes, &view))
-										.child(tab_btn("history", app.t("history"), tab == GitDiffTab::History, GitDiffTab::History, &view)),
+										.child(tab_btn(
+											"changes",
+											app.t("changes"),
+											tab == GitDiffTab::Changes,
+											GitDiffTab::Changes,
+											&view,
+										))
+										.child(tab_btn(
+											"history",
+											app.t("history"),
+											tab == GitDiffTab::History,
+											GitDiffTab::History,
+											&view,
+										)),
 								)
 								.child(if tab == GitDiffTab::Changes {
 									v_flex()
@@ -448,7 +468,17 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 											v_flex()
 												.flex_1()
 												.children(files.iter().map(|(p, s)| {
-													file_row(app, p, s, app.data.current_ws().map(|w| w.git_included.contains(p)).unwrap_or(false), false, cx)
+													file_row(
+														app,
+														p,
+														s,
+														app.data
+															.current_ws()
+															.map(|w| w.git_included.contains(p))
+															.unwrap_or(false),
+														false,
+														cx,
+													)
 												}))
 												.into_any_element()
 										})
@@ -464,41 +494,36 @@ pub fn render_diff_dialog(app: &mut AppView, _window: &mut Window, cx: &mut Cont
 									history_pane(app, cx).into_any_element()
 								}),
 						)
-						.child(
-							v_flex()
-								.flex_1()
-								.min_w_0()
-								.h_full()
-								.p_3()
-								.child(if selected.is_none() && tab == GitDiffTab::Changes {
-									div()
-										.text_color(theme.muted_foreground)
-										.child(app.t("selectFileToView"))
-										.into_any_element()
-								} else if large {
-									v_flex()
-										.gap_2()
-										.child(div().font_semibold().child(app.t("gitDiffLargeGuardrailTitle")))
-										.child(div().text_sm().child(app.t("gitDiffLargeGuardrailDescription")))
-										.child(
-											Button::new("reveal-large")
-												.label(app.t("gitDiffLargeGuardrailReveal"))
-												.on_click({
-													let view = view.clone();
-													let path = selected.clone().unwrap_or_default();
-													move |_, _, cx| {
-														view.update(cx, |app, cx| {
-															app.data.overlay.git_large_revealed.insert(path.clone());
-															cx.notify();
-														});
-													}
-												}),
-										)
-										.into_any_element()
-								} else {
-									diff_view(&diff, mode, theme.muted_foreground).into_any_element()
-								}),
-						),
+						.child(v_flex().flex_1().min_w_0().h_full().p_3().child(
+							if selected.is_none() && tab == GitDiffTab::Changes {
+								div()
+									.text_color(theme.muted_foreground)
+									.child(app.t("selectFileToView"))
+									.into_any_element()
+							} else if large {
+								v_flex()
+									.gap_2()
+									.child(div().font_semibold().child(app.t("gitDiffLargeGuardrailTitle")))
+									.child(div().text_sm().child(app.t("gitDiffLargeGuardrailDescription")))
+									.child(
+										Button::new("reveal-large")
+											.label(app.t("gitDiffLargeGuardrailReveal"))
+											.on_click({
+												let view = view.clone();
+												let path = selected.clone().unwrap_or_default();
+												move |_, _, cx| {
+													view.update(cx, |app, cx| {
+														app.data.overlay.git_large_revealed.insert(path.clone());
+														cx.notify();
+													});
+												}
+											}),
+									)
+									.into_any_element()
+							} else {
+								diff_view(&diff, mode, theme.muted_foreground).into_any_element()
+							},
+						)),
 				),
 		)
 		.into_any_element()
@@ -574,60 +599,110 @@ fn history_pane(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
 	if app.data.overlay.git_commits.is_empty() {
 		return div().p_4().child(app.t("noCommitsFound")).into_any_element();
 	}
-	v_flex().children(app.data.overlay.git_commits.iter().map(|c| {
-		let hash = c.hash.clone();
-		v_flex()
-			.id(crate::ui::eid(format!("commit-{hash}")))
-			.px_3()
-			.py_2()
-			.gap_1()
-			.hover(|el| el.bg(theme.muted))
-			.on_click({
-				let view = view.clone();
-				let hash = hash.clone();
-				move |_, _, cx| {
-					view.update(cx, |app, cx| {
-						app.select_commit(&hash);
-						cx.notify();
-					});
-				}
-			})
-			.child(div().font_medium().text_sm().child(c.message.clone()))
-			.child(
-				div()
-					.text_xs()
-					.text_color(theme.muted_foreground)
-					.child(format!("{} · {}", c.author.name, &hash[..hash.len().min(7)])),
-			)
-	})).into_any_element()
+	v_flex()
+		.children(app.data.overlay.git_commits.iter().map(|c| {
+			let hash = c.hash.clone();
+			v_flex()
+				.id(crate::ui::eid(format!("commit-{hash}")))
+				.px_3()
+				.py_2()
+				.gap_1()
+				.hover(|el| el.bg(theme.muted))
+				.on_click({
+					let view = view.clone();
+					let hash = hash.clone();
+					move |_, _, cx| {
+						view.update(cx, |app, cx| {
+							app.select_commit(&hash);
+							cx.notify();
+						});
+					}
+				})
+				.child(div().font_medium().text_sm().child(c.message.clone()))
+				.child(div().text_xs().text_color(theme.muted_foreground).child(format!(
+					"{} · {}",
+					c.author.name,
+					&hash[..hash.len().min(7)]
+				)))
+		}))
+		.into_any_element()
 }
 
 fn diff_view(diff: &str, mode: DiffPreviewMode, muted: gpui::Hsla) -> impl IntoElement {
 	if diff.trim().is_empty() {
 		return div().text_color(muted).child("").into_any_element();
 	}
+	if mode == DiffPreviewMode::Split {
+		return split_diff_view(diff, muted).into_any_element();
+	}
 	v_flex()
 		.id("diff-lines")
 		.gap_0()
 		.font_family("monospace")
 		.text_sm()
-		.children(diff.lines().map(|line| {
-			let (bg, color) = if line.starts_with('+') && !line.starts_with("+++") {
-				(gpui::hsla(0.38, 0.6, 0.4, 0.15), gpui::hsla(0.38, 0.7, 0.45, 1.))
-			} else if line.starts_with('-') && !line.starts_with("---") {
-				(gpui::hsla(0.02, 0.7, 0.5, 0.15), gpui::hsla(0.02, 0.75, 0.5, 1.))
-			} else {
-				(gpui::hsla(0., 0., 0., 0.), muted)
-			};
-			div()
-				.px_2()
-				.bg(bg)
-				.text_color(color)
-				.child(if mode == DiffPreviewMode::Split && (line.starts_with('+') || line.starts_with('-')) {
-					format!("{} │ {}", if line.starts_with('+') { "   " } else { line }, if line.starts_with('+') { line } else { "   " })
-				} else {
-					line.to_string()
-				})
-		}))
+		.children(diff.lines().map(|line| unified_line(line, muted)))
 		.into_any_element()
+}
+
+fn unified_line(line: &str, muted: gpui::Hsla) -> impl IntoElement {
+	let (bg, color) = line_colors(line, muted);
+	div().px_2().bg(bg).text_color(color).child(line.to_string())
+}
+
+fn line_colors(line: &str, muted: gpui::Hsla) -> (gpui::Hsla, gpui::Hsla) {
+	if line.starts_with('+') && !line.starts_with("+++") {
+		(gpui::hsla(0.38, 0.6, 0.4, 0.15), gpui::hsla(0.38, 0.7, 0.45, 1.))
+	} else if line.starts_with('-') && !line.starts_with("---") {
+		(gpui::hsla(0.02, 0.7, 0.5, 0.15), gpui::hsla(0.02, 0.75, 0.5, 1.))
+	} else {
+		(gpui::hsla(0., 0., 0., 0.), muted)
+	}
+}
+
+fn kind_colors(kind: DiffLineKind, muted: gpui::Hsla) -> (gpui::Hsla, gpui::Hsla) {
+	match kind {
+		DiffLineKind::Add => (gpui::hsla(0.38, 0.6, 0.4, 0.15), gpui::hsla(0.38, 0.7, 0.45, 1.)),
+		DiffLineKind::Del => (gpui::hsla(0.02, 0.7, 0.5, 0.15), gpui::hsla(0.02, 0.75, 0.5, 1.)),
+		DiffLineKind::Header => (gpui::hsla(0., 0., 0., 0.04), muted),
+		DiffLineKind::Context => (gpui::hsla(0., 0., 0., 0.), muted),
+	}
+}
+
+fn split_diff_view(diff: &str, muted: gpui::Hsla) -> impl IntoElement {
+	v_flex()
+		.id("diff-split")
+		.gap_0()
+		.font_family("monospace")
+		.text_sm()
+		.children(diff::split_rows(diff).into_iter().enumerate().map(|(ix, row)| {
+			h_flex()
+				.id(crate::ui::eid(format!("split-row-{ix}")))
+				.w_full()
+				.child(split_cell(row.left, muted, ix, "l"))
+				.child(div().w(px(1.)).h_full().bg(gpui::hsla(0., 0., 0.5, 0.2)))
+				.child(split_cell(row.right, muted, ix, "r"))
+		}))
+}
+
+fn split_cell(
+	cell: Option<(DiffLineKind, String)>,
+	muted: gpui::Hsla,
+	ix: usize,
+	side: &'static str,
+) -> impl IntoElement {
+	let (kind, text) = match cell {
+		Some((kind, text)) => (Some(kind), text),
+		None => (None, String::new()),
+	};
+	let (bg, color) = kind
+		.map(|k| kind_colors(k, muted))
+		.unwrap_or((gpui::hsla(0., 0., 0., 0.), muted));
+	div()
+		.id(crate::ui::eid(format!("split-{side}-{ix}")))
+		.flex_1()
+		.min_w_0()
+		.px_2()
+		.bg(bg)
+		.text_color(color)
+		.child(if text.is_empty() { " ".to_string() } else { text })
 }
