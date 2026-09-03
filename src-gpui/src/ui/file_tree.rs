@@ -1,11 +1,12 @@
 use std::time::Duration;
 
-use gpui::{div, prelude::*, px, Animation, AnimationExt, Context, MouseButton, Window};
+use gpui::{div, prelude::*, px, Animation, AnimationExt, Context, MouseButton, ScrollWheelEvent, Window};
+
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, Icon, IconName, StyledExt};
 
 use crate::app::AppView;
-use crate::state::ContextMenu;
+use crate::state::{leftover_sticky_folder, leftover_tree_row_height, leftover_visible_tree_rows, ContextMenu};
 use crate::ui::TreeDrag;
 
 pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -21,6 +22,7 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 	v_flex()
 		.id("file-tree")
 		.size_full()
+		.min_h_0()
 		.px(px(6.))
 		.py_1()
 		.text_size(px(13.))
@@ -93,6 +95,24 @@ pub fn render(app: &mut AppView, window: &mut Window, cx: &mut Context<AppView>)
 				.child(app.t("fileTreeEmptyDirectory"))
 				.into_any_element(),
 			Some(root) => v_flex()
+				.id("file-tree-list")
+				.flex_1()
+				.min_h_0()
+				.overflow_y_scroll()
+				.on_scroll_wheel({
+					let view = view.clone();
+					move |ev: &ScrollWheelEvent, _, cx| {
+						view.update(cx, |app, cx| {
+							if let Some(ws) = app.data.current_ws_mut() {
+								let delta = match ev.delta.pixel_delta(px(leftover_tree_row_height())) {
+									gpui::Point { y, .. } => f32::from(y),
+								};
+								ws.tree_scroll_y = (ws.tree_scroll_y - delta).max(0.0);
+								cx.notify();
+							}
+						});
+					}
+				})
 				.children(
 					root.children
 						.iter()
@@ -262,19 +282,9 @@ fn node_view(
 
 fn sticky_folder(app: &AppView) -> Option<String> {
 	let ws = app.data.current_ws()?;
-	let path = if let Some(selected) = ws.tree_selected.iter().next() {
-		let parent = selected.rsplit_once('/').map(|(dir, _)| dir).unwrap_or(selected);
-		if parent.is_empty() {
-			None
-		} else {
-			Some(parent.to_string())
-		}
-	} else {
-		ws.tree
-			.values()
-			.filter(|node| node.is_dir && node.expanded && !node.path.is_empty())
-			.max_by_key(|node| node.path.matches('/').count())
-			.map(|node| node.path.clone())
-	}?;
-	Some(path)
+	leftover_sticky_folder(
+		&leftover_visible_tree_rows(&ws.tree),
+		ws.tree_scroll_y,
+		leftover_tree_row_height(),
+	)
 }

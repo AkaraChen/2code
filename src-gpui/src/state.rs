@@ -120,7 +120,7 @@ impl AgentKind {
 		}
 	}
 
-	/// Inventory §9.1: tab icons come from the title keywords, then the detector.
+	/// Inventory §9.1: leftover tab icons come only from these title keywords.
 	pub fn from_tab_title(title: &str) -> Option<Self> {
 		let lower = title.to_ascii_lowercase();
 		const KEYS: &[(&str, AgentKind)] = &[
@@ -136,8 +136,8 @@ impl AgentKind {
 		KEYS.iter().find(|(key, _)| lower.contains(key)).map(|(_, kind)| *kind)
 	}
 
-	pub fn tab_icon_kind(title: &str, detected: Self) -> Self {
-		Self::from_tab_title(title).unwrap_or(detected)
+	pub fn tab_icon_kind(title: &str, _detected: Self) -> Self {
+		Self::from_tab_title(title).unwrap_or(Self::Unknown)
 	}
 }
 
@@ -523,6 +523,7 @@ pub struct Workspace {
 	pub tree_selected: HashSet<String>,
 	pub tree_anchor: Option<String>,
 	pub tree_error: Option<String>,
+	pub tree_scroll_y: f32,
 	pub git_files: Vec<(String, String)>,
 	pub git_included: HashSet<String>,
 	pub git_stats: GitDiffStats,
@@ -617,6 +618,8 @@ pub struct OverlayState {
 	pub settings_tab: SettingsTab,
 	pub debug_open: bool,
 	pub debug_logs: Vec<LogEntry>,
+	pub debug_auto_scroll: bool,
+	pub debug_scroll_y: f32,
 	pub collapsed_projects: HashSet<String>,
 	pub pending_close_file: Option<String>,
 	pub editing_template: Option<String>,
@@ -823,6 +826,54 @@ pub fn leftover_template_display_name(name: &str, fallback: &str) -> String {
 	} else {
 		name.to_string()
 	}
+}
+
+pub fn leftover_debug_auto_scroll(scroll_height: f32, scroll_top: f32, client_height: f32) -> bool {
+	scroll_height - scroll_top - client_height < 40.0
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftoverTreeRow {
+	pub path: String,
+	pub is_dir: bool,
+}
+
+pub fn leftover_visible_tree_rows(tree: &HashMap<String, TreeNode>) -> Vec<LeftoverTreeRow> {
+	let mut rows = Vec::new();
+	fn walk(tree: &HashMap<String, TreeNode>, path: &str, rows: &mut Vec<LeftoverTreeRow>) {
+		let Some(node) = tree.get(path) else {
+			return;
+		};
+		if !path.is_empty() {
+			rows.push(LeftoverTreeRow {
+				path: path.to_string(),
+				is_dir: node.is_dir,
+			});
+		}
+		if node.is_dir && node.expanded {
+			for child in &node.children {
+				walk(tree, child, rows);
+			}
+		}
+	}
+	walk(tree, "", &mut rows);
+	rows
+}
+
+pub fn leftover_sticky_folder(rows: &[LeftoverTreeRow], scroll_y: f32, row_height: f32) -> Option<String> {
+	if rows.is_empty() || row_height <= 0.0 {
+		return None;
+	}
+	let first_visible = ((scroll_y / row_height).floor() as usize).min(rows.len());
+	rows[..first_visible]
+		.iter()
+		.rev()
+		.find(|row| row.is_dir)
+		.map(|row| row.path.clone())
+}
+
+pub fn leftover_tree_row_height() -> f32 {
+	22.0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1249,6 +1300,68 @@ mod tests {
 	}
 
 	#[test]
+	fn leftover_debug_auto_scroll_and_sticky_folder_match_inventory() {
+		assert!(leftover_debug_auto_scroll(400.0, 360.0, 40.0));
+		assert!(leftover_debug_auto_scroll(400.0, 361.0, 40.0));
+		assert!(!leftover_debug_auto_scroll(400.0, 300.0, 40.0));
+		let mut tree = HashMap::new();
+		tree.insert(
+			String::new(),
+			TreeNode {
+				path: String::new(),
+				name: String::new(),
+				is_dir: true,
+				expanded: true,
+				children_loaded: true,
+				children: vec!["src".into(), "README.md".into()],
+			},
+		);
+		tree.insert(
+			"src".into(),
+			TreeNode {
+				path: "src".into(),
+				name: "src".into(),
+				is_dir: true,
+				expanded: true,
+				children_loaded: true,
+				children: vec!["src/lib.rs".into()],
+			},
+		);
+		tree.insert(
+			"src/lib.rs".into(),
+			TreeNode {
+				path: "src/lib.rs".into(),
+				name: "lib.rs".into(),
+				is_dir: false,
+				expanded: false,
+				children_loaded: true,
+				children: Vec::new(),
+			},
+		);
+		tree.insert(
+			"README.md".into(),
+			TreeNode {
+				path: "README.md".into(),
+				name: "README.md".into(),
+				is_dir: false,
+				expanded: false,
+				children_loaded: true,
+				children: Vec::new(),
+			},
+		);
+		let rows = leftover_visible_tree_rows(&tree);
+		assert_eq!(
+			rows.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(),
+			vec!["src", "src/lib.rs", "README.md"]
+		);
+		assert_eq!(leftover_sticky_folder(&rows, 0.0, leftover_tree_row_height()), None);
+		assert_eq!(
+			leftover_sticky_folder(&rows, leftover_tree_row_height() + 1.0, leftover_tree_row_height()),
+			Some("src".into())
+		);
+	}
+
+	#[test]
 	fn leftover_template_dropdown_matches_inventory() {
 		assert_eq!(
 			leftover_template_rows(&[], &[], true),
@@ -1351,7 +1464,7 @@ mod tests {
 		assert_eq!(AgentKind::from_tab_title("opencode"), Some(AgentKind::OpenCode));
 		assert_eq!(AgentKind::from_tab_title("qoder"), Some(AgentKind::Qoder));
 		assert_eq!(AgentKind::from_tab_title("zsh"), None);
-		assert_eq!(AgentKind::tab_icon_kind("zsh", AgentKind::Cursor), AgentKind::Cursor);
+		assert_eq!(AgentKind::tab_icon_kind("zsh", AgentKind::Cursor), AgentKind::Unknown);
 		assert_eq!(AgentKind::tab_icon_kind("claude", AgentKind::Codex), AgentKind::Claude);
 	}
 

@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, Context, Window};
+use gpui::{div, prelude::*, px, Context, ScrollWheelEvent, Window};
 use gpui_component::button::{Button, ButtonRounded, ButtonVariants};
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex, ActiveTheme, IconName};
@@ -89,6 +89,8 @@ pub fn render_dialog_body(app: &mut AppView, cx: &mut Context<AppView>) -> impl 
 							move |_, _, cx| {
 								view.update(cx, |app, cx| {
 									app.data.overlay.debug_logs.clear();
+									app.data.overlay.debug_auto_scroll = true;
+									app.data.overlay.debug_scroll_y = 0.0;
 									cx.notify();
 								});
 							}
@@ -117,6 +119,25 @@ pub fn render_dialog_body(app: &mut AppView, cx: &mut Context<AppView>) -> impl 
 				.w_full()
 				.min_h(px(160.))
 				.overflow_y_scroll()
+				.on_scroll_wheel({
+					let view = view.clone();
+					let filtered = filtered;
+					move |ev: &ScrollWheelEvent, _, cx| {
+						view.update(cx, |app, cx| {
+							let delta = match ev.delta.pixel_delta(px(20.)) {
+								gpui::Point { y, .. } => f32::from(y),
+							};
+							let content = (filtered as f32) * 20.0;
+							let viewport = 280.0;
+							let max_top = (content - viewport).max(0.0);
+							let scroll_top = (app.data.overlay.debug_scroll_y - delta).clamp(0.0, max_top);
+							app.data.overlay.debug_scroll_y = scroll_top;
+							app.data.overlay.debug_auto_scroll =
+								crate::state::leftover_debug_auto_scroll(content.max(viewport), scroll_top, viewport);
+							cx.notify();
+						});
+					}
+				})
 				.children(logs.into_iter().map(|l| {
 					let (badge_bg, badge_fg) = leftover_level_colors(&l.level, &theme);
 					h_flex()

@@ -390,6 +390,7 @@ impl AppView {
 				tree_selected: HashSet::new(),
 				tree_anchor: None,
 				tree_error: None,
+				tree_scroll_y: 0.0,
 				git_files: Vec::new(),
 				git_included: HashSet::new(),
 				git_stats: Default::default(),
@@ -2708,6 +2709,8 @@ impl AppView {
 		});
 		self.data.overlay.dialog = Some(DialogKind::DebugLog);
 		self.data.overlay.debug_open = true;
+		self.data.overlay.debug_auto_scroll = true;
+		self.data.overlay.debug_scroll_y = 0.0;
 	}
 
 	pub fn toggle_debug_log(&mut self, window: &mut Window, cx: &mut Context<Self>) {
