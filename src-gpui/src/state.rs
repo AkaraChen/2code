@@ -164,7 +164,8 @@ pub struct TermSession {
 	pub id: String,
 	pub title: String,
 	pub profile_id: String,
-	pub parser: vt100::Parser,
+	pub parser: vt100::Parser<crate::detector::OscSink>,
+	pub detector: crate::detector::AgentStatusDetector,
 	pub search_open: bool,
 	pub search_ix: usize,
 	pub search_query: String,
@@ -181,7 +182,8 @@ impl TermSession {
 			id,
 			title,
 			profile_id,
-			parser: vt100::Parser::new(32, 120, 10_000),
+			parser: vt100::Parser::new_with_callbacks(32, 120, 10_000, crate::detector::OscSink::default()),
+			detector: crate::detector::AgentStatusDetector::default(),
 			search_open: false,
 			search_ix: 0,
 			search_query: String::new(),
@@ -210,8 +212,12 @@ impl TermSession {
 
 	fn detect_agent(&mut self) {
 		let text = self.parser.screen().contents();
+		let osc = self.parser.callbacks();
 		let prev = self.agent;
-		let (kind, status) = crate::detector::detect(&self.title, &text, prev);
+		let (kind, mut status) = self.detector.detect(&self.title, &text, &osc.title, &osc.progress);
+		if matches!(prev, AgentStatus::Running | AgentStatus::Waiting) && status == AgentStatus::Idle {
+			status = AgentStatus::Completed;
+		}
 		if kind != AgentKind::Unknown {
 			self.agent_kind = kind;
 		}
@@ -333,6 +339,7 @@ pub struct OverlayState {
 	pub git_selected_commit: Option<String>,
 	pub git_large_revealed: HashSet<String>,
 	pub review_comments: Vec<String>,
+	pub review_line: Option<(String, String)>,
 	pub branches: Vec<GitBranchInfo>,
 	pub fuzzy_files: Vec<FileSearchResult>,
 	pub onboarding: bool,

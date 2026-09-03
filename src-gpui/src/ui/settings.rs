@@ -799,9 +799,25 @@ impl SettingsView {
 								self.t("openUpdatePage")
 							})
 							.on_click({
+								let view = view.clone();
 								let url = self.latest_url.clone();
-								move |_, _, _| {
-									let _ = open::that(&url);
+								let has_update = self.latest_version.is_some();
+								move |_, _, cx| {
+									if has_update {
+										view.update(cx, |this, cx| {
+											this.update_status = this.t("checkForUpdates");
+											match crate::updater::download_and_install(this.prefs.accept_beta) {
+												Ok(path) => this.update_status = path,
+												Err(err) => {
+													this.update_status = err;
+													let _ = open::that(&url);
+												}
+											}
+											cx.notify();
+										});
+									} else {
+										let _ = open::that(&url);
+									}
 								}
 							}),
 					),

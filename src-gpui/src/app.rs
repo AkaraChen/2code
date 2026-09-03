@@ -67,6 +67,7 @@ pub struct Inputs {
 	pub custom_shell: Entity<InputState>,
 	pub default_worktree: Entity<InputState>,
 	pub term_search: Entity<InputState>,
+	pub review_comment: Entity<InputState>,
 }
 
 pub struct AppView {
@@ -135,6 +136,7 @@ impl AppView {
 			custom_shell: input(window, cx, "", false),
 			default_worktree: input(window, cx, "", false),
 			term_search: input(window, cx, "", false),
+			review_comment: input(window, cx, "", true),
 		};
 
 		inputs.project_name.update(cx, |s, cx| {
@@ -166,6 +168,9 @@ impl AppView {
 		});
 		inputs.term_search.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "terminalSearchPlaceholder"), window, cx);
+		});
+		inputs.review_comment.update(cx, |s, cx| {
+			s.set_placeholder(i18n::t(locale, "gitReviewCommentPlaceholder"), window, cx);
 		});
 		inputs.default_worktree.update(cx, |s, cx| {
 			s.set_placeholder(i18n::t(locale, "defaultWorktreeDirPlaceholder"), window, cx);
@@ -1234,6 +1239,23 @@ impl AppView {
 		if let Some(profile_id) = self.data.current_profile.clone() {
 			self.data.overlay.git_diff_text = self.backend.git_diff(&profile_id).unwrap_or_default();
 		}
+	}
+
+	pub fn add_review_comment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+		let body = self.inputs.review_comment.read(cx).value().to_string();
+		let Some((file, line)) = self.data.overlay.review_line.clone() else {
+			return;
+		};
+		if body.trim().is_empty() {
+			return;
+		}
+		self.data
+			.overlay
+			.review_comments
+			.push(format!("{file}: {line}\n{body}"));
+		self.inputs.review_comment.update(cx, |s, cx| {
+			s.set_value("", window, cx);
+		});
 	}
 
 	pub fn select_commit(&mut self, hash: &str) {

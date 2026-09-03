@@ -957,6 +957,7 @@ dependencies = [
  "libsqlite3-sys",
  "model",
  "open",
+ "regex",
  "repo",
  "rfd",
  "serde",

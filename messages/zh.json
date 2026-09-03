@@ -361,5 +361,6 @@
 	"notesCodeBlockHidePreview": "隐藏预览",
 	"reviewCommentsCopied": "评论已复制",
 	"reviewCommentsCopiedAndCleared": "评论已复制并清空",
-	"reviewQueue": "审查队列"
+	"reviewQueue": "审查队列",
+	"gitReviewCommentPlaceholder": "写一条审查评论"
 }
