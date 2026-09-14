@@ -129,7 +129,8 @@ An excerpt of methods and subscribe types is in `tests/fixtures/herdr/schema-exc
 | `workspace.list` / `get` / `rename` / `close` | rename keeps `workspace_id`; last-tab/group rules below |
 | `worktree.list` / `create` / `open` / `remove` | see worktree section |
 | `tab.create` | returns `tab_created` with `tab` and `root_pane` |
-| `pane.list` / `get` / `split` / `read` / `scroll` / `run` | see terminal section |
+| `pane.list` / `get` / `split` / `read` / `scroll` | see terminal section |
+| `pane.send_text` / `send_keys` / `send_input` | JSON input. CLI `herdr pane run` is **not** a schema method; it maps to `pane.send_input` with the command plus a trailing newline (verified: creates a disposable file). `pane.send_text` is text without Enter; `pane.send_keys` sends named keys. |
 | `server.stop` / `herdr session stop` | stops the named session |
 
 Socket resolution (verified): `--session` wins; else `HERDR_SOCKET_PATH`; else `$XDG_CONFIG_HOME/herdr/herdr.sock`. Named sessions live at `.../herdr/sessions/<name>/herdr.sock`. The binary client socket is `herdr-client.sock` beside the API socket (or `*-client.sock` when `HERDR_SOCKET_PATH` ends in `.sock`).
@@ -162,7 +163,7 @@ Stdout is newline-delimited JSON:
 - `seq` increases on a given observe stream (**verified**: first full frame seq `<` later incremental seq).
 - The first frame after attach is `full: true` at the requested cols/rows and includes the current screen.
 - Resize (`terminal.resize`) is followed by frames at the new `width`/`height`.
-- Scroll: with a controller and observer attached, `printf` unique `SCR01`–`SCR40` lines, then `terminal.scroll` up. Before/after **visible** snapshots are compared by those unique lines (not the last nonempty line, which can be a prompt). Scroll-up hides later markers (`SCR40`) and reveals earlier ones; the observer `terminal.frame` contains a newly visible `SCRnn` marker. JSON `pane.scroll` is a second, verified way to move the same unique viewport.
+- Scroll: with a controller and observer **already attached**, `printf` unique `SCR01`–`SCR40` lines, then `terminal.scroll` up. Before/after **visible** snapshots are compared by those unique lines (not the last nonempty line, which can be a prompt). Scroll-up hides later markers (`SCR40`) and reveals earlier ones. Existing observe/control clients then receive a later incremental `terminal.frame` (higher `seq`) that rewrites the new digits in place and includes the new bottom `SCRnn`, without `SCR40`. A **fresh** observe, kept as a separate check, starts with `full: true` containing complete `SCRnn` strings of that scrolled surface. JSON `pane.scroll` is a second, verified way to move the same unique viewport.
 - Alternate screen: with an observer attached, `CSI ?1049h` + `CSI 2J` + `CSI H` shows `ALT_ONLY` in `pane.read --source visible` **and** in a `terminal.frame`. `CSI ?1049l` returns to the main screen (`LEFT_ALT`).
 - DSR/DA: with an observer attached, a pane process that writes `CSI 6n` / `CSI c` receives replies **as PTY input**, not as `terminal.frame` bytes. Captured replies: `CSI <row>;<col>R` and `CSI ?62;22c`. 2code must **not** also answer those queries from observe/control frames. Fixture: `frames/dsr-da.json`. Requires `python3`.
 - Control stdin commands (one JSON object per line):
@@ -181,7 +182,7 @@ JSON `pane.scroll` with `offset_from_bottom` is a second, **verified** way to se
 
 `pane.read` prints UTF-8 text (not JSON). `--ansi` keeps SGR. Sources: `visible`, `recent`, `recent-unwrapped`, `detection`. Default recent window is 80 rows. This is a snapshot helper, not the live transport.
 
-`pane.run` submits text plus Enter (empty stdout on success). `pane.send-text` / `pane.send-keys` are lower-level and also print nothing on success.
+CLI `herdr pane run <pane> <command>` submits the command plus Enter (empty stdout on success). It is **not** in the bundled JSON schema. The pinned wire operation is `pane.send_input` with `text` ending in a newline (verified). CLI `herdr pane send-text` / `send-keys` map to `pane.send_text` / `pane.send_keys` and also print nothing on success.
 
 Default scrollback is 10,000,000 bytes (`advanced.scrollback_limit_bytes`). Pane screen history across server restart is off (`experimental.pane_history = false`). Headless size defaults to 120×40; this probe used 80×24.
 
@@ -194,7 +195,7 @@ Verified:
 - One writable controller at a time.
 - A second `terminal session control` without `--takeover` exits 0 and prints `{"type":"terminal.closed","reason":"terminal attach failed: terminal term_… already has an attached client; retry with --takeover"}`.
 - `--takeover` makes the previous controller receive `{"type":"terminal.closed","reason":"terminal attach taken over"}`.
-- After `terminal.release`, the controller process **exits**. Killing the observer then leaves **no** attach clients. `pane_id` / `terminal_id` / shell pid stay the same; the live process keeps running (`DETACH_LIVE_TOKEN` still on screen). A new `terminal session control` **without** `--takeover` attaches; its first frame is `full: true` and includes that live screen; input works (`RECONNECTED`).
+- After `terminal.release`, the controller process **exits**. Killing the observer then leaves **no** attach clients. `pane_id` / `terminal_id` / shell pid stay the same; the live process keeps running (`DETACH_LIVE_TOKEN` still on screen). A new `terminal session control` **without** `--takeover` attaches; its first frame is `full: true` and includes that live screen. Input is a real newline (`touch <repo>/reconnected.ran`); execution is the file existing, not matching echoed command text.
 - **Verified coexistence:** an `observe` client stays connected while a `control` client owns input/resize. The observer receives `full: false` frames for later output and does not take ownership. A second `control` without `--takeover` still fails with the conflict close above.
 
 2code must not silently take control. Task 18 should surface the conflict string and require an explicit takeover.
@@ -279,7 +280,7 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | Shell | **Verified** to launch `/bin/sh` when the server process has `SHELL=/bin/sh` and `terminal.default_shell = "/bin/sh"`. Per-create shell is not a first-class field. |
 | Working directory | `--cwd` on workspace/tab/worktree create **verified**. `terminal.new_cwd = follow` when omitted (**documented**). |
 | Environment | `--env CONTRACT_ENV=from_probe` on `workspace.create` **verified** (`printenv` returns `from_probe`). Herdr-injected `HERDR_*` variables are **documented**. |
-| Startup command | **Not** a create parameter. Workaround: `pane.run` once after create. Blocking: [#397](https://github.com/AkaraChen/2code/issues/397). `layout.apply` argv is **documented**, not probed. |
+| Startup command | **Not** a create parameter. Workaround after create: JSON `pane.send_input` with `text` ending in a newline, or CLI `herdr pane run` (not a schema method). Blocking: [#397](https://github.com/AkaraChen/2code/issues/397). `layout.apply` argv is **documented**, not probed. |
 | Agent state | Idle shells **verified** `unknown`. Live agent CLIs **unverified**. Blocking for Task 13: [#398](https://github.com/AkaraChen/2code/issues/398). |
 | Subscriptions | `events.subscribe` ack + live `tab.created` **verified**. Full bootstrap race (subscribe → snapshot → drain) is **documented** by Herdr, not separately race-tested. |
 | Scrollback search | `pane.read` snapshots **verified**; live search is a 2code UI concern. |
