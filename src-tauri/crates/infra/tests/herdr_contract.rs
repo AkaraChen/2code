@@ -161,6 +161,9 @@ fn pin_fixture_records_an_exact_release() {
 		"pane.split",
 		"pane.read",
 		"pane.scroll",
+		"pane.send_text",
+		"pane.send_keys",
+		"pane.send_input",
 		"pane.close",
 		"pane.process_info",
 		"events.subscribe",
@@ -690,6 +693,41 @@ mod live {
 			stdin.flush().unwrap();
 		}
 
+		fn drain_seq(&mut self) -> u64 {
+			let mut seq = 0u64;
+			for _ in 0..2 {
+				thread::sleep(Duration::from_millis(80));
+				while let Ok(line) = self.rx.try_recv() {
+					if let Ok(frame) = serde_json::from_str::<Value>(&line) {
+						seq = seq.max(frame["seq"].as_u64().unwrap_or(0));
+					}
+				}
+			}
+			seq
+		}
+
+		fn collect_until(&mut self, timeout: Duration) -> Vec<Value> {
+			let deadline = Instant::now() + timeout;
+			let mut out = Vec::new();
+			while Instant::now() < deadline {
+				let remaining =
+					deadline.saturating_duration_since(Instant::now());
+				match self
+					.rx
+					.recv_timeout(remaining.min(Duration::from_millis(100)))
+				{
+					Ok(line) if !line.is_empty() => {
+						if let Ok(frame) = serde_json::from_str::<Value>(&line)
+						{
+							out.push(frame);
+						}
+					}
+					_ => {}
+				}
+			}
+			out
+		}
+
 		fn diagnostics(&mut self, phase: &str, extra: &str) -> String {
 			let status = self.child.try_wait();
 			let err = fs::read_to_string(&self.stderr_path).unwrap_or_default();
@@ -981,6 +1019,60 @@ mod live {
 					.and_then(|rest| rest.parse().ok())
 			})
 			.collect()
+	}
+
+	fn live_scroll_frame(
+		frame: &Value,
+		pre_seq: u64,
+		newly: &[u32],
+		after_scr: &[u32],
+	) -> bool {
+		if frame["type"] != "terminal.frame" {
+			return false;
+		}
+		if frame["seq"].as_u64().unwrap_or(0) <= pre_seq {
+			return false;
+		}
+		let Some(raw) = frame["bytes"].as_str() else {
+			return false;
+		};
+		let bytes = decode_base64(raw);
+		let Some(top) = newly.iter().min() else {
+			return false;
+		};
+		let Some(bottom) = after_scr.iter().max() else {
+			return false;
+		};
+		contains_bytes(&bytes, format!("{top:02}").as_bytes())
+			&& contains_bytes(&bytes, format!("SCR{bottom:02}").as_bytes())
+			&& !contains_bytes(&bytes, b"SCR40")
+	}
+
+	fn summarize_frames(frames: &[Value]) -> String {
+		frames
+			.iter()
+			.take(12)
+			.map(|frame| {
+				format!(
+					"{}#{} full={}",
+					frame["type"].as_str().unwrap_or("?"),
+					frame["seq"].as_u64().unwrap_or(0),
+					frame["full"]
+				)
+			})
+			.collect::<Vec<_>>()
+			.join(",")
+	}
+
+	fn wait_path(path: &Path, timeout: Duration, what: &str) {
+		let deadline = Instant::now() + timeout;
+		while Instant::now() < deadline {
+			if path.is_file() {
+				return;
+			}
+			thread::sleep(Duration::from_millis(40));
+		}
+		panic!("{what}: missing {} after {timeout:?}", path.display());
 	}
 
 	#[test]
@@ -1318,17 +1410,26 @@ mod live {
 		);
 
 		let _ = takeover.wait_frame(FRAME_TIMEOUT, "takeover-initial");
-		takeover
-			.send(&json!({"type":"terminal.input","text":"echo FROM_CTRL\n"}));
-		harness.cli_ok(&[
-			"pane",
-			"wait-output",
-			&pane,
-			"--match",
-			"FROM_CTRL",
-			"--timeout",
-			"5000",
-		]);
+		let from_ctrl = harness.repo.join("from_ctrl.ran");
+		takeover.send(&json!({
+			"type": "terminal.input",
+			"text": format!("touch {}\n", from_ctrl.display())
+		}));
+		wait_path(&from_ctrl, Duration::from_secs(5), "control input");
+		let via_api = harness.repo.join("send_input.ran");
+		let sent = harness.rpc(
+			"si",
+			"pane.send_input",
+			json!({
+				"pane_id": pane,
+				"text": format!("touch {}\n", via_api.display())
+			}),
+		);
+		assert!(
+			sent.get("error").is_none(),
+			"pane.send_input is the JSON stand-in for CLI pane run: {sent}"
+		);
+		wait_path(&via_api, Duration::from_secs(5), "pane.send_input");
 
 		let scroll_lines: String = (1..=40)
 			.map(|i| format!("SCR{i:02}"))
@@ -1349,7 +1450,8 @@ mod live {
 			"--timeout",
 			"5000",
 		]);
-		while observe.rx.try_recv().is_ok() {}
+		let obs_seq = observe.drain_seq();
+		let ctrl_seq = takeover.drain_seq();
 		let at_bottom = harness.rpc("g0", "pane.get", json!({"pane_id": pane}));
 		assert_eq!(
 			at_bottom["result"]["pane"]["scroll"]["offset_from_bottom"],
@@ -1402,6 +1504,22 @@ mod live {
 		assert!(
 			!newly.is_empty(),
 			"scroll up must reveal earlier unique lines: before={before_scr:?} after={after_scr:?}"
+		);
+		let obs_live = observe.collect_until(Duration::from_secs(1));
+		let ctrl_live = takeover.collect_until(Duration::from_secs(1));
+		let obs_hit = obs_live
+			.iter()
+			.any(|frame| live_scroll_frame(frame, obs_seq, &newly, &after_scr));
+		let ctrl_hit = ctrl_live.iter().any(|frame| {
+			live_scroll_frame(frame, ctrl_seq, &newly, &after_scr)
+		});
+		assert!(
+			obs_hit && ctrl_hit,
+			"already-attached observe/control must receive scrolled viewport frames (obs_hit={obs_hit} ctrl_hit={ctrl_hit} newly={newly:?} after={after_scr:?} obs={} ctrl={})\nobs={}\nctrl={}",
+			obs_live.len(),
+			ctrl_live.len(),
+			summarize_frames(&obs_live),
+			summarize_frames(&ctrl_live)
 		);
 		let mut surface = harness.spawn_session("observe", &pane, false, true);
 		let surface_frame =
@@ -1698,18 +1816,12 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			Some(term_before.as_str())
 		);
 		assert_eq!(shell_pid(&harness, &pane), pid_before);
-		reconnect.send(
-			&json!({"type":"terminal.input","text":"echo RECONNECTED\\n"}),
-		);
-		harness.cli_ok(&[
-			"pane",
-			"wait-output",
-			&pane,
-			"--match",
-			"RECONNECTED",
-			"--timeout",
-			"5000",
-		]);
+		let reconnected = harness.repo.join("reconnected.ran");
+		reconnect.send(&json!({
+			"type": "terminal.input",
+			"text": format!("touch {}\n", reconnected.display())
+		}));
+		wait_path(&reconnected, Duration::from_secs(5), "reconnect input");
 	}
 
 	#[test]
