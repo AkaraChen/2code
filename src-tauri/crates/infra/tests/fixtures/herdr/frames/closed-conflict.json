@@ -1,0 +1,7 @@
+{
+  "source": "Live stdout from a second `terminal session control` without --takeover.",
+  "record": {
+    "type": "terminal.closed",
+    "reason": "terminal attach failed: terminal term_abc already has an attached client; retry with --takeover"
+  }
+}

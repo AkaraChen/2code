@@ -1,0 +1,20 @@
+{
+  "source": "Live PTY application reads on herdr 0.9.0. Queries were written to the pane PTY; replies arrived as PTY input, not as terminal.frame bytes.",
+  "dsr_query": {
+    "bytes": "ESC[6n",
+    "hex": "1b5b366e"
+  },
+  "dsr_reply_to_pty_input": {
+    "example": "ESC[10;1R",
+    "pattern": "ESC[<row>;<col>R"
+  },
+  "da_query": {
+    "bytes": "ESC[c",
+    "hex": "1b5b63"
+  },
+  "da_reply_to_pty_input": {
+    "example": "ESC[?62;22c",
+    "meaning": "VT220-level DA with ANSI color (22)"
+  },
+  "xtermjs_rule": "Herdr's server-side emulator answers DSR/DA for the pane process. 2code must not additionally answer those queries from observe/control frames, or the application will see duplicate replies."
+}

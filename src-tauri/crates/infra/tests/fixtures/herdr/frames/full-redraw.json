@@ -1,0 +1,18 @@
+{
+  "source": "Captured from herdr 0.9.0 `terminal session observe` on Linux x86_64, then reduced to the sequences the probe asserts. Host-specific prompt text replaced with `$`.",
+  "record": {
+    "type": "terminal.frame",
+    "seq": 1,
+    "encoding": "ansi",
+    "width": 80,
+    "height": 24,
+    "full": true,
+    "bytes": "G1s/MjAyNmgbWz8yNWwbXTg7OxtcG1syShtbMTsxSBtbMDszOTs0OW0kIHByaW50ZiAnUkVBRFlcbicbWzI7MUhSRUFEWRtbMzsxSCQgG1s/MjVoG1s/MjAyNmw="
+  },
+  "decoded_contains": [
+    "CSI ?2026h",
+    "CSI 2J",
+    "CSI 1;1H"
+  ],
+  "xtermjs_rule": "Treat full=true as a replacement surface: the payload already includes synchronized-output, clear, and home. Do not append it as extra scrollback."
+}
