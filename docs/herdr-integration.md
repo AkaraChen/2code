@@ -75,11 +75,11 @@ Without `HERDR_CONTRACT_REQUIRED=1`, live tests skip if the binary is absent. `c
 
 The probe:
 
-1. Puts git/home/config state in a temp directory (`TMPDIR` may be long).
-2. Binds the JSON API at a **short** `/tmp/2c<pid><n>.sock` via `HERDR_SOCKET_PATH` (not nested `sessions/<name>/herdr.sock`). The client socket is `/tmp/2c<pid><n>-client.sock`. Both must be shorter than `sockaddr_un.sun_path` (104 bytes, macOS bound).
+1. Puts git/home/config state under a **long** nested directory (80 `x` characters inside `TMPDIR`, which may itself be long). Default `--session` sockets at `$XDG_CONFIG_HOME/herdr/sessions/<33-char-name>/herdr.sock` would then exceed `sun_path`.
+2. Binds the JSON API at a **short** `/tmp/2c<pid><n>.sock` via `HERDR_SOCKET_PATH` (not nested `sessions/<name>/herdr.sock`). The client socket is `/tmp/2c<pid><n>-client.sock`. Both must be shorter than `sockaddr_un.sun_path` (104 bytes, macOS bound). The probe asserts those lengths and that the override path does not contain the long XDG component.
 3. Writes `onboarding = false` and a private `[worktrees].directory`.
 4. Starts `herdr server` in the foreground with that socket override.
-5. Stops with `herdr server stop` (2s), then `SIGKILL` if needed, and removes both socket files.
+5. Stops with `herdr server stop` (2s), then `SIGKILL` if needed, and removes both socket files. Timed-out CLI and attach children are `kill -9`'d and reaped (1s).
 
 Cleanup if a test is interrupted — pass the **same** `HERDR_SOCKET_PATH` and isolated `XDG_CONFIG_HOME`:
 
@@ -161,7 +161,7 @@ Stdout is newline-delimited JSON:
 - `seq` increases on a given observe stream (**verified**: first full frame seq `<` later incremental seq).
 - The first frame after attach is `full: true` at the requested cols/rows and includes the current screen.
 - Resize (`terminal.resize`) is followed by frames at the new `width`/`height`.
-- Scroll: with a controller and observer attached, `terminal.scroll` plus `pane.scroll` moves `offset_from_bottom` and the **visible** snapshot is no longer the bottom line (`80` after `seq 1 80`).
+- Scroll: with a controller and observer attached, `terminal.scroll` increases `offset_from_bottom` and the **visible** snapshot is no longer the bottom line (`80` after `seq 1 80`). The observer keeps receiving `terminal.frame` records after that scroll (incremental frames may be cursor/region updates, not a full history dump). JSON `pane.scroll` is a second, verified way to set the same offset.
 - Alternate screen: with an observer attached, `CSI ?1049h` + `CSI 2J` + `CSI H` shows `ALT_ONLY` in `pane.read --source visible` **and** in a `terminal.frame`. `CSI ?1049l` returns to the main screen (`LEFT_ALT`).
 - DSR/DA: with an observer attached, a pane process that writes `CSI 6n` / `CSI c` receives replies **as PTY input**, not as `terminal.frame` bytes. Captured replies: `CSI <row>;<col>R` and `CSI ?62;22c`. 2code must **not** also answer those queries from observe/control frames. Fixture: `frames/dsr-da.json`. Requires `python3`.
 - Control stdin commands (one JSON object per line):
