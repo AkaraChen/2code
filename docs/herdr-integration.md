@@ -2,7 +2,7 @@
 
 Pinned contract for migrating 2code onto [Herdr](https://herdr.dev). Later tasks must depend on this release and the behaviors marked **verified** below. Claims from Herdr docs that this probe did not execute are marked **documented** or **unverified**.
 
-**Decision: proceed** with Herdr **v0.9.0** for Tasks 2–9 on Linux and macOS. Windows JSON control is documented; Windows live terminal attach is **unsupported** by Herdr and is a gap for Task 10, not a blocker for the JSON bridge.
+**Decision: proceed** with Herdr **v0.9.0** for Tasks 2–9 on Linux and macOS. Windows JSON control is documented; Windows live terminal attach is **unsupported** by Herdr and is tracked in [#396](https://github.com/AkaraChen/2code/issues/396) for Task 10, not as a blocker for the JSON bridge.
 
 Machine that executed this probe: Linux x86_64. Reproduction does not use `latest`.
 
@@ -238,7 +238,7 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | JSON API Unix socket | **verified** | documented | documented | n/a |
 | JSON API named pipe | n/a | n/a | n/a | documented, **unverified** |
 | `herdr server` + named session | **verified** | documented | documented | documented |
-| `terminal session control/observe` | **verified** | documented | documented (Unix) | **unsupported** (Herdr: not native Windows) |
+| `terminal session control/observe` | **verified** | documented | documented (Unix) | **unsupported** ([#396](https://github.com/AkaraChen/2code/issues/396)) |
 | Worktree create/open/remove | **verified** | documented | documented | documented (`--trust-repository` for other-SID repos) |
 | Client disconnect keeps server | **verified** | documented | documented | documented |
 | Server restart restores layout, not processes | **verified** | documented | documented | documented |
@@ -261,7 +261,7 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 
 Open separate issues before the named task depends on them:
 
-1. **Windows live terminal streaming** — Herdr’s `terminal session` / direct attach is Linux/macOS only. Task 10 on Windows needs another design or remains experimental.
+1. **Windows live terminal streaming** — Herdr’s `terminal session` / direct attach is Linux/macOS only. Tracked in [#396](https://github.com/AkaraChen/2code/issues/396). Task 10 on Windows needs another design or remains experimental.
 2. **No GPG/cosign** on release assets — Task 3 should keep verifying GitHub SHA-256; signing is extra.
 3. **Alternate screen and DSR/DA** — unverified; Task 11 should add explicit fixtures.
 4. **Live agent detection** — Task 13 needs a real agent CLI; this contract only saw `unknown` shells.
