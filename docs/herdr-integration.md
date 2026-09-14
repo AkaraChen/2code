@@ -8,6 +8,7 @@ Pinned contract for migrating 2code onto [Herdr](https://herdr.dev). Later tasks
 - Task 10 on Windows: live terminal attach **unsupported** — [#396](https://github.com/AkaraChen/2code/issues/396)
 - Task 13: live agent detection **unverified** — [#398](https://github.com/AkaraChen/2code/issues/398)
 - Task 17: no create-time startup command — [#397](https://github.com/AkaraChen/2code/issues/397)
+- Line-count growth vs the 200–400 estimate (tests/docs only) — [#400](https://github.com/AkaraChen/2code/issues/400)
 
 Machine that executed this probe: Linux x86_64. Reproduction does not use `latest`.
 
@@ -79,7 +80,7 @@ The probe:
 2. Binds the JSON API at a **short** `/tmp/2c<pid><n>.sock` via `HERDR_SOCKET_PATH` (not nested `sessions/<name>/herdr.sock`). The client socket is `/tmp/2c<pid><n>-client.sock`. Both must be shorter than `sockaddr_un.sun_path` (104 bytes, macOS bound). The probe asserts those lengths and that the override path does not contain the long XDG component.
 3. Writes `onboarding = false` and a private `[worktrees].directory`.
 4. Starts `herdr server` in the foreground with that socket override.
-5. Stops with `herdr server stop` (2s), then `SIGKILL` if needed, and removes both socket files. Timed-out CLI and attach children are `kill -9`'d and reaped (1s).
+5. Stops with `herdr server stop` (2s), then `SIGKILL` if needed, and removes both socket files. Timed-out CLI children are `kill -9`'d and reaped (1s). Each `terminal session` client is a scoped helper: `Drop` kills and reaps it on assertion failure, not only on the success path. Frame waits are named by phase and dump child status, client stderr, and the server log tail on timeout.
 
 Cleanup if a test is interrupted — pass the **same** `HERDR_SOCKET_PATH` and isolated `XDG_CONFIG_HOME`:
 
@@ -161,7 +162,7 @@ Stdout is newline-delimited JSON:
 - `seq` increases on a given observe stream (**verified**: first full frame seq `<` later incremental seq).
 - The first frame after attach is `full: true` at the requested cols/rows and includes the current screen.
 - Resize (`terminal.resize`) is followed by frames at the new `width`/`height`.
-- Scroll: with a controller and observer attached, `terminal.scroll` increases `offset_from_bottom` and the **visible** snapshot is no longer the bottom line (`80` after `seq 1 80`). The observer keeps receiving `terminal.frame` records after that scroll (incremental frames may be cursor/region updates, not a full history dump). JSON `pane.scroll` is a second, verified way to set the same offset.
+- Scroll: with a controller and observer attached, `printf` unique `SCR01`–`SCR40` lines, then `terminal.scroll` up. Before/after **visible** snapshots are compared by those unique lines (not the last nonempty line, which can be a prompt). Scroll-up hides later markers (`SCR40`) and reveals earlier ones; the observer `terminal.frame` contains a newly visible `SCRnn` marker. JSON `pane.scroll` is a second, verified way to move the same unique viewport.
 - Alternate screen: with an observer attached, `CSI ?1049h` + `CSI 2J` + `CSI H` shows `ALT_ONLY` in `pane.read --source visible` **and** in a `terminal.frame`. `CSI ?1049l` returns to the main screen (`LEFT_ALT`).
 - DSR/DA: with an observer attached, a pane process that writes `CSI 6n` / `CSI c` receives replies **as PTY input**, not as `terminal.frame` bytes. Captured replies: `CSI <row>;<col>R` and `CSI ?62;22c`. 2code must **not** also answer those queries from observe/control frames. Fixture: `frames/dsr-da.json`. Requires `python3`.
 - Control stdin commands (one JSON object per line):
@@ -193,7 +194,7 @@ Verified:
 - One writable controller at a time.
 - A second `terminal session control` without `--takeover` exits 0 and prints `{"type":"terminal.closed","reason":"terminal attach failed: terminal term_… already has an attached client; retry with --takeover"}`.
 - `--takeover` makes the previous controller receive `{"type":"terminal.closed","reason":"terminal attach taken over"}`.
-- After `terminal.release` (or process exit), a new controller can attach without `--takeover`.
+- After `terminal.release`, the controller process **exits**. Killing the observer then leaves **no** attach clients. `pane_id` / `terminal_id` / shell pid stay the same; the live process keeps running (`DETACH_LIVE_TOKEN` still on screen). A new `terminal session control` **without** `--takeover` attaches; its first frame is `full: true` and includes that live screen; input works (`RECONNECTED`).
 - **Verified coexistence:** an `observe` client stays connected while a `control` client owns input/resize. The observer receives `full: false` frames for later output and does not take ownership. A second `control` without `--takeover` still fails with the conflict close above.
 
 2code must not silently take control. Task 18 should surface the conflict string and require an explicit takeover.
@@ -212,9 +213,9 @@ Worktree commands need a git checkout. `--cwd` / `--path` on the socket API must
 | `worktree.open --path <external dirty worktree>` | `already_open: false` the first time; preserves uncommitted files; does not recreate the checkout |
 | `worktree.open` again | `already_open: true` with the **same** `workspace_id` / `pane_id` / `terminal_id` |
 | `worktree.create` for a branch already used | `worktree_create_failed` (git fatal: already used by worktree at …) |
-| `worktree.remove` on a dirty checkout | `dirty_worktree_requires_force`; checkout kept |
-| `worktree.remove --force` | deletes the checkout directory; **does not delete the git branch** |
-| `worktree.remove` on a clean linked worktree | deletes the checkout; keeps the branch |
+| `worktree.remove` on a dirty checkout | `dirty_worktree_requires_force`; checkout kept; pane/`terminal_id`/shell pid unchanged |
+| `worktree.remove --force` | deletes the checkout; drops the workspace and pane records (`pane_not_found`); terminates the pane process; **does not delete the git branch** |
+| `worktree.remove` on a clean linked worktree | same runtime teardown as `--force`; deletes the checkout; keeps the branch |
 | `workspace.close` on a primary with linked worktrees open | `workspace_group_close_required` |
 | `workspace.close --group` | closes Herdr state for the group; **does not** delete git worktrees |
 | `pane.split` | emits `pane_created` and `layout_updated` on `events.subscribe`; creates `wN:p2` |
@@ -302,4 +303,4 @@ None of the open issues block Task 2 (runtime boundary) or Task 5 on **Linux** (
 
 ## Scope vs the 200–400 line estimate
 
-Issue #395 estimated 200–400 lines. This branch is larger because the issue also required an executable probe against a real sidecar: isolation, checksums, captured frames, worktree fixtures, and lifecycle evidence. All of that is tests and docs; production, frontend, and the default runtime are unchanged. Splitting the extra evidence into a follow-up would leave Tasks 5/10–12 without the contract #395 asked them to depend on, so it stays in Task 1.
+Issue #395 estimated 200–400 lines and required material growth to be tracked separately: [#400](https://github.com/AkaraChen/2code/issues/400). This branch is larger because the issue also required an executable probe against a real sidecar: isolation, checksums, captured frames, worktree fixtures, and lifecycle evidence. All of that is tests and docs; production, frontend, and the default runtime are unchanged. Splitting the extra evidence into a follow-up implementation issue would leave Tasks 5/10–12 without the contract #395 asked them to depend on, so it stays in Task 1.
