@@ -1,0 +1,46 @@
+{
+  "transport": "herdr terminal session {control|observe} <target>",
+  "not_in_json_schema": true,
+  "client_socket": "herdr-client.sock next to herdr.sock (or derived from HERDR_SOCKET_PATH)",
+  "stdout_records": [
+    {
+      "type": "terminal.frame",
+      "seq": 1,
+      "encoding": "ansi",
+      "width": 80,
+      "height": 24,
+      "full": true,
+      "bytes": "base64(ANSI bytes). full=true is a complete redraw and typically starts with synchronized-output/cursor/OSC-8 reset plus CSI 2J/H."
+    },
+    {
+      "type": "terminal.frame",
+      "seq": 2,
+      "encoding": "ansi",
+      "width": 80,
+      "height": 24,
+      "full": false,
+      "bytes": "base64(incremental ANSI). Write onto the previous screen; do not clear."
+    },
+    {
+      "type": "terminal.closed",
+      "reason": "terminal attach failed: terminal term_abc already has an attached client; retry with --takeover"
+    },
+    {
+      "type": "terminal.closed",
+      "reason": "terminal attach taken over"
+    }
+  ],
+  "stdin_commands": [
+    { "type": "terminal.input", "text": "echo hello\n" },
+    { "type": "terminal.input", "bytes": "base64-bytes-alternative" },
+    { "type": "terminal.resize", "cols": 90, "rows": 28 },
+    { "type": "terminal.scroll", "direction": "up", "lines": 2, "source": "wheel" },
+    { "type": "terminal.release" }
+  ],
+  "rules": [
+    "terminal.input accepts text or bytes, not both.",
+    "One writable controller at a time. --takeover replaces it.",
+    "Multiple observers may attach without taking input/resize/scroll authority.",
+    "Direct terminal attach is documented as Linux/macOS only, not native Windows."
+  ]
+}
