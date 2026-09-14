@@ -3,7 +3,7 @@
 //! Binaries are not in git. See `docs/herdr-integration.md`.
 //!
 //! ```text
-//! HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract -- --nocapture
+//! HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract -- --nocapture --test-threads=1
 //! ```
 //!
 //! Override the executable with `HERDR_BIN`. Live tests skip when the binary
@@ -256,6 +256,16 @@ fn derive_client_socket(api: &Path) -> PathBuf {
 	api.with_file_name(format!("{stem}-client.sock"))
 }
 
+/// Default Herdr layout: `$XDG_CONFIG_HOME/herdr/sessions/<name>/herdr.sock`.
+/// `config_parent` is the directory that contains `xdg-config`.
+#[cfg(unix)]
+fn nested_session_api_socket(config_parent: &Path, session: &str) -> PathBuf {
+	config_parent
+		.join("xdg-config/herdr/sessions")
+		.join(session)
+		.join("herdr.sock")
+}
+
 #[cfg(unix)]
 fn assert_socket_fits(path: &Path) {
 	let len = unix_path_len(path);
@@ -269,12 +279,9 @@ fn assert_socket_fits(path: &Path) {
 #[cfg(unix)]
 #[test]
 fn nested_session_sockets_under_long_tmpdir_exceed_sun_path() {
-	let tmpdir = format!("/{}", "x".repeat(70));
+	let tmpdir = PathBuf::from(format!("/{}", "x".repeat(70)));
 	let session = format!("t{}", "a".repeat(32));
-	let api = PathBuf::from(&tmpdir)
-		.join("xdg-config/herdr/sessions")
-		.join(session)
-		.join("herdr.sock");
+	let api = nested_session_api_socket(&tmpdir, &session);
 	let client = api.with_file_name("herdr-client.sock");
 	assert!(
 		unix_path_len(&api) >= SUN_PATH_CAP,
@@ -301,6 +308,40 @@ fn short_override_sockets_fit_sun_path() {
 }
 
 #[cfg(unix)]
+#[test]
+fn bind_rejects_nested_session_socket_over_sun_path() {
+	use std::os::unix::net::UnixListener;
+	let tmpdir = PathBuf::from("/tmp")
+		.join(format!("2cl{}", std::process::id()))
+		.join("x".repeat(70));
+	let session = format!("t{}", "a".repeat(32));
+	let api = nested_session_api_socket(&tmpdir, &session);
+	assert!(
+		unix_path_len(&api) >= SUN_PATH_CAP,
+		"fixture path too short to reproduce overflow: {} len {}",
+		api.display(),
+		unix_path_len(&api)
+	);
+	if let Some(parent) = api.parent() {
+		fs::create_dir_all(parent).unwrap();
+	}
+	let err = UnixListener::bind(&api)
+		.expect_err("nested session socket over sun_path must not bind");
+	let msg = err.to_string();
+	assert!(
+		msg.contains("sun_path")
+			|| msg.contains("SUN_LEN")
+			|| msg.to_ascii_lowercase().contains("too long")
+			|| err.kind() == std::io::ErrorKind::InvalidInput,
+		"unexpected bind error for {}: {err:?}",
+		api.display()
+	);
+	let _ = fs::remove_dir_all(
+		PathBuf::from("/tmp").join(format!("2cl{}", std::process::id())),
+	);
+}
+
+#[cfg(unix)]
 mod live {
 	use super::*;
 	use std::os::unix::net::UnixStream;
@@ -309,7 +350,7 @@ mod live {
 
 	const READY_TIMEOUT: Duration = Duration::from_secs(10);
 	const SOCK_TIMEOUT: Duration = Duration::from_secs(2);
-	const FRAME_TIMEOUT: Duration = Duration::from_secs(2);
+	const FRAME_TIMEOUT: Duration = Duration::from_secs(5);
 	const CMD_TIMEOUT: Duration = Duration::from_secs(12);
 	const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -318,6 +359,7 @@ mod live {
 	struct Harness {
 		bin: PathBuf,
 		root: tempfile::TempDir,
+		state: PathBuf,
 		server: Child,
 		sock: PathBuf,
 		client_sock: PathBuf,
@@ -327,10 +369,14 @@ mod live {
 	impl Harness {
 		fn start(bin: PathBuf) -> Self {
 			let root = tempfile::tempdir().unwrap();
-			let xdg = root.path().join("xdg-config");
-			let home = root.path().join("home");
-			let repo = root.path().join("repo");
-			let worktrees = root.path().join("worktrees");
+			// Keep XDG long enough that default `--session` sockets overflow
+			// sun_path; JSON/client sockets stay under `/tmp/2c…`.
+			let state = root.path().join("x".repeat(80));
+			fs::create_dir_all(&state).unwrap();
+			let xdg = state.join("xdg-config");
+			let home = state.join("home");
+			let repo = state.join("repo");
+			let worktrees = state.join("worktrees");
 			fs::create_dir_all(xdg.join("herdr")).unwrap();
 			fs::create_dir_all(&home).unwrap();
 			fs::create_dir_all(&repo).unwrap();
@@ -361,12 +407,22 @@ mod live {
 			let client_sock = derive_client_socket(&sock);
 			assert_socket_fits(&sock);
 			assert_socket_fits(&client_sock);
+			let nested = nested_session_api_socket(
+				&state,
+				&format!("t{}", "a".repeat(32)),
+			);
+			assert!(
+				unix_path_len(&nested) >= SUN_PATH_CAP,
+				"harness XDG must reproduce nested-session overflow, len {} for {}",
+				unix_path_len(&nested),
+				nested.display()
+			);
 			let _ = fs::remove_file(&sock);
 			let _ = fs::remove_file(&client_sock);
 			let log = fs::File::create(root.path().join("server.log")).unwrap();
 			let mut cmd = Command::new(&bin);
 			cmd.arg("server");
-			apply_env(&mut cmd, root.path(), &sock);
+			apply_env(&mut cmd, &state, &sock);
 			cmd.stdin(Stdio::null())
 				.stdout(Stdio::from(log.try_clone().unwrap()))
 				.stderr(Stdio::from(log));
@@ -374,6 +430,7 @@ mod live {
 			let harness = Self {
 				bin,
 				root,
+				state,
 				server,
 				sock,
 				client_sock,
@@ -418,7 +475,7 @@ mod live {
 
 		fn env_command(&self) -> Command {
 			let mut cmd = Command::new(&self.bin);
-			apply_env(&mut cmd, self.root.path(), &self.sock);
+			apply_env(&mut cmd, &self.state, &self.sock);
 			cmd
 		}
 
@@ -506,6 +563,16 @@ mod live {
 			target: &str,
 			takeover: bool,
 		) -> Child {
+			self.spawn_terminal_inner(mode, target, takeover, true)
+		}
+
+		fn spawn_terminal_inner(
+			&self,
+			mode: &str,
+			target: &str,
+			takeover: bool,
+			must_stay: bool,
+		) -> Child {
 			let mut cmd = self.env_command();
 			cmd.args([
 				"terminal", "session", mode, target, "--cols", "80", "--rows",
@@ -520,12 +587,14 @@ mod live {
 				.stderr(Stdio::null())
 				.spawn()
 				.unwrap();
-			thread::sleep(Duration::from_millis(80));
-			if let Ok(Some(status)) = child.try_wait() {
-				panic!(
-					"terminal session {mode} exited immediately ({status:?})\n{}",
-					self.server_log()
-				);
+			if must_stay {
+				thread::sleep(Duration::from_millis(80));
+				if let Ok(Some(status)) = child.try_wait() {
+					panic!(
+						"terminal session {mode} exited immediately ({status:?})\n{}",
+						self.server_log()
+					);
+				}
 			}
 			child
 		}
@@ -565,7 +634,7 @@ mod live {
 				fs::File::create(self.root.path().join("server.log")).unwrap();
 			let mut cmd = Command::new(&self.bin);
 			cmd.arg("server");
-			apply_env(&mut cmd, self.root.path(), &self.sock);
+			apply_env(&mut cmd, &self.state, &self.sock);
 			cmd.stdin(Stdio::null())
 				.stdout(Stdio::from(log.try_clone().unwrap()))
 				.stderr(Stdio::from(log));
@@ -580,11 +649,11 @@ mod live {
 		}
 	}
 
-	fn run_timed(mut cmd: Command, timeout: Duration) -> Output {
-		cmd.stdin(Stdio::null())
-			.stdout(Stdio::piped())
-			.stderr(Stdio::piped());
-		let child = cmd.spawn().unwrap();
+	fn wait_output_bounded(
+		child: Child,
+		timeout: Duration,
+		what: &str,
+	) -> Output {
 		let pid = child.id();
 		let (tx, rx) = mpsc::channel();
 		thread::spawn(move || {
@@ -592,17 +661,24 @@ mod live {
 		});
 		match rx.recv_timeout(timeout) {
 			Ok(Ok(output)) => output,
-			Ok(Err(err)) => panic!("herdr command failed: {err}"),
+			Ok(Err(err)) => panic!("{what} failed: {err}"),
 			Err(_) => {
 				let _ = Command::new("kill")
 					.args(["-9", &pid.to_string()])
 					.status();
 				let reaped = rx.recv_timeout(Duration::from_secs(1));
 				panic!(
-					"herdr command timed out after {timeout:?}; killed pid {pid}; reap {reaped:?}"
+					"{what} timed out after {timeout:?}; killed pid {pid}; reap {reaped:?}"
 				);
 			}
 		}
+	}
+
+	fn run_timed(mut cmd: Command, timeout: Duration) -> Output {
+		cmd.stdin(Stdio::null())
+			.stdout(Stdio::piped())
+			.stderr(Stdio::piped());
+		wait_output_bounded(cmd.spawn().unwrap(), timeout, "herdr command")
 	}
 
 	fn wait_try(child: &mut Child, timeout: Duration) -> bool {
@@ -743,6 +819,15 @@ mod live {
 			status["server"]["socket"].as_str().unwrap(),
 			harness.sock.to_str().unwrap()
 		);
+		let sock = harness.sock.to_str().unwrap();
+		assert!(
+			sock.starts_with("/tmp/2c") && sock.ends_with(".sock"),
+			"API socket must be a short /tmp/2c override, got {sock}"
+		);
+		assert!(
+			!sock.contains(&"x".repeat(80)),
+			"API socket must not inherit the long XDG path: {sock}"
+		);
 		assert_socket_fits(&harness.sock);
 		assert_socket_fits(&harness.client_sock);
 
@@ -777,6 +862,14 @@ mod live {
 			"--timeout",
 			"5000",
 		]);
+		let env_out = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "recent", "--lines", "30",
+		]);
+		let env_text = String::from_utf8_lossy(&env_out.stdout);
+		assert!(
+			env_text.contains("from_probe"),
+			"--env CONTRACT_ENV=from_probe must reach the pane: {env_text:?}"
+		);
 		harness.cli_ok(&["pane", "run", &pane, "echo BEFORE_RESTART"]);
 		harness.cli_ok(&[
 			"pane",
@@ -1009,7 +1102,8 @@ mod live {
 			"observer seq must increase: {first_seq} then {incr_seq}"
 		);
 
-		let rival = harness.spawn_terminal("control", &pane, false);
+		let rival =
+			harness.spawn_terminal_inner("control", &pane, false, false);
 		let rival_out = wait_child(rival, Duration::from_secs(3));
 		assert!(rival_out.status.success());
 		let closed: Value = serde_json::from_slice(&rival_out.stdout)
@@ -1073,6 +1167,15 @@ mod live {
 		assert!(resize_seq > incr_seq || resized["full"] == true);
 
 		harness.cli_ok(&["pane", "run", &pane, "seq 1 80"]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"80",
+			"--timeout",
+			"5000",
+		]);
 		let _ = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
 			frame["type"] == "terminal.frame"
 				&& contains_bytes(
@@ -1080,6 +1183,12 @@ mod live {
 					b"80",
 				)
 		});
+		while obs_rx.try_recv().is_ok() {}
+		let at_bottom = harness.rpc("g0", "pane.get", json!({"pane_id": pane}));
+		assert_eq!(
+			at_bottom["result"]["pane"]["scroll"]["offset_from_bottom"],
+			0
+		);
 		{
 			let stdin = takeover.stdin.as_mut().unwrap();
 			writeln!(
@@ -1090,7 +1199,48 @@ mod live {
 			.unwrap();
 			stdin.flush().unwrap();
 		}
-		let _ = wait_frame(&obs_rx, FRAME_TIMEOUT);
+		let scroll_deadline = Instant::now() + FRAME_TIMEOUT;
+		let mut term_offset = 0u64;
+		while Instant::now() < scroll_deadline {
+			let got = harness.rpc("gs", "pane.get", json!({"pane_id": pane}));
+			term_offset = got["result"]["pane"]["scroll"]["offset_from_bottom"]
+				.as_u64()
+				.unwrap_or(0);
+			if term_offset > 0 {
+				break;
+			}
+			thread::sleep(Duration::from_millis(40));
+		}
+		assert!(
+			term_offset > 0,
+			"terminal.scroll should increase offset_from_bottom, got {term_offset}"
+		);
+		let vis_term = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "visible", "--lines", "40",
+		]);
+		let vis_term_text = String::from_utf8_lossy(&vis_term.stdout);
+		let last_term = vis_term_text
+			.lines()
+			.rev()
+			.find(|line| !line.trim().is_empty())
+			.unwrap_or("");
+		assert_ne!(
+			last_term.trim(),
+			"80",
+			"terminal.scroll must change visible contents: {vis_term_text:?}"
+		);
+		let scroll_frame =
+			wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
+				frame["type"] == "terminal.frame"
+			});
+		assert_eq!(
+			scroll_frame["type"], "terminal.frame",
+			"observer must keep streaming after terminal.scroll"
+		);
+		assert!(
+			observe.try_wait().unwrap().is_none(),
+			"observer must stay attached through scroll"
+		);
 		let scrolled = harness.rpc(
 			"sc1",
 			"pane.scroll",
@@ -1147,6 +1297,11 @@ mod live {
 				)
 		});
 		assert_eq!(alt_frame["type"], "terminal.frame");
+		assert!(
+			observe.try_wait().unwrap().is_none()
+				&& takeover.try_wait().unwrap().is_none(),
+			"observer and controller must stay attached through alt-screen"
+		);
 		harness.cli_ok(&[
 			"pane",
 			"run",
@@ -1253,6 +1408,11 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		assert!(
 			da_text.contains("DA_RAW=b'\\x1b[?") && da_text.contains("c'"),
 			"Herdr must answer CSI c as PTY input DA: {da_text}"
+		);
+		assert!(
+			observe.try_wait().unwrap().is_none()
+				&& takeover.try_wait().unwrap().is_none(),
+			"observer and controller must stay attached through DSR/DA"
 		);
 		{
 			let stdin = takeover.stdin.as_mut().unwrap();
@@ -1407,6 +1567,10 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			}
 			let event: Value = serde_json::from_str(&line).unwrap();
 			if event["event"] == "pane_closed" {
+				let id = event["data"]["pane"]["pane_id"]
+					.as_str()
+					.or_else(|| event["data"]["pane_id"].as_str());
+				assert_eq!(id, Some(split_pane.as_str()), "{event}");
 				saw_pane_closed = true;
 				break;
 			}
@@ -1641,12 +1805,6 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 	}
 
 	fn wait_child(child: Child, timeout: Duration) -> Output {
-		let (tx, rx) = mpsc::channel();
-		thread::spawn(move || {
-			let _ = tx.send(child.wait_with_output());
-		});
-		rx.recv_timeout(timeout)
-			.unwrap_or_else(|_| panic!("child did not exit"))
-			.unwrap()
+		wait_output_bounded(child, timeout, "child")
 	}
 }
