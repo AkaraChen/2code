@@ -162,6 +162,7 @@ fn pin_fixture_records_an_exact_release() {
 		"pane.read",
 		"pane.scroll",
 		"pane.close",
+		"pane.process_info",
 		"events.subscribe",
 	] {
 		assert!(
@@ -557,21 +558,12 @@ mod live {
 			])
 		}
 
-		fn spawn_terminal(
-			&self,
-			mode: &str,
-			target: &str,
-			takeover: bool,
-		) -> Child {
-			self.spawn_terminal_inner(mode, target, takeover, true)
-		}
-
 		fn spawn_terminal_inner(
 			&self,
 			mode: &str,
 			target: &str,
 			takeover: bool,
-			must_stay: bool,
+			stderr_path: Option<&Path>,
 		) -> Child {
 			let mut cmd = self.env_command();
 			cmd.args([
@@ -581,22 +573,52 @@ mod live {
 			if takeover {
 				cmd.arg("--takeover");
 			}
-			let mut child = cmd
-				.stdin(Stdio::piped())
-				.stdout(Stdio::piped())
-				.stderr(Stdio::null())
-				.spawn()
-				.unwrap();
+			cmd.stdin(Stdio::piped()).stdout(Stdio::piped());
+			if let Some(path) = stderr_path {
+				let log = fs::File::create(path).unwrap();
+				cmd.stderr(Stdio::from(log));
+			} else {
+				cmd.stderr(Stdio::null());
+			}
+			cmd.spawn().unwrap()
+		}
+
+		fn spawn_session(
+			&self,
+			mode: &str,
+			target: &str,
+			takeover: bool,
+			must_stay: bool,
+		) -> TerminalSession {
+			let n = SOCK_SEQ.fetch_add(1, Ordering::Relaxed);
+			let stderr_path =
+				self.root.path().join(format!("term-{mode}-{n}.err"));
+			let mut child = self.spawn_terminal_inner(
+				mode,
+				target,
+				takeover,
+				Some(&stderr_path),
+			);
+			let stdout = child.stdout.take().expect("terminal stdout");
+			let rx = json_line_reader(stdout);
 			if must_stay {
-				thread::sleep(Duration::from_millis(80));
+				thread::sleep(Duration::from_millis(50));
 				if let Ok(Some(status)) = child.try_wait() {
+					let err =
+						fs::read_to_string(&stderr_path).unwrap_or_default();
 					panic!(
-						"terminal session {mode} exited immediately ({status:?})\n{}",
+						"terminal session {mode} {target} exited immediately ({status:?})\n--- stderr ---\n{err}\n--- server ---\n{}",
 						self.server_log()
 					);
 				}
 			}
-			child
+			TerminalSession {
+				child,
+				rx,
+				stderr_path,
+				server_log: self.root.path().join("server.log"),
+				label: format!("{mode} {target}"),
+			}
 		}
 
 		fn stop_server_process(&mut self) {
@@ -646,6 +668,148 @@ mod live {
 	impl Drop for Harness {
 		fn drop(&mut self) {
 			self.stop_server_process();
+		}
+	}
+
+	struct TerminalSession {
+		child: Child,
+		rx: mpsc::Receiver<String>,
+		stderr_path: PathBuf,
+		server_log: PathBuf,
+		label: String,
+	}
+
+	impl TerminalSession {
+		fn still_running(&mut self) -> bool {
+			self.child.try_wait().ok().flatten().is_none()
+		}
+
+		fn send(&mut self, value: &Value) {
+			let stdin = self.child.stdin.as_mut().expect("terminal stdin");
+			writeln!(stdin, "{value}").unwrap();
+			stdin.flush().unwrap();
+		}
+
+		fn diagnostics(&mut self, phase: &str, extra: &str) -> String {
+			let status = self.child.try_wait();
+			let err = fs::read_to_string(&self.stderr_path).unwrap_or_default();
+			let log = fs::read_to_string(&self.server_log).unwrap_or_default();
+			let log_tail: String = log
+				.lines()
+				.rev()
+				.take(40)
+				.collect::<Vec<_>>()
+				.into_iter()
+				.rev()
+				.collect::<Vec<_>>()
+				.join("\n");
+			format!(
+				"phase={phase} session={} pid={} child_status={status:?} {extra}\n--- stderr ---\n{err}\n--- server (tail) ---\n{log_tail}",
+				self.label,
+				self.child.id()
+			)
+		}
+
+		fn wait_json(&mut self, timeout: Duration, phase: &str) -> Value {
+			let deadline = Instant::now() + timeout;
+			loop {
+				let remaining =
+					deadline.saturating_duration_since(Instant::now());
+				if remaining.is_zero() {
+					panic!(
+						"timed out waiting for terminal json after {timeout:?}\n{}",
+						self.diagnostics(phase, "")
+					);
+				}
+				let line =
+					self.rx.recv_timeout(remaining).unwrap_or_else(|_| {
+						panic!(
+							"timed out waiting for terminal json after {timeout:?}\n{}",
+							self.diagnostics(phase, "")
+						)
+					});
+				if line.is_empty() {
+					continue;
+				}
+				return serde_json::from_str(&line).unwrap_or_else(|err| {
+					panic!(
+						"terminal json during {phase}: {err} ({line})\n{}",
+						self.diagnostics(phase, "")
+					)
+				});
+			}
+		}
+
+		fn wait_matching(
+			&mut self,
+			timeout: Duration,
+			phase: &str,
+			pred: impl Fn(&Value) -> bool,
+		) -> Value {
+			let deadline = Instant::now() + timeout;
+			let mut seen = Vec::new();
+			loop {
+				let remaining =
+					deadline.saturating_duration_since(Instant::now());
+				if remaining.is_zero() {
+					panic!(
+						"timed out waiting for matching terminal json after {timeout:?}\n{}",
+						self.diagnostics(
+							phase,
+							&format!("seen=[{}]", seen.join(" | "))
+						)
+					);
+				}
+				let frame = self.wait_json(remaining, phase);
+				let ty = frame["type"].as_str().unwrap_or("?");
+				let seq = frame["seq"].as_u64().unwrap_or(0);
+				seen.push(format!("{ty}#{seq}"));
+				if seen.len() > 24 {
+					seen.remove(0);
+				}
+				if pred(&frame) {
+					return frame;
+				}
+			}
+		}
+
+		fn wait_frame(&mut self, timeout: Duration, phase: &str) -> Value {
+			let frame = self.wait_json(timeout, phase);
+			assert_eq!(
+				frame["type"],
+				"terminal.frame",
+				"expected terminal.frame during {phase}, got {frame}\n{}",
+				self.diagnostics(phase, "")
+			);
+			frame
+		}
+
+		fn wait_until_exit(&mut self, timeout: Duration, phase: &str) {
+			if wait_try(&mut self.child, timeout) {
+				return;
+			}
+			panic!(
+				"session did not exit during {phase} after {timeout:?}\n{}",
+				self.diagnostics(phase, "")
+			);
+		}
+
+		fn reap_or_kill(&mut self, timeout: Duration) {
+			if !wait_try(&mut self.child, timeout) {
+				let _ = self.child.kill();
+				if !wait_try(&mut self.child, Duration::from_secs(1)) {
+					let _ = Command::new("kill")
+						.args(["-9", &self.child.id().to_string()])
+						.status();
+					let _ = wait_try(&mut self.child, Duration::from_secs(1));
+				}
+			}
+		}
+	}
+
+	impl Drop for TerminalSession {
+		fn drop(&mut self) {
+			self.reap_or_kill(Duration::from_secs(1));
 		}
 	}
 
@@ -770,30 +934,53 @@ mod live {
 		rx
 	}
 
-	fn wait_frame(rx: &mpsc::Receiver<String>, timeout: Duration) -> Value {
-		let line = rx.recv_timeout(timeout).unwrap_or_else(|_| {
-			panic!("timed out waiting for terminal frame after {timeout:?}")
-		});
-		serde_json::from_str(&line)
-			.unwrap_or_else(|err| panic!("terminal json: {err} ({line})"))
+	fn pid_alive(pid: u32) -> bool {
+		Command::new("kill")
+			.args(["-0", &pid.to_string()])
+			.stdout(Stdio::null())
+			.stderr(Stdio::null())
+			.status()
+			.map(|status| status.success())
+			.unwrap_or(false)
 	}
 
-	fn wait_frame_matching(
-		rx: &mpsc::Receiver<String>,
-		timeout: Duration,
-		pred: impl Fn(&Value) -> bool,
-	) -> Value {
-		let deadline = Instant::now() + timeout;
-		loop {
-			let remaining = deadline.saturating_duration_since(Instant::now());
-			if remaining.is_zero() {
-				panic!("timed out waiting for matching terminal frame");
-			}
-			let frame = wait_frame(rx, remaining);
-			if pred(&frame) {
-				return frame;
-			}
+	fn assert_process_dead(pid: u32, what: &str) {
+		let deadline = Instant::now() + Duration::from_secs(2);
+		while pid_alive(pid) && Instant::now() < deadline {
+			thread::sleep(Duration::from_millis(40));
 		}
+		assert!(!pid_alive(pid), "{what} must terminate pid {pid}");
+	}
+
+	fn shell_pid(harness: &Harness, pane: &str) -> u32 {
+		let info =
+			harness.rpc("pi", "pane.process_info", json!({"pane_id": pane}));
+		let pi = &info["result"]["process_info"];
+		if let Some(pid) = pi["shell_pid"].as_u64() {
+			return pid as u32;
+		}
+		pi["foreground_processes"]
+			.as_array()
+			.and_then(|procs| procs.first())
+			.and_then(|proc| proc["pid"].as_u64())
+			.expect("pane.process_info pid") as u32
+	}
+
+	fn visible_text(harness: &Harness, pane: &str) -> String {
+		let vis = harness.cli_ok(&[
+			"pane", "read", pane, "--source", "visible", "--lines", "50",
+		]);
+		String::from_utf8_lossy(&vis.stdout).into_owned()
+	}
+
+	fn scr_nums(text: &str) -> Vec<u32> {
+		text.lines()
+			.filter_map(|line| {
+				line.trim()
+					.strip_prefix("SCR")
+					.and_then(|rest| rest.parse().ok())
+			})
+			.collect()
 	}
 
 	#[test]
@@ -1055,10 +1242,8 @@ mod live {
 			"pane.read --ansi should keep SGR around RED_COLOR: {ansi_text:?}"
 		);
 
-		let mut observe = harness.spawn_terminal("observe", &pane, false);
-		let obs_rx = json_line_reader(observe.stdout.take().unwrap());
-		let frame = wait_frame(&obs_rx, FRAME_TIMEOUT);
-		assert_eq!(frame["type"], "terminal.frame");
+		let mut observe = harness.spawn_session("observe", &pane, false, true);
+		let frame = observe.wait_frame(FRAME_TIMEOUT, "observe-initial");
 		assert_eq!(frame["encoding"], "ansi");
 		assert_eq!(frame["full"], true);
 		assert_eq!(frame["width"], 80);
@@ -1072,25 +1257,28 @@ mod live {
 		);
 		let first_seq = frame["seq"].as_u64().expect("seq");
 
-		let mut control = harness.spawn_terminal("control", &pane, false);
-		let ctrl_rx = json_line_reader(control.stdout.take().unwrap());
-		let first = wait_frame(&ctrl_rx, FRAME_TIMEOUT);
-		assert_eq!(first["type"], "terminal.frame");
+		let mut control = harness.spawn_session("control", &pane, false, true);
+		let first = control.wait_frame(FRAME_TIMEOUT, "control-initial");
 		assert_eq!(first["full"], true);
 		assert!(
-			observe.try_wait().unwrap().is_none(),
+			observe.still_running(),
 			"observer must keep running beside a controller"
 		);
-		assert!(control.try_wait().unwrap().is_none());
+		assert!(control.still_running());
 
 		harness.cli_ok(&["pane", "run", &pane, "printf 'INCR_LINE_XYZ\\n'"]);
-		let incr = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
-			if frame["type"] != "terminal.frame" || frame["full"] != false {
-				return false;
-			}
-			let bytes = decode_base64(frame["bytes"].as_str().unwrap_or(""));
-			contains_bytes(&bytes, b"INCR_LINE_XYZ")
-		});
+		let incr = observe.wait_matching(
+			FRAME_TIMEOUT,
+			"observe-incremental",
+			|frame| {
+				if frame["type"] != "terminal.frame" || frame["full"] != false {
+					return false;
+				}
+				let bytes =
+					decode_base64(frame["bytes"].as_str().unwrap_or(""));
+				contains_bytes(&bytes, b"INCR_LINE_XYZ")
+			},
+		);
 		let incr_bytes = decode_base64(incr["bytes"].as_str().unwrap());
 		assert!(
 			!contains_bytes(&incr_bytes, b"\x1b[2J"),
@@ -1102,8 +1290,7 @@ mod live {
 			"observer seq must increase: {first_seq} then {incr_seq}"
 		);
 
-		let rival =
-			harness.spawn_terminal_inner("control", &pane, false, false);
+		let rival = harness.spawn_terminal_inner("control", &pane, false, None);
 		let rival_out = wait_child(rival, Duration::from_secs(3));
 		assert!(rival_out.status.success());
 		let closed: Value = serde_json::from_slice(&rival_out.stdout)
@@ -1117,26 +1304,22 @@ mod live {
 		);
 		assert!(reason.contains("--takeover"), "{reason}");
 
-		let mut takeover = harness.spawn_terminal("control", &pane, true);
-		let taken =
-			wait_frame_matching(&ctrl_rx, Duration::from_secs(3), |frame| {
-				frame["type"] == "terminal.closed"
-			});
+		let mut takeover = harness.spawn_session("control", &pane, true, true);
+		let taken = control.wait_matching(
+			Duration::from_secs(3),
+			"control-taken-over",
+			|frame| frame["type"] == "terminal.closed",
+		);
 		assert_eq!(taken["reason"], "terminal attach taken over");
-		let _ = wait_try(&mut control, STOP_TIMEOUT);
+		control.wait_until_exit(STOP_TIMEOUT, "control-after-takeover");
+		assert!(
+			!control.still_running(),
+			"previous controller must exit after takeover"
+		);
 
-		let take_rx = json_line_reader(takeover.stdout.take().unwrap());
-		let _ = wait_frame(&take_rx, FRAME_TIMEOUT);
-		{
-			let stdin = takeover.stdin.as_mut().unwrap();
-			writeln!(
-				stdin,
-				"{}",
-				json!({"type":"terminal.input","text":"echo FROM_CTRL\n"})
-			)
-			.unwrap();
-			stdin.flush().unwrap();
-		}
+		let _ = takeover.wait_frame(FRAME_TIMEOUT, "takeover-initial");
+		takeover
+			.send(&json!({"type":"terminal.input","text":"echo FROM_CTRL\n"}));
 		harness.cli_ok(&[
 			"pane",
 			"wait-output",
@@ -1147,58 +1330,44 @@ mod live {
 			"5000",
 		]);
 
-		{
-			let stdin = takeover.stdin.as_mut().unwrap();
-			writeln!(
-				stdin,
-				"{}",
-				json!({"type":"terminal.resize","cols":90,"rows":28})
-			)
-			.unwrap();
-			stdin.flush().unwrap();
-		}
-		let resized = wait_frame_matching(&take_rx, FRAME_TIMEOUT, |frame| {
-			frame["type"] == "terminal.frame"
-				&& frame["width"] == 90
-				&& frame["height"] == 28
-		});
-		assert_eq!(resized["width"], 90);
-		let resize_seq = resized["seq"].as_u64().unwrap_or(0);
-		assert!(resize_seq > incr_seq || resized["full"] == true);
-
-		harness.cli_ok(&["pane", "run", &pane, "seq 1 80"]);
+		let scroll_lines: String = (1..=40)
+			.map(|i| format!("SCR{i:02}"))
+			.collect::<Vec<_>>()
+			.join("\\n");
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			&format!("printf '{scroll_lines}\\n'"),
+		]);
 		harness.cli_ok(&[
 			"pane",
 			"wait-output",
 			&pane,
 			"--match",
-			"80",
+			"SCR40",
 			"--timeout",
 			"5000",
 		]);
-		let _ = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
-			frame["type"] == "terminal.frame"
-				&& contains_bytes(
-					&decode_base64(frame["bytes"].as_str().unwrap_or("")),
-					b"80",
-				)
-		});
-		while obs_rx.try_recv().is_ok() {}
+		while observe.rx.try_recv().is_ok() {}
 		let at_bottom = harness.rpc("g0", "pane.get", json!({"pane_id": pane}));
 		assert_eq!(
 			at_bottom["result"]["pane"]["scroll"]["offset_from_bottom"],
 			0
 		);
-		{
-			let stdin = takeover.stdin.as_mut().unwrap();
-			writeln!(
-				stdin,
-				"{}",
-				json!({"type":"terminal.scroll","direction":"up","lines":5})
-			)
-			.unwrap();
-			stdin.flush().unwrap();
-		}
+		let before_vis = visible_text(&harness, &pane);
+		let before_scr = scr_nums(&before_vis);
+		assert!(
+			before_scr.contains(&40),
+			"bottom unique line SCR40 must be visible before scroll: {before_vis:?}"
+		);
+		assert!(
+			!before_scr.contains(&1),
+			"SCR01 must be above the viewport before scroll: {before_vis:?}"
+		);
+		takeover.send(
+			&json!({"type":"terminal.scroll","direction":"up","lines":12}),
+		);
 		let scroll_deadline = Instant::now() + FRAME_TIMEOUT;
 		let mut term_offset = 0u64;
 		while Instant::now() < scroll_deadline {
@@ -1215,55 +1384,84 @@ mod live {
 			term_offset > 0,
 			"terminal.scroll should increase offset_from_bottom, got {term_offset}"
 		);
-		let vis_term = harness.cli_ok(&[
-			"pane", "read", &pane, "--source", "visible", "--lines", "40",
-		]);
-		let vis_term_text = String::from_utf8_lossy(&vis_term.stdout);
-		let last_term = vis_term_text
-			.lines()
-			.rev()
-			.find(|line| !line.trim().is_empty())
-			.unwrap_or("");
+		let after_vis = visible_text(&harness, &pane);
+		let after_scr = scr_nums(&after_vis);
 		assert_ne!(
-			last_term.trim(),
-			"80",
-			"terminal.scroll must change visible contents: {vis_term_text:?}"
-		);
-		let scroll_frame =
-			wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
-				frame["type"] == "terminal.frame"
-			});
-		assert_eq!(
-			scroll_frame["type"], "terminal.frame",
-			"observer must keep streaming after terminal.scroll"
+			after_scr, before_scr,
+			"viewport unique lines must change after terminal.scroll\nbefore={before_scr:?}\nafter={after_scr:?}\n{after_vis:?}"
 		);
 		assert!(
-			observe.try_wait().unwrap().is_none(),
-			"observer must stay attached through scroll"
+			after_scr.iter().max() < before_scr.iter().max(),
+			"scroll up must hide later unique lines: before={before_scr:?} after={after_scr:?}"
+		);
+		let newly: Vec<u32> = after_scr
+			.iter()
+			.copied()
+			.filter(|n| !before_scr.contains(n))
+			.collect();
+		assert!(
+			!newly.is_empty(),
+			"scroll up must reveal earlier unique lines: before={before_scr:?} after={after_scr:?}"
+		);
+		let mut surface = harness.spawn_session("observe", &pane, false, true);
+		let surface_frame =
+			surface.wait_frame(FRAME_TIMEOUT, "scrolled-surface-observe");
+		assert_eq!(
+			surface_frame["full"], true,
+			"fresh observe of a scrolled pane starts with a full surface"
+		);
+		let surface_bytes =
+			decode_base64(surface_frame["bytes"].as_str().unwrap());
+		assert!(
+			newly.iter().any(|n| {
+				contains_bytes(
+					&surface_bytes,
+					format!("SCR{n:02}").as_bytes(),
+				)
+			}),
+			"scrolled full frame must include newly visible unique lines {newly:?}"
+		);
+		if !after_scr.contains(&40) {
+			assert!(
+				!contains_bytes(&surface_bytes, b"SCR40"),
+				"scrolled full frame must not still show hidden SCR40"
+			);
+		}
+		surface.reap_or_kill(STOP_TIMEOUT);
+		assert!(
+			observe.still_running(),
+			"original observer must stay attached through scroll"
 		);
 		let scrolled = harness.rpc(
 			"sc1",
 			"pane.scroll",
-			json!({"pane_id": pane, "offset_from_bottom": 5}),
+			json!({"pane_id": pane, "offset_from_bottom": 8}),
 		);
 		assert_eq!(
 			scrolled["result"]["pane"]["scroll"]["offset_from_bottom"],
-			5
+			8
 		);
-		let vis = harness.cli_ok(&[
-			"pane", "read", &pane, "--source", "visible", "--lines", "40",
-		]);
-		let vis_text = String::from_utf8_lossy(&vis.stdout);
-		let last = vis_text
-			.lines()
-			.rev()
-			.find(|line| !line.trim().is_empty())
-			.unwrap_or("");
+		let pane_vis = visible_text(&harness, &pane);
+		let pane_scr = scr_nums(&pane_vis);
 		assert_ne!(
-			last.trim(),
-			"80",
-			"scrolled visible snapshot should not still be at the bottom: {vis_text:?}"
+			pane_scr, before_scr,
+			"pane.scroll must also change unique viewport lines: {pane_vis:?}"
 		);
+		assert!(
+			!pane_scr.contains(&40),
+			"pane.scroll should move SCR40 out of the viewport: {pane_vis:?}"
+		);
+
+		takeover.send(&json!({"type":"terminal.resize","cols":90,"rows":28}));
+		let resized =
+			takeover.wait_matching(FRAME_TIMEOUT, "takeover-resize", |frame| {
+				frame["type"] == "terminal.frame"
+					&& frame["width"] == 90
+					&& frame["height"] == 28
+			});
+		assert_eq!(resized["width"], 90);
+		let resize_seq = resized["seq"].as_u64().unwrap_or(0);
+		assert!(resize_seq > incr_seq || resized["full"] == true);
 
 		harness.cli_ok(&[
 			"pane",
@@ -1289,17 +1487,20 @@ mod live {
 			String::from_utf8_lossy(&in_alt.stdout).contains("ALT_ONLY"),
 			"visible snapshot must show alternate-screen contents"
 		);
-		let alt_frame = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
-			frame["type"] == "terminal.frame"
-				&& contains_bytes(
-					&decode_base64(frame["bytes"].as_str().unwrap_or("")),
-					b"ALT_ONLY",
-				)
-		});
+		let alt_frame = observe.wait_matching(
+			FRAME_TIMEOUT,
+			"observe-alt-screen",
+			|frame| {
+				frame["type"] == "terminal.frame"
+					&& contains_bytes(
+						&decode_base64(frame["bytes"].as_str().unwrap_or("")),
+						b"ALT_ONLY",
+					)
+			},
+		);
 		assert_eq!(alt_frame["type"], "terminal.frame");
 		assert!(
-			observe.try_wait().unwrap().is_none()
-				&& takeover.try_wait().unwrap().is_none(),
+			observe.still_running() && takeover.still_running(),
 			"observer and controller must stay attached through alt-screen"
 		);
 		harness.cli_ok(&[
@@ -1410,18 +1611,105 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			"Herdr must answer CSI c as PTY input DA: {da_text}"
 		);
 		assert!(
-			observe.try_wait().unwrap().is_none()
-				&& takeover.try_wait().unwrap().is_none(),
+			observe.still_running() && takeover.still_running(),
 			"observer and controller must stay attached through DSR/DA"
 		);
-		{
-			let stdin = takeover.stdin.as_mut().unwrap();
-			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
-			stdin.flush().unwrap();
-		}
-		let _ = wait_try(&mut takeover, STOP_TIMEOUT);
-		let _ = observe.kill();
-		let _ = wait_try(&mut observe, STOP_TIMEOUT);
+
+		let term_before = harness.cli_json(&["pane", "get", &pane])["result"]
+			["pane"]["terminal_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let pid_before = shell_pid(&harness, &pane);
+		assert!(
+			pid_alive(pid_before),
+			"shell pid {pid_before} must be alive before detach"
+		);
+		let reset = harness.rpc(
+			"sb",
+			"pane.scroll",
+			json!({"pane_id": pane, "offset_from_bottom": 0}),
+		);
+		assert_eq!(reset["result"]["pane"]["scroll"]["offset_from_bottom"], 0);
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			"printf 'DETACH_LIVE_TOKEN\\n'",
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"DETACH_LIVE_TOKEN",
+			"--timeout",
+			"5000",
+		]);
+
+		takeover.send(&json!({"type":"terminal.release"}));
+		takeover.wait_until_exit(STOP_TIMEOUT, "control-release");
+		assert!(
+			!takeover.still_running(),
+			"controller must exit after terminal.release"
+		);
+		observe.reap_or_kill(STOP_TIMEOUT);
+		assert!(
+			!observe.still_running(),
+			"observer must be gone after detach"
+		);
+
+		let after_detach = harness.cli_json(&["pane", "get", &pane]);
+		assert_eq!(
+			after_detach["result"]["pane"]["pane_id"].as_str(),
+			Some(pane.as_str())
+		);
+		assert_eq!(
+			after_detach["result"]["pane"]["terminal_id"].as_str(),
+			Some(term_before.as_str()),
+			"terminal_id must survive client disconnect"
+		);
+		assert!(
+			pid_alive(pid_before),
+			"same shell pid {pid_before} must keep running with no clients"
+		);
+		assert_eq!(shell_pid(&harness, &pane), pid_before);
+		let detached_text = visible_text(&harness, &pane);
+		assert!(
+			detached_text.contains("DETACH_LIVE_TOKEN"),
+			"live process output must remain after detach: {detached_text:?}"
+		);
+
+		let mut reconnect =
+			harness.spawn_session("control", &pane, false, true);
+		let recon = reconnect.wait_frame(FRAME_TIMEOUT, "reconnect-initial");
+		assert_eq!(
+			recon["full"], true,
+			"reconnect without --takeover starts with a full frame"
+		);
+		let recon_bytes = decode_base64(recon["bytes"].as_str().unwrap());
+		assert!(
+			contains_bytes(&recon_bytes, b"DETACH_LIVE_TOKEN"),
+			"reconnect full frame must include the live screen"
+		);
+		let after_recon = harness.cli_json(&["pane", "get", &pane]);
+		assert_eq!(
+			after_recon["result"]["pane"]["terminal_id"].as_str(),
+			Some(term_before.as_str())
+		);
+		assert_eq!(shell_pid(&harness, &pane), pid_before);
+		reconnect.send(
+			&json!({"type":"terminal.input","text":"echo RECONNECTED\\n"}),
+		);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"RECONNECTED",
+			"--timeout",
+			"5000",
+		]);
 	}
 
 	#[test]
@@ -1551,13 +1839,12 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		);
 
 		let mut split_obs =
-			harness.spawn_terminal("observe", &split_pane, false);
-		let split_rx = json_line_reader(split_obs.stdout.take().unwrap());
-		let split_frame = wait_frame(&split_rx, FRAME_TIMEOUT);
+			harness.spawn_session("observe", &split_pane, false, true);
+		let split_frame =
+			split_obs.wait_frame(FRAME_TIMEOUT, "split-observe-initial");
 		assert_eq!(split_frame["type"], "terminal.frame");
 		assert_eq!(split_frame["full"], true);
-		let _ = split_obs.kill();
-		let _ = wait_try(&mut split_obs, STOP_TIMEOUT);
+		split_obs.reap_or_kill(STOP_TIMEOUT);
 		harness.cli_json(&["pane", "close", &split_pane]);
 		let mut saw_pane_closed = false;
 		for _ in 0..8 {
@@ -1697,6 +1984,12 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		]);
 		assert_eq!(dup["error"]["code"], "worktree_create_failed");
 
+		let opened_term = opened["result"]["root_pane"]["terminal_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let opened_pid = shell_pid(&harness, &opened_pane);
+		assert!(pid_alive(opened_pid));
 		let dirty = harness.cli_err_json(&[
 			"worktree",
 			"remove",
@@ -1705,6 +1998,21 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		]);
 		assert_eq!(dirty["error"]["code"], "dirty_worktree_requires_force");
 		assert!(external.exists());
+		let dirty_still = harness.cli_json(&["pane", "get", &opened_pane]);
+		assert_eq!(
+			dirty_still["result"]["pane"]["terminal_id"].as_str(),
+			Some(opened_term.as_str()),
+			"dirty refusal must keep the runtime pane record"
+		);
+		assert!(
+			j_workspace_ids(&harness).iter().any(|id| id == &opened_ws),
+			"dirty refusal must keep the workspace record"
+		);
+		assert!(
+			pid_alive(opened_pid),
+			"dirty refusal must not kill pid {opened_pid}"
+		);
+
 		harness.cli_json(&[
 			"worktree",
 			"remove",
@@ -1714,6 +2022,13 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			"--trust-repository",
 		]);
 		assert!(!external.exists());
+		let gone = harness.cli_err_json(&["pane", "get", &opened_pane]);
+		assert_eq!(gone["error"]["code"], "pane_not_found");
+		assert!(
+			j_workspace_ids(&harness).iter().all(|id| id != &opened_ws),
+			"forced remove must drop the workspace record immediately"
+		);
+		assert_process_dead(opened_pid, "forced worktree remove");
 		let branches = Command::new("git")
 			.args(["branch", "--list", "wt/external"])
 			.current_dir(&harness.repo)
@@ -1725,6 +2040,12 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			String::from_utf8_lossy(&branches.stdout).contains("wt/external")
 		);
 
+		let wt_pane = wt["result"]["root_pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let wt_pid = shell_pid(&harness, &wt_pane);
+		assert!(pid_alive(wt_pid));
 		harness.cli_json(&[
 			"worktree",
 			"remove",
@@ -1733,6 +2054,21 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			"--trust-repository",
 		]);
 		assert!(!wt_path.exists());
+		let wt_gone = harness.cli_err_json(&["pane", "get", &wt_pane]);
+		assert_eq!(wt_gone["error"]["code"], "pane_not_found");
+		assert!(j_workspace_ids(&harness).iter().all(|id| id != &wt_ws));
+		assert_process_dead(wt_pid, "clean worktree remove");
+		let wt_branch = Command::new("git")
+			.args(["branch", "--list", "wt/contract"])
+			.current_dir(&harness.repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_SYSTEM", "/dev/null")
+			.output()
+			.unwrap();
+		assert!(
+			String::from_utf8_lossy(&wt_branch.stdout).contains("wt/contract"),
+			"clean remove must keep the git branch"
+		);
 
 		let group = harness.cli_json(&[
 			"worktree",
