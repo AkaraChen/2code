@@ -197,7 +197,6 @@ Verified:
 - `--takeover` makes the previous controller receive `{"type":"terminal.closed","reason":"terminal attach taken over"}`.
 - After `terminal.release` (or process exit), a new controller can attach without `--takeover`.
 - **Verified coexistence:** an `observe` client stays connected while a `control` client owns input/resize. The observer receives `full: false` frames for later output and does not take ownership. A second `control` without `--takeover` still fails with the conflict close above.
-- Multiple observers of the same terminal are allowed (documented; two-observer attach was exercised in an earlier probe; this suite asserts observer+controller).
 
 2code must not silently take control. Task 18 should surface the conflict string and require an explicit takeover.
 

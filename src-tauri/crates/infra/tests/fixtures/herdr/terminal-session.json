@@ -2,6 +2,14 @@
   "transport": "herdr terminal session {control|observe} <target>",
   "not_in_json_schema": true,
   "client_socket": "herdr-client.sock next to herdr.sock (or derived from HERDR_SOCKET_PATH)",
+  "captured_frames": [
+    "frames/full-redraw.json",
+    "frames/incremental.json",
+    "frames/unicode-ansi.json",
+    "frames/closed-conflict.json",
+    "frames/closed-takeover.json",
+    "frames/dsr-da.json"
+  ],
   "stdout_records": [
     {
       "type": "terminal.frame",
@@ -10,7 +18,7 @@
       "width": 80,
       "height": 24,
       "full": true,
-      "bytes": "base64(ANSI bytes). full=true is a complete redraw and typically starts with synchronized-output/cursor/OSC-8 reset plus CSI 2J/H."
+      "bytes": "see frames/full-redraw.json"
     },
     {
       "type": "terminal.frame",
@@ -19,7 +27,7 @@
       "width": 80,
       "height": 24,
       "full": false,
-      "bytes": "base64(incremental ANSI). Write onto the previous screen; do not clear."
+      "bytes": "see frames/incremental.json"
     },
     {
       "type": "terminal.closed",
