@@ -160,6 +160,7 @@ fn pin_fixture_records_an_exact_release() {
 		"pane.split",
 		"pane.read",
 		"pane.scroll",
+		"pane.close",
 		"events.subscribe",
 	] {
 		assert!(
@@ -169,11 +170,86 @@ fn pin_fixture_records_an_exact_release() {
 	}
 }
 
+fn decode_base64(input: &str) -> Vec<u8> {
+	fn val(byte: u8) -> u8 {
+		match byte {
+			b'A'..=b'Z' => byte - b'A',
+			b'a'..=b'z' => byte - b'a' + 26,
+			b'0'..=b'9' => byte - b'0' + 52,
+			b'+' => 62,
+			b'/' => 63,
+			_ => panic!("invalid base64 byte {byte}"),
+		}
+	}
+	let bytes: Vec<u8> = input
+		.bytes()
+		.filter(|byte| !byte.is_ascii_whitespace())
+		.collect();
+	let mut out = Vec::new();
+	for chunk in bytes.chunks(4) {
+		if chunk.len() < 2 {
+			break;
+		}
+		let a = val(chunk[0]);
+		let b = val(chunk[1]);
+		out.push((a << 2) | (b >> 4));
+		if chunk.len() > 2 && chunk[2] != b'=' {
+			let c = val(chunk[2]);
+			out.push((b << 4) | (c >> 2));
+			if chunk.len() > 3 && chunk[3] != b'=' {
+				out.push((c << 6) | val(chunk[3]));
+			}
+		}
+	}
+	out
+}
+
+fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
+	hay.windows(needle.len()).any(|window| window == needle)
+}
+
+#[test]
+fn frame_fixtures_encode_full_vs_incremental() {
+	let full = load_json("frames/full-redraw.json");
+	assert_eq!(full["record"]["full"], true);
+	assert_eq!(full["record"]["type"], "terminal.frame");
+	let full_bytes = decode_base64(full["record"]["bytes"].as_str().unwrap());
+	assert!(contains_bytes(&full_bytes, b"\x1b[?2026h"));
+	assert!(contains_bytes(&full_bytes, b"\x1b[2J"));
+	assert!(contains_bytes(&full_bytes, b"\x1b[1;1H"));
+
+	let incr = load_json("frames/incremental.json");
+	assert_eq!(incr["record"]["full"], false);
+	let incr_bytes = decode_base64(incr["record"]["bytes"].as_str().unwrap());
+	assert!(contains_bytes(&incr_bytes, b"INCR_LINE_XYZ"));
+	assert!(
+		!contains_bytes(&incr_bytes, b"\x1b[2J"),
+		"incremental frames must not clear the screen"
+	);
+
+	let uni = load_json("frames/unicode-ansi.json");
+	let uni_bytes = decode_base64(uni["record"]["bytes"].as_str().unwrap());
+	assert!(contains_bytes(&uni_bytes, "αβγ".as_bytes()));
+	assert!(contains_bytes(&uni_bytes, b"\x1b[31m"));
+
+	let dsr = load_json("frames/dsr-da.json");
+	assert!(dsr["xtermjs_rule"]
+		.as_str()
+		.unwrap()
+		.contains("must not additionally answer"));
+}
+
 #[cfg(unix)]
 mod live {
 	use super::*;
 	use std::os::unix::net::UnixStream;
 	use std::sync::mpsc;
+
+	const READY_TIMEOUT: Duration = Duration::from_secs(10);
+	const SOCK_TIMEOUT: Duration = Duration::from_secs(2);
+	const FRAME_TIMEOUT: Duration = Duration::from_secs(2);
+	const CMD_TIMEOUT: Duration = Duration::from_secs(12);
+	const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 	struct Harness {
 		bin: PathBuf,
@@ -236,12 +312,14 @@ mod live {
 		}
 
 		fn wait_ready(&self) {
-			let deadline = Instant::now() + Duration::from_secs(15);
+			let deadline = Instant::now() + READY_TIMEOUT;
 			while Instant::now() < deadline {
 				if self.server_exited() {
 					panic!("herdr server exited early:\n{}", self.server_log());
 				}
-				if UnixStream::connect(&self.sock).is_ok() {
+				if let Ok(stream) = UnixStream::connect(&self.sock) {
+					let _ = stream.set_read_timeout(Some(SOCK_TIMEOUT));
+					let _ = stream.set_write_timeout(Some(SOCK_TIMEOUT));
 					return;
 				}
 				thread::sleep(Duration::from_millis(40));
@@ -250,7 +328,6 @@ mod live {
 		}
 
 		fn server_exited(&self) -> bool {
-			// Child::try_wait needs &mut self; probe via kill(0) on pid.
 			let pid = self.server.id();
 			Command::new("kill")
 				.args(["-0", &pid.to_string()])
@@ -272,7 +349,9 @@ mod live {
 		}
 
 		fn cli(&self, args: &[&str]) -> Output {
-			self.env_command().args(args).output().unwrap()
+			let mut cmd = self.env_command();
+			cmd.args(args);
+			run_timed(cmd, CMD_TIMEOUT)
 		}
 
 		fn cli_ok(&self, args: &[&str]) -> Output {
@@ -324,9 +403,8 @@ mod live {
 				"params": params
 			});
 			let mut stream = UnixStream::connect(&self.sock).unwrap();
-			stream
-				.set_read_timeout(Some(Duration::from_secs(8)))
-				.unwrap();
+			stream.set_read_timeout(Some(SOCK_TIMEOUT)).unwrap();
+			stream.set_write_timeout(Some(SOCK_TIMEOUT)).unwrap();
 			writeln!(stream, "{req}").unwrap();
 			let mut line = String::new();
 			BufReader::new(stream).read_line(&mut line).unwrap();
@@ -367,13 +445,34 @@ mod live {
 				.unwrap()
 		}
 
-		fn restart_server(&mut self) {
-			let _ = self.cli(&["session", "stop", &self.session]);
+		fn stop_server_process(&mut self) {
+			let bin = self.bin.clone();
+			let session = self.session.clone();
+			let root = self.root.path().to_path_buf();
+			let (tx, rx) = mpsc::channel();
+			thread::spawn(move || {
+				let mut cmd = Command::new(bin);
+				apply_env(&mut cmd, &root);
+				let _ = cmd
+					.args(["--session", &session, "session", "stop", &session])
+					.output();
+				let _ = tx.send(());
+			});
+			let _ = rx.recv_timeout(STOP_TIMEOUT);
 			let _ = self.server.kill();
-			let _ = self.server.wait();
-			let deadline = Instant::now() + Duration::from_secs(8);
+			if !wait_try(&mut self.server, STOP_TIMEOUT) {
+				let _ = Command::new("kill")
+					.args(["-9", &self.server.id().to_string()])
+					.status();
+				let _ = wait_try(&mut self.server, Duration::from_secs(1));
+			}
+		}
+
+		fn restart_server(&mut self) {
+			self.stop_server_process();
+			let deadline = Instant::now() + STOP_TIMEOUT;
 			while self.sock.exists() && Instant::now() < deadline {
-				thread::sleep(Duration::from_millis(40));
+				thread::sleep(Duration::from_millis(20));
 			}
 			let log =
 				fs::File::create(self.root.path().join("server.log")).unwrap();
@@ -390,9 +489,42 @@ mod live {
 
 	impl Drop for Harness {
 		fn drop(&mut self) {
-			let _ = self.cli(&["session", "stop", &self.session]);
-			let _ = self.server.kill();
-			let _ = self.server.wait();
+			self.stop_server_process();
+		}
+	}
+
+	fn run_timed(mut cmd: Command, timeout: Duration) -> Output {
+		cmd.stdin(Stdio::null())
+			.stdout(Stdio::piped())
+			.stderr(Stdio::piped());
+		let child = cmd.spawn().unwrap();
+		let pid = child.id();
+		let (tx, rx) = mpsc::channel();
+		thread::spawn(move || {
+			let _ = tx.send(child.wait_with_output());
+		});
+		match rx.recv_timeout(timeout) {
+			Ok(Ok(output)) => output,
+			Ok(Err(err)) => panic!("herdr command failed: {err}"),
+			Err(_) => {
+				let _ = Command::new("kill")
+					.args(["-9", &pid.to_string()])
+					.status();
+				panic!("herdr command timed out after {timeout:?}");
+			}
+		}
+	}
+
+	fn wait_try(child: &mut Child, timeout: Duration) -> bool {
+		let deadline = Instant::now() + timeout;
+		loop {
+			if child.try_wait().ok().flatten().is_some() {
+				return true;
+			}
+			if Instant::now() >= deadline {
+				return false;
+			}
+			thread::sleep(Duration::from_millis(20));
 		}
 	}
 
@@ -473,11 +605,29 @@ mod live {
 	}
 
 	fn wait_frame(rx: &mpsc::Receiver<String>, timeout: Duration) -> Value {
-		let line = rx
-			.recv_timeout(timeout)
-			.unwrap_or_else(|_| panic!("timed out waiting for terminal frame"));
+		let line = rx.recv_timeout(timeout).unwrap_or_else(|_| {
+			panic!("timed out waiting for terminal frame after {timeout:?}")
+		});
 		serde_json::from_str(&line)
 			.unwrap_or_else(|err| panic!("terminal json: {err} ({line})"))
+	}
+
+	fn wait_frame_matching(
+		rx: &mpsc::Receiver<String>,
+		timeout: Duration,
+		pred: impl Fn(&Value) -> bool,
+	) -> Value {
+		let deadline = Instant::now() + timeout;
+		loop {
+			let remaining = deadline.saturating_duration_since(Instant::now());
+			if remaining.is_zero() {
+				panic!("timed out waiting for matching terminal frame");
+			}
+			let frame = wait_frame(rx, remaining);
+			if pred(&frame) {
+				return frame;
+			}
+		}
 	}
 
 	#[test]
@@ -534,7 +684,7 @@ mod live {
 			"--match",
 			"BEFORE_RESTART",
 			"--timeout",
-			"8000",
+			"5000",
 		]);
 
 		// CLI exit must leave the server and live terminal running.
@@ -543,8 +693,30 @@ mod live {
 		let listed = harness.cli_json(&["pane", "get", &pane]);
 		assert_eq!(listed["result"]["pane"]["terminal_id"], term);
 
+		let root_tab = created["result"]["tab"]["tab_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let split = harness.cli_json(&[
+			"pane",
+			"split",
+			&pane,
+			"--direction",
+			"right",
+			"--no-focus",
+		]);
+		let split_pane = split["result"]["pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let split_term = split["result"]["pane"]["terminal_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+
 		let mut sub = UnixStream::connect(&harness.sock).unwrap();
-		sub.set_read_timeout(Some(Duration::from_secs(8))).unwrap();
+		sub.set_read_timeout(Some(SOCK_TIMEOUT)).unwrap();
+		sub.set_write_timeout(Some(SOCK_TIMEOUT)).unwrap();
 		writeln!(
 			sub,
 			"{}",
@@ -562,7 +734,7 @@ mod live {
 		reader.read_line(&mut ack).unwrap();
 		let ack_json: Value = serde_json::from_str(&ack).unwrap();
 		assert_eq!(ack_json["result"]["type"], "subscription_started");
-		harness.cli_json(&[
+		let extra = harness.cli_json(&[
 			"tab",
 			"create",
 			"--workspace",
@@ -571,6 +743,18 @@ mod live {
 			"extra",
 			"--no-focus",
 		]);
+		let extra_tab = extra["result"]["tab"]["tab_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let extra_pane = extra["result"]["root_pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let extra_term = extra["result"]["root_pane"]["terminal_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
 		let mut event = String::new();
 		reader.read_line(&mut event).unwrap();
 		let event_json: Value = serde_json::from_str(&event).unwrap();
@@ -578,13 +762,35 @@ mod live {
 
 		harness.restart_server();
 		let restored = harness.cli_json(&["api", "snapshot"]);
-		let panes = restored["result"]["snapshot"]["panes"].as_array().unwrap();
-		let restored_pane = panes
+		let snap = &restored["result"]["snapshot"];
+		let panes = snap["panes"].as_array().unwrap();
+		let tabs = snap["tabs"].as_array().unwrap();
+		assert!(snap["workspaces"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.any(|item| item["workspace_id"] == workspace));
+		assert!(tabs.iter().any(|item| item["tab_id"] == root_tab));
+		assert!(tabs.iter().any(|item| item["tab_id"] == extra_tab));
+		let restored_root = panes
 			.iter()
 			.find(|item| item["pane_id"] == pane)
-			.expect("restored pane id");
-		assert_eq!(restored_pane["workspace_id"], workspace);
-		assert_ne!(restored_pane["terminal_id"], term);
+			.expect("root pane id");
+		let restored_split = panes
+			.iter()
+			.find(|item| item["pane_id"] == split_pane)
+			.expect("split pane id");
+		let restored_extra = panes
+			.iter()
+			.find(|item| item["pane_id"] == extra_pane)
+			.expect("extra tab pane id");
+		assert_eq!(restored_root["workspace_id"], workspace);
+		assert_eq!(restored_root["tab_id"], root_tab);
+		assert_eq!(restored_split["tab_id"], root_tab);
+		assert_eq!(restored_extra["tab_id"], extra_tab);
+		assert_ne!(restored_root["terminal_id"], term);
+		assert_ne!(restored_split["terminal_id"], split_term);
+		assert_ne!(restored_extra["terminal_id"], extra_term);
 		let recent = harness.cli_ok(&[
 			"pane", "read", &pane, "--source", "recent", "--lines", "20",
 		]);
@@ -610,9 +816,7 @@ mod live {
 			"pane",
 			"run",
 			&pane,
-			&format!(
-				"printf '{marker} UNICODE:αβγ COLOR:\\033[31mred\\033[0m\\n'"
-			),
+			&format!("printf '{marker} UNI:αβγ\\n'"),
 		]);
 		harness.cli_ok(&[
 			"pane",
@@ -621,35 +825,78 @@ mod live {
 			"--match",
 			&marker,
 			"--timeout",
-			"8000",
+			"5000",
 		]);
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			"printf '\\033[31mRED_COLOR\\033[0m\\n'",
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"RED_COLOR",
+			"--timeout",
+			"5000",
+		]);
+		let ansi = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "recent", "--ansi", "--lines",
+			"30",
+		]);
+		let ansi_text = String::from_utf8_lossy(&ansi.stdout);
+		assert!(ansi_text.contains(&marker));
+		assert!(ansi_text.contains("αβγ"));
+		assert!(
+			ansi_text.contains('\u{1b}') && ansi_text.contains("RED_COLOR"),
+			"pane.read --ansi should keep SGR around RED_COLOR: {ansi_text:?}"
+		);
 
 		let mut observe = harness.spawn_terminal("observe", &pane, false);
 		let obs_rx = json_line_reader(observe.stdout.take().unwrap());
-		let frame = wait_frame(&obs_rx, Duration::from_secs(3));
+		let frame = wait_frame(&obs_rx, FRAME_TIMEOUT);
 		assert_eq!(frame["type"], "terminal.frame");
 		assert_eq!(frame["encoding"], "ansi");
 		assert_eq!(frame["full"], true);
 		assert_eq!(frame["width"], 80);
 		assert_eq!(frame["height"], 24);
-		let bytes = data_encoding_std_base64(&frame["bytes"]);
-		assert!(bytes.contains(&0x1b), "full frame is ANSI");
+		let bytes = decode_base64(frame["bytes"].as_str().unwrap());
+		assert!(contains_bytes(&bytes, b"\x1b[?2026h"));
+		assert!(contains_bytes(&bytes, b"\x1b[2J"));
 		assert!(
-			String::from_utf8_lossy(&bytes).contains(&marker)
-				|| bytes.windows(marker.len()).any(|w| w == marker.as_bytes()),
+			contains_bytes(&bytes, marker.as_bytes()),
 			"initial full frame should include current screen contents"
 		);
-		let _ = observe.kill();
-		let _ = observe.wait();
 
 		let mut control = harness.spawn_terminal("control", &pane, false);
 		let ctrl_rx = json_line_reader(control.stdout.take().unwrap());
-		let first = wait_frame(&ctrl_rx, Duration::from_secs(3));
+		let first = wait_frame(&ctrl_rx, FRAME_TIMEOUT);
 		assert_eq!(first["type"], "terminal.frame");
 		assert_eq!(first["full"], true);
+		assert!(
+			observe.try_wait().unwrap().is_none(),
+			"observer must keep running beside a controller"
+		);
+		assert!(control.try_wait().unwrap().is_none());
+
+		harness.cli_ok(&["pane", "run", &pane, "printf 'INCR_LINE_XYZ\\n'"]);
+		let incr = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
+			if frame["type"] != "terminal.frame" || frame["full"] != false {
+				return false;
+			}
+			let bytes = decode_base64(frame["bytes"].as_str().unwrap_or(""));
+			contains_bytes(&bytes, b"INCR_LINE_XYZ")
+		});
+		let incr_bytes = decode_base64(incr["bytes"].as_str().unwrap());
+		assert!(
+			!contains_bytes(&incr_bytes, b"\x1b[2J"),
+			"incremental frames must not CSI 2J"
+		);
 
 		let rival = harness.spawn_terminal("control", &pane, false);
-		let rival_out = wait_child(rival, Duration::from_secs(5));
+		let rival_out = wait_child(rival, Duration::from_secs(3));
 		assert!(rival_out.status.success());
 		let closed: Value = serde_json::from_slice(&rival_out.stdout)
 			.or_else(|_| serde_json::from_slice(&rival_out.stderr))
@@ -663,13 +910,17 @@ mod live {
 		assert!(reason.contains("--takeover"), "{reason}");
 
 		let mut takeover = harness.spawn_terminal("control", &pane, true);
-		let taken = wait_frame(&ctrl_rx, Duration::from_secs(5));
-		assert_eq!(taken["type"], "terminal.closed");
+		let taken =
+			wait_frame_matching(&ctrl_rx, Duration::from_secs(3), |frame| {
+				frame["type"] == "terminal.closed"
+			});
 		assert_eq!(taken["reason"], "terminal attach taken over");
-		let _ = control.wait();
+		let _ = wait_try(&mut control, STOP_TIMEOUT);
+		let _ = observe.kill();
+		let _ = wait_try(&mut observe, STOP_TIMEOUT);
 
 		let take_rx = json_line_reader(takeover.stdout.take().unwrap());
-		let _ = wait_frame(&take_rx, Duration::from_secs(3));
+		let _ = wait_frame(&take_rx, FRAME_TIMEOUT);
 		{
 			let stdin = takeover.stdin.as_mut().unwrap();
 			writeln!(
@@ -687,7 +938,7 @@ mod live {
 			"--match",
 			"FROM_CTRL",
 			"--timeout",
-			"8000",
+			"5000",
 		]);
 
 		{
@@ -700,21 +951,15 @@ mod live {
 			.unwrap();
 			stdin.flush().unwrap();
 		}
-		let mut saw_resize = false;
-		for _ in 0..8 {
-			let frame = wait_frame(&take_rx, Duration::from_secs(3));
-			if frame["type"] == "terminal.frame"
+		let resized = wait_frame_matching(&take_rx, FRAME_TIMEOUT, |frame| {
+			frame["type"] == "terminal.frame"
 				&& frame["width"] == 90
 				&& frame["height"] == 28
-			{
-				saw_resize = true;
-				break;
-			}
-		}
-		assert!(saw_resize, "resize should emit a frame at 90x28");
+		});
+		assert_eq!(resized["width"], 90);
 
 		harness.cli_ok(&["pane", "run", &pane, "seq 1 80"]);
-		thread::sleep(Duration::from_millis(400));
+		thread::sleep(Duration::from_millis(300));
 		let scrolled = harness.rpc(
 			"sc1",
 			"pane.scroll",
@@ -730,28 +975,146 @@ mod live {
 			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
 			stdin.flush().unwrap();
 		}
-		let mut released = false;
-		for _ in 0..8 {
-			let frame = wait_frame(&take_rx, Duration::from_secs(5));
-			if frame["type"] == "terminal.closed" {
-				released = true;
-				break;
-			}
-		}
-		assert!(released, "release should close the controller stream");
-		let _ = takeover.wait();
+		let _ = wait_frame_matching(&take_rx, FRAME_TIMEOUT, |frame| {
+			frame["type"] == "terminal.closed"
+		});
+		let _ = wait_try(&mut takeover, STOP_TIMEOUT);
 
 		let mut reconnect = harness.spawn_terminal("control", &pane, false);
 		let recon_rx = json_line_reader(reconnect.stdout.take().unwrap());
-		let again = wait_frame(&recon_rx, Duration::from_secs(3));
+		let again = wait_frame(&recon_rx, FRAME_TIMEOUT);
 		assert_eq!(again["type"], "terminal.frame");
-		writeln!(
-			reconnect.stdin.as_mut().unwrap(),
-			"{}",
-			json!({"type":"terminal.release"})
+		assert_eq!(again["full"], true);
+		{
+			let stdin = reconnect.stdin.as_mut().unwrap();
+			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
+			stdin.flush().unwrap();
+		}
+		let _ = wait_try(&mut reconnect, STOP_TIMEOUT);
+
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			"printf '\\033[?1049h\\033[2J\\033[HALT_ONLY\\n'",
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--source",
+			"visible",
+			"--match",
+			"ALT_ONLY",
+			"--timeout",
+			"5000",
+		]);
+		let in_alt = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "visible", "--lines", "30",
+		]);
+		assert!(
+			String::from_utf8_lossy(&in_alt.stdout).contains("ALT_ONLY"),
+			"visible snapshot must show alternate-screen contents"
+		);
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			"printf '\\033[?1049lLEFT_ALT\\n'",
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"LEFT_ALT",
+			"--timeout",
+			"5000",
+		]);
+
+		let dsr_py = harness.repo.join("dsr.py");
+		fs::write(
+			&dsr_py,
+			r#"
+import os, select, sys, termios, tty
+fd = sys.stdin.fileno()
+old = termios.tcgetattr(fd)
+try:
+    tty.setraw(fd)
+    os.write(1, b"\x1b[6n")
+    ready, _, _ = select.select([sys.stdin], [], [], 2.0)
+    data = os.read(fd, 64) if ready else b""
+finally:
+    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+sys.stdout.write("\nDSR_RAW=" + repr(data) + "\n")
+"#,
 		)
 		.unwrap();
-		let _ = reconnect.wait();
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			&format!("python3 {}", dsr_py.display()),
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"DSR_RAW=",
+			"--timeout",
+			"5000",
+		]);
+		let dsr_out = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "recent", "--lines", "20",
+		]);
+		let dsr_text = String::from_utf8_lossy(&dsr_out.stdout);
+		assert!(
+			dsr_text.contains("DSR_RAW=b'\\x1b[") && dsr_text.contains("R'"),
+			"Herdr must answer CSI 6n as PTY input CPR: {dsr_text}"
+		);
+
+		let da_py = harness.repo.join("da.py");
+		fs::write(
+			&da_py,
+			r#"
+import os, select, sys, termios, tty
+fd = sys.stdin.fileno()
+old = termios.tcgetattr(fd)
+try:
+    tty.setraw(fd)
+    os.write(1, b"\x1b[c")
+    ready, _, _ = select.select([sys.stdin], [], [], 2.0)
+    data = os.read(fd, 64) if ready else b""
+finally:
+    termios.tcsetattr(fd, termios.TCSADRAIN, old)
+sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
+"#,
+		)
+		.unwrap();
+		harness.cli_ok(&[
+			"pane",
+			"run",
+			&pane,
+			&format!("python3 {}", da_py.display()),
+		]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"DA_RAW=",
+			"--timeout",
+			"5000",
+		]);
+		let da_out = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "recent", "--lines", "20",
+		]);
+		let da_text = String::from_utf8_lossy(&da_out.stdout);
+		assert!(
+			da_text.contains("DA_RAW=b'\\x1b[?") && da_text.contains("c'"),
+			"Herdr must answer CSI c as PTY input DA: {da_text}"
+		);
 	}
 
 	#[test]
@@ -760,7 +1123,29 @@ mod live {
 			return;
 		};
 		let harness = Harness::start(bin);
+		fs::write(harness.repo.join("dirty-primary.txt"), "PRIMARY_DIRTY\n")
+			.unwrap();
 		let created = harness.create_workspace("root");
+		assert_eq!(
+			fs::read_to_string(harness.repo.join("dirty-primary.txt")).unwrap(),
+			"PRIMARY_DIRTY\n",
+			"adopting a dirty primary checkout must not recreate it"
+		);
+		let adopted = harness.cli_json(&[
+			"worktree",
+			"open",
+			"--cwd",
+			harness.repo.to_str().unwrap(),
+			"--path",
+			harness.repo.to_str().unwrap(),
+			"--no-focus",
+			"--trust-repository",
+		]);
+		assert_eq!(adopted["result"]["already_open"], true);
+		assert_eq!(
+			adopted["result"]["workspace"]["workspace_id"],
+			created["result"]["workspace"]["workspace_id"]
+		);
 		let workspace = created["result"]["workspace"]["workspace_id"]
 			.as_str()
 			.unwrap()
@@ -802,6 +1187,26 @@ mod live {
 		let splits = layout_obj["splits"].as_array().unwrap();
 		assert!(!splits.is_empty(), "external split must appear in layout");
 
+		let mut split_obs =
+			harness.spawn_terminal("observe", &split_pane, false);
+		let split_rx = json_line_reader(split_obs.stdout.take().unwrap());
+		let split_frame = wait_frame(&split_rx, FRAME_TIMEOUT);
+		assert_eq!(split_frame["type"], "terminal.frame");
+		assert_eq!(split_frame["full"], true);
+		let _ = split_obs.kill();
+		let _ = wait_try(&mut split_obs, STOP_TIMEOUT);
+		harness.cli_json(&["pane", "close", &split_pane]);
+		let after_split =
+			harness.cli_json(&["pane", "list", "--workspace", &workspace]);
+		let after_ids: Vec<&str> = after_split["result"]["panes"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.map(|item| item["pane_id"].as_str().unwrap())
+			.collect();
+		assert_eq!(after_ids, vec![pane.as_str()]);
+		assert!(!after_ids.contains(&split_pane.as_str()));
+
 		let renamed = harness.cli_json(&[
 			"workspace",
 			"rename",
@@ -817,8 +1222,7 @@ mod live {
 			.iter()
 			.map(|item| item["pane_id"].as_str().unwrap())
 			.collect();
-		assert!(ids.contains(&pane.as_str()));
-		assert!(ids.contains(&split_pane.as_str()));
+		assert_eq!(ids, vec![pane.as_str()]);
 
 		let wt = harness.cli_json(&[
 			"worktree",
@@ -972,6 +1376,49 @@ mod live {
 			group_path.exists(),
 			"workspace close must not delete the git worktree checkout"
 		);
+
+		let last = harness.create_workspace("last-pane");
+		let last_ws = last["result"]["workspace"]["workspace_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let last_pane = last["result"]["root_pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let last_split = harness.cli_json(&[
+			"pane",
+			"split",
+			&last_pane,
+			"--direction",
+			"down",
+			"--no-focus",
+		]);
+		let last_split_pane = last_split["result"]["pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		harness.cli_json(&["pane", "close", &last_split_pane]);
+		assert!(
+			j_workspace_ids(&harness).iter().any(|id| id == &last_ws),
+			"workspace must remain after closing a split pane"
+		);
+		harness.cli_json(&["pane", "close", &last_pane]);
+		assert!(
+			j_workspace_ids(&harness).iter().all(|id| id != &last_ws),
+			"closing the last pane must close the workspace"
+		);
+		let missing = harness.cli_err_json(&["pane", "get", &last_pane]);
+		assert_eq!(missing["error"]["code"], "pane_not_found");
+	}
+
+	fn j_workspace_ids(harness: &Harness) -> Vec<String> {
+		harness.cli_json(&["workspace", "list"])["result"]["workspaces"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.map(|item| item["workspace_id"].as_str().unwrap().to_string())
+			.collect()
 	}
 
 	fn wait_child(child: Child, timeout: Duration) -> Output {
@@ -982,43 +1429,5 @@ mod live {
 		rx.recv_timeout(timeout)
 			.unwrap_or_else(|_| panic!("child did not exit"))
 			.unwrap()
-	}
-
-	fn data_encoding_std_base64(value: &Value) -> Vec<u8> {
-		decode_base64(value.as_str().unwrap())
-	}
-
-	fn decode_base64(input: &str) -> Vec<u8> {
-		fn val(byte: u8) -> u8 {
-			match byte {
-				b'A'..=b'Z' => byte - b'A',
-				b'a'..=b'z' => byte - b'a' + 26,
-				b'0'..=b'9' => byte - b'0' + 52,
-				b'+' => 62,
-				b'/' => 63,
-				_ => panic!("invalid base64 byte {byte}"),
-			}
-		}
-		let bytes: Vec<u8> = input
-			.bytes()
-			.filter(|byte| !byte.is_ascii_whitespace())
-			.collect();
-		let mut out = Vec::new();
-		for chunk in bytes.chunks(4) {
-			if chunk.len() < 2 {
-				break;
-			}
-			let a = val(chunk[0]);
-			let b = val(chunk[1]);
-			out.push((a << 2) | (b >> 4));
-			if chunk.len() > 2 && chunk[2] != b'=' {
-				let c = val(chunk[2]);
-				out.push((b << 4) | (c >> 2));
-				if chunk.len() > 3 && chunk[3] != b'=' {
-					out.push((c << 6) | val(chunk[3]));
-				}
-			}
-		}
-		out
 	}
 }
