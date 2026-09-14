@@ -2,7 +2,12 @@
 
 Pinned contract for migrating 2code onto [Herdr](https://herdr.dev). Later tasks must depend on this release and the behaviors marked **verified** below. Claims from Herdr docs that this probe did not execute are marked **documented** or **unverified**.
 
-**Decision: proceed** with Herdr **v0.9.0** for Tasks 2–9 on Linux and macOS. Windows JSON control is documented; Windows live terminal attach is **unsupported** by Herdr and is tracked in [#396](https://github.com/AkaraChen/2code/issues/396) for Task 10, not as a blocker for the JSON bridge.
+**Decision: proceed** with Herdr **v0.9.0** for Tasks 2–4, 6–9, and 11–12 on Linux (executed) and macOS (Unix socket + terminal attach documented). Blocking gaps:
+
+- Task 5 on Windows: named-pipe JSON **unverified** — [#399](https://github.com/AkaraChen/2code/issues/399)
+- Task 10 on Windows: live terminal attach **unsupported** — [#396](https://github.com/AkaraChen/2code/issues/396)
+- Task 13: live agent detection **unverified** — [#398](https://github.com/AkaraChen/2code/issues/398)
+- Task 17: no create-time startup command — [#397](https://github.com/AkaraChen/2code/issues/397)
 
 Machine that executed this probe: Linux x86_64. Reproduction does not use `latest`.
 
@@ -69,15 +74,30 @@ The probe:
 1. Sets `XDG_CONFIG_HOME`, `HOME`, and `SHELL=/bin/sh` to a temp directory.
 2. Writes `onboarding = false` and a private `[worktrees].directory`.
 3. Starts `herdr --session <unique> server` in the foreground.
-4. Talks to `$XDG_CONFIG_HOME/herdr/sessions/<name>/herdr.sock`.
-5. Stops the session in `Drop` (`herdr session stop` then `kill`).
+4. Talks to `$XDG_CONFIG_HOME/herdr/sessions/<name>/herdr.sock` with a 2s socket timeout.
+5. Stops the session in `Drop` (`session stop` with a 2s bound, then `SIGKILL` if the process is still alive).
 
-Cleanup if a test is interrupted:
+Cleanup if a test is interrupted — always pass the **same isolated `XDG_CONFIG_HOME`** used to start the server, or you will stop a different session:
 
 ```bash
-herdr --session <name> session stop
-# or: kill the herdr server PID; then rm -rf the temp XDG dir
+# Isolated dirs from a hung probe (example paths):
+export XDG_CONFIG_HOME=/tmp/.tmpXXXX/xdg-config
+export HOME=/tmp/.tmpXXXX/home
+export HERDR_DISABLE_SOUND=1
+
+# Graceful stop of the named session (does not use ~/.config/herdr):
+herdr --session <name> session stop <name>
+
+# If the foreground server is still alive:
+kill -9 <pid>
+
+# Sockets and state for that session only:
+rm -f "$XDG_CONFIG_HOME/herdr/sessions/<name>/herdr.sock" \
+      "$XDG_CONFIG_HOME/herdr/sessions/<name>/herdr-client.sock"
+rm -rf /tmp/.tmpXXXX
 ```
+
+Do **not** run `herdr server stop` without `XDG_CONFIG_HOME` / `--session`; that targets the user’s default session.
 
 `herdr server` stays in the foreground. Status reports `detached_server_daemon: false` for that launch. Task 4 must spawn a detached process so GUI exit does not take the server with it. Closing CLI clients does **not** stop this server.
 
@@ -136,14 +156,16 @@ Stdout is newline-delimited JSON:
 {"type":"terminal.closed","reason":"..."}
 ```
 
-Verified frame semantics:
+**Verified** frame semantics (live probe + `tests/fixtures/herdr/frames/`):
 
-- Bytes are base64-encoded ANSI, including UTF-8 text.
-- `full: true` is a complete redraw. The payload typically starts with synchronized output (`CSI ? 2026 h`), hide-cursor, OSC 8 reset, `CSI 2 J` / `CSI 1;1 H`, then the screen. An xterm.js consumer must treat this as a replacement surface (reset/clear, then write), not as extra scrollback.
-- `full: false` is incremental output to apply on top of the current surface.
-- `seq` increases per stream. Use it for ordering; do not assume a global seq across observers.
-- The first frame after attach is `full: true` at the requested cols/rows and includes the current screen (so reconnect does not require a separate history replay API).
-- Resize (`terminal.resize`) is followed by frames at the new `width`/`height`, including a `full: true` redraw.
+- Bytes are base64-encoded ANSI. UTF-8 (`αβγ`) and SGR (`CSI 31 m` / `RED_COLOR`) appear in `terminal.frame` payloads and in `pane.read --ansi`.
+- `full: true` is a complete redraw. The payload starts with synchronized output (`CSI ?2026h`), hide-cursor, OSC 8 reset, `CSI 2J`, `CSI 1;1H`, then the screen. An xterm.js consumer must treat this as a replacement surface, not extra scrollback. Fixture: `frames/full-redraw.json`.
+- `full: false` is incremental output: cursor addressing plus new text, **no** `CSI 2J`. Apply on top of the current surface. Fixture: `frames/incremental.json`.
+- `seq` increases per stream. Do not assume a global seq across observers.
+- The first frame after attach is `full: true` at the requested cols/rows and includes the current screen.
+- Resize (`terminal.resize`) is followed by frames at the new `width`/`height`.
+- Alternate screen: `CSI ?1049h` + `CSI 2J` + `CSI H` makes `pane.read --source visible` show the alt contents (`ALT_ONLY`). `CSI ?1049l` returns to the main screen (`LEFT_ALT`).
+- DSR/DA: a pane process that writes `CSI 6n` / `CSI c` to the PTY receives replies **as PTY input**, not as `terminal.frame` bytes. Captured replies: `CSI 10;1R` (CPR) and `CSI ?62;22c` (VT220 + ANSI color). 2code must **not** also answer those queries from observe/control frames. Fixture: `frames/dsr-da.json`.
 - Control stdin commands (one JSON object per line):
 
 ```json
@@ -164,7 +186,7 @@ JSON `pane.scroll` with `offset_from_bottom` is a second, verified way to set sc
 
 Default scrollback is 10,000,000 bytes (`advanced.scrollback_limit_bytes`). Pane screen history across server restart is off (`experimental.pane_history = false`). Headless size defaults to 120×40; this probe used 80×24.
 
-Unicode in pane output was verified (`αβγ`). ANSI color sequences are present in `--ansi` reads and in `terminal.frame` bytes. Alternate-screen (`tput smcup`) was not a reliable probe here (`TERM`/capability dependent) — treat as **unverified** for Task 11. Terminal query replies (DSR/DA) were not exercised.
+`tput smcup` is **not** required; the probe used raw CSI `?1049h` / `?1049l`.
 
 ## Controller exclusivity
 
@@ -174,8 +196,8 @@ Verified:
 - A second `terminal session control` without `--takeover` exits 0 and prints `{"type":"terminal.closed","reason":"terminal attach failed: terminal term_… already has an attached client; retry with --takeover"}`.
 - `--takeover` makes the previous controller receive `{"type":"terminal.closed","reason":"terminal attach taken over"}`.
 - After `terminal.release` (or process exit), a new controller can attach without `--takeover`.
-- `observe` does not take input/resize/scroll/takeover authority. Control can run while observers exist.
-- Multiple observers of the same terminal are allowed.
+- **Verified coexistence:** an `observe` client stays connected while a `control` client owns input/resize. The observer receives `full: false` frames for later output and does not take ownership. A second `control` without `--takeover` still fails with the conflict close above.
+- Multiple observers of the same terminal are allowed (documented; two-observer attach was exercised in an earlier probe; this suite asserts observer+controller).
 
 2code must not silently take control. Task 18 should surface the conflict string and require an explicit takeover.
 
@@ -187,8 +209,10 @@ Worktree commands need a git checkout. `--cwd` / `--path` on the socket API must
 
 | Operation | Verified result |
 | --- | --- |
-| `worktree.create --branch wt/contract` | creates a git worktree under `[worktrees].directory` (`~/.herdr/worktrees` by default), opens workspace `wN` with `worktree.is_linked_worktree: true`, emits create records |
-| `worktree.open --path <existing>` | `already_open: false` the first time; preserves uncommitted files; does not recreate the checkout |
+| `workspace.create --cwd` on a dirty primary checkout | opens the existing repo; uncommitted files are preserved (not recreated) |
+| `worktree.open --path` of that primary | `already_open: true` with the **same** `workspace_id` |
+| `worktree.create --branch wt/contract` | creates a git worktree under `[worktrees].directory` (`~/.herdr/worktrees` by default), opens workspace `wN` with `worktree.is_linked_worktree: true` |
+| `worktree.open --path <external dirty worktree>` | `already_open: false` the first time; preserves uncommitted files; does not recreate the checkout |
 | `worktree.open` again | `already_open: true` with the **same** `workspace_id` / `pane_id` / `terminal_id` |
 | `worktree.create` for a branch already used | `worktree_create_failed` (git fatal: already used by worktree at …) |
 | `worktree.remove` on a dirty checkout | `dirty_worktree_requires_force`; checkout kept |
@@ -196,6 +220,8 @@ Worktree commands need a git checkout. `--cwd` / `--path` on the socket API must
 | `worktree.remove` on a clean linked worktree | deletes the checkout; keeps the branch |
 | `workspace.close` on a primary with linked worktrees open | `workspace_group_close_required` |
 | `workspace.close --group` | closes Herdr state for the group; **does not** delete git worktrees |
+| `pane.close` on a split pane | workspace remains; remaining pane ids unchanged |
+| `pane.close` on the last pane | workspace is removed; later `pane.get` is `pane_not_found` |
 
 `workspace.close` kills the pane PTY (SIGHUP). It is not “forget this project”.
 
@@ -203,10 +229,10 @@ Worktree commands need a git checkout. `--cwd` / `--path` on the socket API must
 
 | ID | Across enumerate / rename / detach | Across server restart |
 | --- | --- | --- |
-| `workspace_id` (`wN`) | stable; not the label | restored from `session.json` |
-| `tab_id` (`wN:tM`) | stable | restored |
-| `pane_id` (`wN:pK`) | stable | restored |
-| `terminal_id` (`term_<hex>`) | stable while the PTY lives | **new** (new process) |
+| `workspace_id` (`wN`) | **verified** stable; not the label | **verified** restored from `session.json` |
+| `tab_id` (`wN:tM`) | **verified** stable | **verified** restored (root tab and extra tab) |
+| `pane_id` (`wN:pK`) | **verified** stable | **verified** restored (root, split, and extra-tab panes) |
+| `terminal_id` (`term_<hex>`) | **verified** stable while the PTY lives | **verified** **new** (new process) for every restored pane |
 
 Do not key 2code records on display names. After restart, reattach by `pane_id`; expect a new `terminal_id` and an empty screen unless pane history or native agent restore applies. Restored panes are new shells in the saved cwd — not the old processes.
 
@@ -214,7 +240,7 @@ Public IDs increment for new objects in a session (`w1` closed then created beco
 
 ## External split mapping
 
-Verified: `pane.split --direction right` creates `wN:p2` with its own `terminal_id` in the same tab. `pane.layout` / `session.snapshot.layouts` include pane rects and a `splits` array (`direction`, `ratio`, `rect`).
+**Verified:** `pane.split --direction right` creates `wN:p2` with its own `terminal_id` in the same tab. `pane.layout` / `session.snapshot.layouts` include pane rects and a `splits` array (`direction`, `ratio`, `rect`). `terminal session observe` can attach to that split pane. Closing the split pane leaves the original pane and workspace; closing the last remaining pane removes the workspace (`pane_not_found` afterward). Split pane ids survive server restart with new `terminal_id`s.
 
 **Supported 2code mapping for this migration:**
 
@@ -236,36 +262,42 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | --- | --- | --- | --- | --- |
 | Release asset | **verified** (executed) | asset+checksum recorded | asset+checksum recorded | zip+checksum recorded |
 | JSON API Unix socket | **verified** | documented | documented | n/a |
-| JSON API named pipe | n/a | n/a | n/a | documented, **unverified** |
+| JSON API named pipe | n/a | n/a | n/a | documented, **unverified** ([#399](https://github.com/AkaraChen/2code/issues/399)) |
 | `herdr server` + named session | **verified** | documented | documented | documented |
 | `terminal session control/observe` | **verified** | documented | documented (Unix) | **unsupported** ([#396](https://github.com/AkaraChen/2code/issues/396)) |
-| Worktree create/open/remove | **verified** | documented | documented | documented (`--trust-repository` for other-SID repos) |
+| Full vs incremental frames | **verified** | — | — | — |
+| Unicode / SGR / alt-screen / DSR+DA | **verified** | — | — | — |
+| Worktree create/open/remove + dirty primary | **verified** | documented | documented | documented (`--trust-repository` for other-SID repos) |
 | Client disconnect keeps server | **verified** | documented | documented | documented |
-| Server restart restores layout, not processes | **verified** | documented | documented | documented |
-| Agent detection live states | API present; empty-shell `unknown` verified | unverified | unverified | unverified |
-| `live_handoff` | capability flag true; **not exercised** | — | — | — |
+| Server restart restores workspace/tab/pane ids, not processes | **verified** | documented | documented | documented |
+| Agent detection live states | empty-shell `unknown` **verified**; live CLIs **unverified** ([#398](https://github.com/AkaraChen/2code/issues/398)) | — | — | — |
+| `live_handoff` | capability flag true; **not exercised** (not required for local Tasks 2–12) | — | — | — |
 
 ## Later-task capabilities
 
 | Need | Status |
 | --- | --- |
-| Shell | Config `terminal.default_shell` (empty → `$SHELL` then `/bin/sh`). Probe set `/bin/sh` on the server process. Per-create shell via `--env` is accepted; not a first-class create field. |
-| Working directory | `--cwd` on workspace/tab/worktree create **verified**. `terminal.new_cwd = follow` when omitted. |
-| Environment | `--env KEY=VALUE` on create/split **verified** (accepted). Herdr injects `HERDR_SOCKET_PATH`, `HERDR_ENV`, `HERDR_WORKSPACE_ID`, `HERDR_TAB_ID`, `HERDR_PANE_ID`. |
-| Startup command | **Not** a `workspace.create` / `tab.create` parameter. Use `pane.run` **once after create**, never on reattach. `layout.apply` can set argv on new panes (documented; not probed). |
-| Agent state | `agent_status` on panes; `agent.list` / `pane.report_agent`. Idle shells report `unknown`. Live Claude/Codex detection **unverified** here. |
-| Subscriptions | `events.subscribe` **verified**; bootstrap = subscribe first, then `session.snapshot`, then drain buffered events (Herdr docs; subscribe+event verified). |
-| Scrollback search | `pane.read` snapshots **verified**; live search is a 2code UI concern on the xterm buffer plus `pane.read`. |
+| Shell | **Verified** to launch `/bin/sh` when the server process has `SHELL=/bin/sh` and `terminal.default_shell = "/bin/sh"`. Per-create shell is not a first-class field. |
+| Working directory | `--cwd` on workspace/tab/worktree create **verified**. `terminal.new_cwd = follow` when omitted (**documented**). |
+| Environment | `--env KEY=VALUE` on create **verified** (accepted). Herdr injects `HERDR_*` (**documented**). |
+| Startup command | **Not** a create parameter. Workaround: `pane.run` once after create. Blocking: [#397](https://github.com/AkaraChen/2code/issues/397). `layout.apply` argv is **documented**, not probed. |
+| Agent state | Idle shells **verified** `unknown`. Live agent CLIs **unverified**. Blocking for Task 13: [#398](https://github.com/AkaraChen/2code/issues/398). |
+| Subscriptions | `events.subscribe` ack + live `tab.created` **verified**. Full bootstrap race (subscribe → snapshot → drain) is **documented** by Herdr, not separately race-tested. |
+| Scrollback search | `pane.read` snapshots **verified**; live search is a 2code UI concern. |
 
 ## Gaps (not silently “passing”)
 
-Open separate issues before the named task depends on them:
+| Gap | Blocks | Issue |
+| --- | --- | --- |
+| Windows live terminal attach / `terminal session` | Task 10 on Windows | [#396](https://github.com/AkaraChen/2code/issues/396) |
+| Windows named-pipe JSON transport unverified | Task 5 on Windows | [#399](https://github.com/AkaraChen/2code/issues/399) |
+| No create-time startup command / argv on `workspace.create` / `tab.create` | Task 17 | [#397](https://github.com/AkaraChen/2code/issues/397) |
+| Live agent detection (`working`/`blocked`/`done`) unverified | Task 13 | [#398](https://github.com/AkaraChen/2code/issues/398) |
 
-1. **Windows live terminal streaming** — Herdr’s `terminal session` / direct attach is Linux/macOS only. Tracked in [#396](https://github.com/AkaraChen/2code/issues/396). Task 10 on Windows needs another design or remains experimental.
-2. **No GPG/cosign** on release assets — Task 3 should keep verifying GitHub SHA-256; signing is extra.
-3. **Alternate screen and DSR/DA** — unverified; Task 11 should add explicit fixtures.
-4. **Live agent detection** — Task 13 needs a real agent CLI; this contract only saw `unknown` shells.
-5. **`herdr server` is not a daemon** — Task 4 must detach; sidecar must not tie server lifetime to the GUI.
-6. **Startup commands** — no create-time command field; one-shot `pane.run` is the verified workaround.
+Not blocking (recorded, no issue):
 
-None of these block Task 2 (runtime boundary) or Task 5 (JSON socket client) on Linux/macOS.
+- No detached GPG/cosign on release assets — Task 3 keeps using GitHub SHA-256.
+- `herdr server` is foreground (`detached_server_daemon: false`) — **verified**. Task 4 must detach the process.
+- `live_handoff` advertised but not exercised — not required for local Tasks 2–12.
+
+None of the open issues block Task 2 (runtime boundary) or Task 5 on Linux/macOS (Unix sockets **verified**).
