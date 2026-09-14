@@ -3,11 +3,13 @@
 //! Binaries are not in git. See `docs/herdr-integration.md`.
 //!
 //! ```text
-//! cargo test -p infra --test herdr_contract -- --nocapture
+//! HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract -- --nocapture
 //! ```
 //!
-//! Override the executable with `HERDR_BIN`. Fail instead of skipping when
-//! the binary is missing by setting `HERDR_CONTRACT_REQUIRED=1`.
+//! Override the executable with `HERDR_BIN`. Live tests skip when the binary
+//! is missing unless `HERDR_CONTRACT_REQUIRED=1`.
+//!
+//! DSR/DA coverage shells out to `python3` with `termios`/`tty`.
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -15,7 +17,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 use std::{env, fs, thread};
-use uuid::Uuid;
 
 fn fixtures_dir() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/herdr")
@@ -239,10 +240,71 @@ fn frame_fixtures_encode_full_vs_incremental() {
 		.contains("must not additionally answer"));
 }
 
+/// Conservative `sockaddr_un.sun_path` bound (macOS 104; Linux 108).
+#[cfg(unix)]
+const SUN_PATH_CAP: usize = 104;
+
+#[cfg(unix)]
+fn unix_path_len(path: &Path) -> usize {
+	use std::os::unix::ffi::OsStrExt;
+	path.as_os_str().as_bytes().len()
+}
+
+#[cfg(unix)]
+fn derive_client_socket(api: &Path) -> PathBuf {
+	let stem = api.file_stem().and_then(|s| s.to_str()).unwrap_or("herdr");
+	api.with_file_name(format!("{stem}-client.sock"))
+}
+
+#[cfg(unix)]
+fn assert_socket_fits(path: &Path) {
+	let len = unix_path_len(path);
+	assert!(
+		len < SUN_PATH_CAP,
+		"Unix socket path exceeds sun_path ({len} >= {SUN_PATH_CAP}): {}",
+		path.display()
+	);
+}
+
+#[cfg(unix)]
+#[test]
+fn nested_session_sockets_under_long_tmpdir_exceed_sun_path() {
+	let tmpdir = format!("/{}", "x".repeat(70));
+	let session = format!("t{}", "a".repeat(32));
+	let api = PathBuf::from(&tmpdir)
+		.join("xdg-config/herdr/sessions")
+		.join(session)
+		.join("herdr.sock");
+	let client = api.with_file_name("herdr-client.sock");
+	assert!(
+		unix_path_len(&api) >= SUN_PATH_CAP,
+		"expected API socket {} to exceed sun_path, len {}",
+		api.display(),
+		unix_path_len(&api)
+	);
+	assert!(
+		unix_path_len(&client) >= SUN_PATH_CAP,
+		"expected client socket {} to exceed sun_path, len {}",
+		client.display(),
+		unix_path_len(&client)
+	);
+}
+
+#[cfg(unix)]
+#[test]
+fn short_override_sockets_fit_sun_path() {
+	let api = PathBuf::from("/tmp/2cdead.sock");
+	let client = derive_client_socket(&api);
+	assert_socket_fits(&api);
+	assert_socket_fits(&client);
+	assert_eq!(client, PathBuf::from("/tmp/2cdead-client.sock"));
+}
+
 #[cfg(unix)]
 mod live {
 	use super::*;
 	use std::os::unix::net::UnixStream;
+	use std::sync::atomic::{AtomicU32, Ordering};
 	use std::sync::mpsc;
 
 	const READY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -251,19 +313,20 @@ mod live {
 	const CMD_TIMEOUT: Duration = Duration::from_secs(12);
 	const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
+	static SOCK_SEQ: AtomicU32 = AtomicU32::new(1);
+
 	struct Harness {
 		bin: PathBuf,
-		session: String,
 		root: tempfile::TempDir,
 		server: Child,
 		sock: PathBuf,
+		client_sock: PathBuf,
 		repo: PathBuf,
 	}
 
 	impl Harness {
 		fn start(bin: PathBuf) -> Self {
 			let root = tempfile::tempdir().unwrap();
-			let session = format!("t{}", Uuid::new_v4().simple());
 			let xdg = root.path().join("xdg-config");
 			let home = root.path().join("home");
 			let repo = root.path().join("repo");
@@ -289,22 +352,31 @@ mod live {
 
 			init_git_repo(&repo);
 
-			let sock =
-				xdg.join("herdr/sessions").join(&session).join("herdr.sock");
+			let n = SOCK_SEQ.fetch_add(1, Ordering::Relaxed);
+			let sock = PathBuf::from(format!(
+				"/tmp/2c{:x}{:x}.sock",
+				std::process::id(),
+				n
+			));
+			let client_sock = derive_client_socket(&sock);
+			assert_socket_fits(&sock);
+			assert_socket_fits(&client_sock);
+			let _ = fs::remove_file(&sock);
+			let _ = fs::remove_file(&client_sock);
 			let log = fs::File::create(root.path().join("server.log")).unwrap();
 			let mut cmd = Command::new(&bin);
-			cmd.args(["--session", &session, "server"]);
-			apply_env(&mut cmd, root.path());
+			cmd.arg("server");
+			apply_env(&mut cmd, root.path(), &sock);
 			cmd.stdin(Stdio::null())
 				.stdout(Stdio::from(log.try_clone().unwrap()))
 				.stderr(Stdio::from(log));
 			let server = cmd.spawn().unwrap();
 			let harness = Self {
 				bin,
-				session,
 				root,
 				server,
 				sock,
+				client_sock,
 				repo,
 			};
 			harness.wait_ready();
@@ -317,9 +389,12 @@ mod live {
 				if self.server_exited() {
 					panic!("herdr server exited early:\n{}", self.server_log());
 				}
-				if let Ok(stream) = UnixStream::connect(&self.sock) {
-					let _ = stream.set_read_timeout(Some(SOCK_TIMEOUT));
-					let _ = stream.set_write_timeout(Some(SOCK_TIMEOUT));
+				let api = UnixStream::connect(&self.sock).ok();
+				let client = UnixStream::connect(&self.client_sock).ok();
+				if let (Some(api), Some(client)) = (api, client) {
+					let _ = api.set_read_timeout(Some(SOCK_TIMEOUT));
+					let _ = api.set_write_timeout(Some(SOCK_TIMEOUT));
+					drop(client);
 					return;
 				}
 				thread::sleep(Duration::from_millis(40));
@@ -343,8 +418,7 @@ mod live {
 
 		fn env_command(&self) -> Command {
 			let mut cmd = Command::new(&self.bin);
-			cmd.arg("--session").arg(&self.session);
-			apply_env(&mut cmd, self.root.path());
+			apply_env(&mut cmd, self.root.path(), &self.sock);
 			cmd
 		}
 
@@ -420,6 +494,8 @@ mod live {
 				self.repo.to_str().unwrap(),
 				"--label",
 				label,
+				"--env",
+				"CONTRACT_ENV=from_probe",
 				"--no-focus",
 			])
 		}
@@ -438,27 +514,36 @@ mod live {
 			if takeover {
 				cmd.arg("--takeover");
 			}
-			cmd.stdin(Stdio::piped())
+			let mut child = cmd
+				.stdin(Stdio::piped())
 				.stdout(Stdio::piped())
-				.stderr(Stdio::piped())
+				.stderr(Stdio::null())
 				.spawn()
-				.unwrap()
+				.unwrap();
+			thread::sleep(Duration::from_millis(80));
+			if let Ok(Some(status)) = child.try_wait() {
+				panic!(
+					"terminal session {mode} exited immediately ({status:?})\n{}",
+					self.server_log()
+				);
+			}
+			child
 		}
 
 		fn stop_server_process(&mut self) {
-			let bin = self.bin.clone();
-			let session = self.session.clone();
-			let root = self.root.path().to_path_buf();
-			let (tx, rx) = mpsc::channel();
-			thread::spawn(move || {
-				let mut cmd = Command::new(bin);
-				apply_env(&mut cmd, &root);
-				let _ = cmd
-					.args(["--session", &session, "session", "stop", &session])
-					.output();
-				let _ = tx.send(());
-			});
-			let _ = rx.recv_timeout(STOP_TIMEOUT);
+			let mut stop = self.env_command();
+			if let Ok(mut child) = stop
+				.args(["server", "stop"])
+				.stdin(Stdio::null())
+				.stdout(Stdio::null())
+				.stderr(Stdio::null())
+				.spawn()
+			{
+				if !wait_try(&mut child, STOP_TIMEOUT) {
+					let _ = child.kill();
+					let _ = wait_try(&mut child, Duration::from_secs(1));
+				}
+			}
 			let _ = self.server.kill();
 			if !wait_try(&mut self.server, STOP_TIMEOUT) {
 				let _ = Command::new("kill")
@@ -466,6 +551,8 @@ mod live {
 					.status();
 				let _ = wait_try(&mut self.server, Duration::from_secs(1));
 			}
+			let _ = fs::remove_file(&self.sock);
+			let _ = fs::remove_file(&self.client_sock);
 		}
 
 		fn restart_server(&mut self) {
@@ -477,8 +564,8 @@ mod live {
 			let log =
 				fs::File::create(self.root.path().join("server.log")).unwrap();
 			let mut cmd = Command::new(&self.bin);
-			cmd.args(["--session", &self.session, "server"]);
-			apply_env(&mut cmd, self.root.path());
+			cmd.arg("server");
+			apply_env(&mut cmd, self.root.path(), &self.sock);
 			cmd.stdin(Stdio::null())
 				.stdout(Stdio::from(log.try_clone().unwrap()))
 				.stderr(Stdio::from(log));
@@ -510,7 +597,10 @@ mod live {
 				let _ = Command::new("kill")
 					.args(["-9", &pid.to_string()])
 					.status();
-				panic!("herdr command timed out after {timeout:?}");
+				let reaped = rx.recv_timeout(Duration::from_secs(1));
+				panic!(
+					"herdr command timed out after {timeout:?}; killed pid {pid}; reap {reaped:?}"
+				);
 			}
 		}
 	}
@@ -532,14 +622,14 @@ mod live {
 		serde_json::to_string(value).unwrap()
 	}
 
-	fn apply_env(cmd: &mut Command, root: &Path) {
+	fn apply_env(cmd: &mut Command, root: &Path, sock: &Path) {
 		cmd.env("XDG_CONFIG_HOME", root.join("xdg-config"))
 			.env("XDG_STATE_HOME", root.join("xdg-state"))
 			.env("XDG_CACHE_HOME", root.join("xdg-cache"))
 			.env("HOME", root.join("home"))
 			.env("SHELL", "/bin/sh")
 			.env("HERDR_DISABLE_SOUND", "1")
-			.env_remove("HERDR_SOCKET_PATH")
+			.env("HERDR_SOCKET_PATH", sock)
 			.env_remove("HERDR_SESSION")
 			.env_remove("HERDR_CONFIG_PATH")
 			.env_remove("HERDR_CLIENT_SOCKET_PATH");
@@ -649,11 +739,12 @@ mod live {
 		let status = harness.cli_json(&["status", "--json"]);
 		assert_eq!(status["client"]["version"], "0.9.0");
 		assert_eq!(status["server"]["status"], "running");
-		assert_eq!(status["server"]["session"], harness.session);
 		assert_eq!(
 			status["server"]["socket"].as_str().unwrap(),
 			harness.sock.to_str().unwrap()
 		);
+		assert_socket_fits(&harness.sock);
+		assert_socket_fits(&harness.client_sock);
 
 		let snapshot = harness.cli_json(&["api", "snapshot"]);
 		assert_eq!(snapshot["result"]["type"], "session_snapshot");
@@ -676,6 +767,16 @@ mod live {
 			.unwrap()
 			.to_string();
 
+		harness.cli_ok(&["pane", "run", &pane, "printenv CONTRACT_ENV"]);
+		harness.cli_ok(&[
+			"pane",
+			"wait-output",
+			&pane,
+			"--match",
+			"from_probe",
+			"--timeout",
+			"5000",
+		]);
 		harness.cli_ok(&["pane", "run", &pane, "echo BEFORE_RESTART"]);
 		harness.cli_ok(&[
 			"pane",
@@ -811,7 +912,14 @@ mod live {
 			.as_str()
 			.unwrap()
 			.to_string();
-		let marker = format!("MARK_{}", &harness.session[1..7]);
+		let marker = format!(
+			"MARK_{}",
+			harness
+				.sock
+				.file_stem()
+				.and_then(|s| s.to_str())
+				.unwrap_or("x")
+		);
 		harness.cli_ok(&[
 			"pane",
 			"run",
@@ -869,6 +977,7 @@ mod live {
 			contains_bytes(&bytes, marker.as_bytes()),
 			"initial full frame should include current screen contents"
 		);
+		let first_seq = frame["seq"].as_u64().expect("seq");
 
 		let mut control = harness.spawn_terminal("control", &pane, false);
 		let ctrl_rx = json_line_reader(control.stdout.take().unwrap());
@@ -894,6 +1003,11 @@ mod live {
 			!contains_bytes(&incr_bytes, b"\x1b[2J"),
 			"incremental frames must not CSI 2J"
 		);
+		let incr_seq = incr["seq"].as_u64().expect("incr seq");
+		assert!(
+			incr_seq > first_seq,
+			"observer seq must increase: {first_seq} then {incr_seq}"
+		);
 
 		let rival = harness.spawn_terminal("control", &pane, false);
 		let rival_out = wait_child(rival, Duration::from_secs(3));
@@ -916,8 +1030,6 @@ mod live {
 			});
 		assert_eq!(taken["reason"], "terminal attach taken over");
 		let _ = wait_try(&mut control, STOP_TIMEOUT);
-		let _ = observe.kill();
-		let _ = wait_try(&mut observe, STOP_TIMEOUT);
 
 		let take_rx = json_line_reader(takeover.stdout.take().unwrap());
 		let _ = wait_frame(&take_rx, FRAME_TIMEOUT);
@@ -957,9 +1069,28 @@ mod live {
 				&& frame["height"] == 28
 		});
 		assert_eq!(resized["width"], 90);
+		let resize_seq = resized["seq"].as_u64().unwrap_or(0);
+		assert!(resize_seq > incr_seq || resized["full"] == true);
 
 		harness.cli_ok(&["pane", "run", &pane, "seq 1 80"]);
-		thread::sleep(Duration::from_millis(300));
+		let _ = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
+			frame["type"] == "terminal.frame"
+				&& contains_bytes(
+					&decode_base64(frame["bytes"].as_str().unwrap_or("")),
+					b"80",
+				)
+		});
+		{
+			let stdin = takeover.stdin.as_mut().unwrap();
+			writeln!(
+				stdin,
+				"{}",
+				json!({"type":"terminal.scroll","direction":"up","lines":5})
+			)
+			.unwrap();
+			stdin.flush().unwrap();
+		}
+		let _ = wait_frame(&obs_rx, FRAME_TIMEOUT);
 		let scrolled = harness.rpc(
 			"sc1",
 			"pane.scroll",
@@ -969,28 +1100,20 @@ mod live {
 			scrolled["result"]["pane"]["scroll"]["offset_from_bottom"],
 			5
 		);
-
-		{
-			let stdin = takeover.stdin.as_mut().unwrap();
-			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
-			stdin.flush().unwrap();
-		}
-		let _ = wait_frame_matching(&take_rx, FRAME_TIMEOUT, |frame| {
-			frame["type"] == "terminal.closed"
-		});
-		let _ = wait_try(&mut takeover, STOP_TIMEOUT);
-
-		let mut reconnect = harness.spawn_terminal("control", &pane, false);
-		let recon_rx = json_line_reader(reconnect.stdout.take().unwrap());
-		let again = wait_frame(&recon_rx, FRAME_TIMEOUT);
-		assert_eq!(again["type"], "terminal.frame");
-		assert_eq!(again["full"], true);
-		{
-			let stdin = reconnect.stdin.as_mut().unwrap();
-			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
-			stdin.flush().unwrap();
-		}
-		let _ = wait_try(&mut reconnect, STOP_TIMEOUT);
+		let vis = harness.cli_ok(&[
+			"pane", "read", &pane, "--source", "visible", "--lines", "40",
+		]);
+		let vis_text = String::from_utf8_lossy(&vis.stdout);
+		let last = vis_text
+			.lines()
+			.rev()
+			.find(|line| !line.trim().is_empty())
+			.unwrap_or("");
+		assert_ne!(
+			last.trim(),
+			"80",
+			"scrolled visible snapshot should not still be at the bottom: {vis_text:?}"
+		);
 
 		harness.cli_ok(&[
 			"pane",
@@ -1016,6 +1139,14 @@ mod live {
 			String::from_utf8_lossy(&in_alt.stdout).contains("ALT_ONLY"),
 			"visible snapshot must show alternate-screen contents"
 		);
+		let alt_frame = wait_frame_matching(&obs_rx, FRAME_TIMEOUT, |frame| {
+			frame["type"] == "terminal.frame"
+				&& contains_bytes(
+					&decode_base64(frame["bytes"].as_str().unwrap_or("")),
+					b"ALT_ONLY",
+				)
+		});
+		assert_eq!(alt_frame["type"], "terminal.frame");
 		harness.cli_ok(&[
 			"pane",
 			"run",
@@ -1032,6 +1163,14 @@ mod live {
 			"5000",
 		]);
 
+		assert!(
+			Command::new("python3")
+				.args(["-c", "import termios, tty"])
+				.status()
+				.map(|status| status.success())
+				.unwrap_or(false),
+			"python3 with termios/tty is required; see docs/herdr-integration.md"
+		);
 		let dsr_py = harness.repo.join("dsr.py");
 		fs::write(
 			&dsr_py,
@@ -1115,6 +1254,14 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			da_text.contains("DA_RAW=b'\\x1b[?") && da_text.contains("c'"),
 			"Herdr must answer CSI c as PTY input DA: {da_text}"
 		);
+		{
+			let stdin = takeover.stdin.as_mut().unwrap();
+			writeln!(stdin, "{}", json!({"type":"terminal.release"})).unwrap();
+			stdin.flush().unwrap();
+		}
+		let _ = wait_try(&mut takeover, STOP_TIMEOUT);
+		let _ = observe.kill();
+		let _ = wait_try(&mut observe, STOP_TIMEOUT);
 	}
 
 	#[test]
@@ -1163,6 +1310,33 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 			.unwrap()
 			.to_string();
 
+		let mut sub = UnixStream::connect(&harness.sock).unwrap();
+		sub.set_read_timeout(Some(SOCK_TIMEOUT)).unwrap();
+		sub.set_write_timeout(Some(SOCK_TIMEOUT)).unwrap();
+		writeln!(
+			sub,
+			"{}",
+			json!({
+				"id": "sub",
+				"method": "events.subscribe",
+				"params": {
+					"subscriptions": [
+						{"type": "pane.created"},
+						{"type": "pane.closed"},
+						{"type": "layout.updated"}
+					]
+				}
+			})
+		)
+		.unwrap();
+		let mut events = BufReader::new(sub);
+		let mut ack = String::new();
+		events.read_line(&mut ack).unwrap();
+		assert_eq!(
+			serde_json::from_str::<Value>(&ack).unwrap()["result"]["type"],
+			"subscription_started"
+		);
+
 		let split = harness.cli_json(&[
 			"pane",
 			"split",
@@ -1187,6 +1361,35 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		let splits = layout_obj["splits"].as_array().unwrap();
 		assert!(!splits.is_empty(), "external split must appear in layout");
 
+		let mut saw_pane_created = false;
+		let mut saw_layout_updated = false;
+		for _ in 0..8 {
+			let mut line = String::new();
+			if events.read_line(&mut line).unwrap_or(0) == 0 {
+				break;
+			}
+			let event: Value = serde_json::from_str(&line).unwrap();
+			match event["event"].as_str() {
+				Some("pane_created") => {
+					assert_eq!(event["data"]["pane"]["pane_id"], split_pane);
+					saw_pane_created = true;
+				}
+				Some("layout_updated") => saw_layout_updated = true,
+				_ => {}
+			}
+			if saw_pane_created && saw_layout_updated {
+				break;
+			}
+		}
+		assert!(
+			saw_pane_created,
+			"split must emit pane.created / pane_created"
+		);
+		assert!(
+			saw_layout_updated,
+			"split must emit layout.updated / layout_updated"
+		);
+
 		let mut split_obs =
 			harness.spawn_terminal("observe", &split_pane, false);
 		let split_rx = json_line_reader(split_obs.stdout.take().unwrap());
@@ -1196,6 +1399,22 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		let _ = split_obs.kill();
 		let _ = wait_try(&mut split_obs, STOP_TIMEOUT);
 		harness.cli_json(&["pane", "close", &split_pane]);
+		let mut saw_pane_closed = false;
+		for _ in 0..8 {
+			let mut line = String::new();
+			if events.read_line(&mut line).unwrap_or(0) == 0 {
+				break;
+			}
+			let event: Value = serde_json::from_str(&line).unwrap();
+			if event["event"] == "pane_closed" {
+				saw_pane_closed = true;
+				break;
+			}
+		}
+		assert!(
+			saw_pane_closed,
+			"closing a split pane must emit pane.closed / pane_closed"
+		);
 		let after_split =
 			harness.cli_json(&["pane", "list", "--workspace", &workspace]);
 		let after_ids: Vec<&str> = after_split["result"]["panes"]
