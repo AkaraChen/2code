@@ -88,6 +88,23 @@ pub struct HerdrTerminalFrame {
 	pub bytes: Vec<u8>,
 }
 
+/// Application scroll request. Converted to CLI `terminal.scroll` in
+/// the Herdr helper; `lines` must be `> 0`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalScrollDirection {
+	Up,
+	Down,
+}
+
+/// Whether the GUI scroll came from a wheel or a page key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalScrollSource {
+	Wheel,
+	PageKey,
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -154,5 +171,17 @@ mod tests {
 		assert!(json.get("type").is_none());
 		assert!(json.get("encoding").is_none());
 		assert!(json.get("bytes").is_some());
+	}
+
+	#[test]
+	fn scroll_enums_serialize_without_cli_wire_fields() {
+		assert_eq!(
+			serde_json::to_value(TerminalScrollDirection::Up).unwrap(),
+			"up"
+		);
+		assert_eq!(
+			serde_json::to_value(TerminalScrollSource::PageKey).unwrap(),
+			"pageKey"
+		);
 	}
 }

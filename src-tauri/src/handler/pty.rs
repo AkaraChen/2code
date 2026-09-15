@@ -6,7 +6,10 @@ use crate::bridge::{
 };
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
-use model::runtime::{HerdrTerminalFrame, RuntimeBackend};
+use model::runtime::{
+	HerdrTerminalFrame, RuntimeBackend, TerminalScrollDirection,
+	TerminalScrollSource,
+};
 use service::runtime::{RuntimeHandle, TerminalRuntime};
 
 #[tauri::command]
@@ -42,6 +45,18 @@ pub fn resize_pty(
 	cols: u16,
 ) -> Result<(), AppError> {
 	runtime.resize(&session_id, rows, cols)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn scroll_pty(
+	runtime: State<'_, RuntimeHandle>,
+	session_id: String,
+	direction: TerminalScrollDirection,
+	lines: u16,
+	source: TerminalScrollSource,
+) -> Result<(), AppError> {
+	runtime.scroll(&session_id, direction, lines, source)
 }
 
 #[tauri::command]

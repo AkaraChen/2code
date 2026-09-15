@@ -826,6 +826,22 @@ impl TerminalRuntime for HerdrStubAdapter {
 		Err(self.fail("clear"))
 	}
 
+	fn scroll(
+		&self,
+		session_id: &str,
+		direction: model::runtime::TerminalScrollDirection,
+		lines: u16,
+		source: model::runtime::TerminalScrollSource,
+	) -> Result<(), AppError> {
+		self.record("scroll");
+		if self.cli.is_none() {
+			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+		}
+		self.helper_for(session_id)?
+			.scroll(direction, lines, source)
+			.map_err(AppError::from)
+	}
+
 	fn attach_output(
 		&self,
 		session_id: &str,
@@ -1550,6 +1566,15 @@ time.sleep(30)
 			.is_err());
 		assert!(fx.adapter.flush(&created.session_id).is_err());
 		assert!(fx.adapter.clear(&created.session_id).is_err());
+		assert!(fx
+			.adapter
+			.scroll(
+				&created.session_id,
+				model::runtime::TerminalScrollDirection::Up,
+				1,
+				model::runtime::TerminalScrollSource::Wheel,
+			)
+			.is_err());
 		assert!(!fx.fake.calls().iter().any(|m| m.contains("send")));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
@@ -1574,6 +1599,14 @@ time.sleep(30)
 		assert_eq!(frame.bytes, b"a");
 		fx.adapter.write(&created.session_id, b"echo hi\n").unwrap();
 		fx.adapter.resize(&created.session_id, 24, 90).unwrap();
+		fx.adapter
+			.scroll(
+				&created.session_id,
+				model::runtime::TerminalScrollDirection::Up,
+				2,
+				model::runtime::TerminalScrollSource::Wheel,
+			)
+			.unwrap();
 		std::thread::sleep(std::time::Duration::from_millis(120));
 		fx.adapter
 			.detach_output(&created.session_id, "stream-a")
@@ -1587,8 +1620,11 @@ time.sleep(30)
 		let stdin = fx.stdin_log();
 		assert!(stdin.contains("terminal.input"), "{stdin}");
 		assert!(stdin.contains("terminal.resize"), "{stdin}");
+		assert!(stdin.contains("terminal.scroll"), "{stdin}");
+		assert!(stdin.contains("\"lines\":2"), "{stdin}");
 		assert!(stdin.contains("terminal.release"), "{stdin}");
 		assert!(!stdin.contains("pane.close"), "{stdin}");
+		assert!(!stdin.contains("pane.read"), "{stdin}");
 		assert_eq!(fx.fake.pane_close_calls(), 0);
 		assert!(fx.adapter.history(&created.session_id).is_err());
 		assert!(fx.adapter.flush(&created.session_id).is_err());
@@ -1737,10 +1773,12 @@ time.sleep(30)
 		assert!(pty.contains("stream_herdr_output"));
 		assert!(pty.contains("HerdrTerminalFrame"));
 		assert!(pty.contains("get_session_backend"));
+		assert!(pty.contains("scroll_pty"));
 		assert!(!pty.contains("pane.send_text"));
 		let lib = include_str!("../../../../src/lib.rs");
 		assert!(lib.contains("stream_herdr_output"));
 		assert!(lib.contains("get_session_backend"));
+		assert!(lib.contains("scroll_pty"));
 		assert!(lib.contains("release_attachments"));
 		assert!(!lib.contains("server.stop"));
 		assert!(!lib.contains("ensure_herdr_listener"));

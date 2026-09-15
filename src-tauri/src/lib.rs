@@ -81,6 +81,7 @@ pub fn run() {
 			handler::pty::create_pty_session,
 			handler::pty::write_to_pty,
 			handler::pty::resize_pty,
+			handler::pty::scroll_pty,
 			handler::pty::close_pty_session,
 			handler::pty::list_project_sessions,
 			handler::pty::get_pty_session_history,

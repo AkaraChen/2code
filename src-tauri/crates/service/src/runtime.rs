@@ -82,6 +82,16 @@ pub trait TerminalRuntime: Send + Sync {
 
 	fn clear(&self, session_id: &str) -> Result<(), AppError>;
 
+	fn scroll(
+		&self,
+		_session_id: &str,
+		_direction: model::runtime::TerminalScrollDirection,
+		_lines: u16,
+		_source: model::runtime::TerminalScrollSource,
+	) -> Result<(), AppError> {
+		Ok(())
+	}
+
 	fn attach_output(
 		&self,
 		_session_id: &str,
@@ -446,6 +456,18 @@ impl TerminalRuntime for RuntimeRouter {
 	fn clear(&self, session_id: &str) -> Result<(), AppError> {
 		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).clear(session_id)
+	}
+
+	fn scroll(
+		&self,
+		session_id: &str,
+		direction: model::runtime::TerminalScrollDirection,
+		lines: u16,
+		source: model::runtime::TerminalScrollSource,
+	) -> Result<(), AppError> {
+		let backend = self.route_backend(session_id)?;
+		self.adapter(backend)
+			.scroll(session_id, direction, lines, source)
 	}
 
 	fn attach_output(

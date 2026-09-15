@@ -339,6 +339,33 @@ impl TerminalSessionHelper {
 		}))
 	}
 
+	pub fn scroll(
+		&self,
+		direction: model::runtime::TerminalScrollDirection,
+		lines: u16,
+		source: model::runtime::TerminalScrollSource,
+	) -> Result<(), HerdrTerminalError> {
+		if lines == 0 {
+			return Err(HerdrTerminalError::InvalidInput(
+				"scroll lines must be > 0".into(),
+			));
+		}
+		let direction = match direction {
+			model::runtime::TerminalScrollDirection::Up => "up",
+			model::runtime::TerminalScrollDirection::Down => "down",
+		};
+		let source = match source {
+			model::runtime::TerminalScrollSource::Wheel => "wheel",
+			model::runtime::TerminalScrollSource::PageKey => "page_key",
+		};
+		self.write_stdin(&serde_json::json!({
+			"type": "terminal.scroll",
+			"direction": direction,
+			"lines": lines,
+			"source": source,
+		}))
+	}
+
 	pub fn release(&self) -> Result<(), HerdrTerminalError> {
 		if self.released.swap(true, Ordering::SeqCst) {
 			return Ok(());
@@ -1112,6 +1139,52 @@ if (fake / "stay").exists():
 		assert!(stdin.contains(r#""type":"terminal.release""#), "{stdin}");
 		assert!(!stdin.contains("pane.close"), "{stdin}");
 		assert!(!fx.args().contains("pane.close"));
+	}
+
+	#[test]
+	fn scroll_writes_cli_terminal_scroll_not_pane_read() {
+		let fx = Fixture::new();
+		fx.set_flag("stay");
+		fx.write_frames(
+			r#"{"type":"terminal.frame","seq":1,"encoding":"ansi","width":80,"height":24,"full":true,"bytes":"YQ=="}
+"#,
+		);
+		let env = fx.env();
+		let helper = attach(&fx, &env, BufferLimits::default());
+		helper
+			.scroll(
+				model::runtime::TerminalScrollDirection::Up,
+				2,
+				model::runtime::TerminalScrollSource::Wheel,
+			)
+			.unwrap();
+		helper
+			.scroll(
+				model::runtime::TerminalScrollDirection::Down,
+				24,
+				model::runtime::TerminalScrollSource::PageKey,
+			)
+			.unwrap();
+		let zero = helper
+			.scroll(
+				model::runtime::TerminalScrollDirection::Up,
+				0,
+				model::runtime::TerminalScrollSource::Wheel,
+			)
+			.unwrap_err();
+		assert!(zero.to_string().contains("> 0"), "{zero}");
+		thread::sleep(Duration::from_millis(150));
+		helper.release().unwrap();
+		thread::sleep(Duration::from_millis(150));
+		let stdin = fx.stdin_log();
+		assert!(stdin.contains(r#""type":"terminal.scroll""#), "{stdin}");
+		assert!(stdin.contains(r#""direction":"up""#), "{stdin}");
+		assert!(stdin.contains(r#""lines":2"#), "{stdin}");
+		assert!(stdin.contains(r#""source":"wheel""#), "{stdin}");
+		assert!(stdin.contains(r#""source":"page_key""#), "{stdin}");
+		assert!(!stdin.contains("pageKey"), "{stdin}");
+		assert!(!stdin.contains("pane.read"), "{stdin}");
+		assert!(!stdin.contains("pane.scroll"), "{stdin}");
 	}
 
 	fn fixture_record(name: &str) -> Value {
