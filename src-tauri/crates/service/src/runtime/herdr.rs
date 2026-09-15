@@ -21,6 +21,7 @@ use infra::herdr::terminal::{
 use infra::herdr::transport::{
 	HerdrClient, PaneView, TabCreateResult, WorktreeCreateRequest,
 	WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
+	WorktreeRemoveResult,
 };
 use model::error::AppError;
 use model::pty::{
@@ -60,8 +61,8 @@ pub trait HerdrTerminalClient: Send + Sync {
 	fn session_snapshot(&self) -> Result<Value, AppError>;
 }
 
-/// JSON worktree create/list/open used by Herdr-selected profile create.
-/// Implementors must not auto-replay `worktree.create`.
+/// JSON worktree create/list/open/remove used by Herdr profile lifecycle.
+/// Implementors must not auto-replay `worktree.create` or `worktree.remove`.
 pub trait HerdrWorktreeClient: Send + Sync {
 	fn worktree_create(
 		&self,
@@ -79,6 +80,12 @@ pub trait HerdrWorktreeClient: Send + Sync {
 		cwd: &Path,
 		path: &Path,
 	) -> Result<WorktreeOpenResult, AppError>;
+
+	fn worktree_remove(
+		&self,
+		workspace_id: &str,
+		force: bool,
+	) -> Result<WorktreeRemoveResult, AppError>;
 
 	fn session_snapshot(&self) -> Result<Value, AppError>;
 }
@@ -149,6 +156,16 @@ impl HerdrWorktreeClient for HerdrJsonTerminals {
 		path: &Path,
 	) -> Result<WorktreeOpenResult, AppError> {
 		self.client.worktree_open(cwd, path).map_err(AppError::from)
+	}
+
+	fn worktree_remove(
+		&self,
+		workspace_id: &str,
+		force: bool,
+	) -> Result<WorktreeRemoveResult, AppError> {
+		self.client
+			.worktree_remove(workspace_id, force)
+			.map_err(AppError::from)
 	}
 
 	fn session_snapshot(&self) -> Result<Value, AppError> {
@@ -1901,7 +1918,20 @@ time.sleep(30)
 		assert!(!create_session.contains("worktree.create"));
 		assert!(!create_session.contains("worktree.open"));
 		assert!(!create_session.contains("workspace.create"));
-		assert!(!src.contains("worktree.remove"));
+		assert!(!create_session.contains("worktree.remove"));
+		assert!(!create_session.contains("worktree_remove"));
+		let close_session = src
+			.split("fn close_session")
+			.nth(1)
+			.unwrap()
+			.split("fn finish_close")
+			.next()
+			.unwrap();
+		assert!(!close_session.contains("worktree.remove"));
+		assert!(!close_session.contains("worktree_remove"));
+		assert!(
+			src.contains("worktree.remove") || src.contains("worktree_remove")
+		);
 		assert!(!src.contains("workspace.create"));
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("server.stop"));

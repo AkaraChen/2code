@@ -1062,7 +1062,9 @@ mod tests {
 	use diesel::Connection;
 	use diesel::RunQueryDsl;
 	use diesel_migrations::MigrationHarness;
-	use infra::herdr::transport::{WorktreeListEntry, WorktreeOpenResult};
+	use infra::herdr::transport::{
+		WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
+	};
 	use model::runtime::RuntimeBackend;
 	use serde_json::json;
 	use std::path::Path;
@@ -1415,12 +1417,21 @@ mod tests {
 		label: Option<String>,
 	}
 
+	#[derive(Clone)]
+	struct RecordedRemove {
+		workspace_id: String,
+		force: bool,
+	}
+
 	struct FakeWorktreeState {
 		methods: Vec<String>,
 		creates: Vec<RecordedCreate>,
+		removes: Vec<RecordedRemove>,
 		create_error: Option<AppError>,
+		remove_error: Option<AppError>,
 		list_error: Option<AppError>,
 		land_on_error: bool,
+		dirty: bool,
 		listed: Vec<WorktreeListEntry>,
 		snapshot: serde_json::Value,
 		next_workspace: u32,
@@ -1436,9 +1447,12 @@ mod tests {
 				state: Mutex::new(FakeWorktreeState {
 					methods: Vec::new(),
 					creates: Vec::new(),
+					removes: Vec::new(),
 					create_error: None,
+					remove_error: None,
 					list_error: None,
 					land_on_error: false,
+					dirty: false,
 					listed: Vec::new(),
 					snapshot: json!({
 						"type": "session_snapshot",
@@ -1466,6 +1480,19 @@ mod tests {
 				cwd: last.cwd.clone(),
 				workspace_id: last.workspace_id.clone(),
 				label: last.label.clone(),
+			}
+		}
+
+		fn removes(&self) -> Vec<RecordedRemove> {
+			self.state.lock().unwrap().removes.clone()
+		}
+
+		fn last_remove(&self) -> RecordedRemove {
+			let state = self.state.lock().unwrap();
+			let last = state.removes.last().expect("remove recorded");
+			RecordedRemove {
+				workspace_id: last.workspace_id.clone(),
+				force: last.force,
 			}
 		}
 	}
@@ -1547,11 +1574,69 @@ mod tests {
 			})
 		}
 
+		fn worktree_remove(
+			&self,
+			workspace_id: &str,
+			force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.remove".into());
+			state.removes.push(RecordedRemove {
+				workspace_id: workspace_id.to_string(),
+				force,
+			});
+			if let Some(err) = state.remove_error.take() {
+				if state.land_on_error {
+					let _ =
+						apply_listed_remove(&mut state, workspace_id, force);
+				}
+				return Err(err);
+			}
+			apply_listed_remove(&mut state, workspace_id, force)
+		}
+
 		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("session.snapshot".into());
 			Ok(state.snapshot.clone())
 		}
+	}
+
+	fn apply_listed_remove(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+		force: bool,
+	) -> Result<WorktreeRemoveResult, AppError> {
+		let index = state.listed.iter().position(|entry| {
+			entry.workspace_id.as_deref() == Some(workspace_id)
+		});
+		let Some(index) = index else {
+			return Ok(WorktreeRemoveResult {
+				workspace_id: workspace_id.to_string(),
+				path: String::new(),
+				forced: force,
+			});
+		};
+		if !state.listed[index].is_linked_worktree {
+			return Err(AppError::HerdrTransport(
+				"refusing worktree.remove of a primary checkout".into(),
+			));
+		}
+		if state.dirty && !force {
+			return Err(AppError::HerdrTransport(
+				"dirty_worktree_requires_force".into(),
+			));
+		}
+		let path = state.listed[index].path.clone();
+		state.listed.remove(index);
+		if !path.is_empty() {
+			let _ = std::fs::remove_dir_all(&path);
+		}
+		Ok(WorktreeRemoveResult {
+			workspace_id: workspace_id.to_string(),
+			path,
+			forced: force,
+		})
 	}
 
 	fn git_worktree_list(dir: &Path) -> String {
@@ -1606,6 +1691,42 @@ mod tests {
 
 	fn pool_from(conn: SqliteConnection) -> DbPool {
 		Arc::new(Mutex::new(conn))
+	}
+
+	#[test]
+	fn herdr_worktree_client_records_remove_without_replay() {
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: "/tmp/herdr-wt".into(),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+			state.dirty = true;
+		}
+		let err = fake.worktree_remove("w2", false).unwrap_err();
+		assert!(
+			err.to_string().contains("dirty_worktree_requires_force"),
+			"{err}"
+		);
+		assert_eq!(fake.removes().len(), 1);
+		assert!(!fake.last_remove().force);
+		assert_eq!(
+			fake.methods()
+				.iter()
+				.filter(|m| *m == "worktree.remove")
+				.count(),
+			1
+		);
+		fake.worktree_remove("w2", true).unwrap();
+		assert_eq!(fake.removes().len(), 2);
+		assert!(fake.last_remove().force);
+		assert!(fake
+			.worktree_list(Some(Path::new("/tmp")), None)
+			.unwrap()
+			.is_empty());
 	}
 
 	#[test]
