@@ -4523,6 +4523,7 @@ dependencies = [
  "model",
  "notify",
  "repo",
+ "serde_json",
  "tempfile",
  "tracing",
  "uuid",
