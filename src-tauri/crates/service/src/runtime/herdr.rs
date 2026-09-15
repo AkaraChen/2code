@@ -1,7 +1,10 @@
 //! Herdr terminal lifecycle and live CLI attach.
 //!
 //! Create/list/close use pane identities when a client is injected.
-//! Write/resize go through an attached CLI control helper.
+//! Create binds `cwd` on `tab.create` and may inject `init_script` plus
+//! `startup_commands` once via `pane.send_input`. List/restore/close never
+//! replay that input. Write/resize go through an attached CLI control
+//! helper.
 //! Restore stays fail-closed: reopen lists Bound panes from the
 //! namespace snapshot and attaches them. History/flush/clear stay
 //! fail-closed. A missing
@@ -58,6 +61,12 @@ pub trait HerdrTerminalClient: Send + Sync {
 	fn pane_get(&self, pane_id: &str) -> Result<Option<PaneView>, AppError>;
 
 	fn pane_close(&self, pane_id: &str) -> Result<(), AppError>;
+
+	fn pane_send_input(
+		&self,
+		pane_id: &str,
+		text: &str,
+	) -> Result<(), AppError>;
 
 	fn session_snapshot(&self) -> Result<Value, AppError>;
 }
@@ -124,6 +133,16 @@ impl HerdrTerminalClient for HerdrJsonTerminals {
 
 	fn pane_close(&self, pane_id: &str) -> Result<(), AppError> {
 		self.client.pane_close(pane_id).map_err(AppError::from)
+	}
+
+	fn pane_send_input(
+		&self,
+		pane_id: &str,
+		text: &str,
+	) -> Result<(), AppError> {
+		self.client
+			.pane_send_input(pane_id, text)
+			.map_err(AppError::from)
 	}
 
 	fn session_snapshot(&self) -> Result<Value, AppError> {
@@ -496,6 +515,24 @@ fn same_checkout_path(left: &Path, right: &Path) -> bool {
 	}
 }
 
+fn startup_input_text(
+	init_script: &[String],
+	startup_commands: &[String],
+) -> Option<String> {
+	let commands: Vec<&str> = init_script
+		.iter()
+		.chain(startup_commands.iter())
+		.map(String::as_str)
+		.filter(|command| !command.is_empty())
+		.collect();
+	if commands.is_empty() {
+		return None;
+	}
+	let mut text = commands.join("\n");
+	text.push('\n');
+	Some(text)
+}
+
 fn new_unbound_panes<'a>(
 	before: &[PaneView],
 	after: &'a [PaneView],
@@ -650,6 +687,40 @@ impl HerdrLifecycle {
 		})
 	}
 
+	fn project_init_script(&self, profile_id: &str) -> Vec<String> {
+		let folder = self.with_db(|conn| {
+			let profile = repo::profile::find_by_id(conn, profile_id)?;
+			repo::profile::get_project_folder(conn, &profile.project_id)
+		});
+		let Ok(folder) = folder else {
+			return Vec::new();
+		};
+		infra::config::load_project_config(&folder)
+			.map(|config| config.init_script)
+			.unwrap_or_default()
+	}
+
+	fn send_create_startup(
+		&self,
+		meta: &PtySessionMeta,
+		config: &PtyConfig,
+		pane_id: &str,
+	) {
+		let init_script = self.project_init_script(&meta.profile_id);
+		let Some(text) =
+			startup_input_text(&init_script, &config.startup_commands)
+		else {
+			return;
+		};
+		if let Err(err) = self.client.pane_send_input(pane_id, &text) {
+			tracing::warn!(
+				target: "herdr",
+				pane_id,
+				"failed to inject startup commands: {err}"
+			);
+		}
+	}
+
 	fn persist_session(
 		&self,
 		meta: &PtySessionMeta,
@@ -695,7 +766,10 @@ impl HerdrLifecycle {
 		close_on_bind_failure: bool,
 	) -> Result<CreateSessionResult, AppError> {
 		match self.persist_session(meta, config, workspace_id, pane_id) {
-			Ok(created) => Ok(created),
+			Ok(created) => {
+				self.send_create_startup(meta, config, pane_id);
+				Ok(created)
+			}
 			Err(err) => {
 				if close_on_bind_failure {
 					let _ = self.client.pane_close(pane_id);
@@ -1074,9 +1148,11 @@ mod tests {
 		pane_agent: HashMap<String, (Option<String>, Option<String>)>,
 		tab_create_calls: usize,
 		pane_close_calls: usize,
+		send_input_calls: Vec<(String, String)>,
 		methods: Vec<String>,
 		create_error: Option<AppError>,
 		close_error: Option<AppError>,
+		send_input_error: Option<AppError>,
 		create_lands: bool,
 		close_lands: bool,
 		already_open_create: bool,
@@ -1112,9 +1188,11 @@ mod tests {
 					pane_agent: HashMap::new(),
 					tab_create_calls: 0,
 					pane_close_calls: 0,
+					send_input_calls: Vec::new(),
 					methods: Vec::new(),
 					create_error: None,
 					close_error: None,
+					send_input_error: None,
 					create_lands: false,
 					close_lands: false,
 					already_open_create: false,
@@ -1135,6 +1213,10 @@ mod tests {
 
 		fn last_tab_create_cwd(&self) -> Option<String> {
 			self.state.lock().unwrap().last_tab_create_cwd.clone()
+		}
+
+		fn send_input_calls(&self) -> Vec<(String, String)> {
+			self.state.lock().unwrap().send_input_calls.clone()
 		}
 
 		fn pane_close_calls(&self) -> usize {
@@ -1276,6 +1358,22 @@ mod tests {
 				return Err(err);
 			}
 			remove_pane(&mut state.panes, pane_id);
+			Ok(())
+		}
+
+		fn pane_send_input(
+			&self,
+			pane_id: &str,
+			text: &str,
+		) -> Result<(), AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("pane.send_input".into());
+			state
+				.send_input_calls
+				.push((pane_id.to_string(), text.to_string()));
+			if let Some(err) = state.send_input_error.take() {
+				return Err(err);
+			}
 			Ok(())
 		}
 
@@ -1635,6 +1733,13 @@ time.sleep(30)
 			.unwrap();
 		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert!(fx.fake.send_input_calls().is_empty());
+		let row = {
+			let mut conn = fx.db.lock().unwrap();
+			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
+		};
+		assert_eq!(row.shell, "/bin/sh");
+		assert_eq!(row.cwd, fx.config().cwd);
 		assert!(fx.fake.calls().contains(&"pane.list".to_string()));
 		assert!(!fx.fake.calls().contains(&"tab.create".to_string()));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
@@ -1661,6 +1766,7 @@ time.sleep(30)
 			Some(expected_cwd.as_str())
 		);
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
+		assert!(fx.fake.send_input_calls().is_empty());
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
@@ -1707,6 +1813,139 @@ time.sleep(30)
 		assert!(err.to_string().contains("absolute"), "{err}");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		assert!(fx.fake.send_input_calls().is_empty());
+	}
+
+	#[test]
+	fn startup_commands_send_input_once_with_trailing_newline() {
+		let fx = Fixture::new();
+		std::fs::write(
+			fx.cwd.path().join("2code.json"),
+			r#"{"init_script":["echo init"]}"#,
+		)
+		.unwrap();
+		let mut config = fx.config();
+		config.startup_commands = vec!["echo start".into()];
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(
+			fx.fake.send_input_calls(),
+			vec![("w1:p1".into(), "echo init\necho start\n".into())]
+		);
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert_eq!(listed.len(), 1);
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+		assert!(fx
+			.adapter
+			.restore_session(&created.session_id, &Fixture::meta(), &config)
+			.is_err());
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+		fx.adapter.close_session(&created.session_id).unwrap();
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+	}
+
+	#[test]
+	fn root_reuse_with_startup_still_sends_once() {
+		let fx = Fixture::new();
+		let mut config = fx.config();
+		config.startup_commands = vec!["bun dev".into()];
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(
+			fx.fake.send_input_calls(),
+			vec![("w1:p1".into(), "bun dev\n".into())]
+		);
+	}
+
+	#[test]
+	fn subdirectory_startup_sends_after_tab_create() {
+		let fx = Fixture::new();
+		let sub = fx.cwd.path().join("pkg");
+		std::fs::create_dir_all(&sub).unwrap();
+		let mut config = fx.config();
+		config.cwd = sub.to_string_lossy().into_owned();
+		config.startup_commands = vec!["npm test".into()];
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(
+			fx.fake.send_input_calls(),
+			vec![("w1:p2".into(), "npm test\n".into())]
+		);
+	}
+
+	#[test]
+	fn list_flatten_does_not_send_input() {
+		let fx = Fixture::new();
+		let mut config = fx.config();
+		config.startup_commands = vec!["echo once".into()];
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+		fx.fake.push_pane(PaneView {
+			pane_id: "w1:p2".into(),
+			tab_id: "w1:t1".into(),
+			workspace_id: "w1".into(),
+		});
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert_eq!(listed.len(), 2);
+		assert!(listed
+			.iter()
+			.any(|session| session.id == created.session_id));
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+		assert!(!fx.fake.calls().iter().any(|m| m == "tab.create"));
+	}
+
+	#[test]
+	fn uncertain_send_input_is_not_replayed_and_keeps_the_session() {
+		let fx = Fixture::new();
+		{
+			let mut state = fx.fake.state.lock().unwrap();
+			state.send_input_error = Some(AppError::HerdrUncertainOutcome(
+				"pane.send_input dropped".into(),
+			));
+		}
+		let mut config = fx.config();
+		config.startup_commands = vec!["echo hi".into()];
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(fx.fake.send_input_calls().len(), 1);
+		assert_eq!(fx.fake.pane_close_calls(), 0);
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn startup_input_text_joins_init_then_commands() {
+		assert_eq!(startup_input_text(&[], &[]), None);
+		assert_eq!(
+			startup_input_text(&[String::new()], &[String::new()]),
+			None
+		);
+		assert_eq!(
+			startup_input_text(
+				&["echo init".into()],
+				&["echo a".into(), "echo b".into()]
+			)
+			.as_deref(),
+			Some("echo init\necho a\necho b\n")
+		);
 	}
 
 	#[test]
@@ -2034,7 +2273,9 @@ time.sleep(30)
 		assert!(!src.contains("server.stop"));
 		assert!(!src.contains("herdr-client.sock"));
 		assert!(!src.contains("pane.send_text"));
-		assert!(!src.contains("pane.send_input"));
+		assert!(
+			src.contains("pane.send_input") || src.contains("pane_send_input")
+		);
 		assert!(!src.contains("pane.send_keys"));
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("pane.read"));
@@ -2047,6 +2288,27 @@ time.sleep(30)
 			src.contains("worktree.create") || src.contains("worktree_create")
 		);
 		assert!(src.contains("HerdrWorktreeClient"));
+		let list_sessions = src
+			.split("fn list_project_sessions")
+			.nth(1)
+			.unwrap()
+			.split("fn delete_session")
+			.next()
+			.unwrap();
+		assert!(!list_sessions.contains("pane.send_input"));
+		assert!(!list_sessions.contains("pane_send_input"));
+		assert!(!list_sessions.contains("send_create_startup"));
+		assert!(!close_session.contains("pane.send_input"));
+		assert!(!close_session.contains("pane_send_input"));
+		let restore = src
+			.split("fn restore_session")
+			.nth(1)
+			.unwrap()
+			.split("fn close_session")
+			.next()
+			.unwrap();
+		assert!(!restore.contains("pane.send_input"));
+		assert!(!restore.contains("pane_send_input"));
 	}
 
 	#[test]
