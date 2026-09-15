@@ -45,6 +45,7 @@ const {
 			shiftKey?: boolean;
 			code?: string;
 		}) => boolean | undefined;
+		fireWheel: (event: { deltaY: number }) => boolean | undefined;
 		setSelection: (selection: string) => void;
 		writes: unknown[];
 		resetCount: number;
@@ -95,6 +96,7 @@ const {
 		private resizeListeners: Array<(size: { rows: number; cols: number }) => void> =
 			[];
 		private keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
+		private wheelHandler: ((event: WheelEvent) => boolean) | null = null;
 
 		constructor(options: { cols: number; rows: number }) {
 			this.cols = options.cols;
@@ -174,6 +176,16 @@ const {
 			} as unknown as KeyboardEvent);
 		}
 
+		fireWheel(event: { deltaY: number }) {
+			return this.wheelHandler?.({
+				deltaY: event.deltaY,
+				deltaMode: 0,
+				preventDefault: vi.fn(),
+				stopPropagation: vi.fn(),
+				defaultPrevented: false,
+			} as unknown as WheelEvent);
+		}
+
 		onSelectionChange(listener: () => void) {
 			this.selectionListeners.push(listener);
 			return { dispose: vi.fn() };
@@ -201,6 +213,10 @@ const {
 
 		attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
 			this.keyHandler = handler;
+		}
+
+		attachCustomWheelEventHandler(handler: (event: WheelEvent) => boolean) {
+			this.wheelHandler = handler;
 		}
 
 		registerLinkProvider() {
@@ -665,6 +681,33 @@ describe("herdr xterm transport", () => {
 			source: "pageKey",
 		});
 		expect(container.querySelector(".xterm")).toBeNull();
+	});
+
+	it("scrolls Herdr from xterm's inner viewport before local scrollback consumes the wheel", async () => {
+		await renderHerdr();
+		const wrapper = latestTerminal().element;
+		expect(wrapper).toBeTruthy();
+
+		const viewport = document.createElement("div");
+		viewport.className = "xterm-viewport";
+		wrapper!.appendChild(viewport);
+
+		const consumeWheel = vi.fn((event: Event) => {
+			event.preventDefault();
+			event.stopPropagation();
+		});
+		viewport.addEventListener("wheel", consumeWheel, { passive: false });
+
+		fireEvent.wheel(viewport, { deltaY: -80 });
+
+		expect(scrollPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			direction: "up",
+			lines: 2,
+			source: "wheel",
+		});
+		expect(consumeWheel).not.toHaveBeenCalled();
+		expect(latestTerminal().fireWheel({ deltaY: -80 })).toBe(false);
 	});
 
 	it("searches applied frames with the xterm SearchAddon", async () => {

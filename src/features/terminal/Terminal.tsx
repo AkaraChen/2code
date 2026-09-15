@@ -435,18 +435,29 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         });
       }
 
-      function onHerdrWheel(event: WheelEvent) {
-        if (transportKind !== "herdr") return;
+      function onHerdrWheel(event: WheelEvent): boolean {
+        if (transportKind !== "herdr") return true;
         const command = herdrWheelScroll(event);
-        if (!command) return;
+        if (!command) return true;
+        // Capture on the wrapper runs before xterm 6 SmoothScrollableElement
+        // (inner viewport) preventDefault+stopPropagation. Returning false
+        // also cancels xterm's own wheel path if MouseService still sees it.
+        if (!event.defaultPrevented) {
+          sendHerdrScroll(command);
+        }
         event.preventDefault();
         event.stopPropagation();
-        sendHerdrScroll(command);
+        return false;
       }
-      wrapper.addEventListener("wheel", onHerdrWheel, { passive: false });
-      cleanups.push(() => {
-        wrapper.removeEventListener("wheel", onHerdrWheel);
+      wrapper.addEventListener("wheel", onHerdrWheel, {
+        capture: true,
+        passive: false
       });
+      cleanups.push(() => {
+        wrapper.removeEventListener("wheel", onHerdrWheel, { capture: true });
+      });
+      term.attachCustomWheelEventHandler(onHerdrWheel);
+      cleanups.push(() => term.attachCustomWheelEventHandler(() => true));
 
       // 1b. Point xterm's font measurement at attached canvases. WebKit cannot
       //     resolve locally installed fonts from a detached/offscreen canvas,
