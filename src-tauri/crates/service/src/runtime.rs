@@ -301,6 +301,12 @@ impl RuntimeRouter {
 		self.herdr.worktrees()
 	}
 
+	/// Present only when a worktree client was injected. Does not start
+	/// Herdr or call `ensure_herdr_listener`.
+	pub fn herdr_worktrees_optional(&self) -> Option<&dyn HerdrWorktreeClient> {
+		self.herdr.worktrees().ok()
+	}
+
 	/// Herdr-owned ids only. Local-owned ids never read Herdr agent state.
 	pub fn session_agent_status(
 		&self,

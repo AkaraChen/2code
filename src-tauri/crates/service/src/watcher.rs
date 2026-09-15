@@ -342,6 +342,27 @@ mod tests {
 	}
 
 	#[test]
+	fn watcher_targets_retarget_when_persisted_path_changes() {
+		let stale = vec![project_with_profiles(
+			"project-1",
+			"/repo",
+			vec![profile("profile-1", "project-1", "/stale", false)],
+		)];
+		let listed = vec![project_with_profiles(
+			"project-1",
+			"/repo",
+			vec![profile("profile-1", "project-1", "/listed", false)],
+		)];
+
+		let old = watcher_targets(&stale);
+		let new = watcher_targets(&listed);
+
+		assert_ne!(old[0].key, new[0].key);
+		assert_eq!(new[0].root_path, "/listed");
+		assert_eq!(new[0].profile_id.as_deref(), Some("profile-1"));
+	}
+
+	#[test]
 	fn watcher_targets_include_profile_worktrees_and_dedupe_default_root() {
 		let projects = vec![project_with_profiles(
 			"project-1",
