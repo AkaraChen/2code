@@ -940,6 +940,32 @@ impl HerdrClient {
 		}
 	}
 
+	/// Submit text to a pane once. `text` must end in a newline so Herdr
+	/// treats it as Enter. Does not auto-replay an uncertain outcome.
+	/// This is the Task 17 workaround for missing create-time argv.
+	pub fn pane_send_input(
+		&self,
+		pane_id: &str,
+		text: &str,
+	) -> Result<(), HerdrTransportError> {
+		if pane_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "pane.send_input pane_id is required".into(),
+			});
+		}
+		if text.is_empty() || !text.ends_with('\n') {
+			return Err(HerdrTransportError::Refused {
+				reason: "pane.send_input text must end in a newline".into(),
+			});
+		}
+		let params = serde_json::json!({
+			"pane_id": pane_id,
+			"text": text,
+		});
+		self.request(self.next_id("pnsnd"), "pane.send_input", params)?;
+		Ok(())
+	}
+
 	pub fn next_id(&self, prefix: &str) -> String {
 		format!("{prefix}-{}", self.ids.fetch_add(1, Ordering::Relaxed))
 	}
@@ -2621,6 +2647,67 @@ mod unix_tests {
 		assert!(herdr.tab_create("", "x", Path::new("/tmp")).is_err());
 		assert!(herdr.tab_create("w1", "x", Path::new("rel")).is_err());
 		assert!(herdr.pane_close("").is_err());
+	}
+
+	#[test]
+	fn pane_send_input_sends_pane_id_and_trailing_newline() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "pane.send_input");
+			assert_eq!(req["params"]["pane_id"], "w1:p2");
+			assert_eq!(req["params"]["text"], "bun dev\n");
+			assert!(req["params"].get("keys").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(r#"{{"id":"{id}","result":{{"ok":true}}}}"#);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		client(&sock).pane_send_input("w1:p2", "bun dev\n").unwrap();
+		let refused = client(&sock)
+			.pane_send_input("w1:p2", "bun dev")
+			.unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
+		assert!(client(&sock).pane_send_input("", "x\n").is_err());
+		let src = include_str!("transport.rs");
+		let helper = src
+			.split("pub fn pane_send_input")
+			.nth(1)
+			.unwrap()
+			.split("pub fn next_id")
+			.next()
+			.unwrap();
+		assert!(helper.contains("pane.send_input"));
+		assert!(!helper.contains("pane.send_text"));
+		assert!(!helper.contains("pane.send_keys"));
+		assert!(!helper.contains("pane.run"));
+		assert!(!helper.contains("layout.apply"));
+		assert!(!helper.contains("terminal.input"));
+		assert!(!helper.contains("server.stop"));
+		assert!(!helper.contains("--takeover"));
+	}
+
+	#[test]
+	fn pane_send_input_does_not_auto_replay_uncertain_outcome() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "pane.send_input");
+			seen.fetch_add(1, AtomicOrdering::SeqCst);
+			drop(stream);
+		});
+		let err = client(&sock)
+			.pane_send_input("w1:p2", "echo hi\n")
+			.unwrap_err();
+		assert!(err.is_uncertain(), "{err}");
+		match err {
+			HerdrTransportError::UncertainOutcome { method, .. } => {
+				assert_eq!(method, "pane.send_input");
+			}
+			other => panic!("expected UncertainOutcome, got {other:?}"),
+		}
+		thread::sleep(Duration::from_millis(80));
+		assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
 	}
 
 	#[test]
