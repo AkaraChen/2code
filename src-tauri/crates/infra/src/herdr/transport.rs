@@ -1482,7 +1482,10 @@ mod unix_tests {
 				.env("HERDR_SOCKET_PATH", &self.namespace.socket_path)
 				.env("XDG_CONFIG_HOME", &self.namespace.xdg_config_home)
 				.env("HOME", self.root.path().join("home"))
-				.args(["server", "stop"]);
+				.args(["server", "stop"])
+				.stdin(std::process::Stdio::null())
+				.stdout(std::process::Stdio::null())
+				.stderr(std::process::Stdio::null());
 			let _ = cmd.status();
 		}
 	}

@@ -380,10 +380,18 @@ fn wait_until_ready(
 				return Ok(());
 			}
 			Probe::Incompatible(info) => {
-				return Err(HerdrProcessError::Incompatible {
-					message: info.message,
-					socket: info.socket_path,
-				});
+				if info
+					.message
+					.contains("socket is live but status is not_running")
+				{
+					// The listener can accept before `herdr status` reports
+					// running. That is still starting, not a foreign server.
+				} else {
+					return Err(HerdrProcessError::Incompatible {
+						message: info.message,
+						socket: info.socket_path,
+					});
+				}
 			}
 			Probe::Absent => {}
 		}
