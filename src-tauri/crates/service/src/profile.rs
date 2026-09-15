@@ -3,13 +3,17 @@ use std::path::{Component, Path, PathBuf};
 
 use diesel::SqliteConnection;
 use infra::db::DbPool;
+use infra::herdr::transport::{WorktreeCreateRequest, WorktreeCreateResult};
 use uuid::Uuid;
 
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
+use model::runtime::{RuntimeBackend, RuntimeIdentityState, HERDR_NAMESPACE};
 
-use crate::runtime::RuntimeRouter;
+use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
+use crate::runtime_mapping::workspace_identity_state;
+use crate::runtime_sync::RuntimeProjection;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
 const WORKTREE_DIR_NAME_MAX_BYTES: usize = 120;
@@ -427,6 +431,428 @@ pub fn create_with_db(
 	Ok(profile)
 }
 
+pub fn create_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	project_id: &str,
+	branch_name: &str,
+	default_worktree_dir: Option<&str>,
+) -> Result<Profile, AppError> {
+	match runtime.selected_backend() {
+		RuntimeBackend::Local => {
+			create_with_db(db, project_id, branch_name, default_worktree_dir)
+		}
+		RuntimeBackend::Herdr => {
+			let worktrees = runtime.herdr_worktrees()?;
+			create_herdr_with_db(
+				worktrees,
+				db,
+				project_id,
+				branch_name,
+				default_worktree_dir,
+			)
+		}
+	}
+}
+
+fn create_herdr_with_db(
+	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
+	project_id: &str,
+	branch_name: &str,
+	default_worktree_dir: Option<&str>,
+) -> Result<Profile, AppError> {
+	let auto_generated = branch_name.trim().is_empty();
+	let (project_folder, mut existing_branches, default_profile_id) = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let project_folder =
+			repo::profile::get_project_folder(conn, project_id)?;
+		let existing_branches =
+			repo::profile::list_branch_names_by_project(conn, project_id)?;
+		let default_profile_id =
+			repo::profile::list_by_project(conn, project_id)?
+				.into_iter()
+				.find(|profile| profile.is_default)
+				.map(|profile| profile.id);
+		(project_folder, existing_branches, default_profile_id)
+	};
+	let project_config = load_project_config(&project_folder)?;
+	let cwd = Path::new(&project_folder).canonicalize()?;
+	let parent_workspace_id = bound_parent_workspace_id(
+		db,
+		worktrees,
+		default_profile_id.as_deref(),
+	)?;
+
+	let mut branch_name = if auto_generated {
+		generate_auto_branch_name_from(&existing_branches)?
+	} else {
+		let sanitized = sanitize_branch_name(branch_name);
+		if sanitized.is_empty() {
+			return Err(AppError::GitError("Invalid branch name".to_string()));
+		}
+		sanitized
+	};
+
+	let id = Uuid::new_v4().to_string();
+	let attempts = if auto_generated { 5 } else { 1 };
+	let mut last_conflict = None;
+	for _ in 0..attempts {
+		match create_herdr_once(
+			worktrees,
+			db,
+			project_id,
+			&project_folder,
+			&cwd,
+			parent_workspace_id.as_deref(),
+			&project_config,
+			default_worktree_dir,
+			&id,
+			&branch_name,
+		) {
+			Ok(profile) => return Ok(profile),
+			Err(err) if auto_generated && is_branch_conflict(&err) => {
+				existing_branches.push(branch_name.clone());
+				last_conflict = Some(err);
+				branch_name =
+					generate_auto_branch_name_from(&existing_branches)?;
+			}
+			Err(err) => return Err(err),
+		}
+	}
+	Err(last_conflict.unwrap_or_else(|| {
+		AppError::GitError(
+			"Failed to auto-generate a unique branch name".to_string(),
+		)
+	}))
+}
+
+fn bound_parent_workspace_id(
+	db: &DbPool,
+	worktrees: &dyn HerdrWorktreeClient,
+	default_profile_id: Option<&str>,
+) -> Result<Option<String>, AppError> {
+	let Some(profile_id) = default_profile_id else {
+		return Ok(None);
+	};
+	let mapping = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
+			Ok(mapping) => Some(mapping),
+			Err(AppError::NotFound(_)) => None,
+			Err(err) => return Err(err),
+		}
+	};
+	let Some(mapping) = mapping else {
+		return Ok(None);
+	};
+	let snapshot = worktrees.session_snapshot()?;
+	let mut projection = RuntimeProjection::new();
+	projection.apply_snapshot(&snapshot)?;
+	if workspace_identity_state(&mapping, &projection)
+		== RuntimeIdentityState::Bound
+	{
+		Ok(Some(mapping.workspace_id))
+	} else {
+		Ok(None)
+	}
+}
+
+fn is_branch_conflict(err: &AppError) -> bool {
+	match err {
+		AppError::GitError(message) => message.contains("already exists"),
+		AppError::HerdrTransport(message) => {
+			message.contains("worktree_create_failed")
+				|| message.contains("already exists")
+		}
+		_ => false,
+	}
+}
+
+fn create_herdr_once(
+	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
+	project_id: &str,
+	project_folder: &str,
+	cwd: &Path,
+	parent_workspace_id: Option<&str>,
+	project_config: &infra::config::ProjectConfig,
+	default_worktree_dir: Option<&str>,
+	id: &str,
+	branch_name: &str,
+) -> Result<Profile, AppError> {
+	if let Some(existing) =
+		existing_profile_for_branch(db, project_id, branch_name)?
+	{
+		bind_existing_profile_workspace(
+			db,
+			&existing.id,
+			worktrees,
+			cwd,
+			parent_workspace_id,
+			branch_name,
+		)?;
+		return Ok(existing);
+	}
+
+	if let Some(created) = reconcile_existing_checkout(
+		worktrees,
+		cwd,
+		parent_workspace_id,
+		None,
+		branch_name,
+	)? {
+		return persist_herdr_profile(
+			db,
+			project_id,
+			project_config,
+			id,
+			branch_name,
+			created,
+			true,
+		);
+	}
+
+	if infra::git::local_branch_exists(project_folder, branch_name)? {
+		return Err(AppError::GitError(format!(
+			"Branch '{branch_name}' already exists"
+		)));
+	}
+
+	let worktree_base = resolve_worktree_base(
+		project_folder,
+		project_config.worktree_dir.as_deref(),
+		default_worktree_dir,
+	)?;
+	std::fs::create_dir_all(&worktree_base)?;
+	let worktree_base = worktree_base.canonicalize()?;
+	let intended_path =
+		build_worktree_path(&worktree_base, project_folder, branch_name, id);
+
+	let created = match worktrees.worktree_create(WorktreeCreateRequest {
+		branch: branch_name,
+		path: Some(&intended_path),
+		cwd: parent_workspace_id.is_none().then_some(cwd),
+		workspace_id: parent_workspace_id,
+		label: Some(branch_name),
+	}) {
+		Ok(created) => created,
+		Err(AppError::HerdrUncertainOutcome(_)) => reconcile_existing_checkout(
+			worktrees,
+			cwd,
+			parent_workspace_id,
+			Some(&intended_path),
+			branch_name,
+		)?
+		.ok_or_else(|| {
+			AppError::HerdrUncertainOutcome(
+				"worktree.create outcome is uncertain; not replaying".into(),
+			)
+		})?,
+		Err(err) => return Err(err),
+	};
+
+	persist_herdr_profile(
+		db,
+		project_id,
+		project_config,
+		id,
+		branch_name,
+		created,
+		true,
+	)
+}
+
+fn existing_profile_for_branch(
+	db: &DbPool,
+	project_id: &str,
+	branch_name: &str,
+) -> Result<Option<Profile>, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	Ok(repo::profile::list_by_project(conn, project_id)?
+		.into_iter()
+		.find(|profile| {
+			!profile.is_default && profile.branch_name == branch_name
+		}))
+}
+
+fn bind_existing_profile_workspace(
+	db: &DbPool,
+	profile_id: &str,
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	parent_workspace_id: Option<&str>,
+	branch_name: &str,
+) -> Result<(), AppError> {
+	let already_bound = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
+			Ok(_) => true,
+			Err(AppError::NotFound(_)) => false,
+			Err(err) => return Err(err),
+		}
+	};
+	if already_bound {
+		return Ok(());
+	}
+	let created = reconcile_existing_checkout(
+		worktrees,
+		cwd,
+		parent_workspace_id,
+		None,
+		branch_name,
+	)?
+	.ok_or_else(|| {
+		AppError::RuntimeMappingMissing(format!(
+			"profile {profile_id} has no Herdr workspace to bind"
+		))
+	})?;
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	repo::runtime_mapping::bind_profile_workspace(
+		conn,
+		profile_id,
+		HERDR_NAMESPACE,
+		&created.workspace_id,
+	)?;
+	Ok(())
+}
+
+fn reconcile_existing_checkout(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	parent_workspace_id: Option<&str>,
+	intended_path: Option<&Path>,
+	branch_name: &str,
+) -> Result<Option<WorktreeCreateResult>, AppError> {
+	let listed = match worktrees.worktree_list(
+		parent_workspace_id.is_none().then_some(cwd),
+		parent_workspace_id,
+	) {
+		Ok(listed) => listed,
+		Err(AppError::HerdrUncertainOutcome(_)) => Vec::new(),
+		Err(err) => return Err(err),
+	};
+	if let Some(created) =
+		match_listed_worktree(&listed, intended_path, branch_name)
+	{
+		if created.workspace_id.is_empty() {
+			return open_existing_checkout(
+				worktrees,
+				cwd,
+				Path::new(&created.path),
+			);
+		}
+		return Ok(Some(created));
+	}
+	if let Some(path) = intended_path.filter(|path| path.exists()) {
+		return open_existing_checkout(worktrees, cwd, path);
+	}
+	Ok(None)
+}
+
+fn match_listed_worktree(
+	listed: &[infra::herdr::transport::WorktreeListEntry],
+	intended_path: Option<&Path>,
+	branch_name: &str,
+) -> Option<WorktreeCreateResult> {
+	if let Some(intended) = intended_path {
+		if let Some(entry) = listed.iter().find(|entry| {
+			Path::new(&entry.path) == intended
+				|| Path::new(&entry.path).canonicalize().ok().as_deref()
+					== intended.canonicalize().ok().as_deref()
+		}) {
+			return Some(listed_entry_to_created(entry));
+		}
+	}
+	let matches: Vec<_> = listed
+		.iter()
+		.filter(|entry| {
+			entry.is_linked_worktree
+				&& entry.branch.as_deref() == Some(branch_name)
+				&& entry.workspace_id.is_some()
+		})
+		.collect();
+	if matches.len() == 1 {
+		return Some(listed_entry_to_created(matches[0]));
+	}
+	None
+}
+
+fn listed_entry_to_created(
+	entry: &infra::herdr::transport::WorktreeListEntry,
+) -> WorktreeCreateResult {
+	WorktreeCreateResult {
+		workspace_id: entry.workspace_id.clone().unwrap_or_default(),
+		path: entry.path.clone(),
+	}
+}
+
+fn open_existing_checkout(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	path: &Path,
+) -> Result<Option<WorktreeCreateResult>, AppError> {
+	if !path.exists() {
+		return Ok(None);
+	}
+	match worktrees.worktree_open(cwd, path) {
+		Ok(opened) => Ok(Some(WorktreeCreateResult {
+			workspace_id: opened.workspace_id,
+			path: path.to_string_lossy().into_owned(),
+		})),
+		Err(AppError::HerdrUncertainOutcome(_)) => Ok(None),
+		Err(err) => Err(err),
+	}
+}
+
+fn persist_herdr_profile(
+	db: &DbPool,
+	project_id: &str,
+	project_config: &infra::config::ProjectConfig,
+	id: &str,
+	branch_name: &str,
+	created: WorktreeCreateResult,
+	run_setup: bool,
+) -> Result<Profile, AppError> {
+	let worktree_str = created.path.clone();
+	let worktree_path = PathBuf::from(&worktree_str);
+	let profile = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		if let Ok(existing) = repo::profile::find_by_id(conn, id) {
+			repo::runtime_mapping::bind_profile_workspace(
+				conn,
+				id,
+				HERDR_NAMESPACE,
+				&created.workspace_id,
+			)?;
+			return Ok(existing);
+		}
+		let profile = repo::profile::insert(
+			conn,
+			id,
+			project_id,
+			branch_name,
+			&worktree_str,
+		)?;
+		repo::runtime_mapping::bind_profile_workspace(
+			conn,
+			id,
+			HERDR_NAMESPACE,
+			&created.workspace_id,
+		)?;
+		profile
+	};
+
+	if run_setup {
+		infra::config::execute_scripts(
+			&project_config.setup_script,
+			&worktree_path,
+		);
+	}
+
+	Ok(profile)
+}
+
 pub fn create_with_default_worktree_dir(
 	conn: &mut SqliteConnection,
 	project_id: &str,
@@ -581,10 +1007,17 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::pty::{create_flush_senders, PtyContext};
+	use crate::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
+	use crate::PtyEventEmitter;
 	use diesel::Connection;
 	use diesel::RunQueryDsl;
 	use diesel_migrations::MigrationHarness;
+	use infra::herdr::transport::{WorktreeListEntry, WorktreeOpenResult};
+	use model::runtime::RuntimeBackend;
+	use serde_json::json;
 	use std::path::Path;
+	use std::sync::{Arc, Mutex};
 	use tempfile::TempDir;
 
 	fn setup_db() -> SqliteConnection {
@@ -913,5 +1346,545 @@ mod tests {
 			matches!(result, Err(AppError::GitError(message)) if message == "Invalid branch name")
 		);
 		assert!(existing_branches.is_empty());
+	}
+
+	struct TestEmitter;
+
+	impl PtyEventEmitter for TestEmitter {
+		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
+			true
+		}
+
+		fn emit_exit(&self, _session_id: &str) {}
+	}
+
+	struct RecordedCreate {
+		branch: String,
+		path: Option<String>,
+		cwd: Option<String>,
+		workspace_id: Option<String>,
+		label: Option<String>,
+	}
+
+	struct FakeWorktreeState {
+		methods: Vec<String>,
+		creates: Vec<RecordedCreate>,
+		create_error: Option<AppError>,
+		land_on_error: bool,
+		listed: Vec<WorktreeListEntry>,
+		snapshot: serde_json::Value,
+		next_workspace: u32,
+	}
+
+	struct FakeWorktrees {
+		state: Mutex<FakeWorktreeState>,
+	}
+
+	impl FakeWorktrees {
+		fn new() -> Arc<Self> {
+			Arc::new(Self {
+				state: Mutex::new(FakeWorktreeState {
+					methods: Vec::new(),
+					creates: Vec::new(),
+					create_error: None,
+					land_on_error: false,
+					listed: Vec::new(),
+					snapshot: json!({
+						"type": "session_snapshot",
+						"snapshot": { "workspaces": [], "tabs": [], "panes": [] }
+					}),
+					next_workspace: 2,
+				}),
+			})
+		}
+
+		fn methods(&self) -> Vec<String> {
+			self.state.lock().unwrap().methods.clone()
+		}
+
+		fn creates(&self) -> usize {
+			self.state.lock().unwrap().creates.len()
+		}
+
+		fn last_create(&self) -> RecordedCreate {
+			let state = self.state.lock().unwrap();
+			let last = state.creates.last().expect("create recorded");
+			RecordedCreate {
+				branch: last.branch.clone(),
+				path: last.path.clone(),
+				cwd: last.cwd.clone(),
+				workspace_id: last.workspace_id.clone(),
+				label: last.label.clone(),
+			}
+		}
+	}
+
+	impl HerdrWorktreeClient for FakeWorktrees {
+		fn worktree_create(
+			&self,
+			request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.create".into());
+			state.creates.push(RecordedCreate {
+				branch: request.branch.to_string(),
+				path: request
+					.path
+					.map(|path| path.to_string_lossy().into_owned()),
+				cwd: request.cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
+				workspace_id: request.workspace_id.map(str::to_string),
+				label: request.label.map(str::to_string),
+			});
+			if let Some(path) = request.path {
+				std::fs::create_dir_all(path).ok();
+			}
+			let workspace_id = format!("w{}", state.next_workspace);
+			state.next_workspace += 1;
+			let path = request
+				.path
+				.map(|path| path.to_string_lossy().into_owned())
+				.unwrap_or_else(|| "/tmp/herdr-wt".into());
+			let entry = WorktreeListEntry {
+				path: path.clone(),
+				branch: Some(request.branch.to_string()),
+				workspace_id: Some(workspace_id.clone()),
+				is_linked_worktree: true,
+			};
+			if let Some(err) = state.create_error.take() {
+				if state.land_on_error {
+					state.listed.push(entry);
+				}
+				return Err(err);
+			}
+			state.listed.push(entry);
+			Ok(WorktreeCreateResult { workspace_id, path })
+		}
+
+		fn worktree_list(
+			&self,
+			_cwd: Option<&Path>,
+			_workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.list".into());
+			Ok(state.listed.clone())
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.open".into());
+			let path = path.to_string_lossy().into_owned();
+			let workspace_id = state
+				.listed
+				.iter()
+				.find(|entry| entry.path == path)
+				.and_then(|entry| entry.workspace_id.clone())
+				.unwrap_or_else(|| "w2".into());
+			Ok(WorktreeOpenResult {
+				workspace_id,
+				already_open: true,
+			})
+		}
+
+		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("session.snapshot".into());
+			Ok(state.snapshot.clone())
+		}
+	}
+
+	fn git_worktree_list(dir: &Path) -> String {
+		let output = infra::no_window::command_without_windows_console("git")
+			.args(["worktree", "list", "--porcelain"])
+			.current_dir(dir)
+			.output()
+			.expect("git worktree list");
+		String::from_utf8_lossy(&output.stdout).into_owned()
+	}
+
+	fn herdr_router(
+		db: &DbPool,
+		worktrees: Arc<FakeWorktrees>,
+	) -> RuntimeRouter {
+		let logs = std::env::temp_dir().join("2code-profile-herdr-logs");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		RuntimeRouter::with_backend(
+			RuntimeBackend::Herdr,
+			LocalAdapter::new(ctx),
+			HerdrStubAdapter::with_worktree_client(worktrees),
+		)
+	}
+
+	fn local_router(
+		db: &DbPool,
+		worktrees: Arc<FakeWorktrees>,
+	) -> RuntimeRouter {
+		let logs = std::env::temp_dir().join("2code-profile-local-logs");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		RuntimeRouter::new(
+			LocalAdapter::new(ctx),
+			HerdrStubAdapter::with_worktree_client(worktrees),
+		)
+	}
+
+	fn pool_from(conn: SqliteConnection) -> DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
+	#[test]
+	fn herdr_create_uses_worktree_create_and_binds_workspace() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let setup_marker = dir.path().join("setup.ran");
+		std::fs::write(
+			dir.path().join("2code.json"),
+			format!(
+				r#"{{"setup_script":["touch {}"]}}"#,
+				setup_marker.display()
+			),
+		)
+		.unwrap();
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+		let before = git_worktree_list(dir.path());
+
+		let profile = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/用户",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(profile.branch_name, "feat/yong-hu");
+		assert_eq!(fake.creates(), 1);
+		let recorded = fake.last_create();
+		assert_eq!(recorded.branch, "feat/yong-hu");
+		assert!(recorded
+			.cwd
+			.as_ref()
+			.is_some_and(|cwd| Path::new(cwd).is_absolute()));
+		assert!(recorded
+			.path
+			.as_ref()
+			.is_some_and(|path| Path::new(path).is_absolute()));
+		assert!(recorded.workspace_id.is_none());
+		assert_eq!(git_worktree_list(dir.path()), before);
+		assert!(Path::new(&profile.worktree_path).exists());
+		assert_eq!(profile.worktree_path, recorded.path.expect("path sent"));
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
+				.unwrap()
+		};
+		assert_eq!(mapping.workspace_id, "w2");
+		assert_eq!(mapping.namespace, HERDR_NAMESPACE);
+		assert!(setup_marker.exists());
+		assert!(!fake.methods().contains(&"tab.create".to_string()));
+		assert!(!fake.methods().contains(&"pane.close".to_string()));
+		let sessions = {
+			let conn = &mut *db.lock().unwrap();
+			repo::pty::list_ids_by_profile(conn, &profile.id).unwrap()
+		};
+		assert!(sessions.is_empty());
+	}
+
+	#[test]
+	fn herdr_create_prefers_bound_parent_workspace_id() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let default_id = format!("default-{}", project.id);
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&default_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.snapshot = json!({
+				"type": "session_snapshot",
+				"snapshot": {
+					"workspaces": [{ "workspace_id": "w1", "label": "main" }],
+					"tabs": [],
+					"panes": []
+				}
+			});
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/parent",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		let recorded = fake.last_create();
+		assert_eq!(recorded.workspace_id.as_deref(), Some("w1"));
+		assert!(recorded.cwd.is_none());
+	}
+
+	#[test]
+	fn uncertain_worktree_create_reconciles_without_replay() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.create_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+			state.land_on_error = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		let profile = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/uncertain",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(fake.creates(), 1);
+		assert!(fake.methods().contains(&"worktree.list".to_string()));
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
+				.unwrap()
+		};
+		assert_eq!(mapping.workspace_id, "w2");
+		assert_eq!(
+			git_worktree_list(dir.path()).matches("worktree ").count(),
+			1
+		);
+	}
+
+	#[test]
+	fn retry_after_insert_without_bind_does_not_create_again() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let setup_marker = dir.path().join("setup-count");
+		std::fs::write(
+			dir.path().join("2code.json"),
+			format!(
+				r#"{{"setup_script":["printf x >> {}"]}}"#,
+				setup_marker.display()
+			),
+		)
+		.unwrap();
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+		let base = global_base.path().to_str().unwrap();
+
+		let first = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/retry",
+			Some(base),
+		)
+		.unwrap();
+		{
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::unbind_profile_workspace(conn, &first.id)
+				.unwrap();
+		}
+
+		let second = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/retry",
+			Some(base),
+		)
+		.unwrap();
+
+		assert_eq!(first.id, second.id);
+		assert_eq!(fake.creates(), 1);
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &second.id)
+				.unwrap()
+		};
+		assert_eq!(mapping.workspace_id, "w2");
+		let setup = std::fs::read_to_string(&setup_marker).unwrap();
+		assert_eq!(setup.matches('x').count(), 1);
+	}
+
+	#[test]
+	fn herdr_duplicate_existing_branch_fails_closed() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		run_git(dir.path(), ["branch", "feat/taken"]);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/taken",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.err()
+		.expect("duplicate branch should fail");
+
+		assert!(err.to_string().contains("already exists"), "{err}");
+		assert_eq!(fake.creates(), 0);
+	}
+
+	#[test]
+	fn herdr_without_client_does_not_spawn_local_worktree() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let logs = std::env::temp_dir().join("2code-profile-missing-herdr");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		let router = RuntimeRouter::with_backend(
+			RuntimeBackend::Herdr,
+			LocalAdapter::new(ctx),
+			HerdrStubAdapter::new(),
+		);
+		let before = git_worktree_list(dir.path());
+
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/missing",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.err()
+		.expect("missing Herdr client should fail");
+
+		assert!(err.to_string().contains("not available"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
+	}
+
+	#[test]
+	fn local_create_with_runtime_still_uses_git_worktree_add() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = local_router(&db, fake.clone());
+		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
+
+		let profile = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/local",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(fake.creates(), 0);
+		assert!(Path::new(&profile.worktree_path).exists());
+		assert!(git_worktree_list(dir.path()).contains(&profile.worktree_path));
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
+		};
+		assert!(mapping.is_err());
+		delete_with_runtime(&router, &db, &profile.id).unwrap();
+	}
+
+	#[test]
+	fn herdr_profile_create_does_not_use_forbidden_ops() {
+		let src = include_str!("profile.rs");
+		let herdr = src
+			.split("fn create_herdr_with_db")
+			.nth(1)
+			.unwrap()
+			.split("pub fn create_with_default_worktree_dir")
+			.next()
+			.unwrap();
+		assert!(
+			herdr.contains("worktree.create")
+				|| herdr.contains("worktree_create")
+		);
+		assert!(!herdr.contains("worktree.remove"));
+		assert!(!herdr.contains("git worktree add"));
+		assert!(!herdr.contains("worktree_add"));
+		assert!(!herdr.contains("workspace.create"));
+		assert!(!herdr.contains("tab.create"));
+		assert!(!herdr.contains("pane.close"));
+		assert!(!herdr.contains("pane.split"));
+		assert!(!herdr.contains("pane.send_input"));
+		assert!(!herdr.contains("server.stop"));
+		assert!(!herdr.contains("--takeover"));
+		assert!(!herdr.contains("herdr-client.sock"));
+		assert!(!herdr.contains("replace_profile_workspace"));
+		let handler = include_str!("../../../src/handler/profile.rs");
+		let create = handler
+			.split("pub async fn create_profile")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn delete_profile")
+			.next()
+			.unwrap();
+		assert!(create.contains("create_with_runtime"));
+		assert!(create.contains("RuntimeHandle"));
+		assert!(!create.contains("create_with_db"));
+		assert!(!create.contains("ensure_herdr_listener"));
+		let lib = include_str!("../../../src/lib.rs");
+		assert!(!lib.contains("ensure_herdr_listener"));
+	}
+
+	#[test]
+	fn default_profiles_are_not_created_via_worktree_create() {
+		let src = include_str!("project.rs");
+		assert!(src.contains("insert_default"));
+		assert!(!src.contains("worktree.create"));
+		assert!(!src.contains("create_herdr_with_db"));
+		assert!(!src.contains("create_with_runtime"));
 	}
 }
