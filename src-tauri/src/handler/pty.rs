@@ -6,6 +6,7 @@ use crate::bridge::{
 };
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
+use model::runtime::{HerdrTerminalFrame, RuntimeBackend};
 use service::runtime::{RuntimeHandle, TerminalRuntime};
 
 #[tauri::command]
@@ -103,9 +104,13 @@ pub async fn restore_pty_session(
 pub fn attach_pty_output(
 	session_id: String,
 	stream_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	sinks: State<'_, PtyOutputSinks>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return runtime.attach_output(&session_id, &stream_id);
+	}
 	let (sender, receiver) = mpsc::unbounded_channel();
 	{
 		let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
@@ -138,8 +143,12 @@ pub async fn stream_pty_output(
 	session_id: String,
 	stream_id: String,
 	on_output: Channel<&[u8]>,
+	runtime: State<'_, RuntimeHandle>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return Ok(());
+	}
 	let receiver = {
 		let mut receivers =
 			receivers.lock().map_err(|_| AppError::LockError)?;
@@ -167,12 +176,55 @@ pub async fn stream_pty_output(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
+pub async fn stream_herdr_output(
+	session_id: String,
+	stream_id: String,
+	on_output: Channel<HerdrTerminalFrame>,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? != RuntimeBackend::Herdr {
+		return Err(AppError::PtyError("not a Herdr session".into()));
+	}
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || {
+		loop {
+			match runtime.recv_terminal_frame(&session_id, &stream_id) {
+				Ok(frame) => {
+					if on_output.send(frame).is_err() {
+						break;
+					}
+				}
+				Err(err) if herdr_stream_ended(&err) => break,
+				Err(err) => return Err(err),
+			}
+		}
+		Ok(())
+	})
+	.await
+}
+
+fn herdr_stream_ended(err: &AppError) -> bool {
+	matches!(
+		err,
+		AppError::PtyError(message)
+			if message.contains("not attached")
+				|| message.contains("closed")
+				|| message.contains("stale Herdr")
+	)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn detach_pty_output(
 	session_id: String,
 	stream_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	sinks: State<'_, PtyOutputSinks>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return runtime.detach_output(&session_id, &stream_id);
+	}
 	let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
 	if sinks
 		.get(&session_id)

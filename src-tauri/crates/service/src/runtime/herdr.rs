@@ -1,13 +1,21 @@
-//! Herdr terminal lifecycle: create, list, and explicit close.
+//! Herdr terminal lifecycle and live CLI attach.
 //!
-//! Write/resize/history/restore stay fail-closed (Task 10). A missing
+//! Create/list/close use pane identities when a client is injected.
+//! Write/resize go through an attached CLI control helper.
+//! History/restore/flush/clear stay fail-closed (Task 12). A missing
 //! client keeps the Task 2 stub behavior. Identities are `pane_id` in
 //! namespace `2code`. `terminal_id` is never persisted.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use infra::db::DbPool;
+use infra::herdr::process::{HerdrNamespace, HerdrProcessEnv};
+use infra::herdr::terminal::{
+	BufferLimits, TerminalAttachRequest, TerminalSessionHelper,
+};
 use infra::herdr::transport::{HerdrClient, PaneView, TabCreateResult};
 use model::error::AppError;
 use model::pty::{
@@ -15,7 +23,8 @@ use model::pty::{
 	RestoreResult,
 };
 use model::runtime::{
-	CreateSessionResult, RuntimeBackend, RuntimeIdentityState, HERDR_NAMESPACE,
+	CreateSessionResult, HerdrTerminalFrame, RuntimeBackend,
+	RuntimeIdentityState, HERDR_NAMESPACE,
 };
 use serde_json::Value;
 use uuid::Uuid;
@@ -92,11 +101,25 @@ struct HerdrLifecycle {
 	client: Arc<dyn HerdrTerminalClient>,
 }
 
+/// Sidecar + 2code namespace used to spawn one CLI helper per session.
+pub struct HerdrCliAttach {
+	pub executable: PathBuf,
+	pub namespace: HerdrNamespace,
+	pub extra_env: Vec<(OsString, OsString)>,
+}
+
+struct HerdrAttachment {
+	stream_id: String,
+	helper: Arc<TerminalSessionHelper>,
+}
+
 /// Herdr adapter. Without a client, lifecycle stays fail-closed.
 #[derive(Default)]
 pub struct HerdrStubAdapter {
 	ops: Mutex<Vec<&'static str>>,
 	lifecycle: Option<HerdrLifecycle>,
+	cli: Option<HerdrCliAttach>,
+	attachments: Mutex<HashMap<String, HerdrAttachment>>,
 }
 
 impl HerdrStubAdapter {
@@ -111,6 +134,21 @@ impl HerdrStubAdapter {
 		Self {
 			ops: Mutex::new(Vec::new()),
 			lifecycle: Some(HerdrLifecycle { db, client }),
+			cli: None,
+			attachments: Mutex::new(HashMap::new()),
+		}
+	}
+
+	pub fn with_terminal_client_and_cli(
+		db: DbPool,
+		client: Arc<dyn HerdrTerminalClient>,
+		cli: HerdrCliAttach,
+	) -> Self {
+		Self {
+			ops: Mutex::new(Vec::new()),
+			lifecycle: Some(HerdrLifecycle { db, client }),
+			cli: Some(cli),
+			attachments: Mutex::new(HashMap::new()),
 		}
 	}
 
@@ -141,6 +179,155 @@ impl HerdrStubAdapter {
 		self.lifecycle
 			.as_ref()
 			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
+	}
+
+	fn resolve_pane_id(&self, session_id: &str) -> Result<String, AppError> {
+		let lifecycle = self.lifecycle()?;
+		let mapping = lifecycle.with_db(|conn| {
+			match repo::runtime_mapping::find_session_mapping(conn, session_id)
+			{
+				Ok(mapping) => Ok(mapping),
+				Err(AppError::NotFound(_)) => {
+					Err(AppError::RuntimeMappingMissing(format!(
+						"session {session_id} has no Herdr pane"
+					)))
+				}
+				Err(err) => Err(err),
+			}
+		})?;
+		let snapshot = lifecycle.client.session_snapshot()?;
+		let mut projection = RuntimeProjection::new();
+		projection.apply_snapshot(&snapshot)?;
+		match pane_identity_state(&mapping, &projection) {
+			RuntimeIdentityState::Bound => Ok(mapping.pane_id),
+			RuntimeIdentityState::Missing => {
+				Err(AppError::RuntimeMappingMissing(format!(
+					"pane {} is missing",
+					mapping.pane_id
+				)))
+			}
+			RuntimeIdentityState::Replaced => {
+				Err(AppError::RuntimeMappingReplaced(format!(
+					"pane {}",
+					mapping.pane_id
+				)))
+			}
+		}
+	}
+
+	fn take_attachment(&self, session_id: &str) -> Option<HerdrAttachment> {
+		self.attachments
+			.lock()
+			.ok()
+			.and_then(|mut map| map.remove(session_id))
+	}
+
+	pub fn attach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		self.record("attach");
+		let pane_id = self.resolve_pane_id(session_id)?;
+		let cli = self
+			.cli
+			.as_ref()
+			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))?;
+		if let Some(previous) = self.take_attachment(session_id) {
+			drop(previous);
+		}
+		let env = HerdrProcessEnv {
+			executable: &cli.executable,
+			namespace: &cli.namespace,
+			extra_env: &cli.extra_env,
+			ready_timeout: std::time::Duration::from_secs(10),
+			cli_timeout: std::time::Duration::from_secs(5),
+		};
+		let helper =
+			TerminalSessionHelper::attach_control(TerminalAttachRequest {
+				env: &env,
+				pane_id: &pane_id,
+				mode: infra::herdr::terminal::TerminalSessionMode::Control,
+				cols: None,
+				rows: None,
+				takeover: false,
+				limits: BufferLimits::default(),
+			})?;
+		let mut map =
+			self.attachments.lock().map_err(|_| AppError::LockError)?;
+		if let Some(replaced) = map.insert(
+			session_id.to_string(),
+			HerdrAttachment {
+				stream_id: stream_id.to_string(),
+				helper: Arc::new(helper),
+			},
+		) {
+			drop(replaced);
+		}
+		Ok(())
+	}
+
+	pub fn detach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		self.record("detach");
+		let mut map =
+			self.attachments.lock().map_err(|_| AppError::LockError)?;
+		let matches = map
+			.get(session_id)
+			.is_some_and(|attached| attached.stream_id == stream_id);
+		if matches {
+			drop(map.remove(session_id));
+		}
+		Ok(())
+	}
+
+	pub fn recv_terminal_frame(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<HerdrTerminalFrame, AppError> {
+		let helper = {
+			let map =
+				self.attachments.lock().map_err(|_| AppError::LockError)?;
+			let attached = map.get(session_id).ok_or_else(|| {
+				AppError::from(
+					infra::herdr::terminal::HerdrTerminalError::NotAttached,
+				)
+			})?;
+			if attached.stream_id != stream_id {
+				return Err(AppError::PtyError(
+					"stale Herdr attach stream_id".into(),
+				));
+			}
+			Arc::clone(&attached.helper)
+		};
+		helper
+			.recv_frame_blocking()
+			.map(HerdrTerminalFrame::from)
+			.map_err(AppError::from)
+	}
+
+	pub fn release_attachments(&self) {
+		if let Ok(mut map) = self.attachments.lock() {
+			map.clear();
+		}
+	}
+
+	fn helper_for(
+		&self,
+		session_id: &str,
+	) -> Result<Arc<TerminalSessionHelper>, AppError> {
+		let map = self.attachments.lock().map_err(|_| AppError::LockError)?;
+		map.get(session_id)
+			.map(|attached| Arc::clone(&attached.helper))
+			.ok_or_else(|| {
+				AppError::from(
+					infra::herdr::terminal::HerdrTerminalError::NotAttached,
+				)
+			})
 	}
 }
 
@@ -529,6 +716,7 @@ impl TerminalRuntime for HerdrStubAdapter {
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
 		self.record("close");
+		drop(self.take_attachment(session_id));
 		self.lifecycle()?.close_session(session_id)
 	}
 
@@ -545,17 +733,29 @@ impl TerminalRuntime for HerdrStubAdapter {
 		self.lifecycle()?.delete_session(session_id)
 	}
 
-	fn write(&self, _session_id: &str, _data: &[u8]) -> Result<(), AppError> {
-		Err(self.fail("write"))
+	fn write(&self, session_id: &str, data: &[u8]) -> Result<(), AppError> {
+		self.record("write");
+		if self.cli.is_none() {
+			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+		}
+		self.helper_for(session_id)?
+			.write_input(data)
+			.map_err(AppError::from)
 	}
 
 	fn resize(
 		&self,
-		_session_id: &str,
-		_rows: u16,
-		_cols: u16,
+		session_id: &str,
+		rows: u16,
+		cols: u16,
 	) -> Result<(), AppError> {
-		Err(self.fail("resize"))
+		self.record("resize");
+		if self.cli.is_none() {
+			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+		}
+		self.helper_for(session_id)?
+			.resize(cols, rows)
+			.map_err(AppError::from)
 	}
 
 	fn history(&self, _session_id: &str) -> Result<Vec<u8>, AppError> {
@@ -569,11 +769,41 @@ impl TerminalRuntime for HerdrStubAdapter {
 	fn clear(&self, _session_id: &str) -> Result<(), AppError> {
 		Err(self.fail("clear"))
 	}
+
+	fn attach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		HerdrStubAdapter::attach_output(self, session_id, stream_id)
+	}
+
+	fn detach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		HerdrStubAdapter::detach_output(self, session_id, stream_id)
+	}
+
+	fn recv_terminal_frame(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<HerdrTerminalFrame, AppError> {
+		HerdrStubAdapter::recv_terminal_frame(self, session_id, stream_id)
+	}
+
+	fn release_attachments(&self) {
+		HerdrStubAdapter::release_attachments(self);
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use std::collections::HashMap;
+	use std::ffi::OsString;
+	use std::path::PathBuf;
 	use std::sync::{Arc, Mutex};
 
 	use diesel::prelude::*;
@@ -583,7 +813,9 @@ mod tests {
 
 	use super::*;
 	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{LocalAdapter, RuntimeRouter, RuntimeSelector};
+	use crate::runtime::{
+		HerdrCliAttach, LocalAdapter, RuntimeRouter, RuntimeSelector,
+	};
 	use crate::PtyEventEmitter;
 	use model::runtime::RuntimeBackend;
 
@@ -824,6 +1056,57 @@ mod tests {
 		sessions: PtySessionMap,
 		read_threads: PtyReadThreads,
 		cwd: tempfile::TempDir,
+		fake_cli: PathBuf,
+		namespace: infra::herdr::process::HerdrNamespace,
+	}
+
+	fn write_fake_cli(fake_dir: &std::path::Path) -> PathBuf {
+		let path = fake_dir.join("herdr");
+		std::fs::write(
+			&path,
+			r#"#!/usr/bin/env python3
+import os, sys, time, threading
+from pathlib import Path
+fake = Path(os.environ["HERDR_FAKE_DIR"])
+fake.mkdir(parents=True, exist_ok=True)
+(fake / "args.log").open("a").write(" ".join(sys.argv[1:]) + "\n")
+(fake / "env.log").open("a").write(
+    "HERDR_SESSION=%s HERDR_SOCKET_PATH=%s\n"
+    % (os.environ.get("HERDR_SESSION", ""), os.environ.get("HERDR_SOCKET_PATH", ""))
+)
+def pump():
+    with (fake / "stdin.log").open("ab") as out:
+        while True:
+            try:
+                chunk = os.read(0, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            out.write(chunk)
+            out.flush()
+threading.Thread(target=pump, daemon=True).start()
+frames = fake / "frames.ndjson"
+if frames.exists():
+    sys.stdout.buffer.write(frames.read_bytes())
+    sys.stdout.buffer.flush()
+else:
+    sys.stdout.write('{"type":"terminal.frame","seq":1,"encoding":"ansi","width":80,"height":24,"full":true,"bytes":"YQ=="}\n')
+    sys.stdout.flush()
+time.sleep(30)
+"#,
+		)
+		.unwrap();
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			std::fs::set_permissions(
+				&path,
+				std::fs::Permissions::from_mode(0o755),
+			)
+			.unwrap();
+		}
+		path
 	}
 
 	impl Fixture {
@@ -851,10 +1134,29 @@ mod tests {
 				)
 				.unwrap();
 			}
+			let fake_dir = cwd.path().join("fake-cli");
+			std::fs::create_dir_all(&fake_dir).unwrap();
+			let fake_cli = write_fake_cli(&fake_dir);
+			let xdg = cwd.path().join("xdg-config");
+			std::fs::create_dir_all(xdg.join("herdr")).unwrap();
+			let namespace =
+				infra::herdr::process::resolve_namespace(xdg).unwrap();
+			let extra_env = vec![
+				(
+					OsString::from("HOME"),
+					cwd.path().join("home").into_os_string(),
+				),
+				(OsString::from("HERDR_FAKE_DIR"), fake_dir.into_os_string()),
+			];
 			let fake = Arc::new(FakeTerminals::with_root("w1"));
-			let adapter = HerdrStubAdapter::with_terminal_client(
+			let adapter = HerdrStubAdapter::with_terminal_client_and_cli(
 				db.clone(),
 				fake.clone(),
+				HerdrCliAttach {
+					executable: fake_cli.clone(),
+					namespace: namespace.clone(),
+					extra_env: extra_env.clone(),
+				},
 			);
 			let sessions = infra::pty::create_session_map();
 			let read_threads = infra::pty::create_thread_tracker();
@@ -865,7 +1167,36 @@ mod tests {
 				sessions,
 				read_threads,
 				cwd,
+				fake_cli,
+				namespace,
 			}
+		}
+
+		fn cli_attach(&self) -> HerdrCliAttach {
+			HerdrCliAttach {
+				executable: self.fake_cli.clone(),
+				namespace: self.namespace.clone(),
+				extra_env: vec![
+					(
+						OsString::from("HOME"),
+						self.cwd.path().join("home").into_os_string(),
+					),
+					(
+						OsString::from("HERDR_FAKE_DIR"),
+						self.cwd.path().join("fake-cli").into_os_string(),
+					),
+				],
+			}
+		}
+
+		fn args_log(&self) -> String {
+			std::fs::read_to_string(self.cwd.path().join("fake-cli/args.log"))
+				.unwrap_or_default()
+		}
+
+		fn stdin_log(&self) -> String {
+			std::fs::read_to_string(self.cwd.path().join("fake-cli/stdin.log"))
+				.unwrap_or_default()
 		}
 
 		fn router(&self) -> RuntimeRouter {
@@ -881,9 +1212,10 @@ mod tests {
 					emitter: Arc::new(TestEmitter),
 					output_dir: logs,
 				}),
-				HerdrStubAdapter::with_terminal_client(
+				HerdrStubAdapter::with_terminal_client_and_cli(
 					self.db.clone(),
 					self.fake.clone(),
+					self.cli_attach(),
 				),
 			)
 		}
@@ -1140,8 +1472,112 @@ mod tests {
 				&fx.config()
 			)
 			.is_err());
+		assert!(fx.adapter.flush(&created.session_id).is_err());
+		assert!(fx.adapter.clear(&created.session_id).is_err());
 		assert!(!fx.fake.calls().iter().any(|m| m.contains("send")));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn attach_write_resize_release_does_not_pane_close() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		fx.adapter
+			.attach_output(&created.session_id, "stream-a")
+			.unwrap();
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		let frame = fx
+			.adapter
+			.recv_terminal_frame(&created.session_id, "stream-a")
+			.unwrap();
+		assert!(frame.full);
+		assert_eq!(frame.bytes, b"a");
+		fx.adapter.write(&created.session_id, b"echo hi\n").unwrap();
+		fx.adapter.resize(&created.session_id, 24, 90).unwrap();
+		std::thread::sleep(std::time::Duration::from_millis(120));
+		fx.adapter
+			.detach_output(&created.session_id, "stream-a")
+			.unwrap();
+		std::thread::sleep(std::time::Duration::from_millis(160));
+		let args = fx.args_log();
+		assert!(args.contains("terminal session control"), "{args}");
+		assert!(args.contains("--session 2code"), "{args}");
+		assert!(!args.contains("--takeover"), "{args}");
+		assert!(!args.contains("observe"), "{args}");
+		let stdin = fx.stdin_log();
+		assert!(stdin.contains("terminal.input"), "{stdin}");
+		assert!(stdin.contains("terminal.resize"), "{stdin}");
+		assert!(stdin.contains("terminal.release"), "{stdin}");
+		assert!(!stdin.contains("pane.close"), "{stdin}");
+		assert_eq!(fx.fake.pane_close_calls(), 0);
+		assert!(fx.adapter.history(&created.session_id).is_err());
+		assert!(fx.adapter.flush(&created.session_id).is_err());
+		assert!(fx.adapter.clear(&created.session_id).is_err());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn close_after_attach_still_terminates_the_pane() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		fx.adapter
+			.attach_output(&created.session_id, "stream-a")
+			.unwrap();
+		fx.adapter.close_session(&created.session_id).unwrap();
+		assert_eq!(fx.fake.pane_close_calls(), 1);
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn stale_stream_id_does_not_release_newer_helper() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		fx.adapter
+			.attach_output(&created.session_id, "old")
+			.unwrap();
+		fx.adapter
+			.attach_output(&created.session_id, "new")
+			.unwrap();
+		fx.adapter
+			.detach_output(&created.session_id, "old")
+			.unwrap();
+		fx.adapter.write(&created.session_id, b"still\n").unwrap();
+		fx.adapter
+			.detach_output(&created.session_id, "new")
+			.unwrap();
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn missing_mapping_or_pane_fails_closed() {
+		let fx = Fixture::new();
+		let err = fx.adapter.attach_output("missing-sess", "s1").unwrap_err();
+		assert!(err.to_string().contains("missing"), "{err}");
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		{
+			let mut state = fx.fake.state.lock().unwrap();
+			state.panes.clear();
+		}
+		let err = fx
+			.adapter
+			.attach_output(&created.session_id, "s1")
+			.unwrap_err();
+		assert!(err.to_string().contains("missing"), "{err}");
+		assert!(fx.args_log().is_empty());
 	}
 
 	#[test]
@@ -1158,6 +1594,21 @@ mod tests {
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		assert!(router.write(&created.session_id, b"x").is_err());
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn router_herdr_attach_does_not_spawn_local_pty() {
+		let fx = Fixture::new();
+		let router = fx.router();
+		let created = router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		router.attach_output(&created.session_id, "s1").unwrap();
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		router.write(&created.session_id, b"x\n").unwrap();
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		router.detach_output(&created.session_id, "s1").unwrap();
 	}
 
 	#[test]
@@ -1177,7 +1628,12 @@ mod tests {
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("server.stop"));
 		assert!(!src.contains("herdr-client.sock"));
-		assert!(!src.contains("terminal session"));
+		assert!(!src.contains("pane.send_text"));
+		assert!(!src.contains("pane.send_input"));
+		assert!(!src.contains("pane.send_keys"));
+		assert!(!src.contains("pane.split"));
+		assert!(!src.contains("--takeover"));
+		assert!(src.contains("attach_control"));
 	}
 
 	#[test]
@@ -1192,6 +1648,7 @@ mod tests {
 			.unwrap();
 		assert!(!detach.contains("close_session"));
 		assert!(!detach.contains("pane.close"));
+		assert!(detach.contains("detach_output"));
 		let close = pty
 			.split("pub fn close_pty_session")
 			.nth(1)
@@ -1200,6 +1657,14 @@ mod tests {
 			.next()
 			.unwrap();
 		assert!(close.contains("close_session"));
+		assert!(pty.contains("stream_herdr_output"));
+		assert!(pty.contains("HerdrTerminalFrame"));
+		assert!(!pty.contains("pane.send_text"));
+		let lib = include_str!("../../../../src/lib.rs");
+		assert!(lib.contains("stream_herdr_output"));
+		assert!(lib.contains("release_attachments"));
+		assert!(!lib.contains("server.stop"));
+		assert!(!lib.contains("ensure_herdr_listener"));
 	}
 
 	#[test]

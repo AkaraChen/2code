@@ -279,6 +279,22 @@ impl TerminalSessionHelper {
 		}
 	}
 
+	pub fn recv_frame_blocking(
+		&self,
+	) -> Result<TerminalFrame, HerdrTerminalError> {
+		loop {
+			match self.recv_frame(Duration::from_millis(200)) {
+				Ok(frame) => return Ok(frame),
+				Err(HerdrTerminalError::Io(err))
+					if err.kind() == io::ErrorKind::TimedOut =>
+				{
+					continue;
+				}
+				Err(err) => return Err(err),
+			}
+		}
+	}
+
 	pub fn write_input_text(
 		&self,
 		text: &str,

@@ -2,8 +2,8 @@
 //!
 //! Handlers talk to [`RuntimeRouter`]. The Local adapter wraps the current
 //! PTY implementation. Herdr create/list/close use pane identities when a
-//! client is injected; write/resize/restore stay fail-closed. Herdr is
-//! never the default.
+//! client is injected; write/resize require an attached CLI helper.
+//! History/restore stay fail-closed. Herdr is never the default.
 
 mod herdr;
 mod local;
@@ -21,7 +21,9 @@ use model::runtime::{
 	SessionOwnership,
 };
 
-pub use herdr::{HerdrJsonTerminals, HerdrStubAdapter, HerdrTerminalClient};
+pub use herdr::{
+	HerdrCliAttach, HerdrJsonTerminals, HerdrStubAdapter, HerdrTerminalClient,
+};
 pub use infra::herdr::process::{
 	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
 };
@@ -78,6 +80,32 @@ pub trait TerminalRuntime: Send + Sync {
 	fn flush(&self, session_id: &str) -> Result<(), AppError>;
 
 	fn clear(&self, session_id: &str) -> Result<(), AppError>;
+
+	fn attach_output(
+		&self,
+		_session_id: &str,
+		_stream_id: &str,
+	) -> Result<(), AppError> {
+		Ok(())
+	}
+
+	fn detach_output(
+		&self,
+		_session_id: &str,
+		_stream_id: &str,
+	) -> Result<(), AppError> {
+		Ok(())
+	}
+
+	fn recv_terminal_frame(
+		&self,
+		_session_id: &str,
+		_stream_id: &str,
+	) -> Result<model::runtime::HerdrTerminalFrame, AppError> {
+		Err(AppError::PtyError("not a Herdr session".into()))
+	}
+
+	fn release_attachments(&self) {}
 }
 
 /// Process-wide backend selector. Production default is Local.
@@ -198,6 +226,17 @@ impl RuntimeRouter {
 
 	pub fn unbind_session(&self, session_id: &str) -> Result<(), AppError> {
 		self.selector.unbind(session_id)
+	}
+
+	pub fn backend_for(
+		&self,
+		session_id: &str,
+	) -> Result<RuntimeBackend, AppError> {
+		self.selector.backend_for(session_id)
+	}
+
+	pub fn release_attachments(&self) {
+		self.herdr.release_attachments();
 	}
 
 	/// Terminate a bound session on its owner. Unbound live Local PTYs
@@ -361,6 +400,56 @@ impl TerminalRuntime for RuntimeRouter {
 	fn clear(&self, session_id: &str) -> Result<(), AppError> {
 		let backend = self.selector.backend_for(session_id)?;
 		self.adapter(backend).clear(session_id)
+	}
+
+	fn attach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		match self.selector.backend_for(session_id)? {
+			RuntimeBackend::Local => Ok(()),
+			RuntimeBackend::Herdr => {
+				if self.local.has_live_session(session_id) {
+					return Err(AppError::PtyError(format!(
+						"session {session_id} is owned by local; refusing Herdr helper"
+					)));
+				}
+				self.herdr.attach_output(session_id, stream_id)
+			}
+		}
+	}
+
+	fn detach_output(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<(), AppError> {
+		match self.selector.backend_for(session_id)? {
+			RuntimeBackend::Local => Ok(()),
+			RuntimeBackend::Herdr => {
+				self.herdr.detach_output(session_id, stream_id)
+			}
+		}
+	}
+
+	fn recv_terminal_frame(
+		&self,
+		session_id: &str,
+		stream_id: &str,
+	) -> Result<model::runtime::HerdrTerminalFrame, AppError> {
+		match self.selector.backend_for(session_id)? {
+			RuntimeBackend::Local => {
+				Err(AppError::PtyError("not a Herdr session".into()))
+			}
+			RuntimeBackend::Herdr => {
+				self.herdr.recv_terminal_frame(session_id, stream_id)
+			}
+		}
+	}
+
+	fn release_attachments(&self) {
+		RuntimeRouter::release_attachments(self);
 	}
 }
 
@@ -592,6 +681,9 @@ mod tests {
 
 		fx.router.write(id, b"echo ok\n").unwrap();
 		fx.router.resize(id, 30, 100).unwrap();
+		fx.router.attach_output(id, "stream-1").unwrap();
+		fx.router.write(id, b"echo still-local\n").unwrap();
+		assert_eq!(fx.live_count(), 1);
 
 		let listed = fx.router.list_project_sessions("p1").unwrap();
 		let record = listed.iter().find(|s| s.id == *id).unwrap();
@@ -658,9 +750,34 @@ mod tests {
 
 		fx.router.write(&id, b"echo still-local\n").unwrap();
 		fx.router.resize(&id, 24, 80).unwrap();
+		fx.router.attach_output(&id, "stream-local").unwrap();
+		let err = fx
+			.router
+			.recv_terminal_frame(&id, "stream-local")
+			.unwrap_err();
+		assert!(err.to_string().contains("not a Herdr"), "{err}");
 		assert!(fx.router.herdr.recorded_ops().is_empty());
 		assert_eq!(fx.router.owner(&id).unwrap(), Some(RuntimeBackend::Local));
 		assert_eq!(fx.live_count(), 1);
+	}
+
+	#[test]
+	fn herdr_attach_refuses_when_local_pty_is_live() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let id = created.session_id;
+		fx.router.unbind_session(&id).unwrap();
+		fx.router.bind_session(&id, RuntimeBackend::Herdr).unwrap();
+		let err = fx.router.attach_output(&id, "stream-1").unwrap_err();
+		assert!(err.to_string().contains("owned by local"), "{err}");
+		assert!(err.to_string().contains("Herdr helper"), "{err}");
+		assert_eq!(fx.live_count(), 1);
+		fx.router.unbind_session(&id).unwrap();
+		fx.router.bind_session(&id, RuntimeBackend::Local).unwrap();
+		fx.router.write(&id, b"echo still-local\n").unwrap();
 	}
 
 	#[test]

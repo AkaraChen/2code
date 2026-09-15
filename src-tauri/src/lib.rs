@@ -90,6 +90,7 @@ pub fn run() {
 			handler::pty::restore_pty_session,
 			handler::pty::attach_pty_output,
 			handler::pty::stream_pty_output,
+			handler::pty::stream_herdr_output,
 			handler::pty::detach_pty_output,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,
@@ -164,6 +165,11 @@ pub fn run() {
 			service::runtime::release_herdr_client_helpers(
 				&herdr_clients_for_exit,
 			);
+			if let Some(runtime) =
+				app_handle.try_state::<service::runtime::RuntimeHandle>()
+			{
+				runtime.release_attachments();
+			}
 			infra::pty::close_all_sessions(&sessions_for_exit);
 			tracing::info!(target: "pty", "exit: joining read threads...");
 			infra::pty::join_all_read_threads(&read_threads_for_exit);

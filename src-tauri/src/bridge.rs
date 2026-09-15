@@ -97,7 +97,8 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 	}
 }
 
-/// Wire the Local adapter at startup. Herdr is not selected.
+/// Wire the Local adapter at startup. Herdr is not selected and terminal
+/// attach is not started from this constructor.
 pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
 	Arc::new(RuntimeRouter::new(
 		LocalAdapter::new(build_pty_context(app)),
