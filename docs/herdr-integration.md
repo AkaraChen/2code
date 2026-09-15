@@ -2,10 +2,15 @@
 
 Pinned contract for migrating 2code onto [Herdr](https://herdr.dev). Later tasks must depend on this release and the behaviors marked **verified** below. Claims from Herdr docs that this probe did not execute are marked **documented** or **unverified**.
 
-**Decision: proceed** with Herdr **v0.9.0** for Tasks 2–4, 6–9, and 11–12 on **Linux x86_64 (executed)**. macOS Unix sockets and terminal attach are **documented** by Herdr and have release assets, but this probe did **not** execute on macOS. Blocking gaps:
+**Decision: proceed** with Herdr **v0.9.0** on **Linux x86_64 (executed)** for Tasks 2–4, 6–9, **Task 5 (Unix JSON)**, and **Task 10 (CLI `herdr terminal session` frames)**. Tasks 11–12 stay gated on Task 10; this contract does not unblock them independently.
+
+macOS Unix sockets and `terminal session` attach are **documented** by Herdr and have release assets, but this probe did **not** execute on the primary shipping OS — [#401](https://github.com/AkaraChen/2code/issues/401).
+
+**Blocked:**
 
 - Task 5 on Windows: named-pipe JSON **unverified** — [#399](https://github.com/AkaraChen/2code/issues/399)
 - Task 10 on Windows: live terminal attach **unsupported** — [#396](https://github.com/AkaraChen/2code/issues/396)
+- Task 5/10 on macOS: Unix sockets and `terminal session` attach **not executed** — [#401](https://github.com/AkaraChen/2code/issues/401)
 - Task 13: live agent detection **unverified** — [#398](https://github.com/AkaraChen/2code/issues/398)
 - Task 17: no create-time startup command — [#397](https://github.com/AkaraChen/2code/issues/397)
 - Line-count growth vs the 200–400 estimate (tests/docs only) — [#400](https://github.com/AkaraChen/2code/issues/400)
@@ -261,16 +266,16 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | Capability | Linux x86_64 | Linux aarch64 | macOS | Windows x86_64 |
 | --- | --- | --- | --- | --- |
 | Release asset | **verified** (executed) | asset+checksum recorded | asset+checksum recorded | zip+checksum recorded |
-| JSON API Unix socket | **verified** (executed) | documented | documented, **not executed** | n/a |
+| JSON API Unix socket | **verified** (executed) | documented | documented, **not executed** ([#401](https://github.com/AkaraChen/2code/issues/401)) | n/a |
 | JSON API named pipe | n/a | n/a | n/a | documented, **unverified** ([#399](https://github.com/AkaraChen/2code/issues/399)) |
-| `herdr server` + `HERDR_SOCKET_PATH` | **verified** | documented | documented, **not executed** | documented |
-| `terminal session control/observe` | **verified** | documented | documented (Unix) | **unsupported** ([#396](https://github.com/AkaraChen/2code/issues/396)) |
+| `herdr server` + `HERDR_SOCKET_PATH` | **verified** | documented | documented, **not executed** ([#401](https://github.com/AkaraChen/2code/issues/401)) | documented |
+| `terminal session control/observe` | **verified** | documented | documented, **not executed** ([#401](https://github.com/AkaraChen/2code/issues/401)) | **unsupported** ([#396](https://github.com/AkaraChen/2code/issues/396)) |
 | Full vs incremental frames | **verified** | — | — | — |
 | Unicode / SGR / alt-screen / DSR+DA | **verified** | — | — | — |
 | Worktree create/open/remove + dirty primary | **verified** | documented | documented | documented (`--trust-repository` for other-SID repos) |
 | Client disconnect keeps server | **verified** | documented | documented | documented |
 | Server restart restores workspace/tab/pane ids, not processes | **verified** | documented | documented | documented |
-| Agent detection live states | empty-shell `unknown` **verified**; live CLIs **unverified** ([#398](https://github.com/AkaraChen/2code/issues/398)) | — | — | — |
+| Agent detection live states | empty-shell `unknown` **verified** (`pane.get` in `herdr_contract.rs`); live CLIs **unverified** ([#398](https://github.com/AkaraChen/2code/issues/398)) | — | — | — |
 | `live_handoff` | capability flag true; **not exercised** (not required for local Tasks 2–12) | — | — | — |
 
 ## Later-task capabilities
@@ -281,7 +286,7 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | Working directory | `--cwd` on workspace/tab/worktree create **verified**. `terminal.new_cwd = follow` when omitted (**documented**). |
 | Environment | `--env CONTRACT_ENV=from_probe` on `workspace.create` **verified** (`printenv` returns `from_probe`). Herdr-injected `HERDR_*` variables are **documented**. |
 | Startup command | **Not** a create parameter. Workaround after create: JSON `pane.send_input` with `text` ending in a newline, or CLI `herdr pane run` (not a schema method). Blocking: [#397](https://github.com/AkaraChen/2code/issues/397). `layout.apply` argv is **documented**, not probed. |
-| Agent state | Idle shells **verified** `unknown`. Live agent CLIs **unverified**. Blocking for Task 13: [#398](https://github.com/AkaraChen/2code/issues/398). |
+| Agent state | Idle shells **verified** `agent_status: "unknown"` via JSON `pane.get` (and empty `snapshot.agents`) before any command. Live agent CLIs **unverified**. Blocking for Task 13: [#398](https://github.com/AkaraChen/2code/issues/398). |
 | Subscriptions | `events.subscribe` ack + live `tab.created` **verified**. Full bootstrap race (subscribe → snapshot → drain) is **documented** by Herdr, not separately race-tested. |
 | Scrollback search | `pane.read` snapshots **verified**; live search is a 2code UI concern. |
 
@@ -291,6 +296,7 @@ Herdr tabs in the same workspace are additional pane groups, still flattened int
 | --- | --- | --- |
 | Windows live terminal attach / `terminal session` | Task 10 on Windows | [#396](https://github.com/AkaraChen/2code/issues/396) |
 | Windows named-pipe JSON transport unverified | Task 5 on Windows | [#399](https://github.com/AkaraChen/2code/issues/399) |
+| macOS Unix sockets and `terminal session` attach not executed | Task 5/10 on macOS | [#401](https://github.com/AkaraChen/2code/issues/401) |
 | No create-time startup command / argv on `workspace.create` / `tab.create` | Task 17 | [#397](https://github.com/AkaraChen/2code/issues/397) |
 | Live agent detection (`working`/`blocked`/`done`) unverified | Task 13 | [#398](https://github.com/AkaraChen/2code/issues/398) |
 
@@ -300,8 +306,8 @@ Not blocking (recorded, no issue):
 - `herdr server` is foreground (`detached_server_daemon: false`) — **verified**. Task 4 must detach the process.
 - `live_handoff` advertised but not exercised — not required for local Tasks 2–12.
 
-None of the open issues block Task 2 (runtime boundary) or Task 5 on **Linux** (Unix sockets **verified**). macOS Unix sockets remain **documented, not executed**.
+None of the open issues block Task 2 (runtime boundary), Task 5 on **Linux** (Unix JSON **verified**), or Task 10 on **Linux** (CLI terminal frames **verified**). Tasks 11–12 remain gated on Task 10. macOS Unix sockets and `terminal session` attach remain **documented, not executed** ([#401](https://github.com/AkaraChen/2code/issues/401)). Windows Task 5/10 stay blocked via [#399](https://github.com/AkaraChen/2code/issues/399) / [#396](https://github.com/AkaraChen/2code/issues/396).
 
 ## Scope vs the 200–400 line estimate
 
-Issue #395 estimated 200–400 lines and required material growth to be tracked separately: [#400](https://github.com/AkaraChen/2code/issues/400). This branch is larger because the issue also required an executable probe against a real sidecar: isolation, checksums, captured frames, worktree fixtures, and lifecycle evidence. All of that is tests and docs; production, frontend, and the default runtime are unchanged. Splitting the extra evidence into a follow-up implementation issue would leave Tasks 5/10–12 without the contract #395 asked them to depend on, so it stays in Task 1.
+Issue #395 estimated 200–400 lines and required material growth to be tracked separately: [#400](https://github.com/AkaraChen/2code/issues/400). This branch is larger because the issue also required an executable probe against a real sidecar: isolation, checksums, captured frames, worktree fixtures, and lifecycle evidence. All of that is tests and docs; production, frontend, and the default runtime are unchanged. Splitting the extra evidence into a follow-up implementation issue would leave Linux Tasks 5/10 (and 11–12 via Task 10) without the contract #395 asked them to depend on, so it stays in Task 1.
