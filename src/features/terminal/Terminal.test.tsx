@@ -1,7 +1,20 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getPtySessionHistory } from "@/generated";
+import { listen } from "@tauri-apps/api/event";
+import type { HerdrTerminalFrame } from "@/generated";
+import {
+	clearPtyOutput,
+	detachPtyOutput,
+	flushPtyOutput,
+	getPtySessionHistory,
+	getSessionBackend,
+	streamHerdrOutput,
+	streamPtyOutput,
+	writeToPty,
+} from "@/generated";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "./store";
 
@@ -16,6 +29,11 @@ const {
 		fireSelectionChange: () => void;
 		fireTitleChange: (title: string) => void;
 		setSelection: (selection: string) => void;
+		writes: unknown[];
+		resetCount: number;
+		csiHandlers: Array<{ final: string }>;
+		fireData: (data: string) => void;
+		fireBinary: (data: string) => void;
 	}
 
 	const terminalInstances: MockTerminalInstance[] = [];
@@ -28,15 +46,26 @@ const {
 		rows: number;
 		element: HTMLElement | null = null;
 		options: Record<string, unknown>;
+		writes: unknown[] = [];
+		resetCount = 0;
+		csiHandlers: Array<{ final: string }> = [];
 		buffer = {
 			active: {
 				length: 0,
 				getLine: () => undefined,
 			},
 		};
+		parser = {
+			registerCsiHandler: (id: { final: string }) => {
+				this.csiHandlers.push(id);
+				return { dispose: vi.fn() };
+			},
+		};
 		private selection = "";
 		private selectionListeners: Array<() => void> = [];
 		private titleListeners: Array<(title: string) => void> = [];
+		private dataListeners: Array<(data: string) => void> = [];
+		private binaryListeners: Array<(data: string) => void> = [];
 
 		constructor(options: { cols: number; rows: number }) {
 			this.cols = options.cols;
@@ -52,7 +81,11 @@ const {
 		focus() {}
 		refresh() {}
 		clear() {}
-		write(_data: unknown, callback?: () => void) {
+		reset() {
+			this.resetCount += 1;
+		}
+		write(data: unknown, callback?: () => void) {
+			this.writes.push(data);
 			callback?.();
 		}
 
@@ -76,6 +109,14 @@ const {
 			for (const listener of this.titleListeners) listener(title);
 		}
 
+		fireData(data: string) {
+			for (const listener of this.dataListeners) listener(data);
+		}
+
+		fireBinary(data: string) {
+			for (const listener of this.binaryListeners) listener(data);
+		}
+
 		onSelectionChange(listener: () => void) {
 			this.selectionListeners.push(listener);
 			return { dispose: vi.fn() };
@@ -86,7 +127,13 @@ const {
 			return { dispose: vi.fn() };
 		}
 
-		onData() {
+		onData(listener: (data: string) => void) {
+			this.dataListeners.push(listener);
+			return { dispose: vi.fn() };
+		}
+
+		onBinary(listener: (data: string) => void) {
+			this.binaryListeners.push(listener);
 			return { dispose: vi.fn() };
 		}
 
@@ -129,6 +176,7 @@ vi.mock("@/generated", () => ({
 	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	flushPtyOutput: vi.fn(() => Promise.resolve()),
 	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
+	getSessionBackend: vi.fn(() => Promise.resolve("local")),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	playSystemSound: vi.fn(() => Promise.resolve()),
@@ -136,6 +184,7 @@ vi.mock("@/generated", () => ({
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
 	),
+	streamHerdrOutput: vi.fn(() => Promise.resolve()),
 	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
 }));
@@ -164,6 +213,8 @@ vi.mock("./hooks", () => ({
 vi.mock("./lib", () => ({
 	applyTerminalFontFamilyCssVariable: vi.fn(),
 	buildFontFamilyCss: (fontFamily: string) => fontFamily,
+	BUFFER_STORAGE_PREFIX: "terminal-buffer:",
+	DIMS_STORAGE_PREFIX: "terminal-dims:",
 	createResizeScheduler: () => ({
 		observe: vi.fn(),
 		dispose: vi.fn(),
@@ -203,9 +254,48 @@ vi.mock("./lib", () => ({
 	},
 }));
 
-function renderTerminal() {
-	render(<Terminal profileId="profile-1" sessionId="session-1" isActive={false} />);
-	return terminalInstances[terminalInstances.length - 1];
+function renderTerminal(isActive = false) {
+	return render(
+		<Terminal
+			profileId="profile-1"
+			sessionId="session-1"
+			isActive={isActive}
+		/>,
+	);
+}
+
+function latestTerminal() {
+	return terminalInstances[terminalInstances.length - 1]!;
+}
+
+function loadFixtureFrame(name: string): HerdrTerminalFrame {
+	const path = resolve(
+		"src-tauri/crates/infra/tests/fixtures/herdr/frames",
+		name,
+	);
+	const fixture = JSON.parse(readFileSync(path, "utf8")) as {
+		record: {
+			seq: number;
+			full: boolean;
+			width: number;
+			height: number;
+			bytes: string;
+		};
+	};
+	return {
+		seq: fixture.record.seq,
+		full: fixture.record.full,
+		width: fixture.record.width,
+		height: fixture.record.height,
+		bytes: Array.from(Buffer.from(fixture.record.bytes, "base64")),
+	};
+}
+
+function herdrChannel() {
+	const call = (streamHerdrOutput as unknown as Mock).mock.calls[0]?.[0] as {
+		onOutput: { onmessage: (frame: HerdrTerminalFrame) => void };
+	};
+	return call.onOutput;
 }
 
 describe("terminal select to copy", () => {
@@ -218,6 +308,11 @@ describe("terminal select to copy", () => {
 		readClipboardTextMock.mockReset();
 		toasterCreateMock.mockReset();
 		getPtySessionHistoryMock.mockClear();
+		getPtySessionHistoryMock.mockResolvedValue([]);
+		(getSessionBackend as unknown as Mock).mockReset();
+		(getSessionBackend as unknown as Mock).mockResolvedValue("local");
+		(streamHerdrOutput as unknown as Mock).mockClear();
+		(streamPtyOutput as unknown as Mock).mockClear();
 		useTerminalStore.setState({
 			profiles: {},
 			agentStatuses: {},
@@ -232,7 +327,8 @@ describe("terminal select to copy", () => {
 	});
 
 	it("does not copy before xterm reports a selection change", () => {
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		terminal.setSelection("selected text");
 
@@ -241,7 +337,8 @@ describe("terminal select to copy", () => {
 	});
 
 	it("copies the selected text and shows a toast after xterm reports a selection change", async () => {
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		terminal.setSelection("selected text");
 		terminal.fireSelectionChange();
@@ -253,7 +350,8 @@ describe("terminal select to copy", () => {
 	});
 
 	it("does not copy empty selection", () => {
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		terminal.setSelection("");
 		terminal.fireSelectionChange();
@@ -263,7 +361,8 @@ describe("terminal select to copy", () => {
 	});
 
 	it("does not copy the same selection twice", async () => {
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		terminal.setSelection("selected text");
 		terminal.fireSelectionChange();
@@ -280,7 +379,8 @@ describe("terminal select to copy", () => {
 	});
 
 	it("publishes waiting status from an action-required title", async () => {
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		await waitFor(() => {
 			expect(getPtySessionHistoryMock).toHaveBeenCalled();
@@ -301,7 +401,8 @@ describe("terminal select to copy", () => {
 				resolveHistory = resolve;
 			}),
 		);
-		const terminal = renderTerminal();
+		renderTerminal();
+		const terminal = latestTerminal();
 
 		terminal.fireTitleChange("Action Required");
 		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBeUndefined();
@@ -313,5 +414,150 @@ describe("terminal select to copy", () => {
 				"waiting",
 			);
 		});
+	});
+
+	it("streams Local PTY bytes and never opens a Herdr frame stream", async () => {
+		renderTerminal();
+		await waitFor(() => {
+			expect(streamPtyOutput).toHaveBeenCalled();
+		});
+		expect(streamHerdrOutput).not.toHaveBeenCalled();
+		expect(getPtySessionHistory).toHaveBeenCalled();
+		expect(latestTerminal().csiHandlers).toEqual([]);
+		latestTerminal().fireData("ls\n");
+		expect(writeToPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			data: "ls\n",
+		});
+	});
+});
+
+describe("herdr xterm transport", () => {
+	beforeEach(() => {
+		terminalInstances.length = 0;
+		(getSessionBackend as unknown as Mock).mockReset();
+		(getSessionBackend as unknown as Mock).mockResolvedValue("herdr");
+		(streamHerdrOutput as unknown as Mock).mockReset();
+		(streamHerdrOutput as unknown as Mock).mockResolvedValue(undefined);
+		(streamPtyOutput as unknown as Mock).mockClear();
+		(getPtySessionHistory as unknown as Mock).mockClear();
+		(flushPtyOutput as unknown as Mock).mockClear();
+		(detachPtyOutput as unknown as Mock).mockClear();
+		(clearPtyOutput as unknown as Mock).mockClear();
+		(writeToPty as unknown as Mock).mockClear();
+		(listen as unknown as Mock).mockClear();
+		useTerminalStore.setState({
+			profiles: {
+				"profile-1": {
+					tabs: [{ id: "session-1", title: "Terminal 1" }],
+					activeTabId: "session-1",
+					counter: 1,
+				},
+			},
+			agentStatuses: {},
+			agentCompletions: {},
+			sessionProfileIds: { "session-1": "profile-1" },
+		});
+		localStorage.clear();
+		localStorage.setItem("terminal-buffer:session-1", "CACHED_SCROLLBACK");
+	});
+
+	afterEach(() => {
+		cleanup();
+	});
+
+	async function renderHerdr(isActive = false) {
+		const view = renderTerminal(isActive);
+		await waitFor(() => {
+			expect(streamHerdrOutput).toHaveBeenCalled();
+		});
+		return view;
+	}
+
+	it("streams Herdr frames only and skips Local history replay", async () => {
+		await renderHerdr();
+		expect(streamPtyOutput).not.toHaveBeenCalled();
+		expect(getPtySessionHistory).not.toHaveBeenCalled();
+		expect(flushPtyOutput).not.toHaveBeenCalled();
+		expect(latestTerminal().writes).not.toContain("CACHED_SCROLLBACK");
+		expect(listen).not.toHaveBeenCalledWith(
+			"pty-exit-session-1",
+			expect.any(Function),
+		);
+	});
+
+	it("treats a verified full frame as a replacement surface", async () => {
+		await renderHerdr();
+		const terminal = latestTerminal();
+		herdrChannel().onmessage(loadFixtureFrame("full-redraw.json"));
+		expect(terminal.resetCount).toBe(1);
+		expect(terminal.writes).toHaveLength(1);
+		expect(terminal.writes[0]).toBeInstanceOf(Uint8Array);
+		const text = Buffer.from(terminal.writes[0] as Uint8Array).toString(
+			"latin1",
+		);
+		expect(text).toContain("\x1b[2J");
+		expect(text).toContain("\x1b[?2026h");
+	});
+
+	it("appends a verified incremental frame and ignores stale seq", async () => {
+		await renderHerdr();
+		const terminal = latestTerminal();
+		const full = loadFixtureFrame("full-redraw.json");
+		const incr = loadFixtureFrame("incremental.json");
+		herdrChannel().onmessage(full);
+		herdrChannel().onmessage(full);
+		herdrChannel().onmessage(incr);
+		herdrChannel().onmessage({ ...incr, seq: full.seq });
+		expect(terminal.resetCount).toBe(1);
+		expect(terminal.writes).toHaveLength(2);
+		const incrText = Buffer.from(terminal.writes[1] as Uint8Array).toString(
+			"latin1",
+		);
+		expect(incrText).toContain("INCR_LINE_XYZ");
+		expect(incrText).not.toContain("\x1b[2J");
+	});
+
+	it("installs DSR/DA parser guards and still forwards keyboard input", async () => {
+		await renderHerdr();
+		const terminal = latestTerminal();
+		expect(terminal.csiHandlers).toEqual(
+			expect.arrayContaining([{ final: "n" }, { final: "c" }]),
+		);
+		terminal.fireData("echo hi\n");
+		expect(writeToPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			data: "echo hi\n",
+		});
+		terminal.fireBinary("\x80");
+		expect(writeToPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			data: "\x80",
+		});
+	});
+
+	it("keeps the Herdr stream attached when the tab is hidden", async () => {
+		const view = await renderHerdr(false);
+		expect(detachPtyOutput).not.toHaveBeenCalled();
+		view.rerender(
+			<Terminal
+				profileId="profile-1"
+				sessionId="session-1"
+				isActive={true}
+			/>,
+		);
+		expect(detachPtyOutput).not.toHaveBeenCalled();
+		expect(streamHerdrOutput).toHaveBeenCalledTimes(1);
+		expect(terminalInstances).toHaveLength(1);
+	});
+
+	it("does not persist serialized scrollback onto a Herdr pane", async () => {
+		const view = await renderHerdr();
+		view.unmount();
+		expect(localStorage.getItem("terminal-buffer:session-1")).toBe(
+			"CACHED_SCROLLBACK",
+		);
+		expect(flushPtyOutput).not.toHaveBeenCalled();
+		expect(clearPtyOutput).not.toHaveBeenCalled();
 	});
 });

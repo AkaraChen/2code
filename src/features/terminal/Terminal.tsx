@@ -1,4 +1,3 @@
-import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -21,7 +20,6 @@ import {
   getPtySessionHistory,
   playSystemSound,
   resizePty,
-  streamPtyOutput,
   writeToPty } from
 "@/generated";import { toast } from "sonner";
 
@@ -61,6 +59,17 @@ import {
   sendAgentWaitingNotification,
   shouldNotifyAgentWaiting,
 } from "./lib/agentNotification";
+import {
+  applyHerdrFrameAction,
+  HerdrFrameCursor,
+} from "./lib/herdrFrames";
+import { blockHerdrQueryReplies } from "./lib/herdrQueryGuard";
+import {
+  resolveTerminalTransportKind,
+  startHerdrFrameStream,
+  startLocalByteStream,
+  type TerminalTransportKind,
+} from "./lib/terminalTransport";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
@@ -250,6 +259,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       let lastAgentDetectionAt = 0;
       let lastCopiedSelection = "";
       const streamId = crypto.randomUUID();
+      let transportKind: TerminalTransportKind | null = null;
       const agentDetector = createAgentStatusDetector();
       let latestTitle: string | null = null;
       let latestProgress = "0;0";
@@ -461,6 +471,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             return false;
           }
           if (action.type === "clear-screen") {
+            if (transportKind === "herdr") {
+              void writeToPty({ sessionId, data: "\x0C" });
+              return false;
+            }
             term.clear();
             void clearPtyOutput({ sessionId }).
             catch(() => {}).
@@ -502,8 +516,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
       cleanups.push(() => fileLinkDisposable.dispose());
 
-      // 7. Restore buffer from localStorage (cold restart scrollback)
-      restoreBuffer(sessionId, term);
+      // 7. Local cold-restart scrollback is restored after ownership is known.
+      //    Herdr panes wait for the first full frame instead.
 
       // 8. Initial fit + resize PTY (measureAndResize re-measures the char size
       //    first if xterm's cached cell width does not match the real font)
@@ -603,27 +617,64 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         });
       }
 
-      // 12. Register PTY output channel + exit listener, then replay history.
+      // 12. Register output for the owning backend, then replay Local history.
       async function setupListenersAndReplayHistory() {
-        const outputChannel = new Channel<ArrayBuffer>();
-        outputChannel.onmessage = (payload) => {
-          const bytes = new Uint8Array(payload);
-          if (!isStreamReadyRef.current) {
-            pendingEventsRef.current.push(bytes);
+        const kind = await resolveTerminalTransportKind(sessionId);
+        if (disposed) return;
+        transportKind = kind;
+
+        if (kind === "herdr") {
+          cleanups.push(blockHerdrQueryReplies(term));
+          const cursor = new HerdrFrameCursor();
+          await attachPtyOutput({ sessionId, streamId });
+          if (disposed) {
+            void detachPtyOutput({ sessionId, streamId }).catch(() => {});
             return;
           }
-          writeLiveOutput(bytes);
-        };
+          startHerdrFrameStream({
+            sessionId,
+            streamId,
+            onFrame: (frame) => {
+              const action = cursor.apply(frame);
+              if (!action || disposed) return;
+              applyHerdrFrameAction(term, action, scheduleAgentDetection);
+            },
+            onError: (error) => {
+              consola.warn(
+                `[pty-terminal] failed to stream Herdr output for session ${sessionId}`,
+                error
+              );
+            }
+          });
+          isStreamReadyRef.current = true;
+          if (hasPendingAgentDetection) {
+            scheduleAgentDetection();
+          }
+          return;
+        }
+
+        restoreBuffer(sessionId, term);
         await attachPtyOutput({ sessionId, streamId });
         if (disposed) {
           void detachPtyOutput({ sessionId, streamId }).catch(() => {});
           return;
         }
-        void streamPtyOutput({ sessionId, streamId, onOutput: outputChannel }).catch((error) => {
-          consola.warn(
-            `[pty-terminal] failed to stream output for session ${sessionId}`,
-            error
-          );
+        startLocalByteStream({
+          sessionId,
+          streamId,
+          onBytes: (bytes) => {
+            if (!isStreamReadyRef.current) {
+              pendingEventsRef.current.push(bytes);
+              return;
+            }
+            writeLiveOutput(bytes);
+          },
+          onError: (error) => {
+            consola.warn(
+              `[pty-terminal] failed to stream output for session ${sessionId}`,
+              error
+            );
+          }
         });
         const unlistenExit = await listen(
           `pty-exit-${sessionId}`,
@@ -678,10 +729,19 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           );
         });
       });
+      const binaryDisposable = term.onBinary((data) => {
+        writeToPty({ sessionId, data }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to write binary input for session ${sessionId}`,
+            error
+          );
+        });
+      });
       const resizeDisposable = term.onResize(({ rows, cols }) => {
         resizePty({ sessionId, rows, cols });
       });
       cleanups.push(() => dataDisposable.dispose());
+      cleanups.push(() => binaryDisposable.dispose());
       cleanups.push(() => resizeDisposable.dispose());
 
       // 14. React 19 ref cleanup
@@ -690,18 +750,22 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
         void detachPtyOutput({ sessionId, streamId }).catch(() => {});
 
-        // Flush buffered PTY output to DB before teardown (best-effort)
-        flushPtyOutput({ sessionId }).catch(() => {});
+        if (transportKind === "local") {
+          // Flush buffered PTY output to DB before teardown (best-effort)
+          flushPtyOutput({ sessionId }).catch(() => {});
+        }
 
         const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
           (profile) => profile.tabs.some((tab) => tab.id === sessionId)
         );
 
-        if (stillOpen) {
+        if (stillOpen && transportKind === "local") {
           // Persist buffer + dimensions for cold restart or live remount.
           if (serializeAddonRef.current) {
             persistBuffer(sessionId, serializeAddonRef.current);
           }
+          persistDimensions(sessionId, term.cols, term.rows);
+        } else if (stillOpen) {
           persistDimensions(sessionId, term.cols, term.rows);
         }
 

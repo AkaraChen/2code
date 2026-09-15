@@ -104,6 +104,7 @@ describe("production GUI transport", () => {
 			readFileSync("src/features/terminal/lib/terminalTransport.ts", "utf8"),
 			readFileSync("src/features/terminal/lib/herdrFrames.ts", "utf8"),
 			readFileSync("src/features/terminal/lib/herdrQueryGuard.ts", "utf8"),
+			readFileSync("src/features/terminal/Terminal.tsx", "utf8"),
 		].join("\n");
 		expect(src).not.toContain("pane.send_");
 		expect(src).not.toContain("tab.create");
