@@ -293,14 +293,27 @@ mod tests {
 		.unwrap();
 		assert_eq!(replaced_profile.workspace_id, "w2");
 		assert_eq!(replaced_profile.profile_id, "prof-1");
+		assert!(
+			runtime_mapping::find_session_mapping(&mut conn, "sess-1")
+				.is_err(),
+			"profile replace must not leave a stale session workspace_id"
+		);
 
+		runtime_mapping::bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w2",
+			"w2:p1",
+		)
+		.unwrap();
 		let stored_session =
 			runtime_mapping::find_session_mapping(&mut conn, "sess-1").unwrap();
 		assert_eq!(
 			pane_identity_state_with_new_id(
 				&stored_session,
 				&projection,
-				"w1:p2",
+				"w2:p2",
 			),
 			RuntimeIdentityState::Replaced
 		);
@@ -309,12 +322,12 @@ mod tests {
 			"sess-1",
 			HERDR_NAMESPACE,
 			"w2",
-			"w1:p2",
+			"w2:p2",
 		)
 		.unwrap();
 		assert_eq!(replaced_session.session_id, "sess-1");
 		assert_eq!(replaced_session.workspace_id, "w2");
-		assert_eq!(replaced_session.pane_id, "w1:p2");
+		assert_eq!(replaced_session.pane_id, "w2:p2");
 	}
 
 	#[test]

@@ -195,11 +195,27 @@ pub fn replace_profile_workspace(
 		return Ok(existing);
 	}
 	refuse_stolen_workspace(conn, namespace, workspace_id, profile_id)?;
+	// Old pane_ids belong to the previous workspace. Unbind first so a
+	// crash cannot leave session rows pointing at a different id (#416).
+	unbind_session_mappings_for_profile(conn, profile_id)?;
 	diesel::update(profile_runtime_mappings::table.find(profile_id))
 		.set(profile_runtime_mappings::workspace_id.eq(workspace_id))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 	find_profile_mapping(conn, profile_id)
+}
+
+fn unbind_session_mappings_for_profile(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+) -> Result<(), AppError> {
+	let session_ids = crate::pty::list_ids_by_profile(conn, profile_id)?;
+	for session_id in session_ids {
+		if optional_found(find_session_mapping(conn, &session_id))?.is_some() {
+			unbind_session_pane(conn, &session_id)?;
+		}
+	}
+	Ok(())
 }
 
 pub fn unbind_profile_workspace(
@@ -542,6 +558,55 @@ mod tests {
 				.unwrap()
 				.workspace_id,
 			"w2"
+		);
+	}
+
+	#[test]
+	fn profile_replace_unbinds_stale_session_workspace_ids() {
+		let mut conn = setup_db();
+		seed_catalog(&mut conn);
+		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
+			.unwrap();
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
+			.unwrap();
+		bind_profile_workspace(&mut conn, "prof-2", HERDR_NAMESPACE, "w2")
+			.unwrap();
+		bind_session_pane(&mut conn, "sess-2", HERDR_NAMESPACE, "w2", "w2:p1")
+			.unwrap();
+
+		let same = replace_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		assert_eq!(same.workspace_id, "w1");
+		assert_eq!(
+			find_session_mapping(&mut conn, "sess-1").unwrap().pane_id,
+			"w1:p1"
+		);
+
+		let replaced = replace_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w3",
+		)
+		.unwrap();
+		assert_eq!(replaced.workspace_id, "w3");
+		assert!(find_session_mapping(&mut conn, "sess-1").is_err());
+		assert_eq!(
+			find_session_mapping(&mut conn, "sess-2")
+				.unwrap()
+				.workspace_id,
+			"w2"
+		);
+		assert_eq!(
+			find_profile_mapping(&mut conn, "prof-1")
+				.unwrap()
+				.workspace_id,
+			"w3"
 		);
 	}
 
