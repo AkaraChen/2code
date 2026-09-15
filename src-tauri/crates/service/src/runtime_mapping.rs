@@ -1,96 +1,81 @@
 //! Reconcile persisted Herdr associations against a runtime projection.
 //!
 //! Mapping rows do not transfer live session or worktree ownership.
-//! Identities stay `workspace_id` / `pane_id`; labels, paths, and
-//! `terminal_id` never rebind a stored association.
+//! Identities stay `workspace_id` / `pane_id`. Labels, paths, and
+//! `terminal_id` never rematch a stored association. Replaced is only
+//! an explicit caller-supplied new id in namespace `2code`.
 
 use model::runtime::RuntimeIdentityState;
 use model::runtime_mapping::{ProfileRuntimeMapping, SessionRuntimeMapping};
 
 use crate::runtime_sync::RuntimeProjection;
 
-/// Observed substitute for a stored identity. A different id matched by
-/// label, path, or `terminal_id` is [`RuntimeIdentityState::Replaced`].
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct RuntimeIdentityCandidate<'a> {
-	pub workspace_id: Option<&'a str>,
-	pub pane_id: Option<&'a str>,
-	pub label: Option<&'a str>,
-	pub path: Option<&'a str>,
-	pub terminal_id: Option<&'a str>,
-}
-
 pub fn workspace_identity_state(
 	mapping: &ProfileRuntimeMapping,
 	projection: &RuntimeProjection,
 ) -> RuntimeIdentityState {
-	workspace_identity_state_with_candidate(
-		mapping,
-		projection,
-		&RuntimeIdentityCandidate::default(),
-	)
+	if projection.workspace(&mapping.workspace_id).is_some() {
+		RuntimeIdentityState::Bound
+	} else {
+		RuntimeIdentityState::Missing
+	}
 }
 
-pub fn workspace_identity_state_with_candidate(
+/// Classify a stored workspace against the projection.
+///
+/// `new_workspace_id` is an explicit replacement id. It is never
+/// resolved from a label, path, or `worktree_path`.
+pub fn workspace_identity_state_with_new_id(
 	mapping: &ProfileRuntimeMapping,
 	projection: &RuntimeProjection,
-	candidate: &RuntimeIdentityCandidate<'_>,
+	new_workspace_id: &str,
 ) -> RuntimeIdentityState {
-	if projection.workspace(&mapping.workspace_id).is_some() {
-		return RuntimeIdentityState::Bound;
-	}
-
-	let different_id = candidate
-		.workspace_id
-		.is_some_and(|id| id != mapping.workspace_id);
-	let label_match = candidate.label.is_some_and(|label| {
-		projection.workspace_ids().iter().any(|id| {
-			id != &mapping.workspace_id
-				&& projection
-					.workspace(id)
-					.is_some_and(|workspace| workspace.label == label)
-		})
-	});
-	if different_id || label_match {
-		return RuntimeIdentityState::Replaced;
-	}
-	RuntimeIdentityState::Missing
+	classify_explicit_replace(
+		projection.workspace(&mapping.workspace_id).is_some(),
+		&mapping.workspace_id,
+		new_workspace_id,
+	)
 }
 
 pub fn pane_identity_state(
 	mapping: &SessionRuntimeMapping,
 	projection: &RuntimeProjection,
 ) -> RuntimeIdentityState {
-	pane_identity_state_with_candidate(
-		mapping,
-		projection,
-		&RuntimeIdentityCandidate::default(),
+	if projection.pane(&mapping.pane_id).is_some() {
+		RuntimeIdentityState::Bound
+	} else {
+		RuntimeIdentityState::Missing
+	}
+}
+
+/// Classify a stored pane against the projection.
+///
+/// `new_pane_id` is an explicit replacement id. It is never resolved
+/// from `terminal_id`.
+pub fn pane_identity_state_with_new_id(
+	mapping: &SessionRuntimeMapping,
+	projection: &RuntimeProjection,
+	new_pane_id: &str,
+) -> RuntimeIdentityState {
+	classify_explicit_replace(
+		projection.pane(&mapping.pane_id).is_some(),
+		&mapping.pane_id,
+		new_pane_id,
 	)
 }
 
-pub fn pane_identity_state_with_candidate(
-	mapping: &SessionRuntimeMapping,
-	projection: &RuntimeProjection,
-	candidate: &RuntimeIdentityCandidate<'_>,
+fn classify_explicit_replace(
+	stored_present: bool,
+	stored_id: &str,
+	new_id: &str,
 ) -> RuntimeIdentityState {
-	if projection.pane(&mapping.pane_id).is_some() {
-		return RuntimeIdentityState::Bound;
+	if stored_present {
+		RuntimeIdentityState::Bound
+	} else if !new_id.is_empty() && new_id != stored_id {
+		RuntimeIdentityState::Replaced
+	} else {
+		RuntimeIdentityState::Missing
 	}
-
-	let different_pane =
-		candidate.pane_id.is_some_and(|id| id != mapping.pane_id);
-	let terminal_match = candidate.terminal_id.is_some_and(|terminal_id| {
-		projection.pane_ids().iter().any(|id| {
-			id != &mapping.pane_id
-				&& projection
-					.pane(id)
-					.is_some_and(|pane| pane.terminal_id == terminal_id)
-		})
-	});
-	if different_pane || terminal_match {
-		return RuntimeIdentityState::Replaced;
-	}
-	RuntimeIdentityState::Missing
 }
 
 #[cfg(test)]
@@ -173,6 +158,7 @@ mod tests {
 		SessionRuntimeMapping {
 			session_id: "sess-1".into(),
 			namespace: HERDR_NAMESPACE.into(),
+			workspace_id: "w1".into(),
 			pane_id: pane_id.into(),
 		}
 	}
@@ -199,37 +185,140 @@ mod tests {
 	}
 
 	#[test]
-	fn missing_workspace_id_is_explicit_and_does_not_rebind_by_label() {
+	fn label_only_and_path_only_stay_missing_and_do_not_rewrite_rows() {
+		let mut conn = setup_db();
+		seed(&mut conn);
+		runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		runtime_mapping::bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap();
+
 		let mut projection = RuntimeProjection::new();
 		projection
 			.apply_snapshot(&snapshot(
 				json!([{ "workspace_id": "w2", "label": "App" }]),
-				json!([]),
+				json!([{
+					"pane_id": "w2:p1",
+					"tab_id": "w2:t1",
+					"workspace_id": "w2",
+					"terminal_id": "term_old"
+				}]),
 			))
 			.unwrap();
-		let stored = mapping("w1");
+
+		let stored_profile =
+			runtime_mapping::find_profile_mapping(&mut conn, "prof-1").unwrap();
+		let stored_session =
+			runtime_mapping::find_session_mapping(&mut conn, "sess-1").unwrap();
 		assert_eq!(
-			workspace_identity_state(&stored, &projection),
+			workspace_identity_state(&stored_profile, &projection),
 			RuntimeIdentityState::Missing
 		);
 		assert_eq!(
-			workspace_identity_state_with_candidate(
-				&stored,
-				&projection,
-				&RuntimeIdentityCandidate {
-					workspace_id: Some("w2"),
-					label: Some("App"),
-					path: Some("/repo/cache"),
-					..Default::default()
-				},
-			),
-			RuntimeIdentityState::Replaced
+			pane_identity_state(&stored_session, &projection),
+			RuntimeIdentityState::Missing
 		);
-		assert_eq!(stored.workspace_id, "w1");
+		assert_eq!(
+			profile::find_by_id(&mut conn, "prof-1")
+				.unwrap()
+				.worktree_path,
+			"/repo/cache"
+		);
+		assert_eq!(
+			runtime_mapping::find_profile_mapping(&mut conn, "prof-1")
+				.unwrap()
+				.workspace_id,
+			"w1"
+		);
+		assert_eq!(
+			runtime_mapping::find_session_mapping(&mut conn, "sess-1")
+				.unwrap()
+				.pane_id,
+			"w1:p1"
+		);
 	}
 
 	#[test]
-	fn pane_stays_bound_when_terminal_id_is_replaced_after_restart() {
+	fn explicit_new_id_is_replaced_and_persists_on_the_same_row() {
+		let mut conn = setup_db();
+		seed(&mut conn);
+		runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		runtime_mapping::bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap();
+
+		let mut projection = RuntimeProjection::new();
+		projection
+			.apply_snapshot(&snapshot(json!([]), json!([])))
+			.unwrap();
+		let stored_profile =
+			runtime_mapping::find_profile_mapping(&mut conn, "prof-1").unwrap();
+		assert_eq!(
+			workspace_identity_state_with_new_id(
+				&stored_profile,
+				&projection,
+				"w2",
+			),
+			RuntimeIdentityState::Replaced
+		);
+
+		let replaced_profile = runtime_mapping::replace_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w2",
+		)
+		.unwrap();
+		assert_eq!(replaced_profile.workspace_id, "w2");
+		assert_eq!(replaced_profile.profile_id, "prof-1");
+
+		let stored_session =
+			runtime_mapping::find_session_mapping(&mut conn, "sess-1").unwrap();
+		assert_eq!(
+			pane_identity_state_with_new_id(
+				&stored_session,
+				&projection,
+				"w1:p2",
+			),
+			RuntimeIdentityState::Replaced
+		);
+		let replaced_session = runtime_mapping::replace_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w2",
+			"w1:p2",
+		)
+		.unwrap();
+		assert_eq!(replaced_session.session_id, "sess-1");
+		assert_eq!(replaced_session.workspace_id, "w2");
+		assert_eq!(replaced_session.pane_id, "w1:p2");
+	}
+
+	#[test]
+	fn pane_stays_bound_when_terminal_id_is_new_after_restart() {
 		let mut projection = RuntimeProjection::new();
 		projection
 			.apply_snapshot(&snapshot(
@@ -247,40 +336,14 @@ mod tests {
 			RuntimeIdentityState::Bound
 		);
 		assert_eq!(projection.pane("w1:p1").unwrap().terminal_id, "term_new");
-	}
-
-	#[test]
-	fn missing_pane_id_does_not_rebind_by_terminal_id() {
-		let mut projection = RuntimeProjection::new();
-		projection
-			.apply_snapshot(&snapshot(
-				json!([{ "workspace_id": "w1", "label": "App" }]),
-				json!([{
-					"pane_id": "w1:p2",
-					"tab_id": "w1:t1",
-					"workspace_id": "w1",
-					"terminal_id": "term_old"
-				}]),
-			))
-			.unwrap();
-		let stored = pane_mapping("w1:p1");
 		assert_eq!(
-			pane_identity_state(&stored, &projection),
-			RuntimeIdentityState::Missing
-		);
-		assert_eq!(
-			pane_identity_state_with_candidate(
-				&stored,
+			pane_identity_state_with_new_id(
+				&pane_mapping("w1:p1"),
 				&projection,
-				&RuntimeIdentityCandidate {
-					pane_id: Some("w1:p2"),
-					terminal_id: Some("term_old"),
-					..Default::default()
-				},
+				"w1:p2",
 			),
-			RuntimeIdentityState::Replaced
+			RuntimeIdentityState::Bound
 		);
-		assert_eq!(stored.pane_id, "w1:p1");
 	}
 
 	#[test]
@@ -298,6 +361,7 @@ mod tests {
 			&mut conn,
 			"sess-1",
 			HERDR_NAMESPACE,
+			"w1",
 			"w1:p1",
 		)
 		.unwrap();
