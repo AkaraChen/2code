@@ -2232,6 +2232,60 @@ mod tests {
 	}
 
 	#[test]
+	fn project_delete_forgets_mapped_herdr_worktrees() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+		let profile = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/forget",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+		let checkout = PathBuf::from(&profile.worktree_path);
+		assert!(checkout.exists());
+		{
+			let conn = &mut *db.lock().unwrap();
+			let session = model::pty::NewPtySessionRecord {
+				id: "sess-herdr-forget",
+				profile_id: &profile.id,
+				title: "herdr",
+				shell: "/bin/sh",
+				cwd: &profile.worktree_path,
+				cols: 80,
+				rows: 24,
+			};
+			repo::pty::insert_session(conn, &session).unwrap();
+		}
+		router
+			.bind_session("sess-herdr-forget", RuntimeBackend::Herdr)
+			.unwrap();
+
+		crate::project::delete_with_runtime(&router, &db, &project.id).unwrap();
+
+		assert!(fake.removes().is_empty());
+		assert!(!fake.methods().contains(&"worktree.remove".to_string()));
+		assert!(checkout.exists());
+		assert_eq!(
+			git_worktree_list(dir.path()).matches("worktree ").count(),
+			1
+		);
+		assert_eq!(router.owner("sess-herdr-forget").unwrap(), None);
+		let conn = &mut *db.lock().unwrap();
+		assert!(repo::project::find_by_id(conn, &project.id).is_err());
+		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		assert!(
+			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
+				.is_err()
+		);
+	}
+
+	#[test]
 	fn herdr_create_uses_worktree_create_and_binds_workspace() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);

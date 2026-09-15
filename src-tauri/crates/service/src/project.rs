@@ -76,7 +76,7 @@ pub fn delete_with_runtime(
 	};
 
 	for session_id in &session_ids {
-		runtime.teardown_session(session_id)?;
+		runtime.forget_project_session(session_id)?;
 	}
 
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
@@ -358,4 +358,42 @@ pub fn get_github_avatar(
 ) -> Result<Option<String>, AppError> {
 	let project = repo::project::find_by_id(conn, project_id)?;
 	Ok(infra::git::github_avatar_url(&project.folder))
+}
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn project_delete_is_forget_retain() {
+		let src = include_str!("project.rs");
+		let delete = src
+			.split("pub fn delete_with_runtime")
+			.nth(1)
+			.unwrap()
+			.split("pub fn create_group")
+			.next()
+			.unwrap();
+		assert!(delete.contains("forget_project_session"));
+		assert!(!delete.contains("worktree.remove"));
+		assert!(!delete.contains("worktree_remove"));
+		assert!(!delete.contains("git::worktree_remove"));
+		assert!(!delete.contains("workspace.close"));
+		assert!(!delete.contains("workspace_close"));
+		assert!(!delete.contains("pane.close"));
+		assert!(!delete.contains("pane_close"));
+		assert!(!delete.contains("teardown_session"));
+		assert!(!delete.contains("server.stop"));
+		assert!(!delete.contains("pane.send_input"));
+		assert!(!delete.contains("--takeover"));
+		let handler = include_str!("../../../src/handler/project.rs");
+		let delete = handler
+			.split("pub async fn delete_project")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn create_project_group")
+			.next()
+			.unwrap();
+		assert!(delete.contains("delete_with_runtime"));
+		assert!(!delete.contains("worktree.remove"));
+		assert!(!delete.contains("pane.close"));
+	}
 }

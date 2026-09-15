@@ -312,6 +312,22 @@ impl RuntimeRouter {
 		self.herdr.session_agent_status(session_id)
 	}
 
+	/// Forget a project session: terminate Local PTYs, release Herdr
+	/// attachments without `pane.close` / `worktree.remove`.
+	pub fn forget_project_session(
+		&self,
+		session_id: &str,
+	) -> Result<(), AppError> {
+		let herdr_owned = self.selector.owner(session_id)?
+			== Some(RuntimeBackend::Herdr)
+			|| self.local.herdr_mapping(session_id)?.is_some();
+		if herdr_owned {
+			self.release_herdr_session(session_id)
+		} else {
+			self.teardown_session(session_id)
+		}
+	}
+
 	/// Terminate a bound session on its owner. Unbound live Local PTYs
 	/// and Herdr-owned Local PTYs are refused (#403).
 	pub fn teardown_session(&self, session_id: &str) -> Result<(), AppError> {
