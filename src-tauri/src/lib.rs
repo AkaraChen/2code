@@ -90,6 +90,8 @@ pub fn run() {
 			handler::pty::clear_pty_output,
 			handler::pty::restore_pty_session,
 			handler::pty::get_session_backend,
+			handler::pty::get_session_agent_status,
+			handler::pty::stream_session_agent_status,
 			handler::pty::attach_pty_output,
 			handler::pty::stream_pty_output,
 			handler::pty::stream_herdr_output,

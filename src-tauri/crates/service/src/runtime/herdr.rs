@@ -1853,15 +1853,22 @@ time.sleep(30)
 		assert!(pty.contains("stream_herdr_output"));
 		assert!(pty.contains("HerdrTerminalFrame"));
 		assert!(pty.contains("get_session_backend"));
+		assert!(pty.contains("get_session_agent_status"));
+		assert!(pty.contains("stream_session_agent_status"));
 		assert!(pty.contains("scroll_pty"));
 		assert!(!pty.contains("pane.send_text"));
+		assert!(!pty.contains("pane.report_agent"));
+		assert!(!pty.contains("agent.start"));
 		let lib = include_str!("../../../../src/lib.rs");
 		assert!(lib.contains("stream_herdr_output"));
 		assert!(lib.contains("get_session_backend"));
+		assert!(lib.contains("get_session_agent_status"));
+		assert!(lib.contains("stream_session_agent_status"));
 		assert!(lib.contains("scroll_pty"));
 		assert!(lib.contains("release_attachments"));
 		assert!(!lib.contains("server.stop"));
 		assert!(!lib.contains("ensure_herdr_listener"));
+		assert!(!lib.contains("HerdrRuntimeSync"));
 	}
 
 	#[test]
@@ -1871,13 +1878,33 @@ time.sleep(30)
 			.split("pub fn get_session_backend")
 			.nth(1)
 			.unwrap()
-			.split("pub fn attach_pty_output")
+			.split("pub fn get_session_agent_status")
 			.next()
 			.unwrap();
 		assert!(cmd.contains("backend_for"));
 		assert!(!cmd.contains("selected_backend"));
 		assert!(!cmd.contains("discovery"));
 		assert!(!cmd.contains("RuntimeRouter::new"));
+		let agent = pty
+			.split("pub fn get_session_agent_status")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn stream_session_agent_status")
+			.next()
+			.unwrap();
+		assert!(agent.contains("session_agent_status"));
+		assert!(!agent.contains("selected_backend"));
+		assert!(!agent.contains("discovery"));
+		let stream = pty
+			.split("pub async fn stream_session_agent_status")
+			.nth(1)
+			.unwrap()
+			.split("pub fn attach_pty_output")
+			.next()
+			.unwrap();
+		assert!(stream.contains("backend_for"));
+		assert!(stream.contains("RuntimeBackend::Herdr"));
+		assert!(!stream.contains("selected_backend"));
 	}
 
 	#[test]

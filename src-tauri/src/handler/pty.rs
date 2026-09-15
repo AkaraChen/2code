@@ -7,8 +7,8 @@ use crate::bridge::{
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
-	HerdrTerminalFrame, RuntimeBackend, TerminalScrollDirection,
-	TerminalScrollSource,
+	HerdrTerminalFrame, RuntimeBackend, SessionAgentStatus,
+	TerminalScrollDirection, TerminalScrollSource,
 };
 use service::runtime::{RuntimeHandle, TerminalRuntime};
 
@@ -121,6 +121,52 @@ pub fn get_session_backend(
 	runtime: State<'_, RuntimeHandle>,
 ) -> Result<RuntimeBackend, AppError> {
 	runtime.backend_for(&session_id)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn get_session_agent_status(
+	session_id: String,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<Option<SessionAgentStatus>, AppError> {
+	runtime.session_agent_status(&session_id)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn stream_session_agent_status(
+	session_id: String,
+	on_update: Channel<SessionAgentStatus>,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? != RuntimeBackend::Herdr {
+		return Err(AppError::PtyError("not a Herdr session".into()));
+	}
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || {
+		let mut last = None;
+		loop {
+			match runtime.session_agent_status(&session_id) {
+				Ok(Some(status)) => {
+					if last.as_ref() != Some(&status) {
+						last = Some(status.clone());
+						if on_update.send(status).is_err() {
+							break;
+						}
+					}
+				}
+				Ok(None) => {
+					if last.is_some() {
+						break;
+					}
+				}
+				Err(err) => return Err(err),
+			}
+			std::thread::sleep(std::time::Duration::from_millis(200));
+		}
+		Ok(())
+	})
+	.await
 }
 
 #[tauri::command]
