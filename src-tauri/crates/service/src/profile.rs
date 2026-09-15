@@ -584,6 +584,11 @@ fn create_herdr_once(
 	if let Some(existing) =
 		existing_profile_for_branch(db, project_id, branch_name)?
 	{
+		if profile_has_workspace_mapping(db, &existing.id)? {
+			return Err(AppError::GitError(format!(
+				"Branch '{branch_name}' already exists"
+			)));
+		}
 		bind_existing_profile_workspace(
 			db,
 			&existing,
@@ -663,6 +668,18 @@ fn existing_profile_for_branch(
 		}))
 }
 
+fn profile_has_workspace_mapping(
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<bool, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
+		Ok(_) => Ok(true),
+		Err(AppError::NotFound(_)) => Ok(false),
+		Err(err) => Err(err),
+	}
+}
+
 fn bind_existing_profile_workspace(
 	db: &DbPool,
 	profile: &Profile,
@@ -670,16 +687,11 @@ fn bind_existing_profile_workspace(
 	cwd: &Path,
 	parent_workspace_id: Option<&str>,
 ) -> Result<(), AppError> {
-	let already_bound = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		match repo::runtime_mapping::find_profile_mapping(conn, &profile.id) {
-			Ok(_) => true,
-			Err(AppError::NotFound(_)) => false,
-			Err(err) => return Err(err),
-		}
-	};
-	if already_bound {
-		return Ok(());
+	if profile_has_workspace_mapping(db, &profile.id)? {
+		return Err(AppError::GitError(format!(
+			"Branch '{}' already exists",
+			profile.branch_name
+		)));
 	}
 	let created = reconcile_existing_checkout(
 		worktrees,
@@ -1751,6 +1763,53 @@ mod tests {
 		assert_eq!(mapping.workspace_id, "w2");
 		let setup = std::fs::read_to_string(&setup_marker).unwrap();
 		assert_eq!(setup.matches('x').count(), 1);
+	}
+
+	#[test]
+	fn herdr_duplicate_bound_profile_fails_closed() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+		let base = global_base.path().to_str().unwrap();
+
+		let first = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/dup",
+			Some(base),
+		)
+		.unwrap();
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/dup",
+			Some(base),
+		)
+		.err()
+		.expect("duplicate bound profile should fail");
+
+		assert!(err.to_string().contains("already exists"), "{err}");
+		assert_eq!(fake.creates(), 1);
+		let extra = {
+			let conn = &mut *db.lock().unwrap();
+			repo::profile::list_by_project(conn, &project.id)
+				.unwrap()
+				.into_iter()
+				.filter(|profile| !profile.is_default)
+				.count()
+		};
+		assert_eq!(extra, 1);
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &first.id)
+				.unwrap()
+		};
+		assert_eq!(mapping.workspace_id, "w2");
 	}
 
 	#[test]
