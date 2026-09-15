@@ -33,6 +33,7 @@ const {
 	searchAddonMock,
 } = vi.hoisted(() => {
 	interface MockTerminalInstance {
+		element: HTMLElement | null;
 		fireSelectionChange: () => void;
 		fireTitleChange: (title: string) => void;
 		fireKey: (event: {

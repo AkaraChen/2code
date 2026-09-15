@@ -21,7 +21,7 @@ export const sessionHistory = new Map<string, Uint8Array>();
 
 const pendingRestores = new Map<string, Promise<void>>();
 
-export type RestorableSession = {
+export interface RestorableSession {
 	id: string;
 	profile_id: string;
 	title: string;
@@ -29,7 +29,7 @@ export type RestorableSession = {
 	cwd: string;
 	rows: number;
 	cols: number;
-};
+}
 
 /**
  * Rebuild tabs from `list_project_sessions`. Herdr ids become live tabs on the
