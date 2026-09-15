@@ -629,12 +629,12 @@ fn create_herdr_once(
 		label: Some(branch_name),
 	}) {
 		Ok(created) => created,
-		Err(AppError::HerdrUncertainOutcome(_)) => reconcile_existing_checkout(
+		Err(AppError::HerdrUncertainOutcome(_)) => checkout_at_listed_path(
 			worktrees,
 			cwd,
 			parent_workspace_id,
-			Some(&intended_path),
-			branch_name,
+			&intended_path,
+			true,
 		)?
 		.ok_or_else(|| {
 			AppError::HerdrUncertainOutcome(
@@ -693,17 +693,17 @@ fn bind_existing_profile_workspace(
 			profile.branch_name
 		)));
 	}
-	let created = reconcile_existing_checkout(
+	let created = checkout_at_listed_path(
 		worktrees,
 		cwd,
 		parent_workspace_id,
-		Some(Path::new(&profile.worktree_path)),
-		&profile.branch_name,
+		Path::new(&profile.worktree_path),
+		false,
 	)?
 	.ok_or_else(|| {
-		AppError::RuntimeMappingMissing(format!(
-			"profile {} has no Herdr workspace to bind",
-			profile.id
+		AppError::GitError(format!(
+			"Branch '{}' already exists",
+			profile.branch_name
 		))
 	})?;
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
@@ -722,36 +722,39 @@ fn linked_worktree_for_branch(
 	parent_workspace_id: Option<&str>,
 	branch_name: &str,
 ) -> Result<bool, AppError> {
-	let listed = match worktrees.worktree_list(
-		parent_workspace_id.is_none().then_some(cwd),
-		parent_workspace_id,
-	) {
-		Ok(listed) => listed,
-		Err(err) => return Err(err),
-	};
+	let listed = list_worktrees(worktrees, cwd, parent_workspace_id)?;
 	Ok(listed.iter().any(|entry| {
 		entry.is_linked_worktree && entry.branch.as_deref() == Some(branch_name)
 	}))
 }
 
-fn reconcile_existing_checkout(
+fn list_worktrees(
 	worktrees: &dyn HerdrWorktreeClient,
 	cwd: &Path,
 	parent_workspace_id: Option<&str>,
-	intended_path: Option<&Path>,
-	branch_name: &str,
-) -> Result<Option<WorktreeCreateResult>, AppError> {
-	let listed = match worktrees.worktree_list(
+) -> Result<Vec<infra::herdr::transport::WorktreeListEntry>, AppError> {
+	worktrees.worktree_list(
 		parent_workspace_id.is_none().then_some(cwd),
 		parent_workspace_id,
-	) {
+	)
+}
+
+/// Resolve a Herdr checkout by absolute path only. Unique-branch matching is
+/// forbidden so a Local profile cannot bind someone else's workspace.
+/// `open_unlisted` is only for recovering our own `worktree.create`.
+fn checkout_at_listed_path(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	parent_workspace_id: Option<&str>,
+	intended_path: &Path,
+	open_unlisted: bool,
+) -> Result<Option<WorktreeCreateResult>, AppError> {
+	let listed = match list_worktrees(worktrees, cwd, parent_workspace_id) {
 		Ok(listed) => listed,
-		Err(AppError::HerdrUncertainOutcome(_)) => Vec::new(),
+		Err(AppError::HerdrUncertainOutcome(_)) if open_unlisted => Vec::new(),
 		Err(err) => return Err(err),
 	};
-	if let Some(created) =
-		match_listed_worktree(&listed, intended_path, branch_name)
-	{
+	if let Some(created) = match_listed_worktree(&listed, intended_path) {
 		if created.workspace_id.is_empty() {
 			return open_existing_checkout(
 				worktrees,
@@ -761,39 +764,24 @@ fn reconcile_existing_checkout(
 		}
 		return Ok(Some(created));
 	}
-	if let Some(path) = intended_path.filter(|path| path.exists()) {
-		return open_existing_checkout(worktrees, cwd, path);
+	if open_unlisted {
+		return open_existing_checkout(worktrees, cwd, intended_path);
 	}
 	Ok(None)
 }
 
 fn match_listed_worktree(
 	listed: &[infra::herdr::transport::WorktreeListEntry],
-	intended_path: Option<&Path>,
-	branch_name: &str,
+	intended: &Path,
 ) -> Option<WorktreeCreateResult> {
-	let Some(intended) = intended_path else {
-		return None;
-	};
-	if let Some(entry) = listed.iter().find(|entry| {
-		Path::new(&entry.path) == intended
-			|| Path::new(&entry.path).canonicalize().ok().as_deref()
-				== intended.canonicalize().ok().as_deref()
-	}) {
-		return Some(listed_entry_to_created(entry));
-	}
-	let matches: Vec<_> = listed
+	listed
 		.iter()
-		.filter(|entry| {
-			entry.is_linked_worktree
-				&& entry.branch.as_deref() == Some(branch_name)
-				&& entry.workspace_id.is_some()
+		.find(|entry| {
+			Path::new(&entry.path) == intended
+				|| Path::new(&entry.path).canonicalize().ok().as_deref()
+					== intended.canonicalize().ok().as_deref()
 		})
-		.collect();
-	if matches.len() == 1 {
-		return Some(listed_entry_to_created(matches[0]));
-	}
-	None
+		.map(listed_entry_to_created)
 }
 
 fn listed_entry_to_created(
@@ -1931,6 +1919,50 @@ mod tests {
 			)
 		};
 		assert!(stolen.is_err());
+	}
+
+	#[test]
+	fn herdr_create_does_not_adopt_existing_local_profile() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let base = global_base.path().to_str().unwrap();
+		let local =
+			create_with_db(&db, &project.id, "feat/local-dup", Some(base))
+				.unwrap();
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake.clone());
+
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/local-dup",
+			Some(base),
+		)
+		.err()
+		.expect("Local same-branch profile should fail closed");
+
+		assert!(err.to_string().contains("already exists"), "{err}");
+		assert_eq!(fake.creates(), 0);
+		assert!(!fake.methods().contains(&"worktree.create".to_string()));
+		assert!(!fake.methods().contains(&"worktree.open".to_string()));
+		let extra = {
+			let conn = &mut *db.lock().unwrap();
+			repo::profile::list_by_project(conn, &project.id)
+				.unwrap()
+				.into_iter()
+				.filter(|profile| !profile.is_default)
+				.collect::<Vec<_>>()
+		};
+		assert_eq!(extra.len(), 1);
+		assert_eq!(extra[0].id, local.id);
+		let mapping = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(conn, &local.id)
+		};
+		assert!(mapping.is_err());
 	}
 
 	#[test]
