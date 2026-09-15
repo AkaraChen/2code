@@ -18,8 +18,8 @@ export type HerdrFrameAction =
 
 /** Minimal xterm surface used to apply a decoded Herdr frame. */
 export interface HerdrXtermSurface {
-	reset(): void;
-	write(data: Uint8Array, callback?: () => void): void;
+	reset: () => void;
+	write: (data: Uint8Array, callback?: () => void) => void;
 }
 
 export function herdrFrameBytes(frame: HerdrFrameView): Uint8Array {

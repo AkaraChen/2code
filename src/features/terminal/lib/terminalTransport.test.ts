@@ -1,6 +1,9 @@
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HerdrTerminalFrame } from "@/generated";
+import herdrFramesSrc from "./herdrFrames.ts?raw";
+import herdrQueryGuardSrc from "./herdrQueryGuard.ts?raw";
+import terminalSrc from "../Terminal.tsx?raw";
+import terminalTransportSrc from "./terminalTransport.ts?raw";
 import {
 	resolveTerminalTransportKind,
 	startHerdrFrameStream,
@@ -83,17 +86,18 @@ describe("byte vs frame streams", () => {
 				frames.push(frame);
 			},
 		});
-		const channel = streamHerdrOutput.mock.calls[0]?.[0].onOutput as {
-			onmessage: (frame: HerdrTerminalFrame) => void;
-		};
+		const calls = streamHerdrOutput.mock.calls as unknown as Array<
+			[{ onOutput: { onmessage: (frame: HerdrTerminalFrame) => void } }]
+		>;
+		expect(calls.length).toBeGreaterThan(0);
 		const frame: HerdrTerminalFrame = {
 			seq: 1,
 			full: true,
 			width: 80,
 			height: 24,
-			bytes: [0x1b, 0x5b, 0x32, 0x4a],
+			bytes: [0x1B, 0x5B, 0x32, 0x4A],
 		};
-		channel.onmessage(frame);
+		calls[0][0].onOutput.onmessage(frame);
 		expect(frames).toEqual([frame]);
 	});
 });
@@ -101,10 +105,10 @@ describe("byte vs frame streams", () => {
 describe("production GUI transport", () => {
 	it("does not call Herdr JSON mutations or takeover from the xterm adapter", () => {
 		const src = [
-			readFileSync("src/features/terminal/lib/terminalTransport.ts", "utf8"),
-			readFileSync("src/features/terminal/lib/herdrFrames.ts", "utf8"),
-			readFileSync("src/features/terminal/lib/herdrQueryGuard.ts", "utf8"),
-			readFileSync("src/features/terminal/Terminal.tsx", "utf8"),
+			terminalTransportSrc,
+			herdrFramesSrc,
+			herdrQueryGuardSrc,
+			terminalSrc,
 		].join("\n");
 		expect(src).not.toContain("pane.send_");
 		expect(src).not.toContain("tab.create");

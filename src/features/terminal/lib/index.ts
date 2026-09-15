@@ -25,11 +25,6 @@ export {
 } from "./herdrFrames";
 export { blockHerdrQueryReplies } from "./herdrQueryGuard";
 export {
-	resolveTerminalTransportKind,
-	startHerdrFrameStream,
-	startLocalByteStream,
-} from "./terminalTransport";
-export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
 export {
@@ -47,5 +42,10 @@ export {
 	removeTerminalStorage,
 	sweepTerminalStorage,
 } from "./terminalStorage";
+export {
+	resolveTerminalTransportKind,
+	startHerdrFrameStream,
+	startLocalByteStream,
+} from "./terminalTransport";
 export { TitleDebouncer } from "./titleDebounce";
 export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";

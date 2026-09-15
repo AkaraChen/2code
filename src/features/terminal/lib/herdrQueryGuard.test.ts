@@ -1,34 +1,18 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
 	blockHerdrQueryReplies,
 	isHerdrDeviceQuery,
 } from "./herdrQueryGuard";
-
-interface DsrDaFixture {
-	dsr_query: { hex: string };
-	da_query: { hex: string };
-}
-
-function loadDsrDa(): DsrDaFixture {
-	const path = resolve(
-		"src-tauri/crates/infra/tests/fixtures/herdr/frames",
-		"dsr-da.json",
-	);
-	return JSON.parse(readFileSync(path, "utf8")) as DsrDaFixture;
-}
+import { herdrDsrDaFixture } from "./herdrTestFixtures";
 
 describe("isHerdrDeviceQuery", () => {
 	it("matches the verified DSR CSI 6n query", () => {
-		const fixture = loadDsrDa();
-		expect(fixture.dsr_query.hex).toBe("1b5b366e");
+		expect(herdrDsrDaFixture.dsr_query.hex).toBe("1b5b366e");
 		expect(isHerdrDeviceQuery({ final: "n" }, [6])).toBe(true);
 	});
 
 	it("matches the verified primary DA CSI c query", () => {
-		const fixture = loadDsrDa();
-		expect(fixture.da_query.hex).toBe("1b5b63");
+		expect(herdrDsrDaFixture.da_query.hex).toBe("1b5b63");
 		expect(isHerdrDeviceQuery({ final: "c" }, [])).toBe(true);
 		expect(isHerdrDeviceQuery({ final: "c" }, [0])).toBe(true);
 	});

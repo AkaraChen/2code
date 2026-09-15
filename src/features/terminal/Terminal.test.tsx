@@ -1,6 +1,4 @@
 import { cleanup, render, waitFor } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "@tauri-apps/api/event";
@@ -16,6 +14,11 @@ import {
 	writeToPty,
 } from "@/generated";
 import { Terminal } from "./Terminal";
+import {
+	herdrFullRedrawFrame,
+	herdrIncrementalFrame,
+	latin1,
+} from "./lib/herdrTestFixtures";
 import { useTerminalStore } from "./store";
 
 const {
@@ -268,34 +271,12 @@ function latestTerminal() {
 	return terminalInstances[terminalInstances.length - 1]!;
 }
 
-function loadFixtureFrame(name: string): HerdrTerminalFrame {
-	const path = resolve(
-		"src-tauri/crates/infra/tests/fixtures/herdr/frames",
-		name,
-	);
-	const fixture = JSON.parse(readFileSync(path, "utf8")) as {
-		record: {
-			seq: number;
-			full: boolean;
-			width: number;
-			height: number;
-			bytes: string;
-		};
-	};
-	return {
-		seq: fixture.record.seq,
-		full: fixture.record.full,
-		width: fixture.record.width,
-		height: fixture.record.height,
-		bytes: Array.from(Buffer.from(fixture.record.bytes, "base64")),
-	};
-}
-
 function herdrChannel() {
-	const call = (streamHerdrOutput as unknown as Mock).mock.calls[0]?.[0] as {
-		onOutput: { onmessage: (frame: HerdrTerminalFrame) => void };
-	};
-	return call.onOutput;
+	const call = (streamHerdrOutput as unknown as Mock).mock.calls[0] as
+		| [{ onOutput: { onmessage: (frame: HerdrTerminalFrame) => void } }]
+		| undefined;
+	expect(call).toBeDefined();
+	return call![0].onOutput;
 }
 
 describe("terminal select to copy", () => {
@@ -489,33 +470,29 @@ describe("herdr xterm transport", () => {
 	it("treats a verified full frame as a replacement surface", async () => {
 		await renderHerdr();
 		const terminal = latestTerminal();
-		herdrChannel().onmessage(loadFixtureFrame("full-redraw.json"));
+		herdrChannel().onmessage(herdrFullRedrawFrame);
 		expect(terminal.resetCount).toBe(1);
 		expect(terminal.writes).toHaveLength(1);
 		expect(terminal.writes[0]).toBeInstanceOf(Uint8Array);
-		const text = Buffer.from(terminal.writes[0] as Uint8Array).toString(
-			"latin1",
-		);
-		expect(text).toContain("\x1b[2J");
-		expect(text).toContain("\x1b[?2026h");
+		const text = latin1(terminal.writes[0] as Uint8Array);
+		expect(text).toContain("\x1B[2J");
+		expect(text).toContain("\x1B[?2026h");
 	});
 
 	it("appends a verified incremental frame and ignores stale seq", async () => {
 		await renderHerdr();
 		const terminal = latestTerminal();
-		const full = loadFixtureFrame("full-redraw.json");
-		const incr = loadFixtureFrame("incremental.json");
+		const full = herdrFullRedrawFrame;
+		const incr = herdrIncrementalFrame;
 		herdrChannel().onmessage(full);
 		herdrChannel().onmessage(full);
 		herdrChannel().onmessage(incr);
 		herdrChannel().onmessage({ ...incr, seq: full.seq });
 		expect(terminal.resetCount).toBe(1);
 		expect(terminal.writes).toHaveLength(2);
-		const incrText = Buffer.from(terminal.writes[1] as Uint8Array).toString(
-			"latin1",
-		);
+		const incrText = latin1(terminal.writes[1] as Uint8Array);
 		expect(incrText).toContain("INCR_LINE_XYZ");
-		expect(incrText).not.toContain("\x1b[2J");
+		expect(incrText).not.toContain("\x1B[2J");
 	});
 
 	it("installs DSR/DA parser guards and still forwards keyboard input", async () => {
