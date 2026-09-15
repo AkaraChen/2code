@@ -227,7 +227,6 @@ export async function installSidecar(options = {}) {
 		renameSync(tmpDest, dest);
 	} catch (error) {
 		rmSync(tmpDest, { force: true });
-		rmSync(dest, { force: true });
 		throw error;
 	}
 
