@@ -98,6 +98,14 @@ pub struct WorktreeCreateRequest<'a> {
 	pub label: Option<&'a str>,
 }
 
+/// JSON `worktree.remove` identity. Herdr does not delete the git branch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorktreeRemoveResult {
+	pub workspace_id: String,
+	pub path: String,
+	pub forced: bool,
+}
+
 /// JSON `tab.create` identity. `terminal_id` is live-only and is not
 /// returned here so callers cannot persist it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -445,6 +453,56 @@ fn is_pane_not_found(err: &HerdrTransportError) -> bool {
 	}
 }
 
+fn is_worktree_absent(err: &HerdrTransportError) -> bool {
+	match err {
+		HerdrTransportError::Rpc(rpc) => {
+			rpc.code == "workspace_not_found"
+				|| rpc.code == "worktree_not_found"
+				|| rpc.code.contains("workspace_not_found")
+				|| rpc.code.contains("worktree_not_found")
+		}
+		_ => false,
+	}
+}
+
+fn parse_worktree_remove_result(
+	result: &Value,
+) -> Result<WorktreeRemoveResult, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "worktree_removed" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected worktree_removed, got {kind}"
+		)));
+	}
+	let workspace_id = result
+		.get("workspace_id")
+		.and_then(Value::as_str)
+		.unwrap_or("");
+	if workspace_id.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"worktree.remove result missing workspace_id".into(),
+		));
+	}
+	let path = result.get("path").and_then(Value::as_str).unwrap_or("");
+	if path.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"worktree.remove result missing path".into(),
+		));
+	}
+	let forced = result.get("forced").and_then(Value::as_bool).ok_or_else(
+		|| {
+			HerdrTransportError::UnexpectedMessage(
+				"worktree.remove result missing forced".into(),
+			)
+		},
+	)?;
+	Ok(WorktreeRemoveResult {
+		workspace_id: workspace_id.to_string(),
+		path: path.to_string(),
+		forced,
+	})
+}
+
 /// Methods whose in-flight disconnect must not be auto-replayed.
 pub fn outcome_uncertain(method: &str) -> bool {
 	method == "server.stop"
@@ -773,6 +831,36 @@ impl HerdrClient {
 			Value::Object(params),
 		)?;
 		parse_worktree_list_result(&success.result)
+	}
+
+	/// Remove a linked git worktree by `workspace_id`. Never removes a
+	/// path/cwd, never deletes the git branch, and never auto-replays an
+	/// uncertain outcome. `workspace_not_found` / `worktree_not_found` are
+	/// success so retries stay idempotent.
+	pub fn worktree_remove(
+		&self,
+		workspace_id: &str,
+		force: bool,
+	) -> Result<WorktreeRemoveResult, HerdrTransportError> {
+		if workspace_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "worktree.remove workspace_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({
+			"workspace_id": workspace_id,
+			"force": force,
+			"trust_repository": true,
+		});
+		match self.request(self.next_id("wtrm"), "worktree.remove", params) {
+			Ok(success) => parse_worktree_remove_result(&success.result),
+			Err(err) if is_worktree_absent(&err) => Ok(WorktreeRemoveResult {
+				workspace_id: workspace_id.to_string(),
+				path: String::new(),
+				forced: force,
+			}),
+			Err(err) => Err(err),
+		}
 	}
 
 	/// Create an extra tab in an existing workspace. Does not auto-replay
@@ -1654,6 +1742,45 @@ mod tests {
 	}
 
 	#[test]
+	fn worktree_remove_parses_workspace_id_path_and_forced() {
+		let removed = parse_worktree_remove_result(&serde_json::json!({
+			"type": "worktree_removed",
+			"workspace_id": "w5",
+			"path": "/repo/wt",
+			"forced": true
+		}))
+		.unwrap();
+		assert_eq!(removed.workspace_id, "w5");
+		assert_eq!(removed.path, "/repo/wt");
+		assert!(removed.forced);
+		assert!(parse_worktree_remove_result(&serde_json::json!({
+			"type": "worktree_created",
+			"workspace_id": "w5",
+			"path": "/repo/wt",
+			"forced": false
+		}))
+		.is_err());
+		assert!(parse_worktree_remove_result(&serde_json::json!({
+			"type": "worktree_removed",
+			"path": "/repo/wt",
+			"forced": false
+		}))
+		.is_err());
+		assert!(parse_worktree_remove_result(&serde_json::json!({
+			"type": "worktree_removed",
+			"workspace_id": "w5",
+			"forced": false
+		}))
+		.is_err());
+		assert!(parse_worktree_remove_result(&serde_json::json!({
+			"type": "worktree_removed",
+			"workspace_id": "w5",
+			"path": "/repo/wt"
+		}))
+		.is_err());
+	}
+
+	#[test]
 	fn tab_create_and_pane_views_parse_pane_id_never_terminal_id() {
 		let created = parse_tab_create_result(&serde_json::json!({
 			"type": "tab_created",
@@ -2328,6 +2455,89 @@ mod unix_tests {
 	}
 
 	#[test]
+	fn worktree_remove_sends_workspace_id_force_and_trust() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.remove");
+			assert_eq!(req["params"]["workspace_id"], "w5");
+			assert_eq!(req["params"]["force"], true);
+			assert_eq!(req["params"]["trust_repository"], true);
+			assert!(req["params"].get("cwd").is_none());
+			assert!(req["params"].get("path").is_none());
+			assert!(req["params"].get("branch").is_none());
+			assert!(req["params"].get("focus").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"worktree_removed","workspace_id":"w5","path":"/repo/wt","forced":true}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let removed = client(&sock).worktree_remove("w5", true).unwrap();
+		assert_eq!(removed.workspace_id, "w5");
+		assert_eq!(removed.path, "/repo/wt");
+		assert!(removed.forced);
+		let refused = client(&sock).worktree_remove("", false).unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
+		let src = include_str!("transport.rs");
+		let helper = src
+			.split("pub fn worktree_remove")
+			.nth(1)
+			.unwrap()
+			.split("/// Create an extra tab")
+			.next()
+			.unwrap();
+		assert!(helper.contains("worktree.remove"));
+		assert!(!helper.contains("worktree.create"));
+		assert!(!helper.contains("workspace.close"));
+		assert!(!helper.contains("pane.close"));
+		assert!(!helper.contains("git worktree"));
+		assert!(!helper.contains("server.stop"));
+		assert!(!helper.contains("pane.send_input"));
+		assert!(!helper.contains("--takeover"));
+		assert!(!helper.contains("herdr-client.sock"));
+	}
+
+	#[test]
+	fn worktree_remove_does_not_auto_replay_uncertain_outcome() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.remove");
+			seen.fetch_add(1, AtomicOrdering::SeqCst);
+			drop(stream);
+		});
+		let err = client(&sock).worktree_remove("w5", false).unwrap_err();
+		assert!(err.is_uncertain(), "{err}");
+		match err {
+			HerdrTransportError::UncertainOutcome { method, .. } => {
+				assert_eq!(method, "worktree.remove");
+			}
+			other => panic!("expected UncertainOutcome, got {other:?}"),
+		}
+		thread::sleep(Duration::from_millis(80));
+		assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+	}
+
+	#[test]
+	fn worktree_remove_treats_absent_workspace_as_success() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.remove");
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","error":{{"code":"workspace_not_found","message":"gone"}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let removed = client(&sock).worktree_remove("w9", false).unwrap();
+		assert_eq!(removed.workspace_id, "w9");
+		assert!(!removed.forced);
+	}
+
+	#[test]
 	fn tab_create_sends_workspace_label_and_no_focus() {
 		let (_dir, sock) = serve(|mut stream| {
 			let req = read_request(&stream);
@@ -2468,6 +2678,64 @@ mod unix_tests {
 			}
 			other => panic!("expected worktree_create_failed, got {other}"),
 		}
+	}
+
+	#[test]
+	fn live_worktree_remove_fails_closed_on_dirty_without_force() {
+		let Some(live) = require_live() else {
+			return;
+		};
+		let repo = live.root.path().join("remove-repo");
+		std::fs::create_dir_all(&repo).unwrap();
+		init_git_repo(&repo);
+		let checkout = live.root.path().join("remove-wt");
+		let client = live.client();
+		let created = client
+			.worktree_create(WorktreeCreateRequest {
+				branch: "wt/task15",
+				path: Some(&checkout),
+				cwd: Some(&repo),
+				workspace_id: None,
+				label: Some("task15"),
+			})
+			.unwrap_or_else(|err| {
+				panic!("worktree.create failed: {err}\n{}", live.server_log())
+			});
+		std::fs::write(checkout.join("dirty.txt"), "keep\n").unwrap();
+		let dirty = client
+			.worktree_remove(&created.workspace_id, false)
+			.unwrap_err();
+		match dirty {
+			HerdrTransportError::Rpc(rpc) => {
+				assert_eq!(rpc.code, "dirty_worktree_requires_force");
+			}
+			other => {
+				panic!("expected dirty_worktree_requires_force, got {other}")
+			}
+		}
+		assert!(checkout.exists());
+		let removed = client
+			.worktree_remove(&created.workspace_id, true)
+			.unwrap_or_else(|err| {
+				panic!(
+					"worktree.remove --force failed: {err}\n{}",
+					live.server_log()
+				)
+			});
+		assert_eq!(removed.workspace_id, created.workspace_id);
+		assert!(removed.forced);
+		assert!(!checkout.exists());
+		let branches = std::process::Command::new("git")
+			.args(["branch", "--list", "wt/task15"])
+			.current_dir(&repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_SYSTEM", "/dev/null")
+			.output()
+			.unwrap();
+		assert!(
+			String::from_utf8_lossy(&branches.stdout).contains("wt/task15"),
+			"worktree.remove must keep the git branch"
+		);
 	}
 
 	fn init_git_repo(repo: &Path) {
