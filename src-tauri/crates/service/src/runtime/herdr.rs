@@ -1659,12 +1659,30 @@ time.sleep(30)
 		assert!(close.contains("close_session"));
 		assert!(pty.contains("stream_herdr_output"));
 		assert!(pty.contains("HerdrTerminalFrame"));
+		assert!(pty.contains("get_session_backend"));
 		assert!(!pty.contains("pane.send_text"));
 		let lib = include_str!("../../../../src/lib.rs");
 		assert!(lib.contains("stream_herdr_output"));
+		assert!(lib.contains("get_session_backend"));
 		assert!(lib.contains("release_attachments"));
 		assert!(!lib.contains("server.stop"));
 		assert!(!lib.contains("ensure_herdr_listener"));
+	}
+
+	#[test]
+	fn session_backend_ipc_uses_backend_for_not_discovery() {
+		let pty = include_str!("../../../../src/handler/pty.rs");
+		let cmd = pty
+			.split("pub fn get_session_backend")
+			.nth(1)
+			.unwrap()
+			.split("pub fn attach_pty_output")
+			.next()
+			.unwrap();
+		assert!(cmd.contains("backend_for"));
+		assert!(!cmd.contains("selected_backend"));
+		assert!(!cmd.contains("discovery"));
+		assert!(!cmd.contains("RuntimeRouter::new"));
 	}
 
 	#[test]

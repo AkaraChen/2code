@@ -101,6 +101,15 @@ pub async fn restore_pty_session(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
+pub fn get_session_backend(
+	session_id: String,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<RuntimeBackend, AppError> {
+	runtime.backend_for(&session_id)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn attach_pty_output(
 	session_id: String,
 	stream_id: String,

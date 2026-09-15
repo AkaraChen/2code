@@ -88,6 +88,7 @@ pub fn run() {
 			handler::pty::flush_pty_output,
 			handler::pty::clear_pty_output,
 			handler::pty::restore_pty_session,
+			handler::pty::get_session_backend,
 			handler::pty::attach_pty_output,
 			handler::pty::stream_pty_output,
 			handler::pty::stream_herdr_output,
