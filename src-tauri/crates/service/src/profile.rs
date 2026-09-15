@@ -494,10 +494,10 @@ fn create_herdr_with_db(
 		sanitized
 	};
 
-	let id = Uuid::new_v4().to_string();
 	let attempts = if auto_generated { 5 } else { 1 };
 	let mut last_conflict = None;
 	for _ in 0..attempts {
+		let id = herdr_profile_id(project_id, &branch_name);
 		match create_herdr_once(
 			worktrees,
 			db,
@@ -584,19 +584,15 @@ fn create_herdr_once(
 	if let Some(existing) =
 		existing_profile_for_branch(db, project_id, branch_name)?
 	{
-		if profile_has_workspace_mapping(db, &existing.id)? {
-			return Err(AppError::GitError(format!(
-				"Branch '{branch_name}' already exists"
-			)));
-		}
-		bind_existing_profile_workspace(
-			db,
-			&existing,
+		return bind_herdr_insert_retry(
 			worktrees,
+			db,
 			cwd,
 			parent_workspace_id,
-		)?;
-		return Ok(existing);
+			&existing,
+			id,
+			branch_name,
+		);
 	}
 
 	if infra::git::local_branch_exists(project_folder, branch_name)?
@@ -680,40 +676,57 @@ fn profile_has_workspace_mapping(
 	}
 }
 
-fn bind_existing_profile_workspace(
-	db: &DbPool,
-	profile: &Profile,
+fn herdr_profile_id(project_id: &str, branch_name: &str) -> String {
+	Uuid::new_v5(
+		&Uuid::NAMESPACE_URL,
+		format!("2code-profile:{project_id}:{branch_name}").as_bytes(),
+	)
+	.to_string()
+}
+
+fn bind_herdr_insert_retry(
 	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
 	cwd: &Path,
 	parent_workspace_id: Option<&str>,
-) -> Result<(), AppError> {
-	if profile_has_workspace_mapping(db, &profile.id)? {
-		return Err(AppError::GitError(format!(
-			"Branch '{}' already exists",
-			profile.branch_name
-		)));
+	existing: &Profile,
+	id: &str,
+	branch_name: &str,
+) -> Result<Profile, AppError> {
+	let already_exists =
+		AppError::GitError(format!("Branch '{branch_name}' already exists"));
+	if existing.id != id || profile_has_workspace_mapping(db, &existing.id)? {
+		return Err(already_exists);
 	}
-	let created = checkout_at_listed_path(
+	let Some(workspace_id) = listed_open_workspace_id(
 		worktrees,
 		cwd,
 		parent_workspace_id,
-		Path::new(&profile.worktree_path),
-		false,
+		Path::new(&existing.worktree_path),
 	)?
-	.ok_or_else(|| {
-		AppError::GitError(format!(
-			"Branch '{}' already exists",
-			profile.branch_name
-		))
-	})?;
+	else {
+		return Err(already_exists);
+	};
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 	repo::runtime_mapping::bind_profile_workspace(
 		conn,
-		&profile.id,
+		&existing.id,
 		HERDR_NAMESPACE,
-		&created.workspace_id,
+		&workspace_id,
 	)?;
-	Ok(())
+	repo::profile::find_by_id(conn, &existing.id)
+}
+
+fn listed_open_workspace_id(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	parent_workspace_id: Option<&str>,
+	path: &Path,
+) -> Result<Option<String>, AppError> {
+	let listed = list_worktrees(worktrees, cwd, parent_workspace_id)?;
+	Ok(match_listed_worktree(&listed, path)
+		.map(|created| created.workspace_id)
+		.filter(|workspace_id| !workspace_id.is_empty()))
 }
 
 fn linked_worktree_for_branch(
@@ -756,11 +769,14 @@ fn checkout_at_listed_path(
 	};
 	if let Some(created) = match_listed_worktree(&listed, intended_path) {
 		if created.workspace_id.is_empty() {
-			return open_existing_checkout(
-				worktrees,
-				cwd,
-				Path::new(&created.path),
-			);
+			if open_unlisted {
+				return open_existing_checkout(
+					worktrees,
+					cwd,
+					Path::new(&created.path),
+				);
+			}
+			return Ok(None);
 		}
 		return Ok(Some(created));
 	}
@@ -1931,38 +1947,50 @@ mod tests {
 		let local =
 			create_with_db(&db, &project.id, "feat/local-dup", Some(base))
 				.unwrap();
-		let fake = FakeWorktrees::new();
-		let router = herdr_router(&db, fake.clone());
 
-		let err = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local-dup",
-			Some(base),
-		)
-		.err()
-		.expect("Local same-branch profile should fail closed");
+		for workspace_id in [None, Some("w9")] {
+			let fake = FakeWorktrees::new();
+			{
+				let mut state = fake.state.lock().unwrap();
+				state.listed.push(WorktreeListEntry {
+					path: local.worktree_path.clone(),
+					branch: Some("feat/local-dup".into()),
+					workspace_id: workspace_id.map(str::to_string),
+					is_linked_worktree: true,
+				});
+			}
+			let router = herdr_router(&db, fake.clone());
 
-		assert!(err.to_string().contains("already exists"), "{err}");
-		assert_eq!(fake.creates(), 0);
-		assert!(!fake.methods().contains(&"worktree.create".to_string()));
-		assert!(!fake.methods().contains(&"worktree.open".to_string()));
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.collect::<Vec<_>>()
-		};
-		assert_eq!(extra.len(), 1);
-		assert_eq!(extra[0].id, local.id);
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &local.id)
-		};
-		assert!(mapping.is_err());
+			let err = create_with_runtime(
+				&router,
+				&db,
+				&project.id,
+				"feat/local-dup",
+				Some(base),
+			)
+			.err()
+			.expect("Local same-branch profile should fail closed");
+
+			assert!(err.to_string().contains("already exists"), "{err}");
+			assert_eq!(fake.creates(), 0);
+			assert!(!fake.methods().contains(&"worktree.create".to_string()));
+			assert!(!fake.methods().contains(&"worktree.open".to_string()));
+			let extra = {
+				let conn = &mut *db.lock().unwrap();
+				repo::profile::list_by_project(conn, &project.id)
+					.unwrap()
+					.into_iter()
+					.filter(|profile| !profile.is_default)
+					.collect::<Vec<_>>()
+			};
+			assert_eq!(extra.len(), 1);
+			assert_eq!(extra[0].id, local.id);
+			let mapping = {
+				let conn = &mut *db.lock().unwrap();
+				repo::runtime_mapping::find_profile_mapping(conn, &local.id)
+			};
+			assert!(mapping.is_err());
+		}
 	}
 
 	#[test]

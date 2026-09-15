@@ -8,7 +8,7 @@ model = { path = "../model" }
 repo = { path = "../repo" }
 infra = { path = "../infra" }
 diesel = { version = "2", features = ["sqlite"] }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "v5"] }
 dirs = "6"
 notify = "8"
 vt100 = "0.16"
