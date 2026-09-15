@@ -4,11 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "@tauri-apps/api/event";
 import type { HerdrTerminalFrame } from "@/generated";
 import {
+	attachPtyOutput,
 	clearPtyOutput,
 	detachPtyOutput,
 	flushPtyOutput,
 	getPtySessionHistory,
 	getSessionBackend,
+	resizePty,
 	streamHerdrOutput,
 	streamPtyOutput,
 	writeToPty,
@@ -37,6 +39,7 @@ const {
 		csiHandlers: Array<{ final: string }>;
 		fireData: (data: string) => void;
 		fireBinary: (data: string) => void;
+		fireResize: () => void;
 	}
 
 	const terminalInstances: MockTerminalInstance[] = [];
@@ -69,6 +72,8 @@ const {
 		private titleListeners: Array<(title: string) => void> = [];
 		private dataListeners: Array<(data: string) => void> = [];
 		private binaryListeners: Array<(data: string) => void> = [];
+		private resizeListeners: Array<(size: { rows: number; cols: number }) => void> =
+			[];
 
 		constructor(options: { cols: number; rows: number }) {
 			this.cols = options.cols;
@@ -120,6 +125,12 @@ const {
 			for (const listener of this.binaryListeners) listener(data);
 		}
 
+		fireResize() {
+			for (const listener of this.resizeListeners) {
+				listener({ rows: this.rows, cols: this.cols });
+			}
+		}
+
 		onSelectionChange(listener: () => void) {
 			this.selectionListeners.push(listener);
 			return { dispose: vi.fn() };
@@ -140,7 +151,8 @@ const {
 			return { dispose: vi.fn() };
 		}
 
-		onResize() {
+		onResize(listener: (size: { rows: number; cols: number }) => void) {
+			this.resizeListeners.push(listener);
 			return { dispose: vi.fn() };
 		}
 
@@ -426,6 +438,9 @@ describe("herdr xterm transport", () => {
 		(detachPtyOutput as unknown as Mock).mockClear();
 		(clearPtyOutput as unknown as Mock).mockClear();
 		(writeToPty as unknown as Mock).mockClear();
+		(resizePty as unknown as Mock).mockClear();
+		(attachPtyOutput as unknown as Mock).mockClear();
+		(attachPtyOutput as unknown as Mock).mockResolvedValue(undefined);
 		(listen as unknown as Mock).mockClear();
 		useTerminalStore.setState({
 			profiles: {
@@ -454,6 +469,43 @@ describe("herdr xterm transport", () => {
 		});
 		return view;
 	}
+
+	it("resizes a Herdr session only after the control helper is attached", async () => {
+		let resolveAttach: (value: void | PromiseLike<void>) => void = () => {};
+		(attachPtyOutput as unknown as Mock).mockReturnValueOnce(
+			new Promise<void>((resolve) => {
+				resolveAttach = resolve;
+			}),
+		);
+
+		renderTerminal();
+		const terminal = latestTerminal();
+		terminal.fireResize();
+		expect(resizePty).not.toHaveBeenCalled();
+
+		await waitFor(() => {
+			expect(attachPtyOutput).toHaveBeenCalled();
+		});
+		terminal.fireResize();
+		expect(resizePty).not.toHaveBeenCalled();
+		expect(streamHerdrOutput).not.toHaveBeenCalled();
+
+		resolveAttach();
+
+		await waitFor(() => {
+			expect(resizePty).toHaveBeenCalledWith({
+				sessionId: "session-1",
+				rows: terminal.rows,
+				cols: terminal.cols,
+			});
+		});
+		const attachOrder = (attachPtyOutput as unknown as Mock).mock
+			.invocationCallOrder[0];
+		const resizeOrder = (resizePty as unknown as Mock).mock
+			.invocationCallOrder[0];
+		expect(attachOrder).toBeLessThan(resizeOrder);
+		expect(streamHerdrOutput).toHaveBeenCalled();
+	});
 
 	it("streams Herdr frames only and skips Local history replay", async () => {
 		await renderHerdr();

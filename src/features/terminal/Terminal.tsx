@@ -146,8 +146,23 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const initFontFamilyRef = useRef(fontFamily);
   const initFontSizeRef = useRef(fontSize);
   const initThemeRef = useRef(theme);
+  const resizeReadyRef = useRef(false);
 
   isActiveRef.current = isActive;
+
+  const sendSessionResize = useCallback(
+    (rows: number, cols: number) => {
+      if (!resizeReadyRef.current) return;
+      if (rows <= 0 || cols <= 0) return;
+      void resizePty({ sessionId, rows, cols }).catch((error) => {
+        consola.warn(
+          `[pty-terminal] failed to resize session ${sessionId}`,
+          error
+        );
+      });
+    },
+    [sessionId]
+  );
 
   useEffect(() => {
     if (termRef.current) {
@@ -184,13 +199,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         // Repaint after font settles — metrics may have changed
         term.refresh(0, Math.max(0, term.rows - 1));
         if (changed) {
-          resizePty({ sessionId, rows: term.rows, cols: term.cols });
+          sendSessionResize(term.rows, term.cols);
         }
         return changed;
       },
-      () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+      () => sendSessionResize(term.rows, term.cols)
     );
-  }, [fontFamily, fontSize, sessionId]);
+  }, [fontFamily, fontSize, sendSessionResize, sessionId]);
 
   useEffect(() => {
     if (!isActive || !termRef.current) return;
@@ -250,6 +265,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const cleanups: (() => void)[] = [];
 
       let disposed = false;
+      resizeReadyRef.current = false;
       isStreamReadyRef.current = false;
       pendingEventsRef.current = [];
       const liveOutputBuffer: Uint8Array[] = [];
@@ -519,10 +535,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 7. Local cold-restart scrollback is restored after ownership is known.
       //    Herdr panes wait for the first full frame instead.
 
-      // 8. Initial fit + resize PTY (measureAndResize re-measures the char size
-      //    first if xterm's cached cell width does not match the real font)
+      // 8. Initial fit. Do not resizePty until the owning backend is
+      //    attached — Herdr fail-closes helper_for before attach.
       measureAndResize(term, addonsResult.fitAddon, container);
-      resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
       // 9. Font-settle refit — xterm measured cell width at open() time
       //    using whatever font was loaded; refit once the configured font settles.
@@ -532,11 +547,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         () => {
           const changed = measureAndResize(term, addonsResult.fitAddon, container);
           if (changed) {
-            resizePty({ sessionId, rows: term.rows, cols: term.cols });
+            sendSessionResize(term.rows, term.cols);
           }
           return changed;
         },
-        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+        () => sendSessionResize(term.rows, term.cols)
       );
 
       // 10. Debounced resize scheduler (75ms) with scroll position preservation
@@ -544,7 +559,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         term,
         addonsResult.fitAddon,
         () => container,
-        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+        () => sendSessionResize(term.rows, term.cols)
       );
       const resizeObserver = new ResizeObserver(scheduler.observe);
       resizeObserver.observe(container);
@@ -631,6 +646,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             void detachPtyOutput({ sessionId, streamId }).catch(() => {});
             return;
           }
+          resizeReadyRef.current = true;
+          sendSessionResize(term.rows, term.cols);
           startHerdrFrameStream({
             sessionId,
             streamId,
@@ -659,6 +676,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           void detachPtyOutput({ sessionId, streamId }).catch(() => {});
           return;
         }
+        resizeReadyRef.current = true;
+        sendSessionResize(term.rows, term.cols);
         startLocalByteStream({
           sessionId,
           streamId,
@@ -738,7 +757,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         });
       });
       const resizeDisposable = term.onResize(({ rows, cols }) => {
-        resizePty({ sessionId, rows, cols });
+        sendSessionResize(rows, cols);
       });
       cleanups.push(() => dataDisposable.dispose());
       cleanups.push(() => binaryDisposable.dispose());
@@ -747,6 +766,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 14. React 19 ref cleanup
       return () => {
         disposed = true;
+        resizeReadyRef.current = false;
 
         void detachPtyOutput({ sessionId, streamId }).catch(() => {});
 
@@ -813,6 +833,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
     handleTerminalLinkOpen,
     increaseFontSize,
     profileId,
+    sendSessionResize,
     sessionId]
 
   );
