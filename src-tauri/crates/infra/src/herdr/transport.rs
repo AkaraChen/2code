@@ -489,13 +489,15 @@ fn parse_worktree_remove_result(
 			"worktree.remove result missing path".into(),
 		));
 	}
-	let forced = result.get("forced").and_then(Value::as_bool).ok_or_else(
-		|| {
-			HerdrTransportError::UnexpectedMessage(
-				"worktree.remove result missing forced".into(),
-			)
-		},
-	)?;
+	let forced =
+		result
+			.get("forced")
+			.and_then(Value::as_bool)
+			.ok_or_else(|| {
+				HerdrTransportError::UnexpectedMessage(
+					"worktree.remove result missing forced".into(),
+				)
+			})?;
 	Ok(WorktreeRemoveResult {
 		workspace_id: workspace_id.to_string(),
 		path: path.to_string(),
@@ -863,21 +865,24 @@ impl HerdrClient {
 		}
 	}
 
-	/// Create an extra tab in an existing workspace. Does not auto-replay
-	/// an uncertain outcome.
+	/// Create an extra tab in an existing workspace. `cwd` must be
+	/// absolute. Does not auto-replay an uncertain outcome.
 	pub fn tab_create(
 		&self,
 		workspace_id: &str,
 		label: &str,
+		cwd: &Path,
 	) -> Result<TabCreateResult, HerdrTransportError> {
 		if workspace_id.is_empty() {
 			return Err(HerdrTransportError::Refused {
 				reason: "tab.create workspace_id is required".into(),
 			});
 		}
+		require_absolute(cwd, "cwd")?;
 		let params = serde_json::json!({
 			"workspace_id": workspace_id,
 			"label": label,
+			"cwd": cwd.to_string_lossy(),
 			"focus": false,
 		});
 		let success =
@@ -2538,14 +2543,17 @@ mod unix_tests {
 	}
 
 	#[test]
-	fn tab_create_sends_workspace_label_and_no_focus() {
+	fn tab_create_sends_workspace_label_cwd_and_no_focus() {
 		let (_dir, sock) = serve(|mut stream| {
 			let req = read_request(&stream);
 			assert_eq!(req["method"], "tab.create");
 			assert_eq!(req["params"]["workspace_id"], "w1");
 			assert_eq!(req["params"]["label"], "extra");
+			assert_eq!(req["params"]["cwd"], "/repo");
 			assert_eq!(req["params"]["focus"], false);
 			assert!(req["params"].get("terminal_id").is_none());
+			assert!(req["params"].get("env").is_none());
+			assert!(req["params"].get("command").is_none());
 			let id = req["id"].as_str().unwrap();
 			let body = format!(
 				r#"{{"id":"{id}","result":{{"type":"tab_created","tab":{{"tab_id":"w1:t2","workspace_id":"w1"}},"root_pane":{{"pane_id":"w1:p2","terminal_id":"term_y"}}}}}}"#
@@ -2553,10 +2561,16 @@ mod unix_tests {
 			stream.write_all(body.as_bytes()).unwrap();
 			stream.write_all(b"\n").unwrap();
 		});
-		let created = client(&sock).tab_create("w1", "extra").unwrap();
+		let created = client(&sock)
+			.tab_create("w1", "extra", Path::new("/repo"))
+			.unwrap();
 		assert_eq!(created.pane_id, "w1:p2");
 		assert_eq!(created.tab_id, "w1:t2");
 		assert_eq!(created.workspace_id, "w1");
+		let refused = client(&sock)
+			.tab_create("w1", "extra", Path::new("relative"))
+			.unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
 	}
 
 	#[test]
@@ -2604,7 +2618,8 @@ mod unix_tests {
 		assert_eq!(herdr.pane_get("w1:p1").unwrap().unwrap().pane_id, "w1:p1");
 		assert!(herdr.pane_get("w1:p9").unwrap().is_none());
 		herdr.pane_close("w1:p1").unwrap();
-		assert!(herdr.tab_create("", "x").is_err());
+		assert!(herdr.tab_create("", "x", Path::new("/tmp")).is_err());
+		assert!(herdr.tab_create("w1", "x", Path::new("rel")).is_err());
 		assert!(herdr.pane_close("").is_err());
 	}
 

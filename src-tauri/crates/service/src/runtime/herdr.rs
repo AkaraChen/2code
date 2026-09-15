@@ -50,6 +50,7 @@ pub trait HerdrTerminalClient: Send + Sync {
 		&self,
 		workspace_id: &str,
 		label: &str,
+		cwd: &Path,
 	) -> Result<TabCreateResult, AppError>;
 
 	fn pane_list(&self, workspace_id: &str) -> Result<Vec<PaneView>, AppError>;
@@ -106,9 +107,10 @@ impl HerdrTerminalClient for HerdrJsonTerminals {
 		&self,
 		workspace_id: &str,
 		label: &str,
+		cwd: &Path,
 	) -> Result<TabCreateResult, AppError> {
 		self.client
-			.tab_create(workspace_id, label)
+			.tab_create(workspace_id, label, cwd)
 			.map_err(AppError::from)
 	}
 
@@ -698,7 +700,11 @@ impl HerdrLifecycle {
 				false,
 			);
 		}
-		let pane_id = match self.client.tab_create(&workspace_id, &meta.title) {
+		let pane_id = match self.client.tab_create(
+			&workspace_id,
+			&meta.title,
+			Path::new(&config.cwd),
+		) {
 			Ok(created) => created.pane_id,
 			Err(AppError::HerdrUncertainOutcome(_)) => reconcile_created_pane(
 				self.client.as_ref(),
@@ -1047,6 +1053,7 @@ mod tests {
 		close_lands: bool,
 		already_open_create: bool,
 		next_extra: u32,
+		last_tab_create_cwd: Option<String>,
 		on_list: Option<Arc<dyn Fn() + Send + Sync>>,
 	}
 
@@ -1084,6 +1091,7 @@ mod tests {
 					close_lands: false,
 					already_open_create: false,
 					next_extra: 2,
+					last_tab_create_cwd: None,
 					on_list: None,
 				}),
 			}
@@ -1095,6 +1103,10 @@ mod tests {
 
 		fn tab_create_calls(&self) -> usize {
 			self.state.lock().unwrap().tab_create_calls
+		}
+
+		fn last_tab_create_cwd(&self) -> Option<String> {
+			self.state.lock().unwrap().last_tab_create_cwd.clone()
 		}
 
 		fn pane_close_calls(&self) -> usize {
@@ -1133,10 +1145,13 @@ mod tests {
 			&self,
 			workspace_id: &str,
 			_label: &str,
+			cwd: &Path,
 		) -> Result<TabCreateResult, AppError> {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("tab.create".into());
 			state.tab_create_calls += 1;
+			state.last_tab_create_cwd =
+				Some(cwd.to_string_lossy().into_owned());
 			if state.already_open_create {
 				let pane = state
 					.panes
@@ -1612,6 +1627,11 @@ time.sleep(30)
 		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
 		assert_eq!(fx.mapping(&second.session_id), "w1:p2");
 		assert_eq!(fx.fake.tab_create_calls(), 1);
+		let expected_cwd = fx.cwd.path().to_string_lossy().into_owned();
+		assert_eq!(
+			fx.fake.last_tab_create_cwd().as_deref(),
+			Some(expected_cwd.as_str())
+		);
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
