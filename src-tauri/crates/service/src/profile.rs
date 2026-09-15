@@ -727,7 +727,6 @@ fn linked_worktree_for_branch(
 		parent_workspace_id,
 	) {
 		Ok(listed) => listed,
-		Err(AppError::HerdrUncertainOutcome(_)) => return Ok(false),
 		Err(err) => return Err(err),
 	};
 	Ok(listed.iter().any(|entry| {
@@ -1389,6 +1388,7 @@ mod tests {
 		methods: Vec<String>,
 		creates: Vec<RecordedCreate>,
 		create_error: Option<AppError>,
+		list_error: Option<AppError>,
 		land_on_error: bool,
 		listed: Vec<WorktreeListEntry>,
 		snapshot: serde_json::Value,
@@ -1406,6 +1406,7 @@ mod tests {
 					methods: Vec::new(),
 					creates: Vec::new(),
 					create_error: None,
+					list_error: None,
 					land_on_error: false,
 					listed: Vec::new(),
 					snapshot: json!({
@@ -1486,6 +1487,9 @@ mod tests {
 		) -> Result<Vec<WorktreeListEntry>, AppError> {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("worktree.list".into());
+			if let Some(err) = state.list_error.take() {
+				return Err(err);
+			}
 			Ok(state.listed.clone())
 		}
 
@@ -1875,6 +1879,58 @@ mod tests {
 				.count()
 		};
 		assert_eq!(extra, 0);
+	}
+
+	#[test]
+	fn herdr_uncertain_list_does_not_steal_existing_linked_worktree() {
+		let mut conn = setup_db();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let global_base = TempDir::new().expect("worktree base");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: "/tmp/someone-else-wt".into(),
+				branch: Some("feat/taken".into()),
+				workspace_id: Some("w9".into()),
+				is_linked_worktree: true,
+			});
+			state.list_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/taken",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.err()
+		.expect("uncertain worktree.list should fail closed");
+
+		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
+		assert_eq!(fake.creates(), 0);
+		let extra = {
+			let conn = &mut *db.lock().unwrap();
+			repo::profile::list_by_project(conn, &project.id)
+				.unwrap()
+				.into_iter()
+				.filter(|profile| !profile.is_default)
+				.count()
+		};
+		assert_eq!(extra, 0);
+		let stolen = {
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::find_profile_by_workspace(
+				conn,
+				HERDR_NAMESPACE,
+				"w9",
+			)
+		};
+		assert!(stolen.is_err());
 	}
 
 	#[test]
