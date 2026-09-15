@@ -282,6 +282,12 @@ pub fn sidecar_required() -> bool {
 	std::env::var_os("HERDR_SIDECAR_REQUIRED").is_some()
 }
 
+#[cfg(test)]
+pub(crate) fn lock_live_herdr_tests() -> std::sync::MutexGuard<'static, ()> {
+	static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+	LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 pub fn report_version(executable: &Path) -> Result<String, AppError> {
 	let output = command_without_windows_console(executable)
 		.arg("--version")

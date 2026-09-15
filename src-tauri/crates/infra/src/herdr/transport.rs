@@ -1389,10 +1389,12 @@ mod unix_tests {
 		root: tempfile::TempDir,
 		namespace: crate::herdr::process::HerdrNamespace,
 		server: std::process::Child,
+		_lock: std::sync::MutexGuard<'static, ()>,
 	}
 
 	impl Live {
 		fn start() -> Option<Self> {
+			let lock = crate::herdr::lock_live_herdr_tests();
 			let bin = live_binary()?;
 			let root = tempfile::tempdir().unwrap();
 			let xdg = root.path().join("xdg-config");
@@ -1429,6 +1431,7 @@ mod unix_tests {
 				root,
 				namespace,
 				server,
+				_lock: lock,
 			};
 			live.wait_socket();
 			Some(live)

@@ -1160,10 +1160,12 @@ exit 2
 			root: tempfile::TempDir,
 			namespace: HerdrNamespace,
 			extra_env: Vec<(OsString, OsString)>,
+			_lock: std::sync::MutexGuard<'static, ()>,
 		}
 
 		impl Live {
 			fn start() -> Option<Self> {
+				let lock = crate::herdr::lock_live_herdr_tests();
 				let bin = live_binary()?;
 				let n = LIVE_SEQ.fetch_add(1, Ordering::Relaxed);
 				let root = tempfile::tempdir().unwrap();
@@ -1195,6 +1197,7 @@ exit 2
 					root,
 					namespace,
 					extra_env,
+					_lock: lock,
 				})
 			}
 
