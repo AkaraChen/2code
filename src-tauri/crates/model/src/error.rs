@@ -20,6 +20,12 @@ pub enum AppError {
 
 	#[error("Git error: {0}")]
 	GitError(String),
+
+	#[error("Herdr server is absent: {0}")]
+	HerdrServerAbsent(String),
+
+	#[error("Herdr server is incompatible: {0}")]
+	HerdrServerIncompatible(String),
 }
 
 impl Serialize for AppError {
@@ -85,6 +91,20 @@ mod tests {
 	fn display_git_error() {
 		let err = AppError::GitError("branch not found".into());
 		assert_eq!(err.to_string(), "Git error: branch not found");
+	}
+
+	#[test]
+	fn display_herdr_absent_is_distinct_from_incompatible() {
+		let absent = AppError::HerdrServerAbsent("/tmp/x.sock".into());
+		let incompatible =
+			AppError::HerdrServerIncompatible("protocol 1".into());
+		assert_eq!(absent.to_string(), "Herdr server is absent: /tmp/x.sock");
+		assert_eq!(
+			incompatible.to_string(),
+			"Herdr server is incompatible: protocol 1"
+		);
+		assert!(!absent.to_string().contains("incompatible"));
+		assert!(!incompatible.to_string().contains("absent"));
 	}
 
 	// --- Serialize produces JSON string ---
