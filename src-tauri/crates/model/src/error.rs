@@ -26,6 +26,12 @@ pub enum AppError {
 
 	#[error("Herdr server is incompatible: {0}")]
 	HerdrServerIncompatible(String),
+
+	#[error("Herdr transport error: {0}")]
+	HerdrTransport(String),
+
+	#[error("Herdr request outcome is uncertain: {0}")]
+	HerdrUncertainOutcome(String),
 }
 
 impl Serialize for AppError {
@@ -105,6 +111,23 @@ mod tests {
 		);
 		assert!(!absent.to_string().contains("incompatible"));
 		assert!(!incompatible.to_string().contains("absent"));
+	}
+
+	#[test]
+	fn display_herdr_uncertain_is_distinct_from_transport() {
+		let transport = AppError::HerdrTransport("disconnected".into());
+		let uncertain =
+			AppError::HerdrUncertainOutcome("workspace.create".into());
+		assert_eq!(
+			transport.to_string(),
+			"Herdr transport error: disconnected"
+		);
+		assert_eq!(
+			uncertain.to_string(),
+			"Herdr request outcome is uncertain: workspace.create"
+		);
+		assert!(!transport.to_string().contains("uncertain"));
+		assert!(!uncertain.to_string().contains("transport error"));
 	}
 
 	// --- Serialize produces JSON string ---
