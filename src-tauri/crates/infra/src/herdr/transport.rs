@@ -62,6 +62,14 @@ pub struct HerdrSuccess {
 	pub result: Value,
 }
 
+/// JSON `worktree.open` identity. `pane_id` / `terminal_id` are not
+/// persisted here; adoption binds `workspace_id` only.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorktreeOpenResult {
+	pub workspace_id: String,
+	pub already_open: bool,
+}
+
 /// Structured RPC error from Herdr (`error.code` / `error.message`).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HerdrRpcError {
@@ -159,6 +167,39 @@ impl From<HerdrTransportError> for AppError {
 			AppError::HerdrTransport(err.to_string())
 		}
 	}
+}
+
+fn parse_worktree_open_result(
+	result: &Value,
+) -> Result<WorktreeOpenResult, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "worktree_opened" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected worktree_opened, got {kind}"
+		)));
+	}
+	let workspace_id = result
+		.get("workspace")
+		.and_then(|workspace| workspace.get("workspace_id"))
+		.and_then(Value::as_str)
+		.unwrap_or("");
+	if workspace_id.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"worktree.open result missing workspace_id".into(),
+		));
+	}
+	let already_open = result
+		.get("already_open")
+		.and_then(Value::as_bool)
+		.ok_or_else(|| {
+			HerdrTransportError::UnexpectedMessage(
+				"worktree.open result missing already_open".into(),
+			)
+		})?;
+	Ok(WorktreeOpenResult {
+		workspace_id: workspace_id.to_string(),
+		already_open,
+	})
 }
 
 /// Methods whose in-flight disconnect must not be auto-replayed.
@@ -386,6 +427,29 @@ impl HerdrClient {
 			"session.snapshot",
 			Value::Object(Default::default()),
 		)
+	}
+
+	/// Adopt an existing checkout. Paths must be absolute. Never
+	/// `worktree.create` and never auto-replays an uncertain outcome.
+	pub fn worktree_open(
+		&self,
+		cwd: &Path,
+		path: &Path,
+	) -> Result<WorktreeOpenResult, HerdrTransportError> {
+		if !cwd.is_absolute() || !path.is_absolute() {
+			return Err(HerdrTransportError::Refused {
+				reason: "worktree.open cwd and path must be absolute".into(),
+			});
+		}
+		let params = serde_json::json!({
+			"cwd": cwd.to_string_lossy(),
+			"path": path.to_string_lossy(),
+			"trust_repository": true,
+			"focus": false,
+		});
+		let success =
+			self.request(self.next_id("wtopen"), "worktree.open", params)?;
+		parse_worktree_open_result(&success.result)
 	}
 
 	pub fn next_id(&self, prefix: &str) -> String {
@@ -1074,6 +1138,7 @@ mod tests {
 	#[test]
 	fn mutation_disconnect_is_uncertain_and_distinct() {
 		assert!(outcome_uncertain("workspace.create"));
+		assert!(outcome_uncertain("worktree.open"));
 		assert!(outcome_uncertain("worktree.remove"));
 		assert!(outcome_uncertain("tab.close"));
 		assert!(outcome_uncertain("pane.send_input"));
@@ -1095,6 +1160,52 @@ mod tests {
 		assert!(!AppError::from(disconnected)
 			.to_string()
 			.contains("uncertain"));
+	}
+
+	#[test]
+	fn worktree_open_parses_workspace_id_and_refuses_relative_paths() {
+		let opened = parse_worktree_open_result(&serde_json::json!({
+			"type": "worktree_opened",
+			"already_open": true,
+			"workspace": { "workspace_id": "w1", "label": "Renamed" },
+			"root_pane": { "pane_id": "w1:p1", "terminal_id": "term_x" }
+		}))
+		.unwrap();
+		assert_eq!(opened.workspace_id, "w1");
+		assert!(opened.already_open);
+		assert!(parse_worktree_open_result(&serde_json::json!({
+			"type": "worktree_created",
+			"workspace": { "workspace_id": "w2" },
+			"already_open": false
+		}))
+		.is_err());
+		assert!(parse_worktree_open_result(&serde_json::json!({
+			"type": "worktree_opened",
+			"already_open": false,
+			"workspace": { "label": "App" }
+		}))
+		.is_err());
+		let src = include_str!("transport.rs");
+		let helper = src
+			.split("pub fn worktree_open")
+			.nth(1)
+			.unwrap()
+			.split("pub fn next_id")
+			.next()
+			.unwrap();
+		assert!(helper.contains("worktree.open"));
+		assert!(!helper.contains("worktree.create"));
+		assert!(!helper.contains("worktree.remove"));
+		assert!(!helper.contains("workspace.create"));
+		assert!(!helper.contains("git worktree"));
+
+		let client =
+			HerdrClient::connect_path(Path::new("/tmp/ok.sock")).unwrap();
+		let relative = client
+			.worktree_open(Path::new("repo"), Path::new("repo"))
+			.unwrap_err();
+		assert!(matches!(relative, HerdrTransportError::Refused { .. }));
+		assert!(relative.to_string().contains("absolute"));
 	}
 
 	#[test]
@@ -1560,5 +1671,103 @@ mod unix_tests {
 		});
 		assert_eq!(snap.result["type"], "session_snapshot");
 		assert!(snap.result.get("snapshot").is_some());
+	}
+
+	#[test]
+	fn worktree_open_sends_absolute_path_cwd_trust_and_no_focus() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.open");
+			assert_eq!(req["params"]["cwd"], "/repo");
+			assert_eq!(req["params"]["path"], "/repo/wt");
+			assert_eq!(req["params"]["trust_repository"], true);
+			assert_eq!(req["params"]["focus"], false);
+			assert!(req["params"].get("label").is_none());
+			assert!(req["params"].get("branch").is_none());
+			assert!(req["params"].get("workspace_id").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"worktree_opened","already_open":false,"workspace":{{"workspace_id":"w4"}},"root_pane":{{"pane_id":"w4:p1"}}}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let opened = client(&sock)
+			.worktree_open(Path::new("/repo"), Path::new("/repo/wt"))
+			.unwrap();
+		assert_eq!(opened.workspace_id, "w4");
+		assert!(!opened.already_open);
+	}
+
+	#[test]
+	fn live_worktree_open_reuses_already_open_workspace_id() {
+		let Some(live) = require_live() else {
+			return;
+		};
+		let repo = live.root.path().join("repo");
+		std::fs::create_dir_all(&repo).unwrap();
+		init_git_repo(&repo);
+		std::fs::write(repo.join("dirty.txt"), "keep\n").unwrap();
+		let client = live.client();
+		let first = client.worktree_open(&repo, &repo).unwrap_or_else(|err| {
+			panic!("worktree.open failed: {err}\n{}", live.server_log())
+		});
+		assert!(!first.workspace_id.is_empty());
+		assert!(!first.already_open);
+		let second = client.worktree_open(&repo, &repo).unwrap();
+		assert!(second.already_open);
+		assert_eq!(second.workspace_id, first.workspace_id);
+		assert_eq!(
+			std::fs::read_to_string(repo.join("dirty.txt")).unwrap(),
+			"keep\n"
+		);
+		let listed = std::process::Command::new("git")
+			.args(["worktree", "list", "--porcelain"])
+			.current_dir(&repo)
+			.output()
+			.unwrap();
+		let list = String::from_utf8_lossy(&listed.stdout);
+		assert_eq!(list.matches("worktree ").count(), 1);
+	}
+
+	fn init_git_repo(repo: &Path) {
+		assert!(std::process::Command::new("git")
+			.args(["init", "-b", "main"])
+			.current_dir(repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_SYSTEM", "/dev/null")
+			.status()
+			.unwrap()
+			.success());
+		for (key, value) in [
+			("user.email", "adoption@example.test"),
+			("user.name", "Adoption"),
+		] {
+			assert!(std::process::Command::new("git")
+				.args(["config", key, value])
+				.current_dir(repo)
+				.env("GIT_CONFIG_GLOBAL", "/dev/null")
+				.env("GIT_CONFIG_SYSTEM", "/dev/null")
+				.status()
+				.unwrap()
+				.success());
+		}
+		std::fs::write(repo.join("README.md"), "# fixture\n").unwrap();
+		assert!(std::process::Command::new("git")
+			.args(["add", "README.md"])
+			.current_dir(repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_SYSTEM", "/dev/null")
+			.status()
+			.unwrap()
+			.success());
+		assert!(std::process::Command::new("git")
+			.args(["commit", "-m", "init"])
+			.current_dir(repo)
+			.env("GIT_CONFIG_GLOBAL", "/dev/null")
+			.env("GIT_CONFIG_SYSTEM", "/dev/null")
+			.status()
+			.unwrap()
+			.success());
 	}
 }
