@@ -1,41 +1,54 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { HerdrTerminalFrame } from "@/generated";
+import type { HerdrTerminalFrame, SessionAgentStatus } from "@/generated";
 import restorationSrc from "../restoration.ts?raw";
 import terminalSrc from "../Terminal.tsx?raw";
 import addonsSrc from "./addons.ts?raw";
+import herdrAgentSrc from "./herdrAgent.ts?raw";
 import herdrFramesSrc from "./herdrFrames.ts?raw";
 import herdrQueryGuardSrc from "./herdrQueryGuard.ts?raw";
 import herdrScrollSrc from "./herdrScroll.ts?raw";
 import terminalTransportSrc from "./terminalTransport.ts?raw";
 import {
+	hydrateHerdrAgentStatus,
 	resolveTerminalTransportKind,
+	startHerdrAgentStream,
 	startHerdrFrameStream,
 	startLocalByteStream,
 	transportKindFromBackend,
 } from "./terminalTransport";
 
 const {
+	getSessionAgentStatus,
 	getSessionBackend,
 	streamHerdrOutput,
 	streamPtyOutput,
+	streamSessionAgentStatus,
 } = vi.hoisted(() => ({
+	getSessionAgentStatus: vi.fn(),
 	getSessionBackend: vi.fn(),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
 	streamPtyOutput: vi.fn(() => Promise.resolve()),
+	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@/generated", () => ({
+	getSessionAgentStatus,
 	getSessionBackend,
 	streamHerdrOutput,
 	streamPtyOutput,
+	streamSessionAgentStatus,
 }));
 
 beforeEach(() => {
+	getSessionAgentStatus.mockReset();
+	getSessionAgentStatus.mockResolvedValue(null);
 	getSessionBackend.mockReset();
 	streamHerdrOutput.mockReset();
 	streamHerdrOutput.mockResolvedValue(undefined);
 	streamPtyOutput.mockReset();
 	streamPtyOutput.mockResolvedValue(undefined);
+	streamSessionAgentStatus.mockReset();
+	streamSessionAgentStatus.mockResolvedValue(undefined);
 });
 
 describe("transportKindFromBackend", () => {
@@ -68,6 +81,8 @@ describe("byte vs frame streams", () => {
 		});
 		expect(streamPtyOutput).toHaveBeenCalledTimes(1);
 		expect(streamHerdrOutput).not.toHaveBeenCalled();
+		expect(streamSessionAgentStatus).not.toHaveBeenCalled();
+		expect(getSessionAgentStatus).not.toHaveBeenCalled();
 	});
 
 	it("never starts a Local byte stream for a Herdr-owned id", () => {
@@ -98,10 +113,54 @@ describe("byte vs frame streams", () => {
 			full: true,
 			width: 80,
 			height: 24,
-			bytes: [0x1B, 0x5B, 0x32, 0x4A],
+			bytes: [0x1b, 0x5b, 0x32, 0x4a],
 		};
 		calls[0][0].onOutput.onmessage(frame);
 		expect(frames).toEqual([frame]);
+	});
+});
+
+describe("Herdr agent status IPC", () => {
+	it("hydrates mapped session DTOs without Local PTY parsing", async () => {
+		const dto: SessionAgentStatus = {
+			sessionId: "herdr-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		};
+		getSessionAgentStatus.mockResolvedValueOnce(dto);
+		await expect(hydrateHerdrAgentStatus("herdr-1")).resolves.toEqual(dto);
+		expect(getSessionAgentStatus).toHaveBeenCalledWith({
+			sessionId: "herdr-1",
+		});
+		expect(streamPtyOutput).not.toHaveBeenCalled();
+	});
+
+	it("streams agent DTOs on the Herdr path only", () => {
+		const updates: SessionAgentStatus[] = [];
+		startHerdrAgentStream({
+			sessionId: "herdr-1",
+			onUpdate: (dto) => {
+				updates.push(dto);
+			},
+		});
+		expect(streamSessionAgentStatus).toHaveBeenCalledTimes(1);
+		expect(streamPtyOutput).not.toHaveBeenCalled();
+		const calls = streamSessionAgentStatus.mock.calls as unknown as Array<
+			[
+				{
+					onUpdate: {
+						onmessage: (dto: SessionAgentStatus) => void;
+					};
+				},
+			]
+		>;
+		const dto: SessionAgentStatus = {
+			sessionId: "herdr-1",
+			status: "working",
+			agentName: null,
+		};
+		calls[0][0].onUpdate.onmessage(dto);
+		expect(updates).toEqual([dto]);
 	});
 });
 
@@ -109,6 +168,7 @@ describe("production GUI transport", () => {
 	it("does not call Herdr JSON mutations or takeover from the xterm adapter", () => {
 		const src = [
 			terminalTransportSrc,
+			herdrAgentSrc,
 			herdrFramesSrc,
 			herdrQueryGuardSrc,
 			herdrScrollSrc,
@@ -127,6 +187,9 @@ describe("production GUI transport", () => {
 		expect(src).not.toContain("selected_backend");
 		expect(src).not.toContain("selectedBackend");
 		expect(src).not.toContain("pane.read");
+		expect(src).not.toContain("pane.report_agent");
+		expect(src).not.toContain("agent.start");
+		expect(src).not.toContain("agent.prompt");
 		expect(addonsSrc).toContain("@xterm/addon-search");
 	});
 });
