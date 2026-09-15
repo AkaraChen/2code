@@ -11,6 +11,7 @@ pub struct Profile {
 	pub id: String,
 	pub project_id: String,
 	pub branch_name: String,
+	/// Cached checkout path. Not Herdr workspace authority.
 	pub worktree_path: String,
 	pub created_at: String,
 	pub is_default: bool,

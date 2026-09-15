@@ -1,5 +1,20 @@
 use serde::{Deserialize, Serialize};
 
+/// Dedicated 2code Herdr session namespace. Never the user default.
+pub const HERDR_NAMESPACE: &str = "2code";
+
+/// Whether a persisted runtime identity is currently present.
+///
+/// Computed against the live projection. Mapping rows keep the stored
+/// `workspace_id` / `pane_id` and never rebind by label, path, or
+/// `terminal_id`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuntimeIdentityState {
+	Bound,
+	Missing,
+	Replaced,
+}
+
 /// Which terminal backend is selected for new sessions.
 ///
 /// Application-level only: Herdr protocol/wire types do not belong here.
@@ -63,6 +78,22 @@ pub struct RuntimeDiscovery {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn herdr_namespace_is_dedicated_2code() {
+		assert_eq!(HERDR_NAMESPACE, "2code");
+		assert_ne!(HERDR_NAMESPACE, "default");
+	}
+
+	#[test]
+	fn identity_states_are_explicit_and_distinct() {
+		assert_ne!(RuntimeIdentityState::Bound, RuntimeIdentityState::Missing);
+		assert_ne!(
+			RuntimeIdentityState::Missing,
+			RuntimeIdentityState::Replaced
+		);
+		assert_ne!(RuntimeIdentityState::Bound, RuntimeIdentityState::Replaced);
+	}
 
 	#[test]
 	fn default_backend_is_local() {
