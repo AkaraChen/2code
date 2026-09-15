@@ -8,6 +8,9 @@ use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
+use service::runtime::{
+	HerdrStubAdapter, LocalAdapter, RuntimeHandle, RuntimeRouter,
+};
 use service::{PtyEventEmitter, WatchEventSender};
 
 pub struct PtyOutputSink {
@@ -91,4 +94,12 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 		}),
 		output_dir: app.state::<PtyLogDir>().0.clone(),
 	}
+}
+
+/// Wire the Local adapter at startup. Herdr is not selected.
+pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
+	Arc::new(RuntimeRouter::new(
+		LocalAdapter::new(build_pty_context(app)),
+		HerdrStubAdapter::new(),
+	))
 }

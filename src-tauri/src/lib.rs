@@ -70,6 +70,7 @@ pub fn run() {
 			app.manage(service::pty::PtyLogDir(log_dir));
 
 			app.manage(pool);
+			app.manage(crate::bridge::build_runtime(app.handle()));
 
 			Ok(())
 		})
