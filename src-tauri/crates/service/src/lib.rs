@@ -4,6 +4,7 @@ pub mod filesystem;
 pub mod profile;
 pub mod project;
 pub mod pty;
+pub mod runtime;
 pub mod watcher;
 
 /// Trait for emitting PTY events to the frontend.
