@@ -1,8 +1,9 @@
 //! Read-only Herdr runtime projection (Task 6).
 //!
-//! Objects are keyed by `workspace_id` / `tab_id` / `pane_id`, never by
-//! display name. A snapshot replace drops disappeared panes; later
-//! `*_updated` events do not recreate them.
+//! Bootstrap is subscribe ack → buffer → `session.snapshot` → drain,
+//! then live events. Disconnect starts a new epoch so pre-disconnect
+//! events are dropped. Objects are keyed by `workspace_id` / `tab_id` /
+//! `pane_id`, never by display name.
 
 use std::collections::HashMap;
 
@@ -227,6 +228,92 @@ impl RuntimeProjection {
 		} else {
 			ApplyOutcome::Ignored
 		}
+	}
+}
+
+/// One `{event, data}` line from `events.subscribe`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuntimeEvent {
+	pub event: String,
+	pub data: Value,
+	pub generation: u64,
+}
+
+impl RuntimeEvent {
+	pub fn new(generation: u64, event: impl Into<String>, data: Value) -> Self {
+		Self {
+			event: event.into(),
+			data,
+			generation,
+		}
+	}
+}
+
+/// Recoverable projection: subscribe epoch, snapshot replace, drain.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RuntimeReconciler {
+	projection: RuntimeProjection,
+	generation: u64,
+}
+
+impl RuntimeReconciler {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn generation(&self) -> u64 {
+		self.generation
+	}
+
+	pub fn projection(&self) -> &RuntimeProjection {
+		&self.projection
+	}
+
+	/// Begin a subscribe epoch. Tag buffered/live events with the
+	/// returned id. Previous ids become stale.
+	pub fn start_epoch(&mut self) -> u64 {
+		self.generation = self.generation.wrapping_add(1);
+		self.generation
+	}
+
+	/// Apply `session.snapshot`, then buffered events from this subscribe.
+	pub fn commit_snapshot(
+		&mut self,
+		snapshot: &Value,
+		buffered: &[RuntimeEvent],
+	) -> Result<(), AppError> {
+		self.projection.apply_snapshot(snapshot)?;
+		for event in buffered {
+			self.projection.apply_event(&event.event, &event.data);
+		}
+		Ok(())
+	}
+
+	/// Subscribe ack, buffer, snapshot, drain — verified bootstrap.
+	pub fn bootstrap(
+		&mut self,
+		snapshot: &Value,
+		buffered: &[RuntimeEvent],
+	) -> Result<u64, AppError> {
+		let generation = self.start_epoch();
+		self.commit_snapshot(snapshot, buffered)?;
+		Ok(generation)
+	}
+
+	/// Disconnect recovery: new subscribe epoch, fresh snapshot.
+	pub fn rebuild(
+		&mut self,
+		snapshot: &Value,
+		buffered: &[RuntimeEvent],
+	) -> Result<u64, AppError> {
+		self.bootstrap(snapshot, buffered)
+	}
+
+	pub fn apply_event(&mut self, event: &RuntimeEvent) -> ApplyOutcome {
+		if event.generation != self.generation {
+			return ApplyOutcome::IgnoredStale;
+		}
+		self.projection.apply_event(&event.event, &event.data)
 	}
 }
 
@@ -532,5 +619,116 @@ mod tests {
 		assert!(proj.workspace_ids().is_empty());
 		assert!(proj.tab_ids().is_empty());
 		assert!(proj.pane_ids().is_empty());
+	}
+
+	fn base_snapshot(panes: Value) -> Value {
+		snapshot(
+			json!([workspace("w1", "App")]),
+			json!([tab("w1:t1", "w1", "App")]),
+			panes,
+		)
+	}
+
+	#[test]
+	fn bootstrap_applies_events_that_arrive_during_snapshot() {
+		let mut rec = RuntimeReconciler::new();
+		let gen = rec.start_epoch();
+		assert_eq!(gen, 1);
+		let buffered = [RuntimeEvent::new(
+			gen,
+			"pane_created",
+			json!({"pane": pane("w1:p2", "w1:t1", "w1", "term_b", 1)}),
+		)];
+		rec.commit_snapshot(
+			&base_snapshot(json!([pane("w1:p1", "w1:t1", "w1", "term_a", 1)])),
+			&buffered,
+		)
+		.unwrap();
+		assert_eq!(rec.projection().pane_ids(), vec!["w1:p1", "w1:p2"]);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_created",
+				json!({"pane": pane("w1:p3", "w1:t1", "w1", "term_c", 1)}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection().pane_ids(),
+			vec!["w1:p1", "w1:p2", "w1:p3"]
+		);
+	}
+
+	#[test]
+	fn stale_pre_disconnect_events_are_dropped() {
+		let mut rec = RuntimeReconciler::new();
+		let first = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				first,
+				"pane_created",
+				json!({"pane": pane("w1:p2", "w1:t1", "w1", "term_b", 1)}),
+			)),
+			ApplyOutcome::Applied
+		);
+		let second = rec
+			.rebuild(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 2
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_ne!(first, second);
+		assert_eq!(rec.projection().pane_ids(), vec!["w1:p1"]);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				first,
+				"pane_created",
+				json!({"pane": pane("w1:p2", "w1:t1", "w1", "term_b", 1)}),
+			)),
+			ApplyOutcome::IgnoredStale
+		);
+		assert!(rec.projection().pane("w1:p2").is_none());
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				first,
+				"pane_updated",
+				json!({"pane": pane("w1:p9", "w1:t1", "w1", "term_z", 9)}),
+			)),
+			ApplyOutcome::IgnoredStale
+		);
+		assert!(rec.projection().pane("w1:p9").is_none());
+	}
+
+	#[test]
+	fn rebuild_snapshot_drops_externally_removed_objects() {
+		let mut rec = RuntimeReconciler::new();
+		rec.bootstrap(
+			&base_snapshot(json!([
+				pane("w1:p1", "w1:t1", "w1", "term_a", 1),
+				pane("w1:p2", "w1:t1", "w1", "term_b", 1)
+			])),
+			&[],
+		)
+		.unwrap();
+		rec.rebuild(
+			&base_snapshot(json!([pane("w1:p1", "w1:t1", "w1", "term_a", 2)])),
+			&[RuntimeEvent::new(
+				99,
+				"pane_updated",
+				json!({"pane": pane("w1:p2", "w1:t1", "w1", "term_b", 3)}),
+			)],
+		)
+		.unwrap();
+		assert_eq!(rec.projection().pane_ids(), vec!["w1:p1"]);
+		assert!(rec.projection().pane("w1:p2").is_none());
 	}
 }
