@@ -23,6 +23,7 @@ export {
 	HerdrFrameCursor,
 	herdrFrameBytes,
 } from "./herdrFrames";
+export { blockHerdrQueryReplies } from "./herdrQueryGuard";
 export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
