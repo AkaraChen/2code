@@ -613,9 +613,11 @@ impl HerdrSubscription {
 		})
 	}
 
-	pub fn next_event(
+	/// One non-blocking poll. `Ok(None)` means the read timeout elapsed
+	/// with no event, so a sync loop can check shutdown or take a snapshot.
+	pub fn poll_event(
 		&mut self,
-	) -> Result<SubscriptionEvent, HerdrTransportError> {
+	) -> Result<Option<SubscriptionEvent>, HerdrTransportError> {
 		loop {
 			match read_line(
 				&mut self.reader,
@@ -630,11 +632,21 @@ impl HerdrSubscription {
 				}
 				Ok(Some(line)) => {
 					if let Some(event) = decode_event(&line)? {
-						return Ok(event);
+						return Ok(Some(event));
 					}
 				}
-				Err(err) if is_io_timeout(&err) => continue,
+				Err(err) if is_io_timeout(&err) => return Ok(None),
 				Err(err) => return Err(err),
+			}
+		}
+	}
+
+	pub fn next_event(
+		&mut self,
+	) -> Result<SubscriptionEvent, HerdrTransportError> {
+		loop {
+			if let Some(event) = self.poll_event()? {
+				return Ok(event);
 			}
 		}
 	}

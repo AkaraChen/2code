@@ -9,8 +9,9 @@ use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
 use service::runtime::{
-	HerdrStubAdapter, LocalAdapter, RuntimeHandle, RuntimeRouter,
+	HerdrEndpoint, HerdrStubAdapter, LocalAdapter, RuntimeHandle, RuntimeRouter,
 };
+use service::runtime_sync::HerdrRuntimeSync;
 use service::{PtyEventEmitter, WatchEventSender};
 
 pub struct PtyOutputSink {
@@ -102,4 +103,13 @@ pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
 		LocalAdapter::new(build_pty_context(app)),
 		HerdrStubAdapter::new(),
 	))
+}
+
+/// Read-only Herdr projection. Must not be started from Local default
+/// startup in `lib.rs`.
+#[allow(dead_code)]
+pub fn herdr_runtime_sync(
+	endpoint: &HerdrEndpoint,
+) -> Result<HerdrRuntimeSync, model::error::AppError> {
+	HerdrStubAdapter::open_runtime_sync(endpoint)
 }

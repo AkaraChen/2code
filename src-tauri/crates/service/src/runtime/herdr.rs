@@ -1,14 +1,17 @@
 //! Fail-closed Herdr terminal runtime.
 //!
-//! Protocol/wire types (NDJSON methods, pane/workspace IDs, frame records)
-//! stay in this module when a later task implements the real adapter.
-//! This stub never owns a local PTY or a worktree.
+//! PTY create/close/write stay unavailable. A later task can open a
+//! read-only snapshot/event projection via
+//! [`HerdrStubAdapter::open_runtime_sync`]; that path never owns a local
+//! PTY, worktree, or terminal session.
 
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{CreateSessionResult, RuntimeBackend};
 
-use super::TerminalRuntime;
+use crate::runtime_sync::HerdrRuntimeSync;
+
+use super::{HerdrEndpoint, TerminalRuntime};
 
 const UNAVAILABLE: &str = "Herdr runtime is not available";
 
@@ -31,6 +34,14 @@ impl HerdrStubAdapter {
 
 	pub fn recorded_ops(&self) -> Vec<&'static str> {
 		self.ops.lock().map(|ops| ops.clone()).unwrap_or_default()
+	}
+
+	/// Read-only `events.subscribe` + `session.snapshot` projection.
+	/// Does not create, close, or attach terminals.
+	pub fn open_runtime_sync(
+		endpoint: &HerdrEndpoint,
+	) -> Result<HerdrRuntimeSync, AppError> {
+		HerdrRuntimeSync::connect(endpoint)
 	}
 }
 

@@ -6,9 +6,20 @@
 //! `pane_id`, never by display name.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
+use infra::herdr::process::HerdrEndpoint;
+use infra::herdr::transport::{
+	HerdrClient, HerdrClientOptions, HerdrSubscription, HerdrTransportError,
+	SubscriptionEvent,
+};
 use model::error::AppError;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// Workspace identity in the Herdr projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,6 +52,7 @@ pub enum ApplyOutcome {
 	Applied,
 	IgnoredStale,
 	Ignored,
+	Rebuilt,
 }
 
 /// In-memory Herdr runtime cache. Not persisted.
@@ -314,6 +326,221 @@ impl RuntimeReconciler {
 			return ApplyOutcome::IgnoredStale;
 		}
 		self.projection.apply_event(&event.event, &event.data)
+	}
+}
+
+const SUBSCRIBE_TYPES: &[&str] = &[
+	"workspace.created",
+	"workspace.updated",
+	"workspace.metadata_updated",
+	"workspace.renamed",
+	"workspace.moved",
+	"workspace.reordered",
+	"workspace.closed",
+	"workspace.focused",
+	"worktree.created",
+	"worktree.opened",
+	"worktree.removed",
+	"tab.created",
+	"tab.closed",
+	"tab.focused",
+	"tab.renamed",
+	"tab.moved",
+	"pane.created",
+	"pane.closed",
+	"pane.updated",
+	"pane.focused",
+	"pane.moved",
+	"pane.exited",
+	"pane.agent_detected",
+	"layout.updated",
+];
+
+/// `events.subscribe` params for the read-only runtime projection.
+pub fn runtime_subscribe_params() -> Value {
+	json!({
+		"subscriptions": SUBSCRIBE_TYPES
+			.iter()
+			.map(|kind| json!({ "type": kind }))
+			.collect::<Vec<_>>(),
+	})
+}
+
+struct EventPump {
+	generation: u64,
+	rx: mpsc::Receiver<Result<SubscriptionEvent, HerdrTransportError>>,
+	shutdown: Arc<AtomicBool>,
+	join: Option<JoinHandle<()>>,
+}
+
+impl EventPump {
+	fn spawn(
+		mut sub: HerdrSubscription,
+		generation: u64,
+	) -> Result<Self, AppError> {
+		let (tx, rx) = mpsc::channel();
+		let shutdown = Arc::new(AtomicBool::new(false));
+		let flag = Arc::clone(&shutdown);
+		let join = thread::Builder::new()
+			.name("herdr-runtime-sync".into())
+			.spawn(move || loop {
+				if flag.load(Ordering::SeqCst) {
+					break;
+				}
+				match sub.poll_event() {
+					Ok(Some(event)) => {
+						if tx.send(Ok(event)).is_err() {
+							break;
+						}
+					}
+					Ok(None) => {}
+					Err(err) => {
+						let _ = tx.send(Err(err));
+						break;
+					}
+				}
+			})
+			.map_err(AppError::from)?;
+		Ok(Self {
+			generation,
+			rx,
+			shutdown,
+			join: Some(join),
+		})
+	}
+
+	fn drain(&self) -> Result<Vec<RuntimeEvent>, AppError> {
+		let mut buffered = Vec::new();
+		loop {
+			match self.rx.try_recv() {
+				Ok(Ok(event)) => buffered.push(RuntimeEvent::new(
+					self.generation,
+					event.event,
+					event.data,
+				)),
+				Ok(Err(err)) => return Err(err.into()),
+				Err(mpsc::TryRecvError::Empty) => return Ok(buffered),
+				Err(mpsc::TryRecvError::Disconnected) => {
+					return Err(AppError::HerdrTransport(
+						"Herdr subscribe pump stopped".into(),
+					));
+				}
+			}
+		}
+	}
+}
+
+impl Drop for EventPump {
+	fn drop(&mut self) {
+		self.shutdown.store(true, Ordering::SeqCst);
+		if let Some(join) = self.join.take() {
+			let _ = join.join();
+		}
+	}
+}
+
+/// Read-only `events.subscribe` + `session.snapshot` client.
+///
+/// Linux Unix is the verified path. macOS uses the same Unix client at
+/// compile time and is not claimed as executed (#401). Windows named
+/// pipes are not claimed as live-verified (#399). This type never
+/// creates or closes terminals, attaches CLI frames, or sends
+/// `server.stop`.
+pub struct HerdrRuntimeSync {
+	client: HerdrClient,
+	options: HerdrClientOptions,
+	path: PathBuf,
+	reconciler: RuntimeReconciler,
+	pump: Option<EventPump>,
+}
+
+impl HerdrRuntimeSync {
+	pub fn connect(endpoint: &HerdrEndpoint) -> Result<Self, AppError> {
+		Self::connect_path(&endpoint.socket_path)
+	}
+
+	pub fn connect_path(path: &Path) -> Result<Self, AppError> {
+		Self::connect_with(path, HerdrClientOptions::default())
+	}
+
+	pub fn connect_with(
+		path: &Path,
+		options: HerdrClientOptions,
+	) -> Result<Self, AppError> {
+		let client = HerdrClient::connect_with(path, options.clone())?;
+		let mut sync = Self {
+			client,
+			options,
+			path: path.to_path_buf(),
+			reconciler: RuntimeReconciler::new(),
+			pump: None,
+		};
+		sync.rebuild()?;
+		Ok(sync)
+	}
+
+	pub fn projection(&self) -> &RuntimeProjection {
+		self.reconciler.projection()
+	}
+
+	pub fn generation(&self) -> u64 {
+		self.reconciler.generation()
+	}
+
+	/// Fresh subscribe + snapshot. Drops the previous event pump so
+	/// pre-disconnect lines cannot be applied.
+	pub fn rebuild(&mut self) -> Result<(), AppError> {
+		self.pump = None;
+		let generation = self.reconciler.start_epoch();
+		let id = format!("sync-{generation}");
+		let sub = HerdrSubscription::connect_with(
+			&self.path,
+			&id,
+			runtime_subscribe_params(),
+			self.options.clone(),
+		)?;
+		let pump = EventPump::spawn(sub, generation)?;
+		let snap = self.client.session_snapshot()?;
+		let buffered = pump.drain()?;
+		self.reconciler.commit_snapshot(&snap.result, &buffered)?;
+		for event in pump.drain()? {
+			self.reconciler.apply_event(&event);
+		}
+		self.pump = Some(pump);
+		Ok(())
+	}
+
+	/// Apply one live event, or resubscribe after disconnect.
+	pub fn poll(
+		&mut self,
+		timeout: Duration,
+	) -> Result<ApplyOutcome, AppError> {
+		let msg = {
+			let pump = self.pump.as_mut().ok_or_else(|| {
+				AppError::HerdrTransport(
+					"Herdr runtime sync is not subscribed".into(),
+				)
+			})?;
+			pump.rx.recv_timeout(timeout)
+		};
+		match msg {
+			Ok(Ok(event)) => {
+				let generation =
+					self.pump.as_ref().map(|pump| pump.generation).unwrap_or(0);
+				Ok(self.reconciler.apply_event(&RuntimeEvent::new(
+					generation,
+					event.event,
+					event.data,
+				)))
+			}
+			Ok(Err(HerdrTransportError::Disconnected { .. }))
+			| Err(RecvTimeoutError::Disconnected) => {
+				self.rebuild()?;
+				Ok(ApplyOutcome::Rebuilt)
+			}
+			Ok(Err(err)) => Err(err.into()),
+			Err(RecvTimeoutError::Timeout) => Ok(ApplyOutcome::Ignored),
+		}
 	}
 }
 
@@ -730,5 +957,297 @@ mod tests {
 		.unwrap();
 		assert_eq!(rec.projection().pane_ids(), vec!["w1:p1"]);
 		assert!(rec.projection().pane("w1:p2").is_none());
+	}
+
+	#[test]
+	fn subscribe_params_cover_lifecycle_not_output_waits() {
+		let params = runtime_subscribe_params();
+		let types: Vec<&str> = params["subscriptions"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.map(|item| item["type"].as_str().unwrap())
+			.collect();
+		assert!(types.contains(&"pane.created"));
+		assert!(types.contains(&"pane.closed"));
+		assert!(types.contains(&"workspace.closed"));
+		assert!(types.contains(&"tab.created"));
+		assert!(types.contains(&"layout.updated"));
+		assert!(!types.contains(&"pane.output_matched"));
+		assert!(!types.contains(&"pane.agent_status_changed"));
+	}
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+	use super::*;
+	use serde_json::json;
+	use std::io::{BufRead, BufReader, Read, Write};
+	use std::os::unix::net::{UnixListener, UnixStream};
+	use std::sync::{Arc, Mutex};
+	use std::thread;
+	use std::time::Duration;
+
+	use infra::herdr::transport::HerdrClientOptions;
+
+	fn snapshot_result(panes: Value) -> Value {
+		json!({
+			"type": "session_snapshot",
+			"snapshot": {
+				"version": "0.9.0",
+				"protocol": 22,
+				"workspaces": [{
+					"workspace_id": "w1",
+					"number": 1,
+					"label": "App",
+					"focused": false,
+					"pane_count": 1,
+					"tab_count": 1,
+					"active_tab_id": "w1:t1",
+					"agent_status": "unknown"
+				}],
+				"tabs": [{
+					"tab_id": "w1:t1",
+					"workspace_id": "w1",
+					"number": 1,
+					"label": "App",
+					"focused": false,
+					"pane_count": 1,
+					"agent_status": "unknown"
+				}],
+				"panes": panes,
+				"layouts": [],
+				"agents": []
+			}
+		})
+	}
+
+	fn pane_obj(id: &str, term: &str, rev: u64) -> Value {
+		json!({
+			"pane_id": id,
+			"tab_id": "w1:t1",
+			"workspace_id": "w1",
+			"terminal_id": term,
+			"focused": false,
+			"agent_status": "unknown",
+			"revision": rev
+		})
+	}
+
+	fn pane_created(id: &str, term: &str, rev: u64) -> Value {
+		json!({
+			"event": "pane_created",
+			"data": {
+				"type": "pane_created",
+				"pane": pane_obj(id, term, rev)
+			}
+		})
+	}
+
+	fn test_options() -> HerdrClientOptions {
+		HerdrClientOptions {
+			max_message_bytes: 64 * 1024,
+			read_poll: Duration::from_millis(50),
+			request_timeout: Some(Duration::from_secs(2)),
+		}
+	}
+
+	struct Mock {
+		methods: Arc<Mutex<Vec<String>>>,
+		subscribe: Arc<Mutex<Option<UnixStream>>>,
+		_dir: tempfile::TempDir,
+		sock: std::path::PathBuf,
+	}
+
+	impl Mock {
+		fn start(snapshots: Vec<Value>, bootstrap: Vec<Value>) -> Self {
+			let dir = tempfile::tempdir().unwrap();
+			let sock = dir.path().join("api.sock");
+			let listener = UnixListener::bind(&sock).unwrap();
+			let methods = Arc::new(Mutex::new(Vec::new()));
+			let snapshots = Arc::new(Mutex::new(snapshots));
+			let bootstrap = Arc::new(Mutex::new(bootstrap));
+			let subscribe = Arc::new(Mutex::new(None));
+			let methods_h = Arc::clone(&methods);
+			let snapshots_h = Arc::clone(&snapshots);
+			let bootstrap_h = Arc::clone(&bootstrap);
+			let subscribe_h = Arc::clone(&subscribe);
+			thread::spawn(move || {
+				for stream in listener.incoming().flatten() {
+					let methods = Arc::clone(&methods_h);
+					let snapshots = Arc::clone(&snapshots_h);
+					let bootstrap = Arc::clone(&bootstrap_h);
+					let subscribe = Arc::clone(&subscribe_h);
+					thread::spawn(move || {
+						handle_conn(
+							stream, methods, snapshots, bootstrap, subscribe,
+						);
+					});
+				}
+			});
+			Self {
+				methods,
+				subscribe,
+				_dir: dir,
+				sock,
+			}
+		}
+
+		fn connect(&self) -> HerdrRuntimeSync {
+			HerdrRuntimeSync::connect_with(&self.sock, test_options()).unwrap()
+		}
+
+		fn methods(&self) -> Vec<String> {
+			self.methods.lock().unwrap().clone()
+		}
+	}
+
+	fn handle_conn(
+		mut stream: UnixStream,
+		methods: Arc<Mutex<Vec<String>>>,
+		snapshots: Arc<Mutex<Vec<Value>>>,
+		bootstrap: Arc<Mutex<Vec<Value>>>,
+		subscribe: Arc<Mutex<Option<UnixStream>>>,
+	) {
+		let mut line = String::new();
+		if BufReader::new(stream.try_clone().unwrap())
+			.read_line(&mut line)
+			.unwrap_or(0)
+			== 0
+		{
+			return;
+		}
+		let req: Value = serde_json::from_str(&line).unwrap();
+		let method = req["method"].as_str().unwrap_or("").to_string();
+		methods.lock().unwrap().push(method.clone());
+		assert!(
+			method == "events.subscribe" || method == "session.snapshot",
+			"read-only sync sent {method}"
+		);
+		match method.as_str() {
+			"events.subscribe" => {
+				let id = req["id"].as_str().unwrap();
+				*subscribe.lock().unwrap() = Some(stream.try_clone().unwrap());
+				write!(
+					stream,
+					"{{\"id\":\"{id}\",\"result\":{{\"type\":\"subscription_started\"}}}}\n"
+				)
+				.unwrap();
+				let _ = stream.flush();
+				let mut buf = [0_u8; 8];
+				loop {
+					match stream.read(&mut buf) {
+						Ok(0) | Err(_) => break,
+						Ok(_) => {}
+					}
+				}
+			}
+			"session.snapshot" => {
+				if let Some(sub) = subscribe.lock().unwrap().as_mut() {
+					for event in bootstrap.lock().unwrap().drain(..) {
+						writeln!(sub, "{event}").unwrap();
+					}
+					let _ = sub.flush();
+				}
+				let id = req["id"].as_str().unwrap();
+				let result = snapshots.lock().unwrap().remove(0);
+				writeln!(stream, r#"{{"id":"{id}","result":{result}}}"#)
+					.unwrap();
+			}
+			_ => panic!("unexpected method {method}"),
+		}
+	}
+
+	#[test]
+	fn subscribe_snapshot_applies_bootstrap_then_live_events() {
+		let mock = Mock::start(
+			vec![snapshot_result(json!([pane_obj("w1:p1", "term_a", 1)]))],
+			vec![pane_created("w1:p2", "term_b", 1)],
+		);
+		let mut sync = mock.connect();
+		if sync.projection().pane("w1:p2").is_none() {
+			let _ = sync.poll(Duration::from_millis(400));
+		}
+		assert_eq!(sync.projection().pane_ids(), vec!["w1:p1", "w1:p2"]);
+		{
+			let mut slot = mock.subscribe.lock().unwrap();
+			let sub = slot.as_mut().expect("subscribe stream");
+			writeln!(sub, "{}", pane_created("w1:p3", "term_c", 1)).unwrap();
+			let _ = sub.flush();
+		}
+		let mut applied = false;
+		for _ in 0..10 {
+			if sync.poll(Duration::from_millis(200)).unwrap()
+				== ApplyOutcome::Applied
+			{
+				applied = true;
+				break;
+			}
+		}
+		assert!(applied);
+		assert_eq!(
+			sync.projection().pane_ids(),
+			vec!["w1:p1", "w1:p2", "w1:p3"]
+		);
+		assert!(mock
+			.methods()
+			.iter()
+			.all(|m| { m == "events.subscribe" || m == "session.snapshot" }));
+	}
+
+	#[test]
+	fn disconnect_rebuilds_and_drops_stale_events() {
+		let mock = Mock::start(
+			vec![
+				snapshot_result(json!([
+					pane_obj("w1:p1", "term_a", 1),
+					pane_obj("w1:p2", "term_b", 1)
+				])),
+				snapshot_result(json!([pane_obj("w1:p1", "term_a", 2)])),
+			],
+			vec![],
+		);
+		let mut sync = mock.connect();
+		assert_eq!(sync.projection().pane_ids(), vec!["w1:p1", "w1:p2"]);
+		let first_gen = sync.generation();
+		{
+			let mut slot = mock.subscribe.lock().unwrap();
+			if let Some(sub) = slot.take() {
+				let _ = sub.shutdown(std::net::Shutdown::Both);
+			}
+		}
+		let mut rebuilt = false;
+		for _ in 0..20 {
+			match sync.poll(Duration::from_millis(200)).unwrap() {
+				ApplyOutcome::Rebuilt => {
+					rebuilt = true;
+					break;
+				}
+				ApplyOutcome::IgnoredStale | ApplyOutcome::Ignored => {}
+				other => panic!("unexpected {other:?}"),
+			}
+		}
+		assert!(rebuilt);
+		assert_ne!(sync.generation(), first_gen);
+		assert_eq!(sync.projection().pane_ids(), vec!["w1:p1"]);
+		assert!(sync.projection().pane("w1:p2").is_none());
+		assert!(mock
+			.methods()
+			.iter()
+			.all(|m| { m == "events.subscribe" || m == "session.snapshot" }));
+		assert_eq!(
+			mock.methods()
+				.iter()
+				.filter(|m| *m == "events.subscribe")
+				.count(),
+			2
+		);
+		assert_eq!(
+			mock.methods()
+				.iter()
+				.filter(|m| *m == "session.snapshot")
+				.count(),
+			2
+		);
 	}
 }

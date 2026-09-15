@@ -723,5 +723,21 @@ mod tests {
 			!lib.contains("HerdrClient::connect"),
 			"Local default startup must not connect a Herdr socket client"
 		);
+		assert!(
+			!lib.contains("runtime_sync"),
+			"Local default startup must not start Herdr snapshot sync"
+		);
+		assert!(
+			!lib.contains("herdr_runtime_sync"),
+			"Local default startup must not construct a Herdr runtime sync"
+		);
+		assert!(
+			!lib.contains("HerdrRuntimeSync"),
+			"Local default startup must not start HerdrRuntimeSync"
+		);
+		assert!(
+			!lib.contains("events.subscribe"),
+			"Local default startup must not subscribe to Herdr events"
+		);
 	}
 }
