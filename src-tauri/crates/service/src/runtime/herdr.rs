@@ -10,7 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use infra::db::DbPool;
@@ -18,7 +18,10 @@ use infra::herdr::process::{HerdrNamespace, HerdrProcessEnv};
 use infra::herdr::terminal::{
 	BufferLimits, TerminalAttachRequest, TerminalSessionHelper,
 };
-use infra::herdr::transport::{HerdrClient, PaneView, TabCreateResult};
+use infra::herdr::transport::{
+	HerdrClient, PaneView, TabCreateResult, WorktreeCreateRequest,
+	WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
+};
 use model::error::AppError;
 use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
@@ -53,6 +56,29 @@ pub trait HerdrTerminalClient: Send + Sync {
 	fn pane_get(&self, pane_id: &str) -> Result<Option<PaneView>, AppError>;
 
 	fn pane_close(&self, pane_id: &str) -> Result<(), AppError>;
+
+	fn session_snapshot(&self) -> Result<Value, AppError>;
+}
+
+/// JSON worktree create/list/open used by Herdr-selected profile create.
+/// Implementors must not auto-replay `worktree.create`.
+pub trait HerdrWorktreeClient: Send + Sync {
+	fn worktree_create(
+		&self,
+		request: WorktreeCreateRequest<'_>,
+	) -> Result<WorktreeCreateResult, AppError>;
+
+	fn worktree_list(
+		&self,
+		cwd: Option<&Path>,
+		workspace_id: Option<&str>,
+	) -> Result<Vec<WorktreeListEntry>, AppError>;
+
+	fn worktree_open(
+		&self,
+		cwd: &Path,
+		path: &Path,
+	) -> Result<WorktreeOpenResult, AppError>;
 
 	fn session_snapshot(&self) -> Result<Value, AppError>;
 }
@@ -99,6 +125,40 @@ impl HerdrTerminalClient for HerdrJsonTerminals {
 	}
 }
 
+impl HerdrWorktreeClient for HerdrJsonTerminals {
+	fn worktree_create(
+		&self,
+		request: WorktreeCreateRequest<'_>,
+	) -> Result<WorktreeCreateResult, AppError> {
+		self.client.worktree_create(request).map_err(AppError::from)
+	}
+
+	fn worktree_list(
+		&self,
+		cwd: Option<&Path>,
+		workspace_id: Option<&str>,
+	) -> Result<Vec<WorktreeListEntry>, AppError> {
+		self.client
+			.worktree_list(cwd, workspace_id)
+			.map_err(AppError::from)
+	}
+
+	fn worktree_open(
+		&self,
+		cwd: &Path,
+		path: &Path,
+	) -> Result<WorktreeOpenResult, AppError> {
+		self.client.worktree_open(cwd, path).map_err(AppError::from)
+	}
+
+	fn session_snapshot(&self) -> Result<Value, AppError> {
+		self.client
+			.session_snapshot()
+			.map(|success| success.result)
+			.map_err(AppError::from)
+	}
+}
+
 struct HerdrLifecycle {
 	db: DbPool,
 	client: Arc<dyn HerdrTerminalClient>,
@@ -121,6 +181,7 @@ struct HerdrAttachment {
 pub struct HerdrStubAdapter {
 	ops: Mutex<Vec<&'static str>>,
 	lifecycle: Option<HerdrLifecycle>,
+	worktrees: Option<Arc<dyn HerdrWorktreeClient>>,
 	cli: Option<HerdrCliAttach>,
 	attachments: Mutex<HashMap<String, HerdrAttachment>>,
 }
@@ -137,6 +198,7 @@ impl HerdrStubAdapter {
 		Self {
 			ops: Mutex::new(Vec::new()),
 			lifecycle: Some(HerdrLifecycle { db, client }),
+			worktrees: None,
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
 		}
@@ -150,7 +212,18 @@ impl HerdrStubAdapter {
 		Self {
 			ops: Mutex::new(Vec::new()),
 			lifecycle: Some(HerdrLifecycle { db, client }),
+			worktrees: None,
 			cli: Some(cli),
+			attachments: Mutex::new(HashMap::new()),
+		}
+	}
+
+	pub fn with_worktree_client(client: Arc<dyn HerdrWorktreeClient>) -> Self {
+		Self {
+			ops: Mutex::new(Vec::new()),
+			lifecycle: None,
+			worktrees: Some(client),
+			cli: None,
 			attachments: Mutex::new(HashMap::new()),
 		}
 	}
@@ -180,6 +253,14 @@ impl HerdrStubAdapter {
 
 	pub(crate) fn has_terminal_client(&self) -> bool {
 		self.lifecycle.is_some()
+	}
+
+	pub(crate) fn worktrees(
+		&self,
+	) -> Result<&dyn HerdrWorktreeClient, AppError> {
+		self.worktrees
+			.as_deref()
+			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
 	}
 
 	fn lifecycle(&self) -> Result<&HerdrLifecycle, AppError> {
@@ -1810,8 +1891,16 @@ time.sleep(30)
 		assert!(src.contains("pane.close") || src.contains("pane_close"));
 		assert!(src.contains("pane.list") || src.contains("pane_list"));
 		assert!(src.contains("pane.get") || src.contains("pane_get"));
-		assert!(!src.contains("worktree.create"));
-		assert!(!src.contains("worktree.open"));
+		let create_session = src
+			.split("fn create_session")
+			.nth(1)
+			.unwrap()
+			.split("fn close_session")
+			.next()
+			.unwrap();
+		assert!(!create_session.contains("worktree.create"));
+		assert!(!create_session.contains("worktree.open"));
+		assert!(!create_session.contains("workspace.create"));
 		assert!(!src.contains("worktree.remove"));
 		assert!(!src.contains("workspace.create"));
 		assert!(!src.contains("pane.split"));
@@ -1827,6 +1916,10 @@ time.sleep(30)
 		assert!(!src.contains("agent.start"));
 		assert!(!src.contains("agent.prompt"));
 		assert!(src.contains("attach_control"));
+		assert!(
+			src.contains("worktree.create") || src.contains("worktree_create")
+		);
+		assert!(src.contains("HerdrWorktreeClient"));
 	}
 
 	#[test]

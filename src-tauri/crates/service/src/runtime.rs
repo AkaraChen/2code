@@ -24,6 +24,7 @@ use model::runtime::{
 
 pub use herdr::{
 	HerdrCliAttach, HerdrJsonTerminals, HerdrStubAdapter, HerdrTerminalClient,
+	HerdrWorktreeClient,
 };
 pub use infra::herdr::process::{
 	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
@@ -275,6 +276,13 @@ impl RuntimeRouter {
 
 	pub fn release_attachments(&self) {
 		self.herdr.release_attachments();
+	}
+
+	/// Herdr-selected profile create. Missing client is fail-closed.
+	pub fn herdr_worktrees(
+		&self,
+	) -> Result<&dyn HerdrWorktreeClient, AppError> {
+		self.herdr.worktrees()
 	}
 
 	/// Herdr-owned ids only. Local-owned ids never read Herdr agent state.
