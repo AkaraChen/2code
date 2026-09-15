@@ -196,6 +196,10 @@ impl RuntimeRouter {
 		self.selector.bind(session_id, backend)
 	}
 
+	pub fn unbind_session(&self, session_id: &str) -> Result<(), AppError> {
+		self.selector.unbind(session_id)
+	}
+
 	/// Terminate a bound session on its owner. Unbound live Local PTYs
 	/// and Herdr-owned Local PTYs are refused (#403).
 	pub fn teardown_session(&self, session_id: &str) -> Result<(), AppError> {
@@ -309,7 +313,9 @@ impl TerminalRuntime for RuntimeRouter {
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
 		let backend = self.selector.backend_for(session_id)?;
-		self.adapter(backend).close_session(session_id)
+		self.adapter(backend).close_session(session_id)?;
+		let _ = self.selector.unbind(session_id);
+		Ok(())
 	}
 
 	fn list_project_sessions(
@@ -422,6 +428,7 @@ mod tests {
 		sessions: PtySessionMap,
 		read_threads: PtyReadThreads,
 		cwd: tempfile::TempDir,
+		db: DbPool,
 		_logs: PathBuf,
 	}
 
@@ -436,7 +443,7 @@ mod tests {
 			let logs = cwd.path().join("pty-logs");
 			std::fs::create_dir_all(&logs).unwrap();
 			let ctx = PtyContext {
-				db,
+				db: db.clone(),
 				sessions: sessions.clone(),
 				flush_senders: create_flush_senders(),
 				read_threads: read_threads.clone(),
@@ -453,6 +460,7 @@ mod tests {
 				sessions,
 				read_threads,
 				cwd,
+				db,
 				_logs: logs,
 			}
 		}
@@ -592,6 +600,12 @@ mod tests {
 
 		fx.router.close_session(id).unwrap();
 		assert!(!fx.sessions.lock().unwrap().contains_key(id));
+		assert_eq!(fx.router.owner(id).unwrap(), None);
+		{
+			let mut conn = fx.db.lock().unwrap();
+			assert!(repo::runtime_mapping::find_session_mapping(&mut conn, id)
+				.is_err());
+		}
 	}
 
 	#[test]

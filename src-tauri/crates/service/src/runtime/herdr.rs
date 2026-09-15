@@ -14,10 +14,13 @@ use model::pty::{
 	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
 	RestoreResult,
 };
-use model::runtime::{CreateSessionResult, RuntimeBackend, HERDR_NAMESPACE};
+use model::runtime::{
+	CreateSessionResult, RuntimeBackend, RuntimeIdentityState, HERDR_NAMESPACE,
+};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::runtime_mapping::{pane_identity_state, workspace_identity_state};
 use crate::runtime_sync::RuntimeProjection;
 
 use super::TerminalRuntime;
@@ -238,6 +241,16 @@ fn pane_is_absent(
 	Ok(projection.pane(pane_id).is_none())
 }
 
+fn workspace_is_absent(
+	client: &dyn HerdrTerminalClient,
+	workspace_id: &str,
+) -> Result<bool, AppError> {
+	let snapshot = client.session_snapshot()?;
+	let mut projection = RuntimeProjection::new();
+	projection.apply_snapshot(&snapshot)?;
+	Ok(projection.workspace(workspace_id).is_none())
+}
+
 impl HerdrLifecycle {
 	fn with_db<T>(
 		&self,
@@ -261,6 +274,39 @@ impl HerdrLifecycle {
 			.map(|mapping| mapping.pane_id)
 			.collect())
 		})
+	}
+
+	fn bound_workspace(&self, profile_id: &str) -> Result<String, AppError> {
+		let mapping = self.with_db(|conn| {
+			match repo::runtime_mapping::find_profile_mapping(conn, profile_id)
+			{
+				Ok(mapping) => Ok(mapping),
+				Err(AppError::NotFound(_)) => {
+					Err(AppError::RuntimeMappingMissing(format!(
+						"profile {profile_id} has no Herdr workspace"
+					)))
+				}
+				Err(err) => Err(err),
+			}
+		})?;
+		let snapshot = self.client.session_snapshot()?;
+		let mut projection = RuntimeProjection::new();
+		projection.apply_snapshot(&snapshot)?;
+		match workspace_identity_state(&mapping, &projection) {
+			RuntimeIdentityState::Bound => Ok(mapping.workspace_id),
+			RuntimeIdentityState::Missing => {
+				Err(AppError::RuntimeMappingMissing(format!(
+					"workspace {} is missing",
+					mapping.workspace_id
+				)))
+			}
+			RuntimeIdentityState::Replaced => {
+				Err(AppError::RuntimeMappingReplaced(format!(
+					"workspace {}",
+					mapping.workspace_id
+				)))
+			}
+		}
 	}
 
 	fn persist_session(
@@ -299,40 +345,62 @@ impl HerdrLifecycle {
 		Ok(CreateSessionResult { session_id })
 	}
 
+	fn persist_created_pane(
+		&self,
+		meta: &PtySessionMeta,
+		config: &PtyConfig,
+		workspace_id: &str,
+		pane_id: &str,
+		close_on_bind_failure: bool,
+	) -> Result<CreateSessionResult, AppError> {
+		match self.persist_session(meta, config, workspace_id, pane_id) {
+			Ok(created) => Ok(created),
+			Err(err) => {
+				if close_on_bind_failure {
+					let _ = self.client.pane_close(pane_id);
+				}
+				Err(err)
+			}
+		}
+	}
+
 	fn create_session(
 		&self,
 		meta: &PtySessionMeta,
 		config: &PtyConfig,
 	) -> Result<CreateSessionResult, AppError> {
-		let workspace_id = self.with_db(|conn| {
-			repo::runtime_mapping::find_profile_mapping(conn, &meta.profile_id)
-				.map(|mapping| mapping.workspace_id)
-		})?;
+		let workspace_id = self.bound_workspace(&meta.profile_id)?;
 		let bound = self.bound_pane_ids(&workspace_id)?;
 		let listed = self.client.pane_list(&workspace_id)?;
 		if let Some(pane_id) =
 			unbound_adopted_root_pane(&workspace_id, &listed, &bound)
 		{
-			return self.persist_session(meta, config, &workspace_id, &pane_id);
-		}
-		match self.client.tab_create(&workspace_id, &meta.title) {
-			Ok(created) => self.persist_session(
+			return self.persist_created_pane(
 				meta,
 				config,
 				&workspace_id,
-				&created.pane_id,
-			),
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				let pane_id = reconcile_created_pane(
-					self.client.as_ref(),
-					&workspace_id,
-					&listed,
-					&bound,
-				)?;
-				self.persist_session(meta, config, &workspace_id, &pane_id)
-			}
-			Err(err) => Err(err),
+				&pane_id,
+				false,
+			);
 		}
+		let pane_id = match self.client.tab_create(&workspace_id, &meta.title) {
+			Ok(created) => created.pane_id,
+			Err(AppError::HerdrUncertainOutcome(_)) => reconcile_created_pane(
+				self.client.as_ref(),
+				&workspace_id,
+				&listed,
+				&bound,
+			)?,
+			Err(err) => return Err(err),
+		};
+		let already = listed.iter().any(|pane| pane.pane_id == pane_id);
+		self.persist_created_pane(
+			meta,
+			config,
+			&workspace_id,
+			&pane_id,
+			!already,
+		)
 	}
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
@@ -360,6 +428,9 @@ impl HerdrLifecycle {
 	}
 
 	fn finish_close(&self, session_id: &str) -> Result<(), AppError> {
+		let mapping = self.with_db(|conn| {
+			repo::runtime_mapping::find_session_mapping(conn, session_id)
+		})?;
 		self.with_db(|conn| {
 			match repo::runtime_mapping::unbind_session_pane(conn, session_id) {
 				Ok(()) | Err(AppError::NotFound(_)) => {}
@@ -367,7 +438,29 @@ impl HerdrLifecycle {
 			}
 			repo::pty::mark_closed(conn, session_id);
 			Ok(())
-		})
+		})?;
+		if workspace_is_absent(self.client.as_ref(), &mapping.workspace_id)? {
+			self.with_db(|conn| {
+				let profile =
+					match repo::runtime_mapping::find_profile_by_workspace(
+						conn,
+						HERDR_NAMESPACE,
+						&mapping.workspace_id,
+					) {
+						Ok(profile) => profile,
+						Err(AppError::NotFound(_)) => return Ok(()),
+						Err(err) => return Err(err),
+					};
+				match repo::runtime_mapping::unbind_profile_workspace(
+					conn,
+					&profile.profile_id,
+				) {
+					Ok(()) | Err(AppError::NotFound(_)) => Ok(()),
+					Err(err) => Err(err),
+				}
+			})?;
+		}
+		Ok(())
 	}
 
 	fn list_project_sessions(
@@ -382,7 +475,7 @@ impl HerdrLifecycle {
 					conn,
 					&session.id,
 				) {
-					mapped.push((session, mapping.pane_id));
+					mapped.push((session, mapping));
 				}
 			}
 			Ok(mapped)
@@ -392,7 +485,10 @@ impl HerdrLifecycle {
 		projection.apply_snapshot(&snapshot)?;
 		Ok(sessions
 			.into_iter()
-			.filter(|(_, pane_id)| projection.pane(pane_id).is_some())
+			.filter(|(_, mapping)| {
+				pane_identity_state(mapping, &projection)
+					== RuntimeIdentityState::Bound
+			})
 			.map(|(session, _)| session)
 			.collect())
 	}
@@ -521,7 +617,16 @@ mod tests {
 		close_error: Option<AppError>,
 		create_lands: bool,
 		close_lands: bool,
+		already_open_create: bool,
 		next_extra: u32,
+		on_list: Option<Arc<dyn Fn() + Send + Sync>>,
+	}
+
+	fn remove_pane(panes: &mut HashMap<String, Vec<PaneView>>, pane_id: &str) {
+		for listed in panes.values_mut() {
+			listed.retain(|pane| pane.pane_id != pane_id);
+		}
+		panes.retain(|_, listed| !listed.is_empty());
 	}
 
 	struct FakeTerminals {
@@ -547,7 +652,9 @@ mod tests {
 					close_error: None,
 					create_lands: false,
 					close_lands: false,
+					already_open_create: false,
 					next_extra: 2,
+					on_list: None,
 				}),
 			}
 		}
@@ -574,6 +681,21 @@ mod tests {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("tab.create".into());
 			state.tab_create_calls += 1;
+			if state.already_open_create {
+				let pane = state
+					.panes
+					.get(workspace_id)
+					.and_then(|panes| panes.first())
+					.cloned()
+					.ok_or_else(|| {
+						AppError::PtyError("no pane to reuse".into())
+					})?;
+				return Ok(TabCreateResult {
+					workspace_id: workspace_id.to_string(),
+					tab_id: pane.tab_id,
+					pane_id: pane.pane_id,
+				});
+			}
 			if let Some(err) = state.create_error.take() {
 				if state.create_lands {
 					let n = state.next_extra;
@@ -615,9 +737,19 @@ mod tests {
 			&self,
 			workspace_id: &str,
 		) -> Result<Vec<PaneView>, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("pane.list".into());
-			Ok(state.panes.get(workspace_id).cloned().unwrap_or_default())
+			let hook;
+			let listed;
+			{
+				let mut state = self.state.lock().unwrap();
+				state.methods.push("pane.list".into());
+				listed =
+					state.panes.get(workspace_id).cloned().unwrap_or_default();
+				hook = state.on_list.clone();
+			}
+			if let Some(hook) = hook {
+				hook();
+			}
+			Ok(listed)
 		}
 
 		fn pane_get(
@@ -640,15 +772,11 @@ mod tests {
 			state.pane_close_calls += 1;
 			if let Some(err) = state.close_error.take() {
 				if state.close_lands {
-					for panes in state.panes.values_mut() {
-						panes.retain(|pane| pane.pane_id != pane_id);
-					}
+					remove_pane(&mut state.panes, pane_id);
 				}
 				return Err(err);
 			}
-			for panes in state.panes.values_mut() {
-				panes.retain(|pane| pane.pane_id != pane_id);
-			}
+			remove_pane(&mut state.panes, pane_id);
 			Ok(())
 		}
 
@@ -783,6 +911,42 @@ mod tests {
 				.unwrap()
 				.pane_id
 		}
+
+		fn insert_session_row(&self, session_id: &str) {
+			let mut conn = self.db.lock().unwrap();
+			repo::pty::insert_session(
+				&mut conn,
+				&NewPtySessionRecord {
+					id: session_id,
+					profile_id: "pr1",
+					title: "steal",
+					shell: "/bin/sh",
+					cwd: "/tmp",
+					cols: 80,
+					rows: 24,
+				},
+			)
+			.unwrap();
+		}
+
+		fn bind_pane(&self, session_id: &str, pane_id: &str) {
+			let mut conn = self.db.lock().unwrap();
+			repo::runtime_mapping::bind_session_pane(
+				&mut conn,
+				session_id,
+				HERDR_NAMESPACE,
+				"w1",
+				pane_id,
+			)
+			.unwrap();
+		}
+
+		fn profile_workspace_id(&self) -> Option<String> {
+			let mut conn = self.db.lock().unwrap();
+			repo::runtime_mapping::find_profile_mapping(&mut conn, "pr1")
+				.ok()
+				.map(|mapping| mapping.workspace_id)
+		}
 	}
 
 	impl Drop for Fixture {
@@ -828,6 +992,7 @@ mod tests {
 		assert!(fx.fake.calls().contains(&"pane.list".to_string()));
 		assert!(!fx.fake.calls().contains(&"tab.create".to_string()));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		assert_ne!(fx.mapping(&created.session_id), "term_live");
 	}
 
 	#[test]
@@ -1006,7 +1171,9 @@ mod tests {
 		assert!(src.contains("pane.list") || src.contains("pane_list"));
 		assert!(src.contains("pane.get") || src.contains("pane_get"));
 		assert!(!src.contains("worktree.create"));
+		assert!(!src.contains("worktree.open"));
 		assert!(!src.contains("worktree.remove"));
+		assert!(!src.contains("workspace.create"));
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("server.stop"));
 		assert!(!src.contains("herdr-client.sock"));
@@ -1033,6 +1200,173 @@ mod tests {
 			.next()
 			.unwrap();
 		assert!(close.contains("close_session"));
+	}
+
+	#[test]
+	fn missing_workspace_mapping_fails_closed_without_tab_create() {
+		let fx = Fixture::new();
+		{
+			let mut conn = fx.db.lock().unwrap();
+			repo::runtime_mapping::unbind_profile_workspace(&mut conn, "pr1")
+				.unwrap();
+		}
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap_err();
+		assert!(err.to_string().contains("missing"));
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn missing_projected_workspace_fails_closed() {
+		let fx = Fixture::new();
+		{
+			let mut conn = fx.db.lock().unwrap();
+			repo::runtime_mapping::unbind_profile_workspace(&mut conn, "pr1")
+				.unwrap();
+			repo::runtime_mapping::bind_profile_workspace(
+				&mut conn,
+				"pr1",
+				HERDR_NAMESPACE,
+				"w-gone",
+			)
+			.unwrap();
+		}
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap_err();
+		assert!(err.to_string().contains("missing"));
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn already_style_duplicate_create_is_not_a_second_pane() {
+		let fx = Fixture::new();
+		let first = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		{
+			let mut state = fx.fake.state.lock().unwrap();
+			state.already_open_create = true;
+		}
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap_err();
+		assert!(err.to_string().contains("already bound"));
+		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(fx.fake.pane_close_calls(), 0);
+		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
+		assert_eq!(fx.fake.state.lock().unwrap().panes["w1"].len(), 1);
+	}
+
+	#[test]
+	fn bind_failure_after_tab_create_closes_the_new_pane() {
+		let fx = Fixture::new();
+		fx.insert_session_row("sess-steal");
+		fx.bind_pane("sess-steal", "w1:p2");
+		let first = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap_err();
+		assert!(err.to_string().contains("already bound"));
+		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(fx.fake.pane_close_calls(), 1);
+		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
+		let panes = fx.fake.state.lock().unwrap().panes["w1"].clone();
+		assert!(panes.iter().all(|pane| pane.pane_id != "w1:p2"));
+		assert!(panes.iter().any(|pane| pane.pane_id == "w1:p1"));
+	}
+
+	#[test]
+	fn bind_failure_after_root_reuse_does_not_close_the_pane() {
+		let fx = Fixture::new();
+		fx.insert_session_row("sess-steal");
+		let db = fx.db.clone();
+		{
+			let mut state = fx.fake.state.lock().unwrap();
+			state.on_list = Some(Arc::new(move || {
+				let mut conn = db.lock().unwrap();
+				let _ = repo::runtime_mapping::bind_session_pane(
+					&mut conn,
+					"sess-steal",
+					HERDR_NAMESPACE,
+					"w1",
+					"w1:p1",
+				);
+			}));
+		}
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap_err();
+		assert!(err.to_string().contains("already bound"));
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(fx.fake.pane_close_calls(), 0);
+		let panes = fx.fake.state.lock().unwrap().panes["w1"].clone();
+		assert!(panes.iter().any(|pane| pane.pane_id == "w1:p1"));
+	}
+
+	#[test]
+	fn last_pane_close_unbinds_vanished_workspace_and_keeps_checkout() {
+		let fx = Fixture::new();
+		std::fs::write(fx.cwd.path().join("keep"), b"checkout").unwrap();
+		let first = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let second = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		fx.adapter.close_session(&second.session_id).unwrap();
+		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
+		assert!(fx.cwd.path().join("keep").exists());
+		fx.adapter.close_session(&first.session_id).unwrap();
+		assert!(fx.profile_workspace_id().is_none());
+		assert!(fx.cwd.path().join("keep").exists());
+		assert!(!fx.fake.calls().iter().any(|m| m.contains("worktree")));
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn list_omits_sessions_without_pane_mappings() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		fx.insert_session_row("local-only");
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert!(listed
+			.iter()
+			.any(|session| session.id == created.session_id));
+		assert!(listed.iter().all(|session| session.id != "local-only"));
+	}
+
+	#[test]
+	fn router_close_unbinds_herdr_owner() {
+		let fx = Fixture::new();
+		let router = fx.router();
+		let created = router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		assert_eq!(
+			router.owner(&created.session_id).unwrap(),
+			Some(RuntimeBackend::Herdr)
+		);
+		router.close_session(&created.session_id).unwrap();
+		assert_eq!(router.owner(&created.session_id).unwrap(), None);
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[test]
