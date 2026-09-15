@@ -715,5 +715,13 @@ mod tests {
 			!lib.contains("ensure_herdr_listener"),
 			"Local default startup must not start a Herdr server"
 		);
+		assert!(
+			!lib.contains("herdr::transport"),
+			"Local default startup must not open a Herdr NDJSON client"
+		);
+		assert!(
+			!lib.contains("HerdrClient::connect"),
+			"Local default startup must not connect a Herdr socket client"
+		);
 	}
 }
