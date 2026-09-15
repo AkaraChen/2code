@@ -70,6 +70,23 @@ pub struct WorktreeOpenResult {
 	pub already_open: bool,
 }
 
+/// JSON `tab.create` identity. `terminal_id` is live-only and is not
+/// returned here so callers cannot persist it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TabCreateResult {
+	pub workspace_id: String,
+	pub tab_id: String,
+	pub pane_id: String,
+}
+
+/// JSON `pane.list` / `pane.get` identity. `terminal_id` is omitted.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PaneView {
+	pub pane_id: String,
+	pub tab_id: String,
+	pub workspace_id: String,
+}
+
 /// Structured RPC error from Herdr (`error.code` / `error.message`).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HerdrRpcError {
@@ -200,6 +217,100 @@ fn parse_worktree_open_result(
 		workspace_id: workspace_id.to_string(),
 		already_open,
 	})
+}
+
+fn json_id<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+	value
+		.get(key)
+		.and_then(Value::as_str)
+		.filter(|id| !id.is_empty())
+}
+
+fn nested_object<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+	value.get(key).filter(|item| item.is_object())
+}
+
+fn parse_pane_view(value: &Value) -> Result<PaneView, HerdrTransportError> {
+	let pane = nested_object(value, "pane").unwrap_or(value);
+	let pane_id = json_id(pane, "pane_id").ok_or_else(|| {
+		HerdrTransportError::UnexpectedMessage(
+			"pane result missing pane_id".into(),
+		)
+	})?;
+	let tab_id = json_id(pane, "tab_id").unwrap_or("");
+	let workspace_id = json_id(pane, "workspace_id").unwrap_or("");
+	Ok(PaneView {
+		pane_id: pane_id.to_string(),
+		tab_id: tab_id.to_string(),
+		workspace_id: workspace_id.to_string(),
+	})
+}
+
+fn parse_tab_create_result(
+	result: &Value,
+) -> Result<TabCreateResult, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "tab_created" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected tab_created, got {kind}"
+		)));
+	}
+	let tab = nested_object(result, "tab").ok_or_else(|| {
+		HerdrTransportError::UnexpectedMessage(
+			"tab.create result missing tab".into(),
+		)
+	})?;
+	let root_pane = nested_object(result, "root_pane").ok_or_else(|| {
+		HerdrTransportError::UnexpectedMessage(
+			"tab.create result missing root_pane".into(),
+		)
+	})?;
+	let pane_id = json_id(root_pane, "pane_id").ok_or_else(|| {
+		HerdrTransportError::UnexpectedMessage(
+			"tab.create result missing root_pane.pane_id".into(),
+		)
+	})?;
+	let tab_id = json_id(tab, "tab_id").ok_or_else(|| {
+		HerdrTransportError::UnexpectedMessage(
+			"tab.create result missing tab_id".into(),
+		)
+	})?;
+	let workspace_id = json_id(tab, "workspace_id")
+		.or_else(|| json_id(root_pane, "workspace_id"))
+		.ok_or_else(|| {
+			HerdrTransportError::UnexpectedMessage(
+				"tab.create result missing workspace_id".into(),
+			)
+		})?;
+	Ok(TabCreateResult {
+		workspace_id: workspace_id.to_string(),
+		tab_id: tab_id.to_string(),
+		pane_id: pane_id.to_string(),
+	})
+}
+
+fn parse_pane_list_result(
+	result: &Value,
+) -> Result<Vec<PaneView>, HerdrTransportError> {
+	let panes =
+		result
+			.get("panes")
+			.and_then(Value::as_array)
+			.ok_or_else(|| {
+				HerdrTransportError::UnexpectedMessage(
+					"pane.list result missing panes".into(),
+				)
+			})?;
+	panes.iter().map(parse_pane_view).collect()
+}
+
+fn is_pane_not_found(err: &HerdrTransportError) -> bool {
+	match err {
+		HerdrTransportError::Rpc(rpc) => {
+			rpc.code == "pane_not_found" || rpc.code.contains("pane_not_found")
+		}
+		_ => false,
+	}
 }
 
 /// Methods whose in-flight disconnect must not be auto-replayed.
@@ -450,6 +561,78 @@ impl HerdrClient {
 		let success =
 			self.request(self.next_id("wtopen"), "worktree.open", params)?;
 		parse_worktree_open_result(&success.result)
+	}
+
+	/// Create an extra tab in an existing workspace. Does not auto-replay
+	/// an uncertain outcome.
+	pub fn tab_create(
+		&self,
+		workspace_id: &str,
+		label: &str,
+	) -> Result<TabCreateResult, HerdrTransportError> {
+		if workspace_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "tab.create workspace_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({
+			"workspace_id": workspace_id,
+			"label": label,
+			"focus": false,
+		});
+		let success =
+			self.request(self.next_id("tabcr"), "tab.create", params)?;
+		parse_tab_create_result(&success.result)
+	}
+
+	/// List panes in a workspace by `pane_id`. `terminal_id` is ignored.
+	pub fn pane_list(
+		&self,
+		workspace_id: &str,
+	) -> Result<Vec<PaneView>, HerdrTransportError> {
+		if workspace_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "pane.list workspace_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({ "workspace_id": workspace_id });
+		let success =
+			self.request(self.next_id("pnlst"), "pane.list", params)?;
+		parse_pane_list_result(&success.result)
+	}
+
+	/// Fetch one pane. `pane_not_found` is `Ok(None)`, not a retry.
+	pub fn pane_get(
+		&self,
+		pane_id: &str,
+	) -> Result<Option<PaneView>, HerdrTransportError> {
+		if pane_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "pane.get pane_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({ "pane_id": pane_id });
+		match self.request(self.next_id("pnget"), "pane.get", params) {
+			Ok(success) => parse_pane_view(&success.result).map(Some),
+			Err(err) if is_pane_not_found(&err) => Ok(None),
+			Err(err) => Err(err),
+		}
+	}
+
+	/// Terminate a pane. GUI attach/release is not this method. Does not
+	/// auto-replay an uncertain outcome. `pane_not_found` is success.
+	pub fn pane_close(&self, pane_id: &str) -> Result<(), HerdrTransportError> {
+		if pane_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "pane.close pane_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({ "pane_id": pane_id });
+		match self.request(self.next_id("pncls"), "pane.close", params) {
+			Ok(_) => Ok(()),
+			Err(err) if is_pane_not_found(&err) => Ok(()),
+			Err(err) => Err(err),
+		}
 	}
 
 	pub fn next_id(&self, prefix: &str) -> String {
@@ -1209,6 +1392,83 @@ mod tests {
 	}
 
 	#[test]
+	fn tab_create_and_pane_views_parse_pane_id_never_terminal_id() {
+		let created = parse_tab_create_result(&serde_json::json!({
+			"type": "tab_created",
+			"tab": { "tab_id": "w1:t2", "workspace_id": "w1", "label": "extra" },
+			"root_pane": { "pane_id": "w1:p3", "terminal_id": "term_live" }
+		}))
+		.unwrap();
+		assert_eq!(created.workspace_id, "w1");
+		assert_eq!(created.tab_id, "w1:t2");
+		assert_eq!(created.pane_id, "w1:p3");
+		assert!(parse_tab_create_result(&serde_json::json!({
+			"type": "tab_created",
+			"tab": { "tab_id": "w1:t2", "workspace_id": "w1" },
+			"root_pane": { "terminal_id": "term_live" }
+		}))
+		.is_err());
+		assert!(parse_tab_create_result(&serde_json::json!({
+			"type": "workspace_created",
+			"tab": { "tab_id": "w1:t1", "workspace_id": "w1" },
+			"root_pane": { "pane_id": "w1:p1" }
+		}))
+		.is_err());
+
+		let listed = parse_pane_list_result(&serde_json::json!({
+			"type": "pane_list",
+			"panes": [
+				{
+					"pane_id": "w1:p1",
+					"tab_id": "w1:t1",
+					"workspace_id": "w1",
+					"terminal_id": "term_x"
+				}
+			]
+		}))
+		.unwrap();
+		assert_eq!(
+			listed,
+			vec![PaneView {
+				pane_id: "w1:p1".into(),
+				tab_id: "w1:t1".into(),
+				workspace_id: "w1".into(),
+			}]
+		);
+		let got = parse_pane_view(&serde_json::json!({
+			"type": "pane",
+			"pane": {
+				"pane_id": "w1:p1",
+				"tab_id": "w1:t1",
+				"workspace_id": "w1",
+				"terminal_id": "term_x"
+			}
+		}))
+		.unwrap();
+		assert_eq!(got.pane_id, "w1:p1");
+		assert_ne!(got.pane_id, "term_x");
+		assert!(is_pane_not_found(&HerdrTransportError::Rpc(
+			HerdrRpcError {
+				id: "1".into(),
+				code: "pane_not_found".into(),
+				message: "missing".into(),
+			}
+		)));
+		assert!(!is_pane_not_found(&HerdrTransportError::Rpc(
+			HerdrRpcError {
+				id: "1".into(),
+				code: "unavailable".into(),
+				message: "down".into(),
+			}
+		)));
+		assert!(outcome_uncertain("tab.create"));
+		assert!(outcome_uncertain("pane.close"));
+		assert!(outcome_uncertain("pane.list"));
+		assert!(outcome_uncertain("pane.get"));
+		assert!(!outcome_uncertain("session.snapshot"));
+	}
+
+	#[test]
 	fn server_stop_is_refused_without_a_socket() {
 		assert!(outcome_uncertain("server.stop"));
 		let err = HerdrClient::connect_path(Path::new(
@@ -1697,6 +1957,77 @@ mod unix_tests {
 			.unwrap();
 		assert_eq!(opened.workspace_id, "w4");
 		assert!(!opened.already_open);
+	}
+
+	#[test]
+	fn tab_create_sends_workspace_label_and_no_focus() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "tab.create");
+			assert_eq!(req["params"]["workspace_id"], "w1");
+			assert_eq!(req["params"]["label"], "extra");
+			assert_eq!(req["params"]["focus"], false);
+			assert!(req["params"].get("terminal_id").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"tab_created","tab":{{"tab_id":"w1:t2","workspace_id":"w1"}},"root_pane":{{"pane_id":"w1:p2","terminal_id":"term_y"}}}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let created = client(&sock).tab_create("w1", "extra").unwrap();
+		assert_eq!(created.pane_id, "w1:p2");
+		assert_eq!(created.tab_id, "w1:t2");
+		assert_eq!(created.workspace_id, "w1");
+	}
+
+	#[test]
+	fn pane_list_get_and_close_use_pane_id() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |mut stream| {
+			let req = read_request(&stream);
+			let n = seen.fetch_add(1, AtomicOrdering::SeqCst);
+			let id = req["id"].as_str().unwrap();
+			let body = match n {
+				0 => {
+					assert_eq!(req["method"], "pane.list");
+					assert_eq!(req["params"]["workspace_id"], "w1");
+					format!(
+						r#"{{"id":"{id}","result":{{"panes":[{{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1","terminal_id":"term_x"}}]}}}}"#
+					)
+				}
+				1 => {
+					assert_eq!(req["method"], "pane.get");
+					assert_eq!(req["params"]["pane_id"], "w1:p1");
+					format!(
+						r#"{{"id":"{id}","result":{{"pane":{{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1"}}}}}}"#
+					)
+				}
+				2 => {
+					assert_eq!(req["method"], "pane.get");
+					r#"{"id":"ignored","error":{"code":"pane_not_found","message":"gone"}}"#
+						.replace("ignored", id)
+				}
+				_ => {
+					assert_eq!(req["method"], "pane.close");
+					assert_eq!(req["params"]["pane_id"], "w1:p1");
+					format!(
+						r#"{{"id":"{id}","result":{{"type":"pane_closed","pane_id":"w1:p1"}}}}"#
+					)
+				}
+			};
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let herdr = client(&sock);
+		let listed = herdr.pane_list("w1").unwrap();
+		assert_eq!(listed[0].pane_id, "w1:p1");
+		assert_eq!(herdr.pane_get("w1:p1").unwrap().unwrap().pane_id, "w1:p1");
+		assert!(herdr.pane_get("w1:p9").unwrap().is_none());
+		herdr.pane_close("w1:p1").unwrap();
+		assert!(herdr.tab_create("", "x").is_err());
+		assert!(herdr.pane_close("").is_err());
 	}
 
 	#[test]
