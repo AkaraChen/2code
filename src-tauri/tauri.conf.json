@@ -44,6 +44,7 @@
 		"macOS": {
 			"bundleName": "2code"
 		},
+		"externalBin": ["binaries/herdr"],
 		"targets": "all"
 	},
 	"identifier": "com.akrc.code",
