@@ -1904,6 +1904,7 @@ time.sleep(30)
 			.unwrap();
 		assert!(stream.contains("backend_for"));
 		assert!(stream.contains("RuntimeBackend::Herdr"));
+		assert!(stream.contains("pump_session_agent_status"));
 		assert!(!stream.contains("selected_backend"));
 	}
 

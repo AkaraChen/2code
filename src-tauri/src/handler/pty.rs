@@ -11,6 +11,7 @@ use model::runtime::{
 	TerminalScrollDirection, TerminalScrollSource,
 };
 use service::runtime::{RuntimeHandle, TerminalRuntime};
+use service::runtime_agent::pump_session_agent_status;
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -144,27 +145,11 @@ pub async fn stream_session_agent_status(
 	}
 	let runtime = runtime.inner().clone();
 	super::run_blocking(move || {
-		let mut last = None;
-		loop {
-			match runtime.session_agent_status(&session_id) {
-				Ok(Some(status)) => {
-					if last.as_ref() != Some(&status) {
-						last = Some(status.clone());
-						if on_update.send(status).is_err() {
-							break;
-						}
-					}
-				}
-				Ok(None) => {
-					if last.is_some() {
-						break;
-					}
-				}
-				Err(err) => return Err(err),
-			}
-			std::thread::sleep(std::time::Duration::from_millis(200));
-		}
-		Ok(())
+		pump_session_agent_status(
+			&session_id,
+			|| runtime.session_agent_status(&session_id),
+			|dto| on_update.send(dto).is_ok(),
+		)
 	})
 	.await
 }
