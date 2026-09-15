@@ -20,11 +20,14 @@ pub async fn create_profile(
 	project_id: String,
 	branch_name: String,
 	default_worktree_dir: Option<String>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		service::profile::create_with_db(
+		service::profile::create_with_runtime(
+			&runtime,
 			&db,
 			&project_id,
 			&branch_name,
