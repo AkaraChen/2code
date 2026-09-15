@@ -900,4 +900,27 @@ describe("herdr xterm transport", () => {
 			useTerminalStore.getState().agentCompletions["session-1"],
 		).toBeUndefined();
 	});
+
+	it("clears a live waiting badge when the stream fail-closes to unknown", async () => {
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		} satisfies SessionAgentStatus);
+		await renderHerdr();
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+			"waiting",
+		);
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "unknown",
+			agentName: null,
+		});
+		expect(
+			useTerminalStore.getState().agentStatuses["session-1"],
+		).toBeUndefined();
+		expect(
+			useTerminalStore.getState().agentCompletions["session-1"],
+		).toBeUndefined();
+	});
 });
