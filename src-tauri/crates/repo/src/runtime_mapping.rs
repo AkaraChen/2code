@@ -355,6 +355,20 @@ pub fn unbind_session_pane(
 	Ok(())
 }
 
+pub fn list_session_mappings_for_workspace(
+	conn: &mut SqliteConnection,
+	namespace: &str,
+	workspace_id: &str,
+) -> Result<Vec<SessionRuntimeMapping>, AppError> {
+	session_runtime_mappings::table
+		.filter(session_runtime_mappings::namespace.eq(namespace))
+		.filter(session_runtime_mappings::workspace_id.eq(workspace_id))
+		.select(SessionRuntimeMapping::as_select())
+		.order(session_runtime_mappings::pane_id.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -483,6 +497,31 @@ mod tests {
 		assert!(!production.contains("workspace.create"));
 		assert!(!production.contains("pane.close"));
 		assert!(!production.contains("server.stop"));
+	}
+
+	#[test]
+	fn list_session_mappings_for_workspace_uses_pane_id() {
+		let mut conn = setup_db();
+		seed_catalog(&mut conn);
+		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
+			.unwrap();
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
+			.unwrap();
+		let listed = list_session_mappings_for_workspace(
+			&mut conn,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].pane_id, "w1:p1");
+		assert!(list_session_mappings_for_workspace(
+			&mut conn,
+			HERDR_NAMESPACE,
+			"missing",
+		)
+		.unwrap()
+		.is_empty());
 	}
 
 	#[test]
