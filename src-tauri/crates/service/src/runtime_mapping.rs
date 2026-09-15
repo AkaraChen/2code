@@ -294,8 +294,7 @@ mod tests {
 		assert_eq!(replaced_profile.workspace_id, "w2");
 		assert_eq!(replaced_profile.profile_id, "prof-1");
 		assert!(
-			runtime_mapping::find_session_mapping(&mut conn, "sess-1")
-				.is_err(),
+			runtime_mapping::find_session_mapping(&mut conn, "sess-1").is_err(),
 			"profile replace must not leave a stale session workspace_id"
 		);
 
