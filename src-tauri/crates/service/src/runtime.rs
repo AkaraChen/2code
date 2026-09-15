@@ -1,7 +1,9 @@
 //! Terminal runtime boundary: lifecycle, transport, and discovery.
 //!
 //! Handlers talk to [`RuntimeRouter`]. The Local adapter wraps the current
-//! PTY implementation. Herdr is a fail-closed stub and is never the default.
+//! PTY implementation. Herdr create/list/close use pane identities when a
+//! client is injected; write/resize/restore stay fail-closed. Herdr is
+//! never the default.
 
 mod herdr;
 mod local;
@@ -19,7 +21,7 @@ use model::runtime::{
 	SessionOwnership,
 };
 
-pub use herdr::HerdrStubAdapter;
+pub use herdr::{HerdrJsonTerminals, HerdrStubAdapter, HerdrTerminalClient};
 pub use infra::herdr::process::{
 	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
 };
@@ -184,6 +186,41 @@ impl RuntimeRouter {
 			session: SessionIdentity::new(session_id),
 			backend,
 		}))
+	}
+
+	pub fn bind_session(
+		&self,
+		session_id: &str,
+		backend: RuntimeBackend,
+	) -> Result<(), AppError> {
+		self.selector.bind(session_id, backend)
+	}
+
+	/// Terminate a bound session on its owner. Unbound live Local PTYs
+	/// and Herdr-owned Local PTYs are refused (#403).
+	pub fn teardown_session(&self, session_id: &str) -> Result<(), AppError> {
+		match self.selector.owner(session_id)? {
+			Some(RuntimeBackend::Local) => {
+				self.local.teardown_session(session_id)?;
+			}
+			Some(RuntimeBackend::Herdr) => {
+				if self.local.has_live_session(session_id) {
+					return Err(AppError::PtyError(format!(
+						"refusing to kill a Local PTY for Herdr-owned session {session_id}"
+					)));
+				}
+				self.herdr.close_session(session_id)?;
+			}
+			None => {
+				if self.local.has_live_session(session_id) {
+					return Err(AppError::PtyError(format!(
+						"refusing to kill a Local PTY for unbound session {session_id}"
+					)));
+				}
+			}
+		}
+		let _ = self.selector.unbind(session_id);
+		Ok(())
 	}
 
 	fn adapter(&self, backend: RuntimeBackend) -> &dyn TerminalRuntime {
@@ -739,5 +776,48 @@ mod tests {
 			!lib.contains("events.subscribe"),
 			"Local default startup must not subscribe to Herdr events"
 		);
+	}
+
+	#[test]
+	fn teardown_router_local_session_unbinds_and_kills_pty() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let id = created.session_id;
+		fx.router.teardown_session(&id).unwrap();
+		assert_eq!(fx.router.owner(&id).unwrap(), None);
+		assert_eq!(fx.live_count(), 0);
+	}
+
+	#[test]
+	fn teardown_refuses_unbound_live_local_pty() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let id = created.session_id;
+		fx.router.selector.unbind(&id).unwrap();
+		let err = fx.router.teardown_session(&id).unwrap_err();
+		assert!(err.to_string().contains("unbound"));
+		assert_eq!(fx.live_count(), 1);
+	}
+
+	#[test]
+	fn teardown_refuses_to_kill_local_pty_for_herdr_owned_id() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let id = created.session_id;
+		fx.router.selector.unbind(&id).unwrap();
+		fx.router.bind_session(&id, RuntimeBackend::Herdr).unwrap();
+		let err = fx.router.teardown_session(&id).unwrap_err();
+		assert!(err.to_string().contains("Herdr-owned"));
+		assert_eq!(fx.live_count(), 1);
+		assert_eq!(fx.router.owner(&id).unwrap(), Some(RuntimeBackend::Herdr));
 	}
 }

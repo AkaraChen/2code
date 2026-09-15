@@ -8,6 +8,7 @@ use model::project::{
 	ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
+use service::runtime::RuntimeHandle;
 
 fn profile_worktree_path(
 	db: &DbPool,
@@ -320,12 +321,14 @@ pub async fn get_git_pull_request_status(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn delete_project(
-	app: AppHandle,
 	id: String,
+	runtime: State<'_, RuntimeHandle>,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let ctx = crate::bridge::build_pty_context(&app);
+	let runtime = runtime.inner().clone();
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		service::project::delete_with_context(&ctx, &id)
+		service::project::delete_with_runtime(&runtime, &db, &id)
 	})
 	.await
 }

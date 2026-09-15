@@ -10,7 +10,7 @@ use model::project::{
 };
 use model::project_group::ProjectGroup;
 
-use crate::pty::PtyContext;
+use crate::runtime::RuntimeRouter;
 
 pub fn create_from_folder(
 	conn: &mut SqliteConnection,
@@ -60,9 +60,13 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
-pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
+pub fn delete_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &infra::db::DbPool,
+	id: &str,
+) -> Result<(), AppError> {
 	let (project, session_ids) = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let project = repo::project::find_by_id(conn, id)?;
 		let session_ids = repo::pty::list_by_project(conn, id)?
 			.into_iter()
@@ -72,15 +76,10 @@ pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
 	};
 
 	for session_id in &session_ids {
-		crate::pty::close_session_full(
-			&ctx.sessions,
-			&ctx.flush_senders,
-			&ctx.output_dir,
-			session_id,
-		)?;
+		runtime.teardown_session(session_id)?;
 	}
 
-	let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 	for session_id in &session_ids {
 		repo::pty::mark_closed(conn, session_id);
 	}

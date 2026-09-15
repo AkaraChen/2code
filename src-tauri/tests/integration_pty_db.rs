@@ -11,6 +11,9 @@ use infra::pty_log::{self, SessionLog};
 use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
 use repo::pty;
 use service::pty::{create_flush_senders, PtyContext};
+use service::runtime::{
+	HerdrStubAdapter, LocalAdapter, RuntimeRouter, TerminalRuntime,
+};
 
 /// A unique, empty temp directory to stand in for the per-session log store.
 fn tmp_log_dir(tag: &str) -> PathBuf {
@@ -117,6 +120,10 @@ fn create_live_session(
 		&pty_config(cwd.to_string()),
 	)
 	.unwrap()
+}
+
+fn router_from_ctx(ctx: &PtyContext) -> RuntimeRouter {
+	RuntimeRouter::new(LocalAdapter::new(ctx.clone()), HerdrStubAdapter::new())
 }
 
 /// Helper: insert a session record for a given profile.
@@ -735,15 +742,26 @@ fn delete_profile_closes_live_session_and_removes_log() {
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "delete-profile-live");
-	let session_id =
-		create_live_session(&ctx, &profile_id, &worktree_path, "Profile live");
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: profile_id.clone(),
+				title: "Profile live".to_string(),
+			},
+			&pty_config(worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
 	wait_for_flush_sender(&ctx, &session_id);
 	write_output(&logs, &session_id, b"profile output");
 
-	service::profile::delete_with_context(&ctx, &profile_id).unwrap();
+	service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
+		.unwrap();
 
 	assert!(!sessions.lock().unwrap().contains_key(&session_id));
 	assert!(!pty_log::session_path(&logs, &session_id).exists());
+	assert_eq!(router.owner(&session_id).unwrap(), None);
 
 	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);
@@ -759,19 +777,26 @@ fn delete_project_closes_live_session_and_removes_log() {
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "delete-project-live");
-	let session_id = create_live_session(
-		&ctx,
-		&default_profile.id,
-		&default_profile.worktree_path,
-		"Project live",
-	);
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: default_profile.id.clone(),
+				title: "Project live".to_string(),
+			},
+			&pty_config(default_profile.worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
 	wait_for_flush_sender(&ctx, &session_id);
 	write_output(&logs, &session_id, b"project output");
 
-	service::project::delete_with_context(&ctx, &project_id).unwrap();
+	service::project::delete_with_runtime(&router, &ctx.db, &project_id)
+		.unwrap();
 
 	assert!(!sessions.lock().unwrap().contains_key(&session_id));
 	assert!(!pty_log::session_path(&logs, &session_id).exists());
+	assert_eq!(router.owner(&session_id).unwrap(), None);
 
 	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);

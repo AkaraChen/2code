@@ -9,7 +9,7 @@ use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
 
-use crate::pty::PtyContext;
+use crate::runtime::RuntimeRouter;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
 const WORKTREE_DIR_NAME_MAX_BYTES: usize = 120;
@@ -513,9 +513,13 @@ pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	repo::profile::delete_record(conn, id)
 }
 
-pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
+pub fn delete_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &infra::db::DbPool,
+	id: &str,
+) -> Result<(), AppError> {
 	let (profile, project_folder, session_ids) = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let (profile, project_folder) =
 			repo::profile::get_delete_target(conn, id)?;
 		let session_ids = repo::pty::list_ids_by_profile(conn, id)?;
@@ -523,17 +527,12 @@ pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
 	};
 
 	for session_id in &session_ids {
-		crate::pty::close_session_full(
-			&ctx.sessions,
-			&ctx.flush_senders,
-			&ctx.output_dir,
-			session_id,
-		)?;
+		runtime.teardown_session(session_id)?;
 	}
 
 	cleanup_profile(&profile, &project_folder)?;
 
-	let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 	for session_id in &session_ids {
 		repo::pty::mark_closed(conn, session_id);
 	}

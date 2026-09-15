@@ -19,6 +19,30 @@ impl LocalAdapter {
 	pub fn new(ctx: PtyContext) -> Self {
 		Self { ctx }
 	}
+
+	pub(crate) fn has_live_session(&self, session_id: &str) -> bool {
+		self.ctx
+			.sessions
+			.lock()
+			.map(|sessions| sessions.contains_key(session_id))
+			.unwrap_or(false)
+	}
+
+	pub(crate) fn teardown_session(
+		&self,
+		session_id: &str,
+	) -> Result<(), AppError> {
+		crate::pty::close_session_full(
+			&self.ctx.sessions,
+			&self.ctx.flush_senders,
+			&self.ctx.output_dir,
+			session_id,
+		)?;
+		if let Ok(mut conn) = self.ctx.db.lock() {
+			repo::pty::mark_closed(&mut conn, session_id);
+		}
+		Ok(())
+	}
 }
 
 impl TerminalRuntime for LocalAdapter {

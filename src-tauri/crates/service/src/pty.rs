@@ -46,6 +46,7 @@ fn project_folder_for_profile(
 }
 
 /// All dependencies needed to create a PTY session, fully decoupled from Tauri.
+#[derive(Clone)]
 pub struct PtyContext {
 	pub db: DbPool,
 	pub sessions: PtySessionMap,
