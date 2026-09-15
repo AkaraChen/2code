@@ -113,14 +113,14 @@ describe("byte vs frame streams", () => {
 			full: true,
 			width: 80,
 			height: 24,
-			bytes: [0x1b, 0x5b, 0x32, 0x4a],
+			bytes: [0x1B, 0x5B, 0x32, 0x4A],
 		};
 		calls[0][0].onOutput.onmessage(frame);
 		expect(frames).toEqual([frame]);
 	});
 });
 
-describe("Herdr agent status IPC", () => {
+describe("herdr agent status IPC", () => {
 	it("hydrates mapped session DTOs without Local PTY parsing", async () => {
 		const dto: SessionAgentStatus = {
 			sessionId: "herdr-1",
