@@ -1128,9 +1128,9 @@ mod unix_tests {
 			"events.subscribe" => {
 				let id = req["id"].as_str().unwrap();
 				*subscribe.lock().unwrap() = Some(stream.try_clone().unwrap());
-				write!(
+				writeln!(
 					stream,
-					"{{\"id\":\"{id}\",\"result\":{{\"type\":\"subscription_started\"}}}}\n"
+					"{{\"id\":\"{id}\",\"result\":{{\"type\":\"subscription_started\"}}}}"
 				)
 				.unwrap();
 				let _ = stream.flush();
