@@ -19,7 +19,7 @@ import {
 	listGitBranches,
 } from "@/generated";
 import type { GitDiffStats } from "@/generated";
-import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
+import { queryKeys } from "@/shared/lib/queryKeys";
 import { GIT_LIGHT_REFRESH_INTERVAL_MS } from "@/shared/lib/queryRefresh";
 import { parseDiffFiles } from "./patchFiles";
 import type { GitBinaryPreviewSource } from "./utils";
@@ -144,9 +144,8 @@ export function useCheckoutGitBranch(profileId: string) {
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.branches(profileId),
 				}),
-				// Branch-name queries key by folder, so invalidate the namespace.
 				queryClient.invalidateQueries({
-					queryKey: [queryNamespaces["git-branch"]],
+					queryKey: queryKeys.git.branch(profileId),
 				}),
 				queryClient.invalidateQueries({
 					queryKey: queryKeys.git.diff(profileId),

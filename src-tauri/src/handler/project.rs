@@ -11,11 +11,11 @@ use model::project_group::ProjectGroup;
 use service::runtime::RuntimeHandle;
 
 fn profile_worktree_path(
+	runtime: &RuntimeHandle,
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
+	service::project::reconcile_profile_checkout(runtime, db, profile_id)
 }
 
 fn project_folder(db: &DbPool, project_id: &str) -> Result<String, AppError> {
@@ -41,12 +41,13 @@ pub async fn create_project_from_folder(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn list_projects(
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::project::list(conn)
+		service::project::list_with_runtime(&runtime, &db)
 	})
 	.await
 }
@@ -69,19 +70,30 @@ pub async fn update_project(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub async fn get_git_branch(folder: String) -> Result<String, AppError> {
-	super::run_blocking(move || service::project::get_branch(&folder)).await
+pub async fn get_git_branch(
+	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
+	state: State<'_, DbPool>,
+) -> Result<String, AppError> {
+	let runtime = runtime.inner().clone();
+	let db = state.inner().clone();
+	super::run_blocking(move || {
+		service::project::get_branch_for_profile(&runtime, &db, &profile_id)
+	})
+	.await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn get_git_diff(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::diff(&worktree_path)
 	})
 	.await
@@ -91,11 +103,13 @@ pub async fn get_git_diff(
 #[tracing::instrument(skip_all)]
 pub async fn get_git_diff_snapshot(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<GitDiffSnapshot, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::diff_snapshot(&worktree_path)
 	})
 	.await
@@ -105,11 +119,13 @@ pub async fn get_git_diff_snapshot(
 #[tracing::instrument(skip_all)]
 pub async fn get_git_diff_stats(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<GitDiffStats, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::diff_stats(&worktree_path)
 	})
 	.await
@@ -120,11 +136,13 @@ pub async fn get_git_diff_stats(
 pub async fn get_git_log(
 	profile_id: String,
 	limit: Option<u32>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitCommit>, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::log(&worktree_path, limit.unwrap_or(50))
 	})
 	.await
@@ -135,11 +153,13 @@ pub async fn get_git_log(
 pub async fn get_commit_diff(
 	profile_id: String,
 	commit_hash: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::show(&worktree_path, &commit_hash)
 	})
 	.await
@@ -153,8 +173,10 @@ pub async fn get_git_binary_preview(
 	source: String,
 	commit_hash: Option<String>,
 	app: AppHandle,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	let cache_root = app
 		.path()
@@ -162,7 +184,7 @@ pub async fn get_git_binary_preview(
 		.map_err(|err| AppError::IoError(std::io::Error::other(err)))?
 		.join("git-preview-cache");
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		let file_path = match source.as_str() {
 			"working_tree" => infra::git::read_worktree_file(
 				&worktree_path,
@@ -218,11 +240,13 @@ pub async fn commit_git_changes(
 	files: Vec<String>,
 	message: String,
 	body: Option<String>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<String, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::commit(&worktree_path, &files, &message, body.as_deref())
 	})
 	.await
@@ -233,11 +257,13 @@ pub async fn commit_git_changes(
 pub async fn discard_git_file_changes(
 	profile_id: String,
 	paths: Vec<String>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::discard_changes(&worktree_path, &paths)
 	})
 	.await
@@ -247,11 +273,13 @@ pub async fn discard_git_file_changes(
 #[tracing::instrument(skip_all)]
 pub async fn get_git_ahead_count(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<u32, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		Ok(infra::git::ahead_count(&worktree_path))
 	})
 	.await
@@ -261,11 +289,13 @@ pub async fn get_git_ahead_count(
 #[tracing::instrument(skip_all)]
 pub async fn list_git_branches(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Vec<GitBranchInfo>, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::list_branches(&worktree_path)
 	})
 	.await
@@ -276,11 +306,13 @@ pub async fn list_git_branches(
 pub async fn checkout_git_branch(
 	profile_id: String,
 	branch: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::checkout_branch(&worktree_path, &branch)
 	})
 	.await
@@ -290,11 +322,13 @@ pub async fn checkout_git_branch(
 #[tracing::instrument(skip_all)]
 pub async fn git_push(
 	profile_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		infra::git::push(&worktree_path)
 	})
 	.await
@@ -305,11 +339,13 @@ pub async fn git_push(
 pub async fn get_git_pull_request_status(
 	profile_id: String,
 	branch_name: Option<String>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path = profile_worktree_path(&db, &profile_id)?;
+		let worktree_path = profile_worktree_path(&runtime, &db, &profile_id)?;
 		service::project::get_pull_request_status_for_folder(
 			&worktree_path,
 			branch_name.as_deref(),
@@ -475,15 +511,6 @@ mod tests {
 	}
 
 	#[test]
-	fn profile_worktree_path_reads_only_the_needed_field() {
-		let db = setup_db();
-
-		let worktree = profile_worktree_path(&db, "profile-1").unwrap();
-
-		assert_eq!(worktree, "/repo/worktree");
-	}
-
-	#[test]
 	fn project_folder_reads_only_the_needed_field() {
 		let db = setup_db();
 
@@ -493,20 +520,28 @@ mod tests {
 	}
 
 	#[test]
-	fn profile_worktree_path_returns_not_found_for_missing_profile() {
-		let db = setup_db();
-
-		let result = profile_worktree_path(&db, "missing-profile");
-
-		assert!(matches!(result, Err(AppError::NotFound(_))));
-	}
-
-	#[test]
 	fn project_folder_returns_not_found_for_missing_project() {
 		let db = setup_db();
 
 		let result = project_folder(&db, "missing-project");
 
 		assert!(matches!(result, Err(AppError::NotFound(_))));
+	}
+
+	#[test]
+	fn get_git_branch_is_profile_scoped() {
+		let src = include_str!("project.rs");
+		let cmd = src
+			.split("pub async fn get_git_branch")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn get_git_diff")
+			.next()
+			.unwrap();
+		assert!(cmd.contains("profile_id"));
+		assert!(cmd.contains("get_branch_for_profile"));
+		assert!(!cmd.contains("folder"));
+		assert!(src.contains("list_with_runtime"));
+		assert!(!cmd.contains("ensure_herdr_listener"));
 	}
 }

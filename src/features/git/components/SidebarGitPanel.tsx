@@ -51,7 +51,7 @@ export default function SidebarGitPanel({
 		gitDiffReducer,
 		initialState,
 	);
-	const { data: branchName } = useGitBranch(worktreePath, diffDialogOpen);
+	const { data: branchName } = useGitBranch(profileId, diffDialogOpen);
 	const previousChangeFileNamesRef = useRef<Set<string>>(new Set());
 
 	const changesFiles = useGitDiffFiles(profileId);

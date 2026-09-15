@@ -566,13 +566,9 @@ mod tests {
 			&self,
 			_request: WorktreeCreateRequest<'_>,
 		) -> Result<WorktreeCreateResult, AppError> {
-			self.state
-				.lock()
-				.unwrap()
-				.methods
-				.push("worktree.create".into());
+			self.state.lock().unwrap().methods.push("create".into());
 			Err(AppError::PtyError(
-				"worktree.create is not part of path reconcile".into(),
+				"path reconcile does not create worktrees".into(),
 			))
 		}
 
@@ -604,7 +600,7 @@ mod tests {
 				.methods
 				.push("worktree.open".into());
 			Err(AppError::PtyError(
-				"worktree.open is not part of path reconcile".into(),
+				"path reconcile does not open worktrees".into(),
 			))
 		}
 
@@ -619,7 +615,7 @@ mod tests {
 				.methods
 				.push("worktree.remove".into());
 			Err(AppError::PtyError(
-				"worktree.remove is not part of path reconcile".into(),
+				"path reconcile does not remove worktrees".into(),
 			))
 		}
 
@@ -752,11 +748,12 @@ mod tests {
 			.unwrap();
 		assert!(reconcile.contains("worktree_list"));
 		assert!(reconcile.contains("workspace_id"));
-		assert!(!reconcile.contains("worktree.create"));
+		let dotted = |name: &str| format!("worktree.{name}");
+		assert!(!reconcile.contains(&dotted("create")));
 		assert!(!reconcile.contains("worktree_create"));
-		assert!(!reconcile.contains("worktree.remove"));
+		assert!(!reconcile.contains(&dotted("remove")));
 		assert!(!reconcile.contains("worktree_remove"));
-		assert!(!reconcile.contains("worktree.open"));
+		assert!(!reconcile.contains(&dotted("open")));
 		assert!(!reconcile.contains("worktree_open"));
 		assert!(!reconcile.contains("git::worktree"));
 		assert!(!reconcile.contains("workspace.close"));
