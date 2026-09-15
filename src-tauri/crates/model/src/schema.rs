@@ -66,6 +66,7 @@ diesel::table! {
 	session_runtime_mappings (session_id) {
 		session_id -> Text,
 		namespace -> Text,
+		workspace_id -> Text,
 		pane_id -> Text,
 	}
 }

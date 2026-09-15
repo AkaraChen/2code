@@ -249,7 +249,7 @@ mod tests {
 		);
 		assert_eq!(
 			column_names(&mut conn, "session_runtime_mappings"),
-			["session_id", "namespace", "pane_id"]
+			["session_id", "namespace", "workspace_id", "pane_id"]
 		);
 		assert!(!column_names(&mut conn, "profile_runtime_mappings")
 			.contains(&"terminal_id".into()));

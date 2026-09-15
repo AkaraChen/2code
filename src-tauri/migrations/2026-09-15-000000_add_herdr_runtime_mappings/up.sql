@@ -17,6 +17,7 @@ CREATE TABLE profile_runtime_mappings (
 CREATE TABLE session_runtime_mappings (
 	session_id TEXT PRIMARY KEY NOT NULL REFERENCES pty_sessions (id) ON DELETE CASCADE,
 	namespace TEXT NOT NULL REFERENCES herdr_namespaces (name),
+	workspace_id TEXT NOT NULL,
 	pane_id TEXT NOT NULL,
 	UNIQUE (namespace, pane_id)
 );

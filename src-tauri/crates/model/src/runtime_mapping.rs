@@ -35,7 +35,8 @@ pub struct NewProfileRuntimeMapping<'a> {
 
 /// Session → `pane_id` association in a Herdr namespace.
 ///
-/// `pane_id` is the identity. `terminal_id` is live-only and is not
+/// `pane_id` is the identity. `workspace_id` must match the profile
+/// mapping when both exist. `terminal_id` is live-only and is not
 /// persisted.
 #[derive(Queryable, Selectable, Clone, Debug, Eq, PartialEq)]
 #[diesel(table_name = session_runtime_mappings)]
@@ -43,6 +44,7 @@ pub struct NewProfileRuntimeMapping<'a> {
 pub struct SessionRuntimeMapping {
 	pub session_id: String,
 	pub namespace: String,
+	pub workspace_id: String,
 	pub pane_id: String,
 }
 
@@ -51,5 +53,6 @@ pub struct SessionRuntimeMapping {
 pub struct NewSessionRuntimeMapping<'a> {
 	pub session_id: &'a str,
 	pub namespace: &'a str,
+	pub workspace_id: &'a str,
 	pub pane_id: &'a str,
 }

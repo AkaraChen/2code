@@ -5,9 +5,10 @@ pub const HERDR_NAMESPACE: &str = "2code";
 
 /// Whether a persisted runtime identity is currently present.
 ///
-/// Computed against the live projection. Mapping rows keep the stored
-/// `workspace_id` / `pane_id` and never rebind by label, path, or
-/// `terminal_id`.
+/// Computed against the live projection by stored `workspace_id` /
+/// `pane_id` only. Labels, paths, and `terminal_id` are never keys.
+/// [`RuntimeIdentityState::Replaced`] is only for an explicit
+/// caller-supplied new id in namespace `2code`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeIdentityState {
 	Bound,

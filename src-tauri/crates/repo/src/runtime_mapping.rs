@@ -7,7 +7,8 @@ use model::runtime_mapping::{
 	ProfileRuntimeMapping, SessionRuntimeMapping,
 };
 use model::schema::{
-	herdr_namespaces, profile_runtime_mappings, session_runtime_mappings,
+	herdr_namespaces, profile_runtime_mappings, pty_sessions,
+	session_runtime_mappings,
 };
 
 pub fn list_namespaces(
@@ -76,6 +77,69 @@ pub fn find_profile_by_workspace(
 		})
 }
 
+fn refuse_stolen_workspace(
+	conn: &mut SqliteConnection,
+	namespace: &str,
+	workspace_id: &str,
+	profile_id: &str,
+) -> Result<(), AppError> {
+	if let Some(existing) = optional_found(find_profile_by_workspace(
+		conn,
+		namespace,
+		workspace_id,
+	))? {
+		if existing.profile_id != profile_id {
+			return Err(AppError::RuntimeMappingAlreadyBound(format!(
+				"workspace {workspace_id} is already bound to profile {}",
+				existing.profile_id
+			)));
+		}
+	}
+	Ok(())
+}
+
+fn refuse_stolen_pane(
+	conn: &mut SqliteConnection,
+	namespace: &str,
+	pane_id: &str,
+	session_id: &str,
+) -> Result<(), AppError> {
+	if let Some(existing) =
+		optional_found(find_session_by_pane(conn, namespace, pane_id))?
+	{
+		if existing.session_id != session_id {
+			return Err(AppError::RuntimeMappingAlreadyBound(format!(
+				"pane {pane_id} is already bound to session {}",
+				existing.session_id
+			)));
+		}
+	}
+	Ok(())
+}
+
+fn require_session_workspace_matches_profile(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	workspace_id: &str,
+) -> Result<(), AppError> {
+	let profile_id: String = pty_sessions::table
+		.find(session_id)
+		.select(pty_sessions::profile_id)
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Session: {session_id}")))?;
+	if let Some(profile) =
+		optional_found(find_profile_mapping(conn, &profile_id))?
+	{
+		if profile.workspace_id != workspace_id {
+			return Err(AppError::RuntimeMappingAlreadyBound(format!(
+				"session workspace_id {workspace_id} does not match profile {} workspace_id {}",
+				profile.profile_id, profile.workspace_id
+			)));
+		}
+	}
+	Ok(())
+}
+
 pub fn bind_profile_workspace(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
@@ -92,22 +156,13 @@ pub fn bind_profile_workspace(
 		{
 			return Ok(existing);
 		}
-		return Err(AppError::DbError(format!(
-			"profile {profile_id} is already bound to workspace {}",
+		return Err(AppError::RuntimeMappingReplaced(format!(
+			"profile {profile_id} is bound to workspace {}; use replace for {workspace_id}",
 			existing.workspace_id
 		)));
 	}
 
-	if let Some(existing) = optional_found(find_profile_by_workspace(
-		conn,
-		namespace,
-		workspace_id,
-	))? {
-		return Err(AppError::DbError(format!(
-			"workspace {workspace_id} is already bound to profile {}",
-			existing.profile_id
-		)));
-	}
+	refuse_stolen_workspace(conn, namespace, workspace_id, profile_id)?;
 
 	diesel::insert_into(profile_runtime_mappings::table)
 		.values(&NewProfileRuntimeMapping {
@@ -118,6 +173,32 @@ pub fn bind_profile_workspace(
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
+	find_profile_mapping(conn, profile_id)
+}
+
+pub fn replace_profile_workspace(
+	conn: &mut SqliteConnection,
+	profile_id: &str,
+	namespace: &str,
+	workspace_id: &str,
+) -> Result<ProfileRuntimeMapping, AppError> {
+	require_2code_identity(namespace, workspace_id, "workspace_id")?;
+	let Some(existing) =
+		optional_found(find_profile_mapping(conn, profile_id))?
+	else {
+		return Err(AppError::RuntimeMappingMissing(format!(
+			"profile {profile_id}"
+		)));
+	};
+	if existing.workspace_id == workspace_id && existing.namespace == namespace
+	{
+		return Ok(existing);
+	}
+	refuse_stolen_workspace(conn, namespace, workspace_id, profile_id)?;
+	diesel::update(profile_runtime_mappings::table.find(profile_id))
+		.set(profile_runtime_mappings::workspace_id.eq(workspace_id))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 	find_profile_mapping(conn, profile_id)
 }
 
@@ -171,40 +252,74 @@ pub fn bind_session_pane(
 	conn: &mut SqliteConnection,
 	session_id: &str,
 	namespace: &str,
+	workspace_id: &str,
 	pane_id: &str,
 ) -> Result<SessionRuntimeMapping, AppError> {
+	require_2code_identity(namespace, workspace_id, "workspace_id")?;
 	require_2code_identity(namespace, pane_id, "pane_id")?;
+	require_session_workspace_matches_profile(conn, session_id, workspace_id)?;
 
 	if let Some(existing) =
 		optional_found(find_session_mapping(conn, session_id))?
 	{
-		if existing.pane_id == pane_id && existing.namespace == namespace {
+		if existing.pane_id == pane_id
+			&& existing.workspace_id == workspace_id
+			&& existing.namespace == namespace
+		{
 			return Ok(existing);
 		}
-		return Err(AppError::DbError(format!(
-			"session {session_id} is already bound to pane {}",
+		return Err(AppError::RuntimeMappingReplaced(format!(
+			"session {session_id} is bound to pane {}; use replace for {pane_id}",
 			existing.pane_id
 		)));
 	}
 
-	if let Some(existing) =
-		optional_found(find_session_by_pane(conn, namespace, pane_id))?
-	{
-		return Err(AppError::DbError(format!(
-			"pane {pane_id} is already bound to session {}",
-			existing.session_id
-		)));
-	}
+	refuse_stolen_pane(conn, namespace, pane_id, session_id)?;
 
 	diesel::insert_into(session_runtime_mappings::table)
 		.values(&NewSessionRuntimeMapping {
 			session_id,
 			namespace,
+			workspace_id,
 			pane_id,
 		})
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
 
+	find_session_mapping(conn, session_id)
+}
+
+pub fn replace_session_pane(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+	namespace: &str,
+	workspace_id: &str,
+	pane_id: &str,
+) -> Result<SessionRuntimeMapping, AppError> {
+	require_2code_identity(namespace, workspace_id, "workspace_id")?;
+	require_2code_identity(namespace, pane_id, "pane_id")?;
+	require_session_workspace_matches_profile(conn, session_id, workspace_id)?;
+	let Some(existing) =
+		optional_found(find_session_mapping(conn, session_id))?
+	else {
+		return Err(AppError::RuntimeMappingMissing(format!(
+			"session {session_id}"
+		)));
+	};
+	if existing.pane_id == pane_id
+		&& existing.workspace_id == workspace_id
+		&& existing.namespace == namespace
+	{
+		return Ok(existing);
+	}
+	refuse_stolen_pane(conn, namespace, pane_id, session_id)?;
+	diesel::update(session_runtime_mappings::table.find(session_id))
+		.set((
+			session_runtime_mappings::workspace_id.eq(workspace_id),
+			session_runtime_mappings::pane_id.eq(pane_id),
+		))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
 	find_session_mapping(conn, session_id)
 }
 
@@ -299,7 +414,7 @@ mod tests {
 
 		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
 			.unwrap();
-		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p1")
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
 			.unwrap();
 
 		let profile = profile::find_by_id(&mut conn, "prof-1").unwrap();
@@ -331,10 +446,16 @@ mod tests {
 		assert_eq!(profile.workspace_id, "w1");
 		assert_eq!(profile.namespace, HERDR_NAMESPACE);
 
-		let session =
-			bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p1")
-				.unwrap();
+		let session = bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap();
 		assert_eq!(session.pane_id, "w1:p1");
+		assert_eq!(session.workspace_id, "w1");
 
 		let production = include_str!("runtime_mapping.rs")
 			.split("#[cfg(test)]")
@@ -360,19 +481,68 @@ mod tests {
 				.unwrap();
 		assert_eq!(same.workspace_id, "w1");
 
-		let replace =
+		let conflict =
 			bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w2")
 				.unwrap_err();
-		assert!(replace
-			.to_string()
-			.contains("already bound to workspace w1"));
+		assert!(matches!(conflict, AppError::RuntimeMappingReplaced(_)));
 
 		let stolen =
 			bind_profile_workspace(&mut conn, "prof-2", HERDR_NAMESPACE, "w1")
 				.unwrap_err();
+		assert!(matches!(stolen, AppError::RuntimeMappingAlreadyBound(_)));
 		assert!(stolen
 			.to_string()
 			.contains("already bound to profile prof-1"));
+	}
+
+	#[test]
+	fn explicit_replace_persists_new_workspace_id_on_the_same_row() {
+		let mut conn = setup_db();
+		seed_catalog(&mut conn);
+		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
+			.unwrap();
+
+		let missing = replace_profile_workspace(
+			&mut conn,
+			"prof-2",
+			HERDR_NAMESPACE,
+			"w3",
+		)
+		.unwrap_err();
+		assert!(matches!(missing, AppError::RuntimeMappingMissing(_)));
+
+		let replaced = replace_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w2",
+		)
+		.unwrap();
+		assert_eq!(replaced.profile_id, "prof-1");
+		assert_eq!(replaced.workspace_id, "w2");
+		assert_eq!(
+			find_profile_mapping(&mut conn, "prof-1")
+				.unwrap()
+				.workspace_id,
+			"w2"
+		);
+
+		bind_profile_workspace(&mut conn, "prof-2", HERDR_NAMESPACE, "w3")
+			.unwrap();
+		let stolen = replace_profile_workspace(
+			&mut conn,
+			"prof-1",
+			HERDR_NAMESPACE,
+			"w3",
+		)
+		.unwrap_err();
+		assert!(matches!(stolen, AppError::RuntimeMappingAlreadyBound(_)));
+		assert_eq!(
+			find_profile_mapping(&mut conn, "prof-1")
+				.unwrap()
+				.workspace_id,
+			"w2"
+		);
 	}
 
 	#[test]
@@ -380,22 +550,109 @@ mod tests {
 		let mut conn = setup_db();
 		seed_catalog(&mut conn);
 
-		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p1")
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
 			.unwrap();
-		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p1")
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
 			.unwrap();
 
-		let replace =
-			bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p2")
-				.unwrap_err();
-		assert!(replace.to_string().contains("already bound to pane w1:p1"));
+		let conflict = bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p2",
+		)
+		.unwrap_err();
+		assert!(matches!(conflict, AppError::RuntimeMappingReplaced(_)));
 
-		let stolen =
-			bind_session_pane(&mut conn, "sess-2", HERDR_NAMESPACE, "w1:p1")
-				.unwrap_err();
+		let stolen = bind_session_pane(
+			&mut conn,
+			"sess-2",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap_err();
+		assert!(matches!(stolen, AppError::RuntimeMappingAlreadyBound(_)));
 		assert!(stolen
 			.to_string()
 			.contains("already bound to session sess-1"));
+	}
+
+	#[test]
+	fn explicit_replace_persists_new_pane_id_on_the_same_row() {
+		let mut conn = setup_db();
+		seed_catalog(&mut conn);
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
+			.unwrap();
+
+		let missing = replace_session_pane(
+			&mut conn,
+			"sess-2",
+			HERDR_NAMESPACE,
+			"w2",
+			"w2:p1",
+		)
+		.unwrap_err();
+		assert!(matches!(missing, AppError::RuntimeMappingMissing(_)));
+
+		let replaced = replace_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p2",
+		)
+		.unwrap();
+		assert_eq!(replaced.session_id, "sess-1");
+		assert_eq!(replaced.workspace_id, "w1");
+		assert_eq!(replaced.pane_id, "w1:p2");
+	}
+
+	#[test]
+	fn session_workspace_id_must_match_bound_profile_workspace() {
+		let mut conn = setup_db();
+		seed_catalog(&mut conn);
+		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
+			.unwrap();
+
+		let mismatch = bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w2",
+			"w2:p1",
+		)
+		.unwrap_err();
+		assert!(matches!(mismatch, AppError::RuntimeMappingAlreadyBound(_)));
+		assert!(mismatch.to_string().contains("does not match profile"));
+
+		let bound = bind_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap();
+		assert_eq!(bound.workspace_id, "w1");
+
+		let replace_mismatch = replace_session_pane(
+			&mut conn,
+			"sess-1",
+			HERDR_NAMESPACE,
+			"w2",
+			"w1:p2",
+		)
+		.unwrap_err();
+		assert!(matches!(
+			replace_mismatch,
+			AppError::RuntimeMappingAlreadyBound(_)
+		));
+		assert_eq!(
+			find_session_mapping(&mut conn, "sess-1").unwrap().pane_id,
+			"w1:p1"
+		);
 	}
 
 	#[test]
@@ -410,8 +667,9 @@ mod tests {
 			bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "")
 				.unwrap_err();
 		assert!(empty.to_string().contains("workspace_id is required"));
-		let pane = bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "")
-			.unwrap_err();
+		let pane =
+			bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "")
+				.unwrap_err();
 		assert!(pane.to_string().contains("pane_id is required"));
 	}
 
@@ -421,7 +679,7 @@ mod tests {
 		seed_catalog(&mut conn);
 		bind_profile_workspace(&mut conn, "prof-2", HERDR_NAMESPACE, "w2")
 			.unwrap();
-		bind_session_pane(&mut conn, "sess-2", HERDR_NAMESPACE, "w2:p1")
+		bind_session_pane(&mut conn, "sess-2", HERDR_NAMESPACE, "w2", "w2:p1")
 			.unwrap();
 
 		profile::delete(&mut conn, "prof-2").unwrap();
@@ -438,7 +696,7 @@ mod tests {
 		seed_catalog(&mut conn);
 		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
 			.unwrap();
-		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1:p1")
+		bind_session_pane(&mut conn, "sess-1", HERDR_NAMESPACE, "w1", "w1:p1")
 			.unwrap();
 
 		assert!(conn
@@ -451,8 +709,8 @@ mod tests {
 		assert!(conn
 			.batch_execute(
 				"INSERT INTO session_runtime_mappings \
-				 (session_id, namespace, pane_id) \
-				 VALUES ('sess-2', '2code', 'w1:p1');",
+				 (session_id, namespace, workspace_id, pane_id) \
+				 VALUES ('sess-2', '2code', 'w1', 'w1:p1');",
 			)
 			.is_err());
 	}

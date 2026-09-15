@@ -32,6 +32,15 @@ pub enum AppError {
 
 	#[error("Herdr request outcome is uncertain: {0}")]
 	HerdrUncertainOutcome(String),
+
+	#[error("Runtime mapping already bound: {0}")]
+	RuntimeMappingAlreadyBound(String),
+
+	#[error("Runtime mapping is missing: {0}")]
+	RuntimeMappingMissing(String),
+
+	#[error("Runtime mapping was replaced: {0}")]
+	RuntimeMappingReplaced(String),
 }
 
 impl Serialize for AppError {
@@ -128,6 +137,31 @@ mod tests {
 		);
 		assert!(!transport.to_string().contains("uncertain"));
 		assert!(!uncertain.to_string().contains("transport error"));
+	}
+
+	#[test]
+	fn display_mapping_conflicts_are_distinct() {
+		let bound = AppError::RuntimeMappingAlreadyBound("workspace w1".into());
+		let missing = AppError::RuntimeMappingMissing("workspace w1".into());
+		let replaced = AppError::RuntimeMappingReplaced("workspace w2".into());
+		assert_eq!(
+			bound.to_string(),
+			"Runtime mapping already bound: workspace w1"
+		);
+		assert_eq!(
+			missing.to_string(),
+			"Runtime mapping is missing: workspace w1"
+		);
+		assert_eq!(
+			replaced.to_string(),
+			"Runtime mapping was replaced: workspace w2"
+		);
+		assert!(!bound.to_string().contains("missing"));
+		assert!(!bound.to_string().contains("replaced"));
+		assert!(!missing.to_string().contains("already bound"));
+		assert!(!missing.to_string().contains("replaced"));
+		assert!(!replaced.to_string().contains("already bound"));
+		assert!(!replaced.to_string().contains("missing"));
 	}
 
 	// --- Serialize produces JSON string ---
