@@ -1131,6 +1131,20 @@ mod live {
 			.unwrap()
 			.to_string();
 
+		let idle = harness.rpc("ag0", "pane.get", json!({"pane_id": pane}));
+		assert_eq!(
+			idle["result"]["pane"]["agent_status"], "unknown",
+			"empty-shell pane must report agent_status unknown: {idle}"
+		);
+		let agents = harness.cli_json(&["api", "snapshot"]);
+		assert!(
+			agents["result"]["snapshot"]["agents"]
+				.as_array()
+				.unwrap()
+				.is_empty(),
+			"idle shell must not appear in snapshot.agents: {agents}"
+		);
+
 		harness.cli_ok(&["pane", "run", &pane, "printenv CONTRACT_ENV"]);
 		harness.cli_ok(&[
 			"pane",
