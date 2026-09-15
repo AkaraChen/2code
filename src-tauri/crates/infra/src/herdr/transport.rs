@@ -70,6 +70,34 @@ pub struct WorktreeOpenResult {
 	pub already_open: bool,
 }
 
+/// JSON `worktree.create` identity. Checkout path is the path Herdr
+/// created. `terminal_id` / `tab_id` / pane ids are not returned.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorktreeCreateResult {
+	pub workspace_id: String,
+	pub path: String,
+}
+
+/// One `worktree.list` entry. `workspace_id` is Herdr's open workspace
+/// when present; never a display name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorktreeListEntry {
+	pub path: String,
+	pub branch: Option<String>,
+	pub workspace_id: Option<String>,
+	pub is_linked_worktree: bool,
+}
+
+/// JSON `worktree.create` params. At most one of `cwd` or `workspace_id`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorktreeCreateRequest<'a> {
+	pub branch: &'a str,
+	pub path: Option<&'a Path>,
+	pub cwd: Option<&'a Path>,
+	pub workspace_id: Option<&'a str>,
+	pub label: Option<&'a str>,
+}
+
 /// JSON `tab.create` identity. `terminal_id` is live-only and is not
 /// returned here so callers cannot persist it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -217,6 +245,110 @@ fn parse_worktree_open_result(
 		workspace_id: workspace_id.to_string(),
 		already_open,
 	})
+}
+
+fn parse_worktree_create_result(
+	result: &Value,
+) -> Result<WorktreeCreateResult, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "worktree_created" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected worktree_created, got {kind}"
+		)));
+	}
+	let workspace_id = result
+		.get("workspace")
+		.and_then(|workspace| workspace.get("workspace_id"))
+		.and_then(Value::as_str)
+		.unwrap_or("");
+	if workspace_id.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"worktree.create result missing workspace_id".into(),
+		));
+	}
+	let path = result
+		.get("worktree")
+		.and_then(|worktree| worktree.get("path"))
+		.and_then(Value::as_str)
+		.unwrap_or("");
+	if path.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"worktree.create result missing worktree.path".into(),
+		));
+	}
+	Ok(WorktreeCreateResult {
+		workspace_id: workspace_id.to_string(),
+		path: path.to_string(),
+	})
+}
+
+fn parse_worktree_list_result(
+	result: &Value,
+) -> Result<Vec<WorktreeListEntry>, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "worktree_list" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected worktree_list, got {kind}"
+		)));
+	}
+	let worktrees = result
+		.get("worktrees")
+		.and_then(Value::as_array)
+		.ok_or_else(|| {
+			HerdrTransportError::UnexpectedMessage(
+				"worktree.list result missing worktrees".into(),
+			)
+		})?;
+	worktrees
+		.iter()
+		.map(|entry| {
+			let path = json_id(entry, "path").ok_or_else(|| {
+				HerdrTransportError::UnexpectedMessage(
+					"worktree.list entry missing path".into(),
+				)
+			})?;
+			Ok(WorktreeListEntry {
+				path: path.to_string(),
+				branch: json_id(entry, "branch").map(str::to_string),
+				workspace_id: json_id(entry, "open_workspace_id")
+					.map(str::to_string),
+				is_linked_worktree: entry
+					.get("is_linked_worktree")
+					.and_then(Value::as_bool)
+					.unwrap_or(false),
+			})
+		})
+		.collect()
+}
+
+fn require_absolute(
+	path: &Path,
+	what: &str,
+) -> Result<(), HerdrTransportError> {
+	if path.is_absolute() {
+		Ok(())
+	} else {
+		Err(HerdrTransportError::Refused {
+			reason: format!("{what} must be absolute"),
+		})
+	}
+}
+
+fn require_cwd_xor_workspace(
+	cwd: Option<&Path>,
+	workspace_id: Option<&str>,
+) -> Result<(), HerdrTransportError> {
+	let has_cwd = cwd.is_some();
+	let has_workspace = workspace_id.is_some_and(|id| !id.is_empty());
+	if has_cwd == has_workspace {
+		return Err(HerdrTransportError::Refused {
+			reason: "exactly one of cwd or workspace_id is required".into(),
+		});
+	}
+	if let Some(cwd) = cwd {
+		require_absolute(cwd, "cwd")?;
+	}
+	Ok(())
 }
 
 fn json_id<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -561,6 +693,86 @@ impl HerdrClient {
 		let success =
 			self.request(self.next_id("wtopen"), "worktree.open", params)?;
 		parse_worktree_open_result(&success.result)
+	}
+
+	/// Create a linked git worktree and Herdr workspace. Paths must be
+	/// absolute. At most one of `cwd` or `workspace_id`. Never auto-replays
+	/// an uncertain outcome and never calls `worktree.remove`.
+	pub fn worktree_create(
+		&self,
+		request: WorktreeCreateRequest<'_>,
+	) -> Result<WorktreeCreateResult, HerdrTransportError> {
+		if request.branch.trim().is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "worktree.create branch is required".into(),
+			});
+		}
+		require_cwd_xor_workspace(request.cwd, request.workspace_id)?;
+		if let Some(path) = request.path {
+			require_absolute(path, "worktree.create path")?;
+		}
+		let mut params = serde_json::Map::new();
+		params
+			.insert("branch".into(), Value::String(request.branch.to_string()));
+		params.insert("trust_repository".into(), Value::Bool(true));
+		params.insert("focus".into(), Value::Bool(false));
+		if let Some(cwd) = request.cwd {
+			params.insert(
+				"cwd".into(),
+				Value::String(cwd.to_string_lossy().into_owned()),
+			);
+		}
+		if let Some(workspace_id) = request.workspace_id {
+			params.insert(
+				"workspace_id".into(),
+				Value::String(workspace_id.to_string()),
+			);
+		}
+		if let Some(path) = request.path {
+			params.insert(
+				"path".into(),
+				Value::String(path.to_string_lossy().into_owned()),
+			);
+		}
+		if let Some(label) = request.label.filter(|label| !label.is_empty()) {
+			params.insert("label".into(), Value::String(label.to_string()));
+		}
+		let success = self.request(
+			self.next_id("wtcr"),
+			"worktree.create",
+			Value::Object(params),
+		)?;
+		parse_worktree_create_result(&success.result)
+	}
+
+	/// List git worktrees for a repo. At most one of `cwd` or
+	/// `workspace_id`. Never auto-replays an uncertain outcome.
+	pub fn worktree_list(
+		&self,
+		cwd: Option<&Path>,
+		workspace_id: Option<&str>,
+	) -> Result<Vec<WorktreeListEntry>, HerdrTransportError> {
+		require_cwd_xor_workspace(cwd, workspace_id)?;
+		let mut params = serde_json::Map::new();
+		params.insert("trust_repository".into(), Value::Bool(true));
+		if let Some(cwd) = cwd {
+			params.insert(
+				"cwd".into(),
+				Value::String(cwd.to_string_lossy().into_owned()),
+			);
+		}
+		if let Some(workspace_id) = workspace_id {
+			params.insert(
+				"workspace_id".into(),
+				Value::String(workspace_id.to_string()),
+			);
+		}
+		let success = self.request(
+			self.next_id("wtlst"),
+			"worktree.list",
+			Value::Object(params),
+		)?;
+		parse_worktree_list_result(&success.result)
 	}
 
 	/// Create an extra tab in an existing workspace. Does not auto-replay
@@ -1321,6 +1533,8 @@ mod tests {
 	#[test]
 	fn mutation_disconnect_is_uncertain_and_distinct() {
 		assert!(outcome_uncertain("workspace.create"));
+		assert!(outcome_uncertain("worktree.create"));
+		assert!(outcome_uncertain("worktree.list"));
 		assert!(outcome_uncertain("worktree.open"));
 		assert!(outcome_uncertain("worktree.remove"));
 		assert!(outcome_uncertain("tab.close"));
@@ -1373,7 +1587,7 @@ mod tests {
 			.split("pub fn worktree_open")
 			.nth(1)
 			.unwrap()
-			.split("pub fn next_id")
+			.split("/// Create a linked git worktree")
 			.next()
 			.unwrap();
 		assert!(helper.contains("worktree.open"));
@@ -1389,6 +1603,54 @@ mod tests {
 			.unwrap_err();
 		assert!(matches!(relative, HerdrTransportError::Refused { .. }));
 		assert!(relative.to_string().contains("absolute"));
+	}
+
+	#[test]
+	fn worktree_create_parses_workspace_id_and_checkout_path() {
+		let created = parse_worktree_create_result(&serde_json::json!({
+			"type": "worktree_created",
+			"workspace": { "workspace_id": "w2", "label": "wt" },
+			"tab": { "tab_id": "w2:t1" },
+			"root_pane": { "pane_id": "w2:p1", "terminal_id": "term_x" },
+			"worktree": { "path": "/repo/wt", "branch": "feat/x" }
+		}))
+		.unwrap();
+		assert_eq!(created.workspace_id, "w2");
+		assert_eq!(created.path, "/repo/wt");
+		assert!(parse_worktree_create_result(&serde_json::json!({
+			"type": "worktree_opened",
+			"workspace": { "workspace_id": "w2" },
+			"worktree": { "path": "/repo/wt" }
+		}))
+		.is_err());
+		assert!(parse_worktree_create_result(&serde_json::json!({
+			"type": "worktree_created",
+			"workspace": { "workspace_id": "w2" },
+			"worktree": { "branch": "feat/x" }
+		}))
+		.is_err());
+
+		let listed = parse_worktree_list_result(&serde_json::json!({
+			"type": "worktree_list",
+			"worktrees": [
+				{
+					"path": "/repo/wt",
+					"branch": "feat/x",
+					"open_workspace_id": "w2",
+					"is_linked_worktree": true
+				}
+			]
+		}))
+		.unwrap();
+		assert_eq!(
+			listed,
+			vec![WorktreeListEntry {
+				path: "/repo/wt".into(),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			}]
+		);
 	}
 
 	#[test]
@@ -1960,6 +2222,112 @@ mod unix_tests {
 	}
 
 	#[test]
+	fn worktree_create_sends_branch_cwd_path_trust_and_no_focus() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.create");
+			assert_eq!(req["params"]["cwd"], "/repo");
+			assert_eq!(req["params"]["path"], "/repo/wt");
+			assert_eq!(req["params"]["branch"], "feat/x");
+			assert_eq!(req["params"]["trust_repository"], true);
+			assert_eq!(req["params"]["focus"], false);
+			assert!(req["params"].get("workspace_id").is_none());
+			assert!(req["params"].get("terminal_id").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"worktree_created","workspace":{{"workspace_id":"w5"}},"tab":{{"tab_id":"w5:t1"}},"root_pane":{{"pane_id":"w5:p1","terminal_id":"term_live"}},"worktree":{{"path":"/repo/wt","branch":"feat/x"}}}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let created = client(&sock)
+			.worktree_create(WorktreeCreateRequest {
+				branch: "feat/x",
+				path: Some(Path::new("/repo/wt")),
+				cwd: Some(Path::new("/repo")),
+				workspace_id: None,
+				label: None,
+			})
+			.unwrap();
+		assert_eq!(created.workspace_id, "w5");
+		assert_eq!(created.path, "/repo/wt");
+		let refused = client(&sock)
+			.worktree_create(WorktreeCreateRequest {
+				branch: "feat/x",
+				path: Some(Path::new("relative")),
+				cwd: Some(Path::new("/repo")),
+				workspace_id: None,
+				label: None,
+			})
+			.unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
+		let both = client(&sock)
+			.worktree_create(WorktreeCreateRequest {
+				branch: "feat/x",
+				path: None,
+				cwd: Some(Path::new("/repo")),
+				workspace_id: Some("w1"),
+				label: None,
+			})
+			.unwrap_err();
+		assert!(matches!(both, HerdrTransportError::Refused { .. }));
+	}
+
+	#[test]
+	fn worktree_create_does_not_auto_replay_uncertain_outcome() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.create");
+			seen.fetch_add(1, AtomicOrdering::SeqCst);
+			drop(stream);
+		});
+		let err = client(&sock)
+			.worktree_create(WorktreeCreateRequest {
+				branch: "feat/x",
+				path: Some(Path::new("/repo/wt")),
+				cwd: Some(Path::new("/repo")),
+				workspace_id: None,
+				label: None,
+			})
+			.unwrap_err();
+		assert!(err.is_uncertain(), "{err}");
+		match err {
+			HerdrTransportError::UncertainOutcome { method, .. } => {
+				assert_eq!(method, "worktree.create");
+			}
+			other => panic!("expected UncertainOutcome, got {other:?}"),
+		}
+		thread::sleep(Duration::from_millis(80));
+		assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+	}
+
+	#[test]
+	fn worktree_list_sends_cwd_xor_workspace() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "worktree.list");
+			assert_eq!(req["params"]["cwd"], "/repo");
+			assert_eq!(req["params"]["trust_repository"], true);
+			assert!(req["params"].get("workspace_id").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"worktree_list","worktrees":[{{"path":"/repo/wt","branch":"feat/x","open_workspace_id":"w5","is_linked_worktree":true}}]}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let listed = client(&sock)
+			.worktree_list(Some(Path::new("/repo")), None)
+			.unwrap();
+		assert_eq!(listed[0].workspace_id.as_deref(), Some("w5"));
+		assert!(client(&sock)
+			.worktree_list(Some(Path::new("/repo")), Some("w1"))
+			.is_err());
+	}
+
+	#[test]
 	fn tab_create_sends_workspace_label_and_no_focus() {
 		let (_dir, sock) = serve(|mut stream| {
 			let req = read_request(&stream);
@@ -2059,6 +2427,47 @@ mod unix_tests {
 			.unwrap();
 		let list = String::from_utf8_lossy(&listed.stdout);
 		assert_eq!(list.matches("worktree ").count(), 1);
+	}
+
+	#[test]
+	fn live_worktree_create_uses_path_and_fails_closed_on_duplicate_branch() {
+		let Some(live) = require_live() else {
+			return;
+		};
+		let repo = live.root.path().join("create-repo");
+		std::fs::create_dir_all(&repo).unwrap();
+		init_git_repo(&repo);
+		let checkout = live.root.path().join("create-wt");
+		let client = live.client();
+		let created = client
+			.worktree_create(WorktreeCreateRequest {
+				branch: "wt/task14",
+				path: Some(&checkout),
+				cwd: Some(&repo),
+				workspace_id: None,
+				label: Some("task14"),
+			})
+			.unwrap_or_else(|err| {
+				panic!("worktree.create failed: {err}\n{}", live.server_log())
+			});
+		assert!(!created.workspace_id.is_empty());
+		assert_eq!(Path::new(&created.path), checkout.as_path());
+		assert!(checkout.exists());
+		let dup = client
+			.worktree_create(WorktreeCreateRequest {
+				branch: "wt/task14",
+				path: Some(&live.root.path().join("create-wt-dup")),
+				cwd: Some(&repo),
+				workspace_id: None,
+				label: None,
+			})
+			.unwrap_err();
+		match dup {
+			HerdrTransportError::Rpc(rpc) => {
+				assert_eq!(rpc.code, "worktree_create_failed");
+			}
+			other => panic!("expected worktree_create_failed, got {other}"),
+		}
 	}
 
 	fn init_git_repo(repo: &Path) {
