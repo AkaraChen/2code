@@ -155,6 +155,24 @@ pub fn update_notes(
 	find_by_id(conn, id)
 }
 
+/// Persist a checkout path cache. Not Herdr workspace authority.
+pub fn set_worktree_path(
+	conn: &mut SqliteConnection,
+	id: &str,
+	worktree_path: &str,
+) -> Result<Profile, AppError> {
+	let updated = diesel::update(profiles::table.find(id))
+		.set(profiles::worktree_path.eq(worktree_path))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if updated == 0 {
+		return Err(AppError::NotFound(format!("Profile: {id}")));
+	}
+
+	find_by_id(conn, id)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -339,5 +357,28 @@ mod tests {
 		let profile =
 			insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
 		assert_eq!(profile.notes, "");
+	}
+
+	#[test]
+	fn set_worktree_path_updates_only_the_cache() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		insert(&mut conn, "p1", "proj-1", "feat", "/stale").unwrap();
+
+		let profile = set_worktree_path(&mut conn, "p1", "/listed").unwrap();
+
+		assert_eq!(profile.worktree_path, "/listed");
+		assert_eq!(profile.branch_name, "feat");
+		assert_eq!(
+			find_by_id(&mut conn, "p1").unwrap().worktree_path,
+			"/listed"
+		);
+	}
+
+	#[test]
+	fn set_worktree_path_not_found() {
+		let mut conn = setup_db();
+		let result = set_worktree_path(&mut conn, "missing", "/listed");
+		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}
 }
