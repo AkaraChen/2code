@@ -66,6 +66,8 @@ macOS uses `shasum -a 256`. Windows: download the zip, verify the zip digest, th
 
 Override the probe with `HERDR_BIN=/path/to/verified-binary`. The test still checks that digest against the pin.
 
+Packaged and `tauri dev` / `tauri build` acquisition uses the same pin via `bun ./scripts/herdr-sidecar.mjs` (also run from `scripts/tauri-before.mjs`). That copies a checksum-verified file to gitignored `src-tauri/binaries/herdr-<rustc-triple>` for Tauri `bundle.externalBin` (`binaries/herdr`). `infra::herdr` resolves that layout (or a packaged sibling named `herdr`) and runs `herdr --version` only. It does not start `herdr server`. Apache-2.0 text for the sidecar is in `src-tauri/licenses/herdr-0.9.0/`. Windows ARM64 is unsupported.
+
 ## Isolated reproduction
 
 Prerequisites: the pinned binary (checksum-verified), `git`, and `python3` with the `termios` and `tty` modules (used for DSR/DA).

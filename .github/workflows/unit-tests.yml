@@ -100,5 +100,11 @@ jobs:
           workspaces: |
             src-tauri -> target
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Fetch pinned Herdr sidecar
+        run: bun ./scripts/herdr-sidecar.mjs
+
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
