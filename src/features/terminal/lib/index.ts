@@ -19,6 +19,11 @@ export {
 } from "./charSize";
 export { scheduleFontSettleRefit } from "./fontSettle";
 export {
+	applyHerdrFrameAction,
+	HerdrFrameCursor,
+	herdrFrameBytes,
+} from "./herdrFrames";
+export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
 export {
