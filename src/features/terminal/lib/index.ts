@@ -44,9 +44,15 @@ export {
 	sweepTerminalStorage,
 } from "./terminalStorage";
 export {
+	hydrateHerdrAgentStatus,
 	resolveTerminalTransportKind,
+	startHerdrAgentStream,
 	startHerdrFrameStream,
 	startLocalByteStream,
 } from "./terminalTransport";
+export {
+	herdrAgentPublishStatus,
+	mapHerdrAgentStatus,
+} from "./herdrAgent";
 export { TitleDebouncer } from "./titleDebounce";
 export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";

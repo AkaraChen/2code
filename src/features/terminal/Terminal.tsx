@@ -22,7 +22,9 @@ import {
   resizePty,
   scrollPty,
   writeToPty } from
-"@/generated";import { toast } from "sonner";
+"@/generated";
+import type { SessionAgentStatus } from "@/generated";
+import { toast } from "sonner";
 
 import {
   createAgentStatusDetector,
@@ -66,8 +68,11 @@ import {
 } from "./lib/herdrFrames";
 import { blockHerdrQueryReplies } from "./lib/herdrQueryGuard";
 import { herdrPageScroll, herdrWheelScroll } from "./lib/herdrScroll";
+import { herdrAgentPublishStatus } from "./lib/herdrAgent";
 import {
+  hydrateHerdrAgentStatus,
   resolveTerminalTransportKind,
+  startHerdrAgentStream,
   startHerdrFrameStream,
   startLocalByteStream,
   type TerminalTransportKind,
@@ -278,7 +283,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       let lastCopiedSelection = "";
       const streamId = crypto.randomUUID();
       let transportKind: TerminalTransportKind | null = null;
-      const agentDetector = createAgentStatusDetector();
+      let agentDetector: ReturnType<typeof createAgentStatusDetector> | null =
+        null;
       let latestTitle: string | null = null;
       let latestProgress = "0;0";
       let publishedAgentStatus: AgentStatus | null =
@@ -330,9 +336,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         }
       }
 
+      function applyHerdrAgentDto(dto: SessionAgentStatus | null) {
+        const next = herdrAgentPublishStatus(dto);
+        publishAgentStatus(next.status, next.agentName);
+      }
+
       function runAgentDetectionNow() {
         agentDetectionTimer = null;
-        if (disposed || !isStreamReadyRef.current) return;
+        if (disposed || !agentDetector || !isStreamReadyRef.current) return;
         lastAgentDetectionAt = performance.now();
         const result = agentDetector.detect({
           screen: readTerminalDetectionScreen(term),
@@ -356,8 +367,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       runAgentDetectionNowRef.current = runAgentDetectionNow;
 
       function scheduleAgentDetection() {
-        if (disposed) return;
-        if (!isStreamReadyRef.current) {
+        if (disposed || transportKind === "herdr") return;
+        if (agentDetector === null || !isStreamReadyRef.current) {
           hasPendingAgentDetection = true;
           return;
         }
@@ -711,7 +722,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             onFrame: (frame) => {
               const action = cursor.apply(frame);
               if (!action || disposed) return;
-              applyHerdrFrameAction(term, action, scheduleAgentDetection);
+              applyHerdrFrameAction(term, action);
             },
             onError: (error) => {
               consola.warn(
@@ -721,12 +732,33 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             }
           });
           isStreamReadyRef.current = true;
-          if (hasPendingAgentDetection) {
-            scheduleAgentDetection();
+          try {
+            const dto = await hydrateHerdrAgentStatus(sessionId);
+            if (!disposed) applyHerdrAgentDto(dto);
+          } catch (error) {
+            consola.warn(
+              `[pty-terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
+              error
+            );
+            if (!disposed) applyHerdrAgentDto(null);
           }
+          if (disposed) return;
+          startHerdrAgentStream({
+            sessionId,
+            onUpdate: (dto) => {
+              if (!disposed) applyHerdrAgentDto(dto);
+            },
+            onError: (error) => {
+              consola.warn(
+                `[pty-terminal] failed to stream Herdr agent status for session ${sessionId}`,
+                error
+              );
+            }
+          });
           return;
         }
 
+        agentDetector = createAgentStatusDetector();
         restoreBuffer(sessionId, term);
         await attachPtyOutput({ sessionId, streamId });
         if (disposed) {

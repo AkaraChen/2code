@@ -9,13 +9,19 @@ import {
 	detachPtyOutput,
 	flushPtyOutput,
 	getPtySessionHistory,
+	getSessionAgentStatus,
 	getSessionBackend,
+	playSystemSound,
 	resizePty,
 	scrollPty,
 	streamHerdrOutput,
 	streamPtyOutput,
+	streamSessionAgentStatus,
 	writeToPty,
 } from "@/generated";
+import type { SessionAgentStatus } from "@/generated";
+import { useNotificationStore } from "@/features/settings/stores/notificationStore";
+import * as detector from "./detector";
 import { Terminal } from "./Terminal";
 import {
 	herdrFullRedrawFrame,
@@ -31,6 +37,7 @@ const {
 	toasterCreateMock,
 	writeClipboardTextMock,
 	searchAddonMock,
+	sendNotificationMock,
 } = vi.hoisted(() => {
 	interface MockTerminalInstance {
 		element: HTMLElement | null;
@@ -227,6 +234,7 @@ const {
 	return {
 		readClipboardTextMock,
 		searchAddonMock,
+		sendNotificationMock: vi.fn(),
 		terminalInstances,
 		toasterCreateMock,
 		writeClipboardTextMock,
@@ -238,6 +246,16 @@ vi.mock("@xterm/xterm", () => ({
 	Terminal: TerminalMock,
 }));
 
+vi.mock("./detector", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("./detector")>();
+	return {
+		...actual,
+		createAgentStatusDetector: vi.fn(() =>
+			actual.createAgentStatusDetector(),
+		),
+	};
+});
+
 vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 	readText: readClipboardTextMock,
 	writeText: writeClipboardTextMock,
@@ -247,12 +265,18 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 	open: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/plugin-notification", () => ({
+	isPermissionGranted: vi.fn(() => Promise.resolve(true)),
+	sendNotification: sendNotificationMock,
+}));
+
 vi.mock("@/generated", () => ({
 	attachPtyOutput: vi.fn(() => Promise.resolve()),
 	clearPtyOutput: vi.fn(() => Promise.resolve()),
 	detachPtyOutput: vi.fn(() => Promise.resolve()),
 	flushPtyOutput: vi.fn(() => Promise.resolve()),
 	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
+	getSessionAgentStatus: vi.fn(() => Promise.resolve(null)),
 	getSessionBackend: vi.fn(() => Promise.resolve("local")),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
@@ -264,6 +288,7 @@ vi.mock("@/generated", () => ({
 	scrollPty: vi.fn(() => Promise.resolve()),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
 	streamPtyOutput: vi.fn(() => Promise.resolve()),
+	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
 }));
 
@@ -355,6 +380,14 @@ function herdrChannel() {
 	return call![0].onOutput;
 }
 
+function herdrAgentChannel() {
+	const call = (streamSessionAgentStatus as unknown as Mock).mock.calls[0] as
+		| [{ onUpdate: { onmessage: (dto: SessionAgentStatus) => void } }]
+		| undefined;
+	expect(call).toBeDefined();
+	return call![0].onUpdate;
+}
+
 describe("terminal select to copy", () => {
 	const getPtySessionHistoryMock = getPtySessionHistory as unknown as Mock;
 
@@ -370,6 +403,13 @@ describe("terminal select to copy", () => {
 		(getSessionBackend as unknown as Mock).mockResolvedValue("local");
 		(streamHerdrOutput as unknown as Mock).mockClear();
 		(streamPtyOutput as unknown as Mock).mockClear();
+		(getSessionAgentStatus as unknown as Mock).mockReset();
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue(null);
+		(streamSessionAgentStatus as unknown as Mock).mockReset();
+		(streamSessionAgentStatus as unknown as Mock).mockResolvedValue(
+			undefined,
+		);
+		vi.mocked(detector.createAgentStatusDetector).mockClear();
 		useTerminalStore.setState({
 			profiles: {},
 			agentStatuses: {},
@@ -449,6 +489,7 @@ describe("terminal select to copy", () => {
 				"waiting",
 			);
 		});
+		expect(detector.createAgentStatusDetector).toHaveBeenCalled();
 	});
 
 	it("keeps pending agent detection until the stream is ready", async () => {
@@ -480,6 +521,8 @@ describe("terminal select to copy", () => {
 		});
 		expect(streamHerdrOutput).not.toHaveBeenCalled();
 		expect(getPtySessionHistory).toHaveBeenCalled();
+		expect(getSessionAgentStatus).not.toHaveBeenCalled();
+		expect(streamSessionAgentStatus).not.toHaveBeenCalled();
 		expect(latestTerminal().csiHandlers).toEqual([]);
 		latestTerminal().fireData("ls\n");
 		expect(writeToPty).toHaveBeenCalledWith({
@@ -507,6 +550,21 @@ describe("herdr xterm transport", () => {
 		(attachPtyOutput as unknown as Mock).mockResolvedValue(undefined);
 		(scrollPty as unknown as Mock).mockReset();
 		(scrollPty as unknown as Mock).mockResolvedValue(undefined);
+		(getSessionAgentStatus as unknown as Mock).mockReset();
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "unknown",
+			agentName: null,
+		} satisfies SessionAgentStatus);
+		(streamSessionAgentStatus as unknown as Mock).mockReset();
+		(streamSessionAgentStatus as unknown as Mock).mockResolvedValue(
+			undefined,
+		);
+		(playSystemSound as unknown as Mock).mockReset();
+		sendNotificationMock.mockReset();
+		vi.mocked(detector.createAgentStatusDetector).mockClear();
+		useNotificationStore.setState({ enabled: false, sound: "Ping" });
+		vi.spyOn(document, "hasFocus").mockReturnValue(true);
 		searchAddonMock.findNext.mockReset();
 		searchAddonMock.findPrevious.mockReset();
 		searchAddonMock.clearDecorations.mockReset();
@@ -537,6 +595,7 @@ describe("herdr xterm transport", () => {
 		const view = renderTerminal(isActive);
 		await waitFor(() => {
 			expect(streamHerdrOutput).toHaveBeenCalled();
+			expect(streamSessionAgentStatus).toHaveBeenCalled();
 		});
 		return view;
 	}
@@ -726,5 +785,119 @@ describe("herdr xterm transport", () => {
 			expect.objectContaining({ incremental: true }),
 		);
 		expect(getPtySessionHistory).not.toHaveBeenCalled();
+	});
+
+	it("does not construct the local detector or parse OSC for lifecycle", async () => {
+		await renderHerdr();
+		expect(detector.createAgentStatusDetector).not.toHaveBeenCalled();
+		latestTerminal().fireTitleChange("Action Required");
+		await Promise.resolve();
+		expect(
+			useTerminalStore.getState().agentStatuses["session-1"],
+		).toBeUndefined();
+	});
+
+	it("publishes waiting from projected blocked status once when unfocused", async () => {
+		useNotificationStore.setState({ enabled: true, sound: "Ping" });
+		vi.spyOn(document, "hasFocus").mockReturnValue(false);
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		} satisfies SessionAgentStatus);
+		await renderHerdr();
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+			"waiting",
+		);
+		await waitFor(() => {
+			expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+		});
+		expect(playSystemSound).toHaveBeenCalledTimes(1);
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		});
+		expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+		expect(playSystemSound).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not re-notify a still-blocked pane after reconnect hydrate", async () => {
+		useNotificationStore.setState({ enabled: true, sound: "Ping" });
+		vi.spyOn(document, "hasFocus").mockReturnValue(false);
+		useTerminalStore.setState({
+			agentStatuses: { "session-1": "waiting" },
+		});
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		} satisfies SessionAgentStatus);
+		await renderHerdr();
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		});
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+			"waiting",
+		);
+		expect(sendNotificationMock).not.toHaveBeenCalled();
+		expect(playSystemSound).not.toHaveBeenCalled();
+	});
+
+	it("creates a completion once from running to done and keeps a dismissed one gone", async () => {
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "working",
+			agentName: "Claude Code",
+		} satisfies SessionAgentStatus);
+		await renderHerdr();
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+			"running",
+		);
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "done",
+			agentName: "Claude Code",
+		});
+		expect(
+			useTerminalStore.getState().agentStatuses["session-1"],
+		).toBeUndefined();
+		expect(useTerminalStore.getState().agentCompletions["session-1"]).toBe(
+			"completed",
+		);
+		useTerminalStore.getState().dismissAgentCompletion("session-1");
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "done",
+			agentName: "Claude Code",
+		});
+		expect(
+			useTerminalStore.getState().agentCompletions["session-1"],
+		).toBeUndefined();
+	});
+
+	it("does not create a completion when blocked becomes idle", async () => {
+		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
+			sessionId: "session-1",
+			status: "blocked",
+			agentName: "Claude Code",
+		} satisfies SessionAgentStatus);
+		await renderHerdr();
+		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
+			"waiting",
+		);
+		herdrAgentChannel().onmessage({
+			sessionId: "session-1",
+			status: "idle",
+			agentName: "Claude Code",
+		});
+		expect(
+			useTerminalStore.getState().agentStatuses["session-1"],
+		).toBeUndefined();
+		expect(
+			useTerminalStore.getState().agentCompletions["session-1"],
+		).toBeUndefined();
 	});
 });
