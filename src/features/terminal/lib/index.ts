@@ -25,6 +25,11 @@ export {
 } from "./herdrFrames";
 export { blockHerdrQueryReplies } from "./herdrQueryGuard";
 export {
+	resolveTerminalTransportKind,
+	startHerdrFrameStream,
+	startLocalByteStream,
+} from "./terminalTransport";
+export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
 export {
