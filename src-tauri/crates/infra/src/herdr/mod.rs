@@ -2,10 +2,11 @@
 //!
 //! Sidecar helpers locate the pinned executable and can run `herdr --version`.
 //! Server namespace, probe, and detached startup live in [`process`].
-//! Neither this module nor [`process`] opens an NDJSON control client or
-//! owns terminals or worktrees.
+//! Typed NDJSON requests live in [`transport`]. None of these modules
+//! attach terminals, own worktrees, or stop the Herdr server.
 
 pub mod process;
+pub mod transport;
 
 use std::fs::{self, File};
 use std::io;
