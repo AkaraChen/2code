@@ -327,6 +327,10 @@ impl HerdrStubAdapter {
 			.and_then(|mut map| map.remove(session_id))
 	}
 
+	pub fn release_session(&self, session_id: &str) {
+		drop(self.take_attachment(session_id));
+	}
+
 	pub fn attach_output(
 		&self,
 		session_id: &str,

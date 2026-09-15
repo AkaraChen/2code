@@ -240,6 +240,22 @@ impl RuntimeRouter {
 		self.selector.unbind(session_id)
 	}
 
+	/// Drop GUI ownership of a Herdr session without `pane.close`.
+	/// Live Local PTYs are refused so both runtimes cannot own the id.
+	pub fn release_herdr_session(
+		&self,
+		session_id: &str,
+	) -> Result<(), AppError> {
+		if self.local.has_live_session(session_id) {
+			return Err(AppError::PtyError(format!(
+				"refusing to kill a Local PTY for Herdr-owned session {session_id}"
+			)));
+		}
+		self.herdr.release_session(session_id);
+		let _ = self.selector.unbind(session_id);
+		Ok(())
+	}
+
 	pub fn backend_for(
 		&self,
 		session_id: &str,
