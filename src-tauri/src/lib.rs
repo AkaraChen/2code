@@ -19,6 +19,8 @@ pub fn run() {
 	let output_receivers = bridge::create_output_receivers();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
+	let herdr_clients = service::runtime::HerdrClientGuard::new();
+	let herdr_clients_for_exit = herdr_clients.clone();
 
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_process::init())
@@ -35,6 +37,7 @@ pub fn run() {
 		.manage(output_sinks)
 		.manage(output_receivers)
 		.manage(shutdown_flag)
+		.manage(herdr_clients)
 		.manage(layer_handle)
 		.manage(handler::updater::PendingUpdate::default())
 		.setup(move |app| {
@@ -158,6 +161,9 @@ pub fn run() {
 
 		if let tauri::RunEvent::Exit = event {
 			shutdown_for_exit.store(true, Ordering::Relaxed);
+			service::runtime::release_herdr_client_helpers(
+				&herdr_clients_for_exit,
+			);
 			infra::pty::close_all_sessions(&sessions_for_exit);
 			tracing::info!(target: "pty", "exit: joining read threads...");
 			infra::pty::join_all_read_threads(&read_threads_for_exit);

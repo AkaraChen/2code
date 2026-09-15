@@ -7,7 +7,10 @@ mod herdr;
 mod local;
 
 use std::collections::HashMap;
+use std::ffi::OsString;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
@@ -17,6 +20,9 @@ use model::runtime::{
 };
 
 pub use herdr::HerdrStubAdapter;
+pub use infra::herdr::process::{
+	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
+};
 pub use local::LocalAdapter;
 
 pub type RuntimeHandle = Arc<RuntimeRouter>;
@@ -198,6 +204,31 @@ impl RuntimeRouter {
 		}
 		Ok(())
 	}
+}
+
+/// Resolve the dedicated 2code Herdr listener. Never called from the
+/// Local default startup path.
+pub fn ensure_herdr_listener(
+	guard: &HerdrClientGuard,
+	executable: &Path,
+	xdg_config_home: std::path::PathBuf,
+	extra_env: &[(OsString, OsString)],
+) -> Result<HerdrEndpoint, AppError> {
+	let namespace = infra::herdr::process::resolve_namespace(xdg_config_home)?;
+	guard
+		.ensure(&infra::herdr::process::HerdrProcessEnv {
+			executable,
+			namespace: &namespace,
+			extra_env,
+			ready_timeout: Duration::from_secs(10),
+			cli_timeout: Duration::from_secs(5),
+		})
+		.map_err(AppError::from)
+}
+
+/// GUI exit: drop client helpers only. Does not stop the Herdr server.
+pub fn release_herdr_client_helpers(guard: &HerdrClientGuard) {
+	guard.release_client_helpers();
 }
 
 impl TerminalRuntime for RuntimeRouter {
@@ -632,5 +663,57 @@ mod tests {
 		assert!(fx.router.herdr.recorded_ops().is_empty());
 		fx.router.close_session(&restored.new_session_id).unwrap();
 		assert!(fx.router.herdr.recorded_ops().is_empty());
+	}
+
+	#[test]
+	fn local_startup_does_not_ensure_herdr_and_errors_stay_distinct() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		assert_eq!(fx.router.selected_backend(), RuntimeBackend::Local);
+		assert_eq!(SESSION_NAME, "2code");
+		assert_ne!(SESSION_NAME, "default");
+		let guard = HerdrClientGuard::new();
+		release_herdr_client_helpers(&guard);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		assert_eq!(
+			fx.router.owner(&created.session_id).unwrap(),
+			Some(RuntimeBackend::Local)
+		);
+		assert_eq!(fx.live_count(), 1);
+		assert!(fx.router.herdr.recorded_ops().is_empty());
+
+		let absent =
+			AppError::from(infra::herdr::process::HerdrProcessError::Absent {
+				socket: PathBuf::from("/tmp/2code.sock"),
+			});
+		let incompatible = AppError::from(
+			infra::herdr::process::HerdrProcessError::Incompatible {
+				message: "protocol 1".into(),
+				socket: PathBuf::from("/tmp/2code.sock"),
+			},
+		);
+		assert!(absent.to_string().contains("absent"));
+		assert!(incompatible.to_string().contains("incompatible"));
+		assert!(!absent.to_string().contains("incompatible"));
+		assert!(!incompatible.to_string().contains("absent"));
+	}
+
+	#[test]
+	fn gui_exit_drops_herdr_helpers_without_stopping_the_server() {
+		let lib = include_str!("../../../src/lib.rs");
+		assert!(
+			lib.contains("release_herdr_client_helpers"),
+			"GUI exit must drop Herdr client helpers"
+		);
+		assert!(
+			!lib.contains("server stop"),
+			"GUI exit must not stop the Herdr server"
+		);
+		assert!(
+			!lib.contains("ensure_herdr_listener"),
+			"Local default startup must not start a Herdr server"
+		);
 	}
 }
