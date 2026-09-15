@@ -22,5 +22,8 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 tar = "0.4.46"
 flate2 = "1.1.9"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 uuid = { version = "1", features = ["v4"] }
