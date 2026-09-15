@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HerdrTerminalFrame } from "@/generated";
+import restorationSrc from "../restoration.ts?raw";
+import terminalSrc from "../Terminal.tsx?raw";
+import addonsSrc from "./addons.ts?raw";
 import herdrFramesSrc from "./herdrFrames.ts?raw";
 import herdrQueryGuardSrc from "./herdrQueryGuard.ts?raw";
-import terminalSrc from "../Terminal.tsx?raw";
+import herdrScrollSrc from "./herdrScroll.ts?raw";
 import terminalTransportSrc from "./terminalTransport.ts?raw";
 import {
 	resolveTerminalTransportKind,
@@ -108,6 +111,9 @@ describe("production GUI transport", () => {
 			terminalTransportSrc,
 			herdrFramesSrc,
 			herdrQueryGuardSrc,
+			herdrScrollSrc,
+			addonsSrc,
+			restorationSrc,
 			terminalSrc,
 		].join("\n");
 		expect(src).not.toContain("pane.send_");
@@ -120,5 +126,7 @@ describe("production GUI transport", () => {
 		expect(src).not.toContain("herdr-client.sock");
 		expect(src).not.toContain("selected_backend");
 		expect(src).not.toContain("selectedBackend");
+		expect(src).not.toContain("pane.read");
+		expect(addonsSrc).toContain("@xterm/addon-search");
 	});
 });

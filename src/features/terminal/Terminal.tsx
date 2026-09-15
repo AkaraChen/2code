@@ -20,6 +20,7 @@ import {
   getPtySessionHistory,
   playSystemSound,
   resizePty,
+  scrollPty,
   writeToPty } from
 "@/generated";import { toast } from "sonner";
 
@@ -64,6 +65,7 @@ import {
   HerdrFrameCursor,
 } from "./lib/herdrFrames";
 import { blockHerdrQueryReplies } from "./lib/herdrQueryGuard";
+import { herdrPageScroll, herdrWheelScroll } from "./lib/herdrScroll";
 import {
   resolveTerminalTransportKind,
   startHerdrFrameStream,
@@ -416,6 +418,36 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       term.open(wrapper);
       termRef.current = term;
 
+      function sendHerdrScroll(
+        command: ReturnType<typeof herdrWheelScroll>,
+      ) {
+        if (!command) return;
+        void scrollPty({
+          sessionId,
+          direction: command.direction,
+          lines: command.lines,
+          source: command.source,
+        }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to scroll session ${sessionId}`,
+            error
+          );
+        });
+      }
+
+      function onHerdrWheel(event: WheelEvent) {
+        if (transportKind !== "herdr") return;
+        const command = herdrWheelScroll(event);
+        if (!command) return;
+        event.preventDefault();
+        event.stopPropagation();
+        sendHerdrScroll(command);
+      }
+      wrapper.addEventListener("wheel", onHerdrWheel, { passive: false });
+      cleanups.push(() => {
+        wrapper.removeEventListener("wheel", onHerdrWheel);
+      });
+
       // 1b. Point xterm's font measurement at attached canvases. WebKit cannot
       //     resolve locally installed fonts from a detached/offscreen canvas,
       //     which is what xterm measures with — see xtermMetricsPatch.ts.
@@ -464,6 +496,20 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 5. Combined key handler: app-specific shortcuts + kitty protocol suppression
       const kittyHandler = createTerminalKeyEventHandler(term);
       term.attachCustomKeyEventHandler((event) => {
+        if (
+        transportKind === "herdr" &&
+        event.type === "keydown" &&
+        (event.key === "PageUp" || event.key === "PageDown"))
+        {
+          const command = herdrPageScroll(event.key, term.rows);
+          if (command) {
+            event.preventDefault();
+            event.stopPropagation();
+            sendHerdrScroll(command);
+            return false;
+          }
+        }
+
         // 5a. App-specific shortcuts first (font size, clear, copy/paste, sequences)
         const action = getTerminalShortcutAction(event);
         if (action) {

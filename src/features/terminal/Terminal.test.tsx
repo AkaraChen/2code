@@ -1,4 +1,4 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "@tauri-apps/api/event";
@@ -11,6 +11,7 @@ import {
 	getPtySessionHistory,
 	getSessionBackend,
 	resizePty,
+	scrollPty,
 	streamHerdrOutput,
 	streamPtyOutput,
 	writeToPty,
@@ -29,10 +30,20 @@ const {
 	terminalInstances,
 	toasterCreateMock,
 	writeClipboardTextMock,
+	searchAddonMock,
 } = vi.hoisted(() => {
 	interface MockTerminalInstance {
 		fireSelectionChange: () => void;
 		fireTitleChange: (title: string) => void;
+		fireKey: (event: {
+			type: string;
+			key: string;
+			altKey?: boolean;
+			ctrlKey?: boolean;
+			metaKey?: boolean;
+			shiftKey?: boolean;
+			code?: string;
+		}) => boolean | undefined;
 		setSelection: (selection: string) => void;
 		writes: unknown[];
 		resetCount: number;
@@ -48,6 +59,12 @@ const {
 	const writeClipboardTextMock = vi.fn();
 	const readClipboardTextMock = vi.fn();
 	const toasterCreateMock = vi.fn();
+	const searchAddonMock = {
+		findNext: vi.fn(),
+		findPrevious: vi.fn(),
+		clearDecorations: vi.fn(),
+		onDidChangeResults: vi.fn(() => ({ dispose: vi.fn() })),
+	};
 
 	class MockTerminal {
 		cols: number;
@@ -76,6 +93,7 @@ const {
 		private binaryListeners: Array<(data: string) => void> = [];
 		private resizeListeners: Array<(size: { rows: number; cols: number }) => void> =
 			[];
+		private keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
 
 		constructor(options: { cols: number; rows: number }) {
 			this.cols = options.cols;
@@ -133,6 +151,28 @@ const {
 			}
 		}
 
+		fireKey(event: {
+			type: string;
+			key: string;
+			altKey?: boolean;
+			ctrlKey?: boolean;
+			metaKey?: boolean;
+			shiftKey?: boolean;
+			code?: string;
+		}) {
+			return this.keyHandler?.({
+				type: event.type,
+				key: event.key,
+				code: event.code,
+				altKey: event.altKey ?? false,
+				ctrlKey: event.ctrlKey ?? false,
+				metaKey: event.metaKey ?? false,
+				shiftKey: event.shiftKey ?? false,
+				preventDefault: vi.fn(),
+				stopPropagation: vi.fn(),
+			} as unknown as KeyboardEvent);
+		}
+
 		onSelectionChange(listener: () => void) {
 			this.selectionListeners.push(listener);
 			return { dispose: vi.fn() };
@@ -158,7 +198,9 @@ const {
 			return { dispose: vi.fn() };
 		}
 
-		attachCustomKeyEventHandler() {}
+		attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+			this.keyHandler = handler;
+		}
 
 		registerLinkProvider() {
 			return { dispose: vi.fn() };
@@ -167,6 +209,7 @@ const {
 
 	return {
 		readClipboardTextMock,
+		searchAddonMock,
 		terminalInstances,
 		toasterCreateMock,
 		writeClipboardTextMock,
@@ -201,6 +244,7 @@ vi.mock("@/generated", () => ({
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
 	),
+	scrollPty: vi.fn(() => Promise.resolve()),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
 	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
@@ -250,6 +294,7 @@ vi.mock("./lib", () => ({
 			onChange: vi.fn(() => ({ dispose: vi.fn() })),
 			progress: { state: 0, value: 0 },
 		},
+		searchAddon: searchAddonMock,
 		serializeAddon: { serialize: vi.fn(() => "") },
 		dispose: vi.fn(),
 	}),
@@ -443,6 +488,13 @@ describe("herdr xterm transport", () => {
 		(resizePty as unknown as Mock).mockClear();
 		(attachPtyOutput as unknown as Mock).mockClear();
 		(attachPtyOutput as unknown as Mock).mockResolvedValue(undefined);
+		(scrollPty as unknown as Mock).mockReset();
+		(scrollPty as unknown as Mock).mockResolvedValue(undefined);
+		searchAddonMock.findNext.mockReset();
+		searchAddonMock.findPrevious.mockReset();
+		searchAddonMock.clearDecorations.mockReset();
+		searchAddonMock.onDidChangeResults.mockReset();
+		searchAddonMock.onDidChangeResults.mockReturnValue({ dispose: vi.fn() });
 		(listen as unknown as Mock).mockClear();
 		useTerminalStore.setState({
 			profiles: {
@@ -590,5 +642,45 @@ describe("herdr xterm transport", () => {
 		);
 		expect(flushPtyOutput).not.toHaveBeenCalled();
 		expect(clearPtyOutput).not.toHaveBeenCalled();
+	});
+
+	it("scrolls the attached Herdr pane with wheel and page keys", async () => {
+		const { container } = await renderHerdr();
+		const wrapper = latestTerminal().element;
+		expect(wrapper).toBeTruthy();
+		fireEvent.wheel(wrapper!, { deltaY: -80 });
+		expect(scrollPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			direction: "up",
+			lines: 2,
+			source: "wheel",
+		});
+
+		latestTerminal().fireKey({ type: "keydown", key: "PageDown" });
+		expect(scrollPty).toHaveBeenCalledWith({
+			sessionId: "session-1",
+			direction: "down",
+			lines: latestTerminal().rows,
+			source: "pageKey",
+		});
+		expect(container.querySelector(".xterm")).toBeNull();
+	});
+
+	it("searches applied frames with the xterm SearchAddon", async () => {
+		await renderHerdr();
+		herdrChannel().onmessage(herdrFullRedrawFrame);
+		latestTerminal().fireKey({
+			type: "keydown",
+			key: "f",
+			ctrlKey: true,
+			shiftKey: true,
+		});
+		const input = await screen.findByRole("textbox");
+		fireEvent.change(input, { target: { value: "SCR01" } });
+		expect(searchAddonMock.findNext).toHaveBeenCalledWith(
+			"SCR01",
+			expect.objectContaining({ incremental: true }),
+		);
+		expect(getPtySessionHistory).not.toHaveBeenCalled();
 	});
 });

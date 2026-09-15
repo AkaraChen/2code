@@ -113,6 +113,8 @@ vi.mock("@/generated", () => ({
 	restorePtySession: vi.fn(() =>
 		Promise.resolve({ newSessionId: "mock-id", history: [] }),
 	),
+	getSessionBackend: vi.fn(() => Promise.resolve("local")),
+	scrollPty: vi.fn(() => Promise.resolve()),
 }));
 
 // ─── Mock @/generated/types ───
