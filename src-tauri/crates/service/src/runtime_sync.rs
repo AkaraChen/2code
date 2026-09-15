@@ -92,6 +92,17 @@ impl RuntimeProjection {
 		sorted_keys(&self.panes)
 	}
 
+	pub fn panes_in_workspace(&self, workspace_id: &str) -> Vec<ProjectedPane> {
+		let mut panes: Vec<ProjectedPane> = self
+			.panes
+			.values()
+			.filter(|pane| pane.workspace_id == workspace_id)
+			.cloned()
+			.collect();
+		panes.sort_by(|left, right| left.pane_id.cmp(&right.pane_id));
+		panes
+	}
+
 	/// Replace the projection from `session.snapshot` (`result` or the
 	/// inner `snapshot` object). Objects missing from the snapshot are
 	/// dropped, not recreated.

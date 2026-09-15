@@ -61,6 +61,17 @@ pub fn list_ids_by_profile(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn find_by_id(
+	conn: &mut SqliteConnection,
+	session_id: &str,
+) -> Result<PtySessionRecord, AppError> {
+	pty_sessions::table
+		.find(session_id)
+		.select(PtySessionRecord::as_select())
+		.first(conn)
+		.map_err(|_| AppError::NotFound(format!("Session: {session_id}")))
+}
+
 pub fn update_dimensions(
 	conn: &mut SqliteConnection,
 	session_id: &str,
@@ -198,6 +209,18 @@ mod tests {
 		let mut ids = all_session_ids(&mut conn).expect("all ids");
 		ids.sort();
 		assert_eq!(ids, vec!["session-1", "session-2"]);
+	}
+
+	#[test]
+	fn find_by_id_returns_the_inserted_session() {
+		let mut conn = setup_db();
+		let profile_id = setup_profile(&mut conn);
+		insert_session(&mut conn, &session_record("session-1", &profile_id))
+			.expect("insert session");
+		let found = find_by_id(&mut conn, "session-1").expect("find");
+		assert_eq!(found.id, "session-1");
+		assert_eq!(found.profile_id, profile_id);
+		assert!(find_by_id(&mut conn, "missing").is_err());
 	}
 
 	#[test]

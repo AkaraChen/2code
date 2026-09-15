@@ -3,7 +3,8 @@
 //! Handlers talk to [`RuntimeRouter`]. The Local adapter wraps the current
 //! PTY implementation. Herdr create/list/close use pane identities when a
 //! client is injected; write/resize require an attached CLI helper.
-//! History/restore stay fail-closed. Herdr is never the default.
+//! Herdr restore stays fail-closed: reopen attaches Bound panes instead
+//! of spawning a Local PTY. Herdr is never the default.
 
 mod herdr;
 mod local;
@@ -232,7 +233,34 @@ impl RuntimeRouter {
 		&self,
 		session_id: &str,
 	) -> Result<RuntimeBackend, AppError> {
-		self.selector.backend_for(session_id)
+		self.route_backend(session_id)
+	}
+
+	/// Owner, else a persisted Herdr pane mapping, else the default.
+	/// Mapped Herdr ids are never routed to Local restore.
+	fn route_backend(
+		&self,
+		session_id: &str,
+	) -> Result<RuntimeBackend, AppError> {
+		if let Some(owner) = self.selector.owner(session_id)? {
+			return Ok(owner);
+		}
+		if self.local.herdr_mapping(session_id)?.is_some() {
+			return Ok(RuntimeBackend::Herdr);
+		}
+		Ok(self.selector.default_backend())
+	}
+
+	fn bind_listed_herdr(
+		&self,
+		sessions: &[PtySessionRecord],
+	) -> Result<(), AppError> {
+		for session in sessions {
+			if self.selector.owner(&session.id)?.is_none() {
+				self.selector.bind(&session.id, RuntimeBackend::Herdr)?;
+			}
+		}
+		Ok(())
 	}
 
 	pub fn release_attachments(&self) {
@@ -333,25 +361,25 @@ impl TerminalRuntime for RuntimeRouter {
 		meta: &PtySessionMeta,
 		config: &PtyConfig,
 	) -> Result<RestoreResult, AppError> {
-		let backend = self.selector.backend_for(old_session_id)?;
-		let restored = self.adapter(backend).restore_session(
-			old_session_id,
-			meta,
-			config,
-		)?;
+		let backend = self.route_backend(old_session_id)?;
+		if backend == RuntimeBackend::Herdr {
+			return self.herdr.restore_session(old_session_id, meta, config);
+		}
+		let restored =
+			self.local.restore_session(old_session_id, meta, config)?;
 		let _ = self.selector.unbind(old_session_id);
-		if let Err(err) = self.selector.bind(&restored.new_session_id, backend)
+		if let Err(err) = self
+			.selector
+			.bind(&restored.new_session_id, RuntimeBackend::Local)
 		{
-			let _ = self
-				.adapter(backend)
-				.close_session(&restored.new_session_id);
+			let _ = self.local.close_session(&restored.new_session_id);
 			return Err(err);
 		}
 		Ok(restored)
 	}
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).close_session(session_id)?;
 		let _ = self.selector.unbind(session_id);
 		Ok(())
@@ -361,19 +389,37 @@ impl TerminalRuntime for RuntimeRouter {
 		&self,
 		project_id: &str,
 	) -> Result<Vec<PtySessionRecord>, AppError> {
-		let backend = self.selector.default_backend();
-		self.adapter(backend).list_project_sessions(project_id)
+		if self.selector.default_backend() == RuntimeBackend::Herdr {
+			let listed = self.herdr.list_project_sessions(project_id)?;
+			self.bind_listed_herdr(&listed)?;
+			return Ok(listed);
+		}
+		let mut local = self.local.list_project_sessions(project_id)?;
+		local.retain(|session| {
+			self.local
+				.herdr_mapping(&session.id)
+				.ok()
+				.flatten()
+				.is_none()
+		});
+		if !self.herdr.has_terminal_client() {
+			return Ok(local);
+		}
+		let herdr = self.herdr.list_project_sessions(project_id)?;
+		self.bind_listed_herdr(&herdr)?;
+		local.extend(herdr);
+		Ok(local)
 	}
 
 	fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).delete_session(session_id)?;
 		let _ = self.selector.unbind(session_id);
 		Ok(())
 	}
 
 	fn write(&self, session_id: &str, data: &[u8]) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).write(session_id, data)
 	}
 
@@ -383,22 +429,22 @@ impl TerminalRuntime for RuntimeRouter {
 		rows: u16,
 		cols: u16,
 	) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).resize(session_id, rows, cols)
 	}
 
 	fn history(&self, session_id: &str) -> Result<Vec<u8>, AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).history(session_id)
 	}
 
 	fn flush(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).flush(session_id)
 	}
 
 	fn clear(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.selector.backend_for(session_id)?;
+		let backend = self.route_backend(session_id)?;
 		self.adapter(backend).clear(session_id)
 	}
 
@@ -407,7 +453,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<(), AppError> {
-		match self.selector.backend_for(session_id)? {
+		match self.route_backend(session_id)? {
 			RuntimeBackend::Local => Ok(()),
 			RuntimeBackend::Herdr => {
 				if self.local.has_live_session(session_id) {
@@ -425,7 +471,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<(), AppError> {
-		match self.selector.backend_for(session_id)? {
+		match self.route_backend(session_id)? {
 			RuntimeBackend::Local => Ok(()),
 			RuntimeBackend::Herdr => {
 				self.herdr.detach_output(session_id, stream_id)
@@ -438,7 +484,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<model::runtime::HerdrTerminalFrame, AppError> {
-		match self.selector.backend_for(session_id)? {
+		match self.route_backend(session_id)? {
 			RuntimeBackend::Local => {
 				Err(AppError::PtyError("not a Herdr session".into()))
 			}
@@ -463,7 +509,8 @@ mod tests {
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
 	use infra::pty::{PtyReadThreads, PtySessionMap};
-	use model::pty::{PtyConfig, PtySessionMeta};
+	use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
+	use model::runtime::HERDR_NAMESPACE;
 
 	use super::*;
 	use crate::pty::{create_flush_senders, PtyContext};
@@ -831,6 +878,79 @@ mod tests {
 		assert!(fx.router.herdr.recorded_ops().is_empty());
 		fx.router.close_session(&restored.new_session_id).unwrap();
 		assert!(fx.router.herdr.recorded_ops().is_empty());
+	}
+
+	fn insert_mapped_herdr_session(fx: &Fixture, session_id: &str) {
+		let mut conn = fx.db.lock().unwrap();
+		repo::pty::insert_session(
+			&mut conn,
+			&NewPtySessionRecord {
+				id: session_id,
+				profile_id: "pr1",
+				title: "Herdr",
+				shell: "/bin/sh",
+				cwd: "/repo",
+				cols: 80,
+				rows: 24,
+			},
+		)
+		.unwrap();
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			"pr1",
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		repo::runtime_mapping::bind_session_pane(
+			&mut conn,
+			session_id,
+			HERDR_NAMESPACE,
+			"w1",
+			"w1:p1",
+		)
+		.unwrap();
+	}
+
+	#[test]
+	fn mapped_herdr_id_is_not_restored_as_local() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		insert_mapped_herdr_session(&fx, "herdr-sess");
+		assert_eq!(
+			fx.router.backend_for("herdr-sess").unwrap(),
+			RuntimeBackend::Herdr
+		);
+		assert_eq!(fx.router.owner("herdr-sess").unwrap(), None);
+		let live_before = fx.live_count();
+		let err = fx
+			.router
+			.restore_session("herdr-sess", &Fixture::meta(), &fx.config())
+			.map(|_| ())
+			.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is not available"),
+			"{err}"
+		);
+		assert_eq!(fx.live_count(), live_before);
+		assert!(fx.sessions.lock().unwrap().get("herdr-sess").is_none());
+		assert!(fx.router.herdr.recorded_ops().contains(&"restore"));
+		let listed = fx.router.list_project_sessions("p1").unwrap();
+		assert!(listed.iter().all(|session| session.id != "herdr-sess"));
+	}
+
+	#[test]
+	fn unmapped_local_sessions_still_list_for_restore() {
+		let fx = Fixture::new(RuntimeBackend::Local);
+		let created = fx
+			.router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		insert_mapped_herdr_session(&fx, "herdr-sess");
+		let listed = fx.router.list_project_sessions("p1").unwrap();
+		assert!(listed
+			.iter()
+			.any(|session| session.id == created.session_id));
+		assert!(listed.iter().all(|session| session.id != "herdr-sess"));
 	}
 
 	#[test]

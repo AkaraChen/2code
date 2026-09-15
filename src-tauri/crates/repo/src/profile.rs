@@ -130,6 +130,18 @@ pub fn list_branch_names_by_project(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn list_by_project(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<Vec<Profile>, AppError> {
+	profiles::table
+		.filter(profiles::project_id.eq(project_id))
+		.select(Profile::as_select())
+		.order(profiles::created_at.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 pub fn update_notes(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -234,6 +246,19 @@ mod tests {
 		assert!(branch_names.iter().any(|name| name == "main"));
 		assert!(branch_names.iter().any(|name| name == "feature/login"));
 		assert!(branch_names.iter().any(|name| name == "pr/tokyo-1234abcd"));
+	}
+
+	#[test]
+	fn list_by_project_returns_profiles_for_that_project() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test-1");
+		insert_test_project(&mut conn, "proj-2", "/tmp/test-2");
+		insert(&mut conn, "p1", "proj-1", "feature/login", "/w/p1").unwrap();
+
+		let listed = list_by_project(&mut conn, "proj-1").unwrap();
+		assert!(listed.iter().any(|profile| profile.id == "p1"));
+		assert!(listed.iter().any(|profile| profile.project_id == "proj-1"));
+		assert!(listed.iter().all(|profile| profile.project_id != "proj-2"));
 	}
 
 	#[test]
