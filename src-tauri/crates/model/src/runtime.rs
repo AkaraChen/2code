@@ -76,6 +76,18 @@ pub struct RuntimeDiscovery {
 	pub selected_backend: RuntimeBackend,
 }
 
+/// Decoded Herdr terminal frame for IPC. Not CLI wire JSON: no `type`,
+/// `encoding`, or base64 payload.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HerdrTerminalFrame {
+	pub seq: u64,
+	pub full: bool,
+	pub width: u16,
+	pub height: u16,
+	pub bytes: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -125,5 +137,22 @@ mod tests {
 	fn session_identity_is_the_2code_session_id() {
 		let identity = SessionIdentity::new("sess-1");
 		assert_eq!(identity.as_str(), "sess-1");
+	}
+
+	#[test]
+	fn herdr_frame_serializes_without_wire_json() {
+		let json = serde_json::to_value(HerdrTerminalFrame {
+			seq: 1,
+			full: true,
+			width: 80,
+			height: 24,
+			bytes: b"hi".to_vec(),
+		})
+		.unwrap();
+		assert_eq!(json["seq"], 1);
+		assert_eq!(json["full"], true);
+		assert!(json.get("type").is_none());
+		assert!(json.get("encoding").is_none());
+		assert!(json.get("bytes").is_some());
 	}
 }

@@ -41,6 +41,18 @@ pub enum AppError {
 
 	#[error("Runtime mapping was replaced: {0}")]
 	RuntimeMappingReplaced(String),
+
+	#[error("Herdr terminal controller conflict: {0}")]
+	HerdrControllerConflict(String),
+
+	#[error("Herdr terminal attach is unsupported on this platform: {0}")]
+	HerdrUnsupportedPlatform(String),
+
+	#[error("Herdr terminal message is too large: {0}")]
+	HerdrTerminalMessageTooLarge(String),
+
+	#[error("Herdr terminal consumer is too slow: {0}")]
+	HerdrTerminalSlowConsumer(String),
 }
 
 impl Serialize for AppError {
@@ -162,6 +174,24 @@ mod tests {
 		assert!(!missing.to_string().contains("replaced"));
 		assert!(!replaced.to_string().contains("already bound"));
 		assert!(!replaced.to_string().contains("missing"));
+	}
+
+	#[test]
+	fn display_terminal_bridge_errors_are_distinct() {
+		let conflict = AppError::HerdrControllerConflict(
+			"already has an attached client; retry with --takeover".into(),
+		);
+		let unsupported = AppError::HerdrUnsupportedPlatform("windows".into());
+		let oversize = AppError::HerdrTerminalMessageTooLarge("9 > 8".into());
+		let slow = AppError::HerdrTerminalSlowConsumer("cap".into());
+		assert!(conflict.to_string().contains("controller conflict"));
+		assert!(unsupported.to_string().contains("unsupported"));
+		assert!(oversize.to_string().contains("too large"));
+		assert!(slow.to_string().contains("too slow"));
+		assert!(!conflict.to_string().contains("unsupported"));
+		assert!(!unsupported.to_string().contains("conflict"));
+		assert!(!oversize.to_string().contains("slow"));
+		assert!(!slow.to_string().contains("too large"));
 	}
 
 	// --- Serialize produces JSON string ---

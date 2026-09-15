@@ -58,6 +58,12 @@ impl<'a> HerdrProcessEnv<'a> {
 			cli_timeout: CLI_TIMEOUT,
 		}
 	}
+
+	/// Isolate a sidecar command on the 2code namespace. Never the user
+	/// default session.
+	pub fn apply_to(&self, cmd: &mut Command) {
+		apply_namespace_env(cmd, self);
+	}
 }
 
 /// Result of probing the 2code namespace.

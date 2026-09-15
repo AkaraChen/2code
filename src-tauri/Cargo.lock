@@ -2276,6 +2276,7 @@ dependencies = [
 name = "infra"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "diesel",
  "diesel_migrations",
  "flate2",
