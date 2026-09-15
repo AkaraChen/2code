@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
 	BUFFER_STORAGE_PREFIX,
 	DIMS_STORAGE_PREFIX,
+	removeTerminalBuffer,
 	removeTerminalStorage,
 	sweepTerminalStorage,
 } from "./terminalStorage";
@@ -25,6 +26,22 @@ describe("removeTerminalStorage", () => {
 
 	it("tolerates missing keys", () => {
 		expect(() => removeTerminalStorage("missing")).not.toThrow();
+	});
+});
+
+describe("removeTerminalBuffer", () => {
+	beforeEach(() => {
+		localStorage.clear();
+	});
+
+	it("drops cached scrollback and keeps saved dimensions", () => {
+		localStorage.setItem(`${BUFFER_STORAGE_PREFIX}session-1`, "buffer");
+		localStorage.setItem(`${DIMS_STORAGE_PREFIX}session-1`, "{}");
+
+		removeTerminalBuffer("session-1");
+
+		expect(localStorage.getItem(`${BUFFER_STORAGE_PREFIX}session-1`)).toBeNull();
+		expect(localStorage.getItem(`${DIMS_STORAGE_PREFIX}session-1`)).toBe("{}");
 	});
 });
 

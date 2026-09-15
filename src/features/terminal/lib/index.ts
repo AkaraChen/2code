@@ -39,6 +39,7 @@ export { suppressQueryResponses } from "./suppressQueryResponses";
 export {
 	BUFFER_STORAGE_PREFIX,
 	DIMS_STORAGE_PREFIX,
+	removeTerminalBuffer,
 	removeTerminalStorage,
 	sweepTerminalStorage,
 } from "./terminalStorage";

@@ -11,6 +11,12 @@ function terminalSessionIdFromStorageKey(key: string): string | null {
 	return null;
 }
 
+export function removeTerminalBuffer(sessionId: string): void {
+	try {
+		localStorage.removeItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
+	} catch {}
+}
+
 export function removeTerminalStorage(sessionId: string): void {
 	try {
 		localStorage.removeItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
