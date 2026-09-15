@@ -105,6 +105,18 @@ pub enum TerminalScrollSource {
 	PageKey,
 }
 
+/// Herdr agent lifecycle projected onto a 2code session.
+///
+/// `status` is the raw Herdr `agent_status` string. `session_id` is the
+/// 2code id after `pane_id` mapping. Not a wire event envelope.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionAgentStatus {
+	pub session_id: String,
+	pub status: String,
+	pub agent_name: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -171,6 +183,24 @@ mod tests {
 		assert!(json.get("type").is_none());
 		assert!(json.get("encoding").is_none());
 		assert!(json.get("bytes").is_some());
+	}
+
+	#[test]
+	fn session_agent_status_serializes_without_wire_json() {
+		let json = serde_json::to_value(SessionAgentStatus {
+			session_id: "sess-1".into(),
+			status: "working".into(),
+			agent_name: Some("Claude Code".into()),
+		})
+		.unwrap();
+		assert_eq!(json["sessionId"], "sess-1");
+		assert_eq!(json["status"], "working");
+		assert_eq!(json["agentName"], "Claude Code");
+		assert!(json.get("type").is_none());
+		assert!(json.get("pane_id").is_none());
+		assert!(json.get("paneId").is_none());
+		assert!(json.get("agent_status").is_none());
+		assert!(json.get("display_agent").is_none());
 	}
 
 	#[test]

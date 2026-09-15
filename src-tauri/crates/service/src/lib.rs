@@ -6,6 +6,7 @@ pub mod project;
 pub mod pty;
 pub mod runtime;
 pub mod runtime_adoption;
+pub mod runtime_agent;
 pub mod runtime_mapping;
 pub mod runtime_sync;
 pub mod watcher;

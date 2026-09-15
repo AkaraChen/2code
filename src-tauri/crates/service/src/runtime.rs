@@ -18,8 +18,8 @@ use std::time::Duration;
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
-	CreateSessionResult, RuntimeBackend, RuntimeDiscovery, SessionIdentity,
-	SessionOwnership,
+	CreateSessionResult, RuntimeBackend, RuntimeDiscovery, SessionAgentStatus,
+	SessionIdentity, SessionOwnership,
 };
 
 pub use herdr::{
@@ -275,6 +275,17 @@ impl RuntimeRouter {
 
 	pub fn release_attachments(&self) {
 		self.herdr.release_attachments();
+	}
+
+	/// Herdr-owned ids only. Local-owned ids never read Herdr agent state.
+	pub fn session_agent_status(
+		&self,
+		session_id: &str,
+	) -> Result<Option<SessionAgentStatus>, AppError> {
+		if self.backend_for(session_id)? != RuntimeBackend::Herdr {
+			return Ok(None);
+		}
+		self.herdr.session_agent_status(session_id)
 	}
 
 	/// Terminate a bound session on its owner. Unbound live Local PTYs
@@ -992,6 +1003,12 @@ mod tests {
 			Some(RuntimeBackend::Local)
 		);
 		assert_eq!(fx.live_count(), 1);
+		assert!(fx.router.herdr.recorded_ops().is_empty());
+		assert!(fx
+			.router
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.is_none());
 		assert!(fx.router.herdr.recorded_ops().is_empty());
 
 		let absent =

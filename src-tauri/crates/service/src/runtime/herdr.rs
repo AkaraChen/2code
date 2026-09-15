@@ -26,11 +26,12 @@ use model::pty::{
 };
 use model::runtime::{
 	CreateSessionResult, HerdrTerminalFrame, RuntimeBackend,
-	RuntimeIdentityState, HERDR_NAMESPACE,
+	RuntimeIdentityState, SessionAgentStatus, HERDR_NAMESPACE,
 };
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::runtime_agent::mapped_agent_for_session;
 use crate::runtime_mapping::{pane_identity_state, workspace_identity_state};
 use crate::runtime_sync::RuntimeProjection;
 
@@ -320,6 +321,25 @@ impl HerdrStubAdapter {
 		if let Ok(mut map) = self.attachments.lock() {
 			map.clear();
 		}
+	}
+
+	/// Current projected agent state for a mapped Herdr session.
+	/// Missing/replaced panes fail closed (`None`).
+	pub fn session_agent_status(
+		&self,
+		session_id: &str,
+	) -> Result<Option<SessionAgentStatus>, AppError> {
+		self.record("agent_status");
+		let lifecycle = match self.lifecycle() {
+			Ok(lifecycle) => lifecycle,
+			Err(_) => return Ok(None),
+		};
+		let snapshot = lifecycle.client.session_snapshot()?;
+		let mut projection = RuntimeProjection::new();
+		projection.apply_snapshot(&snapshot)?;
+		lifecycle.with_db(|conn| {
+			mapped_agent_for_session(conn, &projection, session_id)
+		})
 	}
 
 	fn helper_for(
@@ -914,6 +934,8 @@ mod tests {
 
 	struct FakeState {
 		panes: HashMap<String, Vec<PaneView>>,
+		pane_agent_status: HashMap<String, String>,
+		pane_agent: HashMap<String, (Option<String>, Option<String>)>,
 		tab_create_calls: usize,
 		pane_close_calls: usize,
 		methods: Vec<String>,
@@ -949,6 +971,8 @@ mod tests {
 			Self {
 				state: Mutex::new(FakeState {
 					panes,
+					pane_agent_status: HashMap::new(),
+					pane_agent: HashMap::new(),
 					tab_create_calls: 0,
 					pane_close_calls: 0,
 					methods: Vec::new(),
@@ -982,6 +1006,23 @@ mod tests {
 				.entry(pane.workspace_id.clone())
 				.or_default()
 				.push(pane);
+		}
+
+		fn set_pane_agent(
+			&self,
+			pane_id: &str,
+			status: &str,
+			agent: Option<&str>,
+			display_agent: Option<&str>,
+		) {
+			let mut state = self.state.lock().unwrap();
+			state
+				.pane_agent_status
+				.insert(pane_id.to_string(), status.to_string());
+			state.pane_agent.insert(
+				pane_id.to_string(),
+				(agent.map(str::to_string), display_agent.map(str::to_string)),
+			);
 		}
 	}
 
@@ -1115,16 +1156,52 @@ mod tests {
 						"tab_id": pane.tab_id,
 						"workspace_id": pane.workspace_id,
 						"terminal_id": "term_live",
-						"revision": 1
+						"revision": 1,
+						"agent_status": state
+							.pane_agent_status
+							.get(&pane.pane_id)
+							.cloned()
+							.unwrap_or_else(|| "unknown".into()),
+						"agent": state
+							.pane_agent
+							.get(&pane.pane_id)
+							.and_then(|(agent, _)| agent.clone()),
+						"display_agent": state
+							.pane_agent
+							.get(&pane.pane_id)
+							.and_then(|(_, display)| display.clone())
 					}));
 				}
+			}
+			let mut agents = Vec::new();
+			for (pane_id, status) in &state.pane_agent_status {
+				if status == "unknown" {
+					continue;
+				}
+				let (agent, display_agent) = state
+					.pane_agent
+					.get(pane_id)
+					.cloned()
+					.unwrap_or((None, None));
+				agents.push(json!({
+					"pane_id": pane_id,
+					"tab_id": "",
+					"workspace_id": "",
+					"terminal_id": "term_live",
+					"focused": false,
+					"revision": 1,
+					"agent_status": status,
+					"agent": agent,
+					"display_agent": display_agent
+				}));
 			}
 			Ok(json!({
 				"type": "session_snapshot",
 				"snapshot": {
 					"workspaces": workspaces,
 					"tabs": tabs,
-					"panes": panes
+					"panes": panes,
+					"agents": agents
 				}
 			}))
 		}
@@ -1746,6 +1823,9 @@ time.sleep(30)
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("pane.read"));
 		assert!(!src.contains("--takeover"));
+		assert!(!src.contains("pane.report_agent"));
+		assert!(!src.contains("agent.start"));
+		assert!(!src.contains("agent.prompt"));
 		assert!(src.contains("attach_control"));
 	}
 
@@ -2057,6 +2137,95 @@ time.sleep(30)
 		router.close_session(&created.session_id).unwrap();
 		assert_eq!(router.owner(&created.session_id).unwrap(), None);
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn herdr_session_hydrates_unknown_agent_status() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let dto = fx
+			.adapter
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.expect("mapped unknown");
+		assert_eq!(dto.session_id, created.session_id);
+		assert_eq!(dto.status, "unknown");
+		assert_eq!(dto.agent_name, None);
+	}
+
+	#[test]
+	fn herdr_session_hydrates_working_identity_from_snapshot() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let pane_id = fx.mapping(&created.session_id);
+		fx.fake.set_pane_agent(
+			&pane_id,
+			"working",
+			Some("claude"),
+			Some("Claude Code"),
+		);
+		let dto = fx
+			.adapter
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.expect("mapped working");
+		assert_eq!(dto.status, "working");
+		assert_eq!(dto.agent_name.as_deref(), Some("Claude Code"));
+	}
+
+	#[test]
+	fn missing_pane_agent_status_fails_closed() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let pane_id = fx.mapping(&created.session_id);
+		fx.fake.pane_close(&pane_id).unwrap();
+		assert!(fx
+			.adapter
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.is_none());
+	}
+
+	#[test]
+	fn router_local_owned_id_never_reads_herdr_agent_status() {
+		let fx = Fixture::new();
+		let router = fx.local_default_router();
+		let created = router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		assert_eq!(
+			router.owner(&created.session_id).unwrap(),
+			Some(RuntimeBackend::Local)
+		);
+		assert!(router
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.is_none());
+		assert!(!fx.fake.calls().iter().any(|m| m == "session.snapshot"));
+	}
+
+	#[test]
+	fn router_herdr_owned_id_hydrates_agent_status() {
+		let fx = Fixture::new();
+		let router = fx.router();
+		let created = router
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		let dto = router
+			.session_agent_status(&created.session_id)
+			.unwrap()
+			.expect("herdr agent");
+		assert_eq!(dto.session_id, created.session_id);
+		assert_eq!(dto.status, "unknown");
 	}
 
 	#[test]
