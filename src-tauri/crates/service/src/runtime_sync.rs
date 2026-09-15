@@ -36,6 +36,36 @@ pub struct ProjectedTab {
 	pub label: String,
 }
 
+/// Optional agent identity for a projected pane. Keyed with the pane,
+/// never by display name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectedAgentIdentity {
+	pub agent: Option<String>,
+	pub display_agent: Option<String>,
+}
+
+impl ProjectedAgentIdentity {
+	pub fn display_name(&self) -> Option<&str> {
+		self.display_agent
+			.as_deref()
+			.filter(|name| !name.is_empty())
+			.or_else(|| self.agent.as_deref().filter(|name| !name.is_empty()))
+	}
+
+	fn from_value(value: &Value) -> Option<Self> {
+		let agent = optional_text(value.get("agent"));
+		let display_agent = optional_text(value.get("display_agent"));
+		if agent.is_none() && display_agent.is_none() {
+			None
+		} else {
+			Some(Self {
+				agent,
+				display_agent,
+			})
+		}
+	}
+}
+
 /// Pane identity in the Herdr projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectedPane {
@@ -44,6 +74,9 @@ pub struct ProjectedPane {
 	pub workspace_id: String,
 	pub terminal_id: String,
 	pub revision: u64,
+	/// Raw Herdr `agent_status` string (`unknown` / `working` / …).
+	pub agent_status: String,
+	pub agent_identity: Option<ProjectedAgentIdentity>,
 }
 
 /// Result of applying one subscribe event.
@@ -132,6 +165,10 @@ impl RuntimeProjection {
 			"pane_created" => self.create_pane(data),
 			"pane_updated" | "pane_moved" => self.update_pane(data),
 			"pane_closed" => self.close_pane(data),
+			"pane_agent_status_changed" => {
+				self.apply_agent_status_changed(data)
+			}
+			"pane_agent_detected" => self.apply_agent_detected(data),
 			_ => ApplyOutcome::Ignored,
 		}
 	}
@@ -252,6 +289,48 @@ impl RuntimeProjection {
 			ApplyOutcome::Ignored
 		}
 	}
+
+	fn apply_agent_status_changed(&mut self, data: &Value) -> ApplyOutcome {
+		let Some(id) = event_id(data, "pane_id") else {
+			return ApplyOutcome::Ignored;
+		};
+		let Some(pane) = self.panes.get_mut(id) else {
+			return ApplyOutcome::IgnoredStale;
+		};
+		let Some(status) = data.get("agent_status").and_then(Value::as_str)
+		else {
+			return ApplyOutcome::Ignored;
+		};
+		pane.agent_status = status.to_string();
+		match ProjectedAgentIdentity::from_value(data) {
+			Some(identity) => pane.agent_identity = Some(identity),
+			None if data.get("agent").is_some_and(Value::is_null) => {
+				pane.agent_identity = None;
+			}
+			None => {}
+		}
+		ApplyOutcome::Applied
+	}
+
+	fn apply_agent_detected(&mut self, data: &Value) -> ApplyOutcome {
+		let Some(id) = event_id(data, "pane_id") else {
+			return ApplyOutcome::Ignored;
+		};
+		let Some(pane) = self.panes.get_mut(id) else {
+			return ApplyOutcome::IgnoredStale;
+		};
+		match ProjectedAgentIdentity::from_value(data) {
+			Some(identity) => pane.agent_identity = Some(identity),
+			None if data.get("agent").is_some_and(Value::is_null) => {
+				pane.agent_identity = None;
+			}
+			None => {}
+		}
+		if let Some(status) = data.get("final_status").and_then(Value::as_str) {
+			pane.agent_status = status.to_string();
+		}
+		ApplyOutcome::Applied
+	}
 }
 
 /// One `{event, data}` line from `events.subscribe`.
@@ -364,6 +443,7 @@ const SUBSCRIBE_TYPES: &[&str] = &[
 	"pane.moved",
 	"pane.exited",
 	"pane.agent_detected",
+	"pane.agent_status_changed",
 	"layout.updated",
 ];
 
@@ -604,7 +684,31 @@ fn parse_panes(snap: &Value) -> HashMap<String, ProjectedPane> {
 			out.insert(record.pane_id.clone(), record);
 		}
 	}
+	overlay_agents(&mut out, snap);
 	out
+}
+
+/// Seed identity (and status when present) from `snapshot.agents` keyed
+/// by `pane_id`. Agents that name a missing pane are ignored.
+fn overlay_agents(panes: &mut HashMap<String, ProjectedPane>, snap: &Value) {
+	for item in snap["agents"]
+		.as_array()
+		.map(|a| a.as_slice())
+		.unwrap_or(&[])
+	{
+		let Some(pane_id) = item.get("pane_id").and_then(Value::as_str) else {
+			continue;
+		};
+		let Some(pane) = panes.get_mut(pane_id) else {
+			continue;
+		};
+		if let Some(status) = item.get("agent_status").and_then(Value::as_str) {
+			pane.agent_status = status.to_string();
+		}
+		if let Some(identity) = ProjectedAgentIdentity::from_value(item) {
+			pane.agent_identity = Some(identity);
+		}
+	}
 }
 
 fn workspace_from_value(value: &Value) -> Option<ProjectedWorkspace> {
@@ -641,7 +745,20 @@ fn pane_from_value(value: &Value) -> Option<ProjectedPane> {
 			.unwrap_or("")
 			.to_string(),
 		revision: value.get("revision").and_then(Value::as_u64).unwrap_or(0),
+		agent_status: value
+			.get("agent_status")
+			.and_then(Value::as_str)
+			.unwrap_or("unknown")
+			.to_string(),
+		agent_identity: ProjectedAgentIdentity::from_value(value),
 	})
+}
+
+fn optional_text(value: Option<&Value>) -> Option<String> {
+	value
+		.and_then(Value::as_str)
+		.filter(|text| !text.is_empty())
+		.map(str::to_string)
 }
 
 fn nested_or_self<'a>(data: &'a Value, key: &str) -> Option<&'a Value> {
@@ -984,8 +1101,297 @@ mod tests {
 		assert!(types.contains(&"workspace.closed"));
 		assert!(types.contains(&"tab.created"));
 		assert!(types.contains(&"layout.updated"));
+		assert!(types.contains(&"pane.agent_detected"));
+		assert!(types.contains(&"pane.agent_status_changed"));
 		assert!(!types.contains(&"pane.output_matched"));
-		assert!(!types.contains(&"pane.agent_status_changed"));
+	}
+
+	fn agent_info(
+		pane_id: &str,
+		agent: &str,
+		display: &str,
+		status: &str,
+	) -> Value {
+		json!({
+			"pane_id": pane_id,
+			"tab_id": "w1:t1",
+			"workspace_id": "w1",
+			"terminal_id": "term_a",
+			"focused": false,
+			"revision": 1,
+			"agent": agent,
+			"display_agent": display,
+			"agent_status": status
+		})
+	}
+
+	#[test]
+	fn snapshot_seeds_unknown_agent_status_and_empty_identity() {
+		let mut proj = RuntimeProjection::new();
+		proj.apply_snapshot(&base_snapshot(json!([pane(
+			"w1:p1", "w1:t1", "w1", "term_a", 1
+		)])))
+		.unwrap();
+		let pane = proj.pane("w1:p1").unwrap();
+		assert_eq!(pane.agent_status, "unknown");
+		assert_eq!(pane.agent_identity, None);
+	}
+
+	#[test]
+	fn snapshot_agents_seed_identity_by_pane_id_never_name() {
+		let mut snap = base_snapshot(json!([
+			pane("w1:p1", "w1:t1", "w1", "term_a", 1),
+			pane("w1:p2", "w1:t1", "w1", "term_b", 1)
+		]));
+		snap["snapshot"]["agents"] =
+			json!([agent_info("w1:p1", "claude", "Claude Code", "working")]);
+		let mut proj = RuntimeProjection::new();
+		proj.apply_snapshot(&snap).unwrap();
+		let one = proj.pane("w1:p1").unwrap();
+		assert_eq!(one.agent_status, "working");
+		assert_eq!(
+			one.agent_identity.as_ref().unwrap().display_name(),
+			Some("Claude Code")
+		);
+		assert_eq!(proj.pane("w1:p2").unwrap().agent_identity, None);
+		assert!(proj.pane("Claude Code").is_none());
+	}
+
+	#[test]
+	fn snapshot_agents_for_unknown_pane_id_are_ignored() {
+		let mut snap =
+			base_snapshot(json!([pane("w1:p1", "w1:t1", "w1", "term_a", 1)]));
+		snap["snapshot"]["agents"] = json!([agent_info(
+			"w1:missing",
+			"claude",
+			"Claude Code",
+			"working"
+		)]);
+		let mut proj = RuntimeProjection::new();
+		proj.apply_snapshot(&snap).unwrap();
+		assert_eq!(proj.pane_ids(), vec!["w1:p1"]);
+		assert_eq!(proj.pane("w1:p1").unwrap().agent_status, "unknown");
+		assert!(proj.pane("w1:missing").is_none());
+	}
+
+	#[test]
+	fn agent_status_events_update_existing_panes() {
+		let mut rec = RuntimeReconciler::new();
+		let gen = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent_status": "working",
+					"agent": "claude",
+					"display_agent": "Claude Code"
+				}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"working"
+		);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent_status": "blocked"
+				}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"blocked"
+		);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent_status": "done"
+				}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"done"
+		);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent_status": "idle"
+				}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"idle"
+		);
+	}
+
+	#[test]
+	fn agent_detected_sets_identity_on_existing_pane() {
+		let mut rec = RuntimeReconciler::new();
+		let gen = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane.agent_detected",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent": "codex"
+				}),
+			)),
+			ApplyOutcome::Applied
+		);
+		assert_eq!(
+			rec.projection()
+				.pane("w1:p1")
+				.unwrap()
+				.agent_identity
+				.as_ref()
+				.unwrap()
+				.display_name(),
+			Some("codex")
+		);
+	}
+
+	#[test]
+	fn stale_generation_does_not_apply_agent_status() {
+		let mut rec = RuntimeReconciler::new();
+		let first = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		let second = rec
+			.rebuild(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 2
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_ne!(first, second);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				first,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:p1",
+					"workspace_id": "w1",
+					"agent_status": "working"
+				}),
+			)),
+			ApplyOutcome::IgnoredStale
+		);
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"unknown"
+		);
+	}
+
+	#[test]
+	fn agent_events_for_missing_pane_are_stale() {
+		let mut rec = RuntimeReconciler::new();
+		let gen = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_agent_status_changed",
+				json!({
+					"pane_id": "w1:ghost",
+					"workspace_id": "w1",
+					"agent_status": "working"
+				}),
+			)),
+			ApplyOutcome::IgnoredStale
+		);
+		assert!(rec.projection().pane("w1:ghost").is_none());
+		assert_eq!(
+			rec.projection().pane("w1:p1").unwrap().agent_status,
+			"unknown"
+		);
+	}
+
+	#[test]
+	fn agent_events_do_not_apply_exited_layout_or_tab_moved() {
+		let mut rec = RuntimeReconciler::new();
+		let gen = rec
+			.bootstrap(
+				&base_snapshot(json!([pane(
+					"w1:p1", "w1:t1", "w1", "term_a", 1
+				)])),
+				&[],
+			)
+			.unwrap();
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"pane_exited",
+				json!({"pane_id": "w1:p1", "workspace_id": "w1"}),
+			)),
+			ApplyOutcome::Ignored
+		);
+		assert!(rec.projection().pane("w1:p1").is_some());
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"layout_updated",
+				json!({"layout": {"workspace_id": "w1"}}),
+			)),
+			ApplyOutcome::Ignored
+		);
+		assert_eq!(
+			rec.apply_event(&RuntimeEvent::new(
+				gen,
+				"tab_moved",
+				json!({"tab_id": "w1:t1", "workspace_id": "w1"}),
+			)),
+			ApplyOutcome::Ignored
+		);
 	}
 }
 
