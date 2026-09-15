@@ -462,7 +462,8 @@ impl HerdrStubAdapter {
 }
 
 /// Adopted workspace root is `{workspace_id}:p1`. Splits are not reused
-/// for extra 2code terminals; those use `tab.create`.
+/// for extra 2code terminals; those use `tab.create`. Template
+/// subdirectory cwds also skip this reuse so Herdr starts in that path.
 pub(crate) fn unbound_adopted_root_pane(
 	workspace_id: &str,
 	panes: &[PaneView],
@@ -476,6 +477,23 @@ pub(crate) fn unbound_adopted_root_pane(
 			None
 		}
 	})
+}
+
+fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
+	if cwd.is_empty() || !Path::new(cwd).is_absolute() {
+		return Err(AppError::PtyError("cwd must be an absolute path".into()));
+	}
+	Ok(())
+}
+
+fn same_checkout_path(left: &Path, right: &Path) -> bool {
+	if left == right {
+		return true;
+	}
+	match (left.canonicalize(), right.canonicalize()) {
+		(Ok(a), Ok(b)) => a == b,
+		_ => false,
+	}
 }
 
 fn new_unbound_panes<'a>(
@@ -626,6 +644,12 @@ impl HerdrLifecycle {
 		}
 	}
 
+	fn profile_checkout(&self, profile_id: &str) -> Result<String, AppError> {
+		self.with_db(|conn| {
+			Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
+		})
+	}
+
 	fn persist_session(
 		&self,
 		meta: &PtySessionMeta,
@@ -686,19 +710,23 @@ impl HerdrLifecycle {
 		meta: &PtySessionMeta,
 		config: &PtyConfig,
 	) -> Result<CreateSessionResult, AppError> {
+		require_absolute_cwd(&config.cwd)?;
 		let workspace_id = self.bound_workspace(&meta.profile_id)?;
 		let bound = self.bound_pane_ids(&workspace_id)?;
 		let listed = self.client.pane_list(&workspace_id)?;
-		if let Some(pane_id) =
-			unbound_adopted_root_pane(&workspace_id, &listed, &bound)
-		{
-			return self.persist_created_pane(
-				meta,
-				config,
-				&workspace_id,
-				&pane_id,
-				false,
-			);
+		let checkout = self.profile_checkout(&meta.profile_id)?;
+		if same_checkout_path(Path::new(&config.cwd), Path::new(&checkout)) {
+			if let Some(pane_id) =
+				unbound_adopted_root_pane(&workspace_id, &listed, &bound)
+			{
+				return self.persist_created_pane(
+					meta,
+					config,
+					&workspace_id,
+					&pane_id,
+					false,
+				);
+			}
 		}
 		let pane_id = match self.client.tab_create(
 			&workspace_id,
@@ -1633,6 +1661,51 @@ time.sleep(30)
 			Some(expected_cwd.as_str())
 		);
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn subdirectory_cwd_skips_root_reuse_and_tab_creates() {
+		let fx = Fixture::new();
+		let sub = fx.cwd.path().join("pkg");
+		std::fs::create_dir_all(&sub).unwrap();
+		let mut config = fx.config();
+		config.cwd = sub.to_string_lossy().into_owned();
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &config)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(
+			fx.fake.last_tab_create_cwd().as_deref(),
+			Some(config.cwd.as_str())
+		);
+		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
+		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+	}
+
+	#[test]
+	fn empty_or_relative_cwd_fails_closed_without_tab_create() {
+		let fx = Fixture::new();
+		let mut empty = fx.config();
+		empty.cwd.clear();
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &empty)
+			.unwrap_err();
+		assert!(err.to_string().contains("absolute"), "{err}");
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert!(!fx.fake.calls().contains(&"pane.list".to_string()));
+
+		let mut relative = fx.config();
+		relative.cwd = "pkg".into();
+		let err = fx
+			.adapter
+			.create_session(&Fixture::meta(), &relative)
+			.unwrap_err();
+		assert!(err.to_string().contains("absolute"), "{err}");
+		assert_eq!(fx.fake.tab_create_calls(), 0);
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
