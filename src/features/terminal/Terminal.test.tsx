@@ -36,6 +36,8 @@ const {
 		setSelection: (selection: string) => void;
 		writes: unknown[];
 		resetCount: number;
+		cols: number;
+		rows: number;
 		csiHandlers: Array<{ final: string }>;
 		fireData: (data: string) => void;
 		fireBinary: (data: string) => void;
