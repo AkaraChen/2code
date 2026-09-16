@@ -500,14 +500,19 @@ pub fn connect_gui_herdr(
 	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
 		.map_err(AppError::from)?;
 	let json = Arc::new(HerdrJsonTerminals::new(client));
-	if let Err(err) = crate::runtime_adoption::import_leftover_sqlite_profiles(
+	match crate::runtime_adoption::import_leftover_sqlite_profiles(
 		&opts.db,
 		json.as_ref(),
 	) {
-		tracing::warn!(
-			target: "herdr",
-			"leftover sqlite extra import failed: {err}"
-		);
+		Ok(report) => {
+			crate::runtime_adoption::log_failed_import_outcomes(&report);
+		}
+		Err(err) => {
+			tracing::warn!(
+				target: "herdr",
+				"leftover sqlite extra import failed: {err}"
+			);
+		}
 	}
 	Ok(HerdrStubAdapter::with_json_clients(
 		opts.db,
@@ -1189,6 +1194,7 @@ mod tests {
 		assert!(connect.contains("HerdrCliAttach"));
 		assert!(connect.contains("resolve_namespace"));
 		assert!(connect.contains("import_leftover_sqlite_profiles"));
+		assert!(connect.contains("log_failed_import_outcomes"));
 		let local_branch = runtime
 			.split("pub fn herdr_adapter_for_gui_backend")
 			.nth(1)

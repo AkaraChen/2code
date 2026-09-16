@@ -109,13 +109,31 @@ struct AdoptionTarget {
 }
 
 /// Import leftover sqlite extras via `worktree.open`. Does not persist
-/// mapping rows. Default checkouts are skipped (Task 10).
+/// mapping rows. Default checkouts are skipped (Task 10). Logs each
+/// Failed outcome, including uncertain `worktree.open`.
 pub fn import_leftover_sqlite_profiles(
 	db: &DbPool,
 	worktrees: &dyn HerdrWorktreeClient,
 ) -> Result<AdoptionReport, AppError> {
 	let mut opener = WorktreeClientOpener { client: worktrees };
-	import_leftover_sqlite_profiles_with(db, &mut opener)
+	let report = import_leftover_sqlite_profiles_with(db, &mut opener)?;
+	log_failed_import_outcomes(&report);
+	Ok(report)
+}
+
+/// Warn for Failed leftover extras. Does not fail the overall import.
+pub fn log_failed_import_outcomes(report: &AdoptionReport) {
+	for outcome in &report.outcomes {
+		if outcome.action != AdoptionAction::Failed {
+			continue;
+		}
+		tracing::warn!(
+			target: "herdr",
+			profile_id = %outcome.profile_id,
+			"leftover sqlite extra import failed: {}",
+			outcome.error.as_deref().unwrap_or("unknown")
+		);
+	}
 }
 
 /// Same import against a test opener. Not called from Local fallback.
@@ -634,6 +652,9 @@ mod tests {
 		assert!(!src.contains("setup_script"));
 		assert!(!src.contains("teardown_script"));
 		assert!(!src.contains("ensure_herdr_listener"));
+		assert!(src.contains("log_failed_import_outcomes"));
+		assert!(src.contains("tracing::warn"));
+		assert!(src.contains("AdoptionAction::Failed"));
 		let lib = include_str!("../../../src/lib.rs");
 		assert!(!lib.contains("adopt_existing_profiles"));
 		assert!(!lib.contains("import_leftover_sqlite_profiles"));
