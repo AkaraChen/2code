@@ -77,6 +77,15 @@ pub fn find_profile_by_workspace(
 		})
 }
 
+pub fn list_profile_mappings(
+	conn: &mut SqliteConnection,
+) -> Result<Vec<ProfileRuntimeMapping>, AppError> {
+	profile_runtime_mappings::table
+		.select(ProfileRuntimeMapping::as_select())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 fn refuse_stolen_workspace(
 	conn: &mut SqliteConnection,
 	namespace: &str,
@@ -486,6 +495,11 @@ mod tests {
 		.unwrap();
 		assert_eq!(session.pane_id, "w1:p1");
 		assert_eq!(session.workspace_id, "w1");
+
+		let listed = list_profile_mappings(&mut conn).unwrap();
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].profile_id, "prof-1");
+		assert_eq!(listed[0].workspace_id, "w1");
 
 		let production = include_str!("runtime_mapping.rs")
 			.split("#[cfg(test)]")
