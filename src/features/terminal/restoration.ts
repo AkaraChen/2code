@@ -1,23 +1,10 @@
 import consola from "consola";
-import {
-	closePtySession,
-	deletePtySessionRecord,
-	getSessionBackend,
-	restorePtySession,
-} from "@/generated";
-import { removeTerminalBuffer, removeTerminalStorage } from "./lib";
+import { getSessionBackend } from "@/generated";
+import { removeTerminalBuffer } from "./lib";
 import {
 	useTerminalStore,
-	type PendingTerminalRestore,
 	type TerminalTab,
 } from "./store";
-
-/**
- * Transient scrollback data for restored Local sessions.
- * Written during restoration, consumed once by Terminal.tsx on mount, then deleted.
- * Herdr reopen attaches the live pane instead and never populates this map.
- */
-export const sessionHistory = new Map<string, Uint8Array>();
 
 const pendingRestores = new Map<string, Promise<void>>();
 
@@ -32,17 +19,15 @@ export interface RestorableSession {
 }
 
 /**
- * Rebuild tabs from `list_project_sessions`. Herdr ids become live tabs on the
- * same 2code session id (attach on mount). Local ids keep the pending-restore
- * path that calls `restorePtySession`.
+ * Rebuild tabs from `list_project_sessions`. Session ids are live Herdr
+ * `pane_id`s and become tabs on the same identity (attach on mount).
  */
 export async function hydrateRestorableSessions(
 	sessions: RestorableSession[],
 ): Promise<void> {
 	for (const session of sessions) {
-		let backend: "local" | "herdr";
 		try {
-			backend = await getSessionBackend({ sessionId: session.id });
+			await getSessionBackend({ sessionId: session.id });
 		} catch (error) {
 			consola.error(
 				`[pty-restore] failed to resolve backend for ${session.id}`,
@@ -50,24 +35,7 @@ export async function hydrateRestorableSessions(
 			);
 			continue;
 		}
-
-		if (backend === "herdr") {
-			reattachHerdrSession(session);
-			continue;
-		}
-
-		useTerminalStore.getState().addRestoringTab(
-			session.profile_id,
-			session.id,
-			session.title,
-			{
-				oldSessionId: session.id,
-				shell: session.shell,
-				cwd: session.cwd,
-				rows: session.rows,
-				cols: session.cols,
-			},
-		);
+		reattachHerdrSession(session);
 	}
 }
 
@@ -93,7 +61,7 @@ export function restorePendingTerminalTab(
 	const existing = pendingRestores.get(key);
 	if (existing) return existing;
 
-	const promise = runRestore(profileId, tab.title, restore)
+	const promise = runRestore(profileId, restore.oldSessionId)
 		.catch((error) => {
 			consola.error(`[pty-restore] failed: ${restore.oldSessionId}`, error);
 			useTerminalStore.getState().closeTab(profileId, restore.oldSessionId);
@@ -105,58 +73,15 @@ export function restorePendingTerminalTab(
 	return promise;
 }
 
-async function runRestore(
-	profileId: string,
-	title: string,
-	restore: PendingTerminalRestore,
-) {
-	const backend = await getSessionBackend({
-		sessionId: restore.oldSessionId,
-	});
-	if (backend === "herdr") {
-		removeTerminalBuffer(restore.oldSessionId);
-		if (!isPendingRestoreStillOpen(profileId, restore.oldSessionId)) {
-			return;
-		}
-		useTerminalStore
-			.getState()
-			.finishRestoringTab(
-				profileId,
-				restore.oldSessionId,
-				restore.oldSessionId,
-			);
+async function runRestore(profileId: string, oldSessionId: string) {
+	await getSessionBackend({ sessionId: oldSessionId });
+	removeTerminalBuffer(oldSessionId);
+	if (!isPendingRestoreStillOpen(profileId, oldSessionId)) {
 		return;
 	}
-
-	const result = await restorePtySession({
-		oldSessionId: restore.oldSessionId,
-		meta: { profileId, title },
-		config: {
-			shell: restore.shell,
-			cwd: restore.cwd,
-			rows: restore.rows,
-			cols: restore.cols,
-			startupCommands: [],
-		},
-	});
-
-	removeTerminalStorage(restore.oldSessionId);
-
-	if (!isPendingRestoreStillOpen(profileId, restore.oldSessionId)) {
-		await Promise.allSettled([
-			closePtySession({ sessionId: result.newSessionId }),
-			deletePtySessionRecord({ sessionId: result.newSessionId }),
-		]);
-		return;
-	}
-
-	if (result.history.length > 0) {
-		sessionHistory.set(result.newSessionId, new Uint8Array(result.history));
-	}
-
 	useTerminalStore
 		.getState()
-		.finishRestoringTab(profileId, restore.oldSessionId, result.newSessionId);
+		.finishRestoringTab(profileId, oldSessionId, oldSessionId);
 }
 
 function isPendingRestoreStillOpen(profileId: string, oldSessionId: string) {

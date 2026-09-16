@@ -52,7 +52,6 @@ export {
 	resolveTerminalTransportKind,
 	startHerdrAgentStream,
 	startHerdrFrameStream,
-	startLocalByteStream,
 } from "./terminalTransport";
 export { TitleDebouncer } from "./titleDebounce";
 export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";

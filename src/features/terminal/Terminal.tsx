@@ -1,5 +1,3 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { listen } from "@tauri-apps/api/event";
 import {
   readText as readClipboardText,
   writeText as writeClipboardText } from
@@ -16,8 +14,6 @@ import {
   attachPtyOutput,
   clearPtyOutput,
   detachPtyOutput,
-  flushPtyOutput,
-  getPtySessionHistory,
   playSystemSound,
   resizePty,
   scrollPty,
@@ -26,10 +22,8 @@ import {
 import type { SessionAgentStatus } from "@/generated";
 import { toast } from "sonner";
 
-import {
-  createAgentStatusDetector,
-  readTerminalDetectionScreen } from
-"./detector";
+import type { createAgentStatusDetector } from "./detector";
+import { readTerminalDetectionScreen } from "./detector";
 import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
@@ -38,8 +32,6 @@ import {
   isAllowedTerminalLinkScheme,
   shouldBypassTerminalLinkConfirm,
 } from "./linkOpening";
-import { concatBytes, getSuffixPrefixOverlapLengthBytes } from "./overlap";
-import { sessionHistory } from "./restoration";
 import { useTerminalStore, type AgentStatus } from "./store";
 import { TerminalSearchBar } from "./TerminalSearchBar";
 import {
@@ -47,7 +39,6 @@ import {
   buildFontFamilyCss,
   createResizeScheduler,
   createTerminalKeyEventHandler,
-  BUFFER_STORAGE_PREFIX,
   DIMS_STORAGE_PREFIX,
   getTerminalParkingContainer,
   installAttachedCanvasMetrics,
@@ -71,16 +62,13 @@ import { herdrPageScroll, herdrWheelScroll } from "./lib/herdrScroll";
 import { herdrAgentPublishStatus } from "./lib/herdrAgent";
 import {
   hydrateHerdrAgentStatus,
-  resolveTerminalTransportKind,
   startHerdrAgentStream,
   startHerdrFrameStream,
-  startLocalByteStream,
   type TerminalTransportKind,
 } from "./lib/terminalTransport";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
-const SERIALIZE_SCROLLBACK = 1000;
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
 const AGENT_DETECTION_INTERVAL_MS = 250;
@@ -109,20 +97,6 @@ function persistDimensions(sessionId: string, cols: number, rows: number): void 
   } catch {}
 }
 
-function persistBuffer(sessionId: string, serializeAddon: SerializeAddon): void {
-  try {
-    const data = serializeAddon.serialize({ scrollback: SERIALIZE_SCROLLBACK });
-    localStorage.setItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`, data);
-  } catch {}
-}
-
-function restoreBuffer(sessionId: string, terminal: XTerm): void {
-  try {
-    const data = localStorage.getItem(`${BUFFER_STORAGE_PREFIX}${sessionId}`);
-    if (data) terminal.write(data);
-  } catch {}
-}
-
 interface TerminalProps {
   profileId: string;
   sessionId: string;
@@ -135,7 +109,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const isStreamReadyRef = useRef(false);
-  const pendingEventsRef = useRef<Uint8Array[]>([]);
   const isActiveRef = useRef(isActive);
   const runAgentDetectionNowRef = useRef<(() => void) | null>(null);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
@@ -268,22 +241,17 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const terminalRef = useCallback(
     (container: HTMLDivElement | null) => {
       if (!container) return;
-      const unlisteners: UnlistenFn[] = [];
       const cleanups: (() => void)[] = [];
 
       let disposed = false;
       resizeReadyRef.current = false;
       isStreamReadyRef.current = false;
-      pendingEventsRef.current = [];
-      const liveOutputBuffer: Uint8Array[] = [];
-      let liveOutputFrame: number | null = null;
       let agentDetectionTimer: number | null = null;
-      let hasPendingAgentDetection = false;
       let lastAgentDetectionAt = 0;
       let lastCopiedSelection = "";
       const streamId = crypto.randomUUID();
       let transportKind: TerminalTransportKind | null = null;
-      let agentDetector: ReturnType<typeof createAgentStatusDetector> | null =
+      const agentDetector: ReturnType<typeof createAgentStatusDetector> | null =
         null;
       let latestTitle: string | null = null;
       let latestProgress = "0;0";
@@ -369,10 +337,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       function scheduleAgentDetection() {
         if (disposed || transportKind === "herdr") return;
         if (agentDetector === null || !isStreamReadyRef.current) {
-          hasPendingAgentDetection = true;
           return;
         }
-        hasPendingAgentDetection = false;
         if (agentDetectionTimer !== null) return;
         const elapsed = performance.now() - lastAgentDetectionAt;
         const interval = isActiveRef.current ?
@@ -660,106 +626,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       latestProgress = `${addonsResult.progressAddon.progress.state};${addonsResult.progressAddon.progress.value}`;
       cleanups.push(() => progressDisposable.dispose());
 
-      function flushLiveOutputBuffer() {
-        liveOutputFrame = null;
-        if (liveOutputBuffer.length === 0 || disposed) return;
-        const output = concatBytes(liveOutputBuffer);
-        liveOutputBuffer.length = 0;
-        term.write(output, scheduleAgentDetection);
-      }
-
-      function writeLiveOutput(output: Uint8Array) {
-        if (output.length === 0 || disposed) return;
-        liveOutputBuffer.push(output);
-        if (liveOutputFrame !== null) return;
-        liveOutputFrame = window.requestAnimationFrame(flushLiveOutputBuffer);
-      }
-
-      function flushPendingEventsAfterHistory(history: Uint8Array) {
-        const pending = concatBytes(pendingEventsRef.current);
-        const overlap = getSuffixPrefixOverlapLengthBytes(history, pending);
-        const remaining = pending.subarray(overlap);
-        pendingEventsRef.current = [];
-        isStreamReadyRef.current = true;
-        if (hasPendingAgentDetection) {
-          scheduleAgentDetection();
-        }
-        if (remaining.length > 0) {
-          writeLiveOutput(remaining);
-        }
-      }
-
-      function replayInitialHistory(history: Uint8Array) {
-        if (disposed) return;
-        if (history.length === 0) {
-          flushPendingEventsAfterHistory(history);
-          return;
-        }
-        term.write(history, () => {
-          flushPendingEventsAfterHistory(history);
-        });
-      }
-
-      // 12. Register output for the owning backend, then replay Local history.
+      // 12. GUI always uses the Herdr frame stream.
       async function setupListenersAndReplayHistory() {
-        const kind = await resolveTerminalTransportKind(sessionId);
         if (disposed) return;
-        transportKind = kind;
+        transportKind = "herdr";
 
-        if (kind === "herdr") {
-          cleanups.push(blockHerdrQueryReplies(term));
-          const cursor = new HerdrFrameCursor();
-          await attachPtyOutput({ sessionId, streamId });
-          if (disposed) {
-            void detachPtyOutput({ sessionId, streamId }).catch(() => {});
-            return;
-          }
-          resizeReadyRef.current = true;
-          sendSessionResize(term.rows, term.cols);
-          startHerdrFrameStream({
-            sessionId,
-            streamId,
-            onFrame: (frame) => {
-              const action = cursor.apply(frame);
-              if (!action || disposed) return;
-              applyHerdrFrameAction(term, action);
-            },
-            onError: (error) => {
-              consola.warn(
-                `[pty-terminal] failed to stream Herdr output for session ${sessionId}`,
-                error
-              );
-            }
-          });
-          isStreamReadyRef.current = true;
-          try {
-            const dto = await hydrateHerdrAgentStatus(sessionId);
-            if (!disposed) applyHerdrAgentDto(dto);
-          } catch (error) {
-            consola.warn(
-              `[pty-terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
-              error
-            );
-            if (!disposed) applyHerdrAgentDto(null);
-          }
-          if (disposed) return;
-          startHerdrAgentStream({
-            sessionId,
-            onUpdate: (dto) => {
-              if (!disposed) applyHerdrAgentDto(dto);
-            },
-            onError: (error) => {
-              consola.warn(
-                `[pty-terminal] failed to stream Herdr agent status for session ${sessionId}`,
-                error
-              );
-            }
-          });
-          return;
-        }
-
-        agentDetector = createAgentStatusDetector();
-        restoreBuffer(sessionId, term);
+        cleanups.push(blockHerdrQueryReplies(term));
+        const cursor = new HerdrFrameCursor();
         await attachPtyOutput({ sessionId, streamId });
         if (disposed) {
           void detachPtyOutput({ sessionId, streamId }).catch(() => {});
@@ -767,59 +640,45 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         }
         resizeReadyRef.current = true;
         sendSessionResize(term.rows, term.cols);
-        startLocalByteStream({
+        startHerdrFrameStream({
           sessionId,
           streamId,
-          onBytes: (bytes) => {
-            if (!isStreamReadyRef.current) {
-              pendingEventsRef.current.push(bytes);
-              return;
-            }
-            writeLiveOutput(bytes);
+          onFrame: (frame) => {
+            const action = cursor.apply(frame);
+            if (!action || disposed) return;
+            applyHerdrFrameAction(term, action);
           },
           onError: (error) => {
             consola.warn(
-              `[pty-terminal] failed to stream output for session ${sessionId}`,
+              `[pty-terminal] failed to stream Herdr output for session ${sessionId}`,
               error
             );
           }
         });
-        const unlistenExit = await listen(
-          `pty-exit-${sessionId}`,
-          () => {
-            latestTitle = null;
-            latestProgress = "0;0";
-            publishAgentStatus(null, null);
-            writeLiveOutput(
-              new TextEncoder().encode(
-                "\r\n\x1B[90m[Process exited]\x1B[0m\r\n"
-              )
-            );
-          }
-        );
-        if (disposed) {
-          void detachPtyOutput({ sessionId, streamId }).catch(() => {});
-          unlistenExit();
-          return;
-        }
-        unlisteners.push(unlistenExit);
-        const restoredHistory = sessionHistory.get(sessionId);
-        if (restoredHistory) {
-          sessionHistory.delete(sessionId);
-          replayInitialHistory(restoredHistory);
-          return;
-        }
+        isStreamReadyRef.current = true;
         try {
-          await flushPtyOutput({ sessionId });
-          const history = await getPtySessionHistory({ sessionId });
-          replayInitialHistory(new Uint8Array(history));
+          const dto = await hydrateHerdrAgentStatus(sessionId);
+          if (!disposed) applyHerdrAgentDto(dto);
         } catch (error) {
           consola.warn(
-            `[pty-terminal] failed to load initial history for session ${sessionId}`,
+            `[pty-terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
             error
           );
-          flushPendingEventsAfterHistory(new Uint8Array(0));
+          if (!disposed) applyHerdrAgentDto(null);
         }
+        if (disposed) return;
+        startHerdrAgentStream({
+          sessionId,
+          onUpdate: (dto) => {
+            if (!disposed) applyHerdrAgentDto(dto);
+          },
+          onError: (error) => {
+            consola.warn(
+              `[pty-terminal] failed to stream Herdr agent status for session ${sessionId}`,
+              error
+            );
+          }
+        });
       }
       void setupListenersAndReplayHistory().catch((error) => {
         consola.warn(
@@ -859,33 +718,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
         void detachPtyOutput({ sessionId, streamId }).catch(() => {});
 
-        if (transportKind === "local") {
-          // Flush buffered PTY output to DB before teardown (best-effort)
-          flushPtyOutput({ sessionId }).catch(() => {});
-        }
-
         const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
           (profile) => profile.tabs.some((tab) => tab.id === sessionId)
         );
 
-        if (stillOpen && transportKind === "local") {
-          // Persist buffer + dimensions for cold restart or live remount.
-          if (serializeAddonRef.current) {
-            persistBuffer(sessionId, serializeAddonRef.current);
-          }
-          persistDimensions(sessionId, term.cols, term.rows);
-        } else if (stillOpen) {
+        if (stillOpen) {
           persistDimensions(sessionId, term.cols, term.rows);
         }
 
         // Reset stream state
         isStreamReadyRef.current = false;
-        pendingEventsRef.current = [];
-        liveOutputBuffer.length = 0;
-        if (liveOutputFrame !== null) {
-          window.cancelAnimationFrame(liveOutputFrame);
-          liveOutputFrame = null;
-        }
         if (agentDetectionTimer !== null) {
           window.clearTimeout(agentDetectionTimer);
           agentDetectionTimer = null;
@@ -894,9 +736,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           runAgentDetectionNowRef.current = null;
         }
 
-        for (const unlisten of unlisteners) {
-          unlisten();
-        }
         for (const cleanup of cleanups) {
           cleanup();
         }

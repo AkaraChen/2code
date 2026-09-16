@@ -13,7 +13,6 @@ import {
 	resolveTerminalTransportKind,
 	startHerdrAgentStream,
 	startHerdrFrameStream,
-	startLocalByteStream,
 	transportKindFromBackend,
 } from "./terminalTransport";
 
@@ -21,13 +20,11 @@ const {
 	getSessionAgentStatus,
 	getSessionBackend,
 	streamHerdrOutput,
-	streamPtyOutput,
 	streamSessionAgentStatus,
 } = vi.hoisted(() => ({
 	getSessionAgentStatus: vi.fn(),
 	getSessionBackend: vi.fn(),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
-	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
 }));
 
@@ -35,7 +32,6 @@ vi.mock("@/generated", () => ({
 	getSessionAgentStatus,
 	getSessionBackend,
 	streamHerdrOutput,
-	streamPtyOutput,
 	streamSessionAgentStatus,
 }));
 
@@ -45,61 +41,48 @@ beforeEach(() => {
 	getSessionBackend.mockReset();
 	streamHerdrOutput.mockReset();
 	streamHerdrOutput.mockResolvedValue(undefined);
-	streamPtyOutput.mockReset();
-	streamPtyOutput.mockResolvedValue(undefined);
 	streamSessionAgentStatus.mockReset();
 	streamSessionAgentStatus.mockResolvedValue(undefined);
 });
 
 describe("transportKindFromBackend", () => {
-	it("maps only herdr to the Herdr stream", () => {
+	it("maps every backend to the Herdr stream", () => {
 		expect(transportKindFromBackend("herdr")).toBe("herdr");
-		expect(transportKindFromBackend("local")).toBe("local");
 	});
 });
 
 describe("resolveTerminalTransportKind", () => {
-	it("uses per-session backend_for IPC, not selected_backend", async () => {
+	it("uses per-session backend IPC and always returns herdr", async () => {
 		getSessionBackend.mockResolvedValueOnce("herdr");
 		await expect(resolveTerminalTransportKind("sess-h")).resolves.toBe(
 			"herdr",
 		);
 		expect(getSessionBackend).toHaveBeenCalledWith({ sessionId: "sess-h" });
-		getSessionBackend.mockResolvedValueOnce("local");
-		await expect(resolveTerminalTransportKind("sess-l")).resolves.toBe(
-			"local",
-		);
 	});
 
 	it("documents unbound ids as the selected Herdr default", () => {
 		expect(terminalTransportSrc).not.toContain("Unbound ids are Local");
 		expect(terminalTransportSrc).toContain(
-			"Unbound ids follow the selected default (Herdr)",
+			"Unbound ids are Herdr",
 		);
 	});
 });
 
 describe("byte vs frame streams", () => {
-	it("never starts a Herdr frame stream for a Local-owned id", () => {
-		startLocalByteStream({
-			sessionId: "local-1",
-			streamId: "s1",
-			onBytes: () => {},
-		});
-		expect(streamPtyOutput).toHaveBeenCalledTimes(1);
-		expect(streamHerdrOutput).not.toHaveBeenCalled();
-		expect(streamSessionAgentStatus).not.toHaveBeenCalled();
-		expect(getSessionAgentStatus).not.toHaveBeenCalled();
+	it("never starts a Local byte stream", () => {
+		expect(terminalTransportSrc).not.toContain("streamPtyOutput");
+		expect(terminalTransportSrc).not.toContain("startLocalByteStream");
+		expect(terminalSrc).not.toContain("startLocalByteStream");
+		expect(terminalSrc).not.toContain("getPtySessionHistory");
 	});
 
-	it("never starts a Local byte stream for a Herdr-owned id", () => {
+	it("starts a Herdr frame stream", () => {
 		startHerdrFrameStream({
 			sessionId: "herdr-1",
 			streamId: "s1",
 			onFrame: () => {},
 		});
 		expect(streamHerdrOutput).toHaveBeenCalledTimes(1);
-		expect(streamPtyOutput).not.toHaveBeenCalled();
 	});
 
 	it("delivers Herdr frames as objects, not Local ArrayBuffer chunks", () => {
@@ -139,7 +122,6 @@ describe("herdr agent status IPC", () => {
 		expect(getSessionAgentStatus).toHaveBeenCalledWith({
 			sessionId: "herdr-1",
 		});
-		expect(streamPtyOutput).not.toHaveBeenCalled();
 	});
 
 	it("streams agent DTOs on the Herdr path only", () => {
@@ -151,7 +133,6 @@ describe("herdr agent status IPC", () => {
 			},
 		});
 		expect(streamSessionAgentStatus).toHaveBeenCalledTimes(1);
-		expect(streamPtyOutput).not.toHaveBeenCalled();
 		const calls = streamSessionAgentStatus.mock.calls as unknown as Array<
 			[
 				{
@@ -197,6 +178,9 @@ describe("production GUI transport", () => {
 		expect(src).not.toContain("pane.report_agent");
 		expect(src).not.toContain("agent.start");
 		expect(src).not.toContain("agent.prompt");
+		expect(src).not.toContain("streamPtyOutput");
+		expect(src).not.toContain("restorePtySession");
+		expect(src).not.toContain("deletePtySessionRecord");
 		expect(addonsSrc).toContain("@xterm/addon-search");
 	});
 });
