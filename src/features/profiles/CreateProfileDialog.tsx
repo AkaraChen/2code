@@ -60,11 +60,9 @@ export default function CreateProfileDialog({
 			}));
 		const live = liveProfileMatchingCreate(projects, created);
 		handleClose();
-		if (live) {
-			navigate(`/projects/${projectId}/profiles/${live.id}`);
-			return;
-		}
-		navigate(`/projects/${projectId}`);
+		navigate(
+			`/projects/${projectId}/profiles/${live?.id ?? created.id}`,
+		);
 	});
 
 	return (

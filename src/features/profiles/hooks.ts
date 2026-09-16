@@ -26,12 +26,13 @@ export function liveProfileMatchingCreate(
 	projects: ProjectWithProfiles[] | undefined,
 	created: Pick<
 		Profile,
-		"project_id" | "worktree_path" | "branch_name"
+		"id" | "project_id" | "worktree_path" | "branch_name"
 	>,
 ): Profile | undefined {
 	const project = projects?.find((item) => item.id === created.project_id);
 	if (!project) return undefined;
 	return (
+		project.profiles.find((profile) => profile.id === created.id) ??
 		project.profiles.find(
 			(profile) => profile.worktree_path === created.worktree_path,
 		) ??

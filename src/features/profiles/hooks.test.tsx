@@ -147,7 +147,7 @@ describe("profile hooks", () => {
 			});
 		});
 
-		it("does not inject the sqlite create result into the projects cache", async () => {
+		it("does not inject the create result into the projects cache", async () => {
 			const queryClient = createQueryClient();
 			const herdrList: ProjectWithProfiles[] = [
 				{
@@ -185,7 +185,7 @@ describe("profile hooks", () => {
 				},
 			]);
 			createProfileMock.mockResolvedValue({
-				id: "sqlite-uuid",
+				id: "w2",
 				project_id: "project-1",
 				branch_name: "feature/worktree",
 				worktree_path: "/tmp/worktrees/profile-1",
@@ -214,11 +214,56 @@ describe("profile hooks", () => {
 		});
 	});
 
-	it("matches a created sqlite row to the live workspace_id by path", () => {
+	it("matches the created workspace_id before path or branch", () => {
+		const created: Profile = {
+			id: "w2",
+			project_id: "project-1",
+			branch_name: "feature/worktree",
+			worktree_path: "/tmp/worktrees/other",
+			created_at: "now",
+			is_default: false,
+			notes: "",
+		};
+		const live = liveProfileMatchingCreate(
+			[
+				{
+					id: "project-1",
+					name: "Project 1",
+					folder: "/projects/one",
+					created_at: "2026-01-01T00:00:00Z",
+					sort_order: 1000,
+					profiles: [
+						{
+							id: "w1",
+							project_id: "project-1",
+							branch_name: "main",
+							worktree_path: "/projects/one",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: true,
+							notes: "",
+						},
+						{
+							id: "w2",
+							project_id: "project-1",
+							branch_name: "feature/worktree",
+							worktree_path: "/tmp/worktrees/profile-1",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: false,
+							notes: "",
+						},
+					],
+				},
+			],
+			created,
+		);
+		expect(live?.id).toBe("w2");
+	});
+
+	it("falls back to path when created.id is not in the live list", () => {
 		const created: Profile = {
 			id: "sqlite-uuid",
 			project_id: "project-1",
-			branch_name: "feature/worktree",
+			branch_name: "other-branch",
 			worktree_path: "/tmp/worktrees/profile-1",
 			created_at: "now",
 			is_default: false,
