@@ -106,6 +106,36 @@ One-shot import of existing sqlite profiles into Herdr is allowed in **#436 Task
 
 Do not implement or close #394 issues [#395](https://github.com/AkaraChen/2code/issues/395)–[#434](https://github.com/AkaraChen/2code/issues/434) from this branch.
 
+## #394 task numbers (leftover vs this plan)
+
+Bare “Task N” in older notes means **#394**, not #436. This table remaps every #394 task so later work does not follow Local-default / mapping-table / path-cache rules.
+
+| #394 | Title | This plan |
+| --- | --- | --- |
+| 1 | Verify the Herdr integration contract | **Superseded** by **#436 Task 1** / [#437](https://github.com/AkaraChen/2code/issues/437) (this rewrite). Pin/frames/exclusivity evidence is reused. |
+| 2 | Introduce a narrow runtime boundary | **#394 leftover (shipped).** **#436 Task 2** switches the default to Herdr; it does not reintroduce the boundary. |
+| 3 | Bundle the pinned Herdr sidecar | **#394 leftover (shipped).** Keep the **v0.9.0** pin. |
+| 4 | Implement server discovery and startup | **#394 leftover (shipped).** Detached sidecar already exists; the contract probe still uses a foreground `herdr server`. |
+| 5 | Implement the socket request client | **#394 leftover.** Unix JSON **verified**. Not **#436 Task 5** (stop mapping writes). Windows named pipes: [#399](https://github.com/AkaraChen/2code/issues/399). |
+| 6 | Synchronize runtime snapshots and events | **#394 leftover.** Feeds **#436 Tasks 3 and 6**. |
+| 7 | Persist project-to-runtime associations | **Inverted.** **#436 Task 5** stops treating mapping tables / `profiles.worktree_path` as authority. |
+| 8 | Adopt existing profiles and worktrees | **#394 leftover** (sqlite-seeded adopt). **#436 Task 10** starts/adopts from the project folder with no sqlite profile seed. |
+| 9 | Implement Herdr terminal lifecycle commands | **#394 leftover.** |
+| 10 | Bridge live terminal frames into Tauri | **#394 leftover.** Linux frames **verified**. Not **#436 Task 10** (launch/adopt). Windows attach: [#396](https://github.com/AkaraChen/2code/issues/396). |
+| 11 | Connect xterm.js to the Herdr transport | **#394 leftover, not this plan.** |
+| 12 | Restore terminals by reattachment | **#394 leftover.** Related to **#436 Task 6** (snapshot / `pane_id`, not `pty_sessions`). |
+| 13 | Drive agent indicators from Herdr | **#394 leftover, not this plan.** Live CLIs **unverified**: [#398](https://github.com/AkaraChen/2code/issues/398). |
+| 14 | Create profiles through Herdr worktree management | Related to **#436 Task 4**. Do not INSERT `profiles`. |
+| 15 | Delegate profile and project runtime cleanup | Related to **#436 Task 4**. Do not DELETE `profiles` as the delete authority. |
+| 16 | Reconcile workspace paths for Git and the editor | Related to **#436 Task 7**. Paths come from live Herdr, not sqlite `worktree_path`. |
+| 17 | Preserve shell and template behavior | **#394 leftover.** No create-time startup command: [#397](https://github.com/AkaraChen/2code/issues/397). This stack already sends init/startup after create. |
+| 18 | Expose runtime health and recovery | **#394 leftover, not this plan.** Controller takeover strings stay recorded above. |
+| 19 | Implement legacy-session migration and rollback | **#394 leftover.** One-shot import is allowed in **#436 Task 5 or 6**; then sqlite profiles are ignored. |
+| 20 | Add migration acceptance coverage | **#394 leftover, not this plan.** |
+| 21 | Make Herdr the default runtime | **#436 Task 2.** Not this branch (`RuntimeRouter::new` stays Local). |
+| 22 | Remove the local agent detector | **#394 leftover, not this plan.** |
+| 23 | Remove the legacy PTY runtime | **#436 Task 9.** Not this branch. |
+
 ## Pinned release
 
 | Field | Value |
@@ -168,7 +198,15 @@ cd src-tauri
 HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract -- --nocapture --test-threads=1
 ```
 
-Client-mode join probe only:
+Offline join-key fixtures (no Herdr binary):
+
+```bash
+cd src-tauri
+cargo test -p infra --test herdr_contract \
+  join_key_fixtures_record_path_to_workspace_binding -- --nocapture
+```
+
+Client-mode join probe only (live JSON `worktree.list` / `workspace.list` / `session.snapshot`):
 
 ```bash
 cd src-tauri
@@ -177,7 +215,7 @@ HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract \
   -- --nocapture --test-threads=1
 ```
 
-Optional: `HERDR_CONTRACT_DUMP=1` prints sanitized-field JSON for empty / primary / linked / second-repo / non-git stages (still uses the fixture socket, never the user default session).
+Optional: `HERDR_CONTRACT_DUMP=1` prints **live** (unsanitized temp-path) JSON for empty / primary / linked / second-repo / non-git stages. Committed excerpts in `tests/fixtures/herdr/lists/join-key.json` replace those paths with `/tmp/contract-*`. The dump still uses the fixture socket, never the user default session.
 
 Without `HERDR_CONTRACT_REQUIRED=1`, live tests skip if the binary is absent. `cargo test --workspace --exclude code` is the crate-level suite on machines without GTK/`gdk-3.0`.
 
@@ -203,9 +241,16 @@ rm -f "$HERDR_SOCKET_PATH" "${HERDR_SOCKET_PATH%.sock}-client.sock"
 # tempfile harness dirs are under TMPDIR; remove the leftover /tmp/.tmpXXXX if Drop did not
 ```
 
-Do **not** run `herdr server stop` without `HERDR_SOCKET_PATH`; that targets the user’s default session.
+Find leftover **fixture** sockets (names are `/tmp/2c<pid><seq>.sock`, not `~/.config/herdr`):
 
-`herdr server` stays in the foreground. Status reports `detached_server_daemon: false` for that launch. **#394 leftover (shipped on this stack):** Task 4 of that plan already detaches the sidecar so GUI exit does not take the server with it. Closing CLI clients does **not** stop this server. The probe does not use `--session` names for sockets; it uses `HERDR_SOCKET_PATH` so paths stay short.
+```bash
+ls /tmp/2c*.sock /tmp/2c*-client.sock 2>/dev/null
+ss -xlp | grep '/tmp/2c' || true
+```
+
+To stop one leftover fixture server, pass **that** socket as `HERDR_SOCKET_PATH` (same binary pin). Do **not** run `herdr server stop` without `HERDR_SOCKET_PATH`; that targets the user’s default session. Do not `server.stop` a non-fixture socket from this probe.
+
+`herdr server` stays in the foreground. Status reports `detached_server_daemon: false` for that launch. **#394 leftover Task 4 (shipped on this stack)** already detaches the sidecar so GUI exit does not take the server with it. Closing CLI clients does **not** stop this server. The probe does not use `--session` names for sockets; it uses `HERDR_SOCKET_PATH` so paths stay short.
 
 ## Control API (JSON)
 
@@ -307,7 +352,7 @@ Verified:
 - After `terminal.release`, the controller process **exits**. Killing the observer then leaves **no** attach clients. `pane_id` / `terminal_id` / shell pid stay the same; the live process keeps running (`DETACH_LIVE_TOKEN` still on screen). A new `terminal session control` **without** `--takeover` attaches; its first frame is `full: true` and includes that live screen. Input is a real newline (`touch <repo>/reconnected.ran`); execution is the file existing, not matching echoed command text.
 - **Verified coexistence:** an `observe` client stays connected while a `control` client owns input/resize. The observer receives `full: false` frames for later output and does not take ownership. A second `control` without `--takeover` still fails with the conflict close above.
 
-2code must not silently take control. Surfacing the conflict string and requiring explicit takeover is **#394 leftover, not this plan** (was #394 Task 18).
+2code must not silently take control. Surfacing the conflict string and requiring explicit takeover is **#394 leftover, not this plan** (#394 Task 18 is runtime health/recovery).
 
 ## Workspace and worktree lifecycle
 
