@@ -376,6 +376,66 @@ pub(crate) fn live_workspace_checkout(
 	checkout_for_workspace(worktrees, workspace_id)
 }
 
+/// Open Herdr workspace ids joined to a project folder.
+///
+/// Git uses `worktree.list` (`open_workspace_id` membership). Non-git
+/// uses `session.snapshot` pane `cwd` / `foreground_cwd`. Disk checkouts
+/// without an open workspace are omitted. sqlite `profiles` is not
+/// consulted.
+pub(crate) fn live_open_workspace_ids(
+	worktrees: &dyn HerdrWorktreeClient,
+	folder: &str,
+) -> Result<Vec<String>, AppError> {
+	let cwd = project_cwd(folder);
+	match worktrees.worktree_list(Some(&cwd), None) {
+		Ok(listed) => Ok(workspace_ids_from_worktree_list(&listed)),
+		Err(err) if is_not_git_worktree(&err) => {
+			match worktrees.session_snapshot() {
+				Ok(snap) => {
+					Ok(workspace_ids_from_snapshot_folder(&snap, folder))
+				}
+				Err(_) => Ok(Vec::new()),
+			}
+		}
+		Err(_) => Ok(Vec::new()),
+	}
+}
+
+fn workspace_ids_from_worktree_list(
+	listed: &[WorktreeListEntry],
+) -> Vec<String> {
+	let mut ids: Vec<String> = listed
+		.iter()
+		.filter_map(|entry| {
+			entry
+				.workspace_id
+				.as_deref()
+				.filter(|id| !id.is_empty())
+				.map(str::to_string)
+		})
+		.collect();
+	ids.sort();
+	ids.dedup();
+	ids
+}
+
+fn workspace_ids_from_snapshot_folder(
+	snapshot: &Value,
+	folder: &str,
+) -> Vec<String> {
+	let mut ids: Vec<String> = snapshot_panes(snapshot)
+		.iter()
+		.filter_map(|pane| {
+			let workspace_id = json_nonempty(pane, "workspace_id")?;
+			let cwd = pane_cwd(pane)?;
+			same_checkout_path(&cwd, folder).then(|| workspace_id.to_string())
+		})
+		.collect();
+	ids.sort();
+	ids.dedup();
+	ids
+}
+
 fn checkout_for_workspace(
 	worktrees: &dyn HerdrWorktreeClient,
 	workspace_id: &str,
@@ -1578,6 +1638,40 @@ mod tests {
 		assert!(listed[0].profiles[0].is_default);
 		assert_eq!(listed[0].profiles[0].worktree_path, "/nongit");
 		assert!(fake.methods().contains(&"session.snapshot".to_string()));
+	}
+
+	#[test]
+	fn live_open_workspace_ids_join_git_and_nongit_without_sqlite() {
+		let git = FakeList::new(Vec::new());
+		git.set_scoped(
+			"/repo",
+			vec![
+				primary("/repo", Some("w1"), Some("main")),
+				listed("/repo/linked", Some("w2"), Some("feat")),
+				primary("/repo/disk", None, Some("old")),
+			],
+		);
+		assert_eq!(
+			live_open_workspace_ids(git.as_ref(), "/repo").unwrap(),
+			vec!["w1".to_string(), "w2".to_string()]
+		);
+
+		let nongit = FakeList::new(Vec::new());
+		nongit.fail_not_git("/nongit");
+		nongit.set_snapshot(serde_json::json!({
+			"type": "session_snapshot",
+			"snapshot": {
+				"panes": [
+					{"pane_id": "w4:p1", "workspace_id": "w4", "cwd": "/nongit"},
+					{"pane_id": "w4:p2", "workspace_id": "w4", "cwd": "/nongit"},
+					{"pane_id": "w9:p1", "workspace_id": "w9", "cwd": "/other"}
+				]
+			}
+		}));
+		assert_eq!(
+			live_open_workspace_ids(nongit.as_ref(), "/nongit").unwrap(),
+			vec!["w4".to_string()]
+		);
 	}
 
 	#[test]
