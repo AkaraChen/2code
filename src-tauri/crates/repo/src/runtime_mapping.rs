@@ -126,27 +126,16 @@ fn refuse_stolen_pane(
 	Ok(())
 }
 
-fn require_session_workspace_matches_profile(
+fn require_session_exists(
 	conn: &mut SqliteConnection,
 	session_id: &str,
-	workspace_id: &str,
 ) -> Result<(), AppError> {
-	let profile_id: String = pty_sessions::table
+	pty_sessions::table
 		.find(session_id)
-		.select(pty_sessions::profile_id)
-		.first(conn)
-		.map_err(|_| AppError::NotFound(format!("Session: {session_id}")))?;
-	if let Some(profile) =
-		optional_found(find_profile_mapping(conn, &profile_id))?
-	{
-		if profile.workspace_id != workspace_id {
-			return Err(AppError::RuntimeMappingAlreadyBound(format!(
-				"session workspace_id {workspace_id} does not match profile {} workspace_id {}",
-				profile.profile_id, profile.workspace_id
-			)));
-		}
-	}
-	Ok(())
+		.select(pty_sessions::id)
+		.first::<String>(conn)
+		.map(|_| ())
+		.map_err(|_| AppError::NotFound(format!("Session: {session_id}")))
 }
 
 pub fn bind_profile_workspace(
@@ -282,7 +271,7 @@ pub fn bind_session_pane(
 ) -> Result<SessionRuntimeMapping, AppError> {
 	require_2code_identity(namespace, workspace_id, "workspace_id")?;
 	require_2code_identity(namespace, pane_id, "pane_id")?;
-	require_session_workspace_matches_profile(conn, session_id, workspace_id)?;
+	require_session_exists(conn, session_id)?;
 
 	if let Some(existing) =
 		optional_found(find_session_mapping(conn, session_id))?
@@ -323,7 +312,7 @@ pub fn replace_session_pane(
 ) -> Result<SessionRuntimeMapping, AppError> {
 	require_2code_identity(namespace, workspace_id, "workspace_id")?;
 	require_2code_identity(namespace, pane_id, "pane_id")?;
-	require_session_workspace_matches_profile(conn, session_id, workspace_id)?;
+	require_session_exists(conn, session_id)?;
 	let Some(existing) =
 		optional_found(find_session_mapping(conn, session_id))?
 	else {
@@ -728,49 +717,33 @@ mod tests {
 	}
 
 	#[test]
-	fn session_workspace_id_must_match_bound_profile_workspace() {
+	fn leftover_sqlite_fk_can_bind_a_different_live_workspace() {
 		let mut conn = setup_db();
 		seed_catalog(&mut conn);
 		bind_profile_workspace(&mut conn, "prof-1", HERDR_NAMESPACE, "w1")
 			.unwrap();
 
-		let mismatch = bind_session_pane(
+		let bound = bind_session_pane(
 			&mut conn,
 			"sess-1",
 			HERDR_NAMESPACE,
 			"w2",
 			"w2:p1",
 		)
-		.unwrap_err();
-		assert!(matches!(mismatch, AppError::RuntimeMappingAlreadyBound(_)));
-		assert!(mismatch.to_string().contains("does not match profile"));
+		.unwrap();
+		assert_eq!(bound.workspace_id, "w2");
+		assert_eq!(bound.pane_id, "w2:p1");
 
-		let bound = bind_session_pane(
+		let replaced = replace_session_pane(
 			&mut conn,
 			"sess-1",
 			HERDR_NAMESPACE,
-			"w1",
-			"w1:p1",
+			"w3",
+			"w3:p1",
 		)
 		.unwrap();
-		assert_eq!(bound.workspace_id, "w1");
-
-		let replace_mismatch = replace_session_pane(
-			&mut conn,
-			"sess-1",
-			HERDR_NAMESPACE,
-			"w2",
-			"w1:p2",
-		)
-		.unwrap_err();
-		assert!(matches!(
-			replace_mismatch,
-			AppError::RuntimeMappingAlreadyBound(_)
-		));
-		assert_eq!(
-			find_session_mapping(&mut conn, "sess-1").unwrap().pane_id,
-			"w1:p1"
-		);
+		assert_eq!(replaced.workspace_id, "w3");
+		assert_eq!(replaced.pane_id, "w3:p1");
 	}
 
 	#[test]

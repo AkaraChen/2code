@@ -369,7 +369,16 @@ fn live_herdr_profile_checkout(
 	let Some(worktrees) = runtime.herdr_worktrees_optional() else {
 		return Err(AppError::NotFound(format!("Profile: {profile_id}")));
 	};
-	checkout_for_workspace(worktrees, profile_id)
+	live_workspace_checkout(worktrees, profile_id)
+}
+
+/// Live checkout for a Herdr `workspace_id`: `worktree.list` then snapshot
+/// pane cwd. sqlite `profiles.worktree_path` is not consulted.
+pub(crate) fn live_workspace_checkout(
+	worktrees: &dyn HerdrWorktreeClient,
+	workspace_id: &str,
+) -> Result<String, AppError> {
+	checkout_for_workspace(worktrees, workspace_id)
 }
 
 fn checkout_for_workspace(

@@ -16,6 +16,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use diesel::SqliteConnection;
 use infra::db::DbPool;
 use infra::herdr::process::{HerdrNamespace, HerdrProcessEnv};
 use infra::herdr::terminal::{
@@ -200,6 +201,7 @@ impl HerdrWorktreeClient for HerdrJsonTerminals {
 struct HerdrLifecycle {
 	db: DbPool,
 	client: Arc<dyn HerdrTerminalClient>,
+	worktrees: Option<Arc<dyn HerdrWorktreeClient>>,
 }
 
 /// Sidecar + 2code namespace used to spawn one CLI helper per session.
@@ -269,7 +271,11 @@ impl HerdrStubAdapter {
 	) -> Self {
 		Self {
 			ops: Mutex::new(Vec::new()),
-			lifecycle: Some(HerdrLifecycle { db, client }),
+			lifecycle: Some(HerdrLifecycle {
+				db,
+				client,
+				worktrees: None,
+			}),
 			worktrees: None,
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
@@ -282,10 +288,23 @@ impl HerdrStubAdapter {
 		client: Arc<dyn HerdrTerminalClient>,
 		cli: HerdrCliAttach,
 	) -> Self {
+		Self::with_terminal_worktree_and_cli(db, client, None, cli)
+	}
+
+	pub fn with_terminal_worktree_and_cli(
+		db: DbPool,
+		client: Arc<dyn HerdrTerminalClient>,
+		worktrees: Option<Arc<dyn HerdrWorktreeClient>>,
+		cli: HerdrCliAttach,
+	) -> Self {
 		Self {
 			ops: Mutex::new(Vec::new()),
-			lifecycle: Some(HerdrLifecycle { db, client }),
-			worktrees: None,
+			lifecycle: Some(HerdrLifecycle {
+				db,
+				client,
+				worktrees: worktrees.clone(),
+			}),
+			worktrees,
 			cli: Some(cli),
 			attachments: Mutex::new(HashMap::new()),
 			startup_error: None,
@@ -313,6 +332,7 @@ impl HerdrStubAdapter {
 			lifecycle: Some(HerdrLifecycle {
 				db,
 				client: json.clone(),
+				worktrees: Some(json.clone()),
 			}),
 			worktrees: Some(json),
 			cli: Some(cli),
@@ -568,6 +588,67 @@ fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+fn snapshot_pane_cwd(snapshot: &Value, workspace_id: &str) -> Option<String> {
+	let snap = if snapshot.get("type").and_then(Value::as_str)
+		== Some("session_snapshot")
+	{
+		snapshot.get("snapshot").unwrap_or(snapshot)
+	} else {
+		snapshot
+	};
+	snap.get("panes")
+		.and_then(Value::as_array)
+		.into_iter()
+		.flatten()
+		.find_map(|pane| {
+			if pane.get("workspace_id").and_then(Value::as_str)
+				== Some(workspace_id)
+			{
+				pane.get("cwd")
+					.and_then(Value::as_str)
+					.filter(|cwd| !cwd.is_empty())
+					.or_else(|| {
+						pane.get("foreground_cwd")
+							.and_then(Value::as_str)
+							.filter(|cwd| !cwd.is_empty())
+					})
+					.map(str::to_string)
+			} else {
+				None
+			}
+		})
+}
+
+fn git_common_dir(path: &str) -> Option<PathBuf> {
+	let output = infra::no_window::command_without_windows_console("git")
+		.args(["rev-parse", "--git-common-dir"])
+		.current_dir(path)
+		.output()
+		.ok()?;
+	if !output.status.success() {
+		return None;
+	}
+	let raw = String::from_utf8_lossy(&output.stdout);
+	let trimmed = raw.trim();
+	if trimmed.is_empty() {
+		return None;
+	}
+	let resolved = Path::new(trimmed);
+	if resolved.is_absolute() {
+		resolved.canonicalize().ok()
+	} else {
+		Path::new(path).join(resolved).canonicalize().ok()
+	}
+}
+
+fn leftover_sqlite_id(profiles: &[model::profile::Profile]) -> Option<String> {
+	profiles
+		.iter()
+		.find(|profile| profile.is_default)
+		.or_else(|| profiles.first())
+		.map(|profile| profile.id.clone())
+}
+
 fn same_checkout_path(left: &Path, right: &Path) -> bool {
 	if left == right {
 		return true;
@@ -759,71 +840,26 @@ impl HerdrLifecycle {
 	}
 
 	fn profile_checkout(&self, profile_id: &str) -> Result<String, AppError> {
-		if let Ok(path) = self.live_checkout(profile_id) {
-			if !path.is_empty() {
-				return Ok(path);
-			}
-		}
-		match self.with_db(|conn| {
-			if let Ok(profile) = repo::profile::find_by_id(conn, profile_id) {
-				return Ok(profile.worktree_path);
-			}
-			match repo::runtime_mapping::find_profile_by_workspace(
-				conn,
-				HERDR_NAMESPACE,
-				profile_id,
-			) {
-				Ok(mapping) => {
-					Ok(repo::profile::find_by_id(conn, &mapping.profile_id)?
-						.worktree_path)
-				}
-				Err(AppError::NotFound(_)) => {
-					Err(AppError::NotFound(format!("Profile: {profile_id}")))
-				}
-				Err(err) => Err(err),
-			}
-		}) {
-			Ok(path) => Ok(path),
-			Err(AppError::NotFound(_)) => Ok(String::new()),
-			Err(err) => Err(err),
-		}
+		let workspace_id = self.bound_workspace(profile_id)?;
+		self.live_workspace_checkout(&workspace_id)
 	}
 
-	fn live_checkout(&self, profile_id: &str) -> Result<String, AppError> {
-		let workspace_id = self.bound_workspace(profile_id)?;
-		let snapshot = self.client.session_snapshot()?;
-		let snap = if snapshot.get("type").and_then(Value::as_str)
-			== Some("session_snapshot")
-		{
-			snapshot.get("snapshot").unwrap_or(&snapshot)
-		} else {
-			&snapshot
-		};
-		let panes = snap
-			.get("panes")
-			.and_then(Value::as_array)
-			.map(Vec::as_slice)
-			.unwrap_or(&[]);
-		Ok(panes
-			.iter()
-			.find_map(|pane| {
-				if pane.get("workspace_id").and_then(Value::as_str)
-					== Some(workspace_id.as_str())
-				{
-					pane.get("cwd")
-						.and_then(Value::as_str)
-						.filter(|cwd| !cwd.is_empty())
-						.or_else(|| {
-							pane.get("foreground_cwd")
-								.and_then(Value::as_str)
-								.filter(|cwd| !cwd.is_empty())
-						})
-						.map(str::to_string)
-				} else {
-					None
-				}
-			})
-			.unwrap_or_default())
+	fn live_workspace_checkout(
+		&self,
+		workspace_id: &str,
+	) -> Result<String, AppError> {
+		if let Some(worktrees) = &self.worktrees {
+			return crate::project::live_workspace_checkout(
+				worktrees.as_ref(),
+				workspace_id,
+			);
+		}
+		let snapshot = self.client.session_snapshot().map_err(|_| {
+			AppError::NotFound(format!("Profile: {workspace_id}"))
+		})?;
+		snapshot_pane_cwd(&snapshot, workspace_id).ok_or_else(|| {
+			AppError::NotFound(format!("Profile: {workspace_id}"))
+		})
 	}
 
 	fn project_init_script(&self, profile_id: &str) -> Vec<String> {
@@ -920,27 +956,63 @@ impl HerdrLifecycle {
 				return Ok(profile_id.to_string());
 			}
 			for project in repo::project::list_all(conn)? {
-				let same = project.folder == cwd
-					|| Path::new(&project.folder)
-						.canonicalize()
-						.ok()
-						.zip(Path::new(cwd).canonicalize().ok())
-						.is_some_and(|(left, right)| left == right);
-				if !same {
+				if !self.project_owns_live_workspace(
+					conn,
+					&project,
+					workspace_id,
+					cwd,
+				)? {
 					continue;
 				}
-				if let Some(profile) =
-					repo::profile::list_by_project(conn, &project.id)?
-						.into_iter()
-						.find(|profile| profile.is_default)
-				{
-					return Ok(profile.id);
+				let profiles =
+					repo::profile::list_by_project(conn, &project.id)?;
+				if let Some(id) = leftover_sqlite_id(&profiles) {
+					return Ok(id);
 				}
 			}
 			Err(AppError::NotFound(format!(
 				"Profile for workspace {workspace_id}"
 			)))
 		})
+	}
+
+	fn project_owns_live_workspace(
+		&self,
+		conn: &mut SqliteConnection,
+		project: &model::project::Project,
+		workspace_id: &str,
+		cwd: &str,
+	) -> Result<bool, AppError> {
+		if same_checkout_path(Path::new(&project.folder), Path::new(cwd)) {
+			return Ok(true);
+		}
+		let profiles = repo::profile::list_by_project(conn, &project.id)?;
+		if profiles.iter().any(|profile| {
+			same_checkout_path(
+				Path::new(&profile.worktree_path),
+				Path::new(cwd),
+			)
+		}) {
+			return Ok(true);
+		}
+		if git_common_dir(&project.folder)
+			.zip(git_common_dir(cwd))
+			.is_some_and(|(left, right)| left == right)
+		{
+			return Ok(true);
+		}
+		let Some(worktrees) = &self.worktrees else {
+			return Ok(false);
+		};
+		let listed = match worktrees
+			.worktree_list(Some(Path::new(&project.folder)), None)
+		{
+			Ok(listed) => listed,
+			Err(_) => return Ok(false),
+		};
+		Ok(listed
+			.iter()
+			.any(|entry| entry.workspace_id.as_deref() == Some(workspace_id)))
 	}
 
 	fn persist_created_pane(
@@ -974,7 +1046,11 @@ impl HerdrLifecycle {
 		let workspace_id = self.bound_workspace(&meta.profile_id)?;
 		let bound = self.bound_pane_ids(&workspace_id)?;
 		let listed = self.client.pane_list(&workspace_id)?;
-		let checkout = self.profile_checkout(&meta.profile_id)?;
+		let checkout = match self.profile_checkout(&meta.profile_id) {
+			Ok(path) => path,
+			Err(AppError::NotFound(_)) => config.cwd.clone(),
+			Err(err) => return Err(err),
+		};
 		if same_checkout_path(Path::new(&config.cwd), Path::new(&checkout)) {
 			if let Some(pane_id) =
 				unbound_adopted_root_pane(&workspace_id, &listed, &bound)
@@ -1357,6 +1433,7 @@ mod tests {
 		next_extra: u32,
 		last_tab_create_cwd: Option<String>,
 		on_list: Option<Arc<dyn Fn() + Send + Sync>>,
+		listed_worktrees: Vec<WorktreeListEntry>,
 	}
 
 	fn remove_pane(panes: &mut HashMap<String, Vec<PaneView>>, pane_id: &str) {
@@ -1397,6 +1474,7 @@ mod tests {
 					next_extra: 2,
 					last_tab_create_cwd: None,
 					on_list: None,
+					listed_worktrees: Vec::new(),
 				}),
 			}
 		}
@@ -1428,6 +1506,120 @@ mod tests {
 				.entry(pane.workspace_id.clone())
 				.or_default()
 				.push(pane);
+		}
+
+		fn set_worktree(
+			&self,
+			workspace_id: &str,
+			path: &Path,
+			is_linked_worktree: bool,
+		) {
+			let mut state = self.state.lock().unwrap();
+			let entry = WorktreeListEntry {
+				path: path.to_string_lossy().into_owned(),
+				branch: Some(if is_linked_worktree {
+					"feat/x".into()
+				} else {
+					"main".into()
+				}),
+				workspace_id: Some(workspace_id.to_string()),
+				is_linked_worktree,
+			};
+			if let Some(existing) =
+				state.listed_worktrees.iter_mut().find(|listed| {
+					listed.workspace_id.as_deref() == Some(workspace_id)
+				}) {
+				*existing = entry;
+			} else {
+				state.listed_worktrees.push(entry);
+			}
+		}
+
+		fn snapshot_json(&self) -> Result<Value, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("session.snapshot".into());
+			let mut workspaces = Vec::new();
+			let mut tabs = Vec::new();
+			let mut panes = Vec::new();
+			for (workspace_id, listed) in &state.panes {
+				workspaces.push(json!({
+					"workspace_id": workspace_id,
+					"label": workspace_id
+				}));
+				let cwd = state
+					.listed_worktrees
+					.iter()
+					.find(|entry| {
+						entry.workspace_id.as_deref() == Some(workspace_id)
+					})
+					.map(|entry| entry.path.clone())
+					.unwrap_or_default();
+				for pane in listed {
+					tabs.push(json!({
+						"tab_id": pane.tab_id,
+						"workspace_id": pane.workspace_id,
+						"label": ""
+					}));
+					let mut pane_json = json!({
+						"pane_id": pane.pane_id,
+						"tab_id": pane.tab_id,
+						"workspace_id": pane.workspace_id,
+						"terminal_id": "term_live",
+						"revision": 1,
+						"agent_status": state
+							.pane_agent_status
+							.get(&pane.pane_id)
+							.cloned()
+							.unwrap_or_else(|| "unknown".into()),
+						"agent": state
+							.pane_agent
+							.get(&pane.pane_id)
+							.and_then(|(agent, _)| agent.clone()),
+						"display_agent": state
+							.pane_agent
+							.get(&pane.pane_id)
+							.and_then(|(_, display)| display.clone())
+					});
+					if !cwd.is_empty() {
+						pane_json
+							.as_object_mut()
+							.expect("pane object")
+							.insert("cwd".into(), json!(cwd));
+					}
+					panes.push(pane_json);
+				}
+			}
+			let mut agents = Vec::new();
+			for (pane_id, status) in &state.pane_agent_status {
+				if status == "unknown" {
+					continue;
+				}
+				let (agent, display_agent) = state
+					.pane_agent
+					.get(pane_id)
+					.cloned()
+					.unwrap_or((None, None));
+				agents.push(json!({
+					"pane_id": pane_id,
+					"tab_id": "",
+					"workspace_id": "",
+					"terminal_id": "term_live",
+					"focused": false,
+					"revision": 1,
+					"agent_status": status,
+					"agent": agent,
+					"display_agent": display_agent
+				}));
+			}
+			Ok(json!({
+				"type": "session_snapshot",
+				"snapshot": {
+					"workspaces": workspaces,
+					"tabs": tabs,
+					"panes": panes,
+					"agents": agents
+				}
+			}))
 		}
 
 		fn set_pane_agent(
@@ -1576,75 +1768,75 @@ mod tests {
 		}
 
 		fn session_snapshot(&self) -> Result<Value, AppError> {
+			self.snapshot_json()
+		}
+	}
+
+	impl HerdrWorktreeClient for FakeTerminals {
+		fn worktree_create(
+			&self,
+			_request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			Err(AppError::PtyError(
+				"fake terminals do not create worktrees".into(),
+			))
+		}
+
+		fn worktree_list(
+			&self,
+			cwd: Option<&Path>,
+			workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
 			let mut state = self.state.lock().unwrap();
-			state.methods.push("session.snapshot".into());
-			let mut workspaces = Vec::new();
-			let mut tabs = Vec::new();
-			let mut panes = Vec::new();
-			for (workspace_id, listed) in &state.panes {
-				workspaces.push(json!({
-					"workspace_id": workspace_id,
-					"label": workspace_id
-				}));
-				for pane in listed {
-					tabs.push(json!({
-						"tab_id": pane.tab_id,
-						"workspace_id": pane.workspace_id,
-						"label": ""
-					}));
-					panes.push(json!({
-						"pane_id": pane.pane_id,
-						"tab_id": pane.tab_id,
-						"workspace_id": pane.workspace_id,
-						"terminal_id": "term_live",
-						"revision": 1,
-						"agent_status": state
-							.pane_agent_status
-							.get(&pane.pane_id)
-							.cloned()
-							.unwrap_or_else(|| "unknown".into()),
-						"agent": state
-							.pane_agent
-							.get(&pane.pane_id)
-							.and_then(|(agent, _)| agent.clone()),
-						"display_agent": state
-							.pane_agent
-							.get(&pane.pane_id)
-							.and_then(|(_, display)| display.clone())
-					}));
-				}
+			state.methods.push("worktree.list".into());
+			let listed = state.listed_worktrees.clone();
+			if let Some(workspace_id) = workspace_id {
+				return Ok(listed
+					.into_iter()
+					.filter(|entry| {
+						entry.workspace_id.as_deref() == Some(workspace_id)
+					})
+					.collect());
 			}
-			let mut agents = Vec::new();
-			for (pane_id, status) in &state.pane_agent_status {
-				if status == "unknown" {
-					continue;
-				}
-				let (agent, display_agent) = state
-					.pane_agent
-					.get(pane_id)
-					.cloned()
-					.unwrap_or((None, None));
-				agents.push(json!({
-					"pane_id": pane_id,
-					"tab_id": "",
-					"workspace_id": "",
-					"terminal_id": "term_live",
-					"focused": false,
-					"revision": 1,
-					"agent_status": status,
-					"agent": agent,
-					"display_agent": display_agent
-				}));
+			let Some(cwd) = cwd else {
+				return Ok(listed);
+			};
+			let cwd = cwd.to_string_lossy();
+			if listed.iter().any(|entry| {
+				entry.path == cwd
+					|| Path::new(&entry.path)
+						.canonicalize()
+						.ok()
+						.zip(Path::new(cwd.as_ref()).canonicalize().ok())
+						.is_some_and(|(left, right)| left == right)
+			}) {
+				return Ok(listed);
 			}
-			Ok(json!({
-				"type": "session_snapshot",
-				"snapshot": {
-					"workspaces": workspaces,
-					"tabs": tabs,
-					"panes": panes,
-					"agents": agents
-				}
-			}))
+			Ok(Vec::new())
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			_path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			Err(AppError::PtyError(
+				"fake terminals do not open worktrees".into(),
+			))
+		}
+
+		fn worktree_remove(
+			&self,
+			_workspace_id: &str,
+			_force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			Err(AppError::PtyError(
+				"fake terminals do not remove worktrees".into(),
+			))
+		}
+
+		fn session_snapshot(&self) -> Result<Value, AppError> {
+			self.snapshot_json()
 		}
 	}
 
@@ -1748,9 +1940,11 @@ time.sleep(30)
 				(OsString::from("HERDR_FAKE_DIR"), fake_dir.into_os_string()),
 			];
 			let fake = Arc::new(FakeTerminals::with_root("w1"));
-			let adapter = HerdrStubAdapter::with_terminal_client_and_cli(
+			fake.set_worktree("w1", cwd.path(), false);
+			let adapter = HerdrStubAdapter::with_terminal_worktree_and_cli(
 				db.clone(),
 				fake.clone(),
+				Some(fake.clone()),
 				HerdrCliAttach {
 					executable: fake_cli.clone(),
 					namespace: namespace.clone(),
@@ -1822,9 +2016,10 @@ time.sleep(30)
 					emitter: Arc::new(TestEmitter),
 					output_dir: logs,
 				}),
-				HerdrStubAdapter::with_terminal_client_and_cli(
+				HerdrStubAdapter::with_terminal_worktree_and_cli(
 					self.db.clone(),
 					self.fake.clone(),
+					Some(self.fake.clone()),
 					self.cli_attach(),
 				),
 			)
@@ -1943,6 +2138,80 @@ time.sleep(30)
 		assert_eq!(row.profile_id, "pr1");
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
 		assert_eq!(listed[0].profile_id, "w1");
+	}
+
+	#[test]
+	fn create_session_uses_live_checkout_not_sqlite_path() {
+		let fx = Fixture::new();
+		{
+			let mut conn = fx.db.lock().unwrap();
+			repo::profile::set_worktree_path(&mut conn, "pr1", "/stale")
+				.unwrap();
+		}
+		let created = fx
+			.adapter
+			.create_session(&Fixture::meta(), &fx.config())
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert!(fx.fake.calls().iter().any(|m| m == "worktree.list"));
+	}
+
+	#[test]
+	fn create_session_unmapped_linked_uses_leftover_sqlite_fk() {
+		let fx = Fixture::new();
+		let linked = fx.cwd.path().join("linked");
+		std::fs::create_dir_all(&linked).unwrap();
+		fx.fake.push_pane(PaneView {
+			pane_id: "w2:p1".into(),
+			tab_id: "w2:t1".into(),
+			workspace_id: "w2".into(),
+		});
+		fx.fake.set_worktree("w2", &linked, true);
+		let profile_count = {
+			let mut conn = fx.db.lock().unwrap();
+			repo::profile::list_by_project(&mut conn, "p1")
+				.unwrap()
+				.len()
+		};
+		let created = fx
+			.adapter
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "w2".to_string(),
+					title: "shell".to_string(),
+				},
+				&PtyConfig {
+					shell: "/bin/sh".into(),
+					cwd: linked.to_string_lossy().into_owned(),
+					rows: 24,
+					cols: 80,
+					startup_commands: Vec::new(),
+				},
+			)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w2:p1");
+		let row = {
+			let mut conn = fx.db.lock().unwrap();
+			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
+		};
+		assert_eq!(row.profile_id, "pr1");
+		assert_eq!(row.cwd, linked.to_string_lossy());
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert!(listed.iter().any(|session| session.profile_id == "w2"));
+		let mut conn = fx.db.lock().unwrap();
+		assert_eq!(
+			repo::profile::list_by_project(&mut conn, "p1")
+				.unwrap()
+				.len(),
+			profile_count
+		);
+		assert!(repo::runtime_mapping::find_profile_by_workspace(
+			&mut conn,
+			HERDR_NAMESPACE,
+			"w2",
+		)
+		.is_err());
 	}
 
 	#[test]
@@ -2743,7 +3012,11 @@ time.sleep(30)
 		fx.adapter.close_session(&first.session_id).unwrap();
 		assert!(fx.profile_workspace_id().is_none());
 		assert!(fx.cwd.path().join("keep").exists());
-		assert!(!fx.fake.calls().iter().any(|m| m.contains("worktree")));
+		assert!(!fx.fake.calls().iter().any(|m| {
+			m.contains("worktree.remove")
+				|| m.contains("worktree.create")
+				|| m.contains("worktree.open")
+		}));
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
