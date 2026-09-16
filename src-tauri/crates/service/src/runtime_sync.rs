@@ -1398,6 +1398,18 @@ mod tests {
 			ApplyOutcome::Ignored
 		);
 	}
+
+	#[test]
+	fn herdr_contract_docs_record_bootstrap_unit_tests() {
+		let docs = include_str!("../../../../docs/herdr-integration.md");
+		assert!(docs.contains("v0.9.0"));
+		assert!(!docs.contains("not separately race-tested"));
+		assert!(docs
+			.contains("bootstrap_applies_events_that_arrive_during_snapshot"));
+		assert!(docs.contains("disconnect_rebuilds_and_drops_stale_events"));
+		assert!(docs.contains("already detaches the sidecar"));
+		assert!(!docs.contains("Task 4 must detach"));
+	}
 }
 
 #[cfg(all(test, unix))]
