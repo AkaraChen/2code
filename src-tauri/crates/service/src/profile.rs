@@ -292,93 +292,6 @@ fn build_worktree_path(
 	))
 }
 
-struct CreatedWorktree {
-	id: String,
-	branch_name: String,
-	worktree_path: PathBuf,
-	worktree_str: String,
-}
-
-fn create_worktree(
-	project_folder: &str,
-	branch_name: &str,
-	auto_generated: bool,
-	existing_branches: &mut Vec<String>,
-	project_worktree_dir: Option<&str>,
-	default_worktree_dir: Option<&str>,
-) -> Result<CreatedWorktree, AppError> {
-	let branch_name = if auto_generated {
-		generate_auto_branch_name_from(existing_branches)?
-	} else {
-		let sanitized = sanitize_branch_name(branch_name);
-		if sanitized.is_empty() {
-			return Err(AppError::GitError("Invalid branch name".to_string()));
-		}
-		sanitized
-	};
-
-	let id = Uuid::new_v4().to_string();
-	let worktree_base = resolve_worktree_base(
-		project_folder,
-		project_worktree_dir,
-		default_worktree_dir,
-	)?;
-	std::fs::create_dir_all(&worktree_base)?;
-
-	if auto_generated {
-		let mut candidate = branch_name;
-		for _ in 0..5 {
-			let worktree_path = build_worktree_path(
-				&worktree_base,
-				project_folder,
-				&candidate,
-				&id,
-			);
-			let worktree_str = worktree_path.to_string_lossy().to_string();
-			match infra::git::worktree_add(
-				project_folder,
-				&candidate,
-				&worktree_str,
-			) {
-				Ok(()) => {
-					return Ok(CreatedWorktree {
-						id,
-						branch_name: candidate,
-						worktree_path,
-						worktree_str,
-					});
-				}
-				Err(AppError::GitError(message))
-					if message.contains("already exists") =>
-				{
-					existing_branches.push(candidate);
-					candidate =
-						generate_auto_branch_name_from(existing_branches)?;
-				}
-				Err(err) => return Err(err),
-			}
-		}
-		return Err(AppError::GitError(
-			"Failed to auto-generate a unique branch name".to_string(),
-		));
-	} else {
-		let worktree_path = build_worktree_path(
-			&worktree_base,
-			project_folder,
-			&branch_name,
-			&id,
-		);
-		let worktree_str = worktree_path.to_string_lossy().to_string();
-		infra::git::worktree_add(project_folder, &branch_name, &worktree_str)?;
-		return Ok(CreatedWorktree {
-			id,
-			branch_name,
-			worktree_path,
-			worktree_str,
-		});
-	}
-}
-
 fn load_project_config(
 	project_folder: &str,
 ) -> Result<infra::config::ProjectConfig, AppError> {
@@ -388,49 +301,22 @@ fn load_project_config(
 pub fn create_with_db(
 	db: &DbPool,
 	project_id: &str,
-	branch_name: &str,
-	default_worktree_dir: Option<&str>,
+	_branch_name: &str,
+	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, mut existing_branches) = {
+	{
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let existing_branches = if auto_generated {
-			repo::profile::list_branch_names_by_project(conn, project_id)?
-		} else {
-			Vec::new()
-		};
-		(project_folder, existing_branches)
-	};
-	let project_config = load_project_config(&project_folder)?;
+		repo::project::find_by_id(conn, project_id)?;
+	}
+	Err(local_extras_create_closed())
+}
 
-	let created = create_worktree(
-		&project_folder,
-		branch_name,
-		auto_generated,
-		&mut existing_branches,
-		project_config.worktree_dir.as_deref(),
-		default_worktree_dir,
-	)?;
+fn local_extras_create_closed() -> AppError {
+	AppError::GitError("Local runtime no longer creates extra profiles".into())
+}
 
-	let profile = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::insert(
-			conn,
-			&created.id,
-			project_id,
-			&created.branch_name,
-			&created.worktree_str,
-		)?
-	};
-
-	infra::config::execute_scripts(
-		&project_config.setup_script,
-		&created.worktree_path,
-	);
-
-	Ok(profile)
+fn local_extras_delete_closed() -> AppError {
+	AppError::GitError("Local runtime no longer deletes extra profiles".into())
 }
 
 pub fn create_with_runtime(
@@ -465,15 +351,9 @@ fn create_herdr_with_db(
 	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
 	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, sqlite_extras) = {
+	let project_folder = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let sqlite_extras = repo::profile::list_by_project(conn, project_id)?
-			.into_iter()
-			.filter(|profile| !profile.is_default)
-			.collect::<Vec<_>>();
-		(project_folder, sqlite_extras)
+		repo::project::find_by_id(conn, project_id)?.folder
 	};
 	let project_config = load_project_config(&project_folder)?;
 	let cwd = Path::new(&project_folder).canonicalize()?;
@@ -486,7 +366,6 @@ fn create_herdr_with_db(
 			&project_config,
 			default_worktree_dir,
 			&listed,
-			&sqlite_extras,
 			branch_name,
 			auto_generated,
 		),
@@ -620,7 +499,6 @@ fn create_herdr_git(
 	project_config: &infra::config::ProjectConfig,
 	default_worktree_dir: Option<&str>,
 	listed: &[infra::herdr::transport::WorktreeListEntry],
-	sqlite_extras: &[Profile],
 	branch_name: &str,
 	auto_generated: bool,
 ) -> Result<Profile, AppError> {
@@ -628,11 +506,6 @@ fn create_herdr_git(
 	let mut existing_branches: Vec<String> = listed
 		.iter()
 		.filter_map(|entry| entry.branch.clone())
-		.chain(
-			sqlite_extras
-				.iter()
-				.map(|profile| profile.branch_name.clone()),
-		)
 		.collect();
 
 	let mut branch_name = if auto_generated {
@@ -657,7 +530,6 @@ fn create_herdr_git(
 			parent_workspace_id.as_deref(),
 			project_config,
 			default_worktree_dir,
-			sqlite_extras,
 			&dir_key,
 			&branch_name,
 		) {
@@ -712,19 +584,9 @@ fn create_herdr_git_once(
 	parent_workspace_id: Option<&str>,
 	project_config: &infra::config::ProjectConfig,
 	default_worktree_dir: Option<&str>,
-	sqlite_extras: &[Profile],
 	dir_key: &str,
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
-	if sqlite_extras
-		.iter()
-		.any(|profile| profile.branch_name == branch_name)
-	{
-		return Err(AppError::GitError(format!(
-			"Branch '{branch_name}' already exists"
-		)));
-	}
-
 	let worktree_base = resolve_worktree_base(
 		project_folder,
 		project_config.worktree_dir.as_deref(),
@@ -951,47 +813,11 @@ fn open_existing_checkout(
 pub fn create_with_default_worktree_dir(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-	branch_name: &str,
-	default_worktree_dir: Option<&str>,
+	_branch_name: &str,
+	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, project_config, mut existing_branches) = {
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let project_config = load_project_config(&project_folder)?;
-		let existing_branches = if auto_generated {
-			repo::profile::list_branch_names_by_project(conn, project_id)?
-		} else {
-			Vec::new()
-		};
-		(project_folder, project_config, existing_branches)
-	};
-
-	let created = create_worktree(
-		&project_folder,
-		branch_name,
-		auto_generated,
-		&mut existing_branches,
-		project_config.worktree_dir.as_deref(),
-		default_worktree_dir,
-	)?;
-
-	let profile = {
-		repo::profile::insert(
-			conn,
-			&created.id,
-			project_id,
-			&created.branch_name,
-			&created.worktree_str,
-		)?
-	};
-
-	infra::config::execute_scripts(
-		&project_config.setup_script,
-		&created.worktree_path,
-	);
-
-	Ok(profile)
+	repo::project::find_by_id(conn, project_id)?;
+	Err(local_extras_create_closed())
 }
 
 pub fn create(
@@ -1000,39 +826,6 @@ pub fn create(
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
 	create_with_default_worktree_dir(conn, project_id, branch_name, None)
-}
-
-fn cleanup_profile(
-	profile: &Profile,
-	project_folder: &str,
-) -> Result<(), AppError> {
-	let worktree_path = PathBuf::from(&profile.worktree_path);
-
-	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
-	}
-
-	let branch_name =
-		infra::git::worktree_current_branch(&profile.worktree_path)?
-			.unwrap_or_else(|| profile.branch_name.clone());
-
-	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(project_folder, &branch_name)?;
-
-	Ok(())
-}
-
-fn refuse_mapped_without_runtime(
-	conn: &mut SqliteConnection,
-	id: &str,
-) -> Result<(), AppError> {
-	match repo::runtime_mapping::find_profile_mapping(conn, id) {
-		Ok(_) => Err(AppError::PtyError(
-			"Herdr-mapped profile requires runtime cleanup".into(),
-		)),
-		Err(AppError::NotFound(_)) => Ok(()),
-		Err(err) => Err(err),
-	}
 }
 
 fn working_tree_is_dirty(path: &str) -> Result<bool, AppError> {
@@ -1149,17 +942,8 @@ fn repo_folder_for_linked_checkout(
 	})
 }
 
-pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
-	let (profile, project_folder) = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		refuse_mapped_without_runtime(conn, id)?;
-		repo::profile::get_delete_target(conn, id)?
-	};
-
-	cleanup_profile(&profile, &project_folder)?;
-
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::profile::delete_record(conn, id)
+pub fn delete_with_db(_db: &DbPool, id: &str) -> Result<(), AppError> {
+	delete_local_identity(id)
 }
 
 pub fn delete_with_runtime(
@@ -1183,32 +967,30 @@ fn delete_with_runtime_force(
 }
 
 fn delete_sqlite_identity(
-	runtime: &RuntimeRouter,
+	_runtime: &RuntimeRouter,
 	db: &infra::db::DbPool,
 	id: &str,
 	_force: Option<bool>,
 ) -> Result<(), AppError> {
-	let (profile, project_folder, session_ids) = {
+	{
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		// Leftover mapping is a dual-ownership lock, not a Herdr workspace_id.
-		refuse_mapped_without_runtime(conn, id)?;
-		let (profile, project_folder) =
-			repo::profile::get_delete_target(conn, id)?;
-		let session_ids = repo::pty::list_ids_by_profile(conn, id)?;
-		(profile, project_folder, session_ids)
-	};
-
-	for session_id in &session_ids {
-		runtime.teardown_session(session_id)?;
+		if let Some(project_id) = Profile::project_id_from_local_default(id) {
+			repo::project::find_by_id(conn, project_id)?;
+			return Err(AppError::DbError(
+				"Cannot delete default profile".to_string(),
+			));
+		}
 	}
+	Err(local_extras_delete_closed())
+}
 
-	cleanup_profile(&profile, &project_folder)?;
-
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	for session_id in &session_ids {
-		repo::pty::mark_closed(conn, session_id);
+fn delete_local_identity(id: &str) -> Result<(), AppError> {
+	if Profile::project_id_from_local_default(id).is_some() {
+		return Err(AppError::DbError(
+			"Cannot delete default profile".to_string(),
+		));
 	}
-	repo::profile::delete_record(conn, id)
+	Err(local_extras_delete_closed())
 }
 
 fn delete_herdr_identity(
@@ -1375,31 +1157,45 @@ pub fn update_notes_with_runtime(
 	notes: &str,
 ) -> Result<Profile, AppError> {
 	if runtime.selected_backend() == RuntimeBackend::Local {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		return repo::profile::update_notes(conn, id, notes);
+		return update_local_notes(db, id, notes);
 	}
 
 	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
-	if let Some(sqlite_id) =
-		crate::project::sqlite_profile_id_for_checkout(db, &path)?
+	let live = live_catalog_profile(runtime, db, id)?
+		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))?;
 	{
-		let mut profile = {
-			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-			let mut profile =
-				repo::profile::update_notes(conn, &sqlite_id, notes)?;
-			profile.id = id.to_string();
-			profile.worktree_path = path;
-			profile
-		};
-		if let Some(live) = live_catalog_profile(runtime, db, id)? {
-			profile.is_default = live.is_default;
-			profile.branch_name = live.branch_name;
-		}
-		return Ok(profile);
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::checkout_notes::upsert(conn, &live.project_id, &path, notes)?;
 	}
-
 	live_catalog_profile(runtime, db, id)?
 		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))
+}
+
+fn update_local_notes(
+	db: &DbPool,
+	id: &str,
+	notes: &str,
+) -> Result<Profile, AppError> {
+	let Some(project_id) = Profile::project_id_from_local_default(id) else {
+		return Err(AppError::NotFound(format!("Profile: {id}")));
+	};
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	let project = repo::project::find_by_id(conn, project_id)?;
+	let stored = repo::checkout_notes::upsert(
+		conn,
+		&project.id,
+		&project.folder,
+		notes,
+	)?;
+	Ok(Profile {
+		id: id.to_string(),
+		project_id: project.id,
+		branch_name: infra::git::branch(&project.folder).unwrap_or_default(),
+		worktree_path: project.folder,
+		created_at: stored.created_at,
+		is_default: true,
+		notes: stored.notes,
+	})
 }
 
 fn live_catalog_profile(
@@ -1414,12 +1210,13 @@ fn live_catalog_profile(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	refuse_mapped_without_runtime(conn, id)?;
-	let (profile, project_folder) = repo::profile::get_delete_target(conn, id)?;
-
-	cleanup_profile(&profile, &project_folder)?;
-
-	repo::profile::delete_record(conn, id)
+	if let Some(project_id) = Profile::project_id_from_local_default(id) {
+		repo::project::find_by_id(conn, project_id)?;
+		return Err(AppError::DbError(
+			"Cannot delete default profile".to_string(),
+		));
+	}
+	Err(local_extras_delete_closed())
 }
 
 pub fn delete_check(
@@ -1465,7 +1262,7 @@ mod tests {
 		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeListEntry,
 		WorktreeOpenResult, WorktreeRemoveResult,
 	};
-	use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
+	use model::runtime::RuntimeBackend;
 	use serde_json::{json, Value};
 	use std::path::Path;
 	use std::sync::{Arc, Mutex};
@@ -1601,30 +1398,22 @@ mod tests {
 	#[test]
 	fn create_profile_accepts_long_valid_branch_name_with_bounded_dir_name() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
 		let long_branch = std::iter::once("feature".to_string())
 			.chain((0..30).map(|index| format!("segment-{index:02}")))
 			.collect::<Vec<_>>()
 			.join("/");
 
-		let profile = create_with_default_worktree_dir(
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			&long_branch,
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert_eq!(profile.branch_name, long_branch);
-		assert!(worktree_path.exists());
-		assert!(dir_name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
-		assert!(dir_name.ends_with(&profile.id[..8]));
-
-		delete(&mut conn, &profile.id).unwrap();
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
@@ -1632,79 +1421,47 @@ mod tests {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
 
-		let result = create_with_default_worktree_dir(
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			"feature/broken-config",
-			Some(global_base.path().to_str().unwrap()),
-		);
-
-		assert!(
-			matches!(result, Err(AppError::IoError(error)) if error.kind() == std::io::ErrorKind::InvalidData)
-		);
+			None,
+		)
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
 	}
 
 	#[test]
 	fn create_profile_uses_project_configured_worktree_dir() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let project_base_name = format!(".worktrees-{}", &project.id[..8]);
-		std::fs::write(
-			dir.path().join("2code.json"),
-			format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
-		)
-		.unwrap();
-		let project_base =
-			dir.path().parent().unwrap().join(&project_base_name);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
-
-		let profile = create_with_default_worktree_dir(
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			"feature/worktree",
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert!(worktree_path.starts_with(&project_base));
-		assert!(!worktree_path.starts_with(global_base.path()));
-		assert!(worktree_path.exists());
-		assert_ne!(dir_name.as_ref(), profile.id);
-		assert!(dir_name.contains("feature-worktree"));
-
-		delete(&mut conn, &profile.id).unwrap();
-		let _ = std::fs::remove_dir_all(project_base);
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
 	fn create_profile_uses_default_worktree_dir_without_project_config() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
-
-		let profile = create_with_default_worktree_dir(
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			"feature/global",
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert!(worktree_path.starts_with(global_base.path()));
-		assert!(worktree_path.exists());
-		assert_ne!(dir_name.as_ref(), profile.id);
-		assert!(dir_name.contains("feature-global"));
-
-		delete(&mut conn, &profile.id).unwrap();
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	// --- branch name sanitization ---
@@ -1781,22 +1538,16 @@ mod tests {
 	}
 
 	#[test]
-	fn create_worktree_rejects_blank_manual_branch_before_git_work() {
-		let mut existing_branches = Vec::new();
-
-		let result = create_worktree(
-			"/missing/project",
-			" /// ",
-			false,
-			&mut existing_branches,
-			None,
-			None,
-		);
-
-		assert!(
-			matches!(result, Err(AppError::GitError(message)) if message == "Invalid branch name")
-		);
-		assert!(existing_branches.is_empty());
+	fn local_extras_create_fails_closed_without_git_worktree_add() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let result = create(&mut conn, &project.id, "feat/extra");
+		assert!(result
+			.err()
+			.map(|err| err.to_string().contains("no longer creates extra"))
+			.unwrap_or(false));
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	struct TestEmitter;
@@ -2211,18 +1962,31 @@ mod tests {
 		Arc::new(Mutex::new(conn))
 	}
 
-	fn sqlite_extras(db: &DbPool, project_id: &str) -> Vec<Profile> {
+	fn no_sqlite_profiles(db: &DbPool) {
+		#[derive(diesel::QueryableByName)]
+		struct CountRow {
+			#[diesel(sql_type = diesel::sql_types::BigInt)]
+			count: i64,
+		}
 		let conn = &mut *db.lock().unwrap();
-		repo::profile::list_by_project(conn, project_id)
-			.unwrap()
-			.into_iter()
-			.filter(|profile| !profile.is_default)
-			.collect()
+		let tables: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master 			 WHERE type = 'table' AND name IN 			 ('profiles', 'profile_runtime_mappings', 			  'session_runtime_mappings', 'herdr_namespaces')",
+		)
+		.get_result(conn)
+		.unwrap();
+		assert_eq!(tables.count, 0);
 	}
 
-	fn no_profile_mapping(db: &DbPool, id: &str) {
+	fn checkout_note(db: &DbPool, project_id: &str, path: &str) -> String {
 		let conn = &mut *db.lock().unwrap();
-		assert!(repo::runtime_mapping::find_profile_mapping(conn, id).is_err());
+		repo::checkout_notes::list_all(conn)
+			.unwrap()
+			.into_iter()
+			.find(|row| {
+				row.project_id == project_id && row.checkout_path == path
+			})
+			.map(|row| row.notes)
+			.unwrap_or_default()
 	}
 
 	#[test]
@@ -2294,71 +2058,40 @@ mod tests {
 		assert!(marker.exists());
 		assert!(!checkout.exists());
 		assert_eq!(git_worktree_list(dir.path()), before);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 		assert!(fake.workspace_closes().is_empty());
 	}
 
 	#[test]
-	fn local_unmapped_delete_still_uses_git_worktree_remove() {
+	fn local_extras_delete_fails_closed_without_git_worktree_remove() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
 		let router = local_router(&db, fake.clone());
-		let profile = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local-del",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap();
-		let checkout = profile.worktree_path.clone();
+		let before = git_worktree_list(dir.path());
+		let extra = format!("extra-{}", project.id);
 
-		delete_with_runtime(&router, &db, &profile.id).unwrap();
-
+		let err = delete_with_runtime(&router, &db, &extra).unwrap_err();
+		assert!(err.to_string().contains("no longer deletes extra"), "{err}");
 		assert!(fake.removes().is_empty());
-		assert!(!Path::new(&checkout).exists());
-		assert!(!git_worktree_list(dir.path()).contains(&checkout));
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
-	fn leftover_mapping_refuses_local_flag_delete_without_git_remove() {
+	fn local_default_delete_is_refused_without_git_remove() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
 		let router = local_router(&db, fake.clone());
-		let profile = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/bound-local",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap();
-		{
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::bind_profile_workspace(
-				conn,
-				&profile.id,
-				HERDR_NAMESPACE,
-				"w9",
-			)
-			.unwrap();
-		}
-		let checkout = profile.worktree_path.clone();
+		let before = git_worktree_list(dir.path());
+		let default_id = Profile::local_default_id(&project.id);
 
-		let err = delete_with_runtime(&router, &db, &profile.id).unwrap_err();
-		assert!(err.to_string().contains("runtime cleanup"), "{err}");
+		let err = delete_with_runtime(&router, &db, &default_id).unwrap_err();
+		assert!(err.to_string().contains("Cannot delete default"), "{err}");
 		assert!(fake.removes().is_empty());
-		assert!(Path::new(&checkout).exists());
-		assert!(git_worktree_list(dir.path()).contains(&checkout));
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_ok());
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
@@ -2398,7 +2131,7 @@ mod tests {
 		assert!(!fake.last_remove().force);
 		assert!(Path::new(&profile.worktree_path).exists());
 		assert_eq!(profile.id, "w2");
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2428,8 +2161,7 @@ mod tests {
 		assert_eq!(fake.removes().len(), 1);
 		assert!(fake.last_remove().force);
 		assert!(!Path::new(&profile.worktree_path).exists());
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2481,7 +2213,7 @@ mod tests {
 
 		assert_eq!(created.branch_name, "feat/reuse");
 		assert_eq!(fake.creates(), 1);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2511,8 +2243,7 @@ mod tests {
 
 		assert_eq!(fake.removes().len(), 1);
 		assert!(!Path::new(&profile.worktree_path).exists());
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2541,7 +2272,7 @@ mod tests {
 		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
 		assert_eq!(fake.removes().len(), 1);
 		assert!(Path::new(&profile.worktree_path).exists());
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2568,29 +2299,19 @@ mod tests {
 		let err = delete_with_runtime(&router, &db, &profile.id).unwrap_err();
 		assert!(err.to_string().contains("primary"), "{err}");
 		assert!(fake.removes().is_empty());
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 		assert!(Path::new(&profile.worktree_path).exists());
 	}
 
 	#[test]
-	fn mapped_delete_without_runtime_fails_closed() {
+	fn local_delete_without_runtime_fails_closed() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let profile =
-			crate::profile::create(&mut conn, &project.id, "feat/mapped")
-				.unwrap();
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile.id,
-			HERDR_NAMESPACE,
-			"w3",
-		)
-		.unwrap();
-		let err = delete(&mut conn, &profile.id).unwrap_err();
-		assert!(err.to_string().contains("runtime cleanup"), "{err}");
-		assert!(Path::new(&profile.worktree_path).exists());
-		assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_ok());
-		let _ = dir;
+		let before = git_worktree_list(dir.path());
+		let err = delete(&mut conn, "extra-id").unwrap_err();
+		assert!(err.to_string().contains("no longer deletes extra"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
+		let _ = project;
 	}
 
 	#[test]
@@ -2616,6 +2337,7 @@ mod tests {
 			let conn = &mut *db.lock().unwrap();
 			let session = model::pty::NewPtySessionRecord {
 				id: "sess-herdr-forget",
+				project_id: &project.id,
 				profile_id: &default_id,
 				title: "herdr",
 				shell: "/bin/sh",
@@ -2634,14 +2356,13 @@ mod tests {
 		assert!(fake.removes().is_empty());
 		assert!(!fake.methods().contains(&"worktree.remove".to_string()));
 		assert!(checkout.exists());
-		assert_eq!(
-			git_worktree_list(dir.path()).matches("worktree ").count(),
-			1
-		);
 		assert_eq!(router.owner("sess-herdr-forget").unwrap(), None);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::project::find_by_id(conn, &project.id).is_err());
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		{
+			let conn = &mut *db.lock().unwrap();
+			assert!(repo::project::find_by_id(conn, &project.id).is_err());
+		}
+		no_sqlite_profiles(&db);
+		let _ = dir;
 	}
 
 	#[test]
@@ -2692,8 +2413,7 @@ mod tests {
 		assert_eq!(git_worktree_list(dir.path()), before);
 		assert!(Path::new(&profile.worktree_path).exists());
 		assert_eq!(profile.worktree_path, recorded.path.expect("path sent"));
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 		assert!(setup_marker.exists());
 		assert!(!fake.methods().contains(&"tab.create".to_string()));
 		assert!(!fake.methods().contains(&"pane.close".to_string()));
@@ -2765,8 +2485,7 @@ mod tests {
 		assert_eq!(fake.creates(), 1);
 		assert!(fake.methods().contains(&"worktree.list".to_string()));
 		assert_eq!(profile.id, "w2");
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 		assert_eq!(
 			git_worktree_list(dir.path()).matches("worktree ").count(),
 			1
@@ -2815,8 +2534,7 @@ mod tests {
 		assert_eq!(first.id, "w2");
 		assert_eq!(first.id, second.id);
 		assert_eq!(fake.creates(), 1);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &second.id);
+		no_sqlite_profiles(&db);
 		assert!(!setup_marker.exists());
 	}
 
@@ -2872,8 +2590,7 @@ mod tests {
 
 		assert_eq!(fake.creates(), 1);
 		assert_eq!(profile.id, "w2");
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2906,8 +2623,7 @@ mod tests {
 		assert_eq!(first.id, "w2");
 		assert_eq!(first.id, second.id);
 		assert_eq!(fake.creates(), 1);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &first.id);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2938,8 +2654,7 @@ mod tests {
 		let recorded = fake.last_workspace_create();
 		assert!(Path::new(&recorded.cwd).is_absolute());
 		assert_eq!(recorded.label.as_deref(), Some("folder"));
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 		assert!(!fake.methods().contains(&"worktree.create".to_string()));
 	}
 
@@ -2974,7 +2689,7 @@ mod tests {
 
 		assert!(err.to_string().contains("uncertain"), "{err}");
 		assert_eq!(fake.workspace_creates(), 2);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -3008,8 +2723,7 @@ mod tests {
 
 		assert_eq!(profile.id, "w3");
 		assert_eq!(fake.workspace_creates(), 2);
-		assert!(sqlite_extras(&db, &project.id).is_empty());
-		no_profile_mapping(&db, &profile.id);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -3038,7 +2752,7 @@ mod tests {
 
 		assert_eq!(fake.workspace_closes(), vec!["w3".to_string()]);
 		assert!(fake.removes().is_empty());
-		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_sqlite_profiles(&db);
 
 		let err = delete_with_runtime(&router, &db, &first.id).unwrap_err();
 		assert!(err.to_string().contains("primary"), "{err}");
@@ -3099,15 +2813,7 @@ mod tests {
 
 		assert!(err.to_string().contains("already exists"), "{err}");
 		assert_eq!(fake.creates(), 0);
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 0);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -3142,80 +2848,31 @@ mod tests {
 
 		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
 		assert_eq!(fake.creates(), 0);
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 0);
-		let stolen = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_by_workspace(
-				conn,
-				HERDR_NAMESPACE,
-				"w9",
-			)
-		};
-		assert!(stolen.is_err());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
-	fn herdr_create_does_not_adopt_existing_local_profile() {
+	fn local_extras_create_with_runtime_fails_closed() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
+		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
-		let base = global_base.path().to_str().unwrap();
-		let local =
-			create_with_db(&db, &project.id, "feat/local-dup", Some(base))
-				.unwrap();
+		let fake = FakeWorktrees::new();
+		let router = local_router(&db, fake.clone());
+		let before = git_worktree_list(dir.path());
 
-		for workspace_id in [None, Some("w9")] {
-			let fake = FakeWorktrees::new();
-			{
-				let mut state = fake.state.lock().unwrap();
-				state.listed.push(WorktreeListEntry {
-					path: local.worktree_path.clone(),
-					branch: Some("feat/local-dup".into()),
-					workspace_id: workspace_id.map(str::to_string),
-					is_linked_worktree: true,
-				});
-			}
-			let router = herdr_router(&db, fake.clone());
-
-			let err = create_with_runtime(
-				&router,
-				&db,
-				&project.id,
-				"feat/local-dup",
-				Some(base),
-			)
-			.err()
-			.expect("Local same-branch profile should fail closed");
-
-			assert!(err.to_string().contains("already exists"), "{err}");
-			assert_eq!(fake.creates(), 0);
-			assert!(!fake.methods().contains(&"worktree.create".to_string()));
-			assert!(!fake.methods().contains(&"worktree.open".to_string()));
-			let extra = {
-				let conn = &mut *db.lock().unwrap();
-				repo::profile::list_by_project(conn, &project.id)
-					.unwrap()
-					.into_iter()
-					.filter(|profile| !profile.is_default)
-					.collect::<Vec<_>>()
-			};
-			assert_eq!(extra.len(), 1);
-			assert_eq!(extra[0].id, local.id);
-			let mapping = {
-				let conn = &mut *db.lock().unwrap();
-				repo::runtime_mapping::find_profile_mapping(conn, &local.id)
-			};
-			assert!(mapping.is_err());
-		}
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/local-dup",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
+		assert_eq!(fake.creates(), 0);
+		assert_eq!(git_worktree_list(dir.path()), before);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -3256,17 +2913,9 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_without_client_does_not_git_worktree_remove_or_delete_sqlite() {
+	fn herdr_without_client_does_not_git_worktree_remove() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let leftover = repo::profile::insert(
-			&mut conn,
-			"leftover",
-			&project.id,
-			"feat/leftover",
-			&format!("{}/extra", dir.path().display()),
-		)
-		.unwrap();
 		let db = pool_from(conn);
 		let logs = std::env::temp_dir().join("2code-profile-missing-herdr-del");
 		std::fs::create_dir_all(&logs).ok();
@@ -3291,12 +2940,12 @@ mod tests {
 
 		assert!(err.to_string().contains("not available"), "{err}");
 		assert_eq!(git_worktree_list(dir.path()), before);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &leftover.id).is_ok());
+		no_sqlite_profiles(&db);
+		let _ = project;
 	}
 
 	#[test]
-	fn local_create_with_runtime_still_uses_git_worktree_add() {
+	fn local_create_with_runtime_fails_closed_without_git_worktree_add() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
@@ -3304,25 +2953,19 @@ mod tests {
 		let fake = FakeWorktrees::new();
 		let router = local_router(&db, fake.clone());
 		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
+		let before = git_worktree_list(dir.path());
 
-		let profile = create_with_runtime(
+		let err = create_with_runtime(
 			&router,
 			&db,
 			&project.id,
 			"feat/local",
 			Some(global_base.path().to_str().unwrap()),
 		)
-		.unwrap();
-
+		.unwrap_err();
+		assert!(err.to_string().contains("no longer creates extra"), "{err}");
 		assert_eq!(fake.creates(), 0);
-		assert!(Path::new(&profile.worktree_path).exists());
-		assert!(git_worktree_list(dir.path()).contains(&profile.worktree_path));
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-		};
-		assert!(mapping.is_err());
-		delete_with_runtime(&router, &db, &profile.id).unwrap();
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
@@ -3437,15 +3080,19 @@ mod tests {
 			.split("fn delete_herdr_identity")
 			.next()
 			.unwrap();
-		assert!(sqlite.contains("refuse_mapped_without_runtime"));
+		assert!(sqlite.contains("local_extras_delete_closed"));
 		assert!(!sqlite.contains("worktree.remove"));
 		assert!(!sqlite.contains("worktree_remove"));
 	}
 
 	#[test]
 	fn default_profiles_are_not_created_via_worktree_create() {
-		let src = include_str!("project.rs");
-		assert!(src.contains("insert_default"));
+		let src = include_str!("project.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(src.contains("synthetic_local_profile"));
+		assert!(!src.contains("insert_default"));
 		assert!(!src.contains("worktree.create"));
 		assert!(!src.contains("create_herdr_with_db"));
 		assert!(!src.contains("create_with_runtime"));
@@ -3476,15 +3123,12 @@ mod tests {
 		assert_eq!(updated.notes, "hello");
 		assert!(updated.is_default);
 
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &default_id).unwrap().notes,
-			"hello"
-		);
+		assert_eq!(checkout_note(&db, &project.id, &folder), "hello");
+		let _ = default_id;
 	}
 
 	#[test]
-	fn herdr_notes_update_unmapped_linked_does_not_stub_sqlite() {
+	fn herdr_notes_update_linked_persists_checkout_notes() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let default_id = format!("default-{}", project.id);
@@ -3514,24 +3158,19 @@ mod tests {
 		assert!(primary.is_default);
 		assert_eq!(primary.notes, "kept");
 
-		let linked = update_notes_with_runtime(&router, &db, "w2", "nope")
-			.expect("linked notes no-op");
+		let linked =
+			update_notes_with_runtime(&router, &db, "w2", "linked-note")
+				.expect("linked notes persist");
 		assert_eq!(linked.id, "w2");
 		assert!(!linked.is_default);
-		assert_eq!(linked.notes, "");
+		assert_eq!(linked.notes, "linked-note");
 
-		let conn = &mut *db.lock().unwrap();
+		assert_eq!(checkout_note(&db, &project.id, &folder), "kept");
 		assert_eq!(
-			repo::profile::find_by_id(conn, &default_id).unwrap().notes,
-			"kept"
+			checkout_note(&db, &project.id, &format!("{folder}/linked")),
+			"linked-note"
 		);
-		assert!(repo::profile::find_by_id(conn, "w2").is_err());
-		assert_eq!(
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.len(),
-			1
-		);
+		let _ = default_id;
 	}
 
 	#[test]
@@ -3539,9 +3178,6 @@ mod tests {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let folder = dir.path().to_string_lossy().into_owned();
-		let before = repo::profile::list_by_project(&mut conn, &project.id)
-			.unwrap()
-			.len();
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
 		{
@@ -3565,14 +3201,8 @@ mod tests {
 
 		assert_eq!(fake.removes().len(), 1);
 		assert_eq!(fake.last_remove().workspace_id, "w2");
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.len(),
-			before
-		);
-		assert!(repo::profile::find_by_id(conn, "w2").is_err());
+		no_sqlite_profiles(&db);
+		let _ = project;
 	}
 
 	#[test]
@@ -3608,21 +3238,8 @@ mod tests {
 		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
 		let stale_dir = create_temp_git_repo();
 		let listed_path = listed_dir.path().to_string_lossy().into_owned();
-		let stale_path = stale_dir.path().to_string_lossy().into_owned();
-		let default_id = repo::profile::list_by_project(&mut conn, &project.id)
-			.unwrap()
-			.into_iter()
-			.find(|profile| profile.is_default)
-			.unwrap()
-			.id;
-		repo::profile::insert(
-			&mut conn,
-			"leftover",
-			&project.id,
-			"stale",
-			&stale_path,
-		)
-		.unwrap();
+		let default_id = Profile::local_default_id(&project.id);
+		let _ = stale_dir;
 		std::fs::write(
 			listed_dir.path().join("listed-only.txt"),
 			"listed dirty",
@@ -3656,31 +3273,20 @@ mod tests {
 	}
 
 	#[test]
-	fn local_delete_check_keeps_sqlite_nested_path() {
+	fn local_delete_check_uses_projects_folder() {
 		let mut conn = setup_db();
 		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
-		let stale_dir = create_temp_git_repo();
-		let stale_path = stale_dir.path().to_string_lossy().into_owned();
-		let leftover = repo::profile::insert(
-			&mut conn,
-			"leftover",
-			&project.id,
-			"stale",
-			&stale_path,
-		)
-		.unwrap();
 		std::fs::write(
 			listed_dir.path().join("listed-only.txt"),
 			"listed dirty",
 		)
 		.unwrap();
-		std::fs::write(stale_dir.path().join("stale-only.txt"), "stale dirty")
-			.unwrap();
 		let db = pool_from(conn);
 		let router = local_router(&db, FakeWorktrees::new());
+		let default_id = Profile::local_default_id(&project.id);
 
 		let check =
-			delete_check(&router, &db, &leftover.id).expect("sqlite check");
+			delete_check(&router, &db, &default_id).expect("folder check");
 		assert_eq!(check.working_tree_diff.files_changed, 1);
 	}
 }

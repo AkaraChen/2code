@@ -1,7 +1,5 @@
 mod common;
 
-use std::path::Path;
-
 use diesel::prelude::*;
 use infra::no_window::command_without_windows_console;
 
@@ -21,35 +19,6 @@ fn create_project_named(
 		.expect("create project from folder");
 
 	(project, dir)
-}
-
-fn shell_quote(value: &str) -> String {
-	if cfg!(windows) {
-		format!("'{}'", value.replace('\'', "''"))
-	} else {
-		format!("'{}'", value.replace('\'', "'\\''"))
-	}
-}
-
-fn touch_script(path: &Path) -> String {
-	let path = shell_quote(&path.to_string_lossy());
-	if cfg!(windows) {
-		format!("New-Item -ItemType File -Path {path} -Force")
-	} else {
-		format!("touch {path}")
-	}
-}
-
-fn write_project_config(
-	dir: &Path,
-	setup_script: Vec<String>,
-	teardown_script: Vec<String>,
-) {
-	let config = serde_json::json!({
-		"setup_script": setup_script,
-		"teardown_script": teardown_script,
-	});
-	std::fs::write(dir.join("2code.json"), config.to_string()).unwrap();
 }
 
 // ============================================================
@@ -297,6 +266,7 @@ fn delete_cascades_to_profiles_and_sessions() {
 	// Insert a PTY session on the default profile
 	let session_record = model::pty::NewPtySessionRecord {
 		id: "sess-1",
+		project_id: &project.id,
 		profile_id: &default_profile.id,
 		title: "bash",
 		shell: "/bin/bash",
@@ -468,593 +438,77 @@ fn startup_cleanup_deletes_existing_empty_groups() {
 }
 
 // ============================================================
-// Profile Creation (basic)
+// Local extras fail closed after sqlite profiles DROP
 // ============================================================
 
 #[test]
-fn create_profile_returns_correct_shape() {
+fn local_extras_create_fails_closed_without_git_worktree() {
 	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "feature-branch")
-			.unwrap();
-
-	assert!(!profile.id.is_empty());
-	assert_eq!(profile.project_id, project.id);
-	assert_eq!(profile.branch_name, "feature-branch");
-	assert!(!profile.worktree_path.is_empty());
-	assert!(!profile.created_at.is_empty());
-	assert!(!profile.is_default);
-
-	// Cleanup: delete profile first (removes worktree)
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_runs_setup_script() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	let marker_name = Path::new("setup-ran.marker");
-	write_project_config(&dir, vec![touch_script(marker_name)], Vec::new());
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "setup-script")
-			.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-
-	assert!(worktree_path.join(marker_name).exists());
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_uses_project_worktree_dir_relative_to_project() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	let relative_base_name = format!(".worktrees-{}", &project.id[..8]);
-	std::fs::write(
-		dir.join("2code.json"),
-		format!(r#"{{"worktree_dir":"../{relative_base_name}"}}"#),
-	)
-	.unwrap();
-	let expected_base = dir.parent().unwrap().join(&relative_base_name);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "feature-worktree")
-			.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-	let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-	assert!(worktree_path.starts_with(&expected_base));
-	assert!(worktree_path.exists());
-	assert_ne!(dir_name.as_ref(), profile.id);
-	assert!(dir_name.contains("feature-worktree"));
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&expected_base);
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_uses_global_worktree_dir_when_project_config_absent() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	let global_base = std::env::temp_dir()
-		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
-
-	let profile = service::profile::create_with_default_worktree_dir(
-		&mut conn,
-		&project.id,
-		"feature-global",
-		Some(global_base.to_str().unwrap()),
-	)
-	.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-
-	assert!(worktree_path.starts_with(&global_base));
-	assert!(worktree_path.exists());
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&global_base);
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_project_worktree_dir_overrides_global_default() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	let project_base_name = format!(".worktrees-{}", &project.id[..8]);
-	std::fs::write(
-		dir.join("2code.json"),
-		format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
-	)
-	.unwrap();
-	let project_base = dir.parent().unwrap().join(&project_base_name);
-	let global_base = std::env::temp_dir()
-		.join(format!("2code-global-worktrees-{}", &project.id[..8]));
-
-	let profile = service::profile::create_with_default_worktree_dir(
-		&mut conn,
-		&project.id,
-		"feature-override",
-		Some(global_base.to_str().unwrap()),
-	)
-	.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-
-	assert!(worktree_path.starts_with(&project_base));
-	assert!(!worktree_path.starts_with(&global_base));
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&project_base);
-	cleanup(&global_base);
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_sanitizes_cjk() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "新功能").unwrap();
-
-	assert_eq!(profile.branch_name, "xin-gong-neng");
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_shows_in_list_projects() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "dev").unwrap();
-
-	let list = service::project::list(&mut conn).unwrap();
-	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	assert_eq!(pwp.profiles.len(), 2); // default + dev
-	assert!(pwp.profiles.iter().any(|p| p.id == profile.id));
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_blank_name_generates_pr_branch() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile = service::profile::create(&mut conn, &project.id, "").unwrap();
-
-	assert!(profile.branch_name.starts_with("pr/"));
-	let generated = profile.branch_name.strip_prefix("pr/").unwrap();
-	let (city, short_id) = generated.rsplit_once('-').unwrap();
-	assert!(!city.is_empty());
-	assert_eq!(short_id.len(), 8);
-	assert!(short_id.chars().all(|c| c.is_ascii_hexdigit()));
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_blank_name_uses_different_city_until_pool_exhausted() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let first = service::profile::create(&mut conn, &project.id, "").unwrap();
-	let second = service::profile::create(&mut conn, &project.id, "").unwrap();
-
-	let first_city = first
-		.branch_name
-		.strip_prefix("pr/")
-		.and_then(|name| name.rsplit_once('-').map(|(city, _)| city))
-		.unwrap();
-	let second_city = second
-		.branch_name
-		.strip_prefix("pr/")
-		.and_then(|name| name.rsplit_once('-').map(|(city, _)| city))
-		.unwrap();
-
-	assert_ne!(first_city, second_city);
-
-	service::profile::delete(&mut conn, &first.id).unwrap();
-	service::profile::delete(&mut conn, &second.id).unwrap();
-	cleanup(&dir);
-}
-
-// ============================================================
-// Profile Creation (Edge Cases)
-// ============================================================
-
-#[test]
-fn create_profile_empty_name_after_sanitize_returns_error() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let result = service::profile::create(&mut conn, &project.id, "!!!");
-
-	assert!(result.is_err());
-	let err = result.err().unwrap();
-	let err_msg = err.to_string();
-	assert!(
-		err_msg.contains("Invalid branch name"),
-		"unexpected error: {err_msg}"
-	);
-
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_preserves_namespace() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "feat/用户").unwrap();
-
-	assert_eq!(profile.branch_name, "feat/yong-hu");
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn profile_branch_namespace_conflict_does_not_delete_existing_branch() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let branch_output = command_without_windows_console("git")
-		.args(["branch", "feat"])
-		.current_dir(&dir)
-		.output()
-		.expect("create conflicting branch");
-	assert!(
-		branch_output.status.success(),
-		"failed to create branch: {}",
-		String::from_utf8_lossy(&branch_output.stderr)
-	);
-
-	let result = service::profile::create(&mut conn, &project.id, "feat/auth");
-	let created_profile_id =
-		result.as_ref().ok().map(|profile| profile.id.clone());
-
-	let branch_list = command_without_windows_console("git")
-		.args(["branch", "--list", "feat"])
-		.current_dir(&dir)
-		.output()
-		.expect("list conflicting branch");
-	let branch_survived =
-		String::from_utf8_lossy(&branch_list.stdout).contains("feat");
-
-	let profile_count: i64 = model::schema::profiles::table
-		.filter(model::schema::profiles::project_id.eq(&project.id))
-		.filter(model::schema::profiles::branch_name.eq("feat/auth"))
-		.count()
-		.get_result(&mut conn)
-		.expect("count profiles");
-
-	if let Some(profile_id) = created_profile_id {
-		let _ = service::profile::delete(&mut conn, &profile_id);
-	}
-	cleanup(&dir);
-
-	let error_message = match result {
-		Ok(_) => panic!("namespace conflict should fail profile creation"),
-		Err(error) => error.to_string(),
-	};
-	assert!(
-		error_message.to_lowercase().contains("conflict")
-			&& error_message.contains("feat")
-			&& error_message.contains("feat/auth"),
-		"expected namespace conflict error, got: {error_message}"
-	);
-	assert!(branch_survived, "existing branch must not be deleted");
-	assert_eq!(
-		profile_count, 0,
-		"profile row should not be inserted when worktree creation fails"
-	);
-}
-
-#[test]
-fn create_profile_duplicate_branch_returns_error() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let p1 =
-		service::profile::create(&mut conn, &project.id, "dup-branch").unwrap();
-	let result = service::profile::create(&mut conn, &project.id, "dup-branch");
-
-	assert!(result.is_err());
-	let err = result.err().unwrap();
-	let err_msg = err.to_string();
-	assert!(
-		err_msg.contains("already exists"),
-		"unexpected error: {err_msg}"
-	);
-
-	service::profile::delete(&mut conn, &p1.id).unwrap();
-	cleanup(&dir);
-}
-
-#[test]
-fn create_profile_for_nonexistent_project_returns_error() {
-	let mut conn = setup_db();
-	let result =
-		service::profile::create(&mut conn, "nonexistent-project-id", "branch");
-	assert!(result.is_err());
-}
-
-// ============================================================
-// Profile Delete
-// ============================================================
-
-#[test]
-fn delete_default_profile_returns_error() {
-	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
+	let before = command_without_windows_console("git")
+		.args(["worktree", "list", "--porcelain"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
 
-	let result = service::profile::delete(&mut conn, &default_profile.id);
+	let err =
+		service::profile::create(&mut conn, &project.id, "feature-branch")
+			.unwrap_err();
+	assert!(err.to_string().contains("no longer creates extra"), "{err}");
 
-	assert!(result.is_err());
-	let err_msg = result.unwrap_err().to_string();
-	assert!(
-		err_msg.contains("Cannot delete default profile"),
-		"unexpected error: {err_msg}"
-	);
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_non_default_succeeds() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "to-delete").unwrap();
-	service::profile::delete(&mut conn, &profile.id).unwrap();
+	let after = command_without_windows_console("git")
+		.args(["worktree", "list", "--porcelain"])
+		.current_dir(&dir)
+		.output()
+		.unwrap();
+	assert_eq!(after.stdout, before.stdout);
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	assert_eq!(pwp.profiles.len(), 1); // only default remains
+	assert_eq!(pwp.profiles.len(), 1);
+	assert_eq!(pwp.profiles[0].id, default_profile.id);
 	assert!(pwp.profiles[0].is_default);
 
 	cleanup(&dir);
 }
 
 #[test]
-fn delete_profile_cascades_sessions() {
+fn local_extras_delete_fails_closed_without_git_worktree_remove() {
 	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "cascade-test")
-			.unwrap();
-
-	// Insert session for this profile
-	let session_record = model::pty::NewPtySessionRecord {
-		id: "sess-cascade",
-		profile_id: &profile.id,
-		title: "bash",
-		shell: "/bin/bash",
-		cwd: &project.folder,
-		cols: 80,
-		rows: 24,
-	};
-	repo::pty::insert_session(&mut conn, &session_record).unwrap();
-
-	// Delete profile — should cascade to session
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	let sessions =
-		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
-	// Only default profile sessions (none)
-	assert!(sessions.is_empty());
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_profile_keeps_row_when_cleanup_fails() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "cleanup-fails")
-			.unwrap();
-
-	let missing_folder = dir.join("missing-project-folder");
-	diesel::update(model::schema::projects::table.find(&project.id))
-		.set(
-			model::schema::projects::folder
-				.eq(missing_folder.to_string_lossy().to_string()),
-		)
-		.execute(&mut conn)
-		.expect("point project at missing folder");
-
-	let result = service::profile::delete(&mut conn, &profile.id);
-	assert!(result.is_err(), "cleanup failure should abort deletion");
-
-	let persisted = repo::profile::find_by_id(&mut conn, &profile.id)
-		.expect("profile row should remain retryable");
-	assert_eq!(persisted.id, profile.id);
-
-	diesel::update(model::schema::projects::table.find(&project.id))
-		.set(
-			model::schema::projects::folder
-				.eq(dir.to_string_lossy().to_string()),
-		)
-		.execute(&mut conn)
-		.expect("restore project folder");
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_profile_runs_teardown_script() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	let marker = dir.join("teardown-ran.marker");
-	write_project_config(&dir, Vec::new(), vec![touch_script(&marker)]);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "teardown-script")
-			.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	assert!(marker.exists());
-	assert!(!worktree_path.exists());
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_profile_ignores_failing_teardown_script() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-	write_project_config(&dir, Vec::new(), vec!["exit 1".to_string()]);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "teardown-fails")
-			.unwrap();
-	let worktree_path = std::path::PathBuf::from(&profile.worktree_path);
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-
-	assert!(!worktree_path.exists());
-	assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_err());
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_profile_succeeds_when_git_resources_already_missing() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "already-cleaned")
-			.unwrap();
-
-	let remove_worktree = command_without_windows_console("git")
-		.args(["worktree", "remove", &profile.worktree_path, "--force"])
-		.current_dir(&dir)
-		.output()
-		.expect("remove worktree outside service");
-	assert!(
-		remove_worktree.status.success(),
-		"failed to remove worktree: {}",
-		String::from_utf8_lossy(&remove_worktree.stderr)
-	);
-
-	let delete_branch = command_without_windows_console("git")
-		.args(["branch", "-D", &profile.branch_name])
-		.current_dir(&dir)
-		.output()
-		.expect("delete branch outside service");
-	assert!(
-		delete_branch.status.success(),
-		"failed to delete branch: {}",
-		String::from_utf8_lossy(&delete_branch.stderr)
-	);
-
-	service::profile::delete(&mut conn, &profile.id).unwrap();
-	assert!(
-		repo::profile::find_by_id(&mut conn, &profile.id).is_err(),
-		"profile row should be deleted when cleanup is already complete"
-	);
-
-	cleanup(&dir);
-}
-
-#[test]
-fn delete_nonexistent_profile_returns_error() {
-	let mut conn = setup_db();
-	let result = service::profile::delete(&mut conn, "nonexistent-profile-id");
-	assert!(result.is_err());
-}
-
-#[test]
-fn delete_profile_removes_live_renamed_branch() {
-	let mut conn = setup_db();
-	let (project, _default, dir) = create_project_with_git_repo(&mut conn);
-
-	let profile =
-		service::profile::create(&mut conn, &project.id, "rename-me").unwrap();
-
-	command_without_windows_console("git")
-		.args(["branch", "-m", "renamed-outside"])
-		.current_dir(&profile.worktree_path)
-		.output()
-		.unwrap();
-
-	let branch_list = command_without_windows_console("git")
-		.args(["branch", "--list", "renamed-outside"])
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let before = command_without_windows_console("git")
+		.args(["worktree", "list", "--porcelain"])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
-	assert!(String::from_utf8_lossy(&branch_list.stdout)
-		.contains("renamed-outside"));
 
-	service::profile::delete(&mut conn, &profile.id).unwrap();
+	let err = service::profile::delete(&mut conn, "extra-id").unwrap_err();
+	assert!(err.to_string().contains("no longer deletes extra"), "{err}");
+	let err =
+		service::profile::delete(&mut conn, &default_profile.id).unwrap_err();
+	assert!(err.to_string().contains("Cannot delete default"), "{err}");
 
-	let branch_list = command_without_windows_console("git")
-		.args(["branch", "--list", "renamed-outside"])
+	let after = command_without_windows_console("git")
+		.args(["worktree", "list", "--porcelain"])
 		.current_dir(&dir)
 		.output()
 		.unwrap();
-	assert!(!String::from_utf8_lossy(&branch_list.stdout)
-		.contains("renamed-outside"));
-	assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_err());
-
+	assert_eq!(after.stdout, before.stdout);
+	let _ = project;
 	cleanup(&dir);
 }
 
-// ============================================================
-// Profile Creation (non-git folder)
-// ============================================================
-
 #[test]
-fn create_profile_in_non_git_folder_fails() {
+fn local_list_is_only_the_folder_default() {
 	let mut conn = setup_db();
-	// Create a plain directory (no git init)
-	let dir = std::env::temp_dir()
-		.join(format!("2code-no-git-{}", uuid::Uuid::new_v4()));
-	std::fs::create_dir_all(&dir).unwrap();
-	std::fs::write(dir.join("file.txt"), "hello").unwrap();
-
-	let folder = dir.to_string_lossy().to_string();
-	// Manually insert a project pointing to the non-git dir
-	// (create_from_folder would itself succeed since it just stores the path)
-	diesel::sql_query(
-		"INSERT INTO projects (id, name, folder, created_at) VALUES ('p-nogit', 'NoGit', ?, datetime('now'))",
-	)
-	.bind::<diesel::sql_types::Text, _>(&folder)
-	.execute(&mut conn)
-	.unwrap();
-	// Insert a default profile so the project is valid
-	diesel::sql_query(
-		"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr-nogit', 'p-nogit', 'main', ?, datetime('now'), 1)",
-	)
-	.bind::<diesel::sql_types::Text, _>(&folder)
-	.execute(&mut conn)
-	.unwrap();
-
-	// Attempting to create a profile (worktree) in a non-git folder should fail
-	let result =
-		service::profile::create(&mut conn, "p-nogit", "feature-branch");
-	assert!(result.is_err(), "should fail for non-git folder");
-
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let list = service::project::list(&mut conn).unwrap();
+	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
+	assert_eq!(pwp.profiles.len(), 1);
+	assert_eq!(pwp.profiles[0].id, default_profile.id);
+	assert_eq!(pwp.profiles[0].worktree_path, project.folder);
 	cleanup(&dir);
 }

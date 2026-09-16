@@ -7,7 +7,6 @@ pub mod project;
 pub mod project_group;
 pub mod pty;
 pub mod runtime;
-pub mod runtime_mapping;
 pub mod schema;
 pub mod topbar;
 pub mod watcher;

@@ -40,9 +40,8 @@ pub fn pool_from(conn: SqliteConnection) -> DbPool {
 	Arc::new(Mutex::new(conn))
 }
 
-/// Local-flag runtime over the given sqlite pool. Git/FS tests that still
-/// cover nested sqlite profiles use this; Herdr-selected leftover rows
-/// cannot win through these helpers.
+/// Local-flag runtime over the given sqlite pool. Local lists only the
+/// synthetic `projects.folder` default after sqlite `profiles` DROP.
 pub fn local_runtime(db: &DbPool) -> RuntimeRouter {
 	let logs = std::env::temp_dir().join("2code-integ-local-runtime");
 	std::fs::create_dir_all(&logs).ok();

@@ -332,9 +332,7 @@ impl RuntimeRouter {
 		self.route_backend(session_id)
 	}
 
-	/// Owner, else a live Herdr `pane_id`, else a leftover sqlite pane
-	/// mapping (dual-ownership lock), else the default. Leftover
-	/// `session_runtime_mappings` must not win over a live `pane_id`.
+	/// Owner, else a live Herdr `pane_id`, else the default.
 	fn route_backend(
 		&self,
 		session_id: &str,
@@ -343,9 +341,6 @@ impl RuntimeRouter {
 			return Ok(owner);
 		}
 		if is_herdr_pane_id(session_id) {
-			return Ok(RuntimeBackend::Herdr);
-		}
-		if self.local.herdr_mapping(session_id)?.is_some() {
 			return Ok(RuntimeBackend::Herdr);
 		}
 		Ok(self.selector.default_backend())
@@ -399,8 +394,7 @@ impl RuntimeRouter {
 	) -> Result<(), AppError> {
 		let herdr_owned = self.selector.owner(session_id)?
 			== Some(RuntimeBackend::Herdr)
-			|| is_herdr_pane_id(session_id)
-			|| self.local.herdr_mapping(session_id)?.is_some();
+			|| is_herdr_pane_id(session_id);
 		if herdr_owned {
 			self.release_herdr_session(session_id)
 		} else {
@@ -504,8 +498,7 @@ fn resolve_gui_sidecar(
 }
 
 /// Resolve the pinned sidecar, ensure the 2code namespace, inject JSON
-/// terminal + worktree + CLI attach clients, import leftover sqlite
-/// extras via `worktree.open` without writing mapping rows, and start
+/// terminal + worktree + CLI attach clients, and start
 /// `HerdrRuntimeSync`. `TWOCODE_RUNTIME=local` does not call this.
 pub fn connect_gui_herdr(
 	opts: GuiHerdrConnect<'_>,
@@ -524,20 +517,6 @@ pub fn connect_gui_herdr(
 	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
 		.map_err(AppError::from)?;
 	let json = Arc::new(HerdrJsonTerminals::new(client));
-	match crate::runtime_adoption::import_leftover_sqlite_profiles(
-		&opts.db,
-		json.as_ref(),
-	) {
-		Ok(report) => {
-			crate::runtime_adoption::log_failed_import_outcomes(&report);
-		}
-		Err(err) => {
-			tracing::warn!(
-				target: "herdr",
-				"leftover sqlite extra import failed: {err}"
-			);
-		}
-	}
 	let mut adapter = HerdrStubAdapter::with_json_clients(
 		opts.db,
 		json,
@@ -666,13 +645,6 @@ impl TerminalRuntime for RuntimeRouter {
 			return Ok(listed);
 		}
 		let mut local = self.local.list_project_sessions(project_id)?;
-		local.retain(|session| {
-			self.local
-				.herdr_mapping(&session.id)
-				.ok()
-				.flatten()
-				.is_none()
-		});
 		if !self.herdr.has_terminal_client() {
 			return Ok(local);
 		}
@@ -792,8 +764,7 @@ mod tests {
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
 	use infra::pty::{PtyReadThreads, PtySessionMap};
-	use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
-	use model::runtime::HERDR_NAMESPACE;
+	use model::pty::{PtyConfig, PtySessionMeta};
 
 	use super::*;
 	use crate::pty::{create_flush_senders, PtyContext};
@@ -827,11 +798,6 @@ mod tests {
 		))
 		.execute(&mut *conn)
 		.unwrap();
-		diesel::sql_query(format!(
-			"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr1', 'p1', 'main', '{folder}', datetime('now'), 1)"
-		))
-		.execute(&mut *conn)
-		.unwrap();
 	}
 
 	fn test_shell() -> String {
@@ -847,7 +813,7 @@ mod tests {
 		sessions: PtySessionMap,
 		read_threads: PtyReadThreads,
 		cwd: tempfile::TempDir,
-		db: DbPool,
+		_db: DbPool,
 		_logs: PathBuf,
 	}
 
@@ -879,7 +845,7 @@ mod tests {
 				sessions,
 				read_threads,
 				cwd,
-				db,
+				_db: db,
 				_logs: logs,
 			}
 		}
@@ -890,7 +856,7 @@ mod tests {
 
 		fn meta() -> PtySessionMeta {
 			PtySessionMeta {
-				profile_id: "pr1".to_string(),
+				profile_id: "default-p1".to_string(),
 				title: "test".to_string(),
 			}
 		}
@@ -990,7 +956,7 @@ mod tests {
 		let err = router
 			.create_session(
 				&PtySessionMeta {
-					profile_id: "pr1".into(),
+					profile_id: "default-p1".into(),
 					title: "t".into(),
 				},
 				&PtyConfig {
@@ -1111,7 +1077,7 @@ mod tests {
 		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
 		let created = router.create_session(
 			&PtySessionMeta {
-				profile_id: "pr1".into(),
+				profile_id: "default-p1".into(),
 				title: "t".into(),
 			},
 			&PtyConfig {
@@ -1193,7 +1159,7 @@ mod tests {
 		let created = router
 			.create_session(
 				&PtySessionMeta {
-					profile_id: "pr1".into(),
+					profile_id: "default-p1".into(),
 					title: "local".into(),
 				},
 				&PtyConfig {
@@ -1234,8 +1200,8 @@ mod tests {
 		assert!(connect.contains("HerdrJsonTerminals"));
 		assert!(connect.contains("HerdrCliAttach"));
 		assert!(connect.contains("resolve_namespace"));
-		assert!(connect.contains("import_leftover_sqlite_profiles"));
-		assert!(connect.contains("log_failed_import_outcomes"));
+		assert!(!connect.contains("import_leftover_sqlite_profiles"));
+		assert!(!connect.contains("log_failed_import_outcomes"));
 		assert!(connect.contains("attach_runtime_sync"));
 		assert!(
 			connect.contains("HerdrRuntimeSync")
@@ -1293,11 +1259,6 @@ mod tests {
 		fx.router.close_session(id).unwrap();
 		assert!(!fx.sessions.lock().unwrap().contains_key(id));
 		assert_eq!(fx.router.owner(id).unwrap(), None);
-		{
-			let mut conn = fx.db.lock().unwrap();
-			assert!(repo::runtime_mapping::find_session_mapping(&mut conn, id)
-				.is_err());
-		}
 	}
 
 	#[test]
@@ -1433,51 +1394,18 @@ mod tests {
 		assert!(fx.router.herdr.recorded_ops().is_empty());
 	}
 
-	fn insert_mapped_herdr_session(fx: &Fixture, session_id: &str) {
-		let mut conn = fx.db.lock().unwrap();
-		repo::pty::insert_session(
-			&mut conn,
-			&NewPtySessionRecord {
-				id: session_id,
-				profile_id: "pr1",
-				title: "Herdr",
-				shell: "/bin/sh",
-				cwd: "/repo",
-				cols: 80,
-				rows: 24,
-			},
-		)
-		.unwrap();
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			"pr1",
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		repo::runtime_mapping::bind_session_pane(
-			&mut conn,
-			session_id,
-			HERDR_NAMESPACE,
-			"w1",
-			"w1:p1",
-		)
-		.unwrap();
-	}
-
 	#[test]
-	fn mapped_herdr_id_is_not_restored_as_local() {
+	fn herdr_pane_id_is_not_restored_as_local() {
 		let fx = Fixture::new(RuntimeBackend::Local);
-		insert_mapped_herdr_session(&fx, "herdr-sess");
 		assert_eq!(
-			fx.router.backend_for("herdr-sess").unwrap(),
+			fx.router.backend_for("w1:p1").unwrap(),
 			RuntimeBackend::Herdr
 		);
-		assert_eq!(fx.router.owner("herdr-sess").unwrap(), None);
+		assert_eq!(fx.router.owner("w1:p1").unwrap(), None);
 		let live_before = fx.live_count();
 		let err = fx
 			.router
-			.restore_session("herdr-sess", &Fixture::meta(), &fx.config())
+			.restore_session("w1:p1", &Fixture::meta(), &fx.config())
 			.map(|_| ())
 			.unwrap_err();
 		assert!(
@@ -1485,10 +1413,10 @@ mod tests {
 			"{err}"
 		);
 		assert_eq!(fx.live_count(), live_before);
-		assert!(fx.sessions.lock().unwrap().get("herdr-sess").is_none());
+		assert!(fx.sessions.lock().unwrap().get("w1:p1").is_none());
 		assert!(fx.router.herdr.recorded_ops().contains(&"restore"));
 		let listed = fx.router.list_project_sessions("p1").unwrap();
-		assert!(listed.iter().all(|session| session.id != "herdr-sess"));
+		assert!(listed.iter().all(|session| session.id != "w1:p1"));
 	}
 
 	#[test]
@@ -1498,12 +1426,11 @@ mod tests {
 			.router
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		insert_mapped_herdr_session(&fx, "herdr-sess");
 		let listed = fx.router.list_project_sessions("p1").unwrap();
 		assert!(listed
 			.iter()
 			.any(|session| session.id == created.session_id));
-		assert!(listed.iter().all(|session| session.id != "herdr-sess"));
+		assert!(listed.iter().all(|session| session.id != "w1:p1"));
 	}
 
 	#[test]
@@ -1588,7 +1515,7 @@ mod tests {
 		);
 		assert!(
 			!lib.contains("import_leftover_sqlite_profiles"),
-			"leftover extra import stays in connect_gui_herdr, not lib.rs"
+			"leftover extra import is gone"
 		);
 		assert!(
 			!lib.contains("runtime_adoption"),

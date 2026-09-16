@@ -599,41 +599,6 @@ fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
-fn snapshot_workspace_id_for_cwd(
-	snapshot: &Value,
-	checkout: &str,
-) -> Option<String> {
-	let snap = if snapshot.get("type").and_then(Value::as_str)
-		== Some("session_snapshot")
-	{
-		snapshot.get("snapshot").unwrap_or(snapshot)
-	} else {
-		snapshot
-	};
-	snap.get("panes")
-		.and_then(Value::as_array)
-		.into_iter()
-		.flatten()
-		.find_map(|pane| {
-			let workspace_id =
-				pane.get("workspace_id").and_then(Value::as_str)?;
-			if workspace_id.is_empty() {
-				return None;
-			}
-			let cwd = pane
-				.get("cwd")
-				.and_then(Value::as_str)
-				.filter(|cwd| !cwd.is_empty())
-				.or_else(|| {
-					pane.get("foreground_cwd")
-						.and_then(Value::as_str)
-						.filter(|cwd| !cwd.is_empty())
-				})?;
-			same_checkout_path(Path::new(cwd), Path::new(checkout))
-				.then(|| workspace_id.to_string())
-		})
-}
-
 fn snapshot_pane_cwd(snapshot: &Value, workspace_id: &str) -> Option<String> {
 	let snap = if snapshot.get("type").and_then(Value::as_str)
 		== Some("session_snapshot")
@@ -798,6 +763,7 @@ fn session_record_from_pane(
 	projection: &RuntimeProjection,
 	pane: &ProjectedPane,
 	checkout: &str,
+	project_id: &str,
 ) -> PtySessionRecord {
 	let title = projection
 		.tab(&pane.tab_id)
@@ -812,6 +778,7 @@ fn session_record_from_pane(
 	};
 	PtySessionRecord {
 		id: pane.pane_id.clone(),
+		project_id: project_id.to_string(),
 		profile_id: pane.workspace_id.clone(),
 		title,
 		shell: "/bin/sh".into(),
@@ -839,52 +806,9 @@ impl HerdrLifecycle {
 		if projection.workspace(profile_id).is_some() {
 			return Ok(profile_id.to_string());
 		}
-		if let Some(workspace_id) =
-			self.live_workspace_for_sqlite_profile(profile_id)?
-		{
-			if projection.workspace(&workspace_id).is_some() {
-				return Ok(workspace_id);
-			}
-		}
 		Err(AppError::RuntimeMappingMissing(format!(
 			"profile {profile_id} has no Herdr workspace"
 		)))
-	}
-
-	fn live_workspace_for_sqlite_profile(
-		&self,
-		profile_id: &str,
-	) -> Result<Option<String>, AppError> {
-		let checkout =
-			self.with_db(|conn| {
-				match repo::profile::find_by_id(conn, profile_id) {
-					Ok(profile) => Ok(Some(profile.worktree_path)),
-					Err(AppError::NotFound(_)) => Ok(None),
-					Err(err) => Err(err),
-				}
-			})?;
-		let Some(checkout) = checkout else {
-			return Ok(None);
-		};
-		if let Some(worktrees) = &self.worktrees {
-			if let Ok(listed) = worktrees.worktree_list(None, None) {
-				if let Some(workspace_id) = listed.iter().find_map(|entry| {
-					let id = entry
-						.workspace_id
-						.as_deref()
-						.filter(|id| !id.is_empty())?;
-					same_checkout_path(
-						Path::new(&entry.path),
-						Path::new(&checkout),
-					)
-					.then(|| id.to_string())
-				}) {
-					return Ok(Some(workspace_id));
-				}
-			}
-		}
-		let snapshot = self.client.session_snapshot()?;
-		Ok(snapshot_workspace_id_for_cwd(&snapshot, &checkout))
 	}
 
 	fn profile_checkout(&self, profile_id: &str) -> Result<String, AppError> {
@@ -1033,7 +957,7 @@ impl HerdrLifecycle {
 				.unwrap_or_default();
 			for pane in projection.panes_in_workspace(&workspace_id) {
 				listed.push(session_record_from_pane(
-					projection, &pane, &checkout,
+					projection, &pane, &checkout, project_id,
 				));
 			}
 		}
@@ -1190,7 +1114,7 @@ mod tests {
 	};
 	use crate::PtyEventEmitter;
 	use model::pty::NewPtySessionRecord;
-	use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
+	use model::runtime::RuntimeBackend;
 
 	struct TestEmitter;
 
@@ -1724,18 +1648,6 @@ time.sleep(30)
 				))
 				.execute(&mut *conn)
 				.unwrap();
-				diesel::sql_query(format!(
-					"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr1', 'p1', 'main', '{folder}', datetime('now'), 1)"
-				))
-				.execute(&mut *conn)
-				.unwrap();
-				repo::runtime_mapping::bind_profile_workspace(
-					&mut conn,
-					"pr1",
-					HERDR_NAMESPACE,
-					"w1",
-				)
-				.unwrap();
 			}
 			let fake_dir = cwd.path().join("fake-cli");
 			std::fs::create_dir_all(&fake_dir).unwrap();
@@ -1839,7 +1751,7 @@ time.sleep(30)
 
 		fn meta() -> PtySessionMeta {
 			PtySessionMeta {
-				profile_id: "pr1".to_string(),
+				profile_id: "w1".to_string(),
 				title: "shell".to_string(),
 			}
 		}
@@ -1869,7 +1781,8 @@ time.sleep(30)
 				&mut conn,
 				&NewPtySessionRecord {
 					id: session_id,
-					profile_id: "pr1",
+					project_id: "p1",
+					profile_id: "w1",
 					title: "steal",
 					shell: "/bin/sh",
 					cwd: "/tmp",
@@ -1878,25 +1791,6 @@ time.sleep(30)
 				},
 			)
 			.unwrap();
-		}
-
-		fn bind_pane(&self, session_id: &str, pane_id: &str) {
-			let mut conn = self.db.lock().unwrap();
-			repo::runtime_mapping::bind_session_pane(
-				&mut conn,
-				session_id,
-				HERDR_NAMESPACE,
-				"w1",
-				pane_id,
-			)
-			.unwrap();
-		}
-
-		fn profile_workspace_id(&self) -> Option<String> {
-			let mut conn = self.db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(&mut conn, "pr1")
-				.ok()
-				.map(|mapping| mapping.workspace_id)
 		}
 	}
 
@@ -1950,11 +1844,6 @@ time.sleep(30)
 	#[test]
 	fn create_session_uses_live_checkout_not_sqlite_path() {
 		let fx = Fixture::new();
-		{
-			let mut conn = fx.db.lock().unwrap();
-			repo::profile::set_worktree_path(&mut conn, "pr1", "/stale")
-				.unwrap();
-		}
 		let created = fx
 			.adapter
 			.create_session(
@@ -1982,12 +1871,6 @@ time.sleep(30)
 			workspace_id: "w2".into(),
 		});
 		fx.fake.set_worktree("w2", &linked, true);
-		let profile_count = {
-			let mut conn = fx.db.lock().unwrap();
-			repo::profile::list_by_project(&mut conn, "p1")
-				.unwrap()
-				.len()
-		};
 		let created = fx
 			.adapter
 			.create_session(
@@ -2010,19 +1893,10 @@ time.sleep(30)
 		assert!(listed.iter().any(|session| session.id == "w2:p1"));
 		assert!(listed.iter().any(|session| session.id == "w2:p2"));
 		assert!(listed.iter().any(|session| session.profile_id == "w2"));
-		let mut conn = fx.db.lock().unwrap();
-		assert_eq!(
-			repo::profile::list_by_project(&mut conn, "p1")
-				.unwrap()
-				.len(),
-			profile_count
+		assert!(
+			fx.sqlite_session_ids().is_empty()
+				|| !fx.sqlite_session_ids().contains(&created.session_id)
 		);
-		assert!(repo::runtime_mapping::find_profile_by_workspace(
-			&mut conn,
-			HERDR_NAMESPACE,
-			"w2",
-		)
-		.is_err());
 	}
 
 	#[test]
@@ -2244,12 +2118,7 @@ time.sleep(30)
 		assert!(listed
 			.iter()
 			.all(|session| session.id != created.session_id));
-		let mut conn = fx.db.lock().unwrap();
-		assert!(repo::runtime_mapping::find_session_mapping(
-			&mut conn,
-			&created.session_id
-		)
-		.is_err());
+		assert!(!fx.sqlite_session_ids().contains(&created.session_id));
 	}
 
 	#[test]
@@ -2694,13 +2563,8 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn leftover_profile_mapping_is_not_required_for_create() {
+	fn live_workspace_id_is_enough_for_create() {
 		let fx = Fixture::new();
-		{
-			let mut conn = fx.db.lock().unwrap();
-			repo::runtime_mapping::unbind_profile_workspace(&mut conn, "pr1")
-				.unwrap();
-		}
 		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
@@ -2708,29 +2572,6 @@ time.sleep(30)
 		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.tab_create_calls(), 1);
 		assert!(fx.sqlite_session_ids().is_empty());
-	}
-
-	#[test]
-	fn stale_profile_mapping_does_not_win_over_live_checkout() {
-		let fx = Fixture::new();
-		{
-			let mut conn = fx.db.lock().unwrap();
-			repo::runtime_mapping::unbind_profile_workspace(&mut conn, "pr1")
-				.unwrap();
-			repo::runtime_mapping::bind_profile_workspace(
-				&mut conn,
-				"pr1",
-				HERDR_NAMESPACE,
-				"w-gone",
-			)
-			.unwrap();
-		}
-		let created = fx
-			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		assert_eq!(created.session_id, "w1:p2");
-		assert_eq!(fx.fake.tab_create_calls(), 1);
 	}
 
 	#[test]
@@ -2767,19 +2608,13 @@ time.sleep(30)
 		let ids = fx.sqlite_session_ids();
 		assert!(ids.contains(&"leftover-sess".to_string()));
 		assert!(!ids.contains(&created.session_id));
-		let mut conn = fx.db.lock().unwrap();
-		assert!(repo::runtime_mapping::find_session_mapping(
-			&mut conn,
-			&created.session_id
-		)
-		.is_err());
+		assert!(!fx.sqlite_session_ids().contains(&created.session_id));
 	}
 
 	#[test]
 	fn leftover_sqlite_mapping_does_not_block_or_close_live_root() {
 		let fx = Fixture::new();
 		fx.insert_session_row("sess-steal");
-		fx.bind_pane("sess-steal", "w1:p1");
 		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
@@ -2804,11 +2639,10 @@ time.sleep(30)
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		fx.adapter.close_session(&second.session_id).unwrap();
-		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
 		assert!(fx.cwd.path().join("keep").exists());
 		fx.adapter.close_session(&first.session_id).unwrap();
 		fx.adapter.close_session("w1:p1").unwrap();
-		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
+		assert!(fx.cwd.path().join("keep").exists());
 		assert!(fx.cwd.path().join("keep").exists());
 		assert!(!fx.fake.calls().iter().any(|m| {
 			m.contains("worktree.remove")
@@ -2826,7 +2660,6 @@ time.sleep(30)
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		fx.insert_session_row("local-only");
-		fx.bind_pane("local-only", "w1:p1");
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
 		assert!(listed.iter().any(|session| session.id == "w1:p1"));
 		assert!(listed
@@ -2988,7 +2821,13 @@ time.sleep(30)
 		let fx = Fixture::new();
 		let router = fx.local_default_router();
 		let created = router
-			.create_session(&Fixture::meta(), &fx.config())
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "default-p1".to_string(),
+					title: "shell".to_string(),
+				},
+				&fx.config(),
+			)
 			.unwrap();
 		assert_eq!(
 			router.owner(&created.session_id).unwrap(),
@@ -3050,7 +2889,7 @@ time.sleep(30)
 			closed
 				.create_session(
 					&PtySessionMeta {
-						profile_id: "pr1".into(),
+						profile_id: "w1".into(),
 						title: "x".into(),
 					},
 					&PtyConfig {
@@ -3067,7 +2906,7 @@ time.sleep(30)
 		assert!(stub
 			.create_session(
 				&PtySessionMeta {
-					profile_id: "pr1".into(),
+					profile_id: "w1".into(),
 					title: "x".into(),
 				},
 				&PtyConfig {

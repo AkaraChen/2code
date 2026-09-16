@@ -664,47 +664,21 @@ fn get_branch_returns_correct_branch() {
 // ============================================================
 
 #[test]
-fn diff_on_profile_worktree() {
+fn diff_on_local_default_uses_projects_folder() {
 	let mut conn = setup_db();
-	let (project, _default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	// Create a non-default profile (creates a worktree)
-	let profile =
-		service::profile::create(&mut conn, &project.id, "worktree-test")
-			.unwrap();
-
-	// Make a change in the worktree, not in the main repo
-	let worktree_path = std::path::Path::new(&profile.worktree_path);
-	std::fs::write(worktree_path.join("worktree-file.txt"), "worktree content")
-		.unwrap();
+	std::fs::write(dir.join("folder-file.txt"), "folder content").unwrap();
 
 	let (runtime, db) = local_from(conn);
-	// Diff on profile should see the worktree changes
-	let diff = service::project::get_diff(&runtime, &db, &profile.id).unwrap();
-	assert!(
-		diff.contains("worktree-file.txt"),
-		"diff should see worktree file, got: {}",
-		&diff[..diff.len().min(200)]
-	);
-
-	// Main repo should NOT see the worktree changes
-	let main_list = {
-		let conn = &mut *db.lock().unwrap();
-		service::project::list(conn).unwrap()
-	};
-	let pwp = main_list.iter().find(|p| p.id == project.id).unwrap();
-	let default_profile = pwp.profiles.iter().find(|p| p.is_default).unwrap();
-	let main_diff =
+	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(
-		!main_diff.contains("worktree-file.txt"),
-		"main repo should not see worktree file"
+		diff.contains("folder-file.txt"),
+		"diff should see folder file, got: {}",
+		&diff[..diff.len().min(200)]
 	);
-
-	{
-		let conn = &mut *db.lock().unwrap();
-		service::profile::delete(conn, &profile.id).unwrap();
-	}
+	let _ = project;
 	cleanup(&dir);
 }

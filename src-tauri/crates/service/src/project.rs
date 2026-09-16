@@ -28,49 +28,78 @@ pub fn create_from_folder(
 	}
 
 	let id = Uuid::new_v4().to_string();
-	let project = repo::project::insert(conn, &id, name, folder)?;
-
-	let branch_name = infra::git::branch(folder).unwrap_or_default();
-
-	let default_profile_id = format!("default-{id}");
-	repo::profile::insert_default(
-		conn,
-		&default_profile_id,
-		&id,
-		&branch_name,
-		folder,
-	)?;
-
-	Ok(project)
+	repo::project::insert(conn, &id, name, folder)
 }
 
 pub fn list(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	repo::project::list_all_with_profiles(conn)
+	list_synthetic_local_profiles(conn)
 }
 
 /// Return the project catalog with nested profiles.
 ///
-/// Local keeps sqlite `profiles`. Herdr replaces each project's profile
-/// array from live `worktree.list` / `session.snapshot` — sqlite rows are
-/// not merged and are not written back. A missing Herdr client yields
-/// empty profiles, not a sqlite fallback.
+/// Local synthesizes at most the `projects.folder` default. Herdr
+/// replaces each project's profile array from live `worktree.list` /
+/// `session.snapshot`. sqlite `profiles` is gone. A missing Herdr
+/// client yields empty profiles, not a sqlite fallback.
 pub fn list_with_runtime(
 	runtime: &RuntimeRouter,
 	db: &DbPool,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	if runtime.selected_backend() == RuntimeBackend::Local {
-		return list_sqlite_profiles(db);
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		return list_synthetic_local_profiles(conn);
 	}
 	list_herdr_derived(runtime, db)
 }
 
-fn list_sqlite_profiles(
-	db: &DbPool,
+fn list_synthetic_local_profiles(
+	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::project::list_all_with_profiles(conn)
+	let notes = notes_overlay(conn)?;
+	Ok(repo::project::list_all(conn)?
+		.into_iter()
+		.map(|project| project_with_synthetic_local(project, &notes))
+		.collect())
+}
+
+fn project_with_synthetic_local(
+	project: Project,
+	notes: &CheckoutNotesOverlay,
+) -> ProjectWithProfiles {
+	let profile = synthetic_local_profile(&project, notes);
+	ProjectWithProfiles {
+		id: project.id,
+		name: project.name,
+		folder: project.folder,
+		created_at: project.created_at,
+		group_id: project.group_id,
+		sort_order: project.sort_order,
+		pinned_at: project.pinned_at,
+		pinned_order: project.pinned_order,
+		profiles: vec![profile],
+	}
+}
+
+fn synthetic_local_profile(
+	project: &Project,
+	notes: &CheckoutNotesOverlay,
+) -> Profile {
+	let (notes, created_at) = notes.for_checkout(&project.id, &project.folder);
+	Profile {
+		id: Profile::local_default_id(&project.id),
+		project_id: project.id.clone(),
+		branch_name: infra::git::branch(&project.folder).unwrap_or_default(),
+		worktree_path: project.folder.clone(),
+		created_at: if created_at.is_empty() {
+			project.created_at.clone()
+		} else {
+			created_at
+		},
+		is_default: true,
+		notes,
+	}
 }
 
 fn list_herdr_derived(
@@ -113,45 +142,40 @@ fn project_without_profiles(project: Project) -> ProjectWithProfiles {
 	}
 }
 
-struct LeftoverNotes {
-	rows: Vec<(String, String, String)>,
+struct CheckoutNotesOverlay {
+	rows: Vec<model::profile::CheckoutNote>,
 }
 
-impl LeftoverNotes {
-	fn for_checkout(&self, checkout: &str) -> (String, String) {
+impl CheckoutNotesOverlay {
+	fn for_checkout(
+		&self,
+		project_id: &str,
+		checkout: &str,
+	) -> (String, String) {
 		self.rows
 			.iter()
-			.find(|(path, _, _)| same_checkout_path(path, checkout))
-			.map(|(_, notes, created_at)| (notes.clone(), created_at.clone()))
+			.find(|row| {
+				row.project_id == project_id
+					&& same_checkout_path(&row.checkout_path, checkout)
+			})
+			.map(|row| (row.notes.clone(), row.created_at.clone()))
 			.unwrap_or_else(|| (String::new(), String::new()))
 	}
 }
 
-/// Leftover sqlite notes keyed by checkout path. Mapping rows are ignored.
+/// Notes keyed by project + canonical checkout path. Not stored in Herdr.
 fn notes_overlay(
 	conn: &mut SqliteConnection,
-) -> Result<LeftoverNotes, AppError> {
-	let projects = repo::project::list_all_with_profiles(conn)?;
-	let mut rows = Vec::new();
-	for project in projects {
-		for profile in project.profiles {
-			if profile.worktree_path.is_empty() {
-				continue;
-			}
-			rows.push((
-				profile.worktree_path,
-				profile.notes,
-				profile.created_at,
-			));
-		}
-	}
-	Ok(LeftoverNotes { rows })
+) -> Result<CheckoutNotesOverlay, AppError> {
+	Ok(CheckoutNotesOverlay {
+		rows: repo::checkout_notes::list_all(conn)?,
+	})
 }
 
 fn derive_project_profiles(
 	worktrees: &dyn HerdrWorktreeClient,
 	project: &ProjectWithProfiles,
-	notes: &LeftoverNotes,
+	notes: &CheckoutNotesOverlay,
 	snapshot: &mut Option<Value>,
 ) -> Result<Vec<Profile>, AppError> {
 	let cwd = project_cwd(&project.folder);
@@ -192,7 +216,7 @@ fn empty_session_snapshot() -> Value {
 fn profiles_from_worktree_list(
 	project: &ProjectWithProfiles,
 	listed: &[WorktreeListEntry],
-	notes: &LeftoverNotes,
+	notes: &CheckoutNotesOverlay,
 ) -> Vec<Profile> {
 	let mut profiles: Vec<Profile> = listed
 		.iter()
@@ -217,7 +241,7 @@ fn profiles_from_worktree_list(
 fn profiles_from_snapshot(
 	project: &ProjectWithProfiles,
 	snapshot: &Value,
-	notes: &LeftoverNotes,
+	notes: &CheckoutNotesOverlay,
 ) -> Vec<Profile> {
 	let mut by_workspace: HashMap<String, String> = HashMap::new();
 	for pane in snapshot_panes(snapshot) {
@@ -263,9 +287,9 @@ fn derived_profile(
 	branch_name: String,
 	worktree_path: &str,
 	is_default: bool,
-	notes: &LeftoverNotes,
+	notes: &CheckoutNotesOverlay,
 ) -> Profile {
-	let (notes, created_at) = notes.for_checkout(worktree_path);
+	let (notes, created_at) = notes.for_checkout(&project.id, worktree_path);
 	Profile {
 		id: workspace_id.to_string(),
 		project_id: project.id.clone(),
@@ -495,27 +519,13 @@ fn reconcile_local_profile_checkout(
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<String, AppError> {
+	let Some(project_id) = Profile::project_id_from_local_default(profile_id)
+	else {
+		return Err(AppError::NotFound(format!("Profile: {profile_id}")));
+	};
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	Ok(profile.worktree_path)
-}
-
-/// Leftover sqlite profile whose checkout path matches live Herdr cwd.
-/// Mapping rows are not consulted.
-pub fn sqlite_profile_id_for_checkout(
-	db: &DbPool,
-	checkout: &str,
-) -> Result<Option<String>, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let projects = repo::project::list_all_with_profiles(conn)?;
-	for project in projects {
-		for profile in project.profiles {
-			if same_checkout_path(&profile.worktree_path, checkout) {
-				return Ok(Some(profile.id));
-			}
-		}
-	}
-	Ok(None)
+	let project = repo::project::find_by_id(conn, project_id)?;
+	Ok(project.folder)
 }
 
 pub fn update(
@@ -852,6 +862,10 @@ mod tests {
 	use std::path::Path;
 	use std::sync::{Arc, Mutex};
 
+	use super::*;
+	use crate::pty::{create_flush_senders, PtyContext};
+	use crate::runtime::{HerdrStubAdapter, LocalAdapter};
+	use crate::PtyEventEmitter;
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::herdr::transport::{
@@ -859,12 +873,6 @@ mod tests {
 		WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
 		WorktreeRemoveResult,
 	};
-	use model::runtime::HERDR_NAMESPACE;
-
-	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{HerdrStubAdapter, LocalAdapter};
-	use crate::PtyEventEmitter;
 
 	struct TestEmitter;
 
@@ -1140,19 +1148,14 @@ mod tests {
 	fn insert_catalog(
 		conn: &mut SqliteConnection,
 		folder: &str,
-		worktree_path: &str,
+		_worktree_path: &str,
 	) -> (String, String) {
 		let project = repo::project::insert(conn, "proj-1", "Project", folder)
 			.expect("insert project");
-		let profile = repo::profile::insert(
-			conn,
-			"prof-1",
-			&project.id,
-			"feat/x",
-			worktree_path,
+		(
+			project.id.clone(),
+			model::profile::Profile::local_default_id(&project.id),
 		)
-		.expect("insert profile");
-		(project.id, profile.id)
 	}
 
 	fn listed(
@@ -1327,19 +1330,19 @@ mod tests {
 	}
 
 	#[test]
-	fn unmapped_profile_uses_db_worktree_path() {
+	fn local_default_checkout_uses_projects_folder() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/repo/wt");
+			insert_catalog(&mut conn, "/repo", "/ignored");
 		let db = pool_from(conn);
 		let fake =
 			FakeList::new(vec![listed("/other", Some("w1"), Some("feat/x"))]);
 		let runtime = local_router(&db, Some(fake.clone()));
 
 		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("unmapped cache");
+			.expect("synthetic folder");
 
-		assert_eq!(path, "/repo/wt");
+		assert_eq!(path, "/repo");
 		assert!(fake.methods().is_empty());
 		assert_eq!(
 			runtime.selected_backend(),
@@ -1348,211 +1351,39 @@ mod tests {
 	}
 
 	#[test]
-	fn mapped_profile_without_client_uses_cache_and_does_not_start_herdr() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let db = pool_from(conn);
+	fn local_unknown_profile_id_is_not_found() {
+		let db = pool_from(setup_db());
 		let runtime = local_router(&db, None);
-
-		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("cache without client");
-
-		assert_eq!(path, "/stale");
-		assert!(runtime.herdr_worktrees_optional().is_none());
-		assert_eq!(
-			runtime.selected_backend(),
-			model::runtime::RuntimeBackend::Local
-		);
+		let err = reconcile_profile_checkout(&runtime, &db, "prof-1")
+			.expect_err("extras gone");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 	}
 
 	#[test]
-	fn mapped_leftover_does_not_write_listed_path_or_call_herdr() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let db = pool_from(conn);
-		let fake = FakeList::new(vec![
-			listed("/other", Some("w2"), Some("feat/x")),
-			listed("/listed", Some("w1"), Some("other-name")),
-		]);
-		let runtime = local_router(&db, Some(fake.clone()));
-
-		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("sqlite cache");
-
-		assert_eq!(path, "/stale");
-		assert!(fake.methods().is_empty());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile_id)
-				.unwrap()
-				.worktree_path,
-			"/stale"
-		);
-	}
-
-	#[test]
-	fn mapped_unavailable_workspace_keeps_sqlite_cache() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let db = pool_from(conn);
-		let fake = FakeList::new(vec![
-			listed("/repo", Some("w-default"), Some("main")),
-			listed("/other-profile", Some("w2"), Some("feat/x")),
-		]);
-		let runtime = local_router(&db, Some(fake.clone()));
-
-		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("sqlite cache");
-
-		assert_eq!(path, "/stale");
-		assert!(fake.methods().is_empty());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile_id)
-				.unwrap()
-				.worktree_path,
-			"/stale"
-		);
-	}
-
-	#[test]
-	fn leftover_mapping_does_not_consult_herdr_on_uncertain_list() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let db = pool_from(conn);
-		let fake = FakeList::new(vec![listed("/listed", Some("w1"), None)]);
-		fake.fail_list(AppError::HerdrUncertainOutcome("dropped".into()));
-		let runtime = local_router(&db, Some(fake.clone()));
-
-		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("sqlite cache");
-
-		assert_eq!(path, "/stale");
-		assert!(fake.methods().is_empty());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile_id)
-				.unwrap()
-				.worktree_path,
-			"/stale"
-		);
-	}
-
-	#[test]
-	fn list_with_runtime_local_keeps_sqlite_worktree_path() {
+	fn local_flag_list_is_synthetic_folder_default_only() {
 		let mut conn = setup_db();
 		let (project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let unmapped = repo::profile::insert(
-			&mut conn,
-			"prof-local",
-			&project_id,
-			"local",
-			"/local-wt",
-		)
-		.unwrap();
+		repo::checkout_notes::upsert(&mut conn, &project_id, "/repo", "hello")
+			.unwrap();
 		let db = pool_from(conn);
 		let fake = FakeList::new(vec![listed("/listed", Some("w1"), None)]);
 		let runtime = local_router(&db, Some(fake.clone()));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 
-		let project = &listed[0];
-		let mapped = project
-			.profiles
-			.iter()
-			.find(|profile| profile.id == profile_id)
-			.unwrap();
-		let local = project
-			.profiles
-			.iter()
-			.find(|profile| profile.id == unmapped.id)
-			.unwrap();
-		assert_eq!(mapped.worktree_path, "/stale");
-		assert_eq!(local.worktree_path, "/local-wt");
+		assert_eq!(listed[0].profiles.len(), 1);
+		assert_eq!(listed[0].profiles[0].id, profile_id);
+		assert!(listed[0].profiles[0].is_default);
+		assert_eq!(listed[0].profiles[0].worktree_path, "/repo");
+		assert_eq!(listed[0].profiles[0].notes, "hello");
 		assert!(fake.methods().is_empty());
-	}
-
-	#[test]
-	fn list_with_runtime_keeps_cache_when_mapped_workspace_is_unavailable() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
-		let db = pool_from(conn);
-		let fake = FakeList::new(vec![listed("/repo", Some("w-other"), None)]);
-		let runtime = local_router(&db, Some(fake));
-
-		let listed = list_with_runtime(&runtime, &db).expect("catalog");
-
-		assert_eq!(listed[0].profiles[0].worktree_path, "/stale");
 	}
 
 	#[test]
 	fn herdr_list_ignores_sqlite_rows_and_disk_only_checkouts() {
 		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::profile::insert(
-			&mut conn,
-			"default-proj-1",
-			"proj-1",
-			"main",
-			"/repo",
-		)
-		.ok();
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w-sqlite",
-		)
-		.unwrap();
+		insert_catalog(&mut conn, "/repo", "/stale");
 		let db = pool_from(conn);
 		let fake = FakeList::new(vec![
 			primary("/repo", None, Some("main")),
@@ -1601,23 +1432,7 @@ mod tests {
 	fn herdr_list_isolates_a_second_repo() {
 		let mut conn = setup_db();
 		repo::project::insert(&mut conn, "proj-a", "A", "/repo-a").unwrap();
-		repo::profile::insert_default(
-			&mut conn,
-			"default-proj-a",
-			"proj-a",
-			"main",
-			"/repo-a",
-		)
-		.unwrap();
 		repo::project::insert(&mut conn, "proj-b", "B", "/repo-b").unwrap();
-		repo::profile::insert_default(
-			&mut conn,
-			"default-proj-b",
-			"proj-b",
-			"main",
-			"/repo-b",
-		)
-		.unwrap();
 		let db = pool_from(conn);
 		let fake = FakeList::new(Vec::new());
 		fake.set_scoped(
@@ -1772,19 +1587,17 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_list_overlays_notes_from_checkout_path_not_mapping() {
+	fn herdr_list_overlays_notes_from_checkout_path_not_workspace_id() {
 		let mut conn = setup_db();
-		let (_project_id, profile_id) =
+		let (project_id, _profile_id) =
 			insert_catalog(&mut conn, "/repo", "/repo");
-		repo::runtime_mapping::bind_profile_workspace(
+		repo::checkout_notes::upsert(
 			&mut conn,
-			&profile_id,
-			HERDR_NAMESPACE,
-			"w2",
+			&project_id,
+			"/repo",
+			"hello notes",
 		)
 		.unwrap();
-		repo::profile::update_notes(&mut conn, &profile_id, "hello notes")
-			.unwrap();
 		let db = pool_from(conn);
 		let fake = FakeList::new(vec![
 			primary("/repo", Some("w1"), Some("main")),
@@ -1840,7 +1653,7 @@ mod tests {
 	}
 
 	#[test]
-	fn local_flag_list_keeps_sqlite_nested_profiles() {
+	fn local_flag_list_is_only_the_folder_default() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
@@ -1851,7 +1664,7 @@ mod tests {
 
 		assert_eq!(listed[0].profiles.len(), 1);
 		assert_eq!(listed[0].profiles[0].id, profile_id);
-		assert_eq!(listed[0].profiles[0].worktree_path, "/stale");
+		assert_eq!(listed[0].profiles[0].worktree_path, "/repo");
 	}
 
 	#[test]
@@ -2031,7 +1844,7 @@ mod tests {
 	}
 
 	#[test]
-	fn local_git_helpers_keep_sqlite_nested_path() {
+	fn local_git_helpers_use_projects_folder() {
 		let listed_repo = init_git_repo("listed.txt", "listed-clean\n");
 		let stale_repo = init_git_repo("stale.txt", "stale-clean\n");
 		std::fs::write(listed_repo.path().join("listed.txt"), "listed-dirty\n")
@@ -2048,10 +1861,10 @@ mod tests {
 		let runtime = local_router(&db, None);
 
 		let diff =
-			get_diff(&runtime, &db, &profile_id).expect("sqlite local diff");
-		assert!(diff.contains("stale.txt"), "{diff}");
-		assert!(diff.contains("stale-dirty"), "{diff}");
-		assert!(!diff.contains("listed.txt"), "{diff}");
+			get_diff(&runtime, &db, &profile_id).expect("folder local diff");
+		assert!(diff.contains("listed.txt"), "{diff}");
+		assert!(diff.contains("listed-dirty"), "{diff}");
+		assert!(!diff.contains("stale.txt"), "{diff}");
 	}
 
 	#[test]
@@ -2097,7 +1910,7 @@ mod tests {
 	}
 
 	#[test]
-	fn local_watcher_targets_keep_sqlite_nested_paths() {
+	fn local_watcher_targets_use_projects_folder() {
 		let mut conn = setup_db();
 		insert_catalog(&mut conn, "/repo", "/stale");
 		let db = pool_from(conn);
@@ -2107,8 +1920,44 @@ mod tests {
 		let targets = crate::watcher::watcher_targets(&listed);
 
 		assert!(targets.iter().any(|target| {
-			target.root_path == "/stale"
-				&& target.profile_id.as_deref() == Some("prof-1")
+			target.root_path == "/repo"
+				&& target.profile_id.as_deref() == Some("default-proj-1")
 		}));
+		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
+	}
+
+	#[test]
+	fn create_from_folder_does_not_insert_a_profile_row() {
+		let dir = tempfile::tempdir().expect("folder");
+		let mut conn = setup_db();
+		create_from_folder(&mut conn, "Proj", &dir.path().to_string_lossy())
+			.unwrap();
+		#[derive(diesel::QueryableByName)]
+		struct CountRow {
+			#[diesel(sql_type = diesel::sql_types::BigInt)]
+			count: i64,
+		}
+		let tables: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'profiles'",
+		)
+		.get_result(&mut conn)
+		.unwrap();
+		assert_eq!(tables.count, 0);
+		let projects = repo::project::list_all(&mut conn).unwrap();
+		assert_eq!(projects.len(), 1);
+	}
+
+	#[test]
+	fn production_source_does_not_write_profiles_or_mappings() {
+		let src = include_str!("project.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(!src.contains("insert_default"));
+		assert!(!src.contains("sqlite_profile_id_for_checkout"));
+		assert!(!src.contains("list_all_with_profiles"));
+		assert!(!src.contains("bind_profile_workspace"));
+		assert!(!src.contains("import_leftover_sqlite_profiles"));
 	}
 }

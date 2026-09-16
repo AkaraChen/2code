@@ -6,21 +6,17 @@ Data access layer. All Diesel ORM queries. No business logic — pure CRUD + com
 ## FILES
 | File | Role |
 |------|------|
-| `project.rs` | Project CRUD + `resolve_context_folder` (polymorphic project/profile folder lookup) |
-| `profile.rs` | Profile CRUD |
+| `project.rs` | Project CRUD |
+| `checkout_notes.rs` | Notes keyed by `project_id` + canonical checkout path |
 | `pty.rs` | PTY session **metadata** CRUD (insert/list/dimensions/mark-closed/delete/all-ids). Output bytes live in files (`infra::pty_log`), not the DB. |
 | `lib.rs` | Re-exports |
 
-## KEY PATTERN — resolve_context_folder
-```rust
-pub fn resolve_context_folder(conn, context_id) -> Result<PathBuf>
-```
-Tries `profiles` table first (profile ID → worktree path), falls back to `projects` table (project ID → folder). Used by all git commands to support both regular projects and profile worktrees with the same `contextId` parameter.
+Checkout paths for Git / the file tree come from live Herdr (or Local `projects.folder`), not a sqlite `profiles` table.
 
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Context ID resolution | `project.rs::resolve_context_folder` |
+| Checkout notes | `checkout_notes.rs` |
 | Session output history | Not in the DB — read from files via `infra::pty_log::read_all` |
 | Schema definitions | `model::schema` (DO NOT edit schema.rs directly) |
 

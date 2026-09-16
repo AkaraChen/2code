@@ -6,7 +6,6 @@
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{CreateSessionResult, RuntimeBackend};
-use model::runtime_mapping::SessionRuntimeMapping;
 
 use crate::pty::PtyContext;
 
@@ -27,18 +26,6 @@ impl LocalAdapter {
 			.lock()
 			.map(|sessions| sessions.contains_key(session_id))
 			.unwrap_or(false)
-	}
-
-	pub(crate) fn herdr_mapping(
-		&self,
-		session_id: &str,
-	) -> Result<Option<SessionRuntimeMapping>, AppError> {
-		let conn = &mut *self.ctx.db.lock().map_err(|_| AppError::LockError)?;
-		match repo::runtime_mapping::find_session_mapping(conn, session_id) {
-			Ok(mapping) => Ok(Some(mapping)),
-			Err(AppError::NotFound(_)) => Ok(None),
-			Err(err) => Err(err),
-		}
 	}
 
 	pub(crate) fn teardown_session(

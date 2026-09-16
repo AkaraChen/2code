@@ -131,15 +131,17 @@ fn router_from_ctx(ctx: &PtyContext) -> RuntimeRouter {
 	)
 }
 
-/// Helper: insert a session record for a given profile.
+/// Helper: insert a session record for a given project/profile.
 fn insert_session(
 	conn: &mut diesel::SqliteConnection,
 	session_id: &str,
+	project_id: &str,
 	profile_id: &str,
 	title: &str,
 ) {
 	let record = NewPtySessionRecord {
 		id: session_id,
+		project_id,
 		profile_id,
 		title,
 		shell: "/bin/bash",
@@ -151,18 +153,17 @@ fn insert_session(
 }
 
 // ============================================================
-// Session List (via profile JOIN)
+// Session List (via pty_sessions.project_id)
 // ============================================================
 
 #[test]
-fn list_sessions_joins_via_profiles() {
+fn list_sessions_filters_by_project_id() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s1", &default_profile.id, "bash");
+	insert_session(&mut conn, "s1", &project.id, &default_profile.id, "bash");
 
-	// Frontend calls with projectId, backend JOINs through profiles
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert_eq!(sessions.len(), 1);
@@ -178,7 +179,13 @@ fn list_sessions_returns_correct_shape() {
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-shape", &default_profile.id, "zsh");
+	insert_session(
+		&mut conn,
+		"s-shape",
+		&project.id,
+		&default_profile.id,
+		"zsh",
+	);
 
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
@@ -198,23 +205,18 @@ fn list_sessions_returns_correct_shape() {
 }
 
 #[test]
-fn list_sessions_across_multiple_profiles() {
+fn list_sessions_for_project_includes_default_profile_rows() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let profile2 =
-		service::profile::create(&mut conn, &project.id, "second-branch")
-			.unwrap();
-
-	insert_session(&mut conn, "s1", &default_profile.id, "bash");
-	insert_session(&mut conn, "s2", &profile2.id, "bash");
+	insert_session(&mut conn, "s1", &project.id, &default_profile.id, "bash");
+	insert_session(&mut conn, "s2", &project.id, &default_profile.id, "zsh");
 
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
 	assert_eq!(sessions.len(), 2);
 
-	service::profile::delete(&mut conn, &profile2.id).unwrap();
 	cleanup(&dir);
 }
 
@@ -224,9 +226,27 @@ fn list_sessions_ordered_by_created_at() {
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-first", &default_profile.id, "first");
-	insert_session(&mut conn, "s-second", &default_profile.id, "second");
-	insert_session(&mut conn, "s-third", &default_profile.id, "third");
+	insert_session(
+		&mut conn,
+		"s-first",
+		&project.id,
+		&default_profile.id,
+		"first",
+	);
+	insert_session(
+		&mut conn,
+		"s-second",
+		&project.id,
+		&default_profile.id,
+		"second",
+	);
+	insert_session(
+		&mut conn,
+		"s-third",
+		&project.id,
+		&default_profile.id,
+		"third",
+	);
 
 	let sessions =
 		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
@@ -270,8 +290,8 @@ fn list_sessions_excludes_other_projects() {
 	let (project1, profile1, dir1) = create_project_with_git_repo(&mut conn);
 	let (project2, profile2, dir2) = create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-p1", &profile1.id, "bash");
-	insert_session(&mut conn, "s-p2", &profile2.id, "bash");
+	insert_session(&mut conn, "s-p1", &project1.id, &profile1.id, "bash");
+	insert_session(&mut conn, "s-p2", &project2.id, &profile2.id, "bash");
 
 	let sessions1 =
 		service::pty::list_project_sessions(&mut conn, &project1.id).unwrap();
@@ -380,7 +400,13 @@ fn resize_updates_dimensions_in_db() {
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-resize", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-resize",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	pty::update_dimensions(&mut conn, "s-resize", 200, 50);
 
 	let sessions =
@@ -398,7 +424,13 @@ fn mark_closed_sets_closed_at() {
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-close", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-close",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	pty::mark_closed(&mut conn, "s-close");
 
 	let sessions =
@@ -415,8 +447,20 @@ fn mark_all_open_closed() {
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-open-1", &default_profile.id, "bash");
-	insert_session(&mut conn, "s-open-2", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-open-1",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
+	insert_session(
+		&mut conn,
+		"s-open-2",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 
 	// Close one manually
 	pty::mark_closed(&mut conn, "s-open-1");
@@ -438,11 +482,12 @@ fn mark_all_open_closed() {
 // ============================================================
 
 #[test]
-fn insert_session_for_nonexistent_profile_returns_error() {
+fn insert_session_for_nonexistent_project_returns_error() {
 	let mut conn = setup_db();
 	let record = NewPtySessionRecord {
 		id: "s-orphan",
-		profile_id: "nonexistent-profile",
+		project_id: "missing-project",
+		profile_id: "default-missing-project",
 		title: "bash",
 		shell: "/bin/bash",
 		cwd: "/tmp",
@@ -456,12 +501,19 @@ fn insert_session_for_nonexistent_profile_returns_error() {
 #[test]
 fn insert_duplicate_session_id_returns_error() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	insert_session(&mut conn, "s-dup", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-dup",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	let record = NewPtySessionRecord {
 		id: "s-dup",
+		project_id: &project.id,
 		profile_id: &default_profile.id,
 		title: "bash",
 		shell: "/bin/bash",
@@ -567,7 +619,13 @@ fn delete_removes_session_and_output() {
 		create_project_with_git_repo(&mut conn);
 	let logs = tmp_log_dir("delete-removes");
 
-	insert_session(&mut conn, "s-del", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-del",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	write_output(&logs, "s-del", b"data");
 
 	service::pty::delete_session(&mut conn, &logs, "s-del").unwrap();
@@ -586,11 +644,17 @@ fn delete_removes_session_and_output() {
 #[test]
 fn close_then_delete_flow() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 	let logs = tmp_log_dir("close-then-delete");
 
-	insert_session(&mut conn, "s-flow", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-flow",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	write_output(&logs, "s-flow", b"output data");
 
 	// Frontend: close_pty_session marks it closed
@@ -607,12 +671,18 @@ fn close_then_delete_flow() {
 #[test]
 fn restoration_flow_db_side() {
 	let mut conn = setup_db();
-	let (_project, default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 	let logs = tmp_log_dir("restoration-flow");
 
 	// 1. Old session with history
-	insert_session(&mut conn, "s-old", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-old",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 	write_output(&logs, "s-old", b"old terminal output");
 
 	// 2. Read history from old session
@@ -620,7 +690,13 @@ fn restoration_flow_db_side() {
 	assert_eq!(history, b"old terminal output");
 
 	// 3. Create new session (simulating PTY restoration)
-	insert_session(&mut conn, "s-new", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-new",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 
 	// 4. Delete old session (row + log file)
 	service::pty::delete_session(&mut conn, &logs, "s-old").unwrap();
@@ -637,7 +713,13 @@ fn restore_session_creates_new_deletes_old_and_returns_history() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
-	insert_session(&mut conn, "s-restore-old", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-restore-old",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "restore-session");
@@ -688,7 +770,13 @@ fn restore_session_with_empty_history_still_swaps_records() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
-	insert_session(&mut conn, "s-restore-empty", &default_profile.id, "bash");
+	insert_session(
+		&mut conn,
+		"s-restore-empty",
+		&project.id,
+		&default_profile.id,
+		"bash",
+	);
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "restore-empty-session");
@@ -735,15 +823,10 @@ fn restore_session_with_empty_history_still_swaps_records() {
 }
 
 #[test]
-fn delete_profile_closes_live_session_and_removes_log() {
+fn local_extras_delete_fails_closed_and_keeps_live_default_pty() {
 	let mut conn = setup_db();
-	let (project, _default_profile, dir) =
+	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
-	let profile =
-		service::profile::create(&mut conn, &project.id, "live-profile")
-			.unwrap();
-	let profile_id = profile.id.clone();
-	let worktree_path = profile.worktree_path.clone();
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "delete-profile-live");
@@ -751,71 +834,63 @@ fn delete_profile_closes_live_session_and_removes_log() {
 	let session_id = router
 		.create_session(
 			&PtySessionMeta {
-				profile_id: profile_id.clone(),
+				profile_id: default_profile.id.clone(),
 				title: "Profile live".to_string(),
 			},
-			&pty_config(worktree_path.clone()),
+			&pty_config(default_profile.worktree_path.clone()),
 		)
 		.unwrap()
 		.session_id;
 	wait_for_flush_sender(&ctx, &session_id);
 	write_output(&logs, &session_id, b"profile output");
 
-	service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
-		.unwrap();
-
-	assert!(!sessions.lock().unwrap().contains_key(&session_id));
-	assert!(!pty_log::session_path(&logs, &session_id).exists());
-	assert_eq!(router.owner(&session_id).unwrap(), None);
-
-	infra::pty::join_all_read_threads(&read_threads);
-	cleanup(&dir);
-	cleanup(&logs);
-}
-
-#[test]
-fn delete_profile_refuses_to_kill_local_pty_for_herdr_owned_id() {
-	let mut conn = setup_db();
-	let (project, _default_profile, dir) =
-		create_project_with_git_repo(&mut conn);
-	let profile =
-		service::profile::create(&mut conn, &project.id, "herdr-owned")
-			.unwrap();
-	let profile_id = profile.id.clone();
-	let worktree_path = profile.worktree_path.clone();
-
-	let (ctx, sessions, read_threads, logs) =
-		pty_context(conn, "delete-profile-herdr-owned");
-	let router = router_from_ctx(&ctx);
-	let session_id = router
-		.create_session(
-			&PtySessionMeta {
-				profile_id: profile_id.clone(),
-				title: "Profile herdr".to_string(),
-			},
-			&pty_config(worktree_path.clone()),
-		)
-		.unwrap()
-		.session_id;
-	wait_for_flush_sender(&ctx, &session_id);
-	router.unbind_session(&session_id).unwrap();
-	router
-		.bind_session(&session_id, RuntimeBackend::Herdr)
-		.unwrap();
 	let err =
-		service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
+		service::profile::delete_with_runtime(&router, &ctx.db, "extra-id")
 			.unwrap_err();
-	assert!(err.to_string().contains("Herdr-owned"));
+	assert!(err.to_string().contains("no longer deletes extra"), "{err}");
 	assert!(sessions.lock().unwrap().contains_key(&session_id));
-	assert_eq!(
-		router.owner(&session_id).unwrap(),
-		Some(RuntimeBackend::Herdr)
-	);
+	assert!(pty_log::session_path(&logs, &session_id).exists());
 
 	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);
 	cleanup(&logs);
+	let _ = project;
+}
+
+#[test]
+fn local_default_delete_is_refused_and_keeps_live_pty() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let profile_id = default_profile.id.clone();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "delete-profile-default");
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: profile_id.clone(),
+				title: "Default live".to_string(),
+			},
+			&pty_config(default_profile.worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
+	wait_for_flush_sender(&ctx, &session_id);
+
+	let err =
+		service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
+			.unwrap_err();
+	assert!(err.to_string().contains("Cannot delete default"), "{err}");
+	assert!(sessions.lock().unwrap().contains_key(&session_id));
+
+	infra::pty::close_all_sessions(&sessions);
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+	let _ = project;
 }
 
 #[test]

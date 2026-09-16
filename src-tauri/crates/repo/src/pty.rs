@@ -2,7 +2,7 @@ use diesel::prelude::*;
 
 use model::error::AppError;
 use model::pty::{NewPtySessionRecord, PtySessionRecord};
-use model::schema::{profiles, pty_sessions};
+use model::schema::pty_sessions;
 
 pub fn insert_session(
 	conn: &mut SqliteConnection,
@@ -31,10 +31,7 @@ pub fn list_by_project(
 	project_id: &str,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
 	let sessions = pty_sessions::table
-		.inner_join(
-			profiles::table.on(profiles::id.eq(pty_sessions::profile_id)),
-		)
-		.filter(profiles::project_id.eq(project_id))
+		.filter(pty_sessions::project_id.eq(project_id))
 		.select(PtySessionRecord::as_select())
 		.order(pty_sessions::created_at.asc())
 		.load(conn)
@@ -150,30 +147,23 @@ pub fn delete_session(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::profile;
 	use crate::project;
 	use crate::test_utils::setup_db;
 
-	fn setup_profile(conn: &mut SqliteConnection) -> String {
+	fn setup_project(conn: &mut SqliteConnection) -> String {
 		project::insert(conn, "proj-1", "Project", "/tmp/project")
 			.expect("insert project");
-		profile::insert_default(
-			conn,
-			"profile-1",
-			"proj-1",
-			"main",
-			"/tmp/project",
-		)
-		.expect("insert default profile");
-		"profile-1".to_string()
+		"proj-1".to_string()
 	}
 
 	fn session_record<'a>(
 		id: &'a str,
+		project_id: &'a str,
 		profile_id: &'a str,
 	) -> NewPtySessionRecord<'a> {
 		NewPtySessionRecord {
 			id,
+			project_id,
 			profile_id,
 			title: "Shell",
 			shell: "/bin/zsh",
@@ -186,25 +176,50 @@ mod tests {
 	#[test]
 	fn insert_session_lists_by_project() {
 		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
+		let project_id = setup_project(&mut conn);
 
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session");
+		insert_session(
+			&mut conn,
+			&session_record("session-1", &project_id, "default-proj-1"),
+		)
+		.expect("insert session");
 
 		let sessions =
 			list_by_project(&mut conn, "proj-1").expect("list sessions");
 		assert_eq!(sessions.len(), 1);
 		assert_eq!(sessions[0].id, "session-1");
+		assert_eq!(sessions[0].project_id, "proj-1");
+	}
+
+	#[test]
+	fn list_by_project_does_not_join_profiles() {
+		let src = include_str!("pty.rs");
+		let list = src
+			.split("pub fn list_by_project")
+			.nth(1)
+			.unwrap()
+			.split("pub fn list_ids_by_profile")
+			.next()
+			.unwrap();
+		assert!(list.contains("pty_sessions::project_id"));
+		assert!(!list.contains("inner_join"));
+		assert!(!list.contains("profiles"));
 	}
 
 	#[test]
 	fn all_session_ids_returns_every_session() {
 		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session 1");
-		insert_session(&mut conn, &session_record("session-2", &profile_id))
-			.expect("insert session 2");
+		let project_id = setup_project(&mut conn);
+		insert_session(
+			&mut conn,
+			&session_record("session-1", &project_id, "default-proj-1"),
+		)
+		.expect("insert session 1");
+		insert_session(
+			&mut conn,
+			&session_record("session-2", &project_id, "default-proj-1"),
+		)
+		.expect("insert session 2");
 
 		let mut ids = all_session_ids(&mut conn).expect("all ids");
 		ids.sort();
@@ -214,39 +229,44 @@ mod tests {
 	#[test]
 	fn find_by_id_returns_the_inserted_session() {
 		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session");
+		let project_id = setup_project(&mut conn);
+		insert_session(
+			&mut conn,
+			&session_record("session-1", &project_id, "default-proj-1"),
+		)
+		.expect("insert session");
 		let found = find_by_id(&mut conn, "session-1").expect("find");
 		assert_eq!(found.id, "session-1");
-		assert_eq!(found.profile_id, profile_id);
+		assert_eq!(found.profile_id, "default-proj-1");
+		assert_eq!(found.project_id, project_id);
 		assert!(find_by_id(&mut conn, "missing").is_err());
 	}
 
 	#[test]
 	fn list_ids_by_profile_returns_only_matching_profile_sessions() {
 		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
+		let project_id = setup_project(&mut conn);
 		project::insert(&mut conn, "proj-2", "Project 2", "/tmp/project-2")
 			.expect("insert second project");
-		profile::insert_default(
-			&mut conn,
-			"profile-2",
-			"proj-2",
-			"main",
-			"/tmp/project-2",
-		)
-		.expect("insert second profile");
 
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session 1");
-		insert_session(&mut conn, &session_record("session-2", &profile_id))
-			.expect("insert session 2");
-		insert_session(&mut conn, &session_record("session-3", "profile-2"))
-			.expect("insert other profile session");
+		insert_session(
+			&mut conn,
+			&session_record("session-1", &project_id, "default-proj-1"),
+		)
+		.expect("insert session 1");
+		insert_session(
+			&mut conn,
+			&session_record("session-2", &project_id, "default-proj-1"),
+		)
+		.expect("insert session 2");
+		insert_session(
+			&mut conn,
+			&session_record("session-3", "proj-2", "default-proj-2"),
+		)
+		.expect("insert other profile session");
 
 		let mut ids =
-			list_ids_by_profile(&mut conn, &profile_id).expect("list ids");
+			list_ids_by_profile(&mut conn, "default-proj-1").expect("list ids");
 		ids.sort();
 		assert_eq!(ids, vec!["session-1", "session-2"]);
 	}
@@ -254,9 +274,12 @@ mod tests {
 	#[test]
 	fn delete_session_removes_the_session() {
 		let mut conn = setup_db();
-		let profile_id = setup_profile(&mut conn);
-		insert_session(&mut conn, &session_record("session-1", &profile_id))
-			.expect("insert session");
+		let project_id = setup_project(&mut conn);
+		insert_session(
+			&mut conn,
+			&session_record("session-1", &project_id, "default-proj-1"),
+		)
+		.expect("insert session");
 
 		delete_session(&mut conn, "session-1").expect("delete session");
 

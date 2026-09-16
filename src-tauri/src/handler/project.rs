@@ -474,7 +474,6 @@ mod tests {
 
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
-	use model::profile::NewProfile;
 	use model::project::NewProject;
 
 	use super::*;
@@ -495,17 +494,6 @@ mod tests {
 			})
 			.execute(&mut conn)
 			.expect("insert project");
-
-		diesel::insert_into(model::schema::profiles::table)
-			.values(&NewProfile {
-				id: "profile-1",
-				project_id: "proj-1",
-				branch_name: "main",
-				worktree_path: "/repo/worktree",
-				is_default: true,
-			})
-			.execute(&mut conn)
-			.expect("insert profile");
 
 		Arc::new(Mutex::new(conn))
 	}

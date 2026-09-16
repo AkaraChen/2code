@@ -128,7 +128,11 @@ fn migrations_create_profile_and_session_lookup_indexes() {
 	let rows: Vec<IndexRow> = diesel::sql_query(
 		"SELECT name FROM sqlite_master \
 		 WHERE type = 'index' \
-		 AND name IN ('idx_profiles_project_id', 'idx_pty_sessions_profile_id') \
+		 AND name IN ( \
+			'idx_pty_sessions_profile_id', \
+			'idx_pty_sessions_project_id', \
+			'idx_checkout_notes_project_id' \
+		 ) \
 		 ORDER BY name",
 	)
 	.load(&mut conn)
@@ -138,8 +142,9 @@ fn migrations_create_profile_and_session_lookup_indexes() {
 	assert_eq!(
 		names,
 		vec![
-			"idx_profiles_project_id".to_string(),
+			"idx_checkout_notes_project_id".to_string(),
 			"idx_pty_sessions_profile_id".to_string(),
+			"idx_pty_sessions_project_id".to_string(),
 		],
 	);
 }

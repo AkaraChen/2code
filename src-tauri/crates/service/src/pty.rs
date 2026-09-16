@@ -39,10 +39,15 @@ pub struct PtyLogDir(pub PathBuf);
 fn project_folder_for_profile(
 	db: &DbPool,
 	profile_id: &str,
-) -> Result<String, AppError> {
+) -> Result<(String, String), AppError> {
+	let Some(project_id) =
+		model::profile::Profile::project_id_from_local_default(profile_id)
+	else {
+		return Err(AppError::NotFound(format!("Profile: {profile_id}")));
+	};
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	repo::profile::get_project_folder(conn, &profile.project_id)
+	let project = repo::project::find_by_id(conn, project_id)?;
+	Ok((project.id, project.folder))
 }
 
 /// All dependencies needed to create a PTY session, fully decoupled from Tauri.
@@ -267,7 +272,8 @@ pub fn create_session(
 	config: &PtyConfig,
 ) -> Result<String, AppError> {
 	// 1. Resolve project folder and load init_script from 2code.json
-	let project_folder = project_folder_for_profile(&ctx.db, &meta.profile_id)?;
+	let (project_id, project_folder) =
+		project_folder_for_profile(&ctx.db, &meta.profile_id)?;
 	let project_init_scripts =
 		infra::config::load_project_config(&project_folder)
 			.map(|c| c.init_script)
@@ -309,6 +315,7 @@ pub fn create_session(
 		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
 		let new_record = NewPtySessionRecord {
 			id: &session_id,
+			project_id: &project_id,
 			profile_id: &meta.profile_id,
 			title: &meta.title,
 			shell: &config.shell,
@@ -1196,14 +1203,10 @@ mod tests {
 		)
 		.execute(&mut *conn)
 		.unwrap();
-		diesel::sql_query(
-			"INSERT INTO profiles (id, project_id, branch_name, worktree_path, created_at, is_default) VALUES ('pr1', 'p1', 'main', '/tmp', datetime('now'), 1)",
-		)
-		.execute(&mut *conn)
-		.unwrap();
 		let record = NewPtySessionRecord {
 			id: session_id,
-			profile_id: "pr1",
+			project_id: "p1",
+			profile_id: "default-p1",
 			title: "test",
 			shell: "/bin/sh",
 			cwd: "/tmp",
@@ -1286,8 +1289,10 @@ mod tests {
 		let db = setup_test_db();
 		insert_test_project_and_session(&db, "s-profile-folder");
 
-		let folder = project_folder_for_profile(&db, "pr1").unwrap();
+		let (project_id, folder) =
+			project_folder_for_profile(&db, "default-p1").unwrap();
 
+		assert_eq!(project_id, "p1");
 		assert_eq!(folder, "/tmp");
 	}
 

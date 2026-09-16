@@ -317,21 +317,13 @@ mod tests {
 		)
 	}
 
-	fn insert_profile(
+	fn insert_project(
 		conn: &mut SqliteConnection,
 		worktree_path: &str,
 	) -> String {
 		repo::project::insert(conn, "proj-1", "Project", worktree_path)
 			.expect("insert project");
-		repo::profile::insert_default(
-			conn,
-			"profile-1",
-			"proj-1",
-			"main",
-			worktree_path,
-		)
-		.expect("insert profile");
-		"profile-1".to_string()
+		model::profile::Profile::local_default_id("proj-1")
 	}
 
 	#[test]
@@ -359,7 +351,7 @@ mod tests {
 
 		let mut conn = setup_db();
 		let profile_id =
-			insert_profile(&mut conn, &dir.path().to_string_lossy());
+			insert_project(&mut conn, &dir.path().to_string_lossy());
 		let db = pool_from(conn);
 		let runtime = local_router(&db);
 
