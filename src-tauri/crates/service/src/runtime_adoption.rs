@@ -1,8 +1,9 @@
-//! Adopt existing 2code checkouts into the dedicated Herdr namespace.
+//! One-shot import of leftover sqlite extra profiles into Herdr.
 //!
-//! Uses JSON `worktree.open` only. Does not create git worktrees, bind
-//! RuntimeRouter identities, write session→pane rows, or start from
-//! the explicit Local fallback.
+//! Uses JSON `worktree.open` only. Does not create git worktrees, write
+//! `profile_runtime_mappings`, write `profiles.worktree_path`, bind
+//! RuntimeRouter identities, or start from the explicit Local fallback.
+//! Default / project-folder checkouts stay for #436 Task 10.
 
 use std::path::{Path, PathBuf};
 
@@ -11,12 +12,10 @@ use infra::db::DbPool;
 use infra::herdr::transport::{HerdrClient, WorktreeOpenResult};
 use model::error::AppError;
 use model::profile::Profile;
-use model::runtime::{RuntimeIdentityState, HERDR_NAMESPACE};
 
-use crate::runtime_mapping::workspace_identity_state;
-use crate::runtime_sync::RuntimeProjection;
+use crate::runtime::HerdrWorktreeClient;
 
-/// Result of JSON `worktree.open` used for profile bind/replace.
+/// Result of JSON `worktree.open`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OpenedWorktree {
 	pub workspace_id: String,
@@ -41,7 +40,7 @@ pub trait WorktreeOpener {
 	) -> Result<OpenedWorktree, AppError>;
 }
 
-/// Typed `worktree.open` against a Task 5 client. Does not retry.
+/// Typed `worktree.open` against a Herdr JSON client. Does not retry.
 pub struct HerdrClientOpener<'a> {
 	client: &'a HerdrClient,
 }
@@ -65,13 +64,29 @@ impl WorktreeOpener for HerdrClientOpener<'_> {
 	}
 }
 
-/// What happened for one profile during adopt/resume.
+struct WorktreeClientOpener<'a> {
+	client: &'a dyn HerdrWorktreeClient,
+}
+
+impl WorktreeOpener for WorktreeClientOpener<'_> {
+	fn open(
+		&mut self,
+		cwd: &Path,
+		path: &Path,
+	) -> Result<OpenedWorktree, AppError> {
+		self.client
+			.worktree_open(cwd, path)
+			.map(OpenedWorktree::from)
+	}
+}
+
+/// What happened for one leftover extra during import.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AdoptionAction {
 	Bound,
-	Replaced { from: String },
 	AlreadyBound,
 	SkippedMissingCheckout,
+	SkippedDefault,
 	Failed,
 }
 
@@ -93,32 +108,44 @@ struct AdoptionTarget {
 	project_folder: String,
 }
 
-/// Resume-safe adoption. Persists after each successful profile bind.
-/// Not called from the explicit Local fallback.
-pub fn adopt_existing_profiles(
+/// Import leftover sqlite extras via `worktree.open`. Does not persist
+/// mapping rows. Default checkouts are skipped (Task 10).
+pub fn import_leftover_sqlite_profiles(
 	db: &DbPool,
-	projection: &RuntimeProjection,
+	worktrees: &dyn HerdrWorktreeClient,
+) -> Result<AdoptionReport, AppError> {
+	let mut opener = WorktreeClientOpener { client: worktrees };
+	import_leftover_sqlite_profiles_with(db, &mut opener)
+}
+
+/// Same import against a test opener. Not called from Local fallback.
+pub fn import_leftover_sqlite_profiles_with(
+	db: &DbPool,
 	opener: &mut dyn WorktreeOpener,
 ) -> Result<AdoptionReport, AppError> {
 	let targets = with_db(db, adoption_targets)?;
 	let mut report = AdoptionReport::default();
 	for target in targets {
-		report
-			.outcomes
-			.push(adopt_one(db, projection, opener, &target)?);
+		report.outcomes.push(import_one(opener, &target));
 	}
 	Ok(report)
 }
 
-fn adopt_one(
-	db: &DbPool,
-	projection: &RuntimeProjection,
+fn import_one(
 	opener: &mut dyn WorktreeOpener,
 	target: &AdoptionTarget,
-) -> Result<ProfileAdoptionOutcome, AppError> {
+) -> ProfileAdoptionOutcome {
 	let profile_id = target.profile.id.clone();
+	if is_default_checkout(target) {
+		return ProfileAdoptionOutcome {
+			profile_id,
+			workspace_id: None,
+			action: AdoptionAction::SkippedDefault,
+			error: None,
+		};
+	}
 	let Some((cwd, checkout)) = resolve_canonical_paths(target) else {
-		return Ok(ProfileAdoptionOutcome {
+		return ProfileAdoptionOutcome {
 			profile_id,
 			workspace_id: None,
 			action: AdoptionAction::SkippedMissingCheckout,
@@ -126,36 +153,21 @@ fn adopt_one(
 				"missing checkout for profile {}",
 				target.profile.id
 			)),
-		});
+		};
 	};
 
-	let stored = with_db(db, |conn| {
-		optional_profile_mapping(conn, &target.profile.id)
-	})?;
-	if let Some(mapping) = stored.as_ref() {
-		if workspace_identity_state(mapping, projection)
-			== RuntimeIdentityState::Bound
-		{
-			return Ok(ProfileAdoptionOutcome {
-				profile_id,
-				workspace_id: Some(mapping.workspace_id.clone()),
-				action: AdoptionAction::AlreadyBound,
-				error: None,
-			});
-		}
-	}
-
-	let opened = match open_resumable(opener, &cwd, &checkout) {
-		Ok(opened) => opened,
-		Err(err) => return Ok(failed_profile(profile_id, err.to_string())),
-	};
-
-	match with_db(db, |conn| {
-		persist_workspace(conn, &target.profile.id, stored.as_ref(), &opened)
-	}) {
-		Ok(outcome) => Ok(outcome),
-		Err(AppError::LockError) => Err(AppError::LockError),
-		Err(err) => Ok(failed_profile(profile_id, err.to_string())),
+	match opener.open(&cwd, &checkout) {
+		Ok(opened) => ProfileAdoptionOutcome {
+			profile_id,
+			workspace_id: Some(opened.workspace_id),
+			action: if opened.already_open {
+				AdoptionAction::AlreadyBound
+			} else {
+				AdoptionAction::Bound
+			},
+			error: None,
+		},
+		Err(err) => failed_profile(profile_id, err.to_string()),
 	}
 }
 
@@ -168,57 +180,15 @@ fn failed_profile(profile_id: String, error: String) -> ProfileAdoptionOutcome {
 	}
 }
 
-fn persist_workspace(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-	stored: Option<&model::runtime_mapping::ProfileRuntimeMapping>,
-	opened: &OpenedWorktree,
-) -> Result<ProfileAdoptionOutcome, AppError> {
-	if let Some(existing) = stored {
-		let replaced = repo::runtime_mapping::replace_profile_workspace(
-			conn,
-			profile_id,
-			HERDR_NAMESPACE,
-			&opened.workspace_id,
-		)?;
-		let action = if existing.workspace_id == replaced.workspace_id {
-			AdoptionAction::AlreadyBound
-		} else {
-			AdoptionAction::Replaced {
-				from: existing.workspace_id.clone(),
-			}
-		};
-		Ok(ProfileAdoptionOutcome {
-			profile_id: profile_id.to_string(),
-			workspace_id: Some(replaced.workspace_id),
-			action,
-			error: None,
-		})
-	} else {
-		let bound = repo::runtime_mapping::bind_profile_workspace(
-			conn,
-			profile_id,
-			HERDR_NAMESPACE,
-			&opened.workspace_id,
-		)?;
-		Ok(ProfileAdoptionOutcome {
-			profile_id: profile_id.to_string(),
-			workspace_id: Some(bound.workspace_id),
-			action: AdoptionAction::Bound,
-			error: None,
-		})
+fn is_default_checkout(target: &AdoptionTarget) -> bool {
+	if target.profile.is_default {
+		return true;
 	}
-}
-
-fn open_resumable(
-	opener: &mut dyn WorktreeOpener,
-	cwd: &Path,
-	path: &Path,
-) -> Result<OpenedWorktree, AppError> {
-	match opener.open(cwd, path) {
-		Ok(opened) => Ok(opened),
-		Err(AppError::HerdrUncertainOutcome(_)) => opener.open(cwd, path),
-		Err(err) => Err(err),
+	let folder = Path::new(&target.project_folder);
+	let checkout = Path::new(&target.profile.worktree_path);
+	match (folder.canonicalize(), checkout.canonicalize()) {
+		(Ok(left), Ok(right)) => left == right,
+		_ => folder == checkout,
 	}
 }
 
@@ -226,13 +196,9 @@ fn resolve_canonical_paths(
 	target: &AdoptionTarget,
 ) -> Option<(PathBuf, PathBuf)> {
 	let cwd = Path::new(&target.project_folder).canonicalize().ok()?;
-	let checkout = if target.profile.is_default {
-		Path::new(&target.project_folder).canonicalize().ok()?
-	} else {
-		Path::new(&target.profile.worktree_path)
-			.canonicalize()
-			.ok()?
-	};
+	let checkout = Path::new(&target.profile.worktree_path)
+		.canonicalize()
+		.ok()?;
 	Some((cwd, checkout))
 }
 
@@ -260,17 +226,6 @@ fn adoption_targets(
 	Ok(out)
 }
 
-fn optional_profile_mapping(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<Option<model::runtime_mapping::ProfileRuntimeMapping>, AppError> {
-	match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
-		Ok(mapping) => Ok(Some(mapping)),
-		Err(AppError::NotFound(_)) => Ok(None),
-		Err(err) => Err(err),
-	}
-}
-
 fn with_db<T>(
 	db: &DbPool,
 	f: impl FnOnce(&mut SqliteConnection) -> Result<T, AppError>,
@@ -288,8 +243,7 @@ mod tests {
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use model::pty::NewPtySessionRecord;
-	use model::runtime::RuntimeBackend;
-	use serde_json::json;
+	use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
 
 	use super::*;
 	use crate::runtime::{
@@ -298,7 +252,6 @@ mod tests {
 
 	struct FakeOpener {
 		assigned: HashMap<PathBuf, String>,
-		reopen_as: HashMap<PathBuf, String>,
 		calls: Vec<(PathBuf, PathBuf)>,
 		fail_on_call: Option<usize>,
 		fail_err: Option<AppError>,
@@ -308,7 +261,6 @@ mod tests {
 		fn new() -> Self {
 			Self {
 				assigned: HashMap::new(),
-				reopen_as: HashMap::new(),
 				calls: Vec::new(),
 				fail_on_call: None,
 				fail_err: None,
@@ -327,12 +279,6 @@ mod tests {
 				return Err(self.fail_err.take().unwrap_or_else(|| {
 					AppError::HerdrTransport("injected open failure".into())
 				}));
-			}
-			if let Some(id) = self.reopen_as.get(path) {
-				return Ok(OpenedWorktree {
-					workspace_id: id.clone(),
-					already_open: false,
-				});
 			}
 			if let Some(id) = self.assigned.get(path) {
 				return Ok(OpenedWorktree {
@@ -391,13 +337,6 @@ mod tests {
 			}
 		}
 
-		fn mapping(&self, profile_id: &str) -> String {
-			let mut conn = self.db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(&mut conn, profile_id)
-				.unwrap()
-				.workspace_id
-		}
-
 		fn worktree_list(&self) -> String {
 			let output = Command::new("git")
 				.args(["worktree", "list", "--porcelain"])
@@ -406,21 +345,14 @@ mod tests {
 				.unwrap();
 			String::from_utf8_lossy(&output.stdout).into_owned()
 		}
+	}
 
-		fn snapshot(workspaces: serde_json::Value) -> RuntimeProjection {
-			let mut projection = RuntimeProjection::new();
-			projection
-				.apply_snapshot(&json!({
-					"type": "session_snapshot",
-					"snapshot": {
-						"workspaces": workspaces,
-						"tabs": [],
-						"panes": []
-					}
-				}))
-				.unwrap();
-			projection
-		}
+	fn leftover_profile_mappings(db: &DbPool) -> Vec<String> {
+		repo::runtime_mapping::list_profile_mappings(&mut db.lock().unwrap())
+			.unwrap()
+			.into_iter()
+			.map(|row| format!("{}:{}", row.profile_id, row.workspace_id))
+			.collect()
 	}
 
 	fn init_git_repo(repo: &Path) {
@@ -474,41 +406,27 @@ mod tests {
 		cmd
 	}
 
-	fn empty_projection() -> RuntimeProjection {
-		RuntimeProjection::new()
-	}
-
 	#[test]
 	fn interrupt_then_retry_does_not_duplicate_workspaces() {
 		let fx = Fixture::new();
 		let lists_before = fx.worktree_list();
 		let mut opener = FakeOpener::new();
-		opener.fail_on_call = Some(1);
+		opener.fail_on_call = Some(0);
 		let first =
-			adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-				.unwrap();
-		assert_eq!(first.outcomes[0].action, AdoptionAction::Bound);
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(first.outcomes[0].action, AdoptionAction::SkippedDefault);
 		assert_eq!(first.outcomes[0].profile_id, "def-1");
 		assert_eq!(first.outcomes[1].action, AdoptionAction::Failed);
-		assert_eq!(fx.mapping("def-1"), "w1");
-		assert!(repo::runtime_mapping::find_profile_mapping(
-			&mut fx.db.lock().unwrap(),
-			"wt-1"
-		)
-		.is_err());
+		assert_eq!(first.outcomes[1].profile_id, "wt-1");
+		assert!(leftover_profile_mappings(&fx.db).is_empty());
 
 		opener.fail_on_call = None;
 		let retry =
-			adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-				.unwrap();
-		assert_eq!(retry.outcomes[0].workspace_id.as_deref(), Some("w1"));
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(retry.outcomes[0].action, AdoptionAction::SkippedDefault);
 		assert_eq!(retry.outcomes[1].action, AdoptionAction::Bound);
-		assert_eq!(fx.mapping("def-1"), "w1");
-		assert_eq!(fx.mapping("wt-1"), "w2");
-		let mut ids = vec![fx.mapping("def-1"), fx.mapping("wt-1")];
-		ids.sort();
-		ids.dedup();
-		assert_eq!(ids, vec!["w1".to_string(), "w2".to_string()]);
+		assert_eq!(retry.outcomes[1].workspace_id.as_deref(), Some("w1"));
+		assert!(leftover_profile_mappings(&fx.db).is_empty());
 		assert_eq!(fx.worktree_list(), lists_before);
 		assert_eq!(
 			std::fs::read_to_string(fx.repo.join("dirty-primary.txt")).unwrap(),
@@ -532,12 +450,13 @@ mod tests {
 				.unwrap();
 		}
 		let mut opener = FakeOpener::new();
-		adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-			.unwrap();
+		let report =
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(report.outcomes[0].action, AdoptionAction::SkippedDefault);
+		assert_eq!(report.outcomes[1].action, AdoptionAction::Bound);
 		let repo = fx.repo.canonicalize().unwrap();
 		let wt = fx.worktree.canonicalize().unwrap();
-		assert_eq!(opener.calls[0], (repo.clone(), repo));
-		assert_eq!(opener.calls[1], (fx.repo.canonicalize().unwrap(), wt));
+		assert_eq!(opener.calls, vec![(repo, wt)]);
 		assert_eq!(
 			repo::profile::find_by_id(&mut fx.db.lock().unwrap(), "def-1")
 				.unwrap()
@@ -547,29 +466,25 @@ mod tests {
 	}
 
 	#[test]
-	fn bound_projection_skips_open_and_missing_id_is_replaced() {
+	fn leftover_mapping_is_ignored_and_already_open_is_not_rewritten() {
 		let fx = Fixture::new();
-		let mut opener = FakeOpener::new();
-		adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-			.unwrap();
-		let first_calls = opener.calls.len();
-		let projection = Fixture::snapshot(json!([
-			{ "workspace_id": "w1", "label": "Renamed" },
-			{ "workspace_id": "w2", "label": "App" }
-		]));
-		adopt_existing_profiles(&fx.db, &projection, &mut opener).unwrap();
-		assert_eq!(opener.calls.len(), first_calls);
-
 		{
 			let mut conn = fx.db.lock().unwrap();
+			repo::runtime_mapping::bind_profile_workspace(
+				&mut conn,
+				"wt-1",
+				HERDR_NAMESPACE,
+				"w-stale",
+			)
+			.unwrap();
 			repo::pty::insert_session(
 				&mut conn,
 				&NewPtySessionRecord {
 					id: "sess-1",
-					profile_id: "def-1",
+					profile_id: "wt-1",
 					title: "Shell",
 					shell: "/bin/sh",
-					cwd: fx.repo.to_str().unwrap(),
+					cwd: fx.worktree.to_str().unwrap(),
 					cols: 80,
 					rows: 24,
 				},
@@ -579,30 +494,36 @@ mod tests {
 				&mut conn,
 				"sess-1",
 				HERDR_NAMESPACE,
-				"w1",
-				"w1:p1",
+				"w-stale",
+				"w-stale:p1",
 			)
 			.unwrap();
 		}
-		opener
-			.reopen_as
-			.insert(fx.repo.canonicalize().unwrap(), "w9".into());
-		let other = Fixture::snapshot(json!([
-			{ "workspace_id": "w8", "label": "App" }
-		]));
-		let report =
-			adopt_existing_profiles(&fx.db, &other, &mut opener).unwrap();
+		let mut opener = FakeOpener::new();
+		let first =
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(first.outcomes[0].action, AdoptionAction::SkippedDefault);
+		assert_eq!(first.outcomes[1].action, AdoptionAction::Bound);
+		assert_eq!(first.outcomes[1].workspace_id.as_deref(), Some("w1"));
 		assert_eq!(
-			report.outcomes[0].action,
-			AdoptionAction::Replaced { from: "w1".into() }
+			leftover_profile_mappings(&fx.db),
+			vec!["wt-1:w-stale".to_string()]
 		);
-		assert_eq!(fx.mapping("def-1"), "w9");
-		assert_ne!(fx.mapping("def-1"), "w8");
 		assert!(repo::runtime_mapping::find_session_mapping(
 			&mut fx.db.lock().unwrap(),
 			"sess-1"
 		)
-		.is_err());
+		.is_ok());
+
+		let second =
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(second.outcomes[1].action, AdoptionAction::AlreadyBound);
+		assert_eq!(second.outcomes[1].workspace_id.as_deref(), Some("w1"));
+		assert_eq!(opener.calls.len(), 2);
+		assert_eq!(
+			leftover_profile_mappings(&fx.db),
+			vec!["wt-1:w-stale".to_string()]
+		);
 	}
 
 	#[test]
@@ -621,30 +542,30 @@ mod tests {
 		}
 		let mut opener = FakeOpener::new();
 		let report =
-			adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-				.unwrap();
-		assert_eq!(report.outcomes[0].action, AdoptionAction::Bound);
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(report.outcomes[0].action, AdoptionAction::SkippedDefault);
 		assert_eq!(
 			report.outcomes[1].action,
 			AdoptionAction::SkippedMissingCheckout
 		);
 		assert!(!missing.exists());
-		assert_eq!(opener.calls.len(), 1);
+		assert!(opener.calls.is_empty());
+		assert!(leftover_profile_mappings(&fx.db).is_empty());
 	}
 
 	#[test]
-	fn uncertain_open_is_retried_then_bound() {
+	fn uncertain_open_is_not_retried() {
 		let fx = Fixture::new();
 		let mut opener = FakeOpener::new();
 		opener.fail_on_call = Some(0);
 		opener.fail_err =
 			Some(AppError::HerdrUncertainOutcome("worktree.open".into()));
 		let report =
-			adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-				.unwrap();
-		assert_eq!(report.outcomes[0].action, AdoptionAction::Bound);
-		assert_eq!(fx.mapping("def-1"), "w1");
-		assert!(opener.calls.len() >= 2);
+			import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
+		assert_eq!(report.outcomes[0].action, AdoptionAction::SkippedDefault);
+		assert_eq!(report.outcomes[1].action, AdoptionAction::Failed);
+		assert_eq!(opener.calls.len(), 1);
+		assert!(leftover_profile_mappings(&fx.db).is_empty());
 	}
 
 	#[test]
@@ -670,8 +591,7 @@ mod tests {
 		selector.bind("sess-local", RuntimeBackend::Local).unwrap();
 		let herdr = HerdrStubAdapter::new();
 		let mut opener = FakeOpener::new();
-		adopt_existing_profiles(&fx.db, &empty_projection(), &mut opener)
-			.unwrap();
+		import_leftover_sqlite_profiles_with(&fx.db, &mut opener).unwrap();
 		assert_eq!(
 			selector.owner("sess-local").unwrap(),
 			Some(RuntimeBackend::Local)
@@ -684,6 +604,7 @@ mod tests {
 			"sess-local"
 		)
 		.is_err());
+		assert!(leftover_profile_mappings(&fx.db).is_empty());
 		assert_eq!(SESSION_NAME, HERDR_NAMESPACE);
 		assert_ne!(SESSION_NAME, "default");
 	}
@@ -705,11 +626,17 @@ mod tests {
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("server.stop"));
 		assert!(!src.contains("bind_session_pane"));
+		assert!(!src.contains("bind_profile_workspace"));
+		assert!(!src.contains("replace_profile_workspace"));
+		assert!(!src.contains("unbind_profile_workspace"));
+		assert!(!src.contains("find_profile_mapping"));
+		assert!(!src.contains("set_worktree_path"));
 		assert!(!src.contains("setup_script"));
 		assert!(!src.contains("teardown_script"));
 		assert!(!src.contains("ensure_herdr_listener"));
 		let lib = include_str!("../../../src/lib.rs");
 		assert!(!lib.contains("adopt_existing_profiles"));
+		assert!(!lib.contains("import_leftover_sqlite_profiles"));
 		assert!(!lib.contains("runtime_adoption"));
 		assert!(!lib.contains("ensure_herdr_listener"));
 	}
