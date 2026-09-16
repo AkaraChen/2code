@@ -777,7 +777,7 @@ fn listed_entry_to_created(
 	}
 }
 
-fn open_existing_checkout(
+pub(crate) fn open_existing_checkout(
 	worktrees: &dyn HerdrWorktreeClient,
 	cwd: &Path,
 	path: &Path,
@@ -790,7 +790,14 @@ fn open_existing_checkout(
 			workspace_id: opened.workspace_id,
 			path: path.to_string_lossy().into_owned(),
 		})),
-		Err(AppError::HerdrUncertainOutcome(_)) => Ok(None),
+		Err(AppError::HerdrUncertainOutcome(err)) => {
+			tracing::warn!(
+				target: "herdr",
+				path = %path.display(),
+				"worktree.open uncertain; not retrying: {err}"
+			);
+			Ok(None)
+		}
 		Err(err) => Err(err),
 	}
 }

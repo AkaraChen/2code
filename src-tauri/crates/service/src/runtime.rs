@@ -422,6 +422,7 @@ pub fn connect_gui_herdr(
 	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
 		.map_err(AppError::from)?;
 	let json = Arc::new(HerdrJsonTerminals::new(client));
+	let db = opts.db.clone();
 	let mut adapter = HerdrStubAdapter::with_json_clients(
 		opts.db,
 		json,
@@ -437,7 +438,20 @@ pub fn connect_gui_herdr(
 			"HerdrRuntimeSync failed: {err}"
 		);
 	}
+	adopt_after_gui_herdr_connect(&adapter, &db);
 	Ok(adapter)
+}
+
+fn adopt_after_gui_herdr_connect(adapter: &HerdrStubAdapter, db: &DbPool) {
+	if let Err(err) = crate::project::adopt_existing_checkouts_with(
+		adapter.worktrees().ok(),
+		db,
+	) {
+		tracing::warn!(
+			target: "herdr",
+			"adopt existing checkouts failed: {err}"
+		);
+	}
 }
 
 /// Herdr stays selected even when sidecar/namespace attach fails.
@@ -461,6 +475,7 @@ pub fn build_gui_runtime(
 	guard: &HerdrClientGuard,
 	xdg_config_home: PathBuf,
 ) -> RuntimeRouter {
+	let db_for_adopt = db.clone();
 	let herdr = build_gui_herdr_adapter(GuiHerdrConnect {
 		db,
 		guard,
@@ -470,7 +485,16 @@ pub fn build_gui_runtime(
 		exe_dir: None,
 		binaries_dir: None,
 	});
-	RuntimeRouter::new(herdr)
+	let runtime = RuntimeRouter::new(herdr);
+	if let Err(err) =
+		crate::project::adopt_existing_checkouts(&runtime, &db_for_adopt)
+	{
+		tracing::warn!(
+			target: "herdr",
+			"adopt existing checkouts failed: {err}"
+		);
+	}
+	runtime
 }
 
 /// GUI exit: drop client helpers only. Does not stop the Herdr server.
@@ -802,6 +826,22 @@ mod tests {
 		assert!(connect.contains("resolve_namespace"));
 		assert!(!connect.contains("import_leftover_sqlite_profiles"));
 		assert!(connect.contains("attach_runtime_sync"));
+		assert!(connect.contains("adopt_existing_checkouts"));
+		assert!(connect.contains("adopt_after_gui_herdr_connect"));
+		let attach = connect.find("attach_runtime_sync").unwrap();
+		let adopt = connect.find("adopt_after_gui_herdr_connect").unwrap();
+		assert!(
+			adopt > attach,
+			"connect-time adopt runs after successful GUI Herdr attach"
+		);
+		let build = production
+			.split("pub fn build_gui_runtime")
+			.nth(1)
+			.unwrap()
+			.split("pub fn release_herdr_client_helpers")
+			.next()
+			.unwrap();
+		assert!(build.contains("adopt_existing_checkouts"));
 		assert!(!production.contains("TWOCODE_RUNTIME"));
 		assert!(!production.contains("--twocode-runtime=local"));
 		assert!(!production.contains("LocalAdapter"));
@@ -815,6 +855,40 @@ mod tests {
 		assert!(!lib.contains("HerdrRuntimeSync"));
 		assert!(!lib.contains("events.subscribe"));
 		assert!(!lib.contains("TWOCODE_RUNTIME"));
+	}
+
+	#[test]
+	fn connect_gui_herdr_adopts_existing_checkouts() {
+		let runtime = include_str!("runtime.rs");
+		let production = runtime.split("#[cfg(test)]").next().unwrap();
+		let connect = production
+			.split("pub fn connect_gui_herdr")
+			.nth(1)
+			.unwrap()
+			.split("pub fn build_gui_herdr_adapter")
+			.next()
+			.unwrap();
+		assert!(connect.contains("adopt_after_gui_herdr_connect"));
+		assert!(connect.contains("adopt_existing_checkouts"));
+		let attach = connect.find("attach_runtime_sync").unwrap();
+		let adopt = connect.find("adopt_after_gui_herdr_connect").unwrap();
+		assert!(
+			adopt > attach,
+			"connect-time adopt runs after successful GUI Herdr attach"
+		);
+		let build = production
+			.split("pub fn build_gui_runtime")
+			.nth(1)
+			.unwrap()
+			.split("pub fn release_herdr_client_helpers")
+			.next()
+			.unwrap();
+		assert!(build.contains("adopt_existing_checkouts"));
+		assert!(!production.contains("import_leftover_sqlite_profiles"));
+		let lib = include_str!("../../../src/lib.rs");
+		assert!(!lib.contains("adopt_existing_checkouts"));
+		assert!(!lib.contains("HerdrRuntimeSync"));
+		assert!(!lib.contains("events.subscribe"));
 	}
 
 	#[test]

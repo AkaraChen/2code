@@ -486,7 +486,14 @@ pub fn adopt_existing_checkouts(
 	runtime: &RuntimeRouter,
 	db: &DbPool,
 ) -> Result<(), AppError> {
-	let Some(worktrees) = runtime.herdr_worktrees_optional() else {
+	adopt_existing_checkouts_with(runtime.herdr_worktrees_optional(), db)
+}
+
+pub(crate) fn adopt_existing_checkouts_with(
+	worktrees: Option<&dyn HerdrWorktreeClient>,
+	db: &DbPool,
+) -> Result<(), AppError> {
+	let Some(worktrees) = worktrees else {
 		return Ok(());
 	};
 	let folders = {
@@ -513,13 +520,29 @@ fn adopt_project_folder(worktrees: &dyn HerdrWorktreeClient, folder: &str) {
 	}
 }
 
+fn adopt_open_checkout(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	path: &Path,
+) {
+	if let Err(err) =
+		crate::profile::open_existing_checkout(worktrees, cwd, path)
+	{
+		tracing::warn!(
+			target: "herdr",
+			path = %path.display(),
+			"adopt worktree.open failed: {err}"
+		);
+	}
+}
+
 fn adopt_git_checkouts(
 	worktrees: &dyn HerdrWorktreeClient,
 	cwd: &Path,
 	folder: &str,
 	listed: &[WorktreeListEntry],
 ) {
-	let _ = worktrees.worktree_open(cwd, cwd);
+	adopt_open_checkout(worktrees, cwd, cwd);
 	for entry in listed {
 		if entry
 			.workspace_id
@@ -531,7 +554,7 @@ fn adopt_git_checkouts(
 		if same_checkout_path(&entry.path, folder) {
 			continue;
 		}
-		let _ = worktrees.worktree_open(cwd, Path::new(&entry.path));
+		adopt_open_checkout(worktrees, cwd, Path::new(&entry.path));
 	}
 }
 
@@ -540,6 +563,9 @@ fn adopt_nongit_folder(
 	cwd: &Path,
 	folder: &str,
 ) {
+	if !cwd.exists() {
+		return;
+	}
 	match worktrees.session_snapshot() {
 		Ok(snap)
 			if !workspace_ids_from_snapshot_folder(&snap, folder)
@@ -550,8 +576,25 @@ fn adopt_nongit_folder(
 		Ok(_) => {}
 		Err(_) => return,
 	}
-	let _ =
-		worktrees.workspace_create(WorkspaceCreateRequest { cwd, label: None });
+	match worktrees
+		.workspace_create(WorkspaceCreateRequest { cwd, label: None })
+	{
+		Ok(_) => {}
+		Err(AppError::HerdrUncertainOutcome(err)) => {
+			tracing::warn!(
+				target: "herdr",
+				cwd = %cwd.display(),
+				"workspace.create uncertain; not retrying: {err}"
+			);
+		}
+		Err(err) => {
+			tracing::warn!(
+				target: "herdr",
+				cwd = %cwd.display(),
+				"adopt workspace.create failed: {err}"
+			);
+		}
+	}
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
@@ -1312,6 +1355,20 @@ mod tests {
 		dir
 	}
 
+	fn abs_folder(dir: &tempfile::TempDir) -> String {
+		dir.path()
+			.canonicalize()
+			.expect("canonicalize")
+			.to_string_lossy()
+			.into_owned()
+	}
+
+	fn existing_dir() -> (tempfile::TempDir, String) {
+		let dir = tempfile::tempdir().expect("folder");
+		let folder = abs_folder(&dir);
+		(dir, folder)
+	}
+
 	fn leftover_git_helper_bodies(src: &str) -> Vec<(&'static str, String)> {
 		const NAMES: &[&str] = &[
 			"pub fn get_diff(",
@@ -1635,12 +1692,14 @@ mod tests {
 
 	#[test]
 	fn adopt_git_default_uses_worktree_open_and_keeps_already_open_id() {
+		let (primary_dir, folder) = existing_dir();
+		let (extra_dir, extra) = existing_dir();
 		let mut conn = setup_db();
-		insert_catalog(&mut conn, "/repo", "/stale");
+		insert_catalog(&mut conn, &folder, &folder);
 		let db = pool_from(conn);
 		let fake = FakeList::new(vec![
-			primary("/repo", None, Some("main")),
-			listed("/repo/disk", None, Some("wt/disk")),
+			primary(&folder, None, Some("main")),
+			listed(&extra, None, Some("wt/disk")),
 		]);
 		let runtime = herdr_router(Some(fake.clone()));
 
@@ -1649,15 +1708,15 @@ mod tests {
 		assert_eq!(first[0].profiles.len(), 2);
 		assert_eq!(first[0].profiles[0].id, "w1");
 		assert!(first[0].profiles[0].is_default);
-		assert_eq!(first[0].profiles[0].worktree_path, "/repo");
+		assert_eq!(first[0].profiles[0].worktree_path, folder);
 		assert_eq!(first[0].profiles[1].id, "w2");
 		assert!(!first[0].profiles[1].is_default);
-		assert_eq!(first[0].profiles[1].worktree_path, "/repo/disk");
+		assert_eq!(first[0].profiles[1].worktree_path, extra);
 		assert_eq!(
 			fake.opens(),
 			vec![
-				("/repo".into(), "/repo".into()),
-				("/repo".into(), "/repo/disk".into()),
+				(folder.clone(), folder.clone()),
+				(folder.clone(), extra.clone()),
 			]
 		);
 		assert!(!fake.methods().iter().any(|m| m == "create"));
@@ -1670,21 +1729,24 @@ mod tests {
 		assert_eq!(fake.opens().len(), 3);
 		assert_eq!(
 			fake.opens()[2],
-			("/repo".into(), "/repo".into()),
+			(folder.clone(), folder.clone()),
 			"already_open default is opened again and keeps w1"
 		);
+		let _keep = (primary_dir, extra_dir);
 	}
 
 	#[test]
 	fn adopt_skips_failed_extra_until_open_succeeds() {
+		let (primary_dir, folder) = existing_dir();
+		let (extra_dir, extra) = existing_dir();
 		let mut conn = setup_db();
-		insert_catalog(&mut conn, "/repo", "/stale");
+		insert_catalog(&mut conn, &folder, &folder);
 		let db = pool_from(conn);
 		let fake = FakeList::new(vec![
-			primary("/repo", None, Some("main")),
-			listed("/repo/disk", None, Some("wt/disk")),
+			primary(&folder, None, Some("main")),
+			listed(&extra, None, Some("wt/disk")),
 		]);
-		fake.fail_open_path("/repo/disk");
+		fake.fail_open_path(&extra);
 		let runtime = herdr_router(Some(fake.clone()));
 
 		adopt_existing_checkouts(&runtime, &db).expect("adopt");
@@ -1692,26 +1754,25 @@ mod tests {
 		assert_eq!(listed[0].profiles.len(), 1);
 		assert_eq!(listed[0].profiles[0].id, "w1");
 		assert!(listed[0].profiles[0].is_default);
-		assert!(
-			!listed[0]
-				.profiles
-				.iter()
-				.any(|profile| profile.worktree_path == "/repo/disk")
-		);
-		assert!(
-			fake.opens()
-				.iter()
-				.any(|call| call == &("/repo".into(), "/repo/disk".into()))
-		);
+		assert!(!listed[0]
+			.profiles
+			.iter()
+			.any(|profile| profile.worktree_path == extra));
+		assert!(fake
+			.opens()
+			.iter()
+			.any(|call| call == &(folder.clone(), extra.clone())));
+		let _keep = (primary_dir, extra_dir);
 	}
 
 	#[test]
 	fn adopt_nongit_creates_once_and_keeps_snapshot_cwd() {
+		let (dir, folder) = existing_dir();
 		let mut conn = setup_db();
-		insert_catalog(&mut conn, "/nongit", "/nongit");
+		insert_catalog(&mut conn, &folder, &folder);
 		let db = pool_from(conn);
 		let fake = FakeList::new(Vec::new());
-		fake.fail_not_git("/nongit");
+		fake.fail_not_git(&folder);
 		let runtime = herdr_router(Some(fake.clone()));
 
 		adopt_existing_checkouts(&runtime, &db).expect("adopt");
@@ -1719,7 +1780,7 @@ mod tests {
 		assert_eq!(first[0].profiles.len(), 1);
 		assert_eq!(first[0].profiles[0].id, "w1");
 		assert!(first[0].profiles[0].is_default);
-		assert_eq!(first[0].profiles[0].worktree_path, "/nongit");
+		assert_eq!(first[0].profiles[0].worktree_path, folder);
 		assert_eq!(
 			fake.methods()
 				.iter()
@@ -1741,6 +1802,81 @@ mod tests {
 			1,
 			"already-present snapshot cwd must not create again"
 		);
+		let _keep = dir;
+	}
+
+	#[test]
+	fn connect_time_adopt_opens_project_folder() {
+		let (dir, folder) = existing_dir();
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, &folder, &folder);
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![primary(&folder, None, Some("main"))]);
+		let adapter = HerdrStubAdapter::with_worktree_client(fake.clone());
+
+		adopt_existing_checkouts_with(adapter.worktrees().ok(), &db)
+			.expect("connect-time adopt");
+		let runtime = RuntimeRouter::new(adapter);
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		assert_eq!(listed[0].profiles.len(), 1);
+		assert_eq!(listed[0].profiles[0].id, "w1");
+		assert!(listed[0].profiles[0].is_default);
+		assert_eq!(fake.opens(), vec![(folder.clone(), folder)]);
+		let _keep = dir;
+	}
+
+	#[test]
+	fn adopt_git_dirty_folder_is_not_recreated() {
+		let dir = init_git_repo("tracked.txt", "committed");
+		let folder = abs_folder(&dir);
+		std::fs::write(dir.path().join("dirty.txt"), "uncommitted")
+			.expect("dirty file");
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, &folder, &folder);
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![primary(&folder, None, Some("main"))]);
+		let runtime = herdr_router(Some(fake.clone()));
+
+		adopt_existing_checkouts(&runtime, &db).expect("adopt");
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		assert_eq!(listed[0].profiles.len(), 1);
+		assert!(listed[0].profiles[0].is_default);
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("tracked.txt")).unwrap(),
+			"committed"
+		);
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("dirty.txt")).unwrap(),
+			"uncommitted"
+		);
+		assert!(!fake.methods().iter().any(|m| m == "create"));
+		assert!(!fake.methods().iter().any(|m| m == "workspace.create"));
+		assert_eq!(fake.opens(), vec![(folder.clone(), folder)]);
+	}
+
+	#[test]
+	fn adopt_skips_nonexistent_path() {
+		let missing = format!(
+			"{}/2code-missing-adopt-{}",
+			std::env::temp_dir().display(),
+			Uuid::new_v4()
+		);
+		assert!(!Path::new(&missing).exists());
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, &missing, &missing);
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![
+			primary(&missing, None, Some("main")),
+			listed(&format!("{missing}/disk"), None, Some("wt/disk")),
+		]);
+		let runtime = herdr_router(Some(fake.clone()));
+
+		adopt_existing_checkouts(&runtime, &db).expect("adopt");
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		assert!(listed[0].profiles.is_empty());
+		assert!(fake.opens().is_empty());
+		assert!(!fake.methods().iter().any(|m| m == "create"));
+		assert!(!fake.methods().iter().any(|m| m == "workspace.create"));
 	}
 
 	#[test]
@@ -2106,7 +2242,7 @@ mod tests {
 			.split("pub fn delete(")
 			.next()
 			.unwrap();
-		assert!(adopt.contains("worktree_open"));
+		assert!(adopt.contains("open_existing_checkout"));
 		assert!(adopt.contains("workspace_create"));
 		assert!(!adopt.contains("worktree_create"));
 		assert!(!adopt.contains("git::worktree"));
