@@ -480,8 +480,9 @@ fn resolve_gui_sidecar(
 	})
 }
 
-/// Resolve the pinned sidecar, ensure the 2code namespace, and inject
-/// JSON terminal + worktree + CLI attach clients.
+/// Resolve the pinned sidecar, ensure the 2code namespace, inject JSON
+/// terminal + worktree + CLI attach clients, and import leftover sqlite
+/// extras via `worktree.open` without writing mapping rows.
 pub fn connect_gui_herdr(
 	opts: GuiHerdrConnect<'_>,
 ) -> Result<HerdrStubAdapter, AppError> {
@@ -499,6 +500,15 @@ pub fn connect_gui_herdr(
 	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
 		.map_err(AppError::from)?;
 	let json = Arc::new(HerdrJsonTerminals::new(client));
+	if let Err(err) = crate::runtime_adoption::import_leftover_sqlite_profiles(
+		&opts.db,
+		json.as_ref(),
+	) {
+		tracing::warn!(
+			target: "herdr",
+			"leftover sqlite extra import failed: {err}"
+		);
+	}
 	Ok(HerdrStubAdapter::with_json_clients(
 		opts.db,
 		json,
@@ -1178,6 +1188,7 @@ mod tests {
 		assert!(connect.contains("HerdrJsonTerminals"));
 		assert!(connect.contains("HerdrCliAttach"));
 		assert!(connect.contains("resolve_namespace"));
+		assert!(connect.contains("import_leftover_sqlite_profiles"));
 		let local_branch = runtime
 			.split("pub fn herdr_adapter_for_gui_backend")
 			.nth(1)
@@ -1189,6 +1200,7 @@ mod tests {
 		assert!(local_branch.contains("HerdrStubAdapter::new()"));
 		assert!(!local_branch.contains("ensure_herdr_listener"));
 		assert!(!local_branch.contains("connect_gui_herdr"));
+		assert!(!local_branch.contains("import_leftover_sqlite_profiles"));
 		assert!(runtime.contains("TWOCODE_RUNTIME"));
 		assert!(runtime.contains(LOCAL_RUNTIME_FLAG));
 		let bridge = include_str!("../../../src/bridge.rs");
@@ -1518,7 +1530,15 @@ mod tests {
 		);
 		assert!(
 			!lib.contains("adopt_existing_profiles"),
-			"launch/adopt stays out of this task"
+			"launch/adopt stays out of lib.rs setup"
+		);
+		assert!(
+			!lib.contains("import_leftover_sqlite_profiles"),
+			"leftover extra import stays in connect_gui_herdr, not lib.rs"
+		);
+		assert!(
+			!lib.contains("runtime_adoption"),
+			"GUI setup must not call runtime_adoption from lib.rs"
 		);
 	}
 
