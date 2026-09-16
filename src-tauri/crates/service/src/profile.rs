@@ -1190,6 +1190,8 @@ fn delete_sqlite_identity(
 ) -> Result<(), AppError> {
 	let (profile, project_folder, session_ids) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		// Leftover mapping is a dual-ownership lock, not a Herdr workspace_id.
+		refuse_mapped_without_runtime(conn, id)?;
 		let (profile, project_folder) =
 			repo::profile::get_delete_target(conn, id)?;
 		let session_ids = repo::pty::list_ids_by_profile(conn, id)?;
@@ -2324,7 +2326,7 @@ mod tests {
 	}
 
 	#[test]
-	fn leftover_mapping_does_not_route_local_delete_through_herdr() {
+	fn leftover_mapping_refuses_local_flag_delete_without_git_remove() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
@@ -2351,13 +2353,13 @@ mod tests {
 		}
 		let checkout = profile.worktree_path.clone();
 
-		delete_with_runtime(&router, &db, &profile.id).unwrap();
-
+		let err = delete_with_runtime(&router, &db, &profile.id).unwrap_err();
+		assert!(err.to_string().contains("runtime cleanup"), "{err}");
 		assert!(fake.removes().is_empty());
-		assert!(!Path::new(&checkout).exists());
-		assert!(!git_worktree_list(dir.path()).contains(&checkout));
+		assert!(Path::new(&checkout).exists());
+		assert!(git_worktree_list(dir.path()).contains(&checkout));
 		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		assert!(repo::profile::find_by_id(conn, &profile.id).is_ok());
 	}
 
 	#[test]
@@ -3429,6 +3431,16 @@ mod tests {
 		assert!(delete.contains("delete_with_runtime"));
 		assert!(!delete.contains("cleanup_profile"));
 		assert!(!delete.contains("git::worktree_remove"));
+		let sqlite = src
+			.split("fn delete_sqlite_identity")
+			.nth(1)
+			.unwrap()
+			.split("fn delete_herdr_identity")
+			.next()
+			.unwrap();
+		assert!(sqlite.contains("refuse_mapped_without_runtime"));
+		assert!(!sqlite.contains("worktree.remove"));
+		assert!(!sqlite.contains("worktree_remove"));
 	}
 
 	#[test]
