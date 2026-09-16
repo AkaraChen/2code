@@ -25,11 +25,10 @@ src-tauri/
 
 ## MANAGED STATE (passed to handlers)
 - `Arc<Mutex<SqliteConnection>>` — single DB connection; acquire/release fast
-- `Arc<Mutex<HashMap<String, PtySession>>>` — active PTY sessions map
 - `AppHandle` — Tauri app handle for events and window management
 
 ## COMMANDS EXPOSED (handler/mod.rs)
-PTY (9): `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`, `flush_pty_output`, `restore_pty_session`
+PTY: `create_pty_session`, `write_to_pty`, `resize_pty`, `scroll_pty`, `close_pty_session`, `list_project_sessions`, `get_session_backend`, `get_session_agent_status`, `stream_session_agent_status`, `attach_pty_output`, `stream_herdr_output`, `detach_pty_output`, `flush_pty_output`, `clear_pty_output`
 
 Projects (6): `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config`
 

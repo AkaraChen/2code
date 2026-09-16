@@ -49,8 +49,8 @@ mod tests {
 
 	use super::init_db;
 
-	const MAPPING_MIGRATION: &str =
-		"2026-09-15-000000_add_herdr_runtime_mappings";
+	const DROP_PROFILES_MIGRATION: &str =
+		"2026-09-16-000000_drop_profiles_and_runtime_mappings";
 
 	#[derive(QueryableByName)]
 	struct IntegerRow {
@@ -76,7 +76,7 @@ mod tests {
 		let row: CountRow = diesel::sql_query(
 			"SELECT COUNT(*) AS count \
 			 FROM sqlite_master \
-			 WHERE type = 'table' AND name IN ('projects', 'profiles', 'pty_sessions')",
+			 WHERE type = 'table' AND name IN ('projects', 'checkout_notes', 'project_groups')",
 		)
 		.get_result(&mut *conn)
 		.expect("read sqlite_master");
@@ -112,7 +112,7 @@ mod tests {
 		#[diesel(sql_type = diesel::sql_types::Integer)]
 		sort_order: i32,
 		#[diesel(sql_type = diesel::sql_types::Text)]
-		worktree_path: String,
+		folder: String,
 	}
 
 	fn column_names(conn: &mut SqliteConnection, table: &str) -> Vec<String> {
@@ -143,7 +143,8 @@ mod tests {
 			.collect();
 		dirs.sort();
 		for dir in dirs {
-			if dir.file_name().and_then(|n| n.to_str()) == Some(skip) {
+			let name = dir.file_name().and_then(|n| n.to_str());
+			if name.is_some_and(|name| name >= skip) {
 				continue;
 			}
 			apply_up_sql(conn, &dir);
@@ -151,7 +152,7 @@ mod tests {
 	}
 
 	#[test]
-	fn mapping_migration_stores_2code_namespace_and_empty_associations() {
+	fn drop_profiles_migration_removes_mapping_tables() {
 		let dir = tempdir().expect("tempdir");
 		let pool = init_db(dir.path()).expect("init db");
 		let mut conn = pool.lock().expect("lock db");
@@ -159,63 +160,14 @@ mod tests {
 		let tables: Vec<NameRow> = diesel::sql_query(
 			"SELECT name FROM sqlite_master \
 			 WHERE type = 'table' \
-			 AND name IN ('herdr_namespaces', 'profile_runtime_mappings', 'session_runtime_mappings') \
+			 AND name IN ('profiles', 'herdr_namespaces', \
+			              'profile_runtime_mappings', 'session_runtime_mappings') \
 			 ORDER BY name",
 		)
 		.load(&mut *conn)
-		.expect("list mapping tables");
-		assert_eq!(
-			tables
-				.iter()
-				.map(|row| row.name.as_str())
-				.collect::<Vec<_>>(),
-			[
-				"herdr_namespaces",
-				"profile_runtime_mappings",
-				"session_runtime_mappings"
-			]
-		);
+		.expect("list dropped tables");
+		assert!(tables.is_empty());
 
-		let namespaces: Vec<NameRow> = diesel::sql_query(
-			"SELECT name FROM herdr_namespaces ORDER BY name",
-		)
-		.load(&mut *conn)
-		.expect("list namespaces");
-		assert_eq!(
-			namespaces
-				.iter()
-				.map(|row| row.name.as_str())
-				.collect::<Vec<_>>(),
-			["2code"]
-		);
-		assert_ne!(namespaces[0].name, "default");
-
-		let mappings: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM profile_runtime_mappings",
-		)
-		.get_result(&mut *conn)
-		.expect("count profile mappings");
-		assert_eq!(mappings.count, 0);
-
-		let sessions: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM session_runtime_mappings",
-		)
-		.get_result(&mut *conn)
-		.expect("count session mappings");
-		assert_eq!(sessions.count, 0);
-
-		assert_eq!(
-			column_names(&mut conn, "profiles"),
-			[
-				"id",
-				"project_id",
-				"branch_name",
-				"worktree_path",
-				"created_at",
-				"is_default",
-				"notes"
-			]
-		);
 		assert_eq!(
 			column_names(&mut conn, "projects"),
 			[
@@ -230,43 +182,25 @@ mod tests {
 			]
 		);
 		assert_eq!(
-			column_names(&mut conn, "pty_sessions"),
-			[
-				"id",
-				"profile_id",
-				"title",
-				"shell",
-				"cwd",
-				"created_at",
-				"closed_at",
-				"cols",
-				"rows"
-			]
+			column_names(&mut conn, "checkout_notes"),
+			["project_id", "checkout_path", "notes", "created_at"]
 		);
-		assert_eq!(
-			column_names(&mut conn, "profile_runtime_mappings"),
-			["profile_id", "namespace", "workspace_id"]
-		);
-		assert_eq!(
-			column_names(&mut conn, "session_runtime_mappings"),
-			["session_id", "namespace", "workspace_id", "pane_id"]
-		);
-		assert!(!column_names(&mut conn, "profile_runtime_mappings")
-			.contains(&"terminal_id".into()));
-		assert!(!column_names(&mut conn, "session_runtime_mappings")
-			.contains(&"terminal_id".into()));
-		assert!(!column_names(&mut conn, "profile_runtime_mappings")
-			.iter()
-			.any(|name| name.contains("label")));
+		let pty: Vec<NameRow> = diesel::sql_query(
+			"SELECT name FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'pty_sessions'",
+		)
+		.load(&mut *conn)
+		.expect("pty_sessions");
+		assert!(pty.is_empty());
 	}
 
 	#[test]
-	fn mapping_migration_does_not_rewrite_existing_catalog_rows() {
+	fn drop_profiles_migration_copies_notes_and_keeps_projects() {
 		let mut conn = SqliteConnection::establish(":memory:").expect("memory");
 		diesel::sql_query("PRAGMA foreign_keys=ON;")
 			.execute(&mut conn)
 			.ok();
-		apply_migrations_except(&mut conn, MAPPING_MIGRATION);
+		apply_migrations_except(&mut conn, DROP_PROFILES_MIGRATION);
 
 		conn.batch_execute(
 			"INSERT INTO projects (id, name, folder, created_at, sort_order) \
@@ -278,49 +212,91 @@ mod tests {
 		)
 		.expect("seed catalog");
 
-		let before: CatalogRow = diesel::sql_query(
-			"SELECT projects.id AS id, profiles.notes AS notes, \
-			        projects.sort_order AS sort_order, profiles.worktree_path AS worktree_path \
-			 FROM projects JOIN profiles ON profiles.project_id = projects.id \
-			 WHERE projects.id = 'proj-keep'",
-		)
-		.get_result(&mut conn)
-		.expect("catalog before");
-
-		let mapping_dir = migrations_dir().join(MAPPING_MIGRATION);
-		apply_up_sql(&mut conn, &mapping_dir);
+		let drop_dir = migrations_dir().join(DROP_PROFILES_MIGRATION);
+		apply_up_sql(&mut conn, &drop_dir);
 
 		let after: CatalogRow = diesel::sql_query(
-			"SELECT projects.id AS id, profiles.notes AS notes, \
-			        projects.sort_order AS sort_order, profiles.worktree_path AS worktree_path \
-			 FROM projects JOIN profiles ON profiles.project_id = projects.id \
+			"SELECT projects.id AS id, checkout_notes.notes AS notes, \
+			        projects.sort_order AS sort_order, projects.folder AS folder \
+			 FROM projects \
+			 JOIN checkout_notes ON checkout_notes.project_id = projects.id \
 			 WHERE projects.id = 'proj-keep'",
 		)
 		.get_result(&mut conn)
 		.expect("catalog after");
-		assert_eq!(after.id, before.id);
+		assert_eq!(after.id, "proj-keep");
 		assert_eq!(after.notes, "keep-notes");
 		assert_eq!(after.sort_order, 42);
-		assert_eq!(after.worktree_path, "/repo/cache");
+		assert_eq!(after.folder, "/repo");
 
-		let session_id: NameRow = diesel::sql_query(
+		let session: NameRow = diesel::sql_query(
 			"SELECT id AS name FROM pty_sessions WHERE id = 'sess-keep'",
 		)
 		.get_result(&mut conn)
 		.expect("session survived");
-		assert_eq!(session_id.name, "sess-keep");
+		assert_eq!(session.name, "sess-keep");
+		let session_project: NameRow = diesel::sql_query(
+			"SELECT project_id AS name FROM pty_sessions WHERE id = 'sess-keep'",
+		)
+		.get_result(&mut conn)
+		.expect("session project");
+		assert_eq!(session_project.name, "proj-keep");
 
-		let profile_mappings: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM profile_runtime_mappings",
+		let dropped: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name IN \
+			 ('profiles', 'herdr_namespaces', \
+			  'profile_runtime_mappings', 'session_runtime_mappings')",
 		)
 		.get_result(&mut conn)
-		.expect("profile mapping count");
-		assert_eq!(profile_mappings.count, 0);
-		let session_mappings: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM session_runtime_mappings",
+		.expect("dropped tables");
+		assert_eq!(dropped.count, 0);
+	}
+
+	#[test]
+	fn drop_pty_sessions_keeps_projects_and_notes() {
+		let dir = tempdir().expect("tempdir");
+		let pool = init_db(dir.path()).expect("init db");
+		let mut conn = pool.lock().expect("lock db");
+		diesel::sql_query(
+			"INSERT INTO projects (id, name, folder, created_at, sort_order) \
+			 VALUES ('proj-keep', 'Keep', '/repo', datetime('now'), 42)",
 		)
-		.get_result(&mut conn)
-		.expect("session mapping count");
-		assert_eq!(session_mappings.count, 0);
+		.execute(&mut *conn)
+		.expect("seed project");
+		diesel::sql_query(
+			"INSERT INTO checkout_notes (project_id, checkout_path, notes) \
+			 VALUES ('proj-keep', '/repo', 'keep-notes')",
+		)
+		.execute(&mut *conn)
+		.expect("seed notes");
+
+		let after: CatalogRow = diesel::sql_query(
+			"SELECT projects.id AS id, checkout_notes.notes AS notes, \
+			        projects.sort_order AS sort_order, projects.folder AS folder \
+			 FROM projects \
+			 JOIN checkout_notes ON checkout_notes.project_id = projects.id \
+			 WHERE projects.id = 'proj-keep'",
+		)
+		.get_result(&mut *conn)
+		.expect("catalog after");
+		assert_eq!(after.id, "proj-keep");
+		assert_eq!(after.notes, "keep-notes");
+		assert_eq!(after.folder, "/repo");
+
+		let pty: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'pty_sessions'",
+		)
+		.get_result(&mut *conn)
+		.expect("pty_sessions");
+		assert_eq!(pty.count, 0);
+		let profiles: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'profiles'",
+		)
+		.get_result(&mut *conn)
+		.expect("profiles");
+		assert_eq!(profiles.count, 0);
 	}
 }

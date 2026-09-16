@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{
@@ -9,22 +8,23 @@ use model::filesystem::{
 
 use crate::runtime::RuntimeRouter;
 
-pub fn search_file(
-	conn: &mut SqliteConnection,
+pub fn search_file_for_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	query: &str,
 ) -> Result<Vec<FileSearchResult>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	let root = std::path::Path::new(&profile.worktree_path);
-	infra::filesystem::search_files(root, query)
+	let root = get_profile_worktree_path(runtime, db, profile_id)?;
+	infra::filesystem::search_files(&root, query)
 }
 
-pub fn get_file_tree_git_status(
-	conn: &mut SqliteConnection,
+pub fn get_file_tree_git_status_for_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::status(&profile.worktree_path)
+	let root = get_profile_worktree_path(runtime, db, profile_id)?;
+	infra::git::status(&root.to_string_lossy())
 }
 
 /// Resolve profile ID to its reconciled worktree path (short DB lock).
@@ -263,12 +263,89 @@ pub fn resolve_terminal_file_path(
 
 #[cfg(test)]
 mod tests {
+	use std::path::Path;
+	use std::sync::{Arc, Mutex};
+
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
+	use infra::db::DbPool;
+	use infra::herdr::transport::{
+		WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
+		WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
+		WorkspaceCreateResult,
+	};
 	use model::error::AppError;
+	use serde_json::Value;
 	use tempfile::tempdir;
 
-	use super::search_file;
+	use super::*;
+	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
+
+	struct FolderWorktrees {
+		folder: std::path::PathBuf,
+	}
+
+	impl HerdrWorktreeClient for FolderWorktrees {
+		fn worktree_create(
+			&self,
+			_request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			Err(AppError::PtyError("fs tests do not create".into()))
+		}
+
+		fn worktree_list(
+			&self,
+			_cwd: Option<&Path>,
+			workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
+			if workspace_id.is_some_and(|id| id != "w1") {
+				return Ok(Vec::new());
+			}
+			Ok(vec![WorktreeListEntry {
+				path: self.folder.to_string_lossy().into_owned(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			}])
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			_path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			Err(AppError::PtyError("fs tests do not open".into()))
+		}
+
+		fn worktree_remove(
+			&self,
+			_workspace_id: &str,
+			_force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			Err(AppError::PtyError("fs tests do not remove".into()))
+		}
+
+		fn workspace_create(
+			&self,
+			_request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			Err(AppError::PtyError("fs tests do not create workspaces".into()))
+		}
+
+		fn workspace_close(
+			&self,
+			_workspace_id: &str,
+		) -> Result<(), AppError> {
+			Ok(())
+		}
+
+		fn session_snapshot(&self) -> Result<Value, AppError> {
+			Ok(serde_json::json!({
+				"type": "session_snapshot",
+				"snapshot": { "workspaces": [], "tabs": [], "panes": [] }
+			}))
+		}
+	}
 
 	fn setup_db() -> SqliteConnection {
 		let mut conn =
@@ -278,25 +355,38 @@ mod tests {
 		conn
 	}
 
-	fn insert_profile(
-		conn: &mut SqliteConnection,
-		worktree_path: &str,
-	) -> String {
+	fn pool_from(conn: SqliteConnection) -> DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
+	fn herdr_router(folder: &Path) -> RuntimeRouter {
+		let worktrees: Arc<dyn HerdrWorktreeClient> = Arc::new(FolderWorktrees {
+			folder: folder.to_path_buf(),
+		});
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees))
+	}
+
+	fn insert_project(conn: &mut SqliteConnection, worktree_path: &str) {
 		repo::project::insert(conn, "proj-1", "Project", worktree_path)
 			.expect("insert project");
-		repo::profile::insert_default(
-			conn,
-			"profile-1",
-			"proj-1",
-			"main",
-			worktree_path,
-		)
-		.expect("insert profile");
-		"profile-1".to_string()
 	}
 
 	#[test]
-	fn search_file_uses_the_profiles_worktree() {
+	fn sqlite_search_helpers_are_gone() {
+		let src = include_str!("filesystem.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(!src.contains("pub fn search_file("));
+		assert!(!src.contains("pub fn get_file_tree_git_status("));
+		assert!(src.contains("search_file_for_profile"));
+		assert!(src.contains("get_file_tree_git_status_for_profile"));
+		assert!(src.contains("reconcile_profile_checkout"));
+		assert!(!src.contains("find_by_id"));
+	}
+
+	#[test]
+	fn search_file_for_profile_uses_live_herdr_worktree() {
 		let dir = tempdir().expect("tempdir");
 		std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
 		std::fs::write(dir.path().join("src/main.rs"), "fn main() {}")
@@ -305,11 +395,12 @@ mod tests {
 			.expect("write readme");
 
 		let mut conn = setup_db();
-		let profile_id =
-			insert_profile(&mut conn, &dir.path().to_string_lossy());
+		insert_project(&mut conn, &dir.path().to_string_lossy());
+		let db = pool_from(conn);
+		let runtime = herdr_router(dir.path());
 
-		let results =
-			search_file(&mut conn, &profile_id, "main").expect("search files");
+		let results = search_file_for_profile(&runtime, &db, "w1", "main")
+			.expect("search files");
 
 		assert_eq!(results.len(), 1);
 		assert_eq!(results[0].name, "main.rs");
@@ -317,10 +408,15 @@ mod tests {
 	}
 
 	#[test]
-	fn search_file_returns_a_not_found_error_for_unknown_profiles() {
+	fn search_file_for_profile_returns_not_found_for_unknown_workspaces() {
+		let dir = tempdir().expect("tempdir");
 		let mut conn = setup_db();
+		insert_project(&mut conn, &dir.path().to_string_lossy());
+		let db = pool_from(conn);
+		let runtime = herdr_router(dir.path());
 
-		let result = search_file(&mut conn, "missing-profile", "main");
+		let result =
+			search_file_for_profile(&runtime, &db, "missing-profile", "main");
 
 		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}

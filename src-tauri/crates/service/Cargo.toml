@@ -11,7 +11,6 @@ diesel = { version = "2", features = ["sqlite"] }
 uuid = { version = "1", features = ["v4", "v5"] }
 dirs = "6"
 notify = "8"
-vt100 = "0.16"
 tracing = "0.1"
 serde_json = "1"
 

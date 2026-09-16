@@ -1,13 +1,108 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
+use serde_json::Value;
 
-use infra::db::MIGRATIONS;
+use infra::db::{DbPool, MIGRATIONS};
+use infra::herdr::transport::{
+	WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
+	WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
+	WorkspaceCreateResult,
+};
 use infra::no_window::command_without_windows_console;
+use model::error::AppError;
 use model::profile::Profile;
 use model::project::Project;
+use service::runtime::{
+	HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter,
+};
+
+/// Lists a single open Herdr workspace `w1` at the given folder.
+struct FolderWorktrees {
+	folder: PathBuf,
+}
+
+impl FolderWorktrees {
+	fn entry(&self) -> WorktreeListEntry {
+		WorktreeListEntry {
+			path: self.folder.to_string_lossy().into_owned(),
+			branch: Some("main".into()),
+			workspace_id: Some("w1".into()),
+			is_linked_worktree: false,
+		}
+	}
+}
+
+impl HerdrWorktreeClient for FolderWorktrees {
+	fn worktree_create(
+		&self,
+		_request: WorktreeCreateRequest<'_>,
+	) -> Result<WorktreeCreateResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not create".into(),
+		))
+	}
+
+	fn worktree_list(
+		&self,
+		_cwd: Option<&Path>,
+		workspace_id: Option<&str>,
+	) -> Result<Vec<WorktreeListEntry>, AppError> {
+		if let Some(workspace_id) = workspace_id {
+			if workspace_id != "w1" {
+				return Ok(Vec::new());
+			}
+		}
+		Ok(vec![self.entry()])
+	}
+
+	fn worktree_open(
+		&self,
+		_cwd: &Path,
+		_path: &Path,
+	) -> Result<WorktreeOpenResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not open".into(),
+		))
+	}
+
+	fn worktree_remove(
+		&self,
+		_workspace_id: &str,
+		_force: bool,
+	) -> Result<WorktreeRemoveResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not remove".into(),
+		))
+	}
+
+	fn workspace_create(
+		&self,
+		_request: WorkspaceCreateRequest<'_>,
+	) -> Result<WorkspaceCreateResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not create workspaces".into(),
+		))
+	}
+
+	fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
+		Ok(())
+	}
+
+	fn session_snapshot(&self) -> Result<Value, AppError> {
+		Ok(serde_json::json!({
+			"type": "session_snapshot",
+			"snapshot": {
+				"workspaces": [],
+				"tabs": [],
+				"panes": []
+			}
+		}))
+	}
+}
 
 /// Create an in-memory SQLite connection with migrations and foreign keys enabled.
 pub fn setup_db() -> SqliteConnection {
@@ -19,6 +114,24 @@ pub fn setup_db() -> SqliteConnection {
 	conn.run_pending_migrations(MIGRATIONS)
 		.expect("run migrations");
 	conn
+}
+
+pub fn pool_from(conn: SqliteConnection) -> DbPool {
+	Arc::new(std::sync::Mutex::new(conn))
+}
+
+/// Herdr-only runtime whose catalog lists `w1` at `folder`.
+pub fn herdr_from(
+	conn: SqliteConnection,
+	folder: &Path,
+) -> (RuntimeRouter, DbPool) {
+	let db = pool_from(conn);
+	let worktrees: Arc<dyn HerdrWorktreeClient> = Arc::new(FolderWorktrees {
+		folder: folder.to_path_buf(),
+	});
+	let runtime =
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees));
+	(runtime, db)
 }
 
 /// Create a temporary git repository with user config set.
@@ -70,8 +183,8 @@ pub fn cleanup(dir: &std::path::Path) {
 	let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Create a git repo, insert a project + default profile into the DB, and return all three.
-/// The project folder points to the temp git repo.
+/// Create a git repo, insert a sqlite project, and return a live Herdr
+/// profile DTO (`w1`) for the folder. sqlite `profiles` is not a table.
 pub fn create_project_with_git_repo(
 	conn: &mut SqliteConnection,
 ) -> (Project, Profile, PathBuf) {
@@ -83,17 +196,15 @@ pub fn create_project_with_git_repo(
 		service::project::create_from_folder(conn, "Test Project", &folder)
 			.expect("create project from folder");
 
-	let projects_with_profiles =
-		service::project::list(conn).expect("list projects");
-	let pwp = projects_with_profiles
-		.into_iter()
-		.find(|p| p.id == project.id)
-		.expect("find project");
-	let default_profile = pwp
-		.profiles
-		.into_iter()
-		.find(|p| p.is_default)
-		.expect("find default profile");
+	let profile = Profile {
+		id: "w1".to_string(),
+		project_id: project.id.clone(),
+		branch_name: "main".to_string(),
+		worktree_path: folder,
+		created_at: String::new(),
+		is_default: true,
+		notes: String::new(),
+	};
 
-	(project, default_profile, dir)
+	(project, profile, dir)
 }

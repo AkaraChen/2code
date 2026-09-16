@@ -1,6 +1,6 @@
 mod common;
 
-use common::{cleanup, create_project_with_git_repo, setup_db};
+use common::{cleanup, create_project_with_git_repo, herdr_from, setup_db};
 
 #[test]
 fn search_file_prefers_file_name_matches() {
@@ -17,8 +17,10 @@ fn search_file_prefers_file_name_matches() {
 	)
 	.unwrap();
 
-	let results = service::filesystem::search_file(
-		&mut conn,
+	let (runtime, db) = herdr_from(conn, &dir);
+	let results = service::filesystem::search_file_for_profile(
+		&runtime,
+		&db,
 		&default_profile.id,
 		"index",
 	)
@@ -44,8 +46,10 @@ fn search_file_respects_gitignore_rules() {
 	std::fs::write(dir.join("src-index.ts"), "visible\n").unwrap();
 	std::fs::write(dir.join("ignored.log"), "ignored\n").unwrap();
 
-	let results = service::filesystem::search_file(
-		&mut conn,
+	let (runtime, db) = herdr_from(conn, &dir);
+	let results = service::filesystem::search_file_for_profile(
+		&runtime,
+		&db,
 		&default_profile.id,
 		"index",
 	)
@@ -63,10 +67,16 @@ fn search_file_respects_gitignore_rules() {
 
 #[test]
 fn search_file_returns_error_for_missing_profile() {
-	let mut conn = setup_db();
-	let error =
-		service::filesystem::search_file(&mut conn, "missing-profile", "main")
-			.expect_err("missing profile should error");
+	let conn = setup_db();
+	let dir = std::env::temp_dir();
+	let (runtime, db) = herdr_from(conn, &dir);
+	let error = service::filesystem::search_file_for_profile(
+		&runtime,
+		&db,
+		"missing-profile",
+		"main",
+	)
+	.expect_err("missing profile should error");
 
 	assert!(error.to_string().contains("Profile: missing-profile"));
 }

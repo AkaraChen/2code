@@ -1,30 +1,17 @@
-use crate::schema::pty_sessions;
-use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Serialize)]
-#[diesel(table_name = pty_sessions)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+/// Derived GUI session DTO from live Herdr `session.snapshot`.
+/// Not a sqlite `pty_sessions` row.
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct PtySessionRecord {
 	pub id: String,
+	pub project_id: String,
 	pub profile_id: String,
 	pub title: String,
 	pub shell: String,
 	pub cwd: String,
 	pub created_at: String,
 	pub closed_at: Option<String>,
-	pub cols: i32,
-	pub rows: i32,
-}
-
-#[derive(Insertable)]
-#[diesel(table_name = pty_sessions)]
-pub struct NewPtySessionRecord<'a> {
-	pub id: &'a str,
-	pub profile_id: &'a str,
-	pub title: &'a str,
-	pub shell: &'a str,
-	pub cwd: &'a str,
 	pub cols: i32,
 	pub rows: i32,
 }

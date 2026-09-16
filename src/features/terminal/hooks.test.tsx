@@ -10,7 +10,6 @@ import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSet
 import {
 	closePtySession,
 	createPtySession,
-	deletePtySessionRecord,
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import {
@@ -25,7 +24,6 @@ import { terminalThemes } from "./themes";
 
 const createPtySessionMock = createPtySession as unknown as Mock;
 const closePtySessionMock = closePtySession as unknown as Mock;
-const deletePtySessionRecordMock = deletePtySessionRecord as unknown as Mock;
 
 function createWrapper(isDark = true) {
 	const queryClient = new QueryClient({
@@ -70,7 +68,6 @@ function resetStores() {
 	localStorage.clear();
 	createPtySessionMock.mockClear();
 	closePtySessionMock.mockClear();
-	deletePtySessionRecordMock.mockClear();
 }
 
 describe("terminal hooks", () => {
@@ -78,7 +75,6 @@ describe("terminal hooks", () => {
 		resetStores();
 		createPtySessionMock.mockResolvedValue("mock-session-id");
 		closePtySessionMock.mockResolvedValue(undefined);
-		deletePtySessionRecordMock.mockResolvedValue(undefined);
 	});
 
 	it("creates terminal tabs with the next default title and stores them on success", async () => {
@@ -150,9 +146,6 @@ describe("terminal hooks", () => {
 		});
 
 		expect(closePtySessionMock).toHaveBeenCalledWith({
-			sessionId: "session-1",
-		});
-		expect(deletePtySessionRecordMock).toHaveBeenCalledWith({
 			sessionId: "session-1",
 		});
 		expect(useTerminalStore.getState().profiles["profile-1"]).toBeUndefined();

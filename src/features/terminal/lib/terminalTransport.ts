@@ -3,7 +3,6 @@ import {
 	getSessionAgentStatus,
 	getSessionBackend,
 	streamHerdrOutput,
-	streamPtyOutput,
 	streamSessionAgentStatus,
 } from "@/generated";
 import type {
@@ -12,43 +11,23 @@ import type {
 	SessionAgentStatus,
 } from "@/generated";
 
-export type TerminalTransportKind = "local" | "herdr";
+export type TerminalTransportKind = "herdr";
 
 export function transportKindFromBackend(
-	backend: RuntimeBackend,
+	_backend: RuntimeBackend,
 ): TerminalTransportKind {
-	return backend === "herdr" ? "herdr" : "local";
+	return "herdr";
 }
 
 /**
- * Per-session ownership from `RuntimeRouter::backend_for`.
- * Unbound ids are Local. Never consult discovery's default-runtime field.
+ * Per-session ownership. GUI is Herdr-only. Unbound ids are Herdr.
+ * Never consult discovery's default-runtime field.
  */
 export async function resolveTerminalTransportKind(
 	sessionId: string,
 ): Promise<TerminalTransportKind> {
-	const backend = await getSessionBackend({ sessionId });
-	return transportKindFromBackend(backend);
-}
-
-export function startLocalByteStream(options: {
-	sessionId: string;
-	streamId: string;
-	onBytes: (bytes: Uint8Array) => void;
-	onError?: (error: unknown) => void;
-}): Channel<ArrayBuffer> {
-	const outputChannel = new Channel<ArrayBuffer>();
-	outputChannel.onmessage = (payload) => {
-		options.onBytes(new Uint8Array(payload));
-	};
-	void streamPtyOutput({
-		sessionId: options.sessionId,
-		streamId: options.streamId,
-		onOutput: outputChannel,
-	}).catch((error) => {
-		options.onError?.(error);
-	});
-	return outputChannel;
+	await getSessionBackend({ sessionId });
+	return "herdr";
 }
 
 export function startHerdrFrameStream(options: {

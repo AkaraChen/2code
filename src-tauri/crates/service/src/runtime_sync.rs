@@ -74,6 +74,8 @@ pub struct ProjectedPane {
 	pub workspace_id: String,
 	pub terminal_id: String,
 	pub revision: u64,
+	/// Snapshot pane `cwd`, else `foreground_cwd`. Empty when omitted.
+	pub cwd: String,
 	/// Raw Herdr `agent_status` string (`unknown` / `working` / …).
 	pub agent_status: String,
 	pub agent_identity: Option<ProjectedAgentIdentity>,
@@ -745,6 +747,9 @@ fn pane_from_value(value: &Value) -> Option<ProjectedPane> {
 			.unwrap_or("")
 			.to_string(),
 		revision: value.get("revision").and_then(Value::as_u64).unwrap_or(0),
+		cwd: optional_text(value.get("cwd"))
+			.or_else(|| optional_text(value.get("foreground_cwd")))
+			.unwrap_or_default(),
 		agent_status: value
 			.get("agent_status")
 			.and_then(Value::as_str)

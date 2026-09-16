@@ -7,15 +7,12 @@ import {
 	attachPtyOutput,
 	clearPtyOutput,
 	detachPtyOutput,
-	flushPtyOutput,
-	getPtySessionHistory,
 	getSessionAgentStatus,
 	getSessionBackend,
 	playSystemSound,
 	resizePty,
 	scrollPty,
 	streamHerdrOutput,
-	streamPtyOutput,
 	streamSessionAgentStatus,
 	writeToPty,
 } from "@/generated";
@@ -274,20 +271,14 @@ vi.mock("@/generated", () => ({
 	attachPtyOutput: vi.fn(() => Promise.resolve()),
 	clearPtyOutput: vi.fn(() => Promise.resolve()),
 	detachPtyOutput: vi.fn(() => Promise.resolve()),
-	flushPtyOutput: vi.fn(() => Promise.resolve()),
-	getPtySessionHistory: vi.fn(() => Promise.resolve([])),
 	getSessionAgentStatus: vi.fn(() => Promise.resolve(null)),
-	getSessionBackend: vi.fn(() => Promise.resolve("local")),
+	getSessionBackend: vi.fn(() => Promise.resolve("herdr")),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	playSystemSound: vi.fn(() => Promise.resolve()),
 	resizePty: vi.fn(() => Promise.resolve()),
-	restorePtySession: vi.fn(() =>
-		Promise.resolve({ newSessionId: "mock-session-id", history: [] }),
-	),
 	scrollPty: vi.fn(() => Promise.resolve()),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
-	streamPtyOutput: vi.fn(() => Promise.resolve()),
 	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
 	writeToPty: vi.fn(() => Promise.resolve()),
 }));
@@ -389,20 +380,15 @@ function herdrAgentChannel() {
 }
 
 describe("terminal select to copy", () => {
-	const getPtySessionHistoryMock = getPtySessionHistory as unknown as Mock;
-
 	beforeEach(() => {
 		terminalInstances.length = 0;
 		writeClipboardTextMock.mockReset();
 		writeClipboardTextMock.mockResolvedValue(undefined);
 		readClipboardTextMock.mockReset();
 		toasterCreateMock.mockReset();
-		getPtySessionHistoryMock.mockClear();
-		getPtySessionHistoryMock.mockResolvedValue([]);
 		(getSessionBackend as unknown as Mock).mockReset();
-		(getSessionBackend as unknown as Mock).mockResolvedValue("local");
+		(getSessionBackend as unknown as Mock).mockResolvedValue("herdr");
 		(streamHerdrOutput as unknown as Mock).mockClear();
-		(streamPtyOutput as unknown as Mock).mockClear();
 		(getSessionAgentStatus as unknown as Mock).mockReset();
 		(getSessionAgentStatus as unknown as Mock).mockResolvedValue(null);
 		(streamSessionAgentStatus as unknown as Mock).mockReset();
@@ -475,55 +461,23 @@ describe("terminal select to copy", () => {
 		expect(toasterCreateMock).toHaveBeenCalledTimes(1);
 	});
 
-	it("publishes waiting status from an action-required title", async () => {
+	it("publishes waiting from Herdr agent DTOs, not OSC title parsing", async () => {
 		renderTerminal();
-		const terminal = latestTerminal();
-
 		await waitFor(() => {
-			expect(getPtySessionHistoryMock).toHaveBeenCalled();
+			expect(streamHerdrOutput).toHaveBeenCalled();
 		});
-		terminal.fireTitleChange("Action Required");
-
-		await waitFor(() => {
-			expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
-				"waiting",
-			);
-		});
-		expect(detector.createAgentStatusDetector).toHaveBeenCalled();
-	});
-
-	it("keeps pending agent detection until the stream is ready", async () => {
-		let resolveHistory: (value: number[]) => void = () => {};
-		getPtySessionHistoryMock.mockReturnValueOnce(
-			new Promise<number[]>((resolve) => {
-				resolveHistory = resolve;
-			}),
-		);
-		renderTerminal();
-		const terminal = latestTerminal();
-
-		terminal.fireTitleChange("Action Required");
+		expect(detector.createAgentStatusDetector).not.toHaveBeenCalled();
+		latestTerminal().fireTitleChange("Action Required");
 		expect(useTerminalStore.getState().agentStatuses["session-1"]).toBeUndefined();
-
-		resolveHistory([]);
-
-		await waitFor(() => {
-			expect(useTerminalStore.getState().agentStatuses["session-1"]).toBe(
-				"waiting",
-			);
-		});
 	});
 
-	it("streams Local PTY bytes and never opens a Herdr frame stream", async () => {
+	it("streams Herdr frames and never opens a Local byte stream", async () => {
 		renderTerminal();
 		await waitFor(() => {
-			expect(streamPtyOutput).toHaveBeenCalled();
+			expect(streamHerdrOutput).toHaveBeenCalled();
 		});
-		expect(streamHerdrOutput).not.toHaveBeenCalled();
-		expect(getPtySessionHistory).toHaveBeenCalled();
-		expect(getSessionAgentStatus).not.toHaveBeenCalled();
-		expect(streamSessionAgentStatus).not.toHaveBeenCalled();
-		expect(latestTerminal().csiHandlers).toEqual([]);
+		expect(getSessionAgentStatus).toHaveBeenCalled();
+		expect(streamSessionAgentStatus).toHaveBeenCalled();
 		latestTerminal().fireData("ls\n");
 		expect(writeToPty).toHaveBeenCalledWith({
 			sessionId: "session-1",
@@ -539,9 +493,6 @@ describe("herdr xterm transport", () => {
 		(getSessionBackend as unknown as Mock).mockResolvedValue("herdr");
 		(streamHerdrOutput as unknown as Mock).mockReset();
 		(streamHerdrOutput as unknown as Mock).mockResolvedValue(undefined);
-		(streamPtyOutput as unknown as Mock).mockClear();
-		(getPtySessionHistory as unknown as Mock).mockClear();
-		(flushPtyOutput as unknown as Mock).mockClear();
 		(detachPtyOutput as unknown as Mock).mockClear();
 		(clearPtyOutput as unknown as Mock).mockClear();
 		(writeToPty as unknown as Mock).mockClear();
@@ -635,18 +586,7 @@ describe("herdr xterm transport", () => {
 			.invocationCallOrder[0];
 		expect(attachOrder).toBeLessThan(resizeOrder);
 		expect(streamHerdrOutput).toHaveBeenCalled();
-	});
-
-	it("streams Herdr frames only and skips Local history replay", async () => {
-		await renderHerdr();
-		expect(streamPtyOutput).not.toHaveBeenCalled();
-		expect(getPtySessionHistory).not.toHaveBeenCalled();
-		expect(flushPtyOutput).not.toHaveBeenCalled();
 		expect(latestTerminal().writes).not.toContain("CACHED_SCROLLBACK");
-		expect(listen).not.toHaveBeenCalledWith(
-			"pty-exit-session-1",
-			expect.any(Function),
-		);
 	});
 
 	it("treats a verified full frame as a replacement surface", async () => {
@@ -716,7 +656,6 @@ describe("herdr xterm transport", () => {
 		expect(localStorage.getItem("terminal-buffer:session-1")).toBe(
 			"CACHED_SCROLLBACK",
 		);
-		expect(flushPtyOutput).not.toHaveBeenCalled();
 		expect(clearPtyOutput).not.toHaveBeenCalled();
 	});
 
@@ -784,7 +723,6 @@ describe("herdr xterm transport", () => {
 			"SCR01",
 			expect.objectContaining({ incremental: true }),
 		);
-		expect(getPtySessionHistory).not.toHaveBeenCalled();
 	});
 
 	it("does not construct the local detector or parse OSC for lifecycle", async () => {

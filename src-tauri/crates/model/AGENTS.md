@@ -8,8 +8,8 @@ All data types: Diesel ORM models, DTOs, and domain types. No logic — pure dat
 |------|------|
 | `schema.rs` | Auto-generated Diesel schema — DO NOT EDIT manually |
 | `project.rs` | `Project` (Queryable), `NewProject` (Insertable), `UpdateProject` (AsChangeset) |
-| `profile.rs` | `Profile`, `NewProfile`, `UpdateProfile` |
-| `pty.rs` | `PtySessionRecord` (Queryable), `NewPtySessionRecord` (Insertable), + DTOs (`PtySessionMeta`, `PtyConfig`, `RestoreResult`) |
+| `profile.rs` | Derived GUI `Profile` DTO, `CheckoutNote` / `NewCheckoutNote`, `ProfileDeleteCheck` |
+| `pty.rs` | Derived GUI DTO `PtySessionRecord` from Herdr snapshot (not a sqlite table), + `PtySessionMeta`, `PtyConfig`, `RestoreResult` |
 | `watcher.rs` | `WatchEvent` DTO |
 | `debug.rs` | `LogEntry` type |
 | `error.rs` | `AppError` — unified error type returned from all Tauri commands |

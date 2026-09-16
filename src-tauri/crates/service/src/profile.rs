@@ -3,18 +3,17 @@ use std::path::{Component, Path, PathBuf};
 
 use diesel::SqliteConnection;
 use infra::db::DbPool;
-use infra::herdr::transport::{WorktreeCreateRequest, WorktreeCreateResult};
+use infra::herdr::transport::{
+	WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeCreateRequest,
+	WorktreeCreateResult,
+};
 use uuid::Uuid;
 
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
-use model::runtime::{RuntimeBackend, RuntimeIdentityState, HERDR_NAMESPACE};
-use model::runtime_mapping::ProfileRuntimeMapping;
-
-use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
-use crate::runtime_mapping::workspace_identity_state;
-use crate::runtime_sync::RuntimeProjection;
+use crate::runtime::{HerdrWorktreeClient, RuntimeRouter};
+use serde_json::Value;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
 const WORKTREE_DIR_NAME_MAX_BYTES: usize = 120;
@@ -291,93 +290,6 @@ fn build_worktree_path(
 	))
 }
 
-struct CreatedWorktree {
-	id: String,
-	branch_name: String,
-	worktree_path: PathBuf,
-	worktree_str: String,
-}
-
-fn create_worktree(
-	project_folder: &str,
-	branch_name: &str,
-	auto_generated: bool,
-	existing_branches: &mut Vec<String>,
-	project_worktree_dir: Option<&str>,
-	default_worktree_dir: Option<&str>,
-) -> Result<CreatedWorktree, AppError> {
-	let branch_name = if auto_generated {
-		generate_auto_branch_name_from(existing_branches)?
-	} else {
-		let sanitized = sanitize_branch_name(branch_name);
-		if sanitized.is_empty() {
-			return Err(AppError::GitError("Invalid branch name".to_string()));
-		}
-		sanitized
-	};
-
-	let id = Uuid::new_v4().to_string();
-	let worktree_base = resolve_worktree_base(
-		project_folder,
-		project_worktree_dir,
-		default_worktree_dir,
-	)?;
-	std::fs::create_dir_all(&worktree_base)?;
-
-	if auto_generated {
-		let mut candidate = branch_name;
-		for _ in 0..5 {
-			let worktree_path = build_worktree_path(
-				&worktree_base,
-				project_folder,
-				&candidate,
-				&id,
-			);
-			let worktree_str = worktree_path.to_string_lossy().to_string();
-			match infra::git::worktree_add(
-				project_folder,
-				&candidate,
-				&worktree_str,
-			) {
-				Ok(()) => {
-					return Ok(CreatedWorktree {
-						id,
-						branch_name: candidate,
-						worktree_path,
-						worktree_str,
-					});
-				}
-				Err(AppError::GitError(message))
-					if message.contains("already exists") =>
-				{
-					existing_branches.push(candidate);
-					candidate =
-						generate_auto_branch_name_from(existing_branches)?;
-				}
-				Err(err) => return Err(err),
-			}
-		}
-		return Err(AppError::GitError(
-			"Failed to auto-generate a unique branch name".to_string(),
-		));
-	} else {
-		let worktree_path = build_worktree_path(
-			&worktree_base,
-			project_folder,
-			&branch_name,
-			&id,
-		);
-		let worktree_str = worktree_path.to_string_lossy().to_string();
-		infra::git::worktree_add(project_folder, &branch_name, &worktree_str)?;
-		return Ok(CreatedWorktree {
-			id,
-			branch_name,
-			worktree_path,
-			worktree_str,
-		});
-	}
-}
-
 fn load_project_config(
 	project_folder: &str,
 ) -> Result<infra::config::ProjectConfig, AppError> {
@@ -387,49 +299,16 @@ fn load_project_config(
 pub fn create_with_db(
 	db: &DbPool,
 	project_id: &str,
-	branch_name: &str,
-	default_worktree_dir: Option<&str>,
+	_branch_name: &str,
+	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, mut existing_branches) = {
+	{
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let existing_branches = if auto_generated {
-			repo::profile::list_branch_names_by_project(conn, project_id)?
-		} else {
-			Vec::new()
-		};
-		(project_folder, existing_branches)
-	};
-	let project_config = load_project_config(&project_folder)?;
-
-	let created = create_worktree(
-		&project_folder,
-		branch_name,
-		auto_generated,
-		&mut existing_branches,
-		project_config.worktree_dir.as_deref(),
-		default_worktree_dir,
-	)?;
-
-	let profile = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::insert(
-			conn,
-			&created.id,
-			project_id,
-			&created.branch_name,
-			&created.worktree_str,
-		)?
-	};
-
-	infra::config::execute_scripts(
-		&project_config.setup_script,
-		&created.worktree_path,
-	);
-
-	Ok(profile)
+		repo::project::find_by_id(conn, project_id)?;
+	}
+	Err(AppError::PtyError(
+		"Herdr runtime is required to create profiles".into(),
+	))
 }
 
 pub fn create_with_runtime(
@@ -439,21 +318,14 @@ pub fn create_with_runtime(
 	branch_name: &str,
 	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	match runtime.selected_backend() {
-		RuntimeBackend::Local => {
-			create_with_db(db, project_id, branch_name, default_worktree_dir)
-		}
-		RuntimeBackend::Herdr => {
-			let worktrees = runtime.herdr_worktrees()?;
-			create_herdr_with_db(
-				worktrees,
-				db,
-				project_id,
-				branch_name,
-				default_worktree_dir,
-			)
-		}
-	}
+	let worktrees = runtime.herdr_worktrees()?;
+	create_herdr_with_db(
+		worktrees,
+		db,
+		project_id,
+		branch_name,
+		default_worktree_dir,
+	)
 }
 
 fn create_herdr_with_db(
@@ -464,26 +336,162 @@ fn create_herdr_with_db(
 	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
 	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, mut existing_branches, default_profile_id) = {
+	let project_folder = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let existing_branches =
-			repo::profile::list_branch_names_by_project(conn, project_id)?;
-		let default_profile_id =
-			repo::profile::list_by_project(conn, project_id)?
-				.into_iter()
-				.find(|profile| profile.is_default)
-				.map(|profile| profile.id);
-		(project_folder, existing_branches, default_profile_id)
+		repo::project::find_by_id(conn, project_id)?.folder
 	};
 	let project_config = load_project_config(&project_folder)?;
 	let cwd = Path::new(&project_folder).canonicalize()?;
-	let parent_workspace_id = bound_parent_workspace_id(
-		db,
-		worktrees,
-		default_profile_id.as_deref(),
-	)?;
+	match worktrees.worktree_list(Some(&cwd), None) {
+		Ok(listed) => create_herdr_git(
+			worktrees,
+			project_id,
+			&project_folder,
+			&cwd,
+			&project_config,
+			default_worktree_dir,
+			&listed,
+			branch_name,
+			auto_generated,
+		),
+		Err(err) if is_not_git_worktree(&err) => create_herdr_nongit(
+			worktrees,
+			project_id,
+			&cwd,
+			&project_config,
+			branch_name,
+			auto_generated,
+		),
+		Err(err) => Err(err),
+	}
+}
+
+fn create_herdr_nongit(
+	worktrees: &dyn HerdrWorktreeClient,
+	project_id: &str,
+	cwd: &Path,
+	project_config: &infra::config::ProjectConfig,
+	branch_name: &str,
+	auto_generated: bool,
+) -> Result<Profile, AppError> {
+	let label = if auto_generated {
+		None
+	} else {
+		let sanitized = sanitize_branch_name(branch_name);
+		if sanitized.is_empty() {
+			return Err(AppError::GitError("Invalid branch name".to_string()));
+		}
+		Some(sanitized)
+	};
+	let before_ids = match worktrees.session_snapshot() {
+		Ok(snapshot) => Some(snapshot_workspace_ids_for_cwd(&snapshot, cwd)),
+		Err(_) => None,
+	};
+	let created = match worktrees.workspace_create(WorkspaceCreateRequest {
+		cwd,
+		label: label.as_deref(),
+	}) {
+		Ok(created) => created,
+		Err(AppError::HerdrUncertainOutcome(_)) => {
+			let Some(before_ids) = before_ids else {
+				return Err(AppError::HerdrUncertainOutcome(
+					"workspace.create outcome is uncertain; not replaying"
+						.into(),
+				));
+			};
+			recover_nongit_workspace(worktrees, cwd, &before_ids)?
+		}
+		Err(err) => return Err(err),
+	};
+	let path = cwd.to_string_lossy().into_owned();
+	let profile = herdr_profile(
+		project_id,
+		&created.workspace_id,
+		label.unwrap_or_default(),
+		&path,
+		false,
+	);
+	infra::config::execute_scripts(&project_config.setup_script, cwd);
+	Ok(profile)
+}
+
+fn recover_nongit_workspace(
+	worktrees: &dyn HerdrWorktreeClient,
+	cwd: &Path,
+	before_ids: &[String],
+) -> Result<WorkspaceCreateResult, AppError> {
+	let snapshot = worktrees.session_snapshot().map_err(|_| {
+		AppError::HerdrUncertainOutcome(
+			"workspace.create outcome is uncertain; not replaying".into(),
+		)
+	})?;
+	let mut ids: Vec<String> = snapshot_workspace_ids_for_cwd(&snapshot, cwd)
+		.into_iter()
+		.filter(|id| !before_ids.iter().any(|before| before == id))
+		.collect();
+	ids.sort();
+	ids.into_iter()
+		.next_back()
+		.map(|workspace_id| WorkspaceCreateResult { workspace_id })
+		.ok_or_else(|| {
+			AppError::HerdrUncertainOutcome(
+				"workspace.create outcome is uncertain; not replaying".into(),
+			)
+		})
+}
+
+fn snapshot_workspace_ids_for_cwd(snapshot: &Value, cwd: &Path) -> Vec<String> {
+	let snap = if snapshot.get("type").and_then(Value::as_str)
+		== Some("session_snapshot")
+	{
+		snapshot.get("snapshot").unwrap_or(snapshot)
+	} else {
+		snapshot
+	};
+	let mut ids = Vec::new();
+	let Some(panes) = snap.get("panes").and_then(Value::as_array) else {
+		return ids;
+	};
+	for pane in panes {
+		let Some(workspace_id) = pane
+			.get("workspace_id")
+			.and_then(Value::as_str)
+			.filter(|id| !id.is_empty())
+		else {
+			continue;
+		};
+		let Some(pane_cwd) = pane
+			.get("cwd")
+			.and_then(Value::as_str)
+			.or_else(|| pane.get("foreground_cwd").and_then(Value::as_str))
+		else {
+			continue;
+		};
+		if same_worktree_path(Path::new(pane_cwd), cwd)
+			&& !ids.iter().any(|id| id == workspace_id)
+		{
+			ids.push(workspace_id.to_string());
+		}
+	}
+	ids
+}
+
+fn create_herdr_git(
+	worktrees: &dyn HerdrWorktreeClient,
+	project_id: &str,
+	project_folder: &str,
+	cwd: &Path,
+	project_config: &infra::config::ProjectConfig,
+	default_worktree_dir: Option<&str>,
+	listed: &[infra::herdr::transport::WorktreeListEntry],
+	branch_name: &str,
+	auto_generated: bool,
+) -> Result<Profile, AppError> {
+	let parent_workspace_id = live_parent_workspace_id(listed, cwd);
+	let mut existing_branches: Vec<String> = listed
+		.iter()
+		.filter_map(|entry| entry.branch.clone())
+		.collect();
 
 	let mut branch_name = if auto_generated {
 		generate_auto_branch_name_from(&existing_branches)?
@@ -498,17 +506,16 @@ fn create_herdr_with_db(
 	let attempts = if auto_generated { 5 } else { 1 };
 	let mut last_conflict = None;
 	for _ in 0..attempts {
-		let id = herdr_profile_id(project_id, &branch_name);
-		match create_herdr_once(
+		let dir_key = herdr_dir_key(project_id, &branch_name);
+		match create_herdr_git_once(
 			worktrees,
-			db,
 			project_id,
-			&project_folder,
-			&cwd,
+			project_folder,
+			cwd,
 			parent_workspace_id.as_deref(),
-			&project_config,
+			project_config,
 			default_worktree_dir,
-			&id,
+			&dir_key,
 			&branch_name,
 		) {
 			Ok(profile) => return Ok(profile),
@@ -528,35 +535,19 @@ fn create_herdr_with_db(
 	}))
 }
 
-fn bound_parent_workspace_id(
-	db: &DbPool,
-	worktrees: &dyn HerdrWorktreeClient,
-	default_profile_id: Option<&str>,
-) -> Result<Option<String>, AppError> {
-	let Some(profile_id) = default_profile_id else {
-		return Ok(None);
-	};
-	let mapping = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
-			Ok(mapping) => Some(mapping),
-			Err(AppError::NotFound(_)) => None,
-			Err(err) => return Err(err),
+fn live_parent_workspace_id(
+	listed: &[infra::herdr::transport::WorktreeListEntry],
+	cwd: &Path,
+) -> Option<String> {
+	listed.iter().find_map(|entry| {
+		if entry.is_linked_worktree {
+			return None;
 		}
-	};
-	let Some(mapping) = mapping else {
-		return Ok(None);
-	};
-	let snapshot = worktrees.session_snapshot()?;
-	let mut projection = RuntimeProjection::new();
-	projection.apply_snapshot(&snapshot)?;
-	if workspace_identity_state(&mapping, &projection)
-		== RuntimeIdentityState::Bound
-	{
-		Ok(Some(mapping.workspace_id))
-	} else {
-		Ok(None)
-	}
+		let workspace_id =
+			entry.workspace_id.as_deref().filter(|id| !id.is_empty())?;
+		same_worktree_path(Path::new(&entry.path), cwd)
+			.then(|| workspace_id.to_string())
+	})
 }
 
 fn is_branch_conflict(err: &AppError) -> bool {
@@ -570,32 +561,17 @@ fn is_branch_conflict(err: &AppError) -> bool {
 	}
 }
 
-fn create_herdr_once(
+fn create_herdr_git_once(
 	worktrees: &dyn HerdrWorktreeClient,
-	db: &DbPool,
 	project_id: &str,
 	project_folder: &str,
 	cwd: &Path,
 	parent_workspace_id: Option<&str>,
 	project_config: &infra::config::ProjectConfig,
 	default_worktree_dir: Option<&str>,
-	id: &str,
+	dir_key: &str,
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
-	if let Some(existing) =
-		existing_profile_for_branch(db, project_id, branch_name)?
-	{
-		return bind_herdr_insert_retry(
-			worktrees,
-			db,
-			cwd,
-			parent_workspace_id,
-			&existing,
-			id,
-			branch_name,
-		);
-	}
-
 	let worktree_base = resolve_worktree_base(
 		project_folder,
 		project_config.worktree_dir.as_deref(),
@@ -603,8 +579,12 @@ fn create_herdr_once(
 	)?;
 	std::fs::create_dir_all(&worktree_base)?;
 	let worktree_base = worktree_base.canonicalize()?;
-	let intended_path =
-		build_worktree_path(&worktree_base, project_folder, branch_name, id);
+	let intended_path = build_worktree_path(
+		&worktree_base,
+		project_folder,
+		branch_name,
+		dir_key,
+	);
 
 	if let Some(created) = checkout_at_listed_path(
 		worktrees,
@@ -613,15 +593,7 @@ fn create_herdr_once(
 		&intended_path,
 		false,
 	)? {
-		return persist_herdr_profile(
-			db,
-			project_id,
-			project_config,
-			id,
-			branch_name,
-			created,
-			true,
-		);
+		return Ok(herdr_profile_from_create(project_id, branch_name, created));
 	}
 
 	if infra::git::local_branch_exists(project_folder, branch_name)?
@@ -660,93 +632,61 @@ fn create_herdr_once(
 		Err(err) => return Err(err),
 	};
 
-	persist_herdr_profile(
-		db,
+	let profile = herdr_profile_from_create(project_id, branch_name, created);
+	infra::config::execute_scripts(
+		&project_config.setup_script,
+		Path::new(&profile.worktree_path),
+	);
+	Ok(profile)
+}
+
+fn herdr_profile_from_create(
+	project_id: &str,
+	branch_name: &str,
+	created: WorktreeCreateResult,
+) -> Profile {
+	herdr_profile(
 		project_id,
-		project_config,
-		id,
-		branch_name,
-		created,
-		true,
+		&created.workspace_id,
+		branch_name.to_string(),
+		&created.path,
+		false,
 	)
 }
 
-fn existing_profile_for_branch(
-	db: &DbPool,
+fn herdr_profile(
 	project_id: &str,
-	branch_name: &str,
-) -> Result<Option<Profile>, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::profile::list_by_project(conn, project_id)?
-		.into_iter()
-		.find(|profile| {
-			!profile.is_default && profile.branch_name == branch_name
-		}))
-}
-
-fn profile_has_workspace_mapping(
-	db: &DbPool,
-	profile_id: &str,
-) -> Result<bool, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	match repo::runtime_mapping::find_profile_mapping(conn, profile_id) {
-		Ok(_) => Ok(true),
-		Err(AppError::NotFound(_)) => Ok(false),
-		Err(err) => Err(err),
+	workspace_id: &str,
+	branch_name: String,
+	worktree_path: &str,
+	is_default: bool,
+) -> Profile {
+	Profile {
+		id: workspace_id.to_string(),
+		project_id: project_id.to_string(),
+		branch_name,
+		worktree_path: worktree_path.to_string(),
+		created_at: String::new(),
+		is_default,
+		notes: String::new(),
 	}
 }
 
-fn herdr_profile_id(project_id: &str, branch_name: &str) -> String {
+fn is_not_git_worktree(err: &AppError) -> bool {
+	match err {
+		AppError::HerdrTransport(message) => {
+			message.contains("not_git_worktree")
+		}
+		_ => false,
+	}
+}
+
+fn herdr_dir_key(project_id: &str, branch_name: &str) -> String {
 	Uuid::new_v5(
 		&Uuid::NAMESPACE_URL,
 		format!("2code-profile:{project_id}:{branch_name}").as_bytes(),
 	)
 	.to_string()
-}
-
-fn bind_herdr_insert_retry(
-	worktrees: &dyn HerdrWorktreeClient,
-	db: &DbPool,
-	cwd: &Path,
-	parent_workspace_id: Option<&str>,
-	existing: &Profile,
-	id: &str,
-	branch_name: &str,
-) -> Result<Profile, AppError> {
-	let already_exists =
-		AppError::GitError(format!("Branch '{branch_name}' already exists"));
-	if existing.id != id || profile_has_workspace_mapping(db, &existing.id)? {
-		return Err(already_exists);
-	}
-	let Some(workspace_id) = listed_open_workspace_id(
-		worktrees,
-		cwd,
-		parent_workspace_id,
-		Path::new(&existing.worktree_path),
-	)?
-	else {
-		return Err(already_exists);
-	};
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::runtime_mapping::bind_profile_workspace(
-		conn,
-		&existing.id,
-		HERDR_NAMESPACE,
-		&workspace_id,
-	)?;
-	repo::profile::find_by_id(conn, &existing.id)
-}
-
-fn listed_open_workspace_id(
-	worktrees: &dyn HerdrWorktreeClient,
-	cwd: &Path,
-	parent_workspace_id: Option<&str>,
-	path: &Path,
-) -> Result<Option<String>, AppError> {
-	let listed = list_worktrees(worktrees, cwd, parent_workspace_id)?;
-	Ok(match_listed_worktree(&listed, path)
-		.map(|created| created.workspace_id)
-		.filter(|workspace_id| !workspace_id.is_empty()))
 }
 
 fn linked_worktree_for_branch(
@@ -837,7 +777,7 @@ fn listed_entry_to_created(
 	}
 }
 
-fn open_existing_checkout(
+pub(crate) fn open_existing_checkout(
 	worktrees: &dyn HerdrWorktreeClient,
 	cwd: &Path,
 	path: &Path,
@@ -850,103 +790,28 @@ fn open_existing_checkout(
 			workspace_id: opened.workspace_id,
 			path: path.to_string_lossy().into_owned(),
 		})),
-		Err(AppError::HerdrUncertainOutcome(_)) => Ok(None),
+		Err(AppError::HerdrUncertainOutcome(err)) => {
+			tracing::warn!(
+				target: "herdr",
+				path = %path.display(),
+				"worktree.open uncertain; not retrying: {err}"
+			);
+			Ok(None)
+		}
 		Err(err) => Err(err),
 	}
-}
-
-fn persist_herdr_profile(
-	db: &DbPool,
-	project_id: &str,
-	project_config: &infra::config::ProjectConfig,
-	id: &str,
-	branch_name: &str,
-	created: WorktreeCreateResult,
-	run_setup: bool,
-) -> Result<Profile, AppError> {
-	let worktree_str = created.path.clone();
-	let worktree_path = PathBuf::from(&worktree_str);
-	let profile = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		if let Ok(existing) = repo::profile::find_by_id(conn, id) {
-			repo::runtime_mapping::bind_profile_workspace(
-				conn,
-				id,
-				HERDR_NAMESPACE,
-				&created.workspace_id,
-			)?;
-			return Ok(existing);
-		}
-		let profile = repo::profile::insert(
-			conn,
-			id,
-			project_id,
-			branch_name,
-			&worktree_str,
-		)?;
-		repo::runtime_mapping::bind_profile_workspace(
-			conn,
-			id,
-			HERDR_NAMESPACE,
-			&created.workspace_id,
-		)?;
-		profile
-	};
-
-	if run_setup {
-		infra::config::execute_scripts(
-			&project_config.setup_script,
-			&worktree_path,
-		);
-	}
-
-	Ok(profile)
 }
 
 pub fn create_with_default_worktree_dir(
 	conn: &mut SqliteConnection,
 	project_id: &str,
-	branch_name: &str,
-	default_worktree_dir: Option<&str>,
+	_branch_name: &str,
+	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	let auto_generated = branch_name.trim().is_empty();
-	let (project_folder, project_config, mut existing_branches) = {
-		let project_folder =
-			repo::profile::get_project_folder(conn, project_id)?;
-		let project_config = load_project_config(&project_folder)?;
-		let existing_branches = if auto_generated {
-			repo::profile::list_branch_names_by_project(conn, project_id)?
-		} else {
-			Vec::new()
-		};
-		(project_folder, project_config, existing_branches)
-	};
-
-	let created = create_worktree(
-		&project_folder,
-		branch_name,
-		auto_generated,
-		&mut existing_branches,
-		project_config.worktree_dir.as_deref(),
-		default_worktree_dir,
-	)?;
-
-	let profile = {
-		repo::profile::insert(
-			conn,
-			&created.id,
-			project_id,
-			&created.branch_name,
-			&created.worktree_str,
-		)?
-	};
-
-	infra::config::execute_scripts(
-		&project_config.setup_script,
-		&created.worktree_path,
-	);
-
-	Ok(profile)
+	repo::project::find_by_id(conn, project_id)?;
+	Err(AppError::PtyError(
+		"Herdr runtime is required to create profiles".into(),
+	))
 }
 
 pub fn create(
@@ -955,39 +820,6 @@ pub fn create(
 	branch_name: &str,
 ) -> Result<Profile, AppError> {
 	create_with_default_worktree_dir(conn, project_id, branch_name, None)
-}
-
-fn cleanup_profile(
-	profile: &Profile,
-	project_folder: &str,
-) -> Result<(), AppError> {
-	let worktree_path = PathBuf::from(&profile.worktree_path);
-
-	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
-	}
-
-	let branch_name =
-		infra::git::worktree_current_branch(&profile.worktree_path)?
-			.unwrap_or_else(|| profile.branch_name.clone());
-
-	infra::git::worktree_remove(project_folder, &profile.worktree_path)?;
-	infra::git::branch_delete(project_folder, &branch_name)?;
-
-	Ok(())
-}
-
-fn refuse_mapped_without_runtime(
-	conn: &mut SqliteConnection,
-	id: &str,
-) -> Result<(), AppError> {
-	match repo::runtime_mapping::find_profile_mapping(conn, id) {
-		Ok(_) => Err(AppError::PtyError(
-			"Herdr-mapped profile requires runtime cleanup".into(),
-		)),
-		Err(AppError::NotFound(_)) => Ok(()),
-		Err(err) => Err(err),
-	}
 }
 
 fn working_tree_is_dirty(path: &str) -> Result<bool, AppError> {
@@ -1012,14 +844,6 @@ fn is_dirty_worktree_error(err: &AppError) -> bool {
 	}
 }
 
-fn is_primary_checkout(profile: &Profile, project_folder: &str) -> bool {
-	profile.is_default
-		|| same_worktree_path(
-			Path::new(&profile.worktree_path),
-			Path::new(project_folder),
-		)
-}
-
 fn refuse_primary_checkout() -> AppError {
 	AppError::GitError(
 		"refusing to worktree.remove a default/primary checkout".into(),
@@ -1035,130 +859,88 @@ fn listed_workspace<'a>(
 		.find(|entry| entry.workspace_id.as_deref() == Some(workspace_id))
 }
 
-fn herdr_workspace_absent(
+fn herdr_workspace_listed_absent(
 	worktrees: &dyn HerdrWorktreeClient,
-	mapping: &ProfileRuntimeMapping,
+	workspace_id: &str,
 	checkout: &str,
 ) -> Result<bool, AppError> {
-	match worktrees.worktree_list(None, Some(&mapping.workspace_id)) {
-		Ok(listed) => {
-			Ok(listed_workspace(&listed, &mapping.workspace_id).is_none())
-		}
+	match worktrees.worktree_list(None, Some(workspace_id)) {
+		Ok(listed) => Ok(listed_workspace(&listed, workspace_id).is_none()),
+		Err(err) if is_not_git_worktree(&err) => Ok(true),
 		Err(AppError::HerdrUncertainOutcome(_)) => {
-			let snapshot = worktrees.session_snapshot()?;
-			let mut projection = RuntimeProjection::new();
-			projection.apply_snapshot(&snapshot)?;
-			Ok(workspace_identity_state(mapping, &projection)
-				!= RuntimeIdentityState::Bound
-				&& !Path::new(checkout).exists())
+			Ok(!Path::new(checkout).exists())
 		}
 		Err(err) => Err(err),
 	}
 }
 
-fn run_teardown_script(profile: &Profile, project_folder: &str) {
-	let worktree_path = PathBuf::from(&profile.worktree_path);
-	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
+fn git_common_dir(path: &str) -> Option<PathBuf> {
+	if !Path::new(path).exists() {
+		return None;
+	}
+	let output = infra::no_window::command_without_windows_console("git")
+		.args(["rev-parse", "--git-common-dir"])
+		.current_dir(path)
+		.output()
+		.ok()?;
+	if !output.status.success() {
+		return None;
+	}
+	let raw = String::from_utf8_lossy(&output.stdout);
+	let trimmed = raw.trim();
+	if trimmed.is_empty() {
+		return None;
+	}
+	let resolved = Path::new(trimmed);
+	if resolved.is_absolute() {
+		resolved.canonicalize().ok()
+	} else {
+		Path::new(path).join(resolved).canonicalize().ok()
 	}
 }
 
-fn delete_herdr_mapped(
-	runtime: &RuntimeRouter,
-	db: &DbPool,
-	profile: &Profile,
-	project_folder: &str,
-	session_ids: &[String],
-	mapping: &ProfileRuntimeMapping,
-	force: Option<bool>,
-) -> Result<(), AppError> {
-	if mapping.namespace != HERDR_NAMESPACE {
-		return Err(AppError::DbError(format!(
-			"runtime mappings must use the {HERDR_NAMESPACE} namespace"
-		)));
-	}
-	if is_primary_checkout(profile, project_folder) {
-		return Err(refuse_primary_checkout());
-	}
-
-	let worktrees = runtime.herdr_worktrees()?;
-	let listed =
-		match worktrees.worktree_list(None, Some(&mapping.workspace_id)) {
-			Ok(listed) => listed,
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				return Err(AppError::HerdrUncertainOutcome(
-					"worktree.list is uncertain; not removing".into(),
-				));
-			}
-			Err(err) => return Err(err),
-		};
-	if let Some(entry) = listed_workspace(&listed, &mapping.workspace_id) {
-		if !entry.is_linked_worktree {
-			return Err(refuse_primary_checkout());
-		}
-	}
-
-	for session_id in session_ids {
-		runtime.release_herdr_session(session_id)?;
-	}
-
-	let checkout_exists = Path::new(&profile.worktree_path).exists();
-	let already_gone = listed_workspace(&listed, &mapping.workspace_id)
-		.is_none()
-		&& !checkout_exists;
-	if !already_gone {
-		run_teardown_script(profile, project_folder);
-		let force = match force {
-			Some(force) => force,
-			None => working_tree_is_dirty(&profile.worktree_path)?,
-		};
-		match worktrees.worktree_remove(&mapping.workspace_id, force) {
-			Ok(_) => {}
-			Err(err) if is_dirty_worktree_error(&err) => return Err(err),
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				if !herdr_workspace_absent(
-					worktrees,
-					mapping,
-					&profile.worktree_path,
-				)? {
-					return Err(AppError::HerdrUncertainOutcome(format!(
-						"worktree.remove {} is uncertain; not replaying",
-						mapping.workspace_id
-					)));
-				}
-			}
-			Err(err) => return Err(err),
-		}
-		if Path::new(&profile.worktree_path).exists() {
-			return Err(AppError::GitError(
-				"worktree.remove left the checkout in place; not using git worktree remove".into(),
-			));
-		}
-	}
-
-	let branch_name =
-		infra::git::worktree_current_branch(&profile.worktree_path)?
-			.unwrap_or_else(|| profile.branch_name.clone());
-	infra::git::branch_delete(project_folder, &branch_name)?;
-
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	for session_id in session_ids {
-		repo::pty::mark_closed(conn, session_id);
-	}
-	repo::profile::delete_record(conn, &profile.id)
-}
-
-pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
-	let (profile, project_folder) = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		refuse_mapped_without_runtime(conn, id)?;
-		repo::profile::get_delete_target(conn, id)?
+fn git_repo_folder_for_checkout(checkout: &str) -> Option<String> {
+	let common = git_common_dir(checkout)?;
+	let folder = if common.file_name().is_some_and(|name| name == ".git") {
+		common.parent()?.to_path_buf()
+	} else {
+		common
 	};
+	folder.to_str().map(str::to_string)
+}
 
-	cleanup_profile(&profile, &project_folder)?;
+/// Repo for `git branch -D` after Herdr `worktree.remove`. Listed checkout
+/// first; `projects.folder` only as a live path join, never sqlite `profiles`.
+fn repo_folder_for_linked_checkout(
+	db: &DbPool,
+	checkout: &str,
+) -> Option<String> {
+	if let Some(repo) = git_repo_folder_for_checkout(checkout) {
+		return Some(repo);
+	}
+	let projects = {
+		let mut conn = db.lock().ok()?;
+		repo::project::list_all(&mut conn).ok()?
+	};
+	let checkout_path = Path::new(checkout);
+	let checkout_common = git_common_dir(checkout);
+	projects.into_iter().find_map(|project| {
+		if same_worktree_path(Path::new(&project.folder), checkout_path) {
+			return Some(project.folder);
+		}
+		let project_common = git_common_dir(&project.folder)?;
+		checkout_common
+			.as_ref()
+			.filter(|common| *common == &project_common)
+			.map(|_| project.folder)
+	})
+}
 
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::profile::delete_record(conn, id)
+pub fn delete_with_db(_db: &DbPool, id: &str) -> Result<(), AppError> {
+	let _ = id;
+	Err(AppError::PtyError(
+		"Herdr runtime is required to delete profiles".into(),
+	))
 }
 
 pub fn delete_with_runtime(
@@ -1175,68 +957,215 @@ fn delete_with_runtime_force(
 	id: &str,
 	force: Option<bool>,
 ) -> Result<(), AppError> {
-	let (profile, project_folder, session_ids, mapping) = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let (profile, project_folder) =
-			repo::profile::get_delete_target(conn, id)?;
-		let session_ids = repo::pty::list_ids_by_profile(conn, id)?;
-		let mapping =
-			match repo::runtime_mapping::find_profile_mapping(conn, id) {
-				Ok(mapping) => Some(mapping),
-				Err(AppError::NotFound(_)) => None,
-				Err(err) => return Err(err),
-			};
-		(profile, project_folder, session_ids, mapping)
+	delete_herdr_identity(runtime, db, id, force)
+}
+
+fn delete_herdr_identity(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	id: &str,
+	force: Option<bool>,
+) -> Result<(), AppError> {
+	let worktrees = runtime.herdr_worktrees()?;
+	match worktrees.worktree_list(None, Some(id)) {
+		Ok(listed) => {
+			delete_herdr_git_workspace(worktrees, db, id, &listed, force)
+		}
+		Err(err) if is_not_git_worktree(&err) => {
+			delete_herdr_nongit_workspace(worktrees, id)
+		}
+		Err(AppError::NotFound(_)) => Ok(()),
+		Err(AppError::HerdrUncertainOutcome(_)) => {
+			Err(AppError::HerdrUncertainOutcome(
+				"worktree.list is uncertain; not removing".into(),
+			))
+		}
+		Err(err) => Err(err),
+	}
+}
+
+fn delete_herdr_git_workspace(
+	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
+	workspace_id: &str,
+	listed: &[infra::herdr::transport::WorktreeListEntry],
+	force: Option<bool>,
+) -> Result<(), AppError> {
+	let Some(entry) = listed_workspace(listed, workspace_id) else {
+		return Ok(());
 	};
-
-	if let Some(mapping) = mapping {
-		return delete_herdr_mapped(
-			runtime,
-			db,
-			&profile,
-			&project_folder,
-			&session_ids,
-			&mapping,
-			force,
-		);
+	if !entry.is_linked_worktree {
+		return Err(refuse_primary_checkout());
 	}
 
-	for session_id in &session_ids {
-		runtime.teardown_session(session_id)?;
+	let checkout = entry.path.clone();
+	let checkout_exists = Path::new(&checkout).exists();
+	let branch_name = entry
+		.branch
+		.clone()
+		.filter(|branch| !branch.is_empty())
+		.or_else(|| {
+			infra::git::worktree_current_branch(&checkout)
+				.ok()
+				.flatten()
+		})
+		.unwrap_or_default();
+	let repo = repo_folder_for_linked_checkout(db, &checkout);
+	run_teardown_script_at(&checkout);
+	let force = match force {
+		Some(force) => force,
+		None => working_tree_is_dirty(&checkout)?,
+	};
+	match worktrees.worktree_remove(workspace_id, force) {
+		Ok(_) => {}
+		Err(err) if is_dirty_worktree_error(&err) => return Err(err),
+		Err(AppError::HerdrUncertainOutcome(_)) => {
+			if !herdr_workspace_listed_absent(
+				worktrees,
+				workspace_id,
+				&checkout,
+			)? {
+				return Err(AppError::HerdrUncertainOutcome(format!(
+					"worktree.remove {workspace_id} is uncertain; not replaying"
+				)));
+			}
+		}
+		Err(err) => return Err(err),
 	}
-
-	cleanup_profile(&profile, &project_folder)?;
-
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	for session_id in &session_ids {
-		repo::pty::mark_closed(conn, session_id);
+	if Path::new(&checkout).exists() && checkout_exists {
+		return Err(AppError::GitError(
+			"worktree.remove left the checkout in place; not using git worktree remove".into(),
+		));
 	}
-	repo::profile::delete_record(conn, id)
+	if let Some(repo) = repo.filter(|folder| !folder.is_empty()) {
+		if !branch_name.is_empty() {
+			infra::git::branch_delete(&repo, &branch_name)?;
+		}
+	}
+	Ok(())
+}
+
+fn delete_herdr_nongit_workspace(
+	worktrees: &dyn HerdrWorktreeClient,
+	workspace_id: &str,
+) -> Result<(), AppError> {
+	let snapshot = worktrees.session_snapshot()?;
+	let cwd = nongit_workspace_cwd(&snapshot, workspace_id);
+	let Some(cwd) = cwd else {
+		return Ok(());
+	};
+	let mut siblings =
+		snapshot_workspace_ids_for_cwd(&snapshot, Path::new(&cwd));
+	siblings.sort();
+	if siblings.len() <= 1
+		|| siblings.first().map(String::as_str) == Some(workspace_id)
+	{
+		return Err(refuse_primary_checkout());
+	}
+	match worktrees.workspace_close(workspace_id) {
+		Ok(()) => Ok(()),
+		Err(AppError::HerdrUncertainOutcome(_)) => {
+			let again = worktrees.session_snapshot().ok();
+			let still_there = again.as_ref().is_some_and(|snap| {
+				nongit_workspace_cwd(snap, workspace_id).is_some()
+			});
+			if still_there {
+				Err(AppError::HerdrUncertainOutcome(format!(
+					"workspace.close {workspace_id} is uncertain; not replaying"
+				)))
+			} else {
+				Ok(())
+			}
+		}
+		Err(err) => Err(err),
+	}
+}
+
+fn nongit_workspace_cwd(
+	snapshot: &Value,
+	workspace_id: &str,
+) -> Option<String> {
+	let snap = if snapshot.get("type").and_then(Value::as_str)
+		== Some("session_snapshot")
+	{
+		snapshot.get("snapshot").unwrap_or(snapshot)
+	} else {
+		snapshot
+	};
+	let panes = snap.get("panes").and_then(Value::as_array)?;
+	for pane in panes {
+		let id = pane.get("workspace_id").and_then(Value::as_str)?;
+		if id != workspace_id {
+			continue;
+		}
+		if let Some(cwd) = pane
+			.get("cwd")
+			.and_then(Value::as_str)
+			.or_else(|| pane.get("foreground_cwd").and_then(Value::as_str))
+			.filter(|cwd| !cwd.is_empty())
+		{
+			return Some(cwd.to_string());
+		}
+	}
+	None
+}
+
+fn run_teardown_script_at(checkout: &str) {
+	let worktree_path = PathBuf::from(checkout);
+	if let Ok(cfg) = infra::config::load_project_config(checkout) {
+		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
+	}
+}
+
+pub fn update_notes_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	id: &str,
+	notes: &str,
+) -> Result<Profile, AppError> {
+	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
+	let live = live_catalog_profile(runtime, db, id)?
+		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))?;
+	{
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::checkout_notes::upsert(conn, &live.project_id, &path, notes)?;
+	}
+	live_catalog_profile(runtime, db, id)?
+		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))
+}
+
+fn live_catalog_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	id: &str,
+) -> Result<Option<Profile>, AppError> {
+	Ok(crate::project::list_with_runtime(runtime, db)?
+		.into_iter()
+		.flat_map(|project| project.profiles)
+		.find(|profile| profile.id == id))
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	refuse_mapped_without_runtime(conn, id)?;
-	let (profile, project_folder) = repo::profile::get_delete_target(conn, id)?;
-
-	cleanup_profile(&profile, &project_folder)?;
-
-	repo::profile::delete_record(conn, id)
+	let _ = conn;
+	let _ = id;
+	Err(AppError::PtyError(
+		"Herdr runtime is required to delete profiles".into(),
+	))
 }
 
 pub fn delete_check(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	id: &str,
 ) -> Result<ProfileDeleteCheck, AppError> {
-	let profile = repo::profile::find_by_id(conn, id)?;
-	let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
-	let unpushed_commits = infra::git::branch_unique_commits(
-		&profile.worktree_path,
-		&profile.branch_name,
-	)?;
-	let unpushed_commit_diff = infra::git::commit_diff_stats(
-		&profile.worktree_path,
-		&unpushed_commits,
-	)?;
+	let worktree_path =
+		crate::project::reconcile_profile_checkout(runtime, db, id)?;
+	let branch_name = infra::git::branch(&worktree_path).unwrap_or_default();
+	let working_tree_diff = infra::git::diff_stats(&worktree_path)?;
+	let unpushed_commits =
+		infra::git::branch_unique_commits(&worktree_path, &branch_name)?;
+	let unpushed_commit_diff =
+		infra::git::commit_diff_stats(&worktree_path, &unpushed_commits)?;
 
 	Ok(ProfileDeleteCheck {
 		total_diff: add_diff_stats(&working_tree_diff, &unpushed_commit_diff),
@@ -1257,18 +1186,20 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
-	use crate::PtyEventEmitter;
+	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
 	use diesel::Connection;
 	use diesel::RunQueryDsl;
+	use diesel::sqlite::SqliteConnection;
 	use diesel_migrations::MigrationHarness;
+	use infra::db::DbPool;
 	use infra::herdr::transport::{
-		WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
+		WorktreeCreateRequest, WorktreeCreateResult, WorkspaceCreateRequest,
+		WorkspaceCreateResult, WorktreeListEntry, WorktreeOpenResult,
+		WorktreeRemoveResult,
 	};
-	use model::runtime::RuntimeBackend;
-	use serde_json::json;
-	use std::path::Path;
+	use model::error::AppError;
+	use serde_json::{json, Value};
+	use std::path::{Path, PathBuf};
 	use std::sync::{Arc, Mutex};
 	use tempfile::TempDir;
 
@@ -1305,6 +1236,401 @@ mod tests {
 		run_git(dir.path(), ["add", "README.md"]);
 		run_git(dir.path(), ["commit", "-m", "Initial commit"]);
 		dir
+	}
+
+
+	struct RecordedCreate {
+		branch: String,
+		path: Option<String>,
+		cwd: Option<String>,
+		workspace_id: Option<String>,
+		label: Option<String>,
+	}
+
+	#[derive(Clone)]
+	struct RecordedRemove {
+		workspace_id: String,
+		force: bool,
+	}
+
+	struct RecordedWorkspaceCreate {
+		cwd: String,
+		label: Option<String>,
+	}
+
+	struct FakeWorktreeState {
+		methods: Vec<String>,
+		creates: Vec<RecordedCreate>,
+		workspace_creates: Vec<RecordedWorkspaceCreate>,
+		removes: Vec<RecordedRemove>,
+		workspace_closes: Vec<String>,
+		create_error: Option<AppError>,
+		workspace_create_error: Option<AppError>,
+		remove_error: Option<AppError>,
+		workspace_close_error: Option<AppError>,
+		list_error: Option<AppError>,
+		land_on_error: bool,
+		dirty: bool,
+		not_git: bool,
+		listed: Vec<WorktreeListEntry>,
+		snapshot: serde_json::Value,
+		next_workspace: u32,
+	}
+
+	struct FakeWorktrees {
+		state: Mutex<FakeWorktreeState>,
+	}
+
+	impl FakeWorktrees {
+		fn new() -> Arc<Self> {
+			Arc::new(Self {
+				state: Mutex::new(FakeWorktreeState {
+					methods: Vec::new(),
+					creates: Vec::new(),
+					workspace_creates: Vec::new(),
+					removes: Vec::new(),
+					workspace_closes: Vec::new(),
+					create_error: None,
+					workspace_create_error: None,
+					remove_error: None,
+					workspace_close_error: None,
+					list_error: None,
+					land_on_error: false,
+					dirty: false,
+					not_git: false,
+					listed: Vec::new(),
+					snapshot: json!({
+						"type": "session_snapshot",
+						"snapshot": { "workspaces": [], "tabs": [], "panes": [] }
+					}),
+					next_workspace: 2,
+				}),
+			})
+		}
+
+		fn methods(&self) -> Vec<String> {
+			self.state.lock().unwrap().methods.clone()
+		}
+
+		fn creates(&self) -> usize {
+			self.state.lock().unwrap().creates.len()
+		}
+
+		fn last_create(&self) -> RecordedCreate {
+			let state = self.state.lock().unwrap();
+			let last = state.creates.last().expect("create recorded");
+			RecordedCreate {
+				branch: last.branch.clone(),
+				path: last.path.clone(),
+				cwd: last.cwd.clone(),
+				workspace_id: last.workspace_id.clone(),
+				label: last.label.clone(),
+			}
+		}
+
+		fn removes(&self) -> Vec<RecordedRemove> {
+			self.state.lock().unwrap().removes.clone()
+		}
+
+		fn last_remove(&self) -> RecordedRemove {
+			let state = self.state.lock().unwrap();
+			let last = state.removes.last().expect("remove recorded");
+			RecordedRemove {
+				workspace_id: last.workspace_id.clone(),
+				force: last.force,
+			}
+		}
+
+		fn workspace_creates(&self) -> usize {
+			self.state.lock().unwrap().workspace_creates.len()
+		}
+
+		fn last_workspace_create(&self) -> RecordedWorkspaceCreate {
+			let state = self.state.lock().unwrap();
+			let last = state
+				.workspace_creates
+				.last()
+				.expect("workspace create recorded");
+			RecordedWorkspaceCreate {
+				cwd: last.cwd.clone(),
+				label: last.label.clone(),
+			}
+		}
+
+		fn workspace_closes(&self) -> Vec<String> {
+			self.state.lock().unwrap().workspace_closes.clone()
+		}
+	}
+
+	impl HerdrWorktreeClient for FakeWorktrees {
+		fn worktree_create(
+			&self,
+			request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.create".into());
+			state.creates.push(RecordedCreate {
+				branch: request.branch.to_string(),
+				path: request
+					.path
+					.map(|path| path.to_string_lossy().into_owned()),
+				cwd: request.cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
+				workspace_id: request.workspace_id.map(str::to_string),
+				label: request.label.map(str::to_string),
+			});
+			let workspace_id = format!("w{}", state.next_workspace);
+			state.next_workspace += 1;
+			let path = request
+				.path
+				.map(|path| path.to_string_lossy().into_owned())
+				.unwrap_or_else(|| "/tmp/herdr-wt".into());
+			let entry = WorktreeListEntry {
+				path: path.clone(),
+				branch: Some(request.branch.to_string()),
+				workspace_id: Some(workspace_id.clone()),
+				is_linked_worktree: true,
+			};
+			if let Some(err) = state.create_error.take() {
+				if state.land_on_error {
+					if let Some(create_path) = request.path {
+						std::fs::create_dir_all(create_path).ok();
+					}
+					state.listed.push(entry);
+				}
+				return Err(err);
+			}
+			if let Some(create_path) = request.path {
+				std::fs::create_dir_all(create_path).ok();
+			}
+			state.listed.push(entry);
+			Ok(WorktreeCreateResult { workspace_id, path })
+		}
+
+		fn worktree_list(
+			&self,
+			_cwd: Option<&Path>,
+			_workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.list".into());
+			if state.not_git {
+				return Err(AppError::HerdrTransport(
+					"Herdr RPC not_git_worktree (wtlst): Herdr worktree actions require a path inside a Git work tree".into(),
+				));
+			}
+			if let Some(err) = state.list_error.take() {
+				return Err(err);
+			}
+			Ok(state.listed.clone())
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.open".into());
+			let path = path.to_string_lossy().into_owned();
+			let workspace_id = state
+				.listed
+				.iter()
+				.find(|entry| entry.path == path)
+				.and_then(|entry| entry.workspace_id.clone())
+				.unwrap_or_else(|| "w2".into());
+			Ok(WorktreeOpenResult {
+				workspace_id,
+				already_open: true,
+			})
+		}
+
+		fn worktree_remove(
+			&self,
+			workspace_id: &str,
+			force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.remove".into());
+			state.removes.push(RecordedRemove {
+				workspace_id: workspace_id.to_string(),
+				force,
+			});
+			if let Some(err) = state.remove_error.take() {
+				if state.land_on_error {
+					let _ =
+						apply_listed_remove(&mut state, workspace_id, force);
+				}
+				return Err(err);
+			}
+			apply_listed_remove(&mut state, workspace_id, force)
+		}
+
+		fn workspace_create(
+			&self,
+			request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("workspace.create".into());
+			let cwd = request.cwd.to_string_lossy().into_owned();
+			state.workspace_creates.push(RecordedWorkspaceCreate {
+				cwd: cwd.clone(),
+				label: request.label.map(str::to_string),
+			});
+			if let Some(err) = state.workspace_create_error.take() {
+				if state.land_on_error {
+					let workspace_id = format!("w{}", state.next_workspace);
+					state.next_workspace += 1;
+					push_snapshot_workspace(&mut state, &workspace_id, &cwd);
+				}
+				return Err(err);
+			}
+			let workspace_id = format!("w{}", state.next_workspace);
+			state.next_workspace += 1;
+			push_snapshot_workspace(&mut state, &workspace_id, &cwd);
+			Ok(WorkspaceCreateResult { workspace_id })
+		}
+
+		fn workspace_close(&self, workspace_id: &str) -> Result<(), AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("workspace.close".into());
+			state.workspace_closes.push(workspace_id.to_string());
+			if let Some(err) = state.workspace_close_error.take() {
+				return Err(err);
+			}
+			remove_snapshot_workspace(&mut state, workspace_id);
+			Ok(())
+		}
+
+		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("session.snapshot".into());
+			Ok(state.snapshot.clone())
+		}
+	}
+
+	fn apply_listed_remove(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+		force: bool,
+	) -> Result<WorktreeRemoveResult, AppError> {
+		let index = state.listed.iter().position(|entry| {
+			entry.workspace_id.as_deref() == Some(workspace_id)
+		});
+		let Some(index) = index else {
+			return Ok(WorktreeRemoveResult {
+				workspace_id: workspace_id.to_string(),
+				path: String::new(),
+				forced: force,
+			});
+		};
+		if !state.listed[index].is_linked_worktree {
+			return Err(AppError::HerdrTransport(
+				"refusing worktree.remove of a primary checkout".into(),
+			));
+		}
+		if state.dirty && !force {
+			return Err(AppError::HerdrTransport(
+				"dirty_worktree_requires_force".into(),
+			));
+		}
+		let path = state.listed[index].path.clone();
+		state.listed.remove(index);
+		if !path.is_empty() {
+			if let Some(repo) = git_repo_folder_for_checkout(&path) {
+				let _ = infra::git::worktree_remove(&repo, &path);
+			}
+			let _ = std::fs::remove_dir_all(&path);
+		}
+		Ok(WorktreeRemoveResult {
+			workspace_id: workspace_id.to_string(),
+			path,
+			forced: force,
+		})
+	}
+
+	fn snapshot_panes_mut(state: &mut FakeWorktreeState) -> &mut Vec<Value> {
+		let snap = if state.snapshot.get("type").and_then(Value::as_str)
+			== Some("session_snapshot")
+		{
+			state.snapshot.get_mut("snapshot").unwrap()
+		} else {
+			&mut state.snapshot
+		};
+		if snap.get("panes").is_none() {
+			snap.as_object_mut()
+				.unwrap()
+				.insert("panes".into(), json!([]));
+		}
+		snap.get_mut("panes").unwrap().as_array_mut().unwrap()
+	}
+
+	fn push_snapshot_workspace(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+		cwd: &str,
+	) {
+		snapshot_panes_mut(state).push(json!({
+			"pane_id": format!("{workspace_id}:p1"),
+			"workspace_id": workspace_id,
+			"cwd": cwd,
+		}));
+	}
+
+	fn remove_snapshot_workspace(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+	) {
+		snapshot_panes_mut(state).retain(|pane| {
+			pane.get("workspace_id").and_then(Value::as_str)
+				!= Some(workspace_id)
+		});
+	}
+
+	fn git_worktree_list(dir: &Path) -> String {
+		let output = infra::no_window::command_without_windows_console("git")
+			.args(["worktree", "list", "--porcelain"])
+			.current_dir(dir)
+			.output()
+			.expect("git worktree list");
+		String::from_utf8_lossy(&output.stdout).into_owned()
+	}
+
+	fn herdr_router(
+		_db: &DbPool,
+		worktrees: Arc<FakeWorktrees>,
+	) -> RuntimeRouter {
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees))
+	}
+
+	fn pool_from(conn: SqliteConnection) -> DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
+	fn no_sqlite_profiles(db: &DbPool) {
+		#[derive(diesel::QueryableByName)]
+		struct CountRow {
+			#[diesel(sql_type = diesel::sql_types::BigInt)]
+			count: i64,
+		}
+		let conn = &mut *db.lock().unwrap();
+		let tables: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master 			 WHERE type = 'table' AND name IN 			 ('profiles', 'profile_runtime_mappings', 			  'session_runtime_mappings', 'herdr_namespaces')",
+		)
+		.get_result(conn)
+		.unwrap();
+		assert_eq!(tables.count, 0);
+	}
+
+	fn checkout_note(db: &DbPool, project_id: &str, path: &str) -> String {
+		let conn = &mut *db.lock().unwrap();
+		repo::checkout_notes::list_all(conn)
+			.unwrap()
+			.into_iter()
+			.find(|row| {
+				row.project_id == project_id && row.checkout_path == path
+			})
+			.map(|row| row.notes)
+			.unwrap_or_default()
 	}
 
 	fn create_project_with_git_repo(
@@ -1402,30 +1728,25 @@ mod tests {
 	#[test]
 	fn create_profile_accepts_long_valid_branch_name_with_bounded_dir_name() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
 		let long_branch = std::iter::once("feature".to_string())
 			.chain((0..30).map(|index| format!("segment-{index:02}")))
 			.collect::<Vec<_>>()
 			.join("/");
 
-		let profile = create_with_default_worktree_dir(
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			&long_branch,
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert_eq!(profile.branch_name, long_branch);
-		assert!(worktree_path.exists());
-		assert!(dir_name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
-		assert!(dir_name.ends_with(&profile.id[..8]));
-
-		delete(&mut conn, &profile.id).unwrap();
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
@@ -1433,79 +1754,57 @@ mod tests {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake);
 
-		let result = create_with_default_worktree_dir(
-			&mut conn,
+		let err = create_with_runtime(
+			&router,
+			&db,
 			&project.id,
 			"feature/broken-config",
-			Some(global_base.path().to_str().unwrap()),
-		);
-
-		assert!(
-			matches!(result, Err(AppError::IoError(error)) if error.kind() == std::io::ErrorKind::InvalidData)
-		);
+			None,
+		)
+		.unwrap_err();
+		assert!(err.to_string().contains("Failed to parse 2code.json"), "{err}");
 	}
 
 	#[test]
 	fn create_profile_uses_project_configured_worktree_dir() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let project_base_name = format!(".worktrees-{}", &project.id[..8]);
-		std::fs::write(
-			dir.path().join("2code.json"),
-			format!(r#"{{"worktree_dir":"../{project_base_name}"}}"#),
-		)
-		.unwrap();
-		let project_base =
-			dir.path().parent().unwrap().join(&project_base_name);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
-
-		let profile = create_with_default_worktree_dir(
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			"feature/worktree",
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert!(worktree_path.starts_with(&project_base));
-		assert!(!worktree_path.starts_with(global_base.path()));
-		assert!(worktree_path.exists());
-		assert_ne!(dir_name.as_ref(), profile.id);
-		assert!(dir_name.contains("feature-worktree"));
-
-		delete(&mut conn, &profile.id).unwrap();
-		let _ = std::fs::remove_dir_all(project_base);
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	#[test]
 	fn create_profile_uses_default_worktree_dir_without_project_config() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let global_base =
-			TempDir::new().expect("global worktree base fallback");
-
-		let profile = create_with_default_worktree_dir(
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
 			&mut conn,
 			&project.id,
 			"feature/global",
-			Some(global_base.path().to_str().unwrap()),
+			None,
 		)
-		.unwrap();
-		let worktree_path = PathBuf::from(&profile.worktree_path);
-		let dir_name = worktree_path.file_name().unwrap().to_string_lossy();
-
-		assert!(worktree_path.starts_with(global_base.path()));
-		assert!(worktree_path.exists());
-		assert_ne!(dir_name.as_ref(), profile.id);
-		assert!(dir_name.contains("feature-global"));
-
-		delete(&mut conn, &profile.id).unwrap();
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
 	}
 
 	// --- branch name sanitization ---
@@ -1581,318 +1880,6 @@ mod tests {
 		assert!(branch_name.ends_with("-00000000"));
 	}
 
-	#[test]
-	fn create_worktree_rejects_blank_manual_branch_before_git_work() {
-		let mut existing_branches = Vec::new();
-
-		let result = create_worktree(
-			"/missing/project",
-			" /// ",
-			false,
-			&mut existing_branches,
-			None,
-			None,
-		);
-
-		assert!(
-			matches!(result, Err(AppError::GitError(message)) if message == "Invalid branch name")
-		);
-		assert!(existing_branches.is_empty());
-	}
-
-	struct TestEmitter;
-
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
-		}
-
-		fn emit_exit(&self, _session_id: &str) {}
-	}
-
-	struct RecordedCreate {
-		branch: String,
-		path: Option<String>,
-		cwd: Option<String>,
-		workspace_id: Option<String>,
-		label: Option<String>,
-	}
-
-	#[derive(Clone)]
-	struct RecordedRemove {
-		workspace_id: String,
-		force: bool,
-	}
-
-	struct FakeWorktreeState {
-		methods: Vec<String>,
-		creates: Vec<RecordedCreate>,
-		removes: Vec<RecordedRemove>,
-		create_error: Option<AppError>,
-		remove_error: Option<AppError>,
-		list_error: Option<AppError>,
-		land_on_error: bool,
-		dirty: bool,
-		listed: Vec<WorktreeListEntry>,
-		snapshot: serde_json::Value,
-		next_workspace: u32,
-	}
-
-	struct FakeWorktrees {
-		state: Mutex<FakeWorktreeState>,
-	}
-
-	impl FakeWorktrees {
-		fn new() -> Arc<Self> {
-			Arc::new(Self {
-				state: Mutex::new(FakeWorktreeState {
-					methods: Vec::new(),
-					creates: Vec::new(),
-					removes: Vec::new(),
-					create_error: None,
-					remove_error: None,
-					list_error: None,
-					land_on_error: false,
-					dirty: false,
-					listed: Vec::new(),
-					snapshot: json!({
-						"type": "session_snapshot",
-						"snapshot": { "workspaces": [], "tabs": [], "panes": [] }
-					}),
-					next_workspace: 2,
-				}),
-			})
-		}
-
-		fn methods(&self) -> Vec<String> {
-			self.state.lock().unwrap().methods.clone()
-		}
-
-		fn creates(&self) -> usize {
-			self.state.lock().unwrap().creates.len()
-		}
-
-		fn last_create(&self) -> RecordedCreate {
-			let state = self.state.lock().unwrap();
-			let last = state.creates.last().expect("create recorded");
-			RecordedCreate {
-				branch: last.branch.clone(),
-				path: last.path.clone(),
-				cwd: last.cwd.clone(),
-				workspace_id: last.workspace_id.clone(),
-				label: last.label.clone(),
-			}
-		}
-
-		fn removes(&self) -> Vec<RecordedRemove> {
-			self.state.lock().unwrap().removes.clone()
-		}
-
-		fn last_remove(&self) -> RecordedRemove {
-			let state = self.state.lock().unwrap();
-			let last = state.removes.last().expect("remove recorded");
-			RecordedRemove {
-				workspace_id: last.workspace_id.clone(),
-				force: last.force,
-			}
-		}
-	}
-
-	impl HerdrWorktreeClient for FakeWorktrees {
-		fn worktree_create(
-			&self,
-			request: WorktreeCreateRequest<'_>,
-		) -> Result<WorktreeCreateResult, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("worktree.create".into());
-			state.creates.push(RecordedCreate {
-				branch: request.branch.to_string(),
-				path: request
-					.path
-					.map(|path| path.to_string_lossy().into_owned()),
-				cwd: request.cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
-				workspace_id: request.workspace_id.map(str::to_string),
-				label: request.label.map(str::to_string),
-			});
-			let workspace_id = format!("w{}", state.next_workspace);
-			state.next_workspace += 1;
-			let path = request
-				.path
-				.map(|path| path.to_string_lossy().into_owned())
-				.unwrap_or_else(|| "/tmp/herdr-wt".into());
-			let entry = WorktreeListEntry {
-				path: path.clone(),
-				branch: Some(request.branch.to_string()),
-				workspace_id: Some(workspace_id.clone()),
-				is_linked_worktree: true,
-			};
-			if let Some(err) = state.create_error.take() {
-				if state.land_on_error {
-					if let Some(create_path) = request.path {
-						std::fs::create_dir_all(create_path).ok();
-					}
-					state.listed.push(entry);
-				}
-				return Err(err);
-			}
-			if let Some(create_path) = request.path {
-				std::fs::create_dir_all(create_path).ok();
-			}
-			state.listed.push(entry);
-			Ok(WorktreeCreateResult { workspace_id, path })
-		}
-
-		fn worktree_list(
-			&self,
-			_cwd: Option<&Path>,
-			_workspace_id: Option<&str>,
-		) -> Result<Vec<WorktreeListEntry>, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("worktree.list".into());
-			if let Some(err) = state.list_error.take() {
-				return Err(err);
-			}
-			Ok(state.listed.clone())
-		}
-
-		fn worktree_open(
-			&self,
-			_cwd: &Path,
-			path: &Path,
-		) -> Result<WorktreeOpenResult, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("worktree.open".into());
-			let path = path.to_string_lossy().into_owned();
-			let workspace_id = state
-				.listed
-				.iter()
-				.find(|entry| entry.path == path)
-				.and_then(|entry| entry.workspace_id.clone())
-				.unwrap_or_else(|| "w2".into());
-			Ok(WorktreeOpenResult {
-				workspace_id,
-				already_open: true,
-			})
-		}
-
-		fn worktree_remove(
-			&self,
-			workspace_id: &str,
-			force: bool,
-		) -> Result<WorktreeRemoveResult, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("worktree.remove".into());
-			state.removes.push(RecordedRemove {
-				workspace_id: workspace_id.to_string(),
-				force,
-			});
-			if let Some(err) = state.remove_error.take() {
-				if state.land_on_error {
-					let _ =
-						apply_listed_remove(&mut state, workspace_id, force);
-				}
-				return Err(err);
-			}
-			apply_listed_remove(&mut state, workspace_id, force)
-		}
-
-		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
-			let mut state = self.state.lock().unwrap();
-			state.methods.push("session.snapshot".into());
-			Ok(state.snapshot.clone())
-		}
-	}
-
-	fn apply_listed_remove(
-		state: &mut FakeWorktreeState,
-		workspace_id: &str,
-		force: bool,
-	) -> Result<WorktreeRemoveResult, AppError> {
-		let index = state.listed.iter().position(|entry| {
-			entry.workspace_id.as_deref() == Some(workspace_id)
-		});
-		let Some(index) = index else {
-			return Ok(WorktreeRemoveResult {
-				workspace_id: workspace_id.to_string(),
-				path: String::new(),
-				forced: force,
-			});
-		};
-		if !state.listed[index].is_linked_worktree {
-			return Err(AppError::HerdrTransport(
-				"refusing worktree.remove of a primary checkout".into(),
-			));
-		}
-		if state.dirty && !force {
-			return Err(AppError::HerdrTransport(
-				"dirty_worktree_requires_force".into(),
-			));
-		}
-		let path = state.listed[index].path.clone();
-		state.listed.remove(index);
-		if !path.is_empty() {
-			let _ = std::fs::remove_dir_all(&path);
-		}
-		Ok(WorktreeRemoveResult {
-			workspace_id: workspace_id.to_string(),
-			path,
-			forced: force,
-		})
-	}
-
-	fn git_worktree_list(dir: &Path) -> String {
-		let output = infra::no_window::command_without_windows_console("git")
-			.args(["worktree", "list", "--porcelain"])
-			.current_dir(dir)
-			.output()
-			.expect("git worktree list");
-		String::from_utf8_lossy(&output.stdout).into_owned()
-	}
-
-	fn herdr_router(
-		db: &DbPool,
-		worktrees: Arc<FakeWorktrees>,
-	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-profile-herdr-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::with_worktree_client(worktrees),
-		)
-	}
-
-	fn local_router(
-		db: &DbPool,
-		worktrees: Arc<FakeWorktrees>,
-	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-profile-local-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		RuntimeRouter::new(
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::with_worktree_client(worktrees),
-		)
-	}
-
-	fn pool_from(conn: SqliteConnection) -> DbPool {
-		Arc::new(Mutex::new(conn))
-	}
 
 	#[test]
 	fn herdr_worktree_client_records_remove_without_replay() {
@@ -1931,15 +1918,13 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_mapped_delete_uses_worktree_remove_not_git() {
+	fn herdr_delete_linked_uses_worktree_remove_not_git() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let marker = dir.path().join("teardown.ran");
-		std::fs::write(
-			dir.path().join("2code.json"),
-			format!(r#"{{"teardown_script":["touch {}"]}}"#, marker.display()),
-		)
-		.unwrap();
+		let teardown =
+			format!(r#"{{"teardown_script":["touch {}"]}}"#, marker.display());
+		std::fs::write(dir.path().join("2code.json"), &teardown).unwrap();
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
@@ -1955,86 +1940,24 @@ mod tests {
 		.unwrap();
 		let checkout = PathBuf::from(&profile.worktree_path);
 		assert!(checkout.exists());
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.unwrap()
-		};
+		std::fs::write(checkout.join("2code.json"), &teardown).unwrap();
 
 		delete_with_runtime(&router, &db, &profile.id).unwrap();
 
 		assert_eq!(fake.removes().len(), 1);
-		assert_eq!(fake.last_remove().workspace_id, mapping.workspace_id);
+		assert_eq!(fake.last_remove().workspace_id, "w2");
 		assert!(!fake.last_remove().force);
 		assert!(marker.exists());
 		assert!(!checkout.exists());
 		assert_eq!(git_worktree_list(dir.path()), before);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
-		assert!(
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.is_err()
-		);
+		no_sqlite_profiles(&db);
+		assert!(fake.workspace_closes().is_empty());
 	}
 
-	#[test]
-	fn local_unmapped_delete_still_uses_git_worktree_remove() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		let profile = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local-del",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap();
-		let checkout = profile.worktree_path.clone();
 
-		delete_with_runtime(&router, &db, &profile.id).unwrap();
-
-		assert!(fake.removes().is_empty());
-		assert!(!Path::new(&checkout).exists());
-		assert!(!git_worktree_list(dir.path()).contains(&checkout));
-	}
 
 	#[test]
-	fn mapped_delete_on_local_backend_still_uses_herdr_remove() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let created = create_with_runtime(
-			&herdr_router(&db, fake.clone()),
-			&db,
-			&project.id,
-			"feat/bound-local",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap();
-		let local = local_router(&db, fake.clone());
-		assert_eq!(local.selected_backend(), RuntimeBackend::Local);
-		let checkout = created.worktree_path.clone();
-
-		delete_with_runtime(&local, &db, &created.id).unwrap();
-
-		assert_eq!(fake.removes().len(), 1);
-		assert!(!Path::new(&checkout).exists());
-		assert_eq!(
-			git_worktree_list(dir.path()).matches("worktree ").count(),
-			1
-		);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &created.id).is_err());
-	}
-
-	#[test]
-	fn dirty_herdr_remove_without_force_keeps_profile_row() {
+	fn dirty_herdr_remove_without_force_keeps_checkout() {
 		let mut conn = setup_db();
 		let (project, _dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
@@ -2069,17 +1992,14 @@ mod tests {
 		assert_eq!(fake.removes().len(), 1);
 		assert!(!fake.last_remove().force);
 		assert!(Path::new(&profile.worktree_path).exists());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile.id).unwrap().id,
-			profile.id
-		);
+		assert_eq!(profile.id, "w2");
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
 	fn confirmed_dirty_herdr_delete_passes_force() {
 		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
@@ -2103,16 +2023,59 @@ mod tests {
 		assert_eq!(fake.removes().len(), 1);
 		assert!(fake.last_remove().force);
 		assert!(!Path::new(&profile.worktree_path).exists());
-		let branches = infra::no_window::command_without_windows_console("git")
-			.args(["branch", "--list", "feat/force"])
-			.current_dir(dir.path())
-			.output()
-			.unwrap();
-		assert!(
-			!String::from_utf8_lossy(&branches.stdout).contains("feat/force")
+		no_sqlite_profiles(&db);
+	}
+
+	#[test]
+	fn herdr_delete_removes_git_branch_so_create_can_reuse_name() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let global_base = TempDir::new().expect("worktree base");
+		let checkout = global_base.path().join("feat-reuse");
+		let checkout_path = checkout.to_string_lossy().into_owned();
+		run_git(
+			dir.path(),
+			["worktree", "add", "-b", "feat/reuse", &checkout_path],
 		);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		assert!(infra::git::local_branch_exists(&folder, "feat/reuse").unwrap());
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: checkout
+					.canonicalize()
+					.unwrap()
+					.to_string_lossy()
+					.into_owned(),
+				branch: Some("feat/reuse".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		delete_with_runtime(&router, &db, "w2").unwrap();
+
+		assert_eq!(fake.removes().len(), 1);
+		assert!(!checkout.exists());
+		assert!(
+			!infra::git::local_branch_exists(&folder, "feat/reuse").unwrap()
+		);
+
+		let created = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/reuse",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(created.branch_name, "feat/reuse");
+		assert_eq!(fake.creates(), 1);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2142,8 +2105,7 @@ mod tests {
 
 		assert_eq!(fake.removes().len(), 1);
 		assert!(!Path::new(&profile.worktree_path).exists());
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2172,11 +2134,7 @@ mod tests {
 		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
 		assert_eq!(fake.removes().len(), 1);
 		assert!(Path::new(&profile.worktree_path).exists());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile.id).unwrap().id,
-			profile.id
-		);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2203,33 +2161,10 @@ mod tests {
 		let err = delete_with_runtime(&router, &db, &profile.id).unwrap_err();
 		assert!(err.to_string().contains("primary"), "{err}");
 		assert!(fake.removes().is_empty());
-		let conn = &mut *db.lock().unwrap();
-		assert_eq!(
-			repo::profile::find_by_id(conn, &profile.id).unwrap().id,
-			profile.id
-		);
+		no_sqlite_profiles(&db);
+		assert!(Path::new(&profile.worktree_path).exists());
 	}
 
-	#[test]
-	fn mapped_delete_without_runtime_fails_closed() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let profile =
-			crate::profile::create(&mut conn, &project.id, "feat/mapped")
-				.unwrap();
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&profile.id,
-			HERDR_NAMESPACE,
-			"w3",
-		)
-		.unwrap();
-		let err = delete(&mut conn, &profile.id).unwrap_err();
-		assert!(err.to_string().contains("runtime cleanup"), "{err}");
-		assert!(Path::new(&profile.worktree_path).exists());
-		assert!(repo::profile::find_by_id(&mut conn, &profile.id).is_ok());
-		let _ = dir;
-	}
 
 	#[test]
 	fn project_delete_forgets_mapped_herdr_worktrees() {
@@ -2249,44 +2184,22 @@ mod tests {
 		.unwrap();
 		let checkout = PathBuf::from(&profile.worktree_path);
 		assert!(checkout.exists());
-		{
-			let conn = &mut *db.lock().unwrap();
-			let session = model::pty::NewPtySessionRecord {
-				id: "sess-herdr-forget",
-				profile_id: &profile.id,
-				title: "herdr",
-				shell: "/bin/sh",
-				cwd: &profile.worktree_path,
-				cols: 80,
-				rows: 24,
-			};
-			repo::pty::insert_session(conn, &session).unwrap();
-		}
-		router
-			.bind_session("sess-herdr-forget", RuntimeBackend::Herdr)
-			.unwrap();
 
 		crate::project::delete_with_runtime(&router, &db, &project.id).unwrap();
 
 		assert!(fake.removes().is_empty());
 		assert!(!fake.methods().contains(&"worktree.remove".to_string()));
 		assert!(checkout.exists());
-		assert_eq!(
-			git_worktree_list(dir.path()).matches("worktree ").count(),
-			1
-		);
-		assert_eq!(router.owner("sess-herdr-forget").unwrap(), None);
-		let conn = &mut *db.lock().unwrap();
-		assert!(repo::project::find_by_id(conn, &project.id).is_err());
-		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
-		assert!(
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.is_err()
-		);
+		{
+			let conn = &mut *db.lock().unwrap();
+			assert!(repo::project::find_by_id(conn, &project.id).is_err());
+		}
+		no_sqlite_profiles(&db);
+		let _ = dir;
 	}
 
 	#[test]
-	fn herdr_create_uses_worktree_create_and_binds_workspace() {
+	fn herdr_create_uses_worktree_create_without_sqlite_insert() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let setup_marker = dir.path().join("setup.ran");
@@ -2313,7 +2226,11 @@ mod tests {
 		)
 		.unwrap();
 
+		assert_eq!(profile.id, "w2");
 		assert_eq!(profile.branch_name, "feat/yong-hu");
+		assert!(profile.notes.is_empty());
+		assert!(profile.created_at.is_empty());
+		assert!(!profile.is_default);
 		assert_eq!(fake.creates(), 1);
 		let recorded = fake.last_create();
 		assert_eq!(recorded.branch, "feat/yong-hu");
@@ -2329,47 +2246,28 @@ mod tests {
 		assert_eq!(git_worktree_list(dir.path()), before);
 		assert!(Path::new(&profile.worktree_path).exists());
 		assert_eq!(profile.worktree_path, recorded.path.expect("path sent"));
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
-		assert_eq!(mapping.namespace, HERDR_NAMESPACE);
+		no_sqlite_profiles(&db);
 		assert!(setup_marker.exists());
 		assert!(!fake.methods().contains(&"tab.create".to_string()));
 		assert!(!fake.methods().contains(&"pane.close".to_string()));
-		let sessions = {
-			let conn = &mut *db.lock().unwrap();
-			repo::pty::list_ids_by_profile(conn, &profile.id).unwrap()
-		};
-		assert!(sessions.is_empty());
+		assert!(!fake.methods().contains(&"workspace.create".to_string()));
 	}
 
 	#[test]
-	fn herdr_create_prefers_bound_parent_workspace_id() {
+	fn herdr_create_prefers_live_parent_workspace_id() {
 		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let default_id = format!("default-{}", project.id);
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&default_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let folder = dir.path().canonicalize().unwrap();
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
 		{
 			let mut state = fake.state.lock().unwrap();
-			state.snapshot = json!({
-				"type": "session_snapshot",
-				"snapshot": {
-					"workspaces": [{ "workspace_id": "w1", "label": "main" }],
-					"tabs": [],
-					"panes": []
-				}
+			state.listed.push(WorktreeListEntry {
+				path: folder.to_string_lossy().into_owned(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
 			});
 		}
 		let router = herdr_router(&db, fake.clone());
@@ -2414,12 +2312,8 @@ mod tests {
 
 		assert_eq!(fake.creates(), 1);
 		assert!(fake.methods().contains(&"worktree.list".to_string()));
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
+		assert_eq!(profile.id, "w2");
+		no_sqlite_profiles(&db);
 		assert_eq!(
 			git_worktree_list(dir.path()).matches("worktree ").count(),
 			1
@@ -2427,7 +2321,7 @@ mod tests {
 	}
 
 	#[test]
-	fn retry_after_insert_without_bind_does_not_create_again() {
+	fn retry_after_herdr_create_does_not_create_again() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let setup_marker = dir.path().join("setup-count");
@@ -2453,109 +2347,29 @@ mod tests {
 			Some(base),
 		)
 		.unwrap();
-		{
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::unbind_profile_workspace(conn, &first.id)
-				.unwrap();
-		}
-
-		let second = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/retry",
-			Some(base),
-		)
-		.unwrap();
-
-		assert_eq!(first.id, second.id);
-		assert_eq!(fake.creates(), 1);
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &second.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
-		let setup = std::fs::read_to_string(&setup_marker).unwrap();
-		assert_eq!(setup.matches('x').count(), 1);
-	}
-
-	#[test]
-	fn retry_after_create_without_insert_does_not_create_again() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let setup_marker = dir.path().join("setup-count");
-		std::fs::write(
-			dir.path().join("2code.json"),
-			format!(
-				r#"{{"setup_script":["printf x >> {}"]}}"#,
-				setup_marker.display()
-			),
-		)
-		.unwrap();
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = herdr_router(&db, fake.clone());
-		let base = global_base.path().to_str().unwrap();
-
-		let first = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/orphan-create",
-			Some(base),
-		)
-		.unwrap();
-		{
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::delete_record(conn, &first.id).unwrap();
-		}
+		let _ = dir;
 		let _ = std::fs::remove_file(&setup_marker);
 
 		let second = create_with_runtime(
 			&router,
 			&db,
 			&project.id,
-			"feat/orphan-create",
+			"feat/retry",
 			Some(base),
 		)
 		.unwrap();
 
+		assert_eq!(first.id, "w2");
 		assert_eq!(first.id, second.id);
 		assert_eq!(fake.creates(), 1);
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &second.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 1);
-		let setup = std::fs::read_to_string(&setup_marker).unwrap();
-		assert_eq!(setup.matches('x').count(), 1);
+		no_sqlite_profiles(&db);
+		assert!(!setup_marker.exists());
 	}
 
 	#[test]
 	fn retry_after_uncertain_create_reconciles_listed_checkout() {
 		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let setup_marker = dir.path().join("setup-count");
-		std::fs::write(
-			dir.path().join("2code.json"),
-			format!(
-				r#"{{"setup_script":["printf x >> {}"]}}"#,
-				setup_marker.display()
-			),
-		)
-		.unwrap();
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
@@ -2603,27 +2417,12 @@ mod tests {
 		.unwrap();
 
 		assert_eq!(fake.creates(), 1);
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 1);
-		let setup = std::fs::read_to_string(&setup_marker).unwrap();
-		assert_eq!(setup.matches('x').count(), 1);
+		assert_eq!(profile.id, "w2");
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
-	fn herdr_duplicate_bound_profile_fails_closed() {
+	fn herdr_duplicate_create_returns_existing_workspace() {
 		let mut conn = setup_db();
 		let (project, _dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
@@ -2640,33 +2439,152 @@ mod tests {
 			Some(base),
 		)
 		.unwrap();
-		let err = create_with_runtime(
+		let second = create_with_runtime(
 			&router,
 			&db,
 			&project.id,
 			"feat/dup",
 			Some(base),
 		)
-		.err()
-		.expect("duplicate bound profile should fail");
+		.unwrap();
 
-		assert!(err.to_string().contains("already exists"), "{err}");
+		assert_eq!(first.id, "w2");
+		assert_eq!(first.id, second.id);
 		assert_eq!(fake.creates(), 1);
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 1);
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &first.id)
-				.unwrap()
-		};
-		assert_eq!(mapping.workspace_id, "w2");
+		no_sqlite_profiles(&db);
+	}
+
+	#[test]
+	fn herdr_nongit_create_uses_workspace_create_cwd() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		let profile =
+			create_with_runtime(&router, &db, &project.id, "folder", None)
+				.unwrap();
+
+		assert_eq!(profile.id, "w2");
+		assert_eq!(profile.branch_name, "folder");
+		assert!(profile.notes.is_empty());
+		assert_eq!(fake.creates(), 0);
+		assert_eq!(fake.workspace_creates(), 1);
+		let recorded = fake.last_workspace_create();
+		assert!(Path::new(&recorded.cwd).is_absolute());
+		assert_eq!(recorded.label.as_deref(), Some("folder"));
+		no_sqlite_profiles(&db);
+		assert!(!fake.methods().contains(&"worktree.create".to_string()));
+	}
+
+	#[test]
+	fn uncertain_nongit_create_does_not_adopt_existing_workspace() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+		let first = create_with_runtime(&router, &db, &project.id, "one", None)
+			.unwrap();
+		assert_eq!(first.id, "w2");
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.workspace_create_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+			state.land_on_error = false;
+		}
+
+		let err = create_with_runtime(&router, &db, &project.id, "two", None)
+			.err()
+			.expect("uncertain create must not adopt the existing workspace");
+
+		assert!(err.to_string().contains("uncertain"), "{err}");
+		assert_eq!(fake.workspace_creates(), 2);
+		no_sqlite_profiles(&db);
+	}
+
+	#[test]
+	fn uncertain_nongit_create_reconciles_new_workspace_without_replay() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+		let first = create_with_runtime(&router, &db, &project.id, "one", None)
+			.unwrap();
+		assert_eq!(first.id, "w2");
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.workspace_create_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+			state.land_on_error = true;
+		}
+
+		let profile =
+			create_with_runtime(&router, &db, &project.id, "two", None)
+				.unwrap();
+
+		assert_eq!(profile.id, "w3");
+		assert_eq!(fake.workspace_creates(), 2);
+		no_sqlite_profiles(&db);
+	}
+
+	#[test]
+	fn herdr_nongit_delete_extra_uses_workspace_close() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+		let first = create_with_runtime(&router, &db, &project.id, "one", None)
+			.unwrap();
+		let extra = create_with_runtime(&router, &db, &project.id, "two", None)
+			.unwrap();
+		assert_eq!(first.id, "w2");
+		assert_eq!(extra.id, "w3");
+
+		delete_with_runtime(&router, &db, &extra.id).unwrap();
+
+		assert_eq!(fake.workspace_closes(), vec!["w3".to_string()]);
+		assert!(fake.removes().is_empty());
+		no_sqlite_profiles(&db);
+
+		let err = delete_with_runtime(&router, &db, &first.id).unwrap_err();
+		assert!(err.to_string().contains("primary"), "{err}");
+		assert_eq!(fake.workspace_closes(), vec!["w3".to_string()]);
 	}
 
 	#[test]
@@ -2723,15 +2641,7 @@ mod tests {
 
 		assert!(err.to_string().contains("already exists"), "{err}");
 		assert_eq!(fake.creates(), 0);
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 0);
+		no_sqlite_profiles(&db);
 	}
 
 	#[test]
@@ -2766,81 +2676,9 @@ mod tests {
 
 		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
 		assert_eq!(fake.creates(), 0);
-		let extra = {
-			let conn = &mut *db.lock().unwrap();
-			repo::profile::list_by_project(conn, &project.id)
-				.unwrap()
-				.into_iter()
-				.filter(|profile| !profile.is_default)
-				.count()
-		};
-		assert_eq!(extra, 0);
-		let stolen = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_by_workspace(
-				conn,
-				HERDR_NAMESPACE,
-				"w9",
-			)
-		};
-		assert!(stolen.is_err());
+		no_sqlite_profiles(&db);
 	}
 
-	#[test]
-	fn herdr_create_does_not_adopt_existing_local_profile() {
-		let mut conn = setup_db();
-		let (project, _dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let base = global_base.path().to_str().unwrap();
-		let local =
-			create_with_db(&db, &project.id, "feat/local-dup", Some(base))
-				.unwrap();
-
-		for workspace_id in [None, Some("w9")] {
-			let fake = FakeWorktrees::new();
-			{
-				let mut state = fake.state.lock().unwrap();
-				state.listed.push(WorktreeListEntry {
-					path: local.worktree_path.clone(),
-					branch: Some("feat/local-dup".into()),
-					workspace_id: workspace_id.map(str::to_string),
-					is_linked_worktree: true,
-				});
-			}
-			let router = herdr_router(&db, fake.clone());
-
-			let err = create_with_runtime(
-				&router,
-				&db,
-				&project.id,
-				"feat/local-dup",
-				Some(base),
-			)
-			.err()
-			.expect("Local same-branch profile should fail closed");
-
-			assert!(err.to_string().contains("already exists"), "{err}");
-			assert_eq!(fake.creates(), 0);
-			assert!(!fake.methods().contains(&"worktree.create".to_string()));
-			assert!(!fake.methods().contains(&"worktree.open".to_string()));
-			let extra = {
-				let conn = &mut *db.lock().unwrap();
-				repo::profile::list_by_project(conn, &project.id)
-					.unwrap()
-					.into_iter()
-					.filter(|profile| !profile.is_default)
-					.collect::<Vec<_>>()
-			};
-			assert_eq!(extra.len(), 1);
-			assert_eq!(extra[0].id, local.id);
-			let mapping = {
-				let conn = &mut *db.lock().unwrap();
-				repo::runtime_mapping::find_profile_mapping(conn, &local.id)
-			};
-			assert!(mapping.is_err());
-		}
-	}
 
 	#[test]
 	fn herdr_without_client_does_not_spawn_local_worktree() {
@@ -2848,21 +2686,7 @@ mod tests {
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
-		let logs = std::env::temp_dir().join("2code-profile-missing-herdr");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		let router = RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::new(),
-		);
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
 		let before = git_worktree_list(dir.path());
 
 		let err = create_with_runtime(
@@ -2880,34 +2704,23 @@ mod tests {
 	}
 
 	#[test]
-	fn local_create_with_runtime_still_uses_git_worktree_add() {
+	fn herdr_without_client_does_not_git_worktree_remove() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
+		let before = git_worktree_list(dir.path());
 
-		let profile = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap();
+		let err = delete_with_runtime(&router, &db, "w2")
+			.err()
+			.expect("missing Herdr client should fail");
 
-		assert_eq!(fake.creates(), 0);
-		assert!(Path::new(&profile.worktree_path).exists());
-		assert!(git_worktree_list(dir.path()).contains(&profile.worktree_path));
-		let mapping = {
-			let conn = &mut *db.lock().unwrap();
-			repo::runtime_mapping::find_profile_mapping(conn, &profile.id)
-		};
-		assert!(mapping.is_err());
-		delete_with_runtime(&router, &db, &profile.id).unwrap();
+		assert!(err.to_string().contains("not available"), "{err}");
+		assert_eq!(git_worktree_list(dir.path()), before);
+		no_sqlite_profiles(&db);
+		let _ = project;
 	}
+
 
 	#[test]
 	fn herdr_profile_create_does_not_use_forbidden_ops() {
@@ -2923,10 +2736,15 @@ mod tests {
 			herdr.contains("worktree.create")
 				|| herdr.contains("worktree_create")
 		);
+		assert!(
+			herdr.contains("workspace.create")
+				|| herdr.contains("workspace_create")
+		);
 		assert!(!herdr.contains("worktree.remove"));
 		assert!(!herdr.contains("git worktree add"));
 		assert!(!herdr.contains("worktree_add"));
-		assert!(!herdr.contains("workspace.create"));
+		assert!(!herdr.contains("repo::profile::insert"));
+		assert!(!herdr.contains("bind_profile_workspace"));
 		assert!(!herdr.contains("tab.create"));
 		assert!(!herdr.contains("pane.close"));
 		assert!(!herdr.contains("pane.split"));
@@ -2935,6 +2753,26 @@ mod tests {
 		assert!(!herdr.contains("--takeover"));
 		assert!(!herdr.contains("herdr-client.sock"));
 		assert!(!herdr.contains("replace_profile_workspace"));
+		assert!(!herdr.contains("git worktree add"));
+		let identity = src
+			.split("fn delete_herdr_identity")
+			.nth(1)
+			.unwrap()
+			.split("pub fn update_notes_with_runtime")
+			.next()
+			.unwrap();
+		assert!(
+			identity.contains("worktree.remove")
+				|| identity.contains("worktree_remove")
+		);
+		assert!(
+			identity.contains("workspace.close")
+				|| identity.contains("workspace_close")
+		);
+		assert!(!identity.contains("repo::profile::delete_record"));
+		assert!(!identity.contains("infra::git::worktree_remove"));
+		assert!(identity.contains("branch_delete"));
+		assert!(!identity.contains("git::worktree_remove"));
 		let handler = include_str!("../../../src/handler/profile.rs");
 		let create = handler
 			.split("pub async fn create_profile")
@@ -2953,21 +2791,24 @@ mod tests {
 
 	#[test]
 	fn herdr_profile_delete_does_not_use_forbidden_ops() {
-		let src = include_str!("profile.rs");
+		let src = include_str!("profile.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
 		let herdr = src
-			.split("fn delete_herdr_mapped")
+			.split("fn delete_herdr_git_workspace")
 			.nth(1)
 			.unwrap()
-			.split("pub fn delete_with_db")
+			.split("fn delete_herdr_nongit_workspace")
 			.next()
 			.unwrap();
 		assert!(
 			herdr.contains("worktree.remove")
 				|| herdr.contains("worktree_remove")
 		);
-		assert!(herdr.contains("teardown_script"));
+		assert!(herdr.contains("run_teardown_script_at"));
 		assert!(herdr.contains("branch_delete"));
-		assert!(herdr.contains("release_herdr_session"));
+		assert!(!herdr.contains("release_herdr_session"));
 		assert!(!herdr.contains("infra::git::worktree_remove"));
 		assert!(!herdr.contains("teardown_session"));
 		assert!(!herdr.contains("pane.close"));
@@ -2989,14 +2830,196 @@ mod tests {
 		assert!(delete.contains("delete_with_runtime"));
 		assert!(!delete.contains("cleanup_profile"));
 		assert!(!delete.contains("git::worktree_remove"));
+		assert!(!src.contains("delete_sqlite_identity"));
+		assert!(!src.contains("local_extras_delete_closed"));
 	}
 
 	#[test]
 	fn default_profiles_are_not_created_via_worktree_create() {
-		let src = include_str!("project.rs");
-		assert!(src.contains("insert_default"));
+		let src = include_str!("project.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(!src.contains("synthetic_local_profile"));
+		assert!(!src.contains("insert_default"));
 		assert!(!src.contains("worktree.create"));
 		assert!(!src.contains("create_herdr_with_db"));
 		assert!(!src.contains("create_with_runtime"));
 	}
+
+	#[test]
+	fn herdr_notes_update_persists_sqlite_notes_by_checkout_path() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let default_id = format!("default-{}", project.id);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let updated = update_notes_with_runtime(&router, &db, "w1", "hello")
+			.expect("notes");
+		assert_eq!(updated.id, "w1");
+		assert_eq!(updated.notes, "hello");
+		assert!(updated.is_default);
+
+		assert_eq!(checkout_note(&db, &project.id, &folder), "hello");
+		let _ = default_id;
+	}
+
+	#[test]
+	fn herdr_notes_update_linked_persists_checkout_notes() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let default_id = format!("default-{}", project.id);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+			state.listed.push(WorktreeListEntry {
+				path: format!("{folder}/linked"),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let primary = update_notes_with_runtime(&router, &db, "w1", "kept")
+			.expect("primary notes persist on leftover checkout");
+		assert_eq!(primary.id, "w1");
+		assert!(primary.is_default);
+		assert_eq!(primary.notes, "kept");
+
+		let linked =
+			update_notes_with_runtime(&router, &db, "w2", "linked-note")
+				.expect("linked notes persist");
+		assert_eq!(linked.id, "w2");
+		assert!(!linked.is_default);
+		assert_eq!(linked.notes, "linked-note");
+
+		assert_eq!(checkout_note(&db, &project.id, &folder), "kept");
+		assert_eq!(
+			checkout_note(&db, &project.id, &format!("{folder}/linked")),
+			"linked-note"
+		);
+		let _ = default_id;
+	}
+
+	#[test]
+	fn herdr_delete_unmapped_workspace_id_does_not_insert_sqlite_profile() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+			state.listed.push(WorktreeListEntry {
+				path: format!("{folder}/linked"),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		delete_with_runtime(&router, &db, "w2").unwrap();
+
+		assert_eq!(fake.removes().len(), 1);
+		assert_eq!(fake.last_remove().workspace_id, "w2");
+		no_sqlite_profiles(&db);
+		let _ = project;
+	}
+
+	#[test]
+	fn delete_check_reconciles_instead_of_sqlite_find() {
+		let src = include_str!("profile.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		let body = src
+			.split("pub fn delete_check(")
+			.nth(1)
+			.unwrap()
+			.split("fn add_diff_stats")
+			.next()
+			.unwrap();
+		assert!(body.contains("reconcile_profile_checkout"));
+		assert!(!body.contains("find_by_id"));
+		let handler = include_str!("../../../src/handler/profile.rs");
+		let check = handler
+			.split("pub async fn get_profile_delete_check")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn update_profile_notes")
+			.next()
+			.unwrap();
+		assert!(check.contains("delete_check"));
+		assert!(!check.contains("find_by_id"));
+	}
+
+	#[test]
+	fn herdr_delete_check_uses_listed_checkout_not_sqlite_stale() {
+		let mut conn = setup_db();
+		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
+		let stale_dir = create_temp_git_repo();
+		let listed_path = listed_dir.path().to_string_lossy().into_owned();
+		let default_id = format!("default-{}", project.id);
+		let _ = stale_dir;
+		std::fs::write(
+			listed_dir.path().join("listed-only.txt"),
+			"listed dirty",
+		)
+		.unwrap();
+		std::fs::write(stale_dir.path().join("stale-only.txt"), "stale dirty")
+			.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: listed_path,
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let check = delete_check(&router, &db, "w1").expect("live check");
+		assert_eq!(check.working_tree_diff.files_changed, 1);
+
+		let err = delete_check(&router, &db, &default_id)
+			.expect_err("sqlite default id");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+		let err = delete_check(&router, &db, "leftover").expect_err("stale id");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+		let err = delete_check(&router, &db, "w-missing").expect_err("unknown");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+	}
+
+
 }

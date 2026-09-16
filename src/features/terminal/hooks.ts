@@ -6,7 +6,6 @@ import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSet
 import {
 	closePtySession,
 	createPtySession,
-	deletePtySessionRecord,
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { removeTerminalStorage } from "./lib";
@@ -64,10 +63,7 @@ export function useCloseTerminalTab() {
 			profileId: string;
 			sessionId: string;
 		}) => {
-			await Promise.all([
-				closePtySession({ sessionId }),
-				deletePtySessionRecord({ sessionId }),
-			]);
+			await closePtySession({ sessionId });
 		},
 		onSettled: (_data, _err, { profileId, sessionId }) => {
 			const terminalProfile = useTerminalStore.getState().profiles[profileId];

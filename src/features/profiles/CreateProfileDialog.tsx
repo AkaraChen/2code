@@ -1,4 +1,5 @@
 import { GitBranchIcon } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,10 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { listProjects, type ProjectWithProfiles } from "@/generated";
 import * as m from "@/paraglide/messages.js";
-import { useCreateProfile } from "./hooks";
+import { queryKeys } from "@/shared/lib/queryKeys";
+import { liveProfileMatchingCreate, useCreateProfile } from "./hooks";
 
 interface CreateProfileDialogProps {
 	isOpen: boolean;
@@ -35,6 +38,7 @@ export default function CreateProfileDialog({
 	});
 	const createProfile = useCreateProfile();
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 
 	const handleClose = () => {
 		form.reset();
@@ -42,12 +46,23 @@ export default function CreateProfileDialog({
 	};
 
 	const handleCreate = form.handleSubmit(async (data) => {
-		const profile = await createProfile.mutateAsync({
+		const created = await createProfile.mutateAsync({
 			projectId,
 			branchName: data.branchName,
 		});
+		const projects =
+			queryClient.getQueryData<ProjectWithProfiles[]>(
+				queryKeys.projects.all,
+			) ??
+			(await queryClient.fetchQuery({
+				queryKey: queryKeys.projects.all,
+				queryFn: listProjects,
+			}));
+		const live = liveProfileMatchingCreate(projects, created);
 		handleClose();
-		navigate(`/projects/${projectId}/profiles/${profile.id}`);
+		navigate(
+			`/projects/${projectId}/profiles/${live?.id ?? created.id}`,
+		);
 	});
 
 	return (

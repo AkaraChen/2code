@@ -3,16 +3,7 @@ use tauri::State;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
-use model::project::GitDiffStats;
 use service::runtime::RuntimeHandle;
-
-fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
-	GitDiffStats {
-		files_changed: left.files_changed + right.files_changed,
-		insertions: left.insertions + right.insertions,
-		deletions: left.deletions + right.deletions,
-	}
-}
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -56,33 +47,13 @@ pub async fn delete_profile(
 #[tracing::instrument(skip_all)]
 pub async fn get_profile_delete_check(
 	id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<ProfileDeleteCheck, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let profile = {
-			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-			repo::profile::find_by_id(conn, &id)?
-		};
-		let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
-		let unpushed_commits = infra::git::branch_unique_commits(
-			&profile.worktree_path,
-			&profile.branch_name,
-		)?;
-		let unpushed_commit_diff = infra::git::commit_diff_stats(
-			&profile.worktree_path,
-			&unpushed_commits,
-		)?;
-
-		Ok(ProfileDeleteCheck {
-			total_diff: add_diff_stats(
-				&working_tree_diff,
-				&unpushed_commit_diff,
-			),
-			working_tree_diff,
-			unpushed_commit_count: unpushed_commits.len() as u32,
-			unpushed_commit_diff,
-		})
+		service::profile::delete_check(&runtime, &db, &id)
 	})
 	.await
 }
@@ -92,19 +63,31 @@ pub async fn get_profile_delete_check(
 pub async fn update_profile_notes(
 	id: String,
 	notes: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::update_notes(conn, &id, &notes)
+		service::profile::update_notes_with_runtime(&runtime, &db, &id, &notes)
 	})
 	.await
 }
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+	use model::project::GitDiffStats;
+
+	fn add_diff_stats(
+		left: &GitDiffStats,
+		right: &GitDiffStats,
+	) -> GitDiffStats {
+		GitDiffStats {
+			files_changed: left.files_changed + right.files_changed,
+			insertions: left.insertions + right.insertions,
+			deletions: left.deletions + right.deletions,
+		}
+	}
 
 	#[test]
 	fn add_diff_stats_sums_fields() {

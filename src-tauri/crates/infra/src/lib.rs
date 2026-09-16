@@ -7,8 +7,5 @@ pub mod herdr;
 pub mod logger;
 pub mod no_window;
 pub mod office;
-pub mod pty;
-pub mod pty_log;
-pub mod shell_init;
 pub mod slug;
 pub mod watcher;

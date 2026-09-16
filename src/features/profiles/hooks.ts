@@ -6,10 +6,12 @@ import {
 	createProfile,
 	deleteProfile,
 	getProfileDeleteCheck,
+	listProjects,
 	updateProfileNotes,
 	type GitDiffStats,
+	type Profile,
+	type ProjectWithProfiles,
 } from "@/generated";
-import type { ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 function hasDiffStats(stats: GitDiffStats | null) {
@@ -17,6 +19,26 @@ function hasDiffStats(stats: GitDiffStats | null) {
 		(stats?.files_changed ?? 0) > 0 ||
 		(stats?.insertions ?? 0) > 0 ||
 		(stats?.deletions ?? 0) > 0
+	);
+}
+
+export function liveProfileMatchingCreate(
+	projects: ProjectWithProfiles[] | undefined,
+	created: Pick<
+		Profile,
+		"id" | "project_id" | "worktree_path" | "branch_name"
+	>,
+): Profile | undefined {
+	const project = projects?.find((item) => item.id === created.project_id);
+	if (!project) return undefined;
+	return (
+		project.profiles.find((profile) => profile.id === created.id) ??
+		project.profiles.find(
+			(profile) => profile.worktree_path === created.worktree_path,
+		) ??
+		project.profiles.find(
+			(profile) => profile.branch_name === created.branch_name,
+		)
 	);
 }
 
@@ -38,26 +60,14 @@ export function useCreateProfile() {
 				defaultWorktreeDir: defaultWorktreeDir || null,
 			});
 		},
-		onSuccess: (profile) => {
-			queryClient.setQueryData<ProjectWithProfiles[]>(
-				queryKeys.projects.all,
-				(projects) =>
-					projects?.map((project) => {
-						if (project.id !== profile.project_id) return project;
-						const hasProfile = project.profiles.some(
-							(item) => item.id === profile.id,
-						);
-						return {
-							...project,
-							profiles: hasProfile
-								? project.profiles.map((item) =>
-										item.id === profile.id ? profile : item,
-									)
-								: [...project.profiles, profile],
-						};
-					}),
-			);
-			queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+		onSuccess: async () => {
+			await queryClient.invalidateQueries({
+				queryKey: queryKeys.projects.all,
+			});
+			await queryClient.fetchQuery({
+				queryKey: queryKeys.projects.all,
+				queryFn: listProjects,
+			});
 		},
 	});
 }
@@ -129,11 +139,14 @@ export function useUpdateProfileNotes() {
 			latestRevisionByProfileIdRef.current.set(id, revision);
 			return { revision };
 		},
-		onSuccess: (profile, { id }, context) => {
+		onSuccess: (profile, { id, notes }, context) => {
 			if (
 				!context ||
 				latestRevisionByProfileIdRef.current.get(id) !== context.revision
 			) {
+				return;
+			}
+			if (profile.notes !== notes) {
 				return;
 			}
 			queryClient.setQueryData<ProjectWithProfiles[]>(
@@ -142,10 +155,20 @@ export function useUpdateProfileNotes() {
 					projects?.map((project) => {
 						if (project.id !== profile.project_id) return project;
 						let changed = false;
-						const profiles = project.profiles.map((p) => {
-							if (p.id !== profile.id) return p;
+						const profiles = project.profiles.map((existing) => {
+							if (existing.id !== profile.id && existing.id !== id) {
+								return existing;
+							}
 							changed = true;
-							return profile;
+							return {
+								...existing,
+								notes: profile.notes,
+								worktree_path:
+									profile.worktree_path || existing.worktree_path,
+								branch_name:
+									profile.branch_name || existing.branch_name,
+								is_default: existing.is_default,
+							};
 						});
 						return changed ? { ...project, profiles } : project;
 					}),

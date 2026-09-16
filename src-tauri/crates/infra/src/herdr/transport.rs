@@ -106,6 +106,21 @@ pub struct WorktreeRemoveResult {
 	pub forced: bool,
 }
 
+/// JSON `workspace.create --cwd` params. Used for non-git folder
+/// profiles. Paths must be absolute.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceCreateRequest<'a> {
+	pub cwd: &'a Path,
+	pub label: Option<&'a str>,
+}
+
+/// JSON `workspace.create` identity. Non-git responses omit `worktree`.
+/// `terminal_id` / `tab_id` / pane ids are not returned.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceCreateResult {
+	pub workspace_id: String,
+}
+
 /// JSON `tab.create` identity. `terminal_id` is live-only and is not
 /// returned here so callers cannot persist it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -288,6 +303,42 @@ fn parse_worktree_create_result(
 		workspace_id: workspace_id.to_string(),
 		path: path.to_string(),
 	})
+}
+
+fn parse_workspace_create_result(
+	result: &Value,
+) -> Result<WorkspaceCreateResult, HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "workspace_created" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected workspace_created, got {kind}"
+		)));
+	}
+	let workspace_id = result
+		.get("workspace")
+		.and_then(|workspace| workspace.get("workspace_id"))
+		.and_then(Value::as_str)
+		.unwrap_or("");
+	if workspace_id.is_empty() {
+		return Err(HerdrTransportError::UnexpectedMessage(
+			"workspace.create result missing workspace_id".into(),
+		));
+	}
+	Ok(WorkspaceCreateResult {
+		workspace_id: workspace_id.to_string(),
+	})
+}
+
+fn parse_workspace_close_result(
+	result: &Value,
+) -> Result<(), HerdrTransportError> {
+	let kind = result.get("type").and_then(Value::as_str).unwrap_or("");
+	if kind != "workspace_closed" {
+		return Err(HerdrTransportError::UnexpectedMessage(format!(
+			"expected workspace_closed, got {kind}"
+		)));
+	}
+	Ok(())
 }
 
 fn parse_worktree_list_result(
@@ -861,6 +912,54 @@ impl HerdrClient {
 				path: String::new(),
 				forced: force,
 			}),
+			Err(err) => Err(err),
+		}
+	}
+
+	/// Open a folder workspace (`workspace.create --cwd`). `cwd` must be
+	/// absolute. Never `worktree.create` and never auto-replays an
+	/// uncertain outcome.
+	pub fn workspace_create(
+		&self,
+		request: WorkspaceCreateRequest<'_>,
+	) -> Result<WorkspaceCreateResult, HerdrTransportError> {
+		require_absolute(request.cwd, "workspace.create cwd")?;
+		let mut params = serde_json::Map::new();
+		params.insert(
+			"cwd".into(),
+			Value::String(request.cwd.to_string_lossy().into_owned()),
+		);
+		params.insert("focus".into(), Value::Bool(false));
+		if let Some(label) = request.label.filter(|label| !label.is_empty()) {
+			params.insert("label".into(), Value::String(label.to_string()));
+		}
+		let success = self.request(
+			self.next_id("wscr"),
+			"workspace.create",
+			Value::Object(params),
+		)?;
+		parse_workspace_create_result(&success.result)
+	}
+
+	/// Close one Herdr workspace by `workspace_id`. Never closes a
+	/// workspace group, never `worktree.remove`, and never auto-replays an
+	/// uncertain outcome. `workspace_not_found` is success so retries stay
+	/// idempotent.
+	pub fn workspace_close(
+		&self,
+		workspace_id: &str,
+	) -> Result<(), HerdrTransportError> {
+		if workspace_id.is_empty() {
+			return Err(HerdrTransportError::Refused {
+				reason: "workspace.close workspace_id is required".into(),
+			});
+		}
+		let params = serde_json::json!({
+			"workspace_id": workspace_id,
+		});
+		match self.request(self.next_id("wscl"), "workspace.close", params) {
+			Ok(success) => parse_workspace_close_result(&success.result),
+			Err(err) if is_worktree_absent(&err) => Ok(()),
 			Err(err) => Err(err),
 		}
 	}
@@ -1812,6 +1911,38 @@ mod tests {
 	}
 
 	#[test]
+	fn workspace_create_parses_workspace_id_and_ignores_live_ids() {
+		let created = parse_workspace_create_result(&serde_json::json!({
+			"type": "workspace_created",
+			"workspace": { "workspace_id": "w3", "label": "notes" },
+			"tab": { "tab_id": "w3:t1" },
+			"root_pane": { "pane_id": "w3:p1", "terminal_id": "term_x" }
+		}))
+		.unwrap();
+		assert_eq!(created.workspace_id, "w3");
+		assert!(parse_workspace_create_result(&serde_json::json!({
+			"type": "worktree_created",
+			"workspace": { "workspace_id": "w3" }
+		}))
+		.is_err());
+		assert!(parse_workspace_create_result(&serde_json::json!({
+			"type": "workspace_created",
+			"workspace": { "label": "notes" }
+		}))
+		.is_err());
+		parse_workspace_close_result(&serde_json::json!({
+			"type": "workspace_closed",
+			"workspace_id": "w3"
+		}))
+		.unwrap();
+		assert!(parse_workspace_close_result(&serde_json::json!({
+			"type": "workspace_created",
+			"workspace_id": "w3"
+		}))
+		.is_err());
+	}
+
+	#[test]
 	fn tab_create_and_pane_views_parse_pane_id_never_terminal_id() {
 		let created = parse_tab_create_result(&serde_json::json!({
 			"type": "tab_created",
@@ -2515,7 +2646,7 @@ mod unix_tests {
 			.split("pub fn worktree_remove")
 			.nth(1)
 			.unwrap()
-			.split("/// Create an extra tab")
+			.split("/// Open a folder workspace")
 			.next()
 			.unwrap();
 		assert!(helper.contains("worktree.remove"));
@@ -2566,6 +2697,146 @@ mod unix_tests {
 		let removed = client(&sock).worktree_remove("w9", false).unwrap();
 		assert_eq!(removed.workspace_id, "w9");
 		assert!(!removed.forced);
+	}
+
+	#[test]
+	fn workspace_create_sends_absolute_cwd_label_and_no_focus() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "workspace.create");
+			assert_eq!(req["params"]["cwd"], "/notes");
+			assert_eq!(req["params"]["label"], "folder");
+			assert_eq!(req["params"]["focus"], false);
+			assert!(req["params"].get("branch").is_none());
+			assert!(req["params"].get("path").is_none());
+			assert!(req["params"].get("workspace_id").is_none());
+			assert!(req["params"].get("group").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"workspace_created","workspace":{{"workspace_id":"w3","label":"folder"}},"tab":{{"tab_id":"w3:t1"}},"root_pane":{{"pane_id":"w3:p1","terminal_id":"term_live"}}}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		let created = client(&sock)
+			.workspace_create(WorkspaceCreateRequest {
+				cwd: Path::new("/notes"),
+				label: Some("folder"),
+			})
+			.unwrap();
+		assert_eq!(created.workspace_id, "w3");
+		let refused = client(&sock)
+			.workspace_create(WorkspaceCreateRequest {
+				cwd: Path::new("relative"),
+				label: None,
+			})
+			.unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
+		let src = include_str!("transport.rs");
+		let helper = src
+			.split("pub fn workspace_create")
+			.nth(1)
+			.unwrap()
+			.split("/// Close one Herdr workspace")
+			.next()
+			.unwrap();
+		assert!(helper.contains("workspace.create"));
+		assert!(!helper.contains("worktree.create"));
+		assert!(!helper.contains("worktree.remove"));
+		assert!(!helper.contains("git worktree"));
+		assert!(!helper.contains("server.stop"));
+	}
+
+	#[test]
+	fn workspace_create_does_not_auto_replay_uncertain_outcome() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "workspace.create");
+			seen.fetch_add(1, AtomicOrdering::SeqCst);
+			drop(stream);
+		});
+		let err = client(&sock)
+			.workspace_create(WorkspaceCreateRequest {
+				cwd: Path::new("/notes"),
+				label: None,
+			})
+			.unwrap_err();
+		assert!(err.is_uncertain(), "{err}");
+		match err {
+			HerdrTransportError::UncertainOutcome { method, .. } => {
+				assert_eq!(method, "workspace.create");
+			}
+			other => panic!("expected UncertainOutcome, got {other:?}"),
+		}
+		thread::sleep(Duration::from_millis(80));
+		assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+	}
+
+	#[test]
+	fn workspace_close_sends_workspace_id_without_group() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "workspace.close");
+			assert_eq!(req["params"]["workspace_id"], "w4");
+			assert!(req["params"].get("group").is_none());
+			assert!(req["params"].get("force").is_none());
+			assert!(req["params"].get("cwd").is_none());
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","result":{{"type":"workspace_closed","workspace_id":"w4"}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		client(&sock).workspace_close("w4").unwrap();
+		let refused = client(&sock).workspace_close("").unwrap_err();
+		assert!(matches!(refused, HerdrTransportError::Refused { .. }));
+		let src = include_str!("transport.rs");
+		let helper = src
+			.split("pub fn workspace_close")
+			.nth(1)
+			.unwrap()
+			.split("/// Create an extra tab")
+			.next()
+			.unwrap();
+		assert!(helper.contains("workspace.close"));
+		assert!(!helper.contains("worktree.remove"));
+		assert!(!helper.contains("pane.close"));
+		assert!(!helper.contains("--group"));
+		assert!(!helper.contains("server.stop"));
+	}
+
+	#[test]
+	fn workspace_close_does_not_auto_replay_uncertain_outcome() {
+		let calls = std::sync::Arc::new(AtomicUsize::new(0));
+		let seen = calls.clone();
+		let (_dir, sock) = serve(move |stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "workspace.close");
+			seen.fetch_add(1, AtomicOrdering::SeqCst);
+			drop(stream);
+		});
+		let err = client(&sock).workspace_close("w4").unwrap_err();
+		assert!(err.is_uncertain(), "{err}");
+		thread::sleep(Duration::from_millis(80));
+		assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+	}
+
+	#[test]
+	fn workspace_close_treats_absent_workspace_as_success() {
+		let (_dir, sock) = serve(|mut stream| {
+			let req = read_request(&stream);
+			assert_eq!(req["method"], "workspace.close");
+			let id = req["id"].as_str().unwrap();
+			let body = format!(
+				r#"{{"id":"{id}","error":{{"code":"workspace_not_found","message":"gone"}}}}"#
+			);
+			stream.write_all(body.as_bytes()).unwrap();
+			stream.write_all(b"\n").unwrap();
+		});
+		client(&sock).workspace_close("w9").unwrap();
 	}
 
 	#[test]

@@ -128,18 +128,14 @@ fn migrations_create_profile_and_session_lookup_indexes() {
 	let rows: Vec<IndexRow> = diesel::sql_query(
 		"SELECT name FROM sqlite_master \
 		 WHERE type = 'index' \
-		 AND name IN ('idx_profiles_project_id', 'idx_pty_sessions_profile_id') \
+		 AND name IN ( \
+			'idx_checkout_notes_project_id' \
+		 ) \
 		 ORDER BY name",
 	)
 	.load(&mut conn)
 	.expect("load index names");
 	let names: Vec<String> = rows.into_iter().map(|row| row.name).collect();
 
-	assert_eq!(
-		names,
-		vec![
-			"idx_profiles_project_id".to_string(),
-			"idx_pty_sessions_profile_id".to_string(),
-		],
-	);
+	assert_eq!(names, vec!["idx_checkout_notes_project_id".to_string()]);
 }

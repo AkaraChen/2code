@@ -24,7 +24,7 @@ Project CRUD, folder selection, project detail page, and settings. Core domain.
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Project backend logic | `src-tauri/crates/service/src/project.rs` |
+| Project backend logic | `src-tauri/crates/service/src/project.rs` (`adopt_existing_checkouts` on GUI list) |
 | Project DB queries | `src-tauri/crates/repo/src/project.rs` |
 | Config loading + scripts | `src-tauri/crates/infra/src/config.rs` |
 | Query keys | `src/shared/lib/queryKeys.ts` |

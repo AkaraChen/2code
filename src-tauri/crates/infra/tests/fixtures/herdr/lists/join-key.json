@@ -1,0 +1,148 @@
+{
+  "source": "Captured from herdr 0.9.0 JSON API (protocol 22) on Linux x86_64. Host temp paths replaced with /tmp/contract-* placeholders. terminal_id values omitted.",
+  "pin_version": "0.9.0",
+  "join_key": "canonical absolute projects.folder ↔ worktree.list path (git) or session.snapshot pane.cwd (any workspace, including non-git). workspace.list enumerates workspace_id but does not carry checkout_path on v0.9.0.",
+  "profile_id": "Herdr workspace_id (wN). worktree.list open_workspace_id when the checkout is open; omitted when it is not.",
+  "stages": {
+    "empty_server": {
+      "workspace_list": {
+        "type": "workspace_list",
+        "workspaces": []
+      },
+      "snapshot_workspaces": [],
+      "worktree_list": {
+        "type": "worktree_list",
+        "source": {
+          "repo_key": "/tmp/contract-repo/.git",
+          "repo_name": "repo",
+          "repo_root": "/tmp/contract-repo",
+          "source_checkout_path": "/tmp/contract-repo"
+        },
+        "worktrees": [
+          {
+            "path": "/tmp/contract-repo",
+            "branch": "main",
+            "is_linked_worktree": false,
+            "label": "repo"
+          },
+          {
+            "path": "/tmp/contract-disk-only",
+            "branch": "wt/disk-only",
+            "is_linked_worktree": true,
+            "label": "repo"
+          }
+        ]
+      }
+    },
+    "primary": {
+      "worktree_list": {
+        "type": "worktree_list",
+        "source": {
+          "repo_key": "/tmp/contract-repo/.git",
+          "repo_name": "repo",
+          "repo_root": "/tmp/contract-repo",
+          "source_checkout_path": "/tmp/contract-repo",
+          "source_workspace_id": "w1"
+        },
+        "worktrees": [
+          {
+            "path": "/tmp/contract-repo",
+            "branch": "main",
+            "is_linked_worktree": false,
+            "label": "repo",
+            "open_workspace_id": "w1"
+          },
+          {
+            "path": "/tmp/contract-disk-only",
+            "branch": "wt/disk-only",
+            "is_linked_worktree": true,
+            "label": "repo"
+          }
+        ]
+      },
+      "workspace_list": {
+        "type": "workspace_list",
+        "workspaces": [
+          {
+            "workspace_id": "w1",
+            "label": "primary",
+            "number": 1
+          }
+        ]
+      },
+      "snapshot_pane": {
+        "workspace_id": "w1",
+        "pane_id": "w1:p1",
+        "cwd": "/tmp/contract-repo"
+      }
+    },
+    "linked": {
+      "worktree_list": {
+        "type": "worktree_list",
+        "source": {
+          "repo_key": "/tmp/contract-repo/.git",
+          "repo_root": "/tmp/contract-repo"
+        },
+        "worktrees": [
+          {
+            "path": "/tmp/contract-repo",
+            "branch": "main",
+            "is_linked_worktree": false,
+            "open_workspace_id": "w1"
+          },
+          {
+            "path": "/tmp/contract-disk-only",
+            "branch": "wt/disk-only",
+            "is_linked_worktree": true
+          },
+          {
+            "path": "/tmp/contract-worktrees/repo/wt-client-mode",
+            "branch": "wt/client-mode",
+            "is_linked_worktree": true,
+            "open_workspace_id": "w2"
+          }
+        ]
+      }
+    },
+    "second_repo": {
+      "repo_a_paths": [
+        "/tmp/contract-repo",
+        "/tmp/contract-disk-only",
+        "/tmp/contract-worktrees/repo/wt-client-mode"
+      ],
+      "repo_b_worktree_list": {
+        "type": "worktree_list",
+        "source": {
+          "repo_key": "/tmp/contract-repo-b/.git",
+          "repo_name": "repo-b",
+          "repo_root": "/tmp/contract-repo-b",
+          "source_checkout_path": "/tmp/contract-repo-b",
+          "source_workspace_id": "w3"
+        },
+        "worktrees": [
+          {
+            "path": "/tmp/contract-repo-b",
+            "branch": "main",
+            "is_linked_worktree": false,
+            "open_workspace_id": "w3"
+          }
+        ]
+      }
+    },
+    "nongit": {
+      "worktree_list_error": {
+        "code": "not_git_worktree",
+        "message": "Herdr worktree actions require a path inside a Git work tree"
+      },
+      "workspace": {
+        "workspace_id": "w4",
+        "label": "nongit"
+      },
+      "snapshot_pane": {
+        "workspace_id": "w4",
+        "pane_id": "w4:p1",
+        "cwd": "/tmp/contract-nongit"
+      }
+    }
+  }
+}

@@ -6,9 +6,10 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 ## FILES
 | File | Role |
 |------|------|
-| `project.rs` | Create/update/delete projects; folder validation; config loading via infra |
-| `profile.rs` | Create profile → git worktree add → run setup_script; delete → teardown_script → worktree remove |
-| `pty.rs` | PTY session create/close/restore; session cleanup (`mark_all_closed`); output persistence to per-session files (`infra::pty_log`) + orphan-log GC (`gc_orphan_logs`) |
+| `project.rs` | Create/update/delete projects; GUI list adopts Herdr checkouts then live-reads profiles |
+| `profile.rs` | Create profile via Herdr `worktree.create` / `workspace.create`; delete via `worktree.remove` / `workspace.close` |
+| `runtime.rs` | Herdr-only RuntimeRouter (create/list/close/write/resize/restore) |
+| `runtime/herdr.rs` | Herdr adapter: pane_id sessions, frame stream, snapshot list |
 | `watcher.rs` | File system watcher setup and event routing |
 | `debug.rs` | Debug log session management |
 | `lib.rs` | Re-exports |
@@ -23,11 +24,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 5. Run `setup_script` from `2code.json` in the worktree dir
 6. On delete: run `teardown_script` → `git worktree remove` → delete branch
 
-**PTY cleanup**: `mark_all_open_sessions_closed()` runs on both startup (orphan cleanup) and graceful shutdown.
-
-**PTY persistence architecture**: `PersistMsg` enum (`Data`, `Flush`, `Clear`) — a per-session persistence thread owns a `pty_log::SessionLog` (append-only file handle) and batches 32KB, flushing every 250ms. `Clear` truncates the file (`ESC[3J`). No DB lock on this hot path. `PtyFlushSenders` allows async flush from frontend.
-
-**Scrollback restore**: `strip_alternative_screen()` strips alternate screen buffer content (vim/tmux) by parsing VT100 escape sequences (`ESC [ ? 1047m`) before replaying history. Caps at 10KB to prevent bloat.
+**Herdr sessions**: create/list/close/write/resize go through `RuntimeRouter` (Herdr-only). Restore reattaches a live `pane_id`. There is no Local portable-pty spawn or sqlite `pty_sessions` scrollback.
 
 **Worktree path**: Project `2code.json` `worktree_dir` wins, then the global Settings default, then `~/.2code/workspace`. Relative paths and `~` are resolved before `git worktree add`.
 
@@ -36,6 +33,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 | Task | Location |
 |------|----------|
 | Profile worktree path | `profile.rs` — `resolve_worktree_base` + `build_worktree_dir_name` |
-| PTY session restore | `pty.rs::restore_pty_session` |
+| Launch/adopt checkouts | `project.rs` — `adopt_existing_checkouts` (GUI list); `list_with_runtime` (watcher live read) |
+| Herdr session restore | `runtime/herdr.rs` — reattach live `pane_id` |
 | Script execution | `infra::config::run_script` |
 | Branch slug generation | `infra::slug` |

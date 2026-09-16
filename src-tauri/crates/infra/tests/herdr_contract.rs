@@ -153,7 +153,9 @@ fn pin_fixture_records_an_exact_release() {
 		"ping",
 		"session.snapshot",
 		"workspace.create",
+		"workspace.list",
 		"workspace.close",
+		"worktree.list",
 		"worktree.create",
 		"worktree.open",
 		"worktree.remove",
@@ -242,6 +244,88 @@ fn frame_fixtures_encode_full_vs_incremental() {
 		.as_str()
 		.unwrap()
 		.contains("must not additionally answer"));
+}
+
+fn fixture_open_workspace_id(entry: &Value) -> Option<&str> {
+	entry
+		.get("open_workspace_id")
+		.and_then(Value::as_str)
+		.filter(|id| !id.is_empty())
+}
+
+#[test]
+fn join_key_fixtures_record_path_to_workspace_binding() {
+	let fx = load_json("lists/join-key.json");
+	assert_eq!(fx["pin_version"], "0.9.0");
+	assert!(fx["join_key"].as_str().unwrap().contains("projects.folder"));
+
+	let empty = &fx["stages"]["empty_server"];
+	assert!(empty["workspace_list"]["workspaces"]
+		.as_array()
+		.unwrap()
+		.is_empty());
+	assert!(empty["snapshot_workspaces"].as_array().unwrap().is_empty());
+	let empty_trees = empty["worktree_list"]["worktrees"].as_array().unwrap();
+	assert!(!empty_trees.is_empty());
+	assert!(
+		empty_trees
+			.iter()
+			.all(|entry| fixture_open_workspace_id(entry).is_none()),
+		"disk git worktrees without an open workspace are not profiles: {empty}"
+	);
+
+	let primary = &fx["stages"]["primary"];
+	let primary_trees =
+		primary["worktree_list"]["worktrees"].as_array().unwrap();
+	let primary_entry = primary_trees
+		.iter()
+		.find(|entry| entry["path"] == "/tmp/contract-repo")
+		.unwrap();
+	assert_eq!(fixture_open_workspace_id(primary_entry), Some("w1"));
+	assert_eq!(primary_entry["is_linked_worktree"], false);
+	let disk_only = primary_trees
+		.iter()
+		.find(|entry| entry["path"] == "/tmp/contract-disk-only")
+		.unwrap();
+	assert!(fixture_open_workspace_id(disk_only).is_none());
+	assert_eq!(primary["snapshot_pane"]["cwd"], "/tmp/contract-repo");
+	assert_eq!(primary["snapshot_pane"]["workspace_id"], "w1");
+	assert_eq!(
+		primary["worktree_list"]["source"]["repo_key"],
+		"/tmp/contract-repo/.git"
+	);
+
+	let linked = &fx["stages"]["linked"]["worktree_list"]["worktrees"];
+	let linked_entry = linked
+		.as_array()
+		.unwrap()
+		.iter()
+		.find(|entry| entry["open_workspace_id"] == "w2")
+		.unwrap();
+	assert_eq!(linked_entry["is_linked_worktree"], true);
+	assert_eq!(
+		linked_entry["path"],
+		"/tmp/contract-worktrees/repo/wt-client-mode"
+	);
+
+	let second = &fx["stages"]["second_repo"];
+	let repo_a_paths = second["repo_a_paths"].as_array().unwrap();
+	assert!(!repo_a_paths
+		.iter()
+		.any(|path| path == "/tmp/contract-repo-b"));
+	assert_eq!(
+		second["repo_b_worktree_list"]["source"]["repo_key"],
+		"/tmp/contract-repo-b/.git"
+	);
+	assert_ne!(
+		second["repo_b_worktree_list"]["source"]["repo_key"],
+		primary["worktree_list"]["source"]["repo_key"]
+	);
+
+	let nongit = &fx["stages"]["nongit"];
+	assert_eq!(nongit["worktree_list_error"]["code"], "not_git_worktree");
+	assert_eq!(nongit["snapshot_pane"]["cwd"], "/tmp/contract-nongit");
+	assert_eq!(nongit["snapshot_pane"]["workspace_id"], "w4");
 }
 
 /// Conservative `sockaddr_un.sun_path` bound (macOS 104; Linux 108).
@@ -2255,6 +2339,462 @@ sys.stdout.write("\nDA_RAW=" + repr(data) + "\n")
 		);
 		let missing = harness.cli_err_json(&["pane", "get", &last_pane]);
 		assert_eq!(missing["error"]["code"], "pane_not_found");
+	}
+
+	/// Client-mode join: canonical project folder ↔ live Herdr checkout/cwd.
+	/// A profile is an open `workspace_id`. Disk git worktrees without
+	/// `open_workspace_id` are not profiles. sqlite `profiles` is not
+	/// consulted (this harness has no 2code database).
+	#[test]
+	fn client_mode_path_join_lists_open_workspaces_as_profiles() {
+		let Some(bin) = require_herdr() else {
+			return;
+		};
+		let harness = Harness::start(bin);
+		let repo_a = harness.repo.clone();
+		let repo_a_str = repo_a.to_str().unwrap();
+
+		let empty_ws =
+			json_rpc_ok(&harness, "wl0", "workspace.list", json!({}));
+		assert_eq!(empty_ws["type"], "workspace_list");
+		assert!(
+			empty_ws["workspaces"].as_array().unwrap().is_empty(),
+			"empty Herdr has no default workspace: {empty_ws}"
+		);
+		let empty_snap =
+			json_rpc_ok(&harness, "ss0", "session.snapshot", json!({}));
+		assert_eq!(empty_snap["type"], "session_snapshot");
+		assert!(
+			empty_snap["snapshot"]["workspaces"]
+				.as_array()
+				.unwrap()
+				.is_empty(),
+			"empty snapshot must not seed profiles: {empty_snap}"
+		);
+
+		let disk_only = harness.root.path().join("disk-only-wt");
+		assert!(git()
+			.args([
+				"worktree",
+				"add",
+				"-b",
+				"wt/disk-only",
+				disk_only.to_str().unwrap()
+			])
+			.current_dir(&repo_a)
+			.status()
+			.unwrap()
+			.success());
+
+		let empty_wt = harness.rpc(
+			"wtl0",
+			"worktree.list",
+			json!({
+				"cwd": repo_a_str,
+				"trust_repository": true
+			}),
+		);
+		if empty_wt.get("error").is_none() {
+			assert_eq!(empty_wt["result"]["type"], "worktree_list");
+			assert!(
+				profiles_from_worktree_list(&empty_wt["result"]).is_empty(),
+				"disk git worktrees without open_workspace_id are not profiles: {empty_wt}"
+			);
+		}
+
+		let created = harness.create_workspace("primary");
+		let primary_ws = created["result"]["workspace"]["workspace_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let primary_pane = created["result"]["root_pane"]["pane_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+
+		let listed = json_worktree_list(&harness, "wtl1", &repo_a);
+		assert_eq!(listed["type"], "worktree_list");
+		let primary_entry = worktree_entry_for(&listed, &repo_a)
+			.expect("primary checkout in worktree.list");
+		assert_eq!(
+			open_workspace_id(primary_entry),
+			Some(primary_ws.as_str()),
+			"primary profile id is the open workspace_id: {primary_entry}"
+		);
+		assert_eq!(
+			primary_entry["is_linked_worktree"], false,
+			"project-folder checkout is the non-linked primary: {primary_entry}"
+		);
+		let disk_entry = worktree_entry_for(&listed, &disk_only)
+			.expect("disk-only git worktree still listed");
+		assert!(
+			open_workspace_id(disk_entry).is_none(),
+			"git worktree without an open workspace is not a profile: {disk_entry}"
+		);
+		assert_eq!(
+			profiles_from_worktree_list(&listed),
+			vec![primary_ws.clone()],
+			"profile list is open workspaces only: {listed}"
+		);
+		if let Some(key) = listed["source"]["repo_key"].as_str() {
+			assert!(!key.is_empty(), "repo_key must be non-empty when present");
+		}
+
+		let ws_list = json_rpc_ok(&harness, "wl1", "workspace.list", json!({}));
+		assert!(
+			ws_list["workspaces"]
+				.as_array()
+				.unwrap()
+				.iter()
+				.any(|workspace| workspace["workspace_id"] == primary_ws),
+			"workspace.list enumerates the profile workspace_id: {ws_list}"
+		);
+		// v0.9.0 workspace.list omits worktree/checkout_path. Path join is
+		// worktree.list (git) and session.snapshot pane.cwd (any workspace).
+		if let Some(primary_listed) = workspace_for_checkout(&ws_list, &repo_a)
+		{
+			assert_eq!(primary_listed["workspace_id"], primary_ws);
+			assert_eq!(primary_listed["worktree"]["is_linked_worktree"], false);
+			assert!(path_matches(
+				&primary_listed["worktree"]["checkout_path"],
+				&repo_a
+			));
+		} else {
+			assert!(
+				ws_list["workspaces"].as_array().unwrap().iter().all(
+					|workspace| workspace.get("worktree").is_none()
+						|| workspace["worktree"].is_null()
+				),
+				"workspace.list without checkout_path must not invent a worktree: {ws_list}"
+			);
+		}
+
+		let snap = json_rpc_ok(&harness, "ss1", "session.snapshot", json!({}));
+		assert_eq!(
+			workspace_ids_for_path(&snap["snapshot"], &repo_a),
+			vec![primary_ws.clone()],
+			"snapshot join key is checkout_path / pane cwd: {snap}"
+		);
+		let snap_pane = snap["snapshot"]["panes"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.find(|pane| pane["pane_id"] == primary_pane)
+			.expect("primary pane in snapshot");
+		assert!(
+			path_matches(&snap_pane["cwd"], &repo_a),
+			"snapshot pane.cwd must match the project folder: {snap_pane}"
+		);
+
+		let linked = harness.cli_json(&[
+			"worktree",
+			"create",
+			"--cwd",
+			repo_a_str,
+			"--branch",
+			"wt/client-mode",
+			"--label",
+			"linked",
+			"--no-focus",
+			"--trust-repository",
+		]);
+		assert_eq!(linked["result"]["type"], "worktree_created");
+		let linked_ws = linked["result"]["workspace"]["workspace_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let linked_path = PathBuf::from(
+			linked["result"]["worktree"]["path"].as_str().unwrap(),
+		);
+		assert_eq!(
+			linked["result"]["workspace"]["worktree"]["is_linked_worktree"],
+			true
+		);
+
+		let listed2 = json_worktree_list(&harness, "wtl2", &repo_a);
+		let linked_entry = worktree_entry_for(&listed2, &linked_path)
+			.expect("linked worktree in worktree.list");
+		assert_eq!(open_workspace_id(linked_entry), Some(linked_ws.as_str()));
+		assert_eq!(linked_entry["is_linked_worktree"], true);
+		assert!(
+			open_workspace_id(
+				worktree_entry_for(&listed2, &disk_only).expect("disk-only")
+			)
+			.is_none(),
+			"still-closed disk worktree must not become a profile after create: {listed2}"
+		);
+		let mut open_ids = profiles_from_worktree_list(&listed2);
+		open_ids.sort();
+		let mut expected = vec![primary_ws.clone(), linked_ws.clone()];
+		expected.sort();
+		assert_eq!(
+			open_ids, expected,
+			"linked worktree is a second profile: {listed2}"
+		);
+
+		let reopened = harness.cli_json(&[
+			"worktree",
+			"open",
+			"--cwd",
+			repo_a_str,
+			"--path",
+			repo_a_str,
+			"--no-focus",
+			"--trust-repository",
+		]);
+		assert_eq!(reopened["result"]["already_open"], true);
+		assert_eq!(reopened["result"]["workspace"]["workspace_id"], primary_ws);
+		let listed_reopen = json_worktree_list(&harness, "wtl3", &repo_a);
+		assert_eq!(
+			open_workspace_id(
+				worktree_entry_for(&listed_reopen, &repo_a).expect("primary")
+			),
+			Some(primary_ws.as_str()),
+			"already_open keeps the same profile workspace_id: {listed_reopen}"
+		);
+		let snap_reopen =
+			json_rpc_ok(&harness, "ss2", "session.snapshot", json!({}));
+		assert!(workspace_ids_for_path(&snap_reopen["snapshot"], &repo_a)
+			.contains(&primary_ws));
+
+		let repo_b = harness.root.path().join("repo-b");
+		fs::create_dir_all(&repo_b).unwrap();
+		init_git_repo(&repo_b);
+		let created_b = harness.cli_json(&[
+			"workspace",
+			"create",
+			"--cwd",
+			repo_b.to_str().unwrap(),
+			"--label",
+			"second-repo",
+			"--no-focus",
+		]);
+		let ws_b = created_b["result"]["workspace"]["workspace_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		assert_ne!(ws_b, primary_ws);
+		assert_ne!(ws_b, linked_ws);
+
+		let list_a = json_worktree_list(&harness, "wtl-a", &repo_a);
+		let list_b = json_worktree_list(&harness, "wtl-b", &repo_b);
+		for entry in list_a["worktrees"].as_array().unwrap() {
+			let path = Path::new(entry["path"].as_str().unwrap());
+			assert!(
+				!same_path(path, &repo_b),
+				"repo B checkout must not appear in repo A worktree.list: {entry}"
+			);
+			assert_ne!(open_workspace_id(entry), Some(ws_b.as_str()));
+		}
+		for entry in list_b["worktrees"].as_array().unwrap() {
+			let path = Path::new(entry["path"].as_str().unwrap());
+			assert!(
+				!same_path(path, &repo_a),
+				"repo A checkout must not appear in repo B worktree.list: {entry}"
+			);
+		}
+		if let (Some(key_a), Some(key_b)) = (
+			list_a["source"]["repo_key"].as_str(),
+			list_b["source"]["repo_key"].as_str(),
+		) {
+			assert_ne!(
+				key_a, key_b,
+				"repo_key is repo-scoped, not a global project id"
+			);
+		}
+		assert!(
+			worktree_entry_for(&list_b, &repo_b).is_some(),
+			"second repo lists its own primary: {list_b}"
+		);
+		assert_eq!(
+			open_workspace_id(
+				worktree_entry_for(&list_b, &repo_b).expect("repo B primary")
+			),
+			Some(ws_b.as_str())
+		);
+
+		let nongit = harness.root.path().join("nongit");
+		fs::create_dir_all(&nongit).unwrap();
+		fs::write(nongit.join("notes.txt"), "not a git repo\n").unwrap();
+		let created_ng = harness.cli_json(&[
+			"workspace",
+			"create",
+			"--cwd",
+			nongit.to_str().unwrap(),
+			"--label",
+			"nongit",
+			"--no-focus",
+		]);
+		let ws_ng = created_ng["result"]["workspace"]["workspace_id"]
+			.as_str()
+			.unwrap()
+			.to_string();
+		let ng_created_ws = &created_ng["result"]["workspace"];
+		assert!(
+			ng_created_ws.get("worktree").is_none()
+				|| ng_created_ws["worktree"].is_null(),
+			"non-git project uses workspace.create, not worktree.*: {created_ng}"
+		);
+		let wt_ng = harness.rpc(
+			"wtl-ng",
+			"worktree.list",
+			json!({
+				"cwd": nongit.to_str().unwrap(),
+				"trust_repository": true
+			}),
+		);
+		assert_eq!(
+			wt_ng["error"]["code"], "not_git_worktree",
+			"worktree.list is inapplicable on a non-git folder: {wt_ng}"
+		);
+		let snap_ng =
+			json_rpc_ok(&harness, "ss-ng", "session.snapshot", json!({}));
+		assert_eq!(
+			workspace_ids_for_path(&snap_ng["snapshot"], &nongit),
+			vec![ws_ng.clone()],
+			"non-git profile join is workspace/pane cwd, not worktree.list: {snap_ng}"
+		);
+		let ng_ws = json_rpc_ok(&harness, "wl-ng", "workspace.list", json!({}))
+			["workspaces"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.find(|ws| ws["workspace_id"] == ws_ng)
+			.cloned()
+			.expect("nongit workspace in workspace.list");
+		assert!(
+			ng_ws.get("worktree").is_none() || ng_ws["worktree"].is_null(),
+			"workspace.list has no worktree group for a non-git cwd: {ng_ws}"
+		);
+
+		if env::var_os("HERDR_CONTRACT_DUMP").is_some() {
+			eprintln!(
+				"client-mode join dump\nempty_workspaces={}\nempty_snapshot_workspaces={}\nempty_worktree_list={}\nprimary_worktree_list={}\nlinked_worktree_list={}\nrepo_a={}\nrepo_b={}\nnongit_worktree_list={}\nnongit_workspace={}\nnongit_snapshot_panes={}",
+				empty_ws["workspaces"],
+				empty_snap["snapshot"]["workspaces"],
+				empty_wt,
+				listed,
+				listed2,
+				list_a,
+				list_b,
+				wt_ng,
+				ng_ws,
+				snap_ng["snapshot"]["panes"]
+			);
+		}
+	}
+
+	fn json_rpc_ok(
+		harness: &Harness,
+		id: &str,
+		method: &str,
+		params: Value,
+	) -> Value {
+		let resp = harness.rpc(id, method, params);
+		assert!(
+			resp.get("error").is_none(),
+			"JSON {method} ({id}) failed: {resp}"
+		);
+		resp["result"].clone()
+	}
+
+	fn json_worktree_list(harness: &Harness, id: &str, cwd: &Path) -> Value {
+		json_rpc_ok(
+			harness,
+			id,
+			"worktree.list",
+			json!({
+				"cwd": cwd.to_str().unwrap(),
+				"trust_repository": true
+			}),
+		)
+	}
+
+	fn open_workspace_id(entry: &Value) -> Option<&str> {
+		entry
+			.get("open_workspace_id")
+			.and_then(Value::as_str)
+			.filter(|id| !id.is_empty())
+	}
+
+	fn profiles_from_worktree_list(list: &Value) -> Vec<String> {
+		list["worktrees"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.filter_map(open_workspace_id)
+			.map(str::to_string)
+			.collect()
+	}
+
+	fn same_path(a: &Path, b: &Path) -> bool {
+		match (a.canonicalize(), b.canonicalize()) {
+			(Ok(left), Ok(right)) => left == right,
+			_ => a == b,
+		}
+	}
+
+	fn path_matches(value: &Value, expected: &Path) -> bool {
+		value
+			.as_str()
+			.map(|path| same_path(Path::new(path), expected))
+			.unwrap_or(false)
+	}
+
+	fn worktree_entry_for<'a>(
+		list: &'a Value,
+		path: &Path,
+	) -> Option<&'a Value> {
+		list["worktrees"].as_array()?.iter().find(|entry| {
+			entry
+				.get("path")
+				.and_then(Value::as_str)
+				.map(|listed| same_path(Path::new(listed), path))
+				.unwrap_or(false)
+		})
+	}
+
+	fn workspace_for_checkout<'a>(
+		list: &'a Value,
+		checkout: &Path,
+	) -> Option<&'a Value> {
+		list["workspaces"].as_array()?.iter().find(|workspace| {
+			path_matches(&workspace["worktree"]["checkout_path"], checkout)
+		})
+	}
+
+	fn workspace_ids_for_path(snapshot: &Value, path: &Path) -> Vec<String> {
+		let mut ids: Vec<String> = snapshot["workspaces"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.filter_map(|workspace| {
+				let by_worktree =
+					path_matches(&workspace["worktree"]["checkout_path"], path);
+				if by_worktree {
+					workspace["workspace_id"].as_str().map(str::to_string)
+				} else {
+					None
+				}
+			})
+			.collect();
+		if ids.is_empty() {
+			ids = snapshot["panes"]
+				.as_array()
+				.unwrap()
+				.iter()
+				.filter_map(|pane| {
+					if path_matches(&pane["cwd"], path) {
+						pane["workspace_id"].as_str().map(str::to_string)
+					} else {
+						None
+					}
+				})
+				.collect();
+			ids.sort();
+			ids.dedup();
+		}
+		ids
 	}
 
 	fn j_workspace_ids(harness: &Harness) -> Vec<String> {
