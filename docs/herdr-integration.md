@@ -4,7 +4,7 @@ Pinned contract for 2code as a **Herdr client** ([parent plan #436](https://gith
 
 **Decision: proceed** with Herdr **v0.9.0** on **Linux x86_64 (executed)** for **#436 Tasks 2–10**, gated only on capabilities this probe marks verified. Frame semantics, controller exclusivity, DSR/DA, and sidecar checksums stay as previously recorded; this rewrite adds the client-mode join key.
 
-Herdr is the **intended default** runtime for this plan. This branch does **not** change [`RuntimeRouter::new`](../src-tauri/crates/service/src/runtime.rs) (still Local). Switching the default is **#436 Task 2**. Local may remain only as an **explicit** fallback until **#436 Task 9** deletes it. Local must never own a worktree or workspace Herdr already owns.
+Herdr is the **production default** runtime ([#436 Task 2](https://github.com/AkaraChen/2code/issues/439)). [`RuntimeBackend::default`](../src-tauri/crates/model/src/runtime.rs), [`RuntimeSelector::default`](../src-tauri/crates/service/src/runtime.rs), and [`RuntimeRouter::new`](../src-tauri/crates/service/src/runtime.rs) select Herdr. GUI startup resolves the pinned **v0.9.0** sidecar, calls `ensure_herdr_listener` on the dedicated `2code` namespace (never the user default session), and injects JSON terminal + worktree + CLI attach clients. Local remains only as an **explicit** fallback (`TWOCODE_RUNTIME=local` or `--twocode-runtime=local`) until **#436 Task 9** deletes it. That flag skips `ensure_herdr_listener` and creates Local sessions. There is no Settings toggle and no silent failover: if Herdr is selected and the sidecar/namespace is absent or incompatible, ops fail closed (`HerdrServerAbsent` / `HerdrServerIncompatible` or equivalent) without flipping the selector to Local. Local must never own a worktree or workspace Herdr already owns. GUI exit still must not `herdr server stop`.
 
 macOS Unix sockets and `terminal session` attach are **documented** by Herdr and have release assets, but this probe did **not** execute on the primary shipping OS — [#401](https://github.com/AkaraChen/2code/issues/401) (**#394 leftover, not this plan**).
 
@@ -38,7 +38,7 @@ A 2code **project** stays a sqlite row (`projects.id`, canonical `projects.folde
 
 Listing, creating, deleting, and restoring profiles go through Herdr. sqlite `profiles` is **not** source of truth. After a one-shot import in **#436 Task 5 or 6**, leftover `profiles` rows are ignored.
 
-Production default on **this branch** remains Local. The intended default for the plan is Herdr.
+Production default is Herdr. Local is only an explicit env/flag fallback. sqlite `profiles` remains writable until **#436 Tasks 4/5/8**; it is **not** source of truth.
 
 ## Project ↔ Herdr binding (join key)
 
@@ -94,7 +94,7 @@ One-shot import of existing sqlite profiles into Herdr is allowed in **#436 Task
 
 | #436 task | Status | Gate |
 | --- | --- | --- |
-| 2. Make Herdr the default runtime | **proceed** | No new Herdr capability. Do **not** switch on this branch. Local stays explicit fallback until **#436 Task 9**. |
+| 2. Make Herdr the default runtime | **done (this branch)** | No new Herdr capability. Local is explicit fallback (`TWOCODE_RUNTIME=local`) until **#436 Task 9**. Fail closed if sidecar/namespace is absent. |
 | 3. Derive the profile list from Herdr | **proceed** | JSON `worktree.list` (git, repo-scoped) + `session.snapshot` pane `cwd` (including non-git). Empty Herdr → empty list. `workspace.list` is not a path join. |
 | 4. Create/delete profile through Herdr only | **proceed** | `worktree.create` / `worktree.remove` (git linked); `workspace.create` / `workspace.close` (including non-git). Do not INSERT/DELETE `profiles`. |
 | 5. Stop persisting profile mappings | **proceed** | 2code-only. Import then ignore sqlite `profiles` / `profile_runtime_mappings`. |
@@ -132,7 +132,7 @@ Bare “Task N” in older notes means **#394**, not #436. This table remaps eve
 | 18 | Expose runtime health and recovery | **#394 leftover, not this plan.** Controller takeover strings stay recorded above. |
 | 19 | Implement legacy-session migration and rollback | **#394 leftover.** One-shot import is allowed in **#436 Task 5 or 6**; then sqlite profiles are ignored. |
 | 20 | Add migration acceptance coverage | **#394 leftover, not this plan.** |
-| 21 | Make Herdr the default runtime | **#436 Task 2.** Not this branch (`RuntimeRouter::new` stays Local). |
+| 21 | Make Herdr the default runtime | **#436 Task 2 (this branch).** `RuntimeRouter::new` selects Herdr. Local is `TWOCODE_RUNTIME=local` only. |
 | 22 | Remove the local agent detector | **#394 leftover, not this plan.** |
 | 23 | Remove the legacy PTY runtime | **#436 Task 9.** Not this branch. |
 
@@ -467,4 +467,4 @@ None of the open #394 leftover issues block Linux **#436 Tasks 2–10**. Do not 
 
 ## Scope vs the 200–400 line estimate
 
-Issue [#437](https://github.com/AkaraChen/2code/issues/437) estimated 200–400 lines and required material growth to be tracked separately: [#438](https://github.com/AkaraChen/2code/issues/438). This rewrite is larger because the live JSON join probe, sanitized list/snapshot fixtures, and #394→#436 remapping are all tests and docs. Production `RuntimeRouter` default, adapters, handlers, frontend, and migrations are unchanged. Splitting the extra evidence would leave #436 Tasks 3–4/7/10 without the path-join contract. #394 leftover line-count tracker: [#400](https://github.com/AkaraChen/2code/issues/400).
+Issue [#437](https://github.com/AkaraChen/2code/issues/437) estimated 200–400 lines and required material growth to be tracked separately: [#438](https://github.com/AkaraChen/2code/issues/438). The Task 1 rewrite is larger because the live JSON join probe, sanitized list/snapshot fixtures, and #394→#436 remapping are all tests and docs. Task 1 did not switch the production `RuntimeRouter` default; **#436 Task 2** does. Splitting the extra evidence would leave #436 Tasks 3–4/7/10 without the path-join contract. #394 leftover line-count tracker: [#400](https://github.com/AkaraChen/2code/issues/400).
