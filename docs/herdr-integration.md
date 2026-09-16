@@ -6,6 +6,8 @@ Pinned contract for 2code as a **Herdr client** ([parent plan #436](https://gith
 
 Herdr is the **production default** runtime ([#436 Task 2](https://github.com/AkaraChen/2code/issues/439)). [`RuntimeBackend::default`](../src-tauri/crates/model/src/runtime.rs), [`RuntimeSelector::default`](../src-tauri/crates/service/src/runtime.rs), and [`RuntimeRouter::new`](../src-tauri/crates/service/src/runtime.rs) select Herdr. GUI startup resolves the pinned **v0.9.0** sidecar, calls `ensure_herdr_listener` on the dedicated `2code` namespace (never the user default session), and injects JSON terminal + worktree + CLI attach clients. Local remains only as an **explicit** fallback (`TWOCODE_RUNTIME=local` or `--twocode-runtime=local`) until **#436 Task 9** deletes it. That flag skips `ensure_herdr_listener` and creates Local sessions. There is no Settings toggle and no silent failover: if Herdr is selected and the sidecar/namespace is absent or incompatible, ops fail closed (`HerdrServerAbsent` / `HerdrServerIncompatible` or equivalent) without flipping the selector to Local. Local must never own a worktree or workspace Herdr already owns. GUI exit still must not `herdr server stop`.
 
+The sidebar / profile-switcher list is derived from live Herdr ([#436 Task 3](https://github.com/AkaraChen/2code/issues/441)). [`list_projects`](../src-tauri/src/handler/project.rs) / [`list_with_runtime`](../src-tauri/crates/service/src/project.rs) still load sqlite **projects** (and groups). When Herdr is selected, each project's `profiles` array is **replaced** from JSON `worktree.list` (git, `cwd` = canonical `projects.folder`, membership = non-empty `open_workspace_id`) or `session.snapshot` pane `cwd` / `foreground_cwd` (non-git `not_git_worktree`). `workspace.list` is not a path join. Profile `id` is the Herdr `workspace_id` (`wN`); route ids are `wN`. sqlite `profiles` rows are not merged and are not written back from the list. Empty Herdr, disk git checkouts without `open_workspace_id`, or an absent/incompatible sidecar yield `profiles: []` for that project until **#436 Task 10**. `TWOCODE_RUNTIME=local` still lists sqlite nested profiles. Notes overlay via `profile_runtime_mappings` is not list membership. No `HerdrRuntimeSync` / `events.subscribe`.
+
 macOS Unix sockets and `terminal session` attach are **documented** by Herdr and have release assets, but this probe did **not** execute on the primary shipping OS — [#401](https://github.com/AkaraChen/2code/issues/401) (**#394 leftover, not this plan**).
 
 **Blocked (#436 on Linux):** none. v0.9.0 can join a 2code project folder to live Herdr state by path (see join key). Do not invent a sqlite cache to paper over a hole that is not there.
@@ -68,7 +70,7 @@ Verified on v0.9.0 Linux (JSON, disposable repo, `HERDR_CONTRACT_REQUIRED=1`):
 
 **Re-open / `already_open`:** `worktree.open` of an already-open primary keeps the same `workspace_id`. `worktree.list` / snapshot still key that profile as that id (**verified** here; create/open identity was already verified in the lifecycle probe).
 
-**Repo isolation:** a second repo's workspaces do **not** appear in the first repo's `worktree.list`. `source.repo_key` differs. `workspace.list` is session-global, so **#436 Task 3** must filter by the join key, not by listing every Herdr workspace.
+**Repo isolation:** a second repo's workspaces do **not** appear in the first repo's `worktree.list`. `source.repo_key` differs. `workspace.list` is session-global, so **#436 Task 3** filters by the join key, not by listing every Herdr workspace.
 
 Sanitized payloads: `src-tauri/crates/infra/tests/fixtures/herdr/lists/join-key.json`. Live test: `client_mode_path_join_lists_open_workspaces_as_profiles`.
 
@@ -94,8 +96,8 @@ One-shot import of existing sqlite profiles into Herdr is allowed in **#436 Task
 
 | #436 task | Status | Gate |
 | --- | --- | --- |
-| 2. Make Herdr the default runtime | **done (this branch)** | No new Herdr capability. Local is explicit fallback (`TWOCODE_RUNTIME=local`) until **#436 Task 9**. Fail closed if sidecar/namespace is absent. |
-| 3. Derive the profile list from Herdr | **proceed** | JSON `worktree.list` (git, repo-scoped) + `session.snapshot` pane `cwd` (including non-git). Empty Herdr → empty list. `workspace.list` is not a path join. |
+| 2. Make Herdr the default runtime | **done** (`task-2-herdr-default-runtime`) | No new Herdr capability. Local is explicit fallback (`TWOCODE_RUNTIME=local`) until **#436 Task 9**. Fail closed if sidecar/namespace is absent. |
+| 3. Derive the profile list from Herdr | **done (this branch)** | JSON `worktree.list` (git, repo-scoped) + `session.snapshot` pane `cwd` (including non-git). Profile id is `workspace_id`. Empty Herdr → empty list. Route ids are `wN`. `workspace.list` is not a path join. |
 | 4. Create/delete profile through Herdr only | **proceed** | `worktree.create` / `worktree.remove` (git linked); `workspace.create` / `workspace.close` (including non-git). Do not INSERT/DELETE `profiles`. |
 | 5. Stop persisting profile mappings | **proceed** | 2code-only. Import then ignore sqlite `profiles` / `profile_runtime_mappings`. |
 | 6. Sessions from Herdr snapshot, not `pty_sessions` | **proceed** | `session.snapshot` **verified**. CLI `terminal session` frames **verified** (#394 leftover, shipped). |
@@ -132,7 +134,7 @@ Bare “Task N” in older notes means **#394**, not #436. This table remaps eve
 | 18 | Expose runtime health and recovery | **#394 leftover, not this plan.** Controller takeover strings stay recorded above. |
 | 19 | Implement legacy-session migration and rollback | **#394 leftover.** One-shot import is allowed in **#436 Task 5 or 6**; then sqlite profiles are ignored. |
 | 20 | Add migration acceptance coverage | **#394 leftover, not this plan.** |
-| 21 | Make Herdr the default runtime | **#436 Task 2 (this branch).** `RuntimeRouter::new` selects Herdr. Local is `TWOCODE_RUNTIME=local` only. |
+| 21 | Make Herdr the default runtime | **#436 Task 2 (done).** `RuntimeRouter::new` selects Herdr. Local is `TWOCODE_RUNTIME=local` only. |
 | 22 | Remove the local agent detector | **#394 leftover, not this plan.** |
 | 23 | Remove the legacy PTY runtime | **#436 Task 9.** Not this branch. |
 
