@@ -43,8 +43,8 @@ xterm 6 measures through canvas but paints through the DOM, and both of its meas
 |------|----------|
 | Tab state shape | `store.ts` — `profiles[profileId].tabs`, `activeTabId`, `counter` |
 | xterm instance creation | `Terminal.tsx` lines ~145–297 (ref callback) |
-| PTY output streaming | `attach_pty_output(sessionId, streamId)` registers the active sink, then `stream_pty_output` owns `Channel<ArrayBuffer>` in `Terminal.tsx`; `detach_pty_output` must use the same `streamId` so stale cleanup cannot remove a newer stream |
-| Scrollback restore | `Terminal.tsx` + `src-tauri/crates/service/src/pty.rs` |
+| PTY output streaming | `attach_pty_output(sessionId, streamId)` then `stream_herdr_output` owns `Channel<HerdrTerminalFrame>` in `Terminal.tsx`; `detach_pty_output` must use the same `streamId` so stale cleanup cannot remove a newer stream |
+| Scrollback restore | `restoration.ts` reattaches live Herdr `pane_id`; no sqlite history |
 | Agent rules | `detector/rules/*.ts` — keep one agent per manifest file |
 | Terminal not filling its width | `lib/xtermMetricsPatch.ts` — compare xterm's `dimensions.css.cell.width` against an attached-canvas `measureText("W")` |
 
