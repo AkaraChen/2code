@@ -1433,6 +1433,25 @@ mod tests {
 	}
 
 	#[test]
+	fn data_flow_deletion_does_not_describe_sqlite_profiles_git_only() {
+		let docs = include_str!("../../../../docs/data-flow.md");
+		let deletion = docs
+			.split("### Deletion Flow")
+			.nth(1)
+			.expect("Deletion Flow")
+			.split("\n## ")
+			.next()
+			.unwrap();
+		assert!(deletion.contains("worktree.remove"));
+		assert!(deletion.contains("workspace.close"));
+		assert!(deletion.contains("sqlite `profiles` is DROPped"));
+		assert!(!deletion.contains("Delete profile record from DB"));
+		assert!(
+			!deletion.contains("Run `git worktree remove` and `git branch -D`")
+		);
+	}
+
+	#[test]
 	fn path_reconcile_does_not_mutate_or_start_herdr() {
 		let src = include_str!("project.rs")
 			.split("#[cfg(test)]")

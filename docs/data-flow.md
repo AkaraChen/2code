@@ -182,6 +182,7 @@ The `watch_projects` command starts a background watcher thread using the `notif
 
 ### Deletion Flow
 
-1. If `2code.json` has `teardown_script`, execute in worktree directory
-2. Run `git worktree remove` and `git branch -D`
-3. Delete profile record from DB (cascades to sessions)
+1. If `2code.json` has `teardown_script`, execute in the checkout directory
+2. Linked git extras: JSON `worktree.remove`, then 2code `git branch -D` on the repo so New Profile can reuse the name. Herdr does not delete the git branch. If `worktree.remove` leaves the checkout in place, fail closed — do not fall back to `git worktree remove`
+3. Non-git extras: JSON `workspace.close`. The primary / project-folder checkout is refused
+4. sqlite `profiles` is DROPped; there is no profile row to delete. Live tabs are Herdr `pane_id`s, not sqlite sessions
