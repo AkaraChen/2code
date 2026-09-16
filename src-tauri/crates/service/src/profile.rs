@@ -12,7 +12,7 @@ use uuid::Uuid;
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
-use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
+use model::runtime::RuntimeBackend;
 
 use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
 use serde_json::Value;
@@ -1464,7 +1464,7 @@ mod tests {
 		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeListEntry,
 		WorktreeOpenResult, WorktreeRemoveResult,
 	};
-	use model::runtime::RuntimeBackend;
+	use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
 	use serde_json::{json, Value};
 	use std::path::Path;
 	use std::sync::{Arc, Mutex};
