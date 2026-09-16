@@ -124,7 +124,11 @@ fn create_live_session(
 }
 
 fn router_from_ctx(ctx: &PtyContext) -> RuntimeRouter {
-	RuntimeRouter::new(LocalAdapter::new(ctx.clone()), HerdrStubAdapter::new())
+	RuntimeRouter::with_backend(
+		RuntimeBackend::Local,
+		LocalAdapter::new(ctx.clone()),
+		HerdrStubAdapter::new(),
+	)
 }
 
 /// Helper: insert a session record for a given profile.

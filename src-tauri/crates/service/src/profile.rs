@@ -1884,7 +1884,8 @@ mod tests {
 			emitter: Arc::new(TestEmitter),
 			output_dir: logs,
 		};
-		RuntimeRouter::new(
+		RuntimeRouter::with_backend(
+			RuntimeBackend::Local,
 			LocalAdapter::new(ctx),
 			HerdrStubAdapter::with_worktree_client(worktrees),
 		)

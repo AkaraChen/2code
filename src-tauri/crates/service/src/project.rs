@@ -664,7 +664,11 @@ mod tests {
 			Some(client) => HerdrStubAdapter::with_worktree_client(client),
 			None => HerdrStubAdapter::new(),
 		};
-		RuntimeRouter::new(LocalAdapter::new(ctx), herdr)
+		RuntimeRouter::with_backend(
+			model::runtime::RuntimeBackend::Local,
+			LocalAdapter::new(ctx),
+			herdr,
+		)
 	}
 
 	fn insert_catalog(
@@ -981,12 +985,33 @@ mod tests {
 	}
 
 	#[test]
-	fn runtime_new_stays_local_for_path_reconcile() {
+	fn explicit_local_router_stays_local_for_path_reconcile() {
 		let db = pool_from(setup_db());
 		let runtime = local_router(&db, None);
 		assert_eq!(
 			runtime.selected_backend(),
 			model::runtime::RuntimeBackend::Local
+		);
+	}
+
+	#[test]
+	fn production_router_new_selects_herdr_for_path_reconcile() {
+		let db = pool_from(setup_db());
+		let logs = std::env::temp_dir().join("2code-project-herdr-logs");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		let runtime =
+			RuntimeRouter::new(LocalAdapter::new(ctx), HerdrStubAdapter::new());
+		assert_eq!(
+			runtime.selected_backend(),
+			model::runtime::RuntimeBackend::Herdr
 		);
 	}
 }

@@ -4,7 +4,8 @@
 //! PTY implementation. Herdr create/list/close use pane identities when a
 //! client is injected; write/resize require an attached CLI helper.
 //! Herdr restore stays fail-closed: reopen attaches Bound panes instead
-//! of spawning a Local PTY. Herdr is never the default.
+//! of spawning a Local PTY. Production default is Herdr. Local is only
+//! an explicit `TWOCODE_RUNTIME=local` fallback.
 
 mod herdr;
 mod local;
@@ -120,7 +121,7 @@ pub trait TerminalRuntime: Send + Sync {
 	fn release_attachments(&self) {}
 }
 
-/// Process-wide backend selector. Production default is Local.
+/// Process-wide backend selector. Production default is Herdr.
 pub struct RuntimeSelector {
 	default_backend: RuntimeBackend,
 	ownership: Mutex<HashMap<String, RuntimeBackend>>,
@@ -182,7 +183,7 @@ impl RuntimeSelector {
 
 impl Default for RuntimeSelector {
 	fn default() -> Self {
-		Self::new(RuntimeBackend::Local)
+		Self::new(RuntimeBackend::Herdr)
 	}
 }
 
@@ -194,9 +195,9 @@ pub struct RuntimeRouter {
 }
 
 impl RuntimeRouter {
-	/// Production constructor: Local is the default runtime.
+	/// Production constructor: Herdr is the default runtime.
 	pub fn new(local: LocalAdapter, herdr: HerdrStubAdapter) -> Self {
-		Self::with_backend(RuntimeBackend::Local, local, herdr)
+		Self::with_backend(RuntimeBackend::Herdr, local, herdr)
 	}
 
 	pub fn with_backend(
@@ -727,15 +728,15 @@ mod tests {
 	}
 
 	#[test]
-	fn selector_defaults_to_local() {
+	fn selector_defaults_to_herdr() {
 		let selector = RuntimeSelector::default();
-		assert_eq!(selector.default_backend(), RuntimeBackend::Local);
-		assert_ne!(selector.default_backend(), RuntimeBackend::Herdr);
+		assert_eq!(selector.default_backend(), RuntimeBackend::Herdr);
+		assert_ne!(selector.default_backend(), RuntimeBackend::Local);
 	}
 
 	#[test]
 	fn selector_rejects_dual_backend_ownership() {
-		let selector = RuntimeSelector::default();
+		let selector = RuntimeSelector::new(RuntimeBackend::Local);
 		selector.bind("sess-1", RuntimeBackend::Local).unwrap();
 		let err = selector.bind("sess-1", RuntimeBackend::Herdr).unwrap_err();
 		assert!(err.to_string().contains("owned by local"));
@@ -748,12 +749,16 @@ mod tests {
 
 	#[test]
 	fn selector_backend_for_unbound_uses_default() {
+		assert_eq!(
+			RuntimeSelector::default().backend_for("unknown").unwrap(),
+			RuntimeBackend::Herdr
+		);
 		let herdr = RuntimeSelector::new(RuntimeBackend::Herdr);
 		assert_eq!(
 			herdr.backend_for("unknown").unwrap(),
 			RuntimeBackend::Herdr
 		);
-		let local = RuntimeSelector::default();
+		let local = RuntimeSelector::new(RuntimeBackend::Local);
 		assert_eq!(
 			local.backend_for("unknown").unwrap(),
 			RuntimeBackend::Local
@@ -761,26 +766,49 @@ mod tests {
 	}
 
 	#[test]
-	fn router_production_constructor_selects_local() {
+	fn router_production_constructor_selects_herdr() {
 		let cwd = tempfile::tempdir().unwrap();
+		let sessions = infra::pty::create_session_map();
+		let read_threads = infra::pty::create_thread_tracker();
 		let router = RuntimeRouter::new(
 			LocalAdapter::new(PtyContext {
 				db: setup_db(),
-				sessions: infra::pty::create_session_map(),
+				sessions: sessions.clone(),
 				flush_senders: create_flush_senders(),
-				read_threads: infra::pty::create_thread_tracker(),
+				read_threads: read_threads.clone(),
 				emitter: Arc::new(TestEmitter),
 				output_dir: cwd.path().to_path_buf(),
 			}),
 			HerdrStubAdapter::new(),
 		);
-		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
-		assert_eq!(router.discovery().selected_backend, RuntimeBackend::Local);
-		assert_ne!(router.selected_backend(), RuntimeBackend::Herdr);
+		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
+		assert_eq!(router.discovery().selected_backend, RuntimeBackend::Herdr);
+		assert_ne!(router.selected_backend(), RuntimeBackend::Local);
+		let err = router
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "pr1".into(),
+					title: "t".into(),
+				},
+				&PtyConfig {
+					shell: test_shell(),
+					cwd: cwd.path().to_string_lossy().into_owned(),
+					rows: 24,
+					cols: 80,
+					startup_commands: Vec::new(),
+				},
+			)
+			.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is not available"),
+			"{err}"
+		);
+		assert!(sessions.lock().unwrap().is_empty());
+		infra::pty::join_all_read_threads(&read_threads);
 	}
 
 	#[test]
-	fn default_router_uses_local() {
+	fn explicit_local_router_uses_local() {
 		let fx = Fixture::new(RuntimeBackend::Local);
 		assert_eq!(fx.router.selected_backend(), RuntimeBackend::Local);
 		assert_eq!(

@@ -2742,7 +2742,7 @@ time.sleep(30)
 	fn stub_without_client_stays_fail_closed() {
 		let stub = HerdrStubAdapter::new();
 		let selector = RuntimeSelector::default();
-		assert_eq!(selector.default_backend(), RuntimeBackend::Local);
+		assert_eq!(selector.default_backend(), RuntimeBackend::Herdr);
 		let client = HerdrClient::connect_path(std::path::Path::new(
 			"/tmp/2code-ok.sock",
 		))
