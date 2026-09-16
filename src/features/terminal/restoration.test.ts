@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionBackend } from "@/generated";
 import {
@@ -135,5 +138,22 @@ describe("restorePendingTerminalTab", () => {
 		await restorePendingTerminalTab("profile-1", addPendingTab());
 
 		expect(useTerminalStore.getState().profiles["profile-1"]).toBeUndefined();
+	});
+});
+
+describe("terminal KEY PATTERNS", () => {
+	it("describes restore as reattach of a live Herdr pane_id", () => {
+		const here = dirname(fileURLToPath(import.meta.url));
+		const agents = readFileSync(join(here, "AGENTS.md"), "utf8");
+		const claude = readFileSync(join(here, "CLAUDE.md"), "utf8");
+		expect(agents).toBe(claude);
+		const keyPatterns = agents
+			.split("## KEY PATTERNS")[1]
+			.split("## WHERE TO LOOK")[0];
+		expect(keyPatterns).not.toContain("Fetch closed session history from DB");
+		expect(keyPatterns).not.toContain(
+			"Pass old `session.id` as `restoreFrom` prop",
+		);
+		expect(keyPatterns).toContain("reattaches each live `pane_id`");
 	});
 });
