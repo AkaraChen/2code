@@ -6,7 +6,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 ## FILES
 | File | Role |
 |------|------|
-| `project.rs` | Create/update/delete projects; folder validation; config loading via infra |
+| `project.rs` | Create/update/delete projects; GUI list adopts Herdr checkouts then live-reads profiles |
 | `profile.rs` | Create profile via Herdr `worktree.create` / `workspace.create`; delete via `worktree.remove` / `workspace.close` |
 | `runtime.rs` | Herdr-only RuntimeRouter (create/list/close/write/resize/restore) |
 | `runtime/herdr.rs` | Herdr adapter: pane_id sessions, frame stream, snapshot list |
@@ -33,6 +33,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 | Task | Location |
 |------|----------|
 | Profile worktree path | `profile.rs` — `resolve_worktree_base` + `build_worktree_dir_name` |
+| Launch/adopt checkouts | `project.rs` — `adopt_existing_checkouts` (GUI list); `list_with_runtime` (watcher live read) |
 | Herdr session restore | `runtime/herdr.rs` — reattach live `pane_id` |
 | Script execution | `infra::config::run_script` |
 | Branch slug generation | `infra::slug` |
