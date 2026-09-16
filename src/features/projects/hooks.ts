@@ -68,10 +68,10 @@ export function useProjectGroups() {
 	});
 }
 
-export function useGitBranch(folder: string, enabled = true) {
+export function useGitBranch(profileId: string, enabled = true) {
 	return useQuery({
-		queryKey: queryKeys.git.branch(folder),
-		queryFn: () => getGitBranch({ folder }),
+		queryKey: queryKeys.git.branch(profileId),
+		queryFn: () => getGitBranch({ profileId }),
 		enabled,
 		staleTime: GIT_LIGHT_REFRESH_INTERVAL_MS,
 		refetchInterval: enabled ? GIT_LIGHT_REFRESH_INTERVAL_MS : false,

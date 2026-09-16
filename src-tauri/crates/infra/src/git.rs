@@ -925,6 +925,23 @@ pub fn pull_request_status_for_branch(
 	Ok(prs.into_iter().next())
 }
 
+/// Whether `refs/heads/<branch>` already exists in the repository.
+pub fn local_branch_exists(
+	project_folder: &str,
+	branch_name: &str,
+) -> Result<bool, AppError> {
+	let output = command_without_windows_console("git")
+		.args([
+			"show-ref",
+			"--verify",
+			"--quiet",
+			&format!("refs/heads/{branch_name}"),
+		])
+		.current_dir(project_folder)
+		.output()?;
+	Ok(output.status.success())
+}
+
 /// Try `git worktree add -b <branch> <path>` (new branch).
 /// If the branch already exists, return an error.
 /// If a ref conflict blocks creation (e.g. `feat` exists, blocking `feat/auth`),

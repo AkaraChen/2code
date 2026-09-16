@@ -142,7 +142,7 @@ export function GitPullRequestStatusControl({
 	profile,
 	isActive,
 }: ControlProps) {
-	const { data: branch } = useGitBranch(profile.worktree_path, isActive);
+	const { data: branch } = useGitBranch(profile.id, isActive);
 	const { data: pr } = useGitPullRequestStatus(
 		profile.id,
 		branch,

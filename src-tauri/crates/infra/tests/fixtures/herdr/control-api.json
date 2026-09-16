@@ -1,0 +1,57 @@
+{
+  "transport": "newline-delimited JSON over a Unix domain socket (Windows: named pipe)",
+  "request": {
+    "id": "req_1",
+    "method": "ping",
+    "params": {}
+  },
+  "success": {
+    "id": "req_1",
+    "result": {
+      "type": "pong",
+      "version": "0.9.0",
+      "protocol": 22,
+      "capabilities": {
+        "live_handoff": true,
+        "detached_server_daemon": false,
+        "endpoint_protocol_generation": 1,
+        "surface_interest": true,
+        "health_check": true
+      }
+    }
+  },
+  "error": {
+    "id": "cli:worktree:remove",
+    "error": {
+      "code": "dirty_worktree_requires_force",
+      "message": "fatal: '<path>' contains modified or untracked files, use --force to delete it"
+    }
+  },
+  "subscription_ack": {
+    "id": "sub",
+    "result": { "type": "subscription_started" }
+  },
+  "subscription_event": {
+    "event": "pane_created",
+    "data": {
+      "type": "pane_created",
+      "pane": {
+        "pane_id": "w1:p2",
+        "terminal_id": "term_...",
+        "workspace_id": "w1",
+        "tab_id": "w1:t1"
+      }
+    }
+  },
+  "verified_error_codes": [
+    "dirty_worktree_requires_force",
+    "worktree_create_failed",
+    "workspace_group_close_required"
+  ],
+  "identity_fields": {
+    "workspace_id": "wN",
+    "tab_id": "wN:tM",
+    "pane_id": "wN:pK",
+    "terminal_id": "term_<hex> (new PTY after server restart; stable across client detach)"
+  }
+}

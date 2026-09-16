@@ -1,0 +1,17 @@
+{
+  "source": "Representative observe payload containing SGR color and UTF-8 Greek letters, matching live probe assertions.",
+  "record": {
+    "type": "terminal.frame",
+    "seq": 3,
+    "encoding": "ansi",
+    "width": 80,
+    "height": 24,
+    "full": false,
+    "bytes": "G1s/MjAyNmgbWzMxbVJFRF9DT0xPUhtbMG0gzrHOss6zG1s/MjAyNmw="
+  },
+  "decoded_utf8_contains": [
+    "\u03b1\u03b2\u03b3",
+    "RED_COLOR"
+  ],
+  "decoded_contains_csi": "ESC[31m"
+}

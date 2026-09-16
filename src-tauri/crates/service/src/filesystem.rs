@@ -7,6 +7,8 @@ use model::filesystem::{
 	FilePreview, FileSearchResult, FileTreeGitStatusEntry, ResolvedFilePath,
 };
 
+use crate::runtime::RuntimeRouter;
+
 pub fn search_file(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
@@ -25,42 +27,46 @@ pub fn get_file_tree_git_status(
 	infra::git::status(&profile.worktree_path)
 }
 
-/// Resolve profile ID to its worktree path (short DB lock).
+/// Resolve profile ID to its reconciled worktree path (short DB lock).
 pub fn get_profile_worktree_path(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<std::path::PathBuf, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	Ok(std::path::PathBuf::from(profile.worktree_path))
+	Ok(std::path::PathBuf::from(
+		crate::project::reconcile_profile_checkout(runtime, db, profile_id)?,
+	))
 }
 
 fn get_canonical_profile_worktree_path(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<std::path::PathBuf, AppError> {
-	let root = get_profile_worktree_path(db, profile_id)?;
+	let root = get_profile_worktree_path(runtime, db, profile_id)?;
 	root.canonicalize().map_err(AppError::IoError)
 }
 
 // Profile-scoped wrappers for tree operations (resolve trusted root from profile ID,
 // then delegate to infra which enforces relative path validation and root boundary).
 pub fn list_file_tree_child_paths(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	parent_path: Option<&str>,
 ) -> Result<Vec<String>, AppError> {
-	let root = get_canonical_profile_worktree_path(db, profile_id)?;
+	let root = get_canonical_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::list_file_tree_child_paths(&root, parent_path)
 }
 
 pub fn rename_file_tree_path(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	source_path: &str,
 	destination_path: &str,
 ) -> Result<(), AppError> {
-	let root = get_canonical_profile_worktree_path(db, profile_id)?;
+	let root = get_canonical_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::rename_file_tree_path(
 		&root,
 		source_path,
@@ -69,12 +75,13 @@ pub fn rename_file_tree_path(
 }
 
 pub fn move_file_tree_paths(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	source_paths: &[String],
 	target_dir_path: Option<&str>,
 ) -> Result<(), AppError> {
-	let root = get_canonical_profile_worktree_path(db, profile_id)?;
+	let root = get_canonical_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::move_file_tree_paths(
 		&root,
 		source_paths,
@@ -83,30 +90,33 @@ pub fn move_file_tree_paths(
 }
 
 pub fn delete_file_tree_paths(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	paths: &[String],
 ) -> Result<(), AppError> {
-	let root = get_canonical_profile_worktree_path(db, profile_id)?;
+	let root = get_canonical_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::delete_file_tree_paths(&root, paths)
 }
 
 pub fn create_file_tree_path(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: &str,
 	kind: &str,
 ) -> Result<(), AppError> {
-	let root = get_canonical_profile_worktree_path(db, profile_id)?;
+	let root = get_canonical_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::create_file_tree_path(&root, path, kind)
 }
 
 pub fn reveal_path_in_file_manager(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: Option<&str>,
 ) -> Result<(), AppError> {
-	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let worktree_root = get_profile_worktree_path(runtime, db, profile_id)?;
 	let path = infra::filesystem::resolve_existing_worktree_path_or_root(
 		&worktree_root,
 		path,
@@ -115,11 +125,12 @@ pub fn reveal_path_in_file_manager(
 }
 
 pub fn open_path_in_default_app(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: &str,
 ) -> Result<(), AppError> {
-	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let worktree_root = get_profile_worktree_path(runtime, db, profile_id)?;
 	let path = infra::filesystem::resolve_existing_worktree_path(
 		&worktree_root,
 		path,
@@ -129,11 +140,12 @@ pub fn open_path_in_default_app(
 }
 
 pub fn read_file_content(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: &str,
 ) -> Result<String, AppError> {
-	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let worktree_root = get_profile_worktree_path(runtime, db, profile_id)?;
 	let file_path = infra::filesystem::resolve_existing_worktree_path(
 		&worktree_root,
 		path,
@@ -143,12 +155,13 @@ pub fn read_file_content(
 }
 
 pub fn write_file_content(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: &str,
 	content: &str,
 ) -> Result<(), AppError> {
-	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let worktree_root = get_profile_worktree_path(runtime, db, profile_id)?;
 	let file_path = infra::filesystem::resolve_existing_worktree_path(
 		&worktree_root,
 		path,
@@ -158,13 +171,14 @@ pub fn write_file_content(
 }
 
 pub fn get_file_preview(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	path: &str,
 	file_cache_root: &Path,
 	office_cache_root: &Path,
 ) -> Result<FilePreview, AppError> {
-	let worktree_root = get_profile_worktree_path(db, profile_id)?;
+	let worktree_root = get_profile_worktree_path(runtime, db, profile_id)?;
 	let file_path = infra::filesystem::resolve_existing_worktree_path(
 		&worktree_root,
 		path,
@@ -238,11 +252,12 @@ pub fn get_file_preview(
 }
 
 pub fn resolve_terminal_file_path(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 	file_path: &str,
 ) -> Result<ResolvedFilePath, AppError> {
-	let worktree = get_profile_worktree_path(db, profile_id)?;
+	let worktree = get_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::resolve_file_path_in_worktree(&worktree, file_path)
 }
 

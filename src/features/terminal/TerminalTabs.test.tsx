@@ -228,6 +228,16 @@ describe("terminalTabs file tree drops", () => {
 		expect(screen.queryByTestId("terminal-old-session")).not.toBeInTheDocument();
 	});
 
+	it("mounts a live Herdr tab with the same session id and does not Local-restore", () => {
+		useTerminalStore.getState().addTab(profileId, "herdr-sess", "Claude");
+		useTerminalStore.getState().setActiveTab(profileId, "herdr-sess");
+
+		renderTerminalTabs();
+
+		expect(restorePendingTerminalTabMock).not.toHaveBeenCalled();
+		expect(screen.getByTestId("terminal-herdr-sess")).toBeInTheDocument();
+	});
+
 	it("renders running status as a breathing dot without label text", () => {
 		useTerminalStore.getState().addTab(profileId, "session-1", "Terminal 1");
 		useTerminalStore.getState().setAgentStatus("session-1", "running");

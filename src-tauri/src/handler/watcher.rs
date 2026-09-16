@@ -4,6 +4,7 @@ use tauri::State;
 use infra::db::DbPool;
 use infra::watcher::WatcherShutdownFlag;
 use model::watcher::WatchEvent;
+use service::runtime::RuntimeHandle;
 
 use crate::bridge::TauriWatchSender;
 
@@ -12,9 +13,16 @@ use crate::bridge::TauriWatchSender;
 pub fn watch_projects(
 	on_event: Channel<WatchEvent>,
 	state: State<'_, DbPool>,
+	runtime: State<'_, RuntimeHandle>,
 	shutdown: State<'_, WatcherShutdownFlag>,
 ) {
 	let db = state.inner().clone();
+	let runtime = runtime.inner().clone();
 	let flag = shutdown.inner().clone();
-	service::watcher::start(Box::new(TauriWatchSender(on_event)), db, flag);
+	service::watcher::start(
+		Box::new(TauriWatchSender(on_event)),
+		db,
+		runtime,
+		flag,
+	);
 }

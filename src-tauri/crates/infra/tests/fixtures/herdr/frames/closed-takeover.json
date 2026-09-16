@@ -1,0 +1,7 @@
+{
+  "source": "Live stdout on the displaced controller after --takeover.",
+  "record": {
+    "type": "terminal.closed",
+    "reason": "terminal attach taken over"
+  }
+}

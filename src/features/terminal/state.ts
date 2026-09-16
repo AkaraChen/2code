@@ -5,6 +5,7 @@ import { listProjectSessions, listProjects } from "@/generated";
 import { queryClient } from "@/shared/lib/queryClient";
 import { queryKeys } from "@/shared/lib/queryKeys";
 import { sweepTerminalStorage } from "./lib";
+import { hydrateRestorableSessions } from "./restoration";
 import { useTerminalStore } from "./store";
 
 /**
@@ -73,20 +74,7 @@ async function loadRestorableTerminals(projects: ProjectWithProfiles[]) {
 
 	const allSessions = projectSessions.flat();
 	if (allSessions.length > 0) {
-		for (const session of allSessions) {
-			useTerminalStore.getState().addRestoringTab(
-				session.profile_id,
-				session.id,
-				session.title,
-				{
-					oldSessionId: session.id,
-					shell: session.shell,
-					cwd: session.cwd,
-					rows: session.rows,
-					cols: session.cols,
-				},
-			);
-		}
+		await hydrateRestorableSessions(allSessions);
 	}
 
 	const liveSessionIds = new Set(

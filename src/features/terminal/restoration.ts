@@ -2,9 +2,10 @@ import consola from "consola";
 import {
 	closePtySession,
 	deletePtySessionRecord,
+	getSessionBackend,
 	restorePtySession,
 } from "@/generated";
-import { removeTerminalStorage } from "./lib";
+import { removeTerminalBuffer, removeTerminalStorage } from "./lib";
 import {
 	useTerminalStore,
 	type PendingTerminalRestore,
@@ -12,12 +13,74 @@ import {
 } from "./store";
 
 /**
- * Transient scrollback data for restored sessions.
+ * Transient scrollback data for restored Local sessions.
  * Written during restoration, consumed once by Terminal.tsx on mount, then deleted.
+ * Herdr reopen attaches the live pane instead and never populates this map.
  */
 export const sessionHistory = new Map<string, Uint8Array>();
 
 const pendingRestores = new Map<string, Promise<void>>();
+
+export interface RestorableSession {
+	id: string;
+	profile_id: string;
+	title: string;
+	shell: string;
+	cwd: string;
+	rows: number;
+	cols: number;
+}
+
+/**
+ * Rebuild tabs from `list_project_sessions`. Herdr ids become live tabs on the
+ * same 2code session id (attach on mount). Local ids keep the pending-restore
+ * path that calls `restorePtySession`.
+ */
+export async function hydrateRestorableSessions(
+	sessions: RestorableSession[],
+): Promise<void> {
+	for (const session of sessions) {
+		let backend: "local" | "herdr";
+		try {
+			backend = await getSessionBackend({ sessionId: session.id });
+		} catch (error) {
+			consola.error(
+				`[pty-restore] failed to resolve backend for ${session.id}`,
+				error,
+			);
+			continue;
+		}
+
+		if (backend === "herdr") {
+			reattachHerdrSession(session);
+			continue;
+		}
+
+		useTerminalStore.getState().addRestoringTab(
+			session.profile_id,
+			session.id,
+			session.title,
+			{
+				oldSessionId: session.id,
+				shell: session.shell,
+				cwd: session.cwd,
+				rows: session.rows,
+				cols: session.cols,
+			},
+		);
+	}
+}
+
+function reattachHerdrSession(session: RestorableSession) {
+	removeTerminalBuffer(session.id);
+	const existing = useTerminalStore
+		.getState()
+		.profiles[session.profile_id]?.tabs.some((tab) => tab.id === session.id);
+	if (existing) return;
+	useTerminalStore
+		.getState()
+		.addTab(session.profile_id, session.id, session.title);
+}
 
 export function restorePendingTerminalTab(
 	profileId: string,
@@ -47,6 +110,24 @@ async function runRestore(
 	title: string,
 	restore: PendingTerminalRestore,
 ) {
+	const backend = await getSessionBackend({
+		sessionId: restore.oldSessionId,
+	});
+	if (backend === "herdr") {
+		removeTerminalBuffer(restore.oldSessionId);
+		if (!isPendingRestoreStillOpen(profileId, restore.oldSessionId)) {
+			return;
+		}
+		useTerminalStore
+			.getState()
+			.finishRestoringTab(
+				profileId,
+				restore.oldSessionId,
+				restore.oldSessionId,
+			);
+		return;
+	}
+
 	const result = await restorePtySession({
 		oldSessionId: restore.oldSessionId,
 		meta: { profileId, title },

@@ -20,6 +20,39 @@ pub enum AppError {
 
 	#[error("Git error: {0}")]
 	GitError(String),
+
+	#[error("Herdr server is absent: {0}")]
+	HerdrServerAbsent(String),
+
+	#[error("Herdr server is incompatible: {0}")]
+	HerdrServerIncompatible(String),
+
+	#[error("Herdr transport error: {0}")]
+	HerdrTransport(String),
+
+	#[error("Herdr request outcome is uncertain: {0}")]
+	HerdrUncertainOutcome(String),
+
+	#[error("Runtime mapping already bound: {0}")]
+	RuntimeMappingAlreadyBound(String),
+
+	#[error("Runtime mapping is missing: {0}")]
+	RuntimeMappingMissing(String),
+
+	#[error("Runtime mapping was replaced: {0}")]
+	RuntimeMappingReplaced(String),
+
+	#[error("Herdr terminal controller conflict: {0}")]
+	HerdrControllerConflict(String),
+
+	#[error("Herdr terminal attach is unsupported on this platform: {0}")]
+	HerdrUnsupportedPlatform(String),
+
+	#[error("Herdr terminal message is too large: {0}")]
+	HerdrTerminalMessageTooLarge(String),
+
+	#[error("Herdr terminal consumer is too slow: {0}")]
+	HerdrTerminalSlowConsumer(String),
 }
 
 impl Serialize for AppError {
@@ -85,6 +118,80 @@ mod tests {
 	fn display_git_error() {
 		let err = AppError::GitError("branch not found".into());
 		assert_eq!(err.to_string(), "Git error: branch not found");
+	}
+
+	#[test]
+	fn display_herdr_absent_is_distinct_from_incompatible() {
+		let absent = AppError::HerdrServerAbsent("/tmp/x.sock".into());
+		let incompatible =
+			AppError::HerdrServerIncompatible("protocol 1".into());
+		assert_eq!(absent.to_string(), "Herdr server is absent: /tmp/x.sock");
+		assert_eq!(
+			incompatible.to_string(),
+			"Herdr server is incompatible: protocol 1"
+		);
+		assert!(!absent.to_string().contains("incompatible"));
+		assert!(!incompatible.to_string().contains("absent"));
+	}
+
+	#[test]
+	fn display_herdr_uncertain_is_distinct_from_transport() {
+		let transport = AppError::HerdrTransport("disconnected".into());
+		let uncertain =
+			AppError::HerdrUncertainOutcome("workspace.create".into());
+		assert_eq!(
+			transport.to_string(),
+			"Herdr transport error: disconnected"
+		);
+		assert_eq!(
+			uncertain.to_string(),
+			"Herdr request outcome is uncertain: workspace.create"
+		);
+		assert!(!transport.to_string().contains("uncertain"));
+		assert!(!uncertain.to_string().contains("transport error"));
+	}
+
+	#[test]
+	fn display_mapping_conflicts_are_distinct() {
+		let bound = AppError::RuntimeMappingAlreadyBound("workspace w1".into());
+		let missing = AppError::RuntimeMappingMissing("workspace w1".into());
+		let replaced = AppError::RuntimeMappingReplaced("workspace w2".into());
+		assert_eq!(
+			bound.to_string(),
+			"Runtime mapping already bound: workspace w1"
+		);
+		assert_eq!(
+			missing.to_string(),
+			"Runtime mapping is missing: workspace w1"
+		);
+		assert_eq!(
+			replaced.to_string(),
+			"Runtime mapping was replaced: workspace w2"
+		);
+		assert!(!bound.to_string().contains("missing"));
+		assert!(!bound.to_string().contains("replaced"));
+		assert!(!missing.to_string().contains("already bound"));
+		assert!(!missing.to_string().contains("replaced"));
+		assert!(!replaced.to_string().contains("already bound"));
+		assert!(!replaced.to_string().contains("missing"));
+	}
+
+	#[test]
+	fn display_terminal_bridge_errors_are_distinct() {
+		let conflict = AppError::HerdrControllerConflict(
+			"already has an attached client; retry with --takeover".into(),
+		);
+		let unsupported = AppError::HerdrUnsupportedPlatform("windows".into());
+		let oversize = AppError::HerdrTerminalMessageTooLarge("9 > 8".into());
+		let slow = AppError::HerdrTerminalSlowConsumer("cap".into());
+		assert!(conflict.to_string().contains("controller conflict"));
+		assert!(unsupported.to_string().contains("unsupported"));
+		assert!(oversize.to_string().contains("too large"));
+		assert!(slow.to_string().contains("too slow"));
+		assert!(!conflict.to_string().contains("unsupported"));
+		assert!(!unsupported.to_string().contains("conflict"));
+		assert!(!oversize.to_string().contains("slow"));
+		assert!(!slow.to_string().contains("too large"));
 	}
 
 	// --- Serialize produces JSON string ---

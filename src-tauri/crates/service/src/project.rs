@@ -3,14 +3,17 @@ use std::path::Path;
 use diesel::{Connection, SqliteConnection};
 use uuid::Uuid;
 
+use infra::db::DbPool;
 use model::error::AppError;
 use model::project::{
 	GitBinaryPreview, GitCommit, GitDiffStats, GitPullRequestStatus, Project,
 	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
+use model::runtime::HERDR_NAMESPACE;
+use model::runtime_mapping::ProfileRuntimeMapping;
 
-use crate::pty::PtyContext;
+use crate::runtime::{HerdrWorktreeClient, RuntimeRouter};
 
 pub fn create_from_folder(
 	conn: &mut SqliteConnection,
@@ -44,6 +47,120 @@ pub fn list(
 	repo::project::list_all_with_profiles(conn)
 }
 
+/// Reconcile Herdr-mapped checkout caches, then return the catalog.
+///
+/// Unmapped profiles and Local-without-client keep `profiles.worktree_path`.
+/// Unavailable mapped workspaces fail closed for that profile: the catalog
+/// keeps the previous cache and does not fall back to `project.folder`,
+/// another profile, or a label rematch. Does not start Herdr.
+pub fn list_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+) -> Result<Vec<ProjectWithProfiles>, AppError> {
+	let mut projects = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::project::list_all_with_profiles(conn)?
+	};
+
+	for project in &mut projects {
+		for profile in &mut project.profiles {
+			match reconcile_profile_checkout(runtime, db, &profile.id) {
+				Ok(path) => profile.worktree_path = path,
+				Err(AppError::RuntimeMappingMissing(_))
+				| Err(AppError::HerdrUncertainOutcome(_)) => {}
+				Err(err) => return Err(err),
+			}
+		}
+	}
+
+	Ok(projects)
+}
+
+/// Resolve the checkout used by Git, filesystem, watcher, and
+/// terminal-link consumers.
+///
+/// Mapped profiles in namespace `2code` use JSON `worktree.list` keyed by
+/// `workspace_id`. The listed path is persisted into `profiles.worktree_path`
+/// as a cache. Identity stays `workspace_id`. Local-unmapped profiles and
+/// mapped profiles without an injected Herdr client use the DB cache.
+pub fn reconcile_profile_checkout(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let (cache, mapping) = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let profile = repo::profile::find_by_id(conn, profile_id)?;
+		let mapping =
+			match repo::runtime_mapping::find_profile_mapping(conn, profile_id)
+			{
+				Ok(mapping) => Some(mapping),
+				Err(AppError::NotFound(_)) => None,
+				Err(err) => return Err(err),
+			};
+		(profile.worktree_path, mapping)
+	};
+
+	let Some(mapping) = mapping else {
+		return Ok(cache);
+	};
+	if mapping.namespace != HERDR_NAMESPACE {
+		return Err(AppError::DbError(format!(
+			"runtime mappings must use the {HERDR_NAMESPACE} namespace"
+		)));
+	}
+	let Some(worktrees) = runtime.herdr_worktrees_optional() else {
+		return Ok(cache);
+	};
+
+	persist_listed_checkout(worktrees, db, profile_id, &mapping, &cache)
+}
+
+fn persist_listed_checkout(
+	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
+	profile_id: &str,
+	mapping: &ProfileRuntimeMapping,
+	cache: &str,
+) -> Result<String, AppError> {
+	let listed =
+		match worktrees.worktree_list(None, Some(&mapping.workspace_id)) {
+			Ok(listed) => listed,
+			Err(AppError::HerdrUncertainOutcome(_)) => {
+				return Err(AppError::HerdrUncertainOutcome(
+					"worktree.list is uncertain; not replaying".into(),
+				));
+			}
+			Err(err) => return Err(err),
+		};
+
+	let matches: Vec<_> = listed
+		.iter()
+		.filter(|entry| {
+			entry.workspace_id.as_deref() == Some(mapping.workspace_id.as_str())
+		})
+		.collect();
+	let Some(entry) = matches.first() else {
+		return Err(AppError::RuntimeMappingMissing(format!(
+			"workspace {} is unavailable",
+			mapping.workspace_id
+		)));
+	};
+	if matches.len() != 1 || entry.path.is_empty() {
+		return Err(AppError::RuntimeMappingMissing(format!(
+			"workspace {} is unavailable",
+			mapping.workspace_id
+		)));
+	}
+
+	if entry.path != cache {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::profile::set_worktree_path(conn, profile_id, &entry.path)?;
+	}
+
+	Ok(entry.path.clone())
+}
+
 pub fn update(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -60,9 +177,13 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
-pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
+pub fn delete_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &infra::db::DbPool,
+	id: &str,
+) -> Result<(), AppError> {
 	let (project, session_ids) = {
-		let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let project = repo::project::find_by_id(conn, id)?;
 		let session_ids = repo::pty::list_by_project(conn, id)?
 			.into_iter()
@@ -72,15 +193,10 @@ pub fn delete_with_context(ctx: &PtyContext, id: &str) -> Result<(), AppError> {
 	};
 
 	for session_id in &session_ids {
-		crate::pty::close_session_full(
-			&ctx.sessions,
-			&ctx.flush_senders,
-			&ctx.output_dir,
-			session_id,
-		)?;
+		runtime.forget_project_session(session_id)?;
 	}
 
-	let conn = &mut *ctx.db.lock().map_err(|_| AppError::LockError)?;
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 	for session_id in &session_ids {
 		repo::pty::mark_closed(conn, session_id);
 	}
@@ -210,6 +326,15 @@ fn cleanup_empty_group(
 
 pub fn get_branch(folder: &str) -> Result<String, AppError> {
 	infra::git::branch(folder)
+}
+
+pub fn get_branch_for_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<String, AppError> {
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::branch(&worktree_path)
 }
 
 pub fn get_diff(
@@ -359,4 +484,509 @@ pub fn get_github_avatar(
 ) -> Result<Option<String>, AppError> {
 	let project = repo::project::find_by_id(conn, project_id)?;
 	Ok(infra::git::github_avatar_url(&project.folder))
+}
+
+#[cfg(test)]
+mod tests {
+	use std::path::Path;
+	use std::sync::{Arc, Mutex};
+
+	use diesel::prelude::*;
+	use diesel_migrations::MigrationHarness;
+	use infra::herdr::transport::{
+		WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
+		WorktreeOpenResult, WorktreeRemoveResult,
+	};
+	use model::runtime::HERDR_NAMESPACE;
+
+	use super::*;
+	use crate::pty::{create_flush_senders, PtyContext};
+	use crate::runtime::{HerdrStubAdapter, LocalAdapter, TerminalRuntime};
+	use crate::PtyEventEmitter;
+
+	struct TestEmitter;
+
+	impl PtyEventEmitter for TestEmitter {
+		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
+			true
+		}
+
+		fn emit_exit(&self, _session_id: &str) {}
+	}
+
+	struct ListCall {
+		cwd: Option<String>,
+		workspace_id: Option<String>,
+	}
+
+	struct FakeListState {
+		methods: Vec<String>,
+		calls: Vec<ListCall>,
+		listed: Vec<WorktreeListEntry>,
+		list_error: Option<AppError>,
+	}
+
+	struct FakeList {
+		state: Mutex<FakeListState>,
+	}
+
+	impl FakeList {
+		fn new(listed: Vec<WorktreeListEntry>) -> Arc<Self> {
+			Arc::new(Self {
+				state: Mutex::new(FakeListState {
+					methods: Vec::new(),
+					calls: Vec::new(),
+					listed,
+					list_error: None,
+				}),
+			})
+		}
+
+		fn methods(&self) -> Vec<String> {
+			self.state.lock().unwrap().methods.clone()
+		}
+
+		fn calls(&self) -> Vec<(Option<String>, Option<String>)> {
+			self.state
+				.lock()
+				.unwrap()
+				.calls
+				.iter()
+				.map(|call| (call.cwd.clone(), call.workspace_id.clone()))
+				.collect()
+		}
+
+		fn fail_list(&self, err: AppError) {
+			self.state.lock().unwrap().list_error = Some(err);
+		}
+	}
+
+	impl HerdrWorktreeClient for FakeList {
+		fn worktree_create(
+			&self,
+			_request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			self.state.lock().unwrap().methods.push("create".into());
+			Err(AppError::PtyError(
+				"path reconcile does not create worktrees".into(),
+			))
+		}
+
+		fn worktree_list(
+			&self,
+			cwd: Option<&Path>,
+			workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("worktree.list".into());
+			state.calls.push(ListCall {
+				cwd: cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
+				workspace_id: workspace_id.map(str::to_string),
+			});
+			if let Some(err) = state.list_error.take() {
+				return Err(err);
+			}
+			Ok(state.listed.clone())
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			_path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			self.state
+				.lock()
+				.unwrap()
+				.methods
+				.push("worktree.open".into());
+			Err(AppError::PtyError(
+				"path reconcile does not open worktrees".into(),
+			))
+		}
+
+		fn worktree_remove(
+			&self,
+			_workspace_id: &str,
+			_force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			self.state
+				.lock()
+				.unwrap()
+				.methods
+				.push("worktree.remove".into());
+			Err(AppError::PtyError(
+				"path reconcile does not remove worktrees".into(),
+			))
+		}
+
+		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
+			self.state
+				.lock()
+				.unwrap()
+				.methods
+				.push("session.snapshot".into());
+			Err(AppError::PtyError(
+				"session.snapshot is not part of path reconcile".into(),
+			))
+		}
+	}
+
+	fn setup_db() -> SqliteConnection {
+		let mut conn =
+			SqliteConnection::establish(":memory:").expect("in-memory db");
+		diesel::sql_query("PRAGMA foreign_keys=ON;")
+			.execute(&mut conn)
+			.ok();
+		conn.run_pending_migrations(infra::db::MIGRATIONS)
+			.expect("run migrations");
+		conn
+	}
+
+	fn pool_from(conn: SqliteConnection) -> DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
+	fn local_router(
+		db: &DbPool,
+		worktrees: Option<Arc<FakeList>>,
+	) -> RuntimeRouter {
+		let logs = std::env::temp_dir().join("2code-project-path-logs");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		let herdr = match worktrees {
+			Some(client) => HerdrStubAdapter::with_worktree_client(client),
+			None => HerdrStubAdapter::new(),
+		};
+		RuntimeRouter::new(LocalAdapter::new(ctx), herdr)
+	}
+
+	fn insert_catalog(
+		conn: &mut SqliteConnection,
+		folder: &str,
+		worktree_path: &str,
+	) -> (String, String) {
+		let project = repo::project::insert(conn, "proj-1", "Project", folder)
+			.expect("insert project");
+		let profile = repo::profile::insert(
+			conn,
+			"prof-1",
+			&project.id,
+			"feat/x",
+			worktree_path,
+		)
+		.expect("insert profile");
+		(project.id, profile.id)
+	}
+
+	fn listed(
+		path: &str,
+		workspace_id: Option<&str>,
+		branch: Option<&str>,
+	) -> WorktreeListEntry {
+		WorktreeListEntry {
+			path: path.to_string(),
+			branch: branch.map(str::to_string),
+			workspace_id: workspace_id.map(str::to_string),
+			is_linked_worktree: true,
+		}
+	}
+
+	#[test]
+	fn project_delete_is_forget_retain() {
+		let src = include_str!("project.rs");
+		let delete = src
+			.split("pub fn delete_with_runtime")
+			.nth(1)
+			.unwrap()
+			.split("pub fn create_group")
+			.next()
+			.unwrap();
+		assert!(delete.contains("forget_project_session"));
+		assert!(!delete.contains("worktree.remove"));
+		assert!(!delete.contains("worktree_remove"));
+		assert!(!delete.contains("git::worktree_remove"));
+		assert!(!delete.contains("workspace.close"));
+		assert!(!delete.contains("workspace_close"));
+		assert!(!delete.contains("pane.close"));
+		assert!(!delete.contains("pane_close"));
+		assert!(!delete.contains("teardown_session"));
+		assert!(!delete.contains("server.stop"));
+		assert!(!delete.contains("pane.send_input"));
+		assert!(!delete.contains("--takeover"));
+		let handler = include_str!("../../../src/handler/project.rs");
+		let delete = handler
+			.split("pub async fn delete_project")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn create_project_group")
+			.next()
+			.unwrap();
+		assert!(delete.contains("delete_with_runtime"));
+		assert!(!delete.contains("worktree.remove"));
+		assert!(!delete.contains("pane.close"));
+	}
+
+	#[test]
+	fn path_reconcile_does_not_mutate_or_start_herdr() {
+		let src = include_str!("project.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		let reconcile = src
+			.split("pub fn reconcile_profile_checkout")
+			.nth(1)
+			.unwrap()
+			.split("pub fn update")
+			.next()
+			.unwrap();
+		assert!(reconcile.contains("worktree_list"));
+		assert!(reconcile.contains("workspace_id"));
+		let dotted = |name: &str| format!("worktree.{name}");
+		assert!(!reconcile.contains(&dotted("create")));
+		assert!(!reconcile.contains("worktree_create"));
+		assert!(!reconcile.contains(&dotted("remove")));
+		assert!(!reconcile.contains("worktree_remove"));
+		assert!(!reconcile.contains(&dotted("open")));
+		assert!(!reconcile.contains("worktree_open"));
+		assert!(!reconcile.contains("git::worktree"));
+		assert!(!reconcile.contains("workspace.close"));
+		assert!(!reconcile.contains("pane.close"));
+		assert!(!reconcile.contains("pane.send_input"));
+		assert!(!reconcile.contains("server.stop"));
+		assert!(!reconcile.contains("--takeover"));
+		assert!(!reconcile.contains("herdr-client.sock"));
+		assert!(!reconcile.contains("ensure_herdr_listener"));
+		assert!(!reconcile.contains("ProjectedWorkspace"));
+		assert!(!reconcile.contains("apply_snapshot"));
+		assert!(!reconcile.contains("session_snapshot"));
+		let lib = include_str!("../../../src/lib.rs");
+		assert!(!lib.contains("ensure_herdr_listener"));
+		assert!(src.contains("herdr_worktrees_optional"));
+	}
+
+	#[test]
+	fn unmapped_profile_uses_db_worktree_path() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/repo/wt");
+		let db = pool_from(conn);
+		let fake =
+			FakeList::new(vec![listed("/other", Some("w1"), Some("feat/x"))]);
+		let runtime = local_router(&db, Some(fake.clone()));
+
+		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect("unmapped cache");
+
+		assert_eq!(path, "/repo/wt");
+		assert!(fake.methods().is_empty());
+		assert_eq!(
+			runtime.selected_backend(),
+			model::runtime::RuntimeBackend::Local
+		);
+	}
+
+	#[test]
+	fn mapped_profile_without_client_uses_cache_and_does_not_start_herdr() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let runtime = local_router(&db, None);
+
+		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect("cache without client");
+
+		assert_eq!(path, "/stale");
+		assert!(runtime.herdr_worktrees_optional().is_none());
+		assert_eq!(
+			runtime.selected_backend(),
+			model::runtime::RuntimeBackend::Local
+		);
+	}
+
+	#[test]
+	fn mapped_profile_persists_listed_path_for_workspace_id() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![
+			listed("/other", Some("w2"), Some("feat/x")),
+			listed("/listed", Some("w1"), Some("other-name")),
+		]);
+		let runtime = local_router(&db, Some(fake.clone()));
+
+		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect("listed path");
+
+		assert_eq!(path, "/listed");
+		assert_eq!(fake.calls(), vec![(None, Some("w1".into()))]);
+		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::find_by_id(conn, &profile_id)
+				.unwrap()
+				.worktree_path,
+			"/listed"
+		);
+	}
+
+	#[test]
+	fn mapped_unavailable_workspace_does_not_fall_back() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![
+			listed("/repo", Some("w-default"), Some("main")),
+			listed("/other-profile", Some("w2"), Some("feat/x")),
+		]);
+		let runtime = local_router(&db, Some(fake.clone()));
+
+		let err = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect_err("unavailable");
+
+		assert!(matches!(err, AppError::RuntimeMappingMissing(_)), "{err}");
+		assert!(err.to_string().contains("w1"));
+		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::find_by_id(conn, &profile_id)
+				.unwrap()
+				.worktree_path,
+			"/stale"
+		);
+	}
+
+	#[test]
+	fn uncertain_worktree_list_is_not_replayed() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![listed("/listed", Some("w1"), None)]);
+		fake.fail_list(AppError::HerdrUncertainOutcome("dropped".into()));
+		let runtime = local_router(&db, Some(fake.clone()));
+
+		let err = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect_err("uncertain");
+
+		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
+		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::find_by_id(conn, &profile_id)
+				.unwrap()
+				.worktree_path,
+			"/stale"
+		);
+	}
+
+	#[test]
+	fn list_with_runtime_returns_reconciled_worktree_path() {
+		let mut conn = setup_db();
+		let (project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let unmapped = repo::profile::insert(
+			&mut conn,
+			"prof-local",
+			&project_id,
+			"local",
+			"/local-wt",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![listed("/listed", Some("w1"), None)]);
+		let runtime = local_router(&db, Some(fake.clone()));
+
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+
+		let project = &listed[0];
+		let mapped = project
+			.profiles
+			.iter()
+			.find(|profile| profile.id == profile_id)
+			.unwrap();
+		let local = project
+			.profiles
+			.iter()
+			.find(|profile| profile.id == unmapped.id)
+			.unwrap();
+		assert_eq!(mapped.worktree_path, "/listed");
+		assert_eq!(local.worktree_path, "/local-wt");
+		assert_eq!(fake.calls(), vec![(None, Some("w1".into()))]);
+	}
+
+	#[test]
+	fn list_with_runtime_keeps_cache_when_mapped_workspace_is_unavailable() {
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, "/repo", "/stale");
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&profile_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![listed("/repo", Some("w-other"), None)]);
+		let runtime = local_router(&db, Some(fake));
+
+		let listed = list_with_runtime(&runtime, &db).expect("catalog");
+
+		assert_eq!(listed[0].profiles[0].worktree_path, "/stale");
+	}
+
+	#[test]
+	fn runtime_new_stays_local_for_path_reconcile() {
+		let db = pool_from(setup_db());
+		let runtime = local_router(&db, None);
+		assert_eq!(
+			runtime.selected_backend(),
+			model::runtime::RuntimeBackend::Local
+		);
+	}
 }

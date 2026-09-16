@@ -78,10 +78,10 @@ describe("queryKeys", () => {
 	});
 
 	describe("git", () => {
-		it("branch() includes folder in key", () => {
-			expect(queryKeys.git.branch("/path/to/repo")).toEqual([
+		it("branch() includes profileId in key", () => {
+			expect(queryKeys.git.branch("profile-1")).toEqual([
 				"git-branch",
-				"/path/to/repo",
+				"profile-1",
 			]);
 		});
 

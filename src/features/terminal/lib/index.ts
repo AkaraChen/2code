@@ -19,6 +19,16 @@ export {
 } from "./charSize";
 export { scheduleFontSettleRefit } from "./fontSettle";
 export {
+	herdrAgentPublishStatus,
+	mapHerdrAgentStatus,
+} from "./herdrAgent";
+export {
+	applyHerdrFrameAction,
+	HerdrFrameCursor,
+	herdrFrameBytes,
+} from "./herdrFrames";
+export { blockHerdrQueryReplies } from "./herdrQueryGuard";
+export {
 	installImagePasteFallback,
 } from "./imagePasteFallback";
 export {
@@ -33,8 +43,16 @@ export { suppressQueryResponses } from "./suppressQueryResponses";
 export {
 	BUFFER_STORAGE_PREFIX,
 	DIMS_STORAGE_PREFIX,
+	removeTerminalBuffer,
 	removeTerminalStorage,
 	sweepTerminalStorage,
 } from "./terminalStorage";
+export {
+	hydrateHerdrAgentStatus,
+	resolveTerminalTransportKind,
+	startHerdrAgentStream,
+	startHerdrFrameStream,
+	startLocalByteStream,
+} from "./terminalTransport";
 export { TitleDebouncer } from "./titleDebounce";
 export { installAttachedCanvasMetrics } from "./xtermMetricsPatch";

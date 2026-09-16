@@ -1,9 +1,10 @@
-use tauri::{AppHandle, State};
+use tauri::State;
 
 use infra::db::DbPool;
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
+use service::runtime::RuntimeHandle;
 
 fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 	GitDiffStats {
@@ -19,11 +20,14 @@ pub async fn create_profile(
 	project_id: String,
 	branch_name: String,
 	default_worktree_dir: Option<String>,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		service::profile::create_with_db(
+		service::profile::create_with_runtime(
+			&runtime,
 			&db,
 			&project_id,
 			&branch_name,
@@ -36,12 +40,14 @@ pub async fn create_profile(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn delete_profile(
-	app: AppHandle,
 	id: String,
+	runtime: State<'_, RuntimeHandle>,
+	state: State<'_, DbPool>,
 ) -> Result<(), AppError> {
-	let ctx = crate::bridge::build_pty_context(&app);
+	let runtime = runtime.inner().clone();
+	let db = state.inner().clone();
 	super::run_blocking(move || {
-		service::profile::delete_with_context(&ctx, &id)
+		service::profile::delete_with_runtime(&runtime, &db, &id)
 	})
 	.await
 }

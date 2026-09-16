@@ -1,0 +1,41 @@
+Herdr
+Version: 0.9.0
+Tag: v0.9.0
+Source commit: b99002ac99b09e00b4ca692436cb15a6b0d676f1
+Release: https://github.com/herdrdev/herdr/releases/tag/v0.9.0
+License: Apache-2.0
+LICENSE: https://github.com/herdrdev/herdr/blob/v0.9.0/LICENSE
+
+This directory vendors the Apache-2.0 license text for the Herdr v0.9.0
+executable that 2code packages as a sidecar. Upstream v0.9.0 does not
+publish a NOTICE file; this record exists so packaging does not depend
+on the website.
+
+Checksum source: GitHub Release asset digest (SHA-256). No detached GPG
+or cosign signature is published for this tag.
+
+Assets:
+  herdr-linux-x86_64
+    https://github.com/herdrdev/herdr/releases/download/v0.9.0/herdr-linux-x86_64
+    sha256: 4fa1a01158dd8043da92d31b270780b0dcc10603038d9b61cac4d81ab63fb71f
+    sidecar: herdr-x86_64-unknown-linux-gnu
+  herdr-linux-aarch64
+    https://github.com/herdrdev/herdr/releases/download/v0.9.0/herdr-linux-aarch64
+    sha256: 9c8db20fb7e7427b138d5367113f1621ffd319f2f65d6f009e2594029115f0d2
+    sidecar: herdr-aarch64-unknown-linux-gnu
+  herdr-macos-aarch64
+    https://github.com/herdrdev/herdr/releases/download/v0.9.0/herdr-macos-aarch64
+    sha256: 32b53df09872628059c789a69f02a6b8e29e14ddf26711421f3463f70c1aef17
+    sidecar: herdr-aarch64-apple-darwin
+  herdr-macos-x86_64
+    https://github.com/herdrdev/herdr/releases/download/v0.9.0/herdr-macos-x86_64
+    sha256: d0c920b2a126a74809fa1491411c9a097a44786cac9c2ca51b818a995581cf16
+    sidecar: herdr-x86_64-apple-darwin
+  herdr-windows-x86_64.zip
+    https://github.com/herdrdev/herdr/releases/download/v0.9.0/herdr-windows-x86_64.zip
+    sha256: b4508c445de1c1a68c760a01735da2aba2fa214b2aafd4b07f732e49b2a64b11
+    sidecar: herdr-x86_64-pc-windows-msvc.exe (zip digest, then herdr.exe)
+    Windows ARM64 is unsupported.
+
+Canonical pin: src-tauri/crates/infra/tests/fixtures/herdr/pin.json
+The binary itself is not stored in git.

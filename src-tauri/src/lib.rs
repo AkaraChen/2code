@@ -19,6 +19,8 @@ pub fn run() {
 	let output_receivers = bridge::create_output_receivers();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
+	let herdr_clients = service::runtime::HerdrClientGuard::new();
+	let herdr_clients_for_exit = herdr_clients.clone();
 
 	let app = tauri::Builder::default()
 		.plugin(tauri_plugin_process::init())
@@ -35,6 +37,7 @@ pub fn run() {
 		.manage(output_sinks)
 		.manage(output_receivers)
 		.manage(shutdown_flag)
+		.manage(herdr_clients)
 		.manage(layer_handle)
 		.manage(handler::updater::PendingUpdate::default())
 		.setup(move |app| {
@@ -70,6 +73,7 @@ pub fn run() {
 			app.manage(service::pty::PtyLogDir(log_dir));
 
 			app.manage(pool);
+			app.manage(crate::bridge::build_runtime(app.handle()));
 
 			Ok(())
 		})
@@ -77,6 +81,7 @@ pub fn run() {
 			handler::pty::create_pty_session,
 			handler::pty::write_to_pty,
 			handler::pty::resize_pty,
+			handler::pty::scroll_pty,
 			handler::pty::close_pty_session,
 			handler::pty::list_project_sessions,
 			handler::pty::get_pty_session_history,
@@ -84,8 +89,12 @@ pub fn run() {
 			handler::pty::flush_pty_output,
 			handler::pty::clear_pty_output,
 			handler::pty::restore_pty_session,
+			handler::pty::get_session_backend,
+			handler::pty::get_session_agent_status,
+			handler::pty::stream_session_agent_status,
 			handler::pty::attach_pty_output,
 			handler::pty::stream_pty_output,
+			handler::pty::stream_herdr_output,
 			handler::pty::detach_pty_output,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,
@@ -157,6 +166,14 @@ pub fn run() {
 
 		if let tauri::RunEvent::Exit = event {
 			shutdown_for_exit.store(true, Ordering::Relaxed);
+			service::runtime::release_herdr_client_helpers(
+				&herdr_clients_for_exit,
+			);
+			if let Some(runtime) =
+				app_handle.try_state::<service::runtime::RuntimeHandle>()
+			{
+				runtime.release_attachments();
+			}
 			infra::pty::close_all_sessions(&sessions_for_exit);
 			tracing::info!(target: "pty", "exit: joining read threads...");
 			infra::pty::join_all_read_threads(&read_threads_for_exit);

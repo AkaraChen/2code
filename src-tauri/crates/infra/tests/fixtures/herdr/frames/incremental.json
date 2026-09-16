@@ -1,0 +1,20 @@
+{
+  "source": "Captured from herdr 0.9.0 observe after a subsequent pane.run. Reduced to the incremental sequences the probe asserts.",
+  "record": {
+    "type": "terminal.frame",
+    "seq": 2,
+    "encoding": "ansi",
+    "width": 80,
+    "height": 24,
+    "full": false,
+    "bytes": "G1s/MjAyNmgbWz8yNWwbXTg7OxtcG1s0OzFISU5DUl9MSU5FX1hZWhtbNTsxSCQgG1s/MjVoG1s/MjAyNmw="
+  },
+  "decoded_contains": [
+    "INCR_LINE_XYZ",
+    "CSI ?2026h"
+  ],
+  "decoded_absent": [
+    "CSI 2J"
+  ],
+  "xtermjs_rule": "Write full=false bytes onto the current surface. Do not clear. Payload uses cursor addressing, not a full erase."
+}

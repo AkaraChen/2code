@@ -90,6 +90,11 @@ jobs:
       - name: Install app dependencies
         run: bun install --frozen-lockfile
 
+      - name: Fetch pinned Herdr sidecar
+        run: bun ./scripts/herdr-sidecar.mjs
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.rustTargets }}
+
       - name: Install Apple Developer ID G2 certificate
         if: runner.os == 'macOS'
         shell: bash

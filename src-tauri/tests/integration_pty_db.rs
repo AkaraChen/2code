@@ -9,8 +9,12 @@ use diesel::RunQueryDsl;
 use infra::db::DbPool;
 use infra::pty_log::{self, SessionLog};
 use model::pty::{NewPtySessionRecord, PtyConfig, PtySessionMeta};
+use model::runtime::RuntimeBackend;
 use repo::pty;
 use service::pty::{create_flush_senders, PtyContext};
+use service::runtime::{
+	HerdrStubAdapter, LocalAdapter, RuntimeRouter, TerminalRuntime,
+};
 
 /// A unique, empty temp directory to stand in for the per-session log store.
 fn tmp_log_dir(tag: &str) -> PathBuf {
@@ -117,6 +121,10 @@ fn create_live_session(
 		&pty_config(cwd.to_string()),
 	)
 	.unwrap()
+}
+
+fn router_from_ctx(ctx: &PtyContext) -> RuntimeRouter {
+	RuntimeRouter::new(LocalAdapter::new(ctx.clone()), HerdrStubAdapter::new())
 }
 
 /// Helper: insert a session record for a given profile.
@@ -735,16 +743,72 @@ fn delete_profile_closes_live_session_and_removes_log() {
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "delete-profile-live");
-	let session_id =
-		create_live_session(&ctx, &profile_id, &worktree_path, "Profile live");
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: profile_id.clone(),
+				title: "Profile live".to_string(),
+			},
+			&pty_config(worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
 	wait_for_flush_sender(&ctx, &session_id);
 	write_output(&logs, &session_id, b"profile output");
 
-	service::profile::delete_with_context(&ctx, &profile_id).unwrap();
+	service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
+		.unwrap();
 
 	assert!(!sessions.lock().unwrap().contains_key(&session_id));
 	assert!(!pty_log::session_path(&logs, &session_id).exists());
+	assert_eq!(router.owner(&session_id).unwrap(), None);
 
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn delete_profile_refuses_to_kill_local_pty_for_herdr_owned_id() {
+	let mut conn = setup_db();
+	let (project, _default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let profile =
+		service::profile::create(&mut conn, &project.id, "herdr-owned")
+			.unwrap();
+	let profile_id = profile.id.clone();
+	let worktree_path = profile.worktree_path.clone();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "delete-profile-herdr-owned");
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: profile_id.clone(),
+				title: "Profile herdr".to_string(),
+			},
+			&pty_config(worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
+	wait_for_flush_sender(&ctx, &session_id);
+	router.unbind_session(&session_id).unwrap();
+	router
+		.bind_session(&session_id, RuntimeBackend::Herdr)
+		.unwrap();
+	let err =
+		service::profile::delete_with_runtime(&router, &ctx.db, &profile_id)
+			.unwrap_err();
+	assert!(err.to_string().contains("Herdr-owned"));
+	assert!(sessions.lock().unwrap().contains_key(&session_id));
+	assert_eq!(
+		router.owner(&session_id).unwrap(),
+		Some(RuntimeBackend::Herdr)
+	);
+
+	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);
 	cleanup(&logs);
@@ -759,20 +823,68 @@ fn delete_project_closes_live_session_and_removes_log() {
 
 	let (ctx, sessions, read_threads, logs) =
 		pty_context(conn, "delete-project-live");
-	let session_id = create_live_session(
-		&ctx,
-		&default_profile.id,
-		&default_profile.worktree_path,
-		"Project live",
-	);
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: default_profile.id.clone(),
+				title: "Project live".to_string(),
+			},
+			&pty_config(default_profile.worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
 	wait_for_flush_sender(&ctx, &session_id);
 	write_output(&logs, &session_id, b"project output");
 
-	service::project::delete_with_context(&ctx, &project_id).unwrap();
+	service::project::delete_with_runtime(&router, &ctx.db, &project_id)
+		.unwrap();
 
 	assert!(!sessions.lock().unwrap().contains_key(&session_id));
 	assert!(!pty_log::session_path(&logs, &session_id).exists());
+	assert_eq!(router.owner(&session_id).unwrap(), None);
 
+	infra::pty::join_all_read_threads(&read_threads);
+	cleanup(&dir);
+	cleanup(&logs);
+}
+
+#[test]
+fn delete_project_refuses_to_kill_local_pty_for_herdr_owned_id() {
+	let mut conn = setup_db();
+	let (project, default_profile, dir) =
+		create_project_with_git_repo(&mut conn);
+	let project_id = project.id.clone();
+
+	let (ctx, sessions, read_threads, logs) =
+		pty_context(conn, "delete-project-herdr-owned");
+	let router = router_from_ctx(&ctx);
+	let session_id = router
+		.create_session(
+			&PtySessionMeta {
+				profile_id: default_profile.id.clone(),
+				title: "Project herdr".to_string(),
+			},
+			&pty_config(default_profile.worktree_path.clone()),
+		)
+		.unwrap()
+		.session_id;
+	wait_for_flush_sender(&ctx, &session_id);
+	router.unbind_session(&session_id).unwrap();
+	router
+		.bind_session(&session_id, RuntimeBackend::Herdr)
+		.unwrap();
+	let err =
+		service::project::delete_with_runtime(&router, &ctx.db, &project_id)
+			.unwrap_err();
+	assert!(err.to_string().contains("Herdr-owned"));
+	assert!(sessions.lock().unwrap().contains_key(&session_id));
+	assert_eq!(
+		router.owner(&session_id).unwrap(),
+		Some(RuntimeBackend::Herdr)
+	);
+
+	infra::pty::close_all_sessions(&sessions);
 	infra::pty::join_all_read_threads(&read_threads);
 	cleanup(&dir);
 	cleanup(&logs);

@@ -11,6 +11,7 @@ use infra::watcher::WatcherShutdownFlag;
 use model::project::ProjectWithProfiles;
 use model::watcher::WatchEvent;
 
+use crate::runtime::RuntimeHandle;
 use crate::WatchEventSender;
 
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(3);
@@ -34,16 +35,18 @@ struct WatchTarget {
 pub fn start(
 	sender: Box<dyn WatchEventSender>,
 	db: DbPool,
+	runtime: RuntimeHandle,
 	shutdown: WatcherShutdownFlag,
 ) {
 	std::thread::spawn(move || {
-		run_coordinator(sender, db, shutdown);
+		run_coordinator(sender, db, runtime, shutdown);
 	});
 }
 
 fn run_coordinator(
 	sender: Box<dyn WatchEventSender>,
 	db: DbPool,
+	runtime: RuntimeHandle,
 	shutdown: WatcherShutdownFlag,
 ) {
 	let (tx, rx) = mpsc::channel::<WatchEvent>();
@@ -60,7 +63,7 @@ fn run_coordinator(
 		// Poll DB for project list periodically
 		if last_poll.elapsed() >= DB_POLL_INTERVAL {
 			last_poll = Instant::now();
-			reconcile_watchers(&db, &tx, &mut watchers);
+			reconcile_watchers(&runtime, &db, &tx, &mut watchers);
 		}
 
 		// Receive filesystem events with timeout
@@ -96,21 +99,17 @@ fn run_coordinator(
 }
 
 fn reconcile_watchers(
+	runtime: &RuntimeHandle,
 	db: &DbPool,
 	tx: &mpsc::Sender<WatchEvent>,
 	watchers: &mut HashMap<String, ProjectWatcher>,
 ) {
-	let targets = match db.lock() {
-		Ok(mut conn) => {
-			match repo::project::list_all_with_profiles(&mut conn) {
-				Ok(p) => p,
-				Err(e) => {
-					tracing::warn!("Watcher: failed to list projects: {e}");
-					return;
-				}
-			}
+	let targets = match crate::project::list_with_runtime(runtime, db) {
+		Ok(p) => p,
+		Err(e) => {
+			tracing::warn!("Watcher: failed to list projects: {e}");
+			return;
 		}
-		Err(_) => return,
 	};
 	let targets = watcher_targets(&targets);
 
@@ -339,6 +338,27 @@ mod tests {
 			pinned_order: None,
 			profiles,
 		}
+	}
+
+	#[test]
+	fn watcher_targets_retarget_when_persisted_path_changes() {
+		let stale = vec![project_with_profiles(
+			"project-1",
+			"/repo",
+			vec![profile("profile-1", "project-1", "/stale", false)],
+		)];
+		let listed = vec![project_with_profiles(
+			"project-1",
+			"/repo",
+			vec![profile("profile-1", "project-1", "/listed", false)],
+		)];
+
+		let old = watcher_targets(&stale);
+		let new = watcher_targets(&listed);
+
+		assert_ne!(old[0].key, new[0].key);
+		assert_eq!(new[0].root_path, "/listed");
+		assert_eq!(new[0].profile_id.as_deref(), Some("profile-1"));
 	}
 
 	#[test]

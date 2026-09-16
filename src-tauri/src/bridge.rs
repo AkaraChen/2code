@@ -8,6 +8,10 @@ use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
+use service::runtime::{
+	HerdrEndpoint, HerdrStubAdapter, LocalAdapter, RuntimeHandle, RuntimeRouter,
+};
+use service::runtime_sync::HerdrRuntimeSync;
 use service::{PtyEventEmitter, WatchEventSender};
 
 pub struct PtyOutputSink {
@@ -91,4 +95,22 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 		}),
 		output_dir: app.state::<PtyLogDir>().0.clone(),
 	}
+}
+
+/// Wire the Local adapter at startup. Herdr is not selected and terminal
+/// attach is not started from this constructor.
+pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
+	Arc::new(RuntimeRouter::new(
+		LocalAdapter::new(build_pty_context(app)),
+		HerdrStubAdapter::new(),
+	))
+}
+
+/// Read-only Herdr projection. Must not be started from Local default
+/// startup in `lib.rs`.
+#[allow(dead_code)]
+pub fn herdr_runtime_sync(
+	endpoint: &HerdrEndpoint,
+) -> Result<HerdrRuntimeSync, model::error::AppError> {
+	HerdrStubAdapter::open_runtime_sync(endpoint)
 }

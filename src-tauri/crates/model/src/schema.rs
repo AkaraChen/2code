@@ -1,6 +1,20 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+	herdr_namespaces (name) {
+		name -> Text,
+	}
+}
+
+diesel::table! {
+	profile_runtime_mappings (profile_id) {
+		profile_id -> Text,
+		namespace -> Text,
+		workspace_id -> Text,
+	}
+}
+
+diesel::table! {
 	profiles (id) {
 		id -> Text,
 		project_id -> Text,
@@ -48,13 +62,29 @@ diesel::table! {
 	}
 }
 
+diesel::table! {
+	session_runtime_mappings (session_id) {
+		session_id -> Text,
+		namespace -> Text,
+		workspace_id -> Text,
+		pane_id -> Text,
+	}
+}
+
+diesel::joinable!(profile_runtime_mappings -> herdr_namespaces (namespace));
+diesel::joinable!(profile_runtime_mappings -> profiles (profile_id));
 diesel::joinable!(profiles -> projects (project_id));
 diesel::joinable!(projects -> project_groups (group_id));
 diesel::joinable!(pty_sessions -> profiles (profile_id));
+diesel::joinable!(session_runtime_mappings -> herdr_namespaces (namespace));
+diesel::joinable!(session_runtime_mappings -> pty_sessions (session_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+	herdr_namespaces,
+	profile_runtime_mappings,
 	profiles,
 	project_groups,
 	projects,
 	pty_sessions,
+	session_runtime_mappings,
 );

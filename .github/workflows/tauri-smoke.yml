@@ -52,6 +52,9 @@ jobs:
       - name: Install app dependencies
         run: bun install --frozen-lockfile
 
+      - name: Fetch pinned Herdr sidecar
+        run: bun ./scripts/herdr-sidecar.mjs
+
       - name: Install smoke-test dependencies
         run: bun install --cwd e2e-tests --frozen-lockfile
 

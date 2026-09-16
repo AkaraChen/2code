@@ -70,3 +70,4 @@
 | [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
 | [Configuration](configuration.md) | Config files, environment variables, database schema                      |
 | [Notification Behavior](notification-behavior.md) | Terminal unread-dot state machine and click behavior          |
+| [Herdr integration](herdr-integration.md) | Pinned Herdr v0.9.0 contract, protocol, and capability matrix |

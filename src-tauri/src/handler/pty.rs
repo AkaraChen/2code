@@ -1,25 +1,28 @@
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{ipc::Channel, State};
 use tokio::sync::mpsc;
 
 use crate::bridge::{
 	PtyOutputReceiver, PtyOutputReceivers, PtyOutputSink, PtyOutputSinks,
 };
-use infra::db::DbPool;
-use infra::pty::{self as session, PtySessionMap};
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
-use service::pty::{PtyFlushSenders, PtyLogDir};
+use model::runtime::{
+	HerdrTerminalFrame, RuntimeBackend, SessionAgentStatus,
+	TerminalScrollDirection, TerminalScrollSource,
+};
+use service::runtime::{RuntimeHandle, TerminalRuntime};
+use service::runtime_agent::pump_session_agent_status;
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn create_pty_session(
-	app: AppHandle,
+	runtime: State<'_, RuntimeHandle>,
 	meta: PtySessionMeta,
 	config: PtyConfig,
 ) -> Result<String, AppError> {
-	let ctx = crate::bridge::build_pty_context(&app);
+	let runtime = runtime.inner().clone();
 	super::run_blocking(move || {
-		service::pty::create_session(&ctx, &meta, &config)
+		runtime.create_session(&meta, &config).map(|r| r.session_id)
 	})
 	.await
 }
@@ -27,94 +30,126 @@ pub async fn create_pty_session(
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn write_to_pty(
-	sessions: State<'_, PtySessionMap>,
+	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 	data: String,
 ) -> Result<(), AppError> {
-	session::write_to_pty(&sessions, &session_id, data.as_bytes())
+	runtime.write(&session_id, data.as_bytes())
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn resize_pty(
-	sessions: State<'_, PtySessionMap>,
-	db: State<'_, DbPool>,
+	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 	rows: u16,
 	cols: u16,
 ) -> Result<(), AppError> {
-	session::resize_pty(&sessions, &session_id, rows, cols)?;
+	runtime.resize(&session_id, rows, cols)
+}
 
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	repo::pty::update_dimensions(conn, &session_id, cols, rows);
-
-	Ok(())
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn scroll_pty(
+	runtime: State<'_, RuntimeHandle>,
+	session_id: String,
+	direction: TerminalScrollDirection,
+	lines: u16,
+	source: TerminalScrollSource,
+) -> Result<(), AppError> {
+	runtime.scroll(&session_id, direction, lines, source)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn close_pty_session(
-	db: State<'_, DbPool>,
-	sessions: State<'_, PtySessionMap>,
+	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 ) -> Result<(), AppError> {
-	service::pty::close_session(db.inner(), sessions.inner(), &session_id)
+	runtime.close_session(&session_id)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn list_project_sessions(
 	project_id: String,
-	state: State<'_, DbPool>,
+	runtime: State<'_, RuntimeHandle>,
 ) -> Result<Vec<PtySessionRecord>, AppError> {
-	let db = state.inner().clone();
-	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::pty::list_project_sessions(conn, &project_id)
-	})
-	.await
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || runtime.list_project_sessions(&project_id))
+		.await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn get_pty_session_history(
 	session_id: String,
-	log_dir: State<'_, PtyLogDir>,
+	runtime: State<'_, RuntimeHandle>,
 ) -> Result<Vec<u8>, AppError> {
-	let dir = log_dir.0.clone();
-	super::run_blocking(move || {
-		Ok(service::pty::get_history(&dir, &session_id))
-	})
-	.await
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || runtime.history(&session_id)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub async fn delete_pty_session_record(
 	session_id: String,
-	state: State<'_, DbPool>,
-	log_dir: State<'_, PtyLogDir>,
+	runtime: State<'_, RuntimeHandle>,
 ) -> Result<(), AppError> {
-	let db = state.inner().clone();
-	let dir = log_dir.0.clone();
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || runtime.delete_session(&session_id)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn restore_pty_session(
+	runtime: State<'_, RuntimeHandle>,
+	old_session_id: String,
+	meta: PtySessionMeta,
+	config: PtyConfig,
+) -> Result<RestoreResult, AppError> {
+	let runtime = runtime.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::pty::delete_session(conn, &dir, &session_id)
+		runtime.restore_session(&old_session_id, &meta, &config)
 	})
 	.await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub async fn restore_pty_session(
-	app: AppHandle,
-	old_session_id: String,
-	meta: PtySessionMeta,
-	config: PtyConfig,
-) -> Result<RestoreResult, AppError> {
-	let ctx = crate::bridge::build_pty_context(&app);
+pub fn get_session_backend(
+	session_id: String,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<RuntimeBackend, AppError> {
+	runtime.backend_for(&session_id)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub fn get_session_agent_status(
+	session_id: String,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<Option<SessionAgentStatus>, AppError> {
+	runtime.session_agent_status(&session_id)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
+pub async fn stream_session_agent_status(
+	session_id: String,
+	on_update: Channel<SessionAgentStatus>,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? != RuntimeBackend::Herdr {
+		return Err(AppError::PtyError("not a Herdr session".into()));
+	}
+	let runtime = runtime.inner().clone();
 	super::run_blocking(move || {
-		service::pty::restore_session(&ctx, &old_session_id, &meta, &config)
+		pump_session_agent_status(
+			&session_id,
+			|| runtime.session_agent_status(&session_id),
+			|dto| on_update.send(dto).is_ok(),
+		)
 	})
 	.await
 }
@@ -124,9 +159,13 @@ pub async fn restore_pty_session(
 pub fn attach_pty_output(
 	session_id: String,
 	stream_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	sinks: State<'_, PtyOutputSinks>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return runtime.attach_output(&session_id, &stream_id);
+	}
 	let (sender, receiver) = mpsc::unbounded_channel();
 	{
 		let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
@@ -159,8 +198,12 @@ pub async fn stream_pty_output(
 	session_id: String,
 	stream_id: String,
 	on_output: Channel<&[u8]>,
+	runtime: State<'_, RuntimeHandle>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return Ok(());
+	}
 	let receiver = {
 		let mut receivers =
 			receivers.lock().map_err(|_| AppError::LockError)?;
@@ -188,12 +231,55 @@ pub async fn stream_pty_output(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
+pub async fn stream_herdr_output(
+	session_id: String,
+	stream_id: String,
+	on_output: Channel<HerdrTerminalFrame>,
+	runtime: State<'_, RuntimeHandle>,
+) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? != RuntimeBackend::Herdr {
+		return Err(AppError::PtyError("not a Herdr session".into()));
+	}
+	let runtime = runtime.inner().clone();
+	super::run_blocking(move || {
+		loop {
+			match runtime.recv_terminal_frame(&session_id, &stream_id) {
+				Ok(frame) => {
+					if on_output.send(frame).is_err() {
+						break;
+					}
+				}
+				Err(err) if herdr_stream_ended(&err) => break,
+				Err(err) => return Err(err),
+			}
+		}
+		Ok(())
+	})
+	.await
+}
+
+fn herdr_stream_ended(err: &AppError) -> bool {
+	matches!(
+		err,
+		AppError::PtyError(message)
+			if message.contains("not attached")
+				|| message.contains("closed")
+				|| message.contains("stale Herdr")
+	)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip_all)]
 pub fn detach_pty_output(
 	session_id: String,
 	stream_id: String,
+	runtime: State<'_, RuntimeHandle>,
 	sinks: State<'_, PtyOutputSinks>,
 	receivers: State<'_, PtyOutputReceivers>,
 ) -> Result<(), AppError> {
+	if runtime.backend_for(&session_id)? == RuntimeBackend::Herdr {
+		return runtime.detach_output(&session_id, &stream_id);
+	}
 	let mut sinks = sinks.lock().map_err(|_| AppError::LockError)?;
 	if sinks
 		.get(&session_id)
@@ -217,17 +303,16 @@ pub fn detach_pty_output(
 #[tracing::instrument(skip_all)]
 pub fn flush_pty_output(
 	session_id: String,
-	state: State<'_, PtyFlushSenders>,
+	runtime: State<'_, RuntimeHandle>,
 ) -> Result<(), AppError> {
-	service::pty::flush_output(state.inner(), &session_id)
+	runtime.flush(&session_id)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
 pub fn clear_pty_output(
 	session_id: String,
-	log_dir: State<'_, PtyLogDir>,
-	state: State<'_, PtyFlushSenders>,
+	runtime: State<'_, RuntimeHandle>,
 ) -> Result<(), AppError> {
-	service::pty::clear_output(&log_dir.0, state.inner(), &session_id)
+	runtime.clear(&session_id)
 }

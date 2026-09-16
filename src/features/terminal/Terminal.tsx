@@ -1,4 +1,3 @@
-import { Channel } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -21,9 +20,11 @@ import {
   getPtySessionHistory,
   playSystemSound,
   resizePty,
-  streamPtyOutput,
+  scrollPty,
   writeToPty } from
-"@/generated";import { toast } from "sonner";
+"@/generated";
+import type { SessionAgentStatus } from "@/generated";
+import { toast } from "sonner";
 
 import {
   createAgentStatusDetector,
@@ -61,6 +62,21 @@ import {
   sendAgentWaitingNotification,
   shouldNotifyAgentWaiting,
 } from "./lib/agentNotification";
+import {
+  applyHerdrFrameAction,
+  HerdrFrameCursor,
+} from "./lib/herdrFrames";
+import { blockHerdrQueryReplies } from "./lib/herdrQueryGuard";
+import { herdrPageScroll, herdrWheelScroll } from "./lib/herdrScroll";
+import { herdrAgentPublishStatus } from "./lib/herdrAgent";
+import {
+  hydrateHerdrAgentStatus,
+  resolveTerminalTransportKind,
+  startHerdrAgentStream,
+  startHerdrFrameStream,
+  startLocalByteStream,
+  type TerminalTransportKind,
+} from "./lib/terminalTransport";
 import "@xterm/xterm/css/xterm.css";
 
 const TERMINAL_SCROLLBACK = 5000;
@@ -137,8 +153,23 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
   const initFontFamilyRef = useRef(fontFamily);
   const initFontSizeRef = useRef(fontSize);
   const initThemeRef = useRef(theme);
+  const resizeReadyRef = useRef(false);
 
   isActiveRef.current = isActive;
+
+  const sendSessionResize = useCallback(
+    (rows: number, cols: number) => {
+      if (!resizeReadyRef.current) return;
+      if (rows <= 0 || cols <= 0) return;
+      void resizePty({ sessionId, rows, cols }).catch((error) => {
+        consola.warn(
+          `[pty-terminal] failed to resize session ${sessionId}`,
+          error
+        );
+      });
+    },
+    [sessionId]
+  );
 
   useEffect(() => {
     if (termRef.current) {
@@ -175,13 +206,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         // Repaint after font settles — metrics may have changed
         term.refresh(0, Math.max(0, term.rows - 1));
         if (changed) {
-          resizePty({ sessionId, rows: term.rows, cols: term.cols });
+          sendSessionResize(term.rows, term.cols);
         }
         return changed;
       },
-      () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+      () => sendSessionResize(term.rows, term.cols)
     );
-  }, [fontFamily, fontSize, sessionId]);
+  }, [fontFamily, fontSize, sendSessionResize, sessionId]);
 
   useEffect(() => {
     if (!isActive || !termRef.current) return;
@@ -241,6 +272,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const cleanups: (() => void)[] = [];
 
       let disposed = false;
+      resizeReadyRef.current = false;
       isStreamReadyRef.current = false;
       pendingEventsRef.current = [];
       const liveOutputBuffer: Uint8Array[] = [];
@@ -250,7 +282,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       let lastAgentDetectionAt = 0;
       let lastCopiedSelection = "";
       const streamId = crypto.randomUUID();
-      const agentDetector = createAgentStatusDetector();
+      let transportKind: TerminalTransportKind | null = null;
+      let agentDetector: ReturnType<typeof createAgentStatusDetector> | null =
+        null;
       let latestTitle: string | null = null;
       let latestProgress = "0;0";
       let publishedAgentStatus: AgentStatus | null =
@@ -302,9 +336,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         }
       }
 
+      function applyHerdrAgentDto(dto: SessionAgentStatus | null) {
+        const next = herdrAgentPublishStatus(dto);
+        publishAgentStatus(next.status, next.agentName);
+      }
+
       function runAgentDetectionNow() {
         agentDetectionTimer = null;
-        if (disposed || !isStreamReadyRef.current) return;
+        if (disposed || !agentDetector || !isStreamReadyRef.current) return;
         lastAgentDetectionAt = performance.now();
         const result = agentDetector.detect({
           screen: readTerminalDetectionScreen(term),
@@ -328,8 +367,8 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       runAgentDetectionNowRef.current = runAgentDetectionNow;
 
       function scheduleAgentDetection() {
-        if (disposed) return;
-        if (!isStreamReadyRef.current) {
+        if (disposed || transportKind === "herdr") return;
+        if (agentDetector === null || !isStreamReadyRef.current) {
           hasPendingAgentDetection = true;
           return;
         }
@@ -390,6 +429,47 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       term.open(wrapper);
       termRef.current = term;
 
+      function sendHerdrScroll(
+        command: ReturnType<typeof herdrWheelScroll>,
+      ) {
+        if (!command) return;
+        void scrollPty({
+          sessionId,
+          direction: command.direction,
+          lines: command.lines,
+          source: command.source,
+        }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to scroll session ${sessionId}`,
+            error
+          );
+        });
+      }
+
+      function onHerdrWheel(event: WheelEvent): boolean {
+        if (transportKind !== "herdr") return true;
+        const command = herdrWheelScroll(event);
+        if (!command) return true;
+        // Capture on the wrapper runs before xterm 6 SmoothScrollableElement
+        // (inner viewport) preventDefault+stopPropagation. Returning false
+        // also cancels xterm's own wheel path if MouseService still sees it.
+        if (!event.defaultPrevented) {
+          sendHerdrScroll(command);
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+      wrapper.addEventListener("wheel", onHerdrWheel, {
+        capture: true,
+        passive: false
+      });
+      cleanups.push(() => {
+        wrapper.removeEventListener("wheel", onHerdrWheel, { capture: true });
+      });
+      term.attachCustomWheelEventHandler(onHerdrWheel);
+      cleanups.push(() => term.attachCustomWheelEventHandler(() => true));
+
       // 1b. Point xterm's font measurement at attached canvases. WebKit cannot
       //     resolve locally installed fonts from a detached/offscreen canvas,
       //     which is what xterm measures with — see xtermMetricsPatch.ts.
@@ -438,6 +518,20 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 5. Combined key handler: app-specific shortcuts + kitty protocol suppression
       const kittyHandler = createTerminalKeyEventHandler(term);
       term.attachCustomKeyEventHandler((event) => {
+        if (
+        transportKind === "herdr" &&
+        event.type === "keydown" &&
+        (event.key === "PageUp" || event.key === "PageDown"))
+        {
+          const command = herdrPageScroll(event.key, term.rows);
+          if (command) {
+            event.preventDefault();
+            event.stopPropagation();
+            sendHerdrScroll(command);
+            return false;
+          }
+        }
+
         // 5a. App-specific shortcuts first (font size, clear, copy/paste, sequences)
         const action = getTerminalShortcutAction(event);
         if (action) {
@@ -461,6 +555,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             return false;
           }
           if (action.type === "clear-screen") {
+            if (transportKind === "herdr") {
+              void writeToPty({ sessionId, data: "\x0C" });
+              return false;
+            }
             term.clear();
             void clearPtyOutput({ sessionId }).
             catch(() => {}).
@@ -502,13 +600,12 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
       cleanups.push(() => fileLinkDisposable.dispose());
 
-      // 7. Restore buffer from localStorage (cold restart scrollback)
-      restoreBuffer(sessionId, term);
+      // 7. Local cold-restart scrollback is restored after ownership is known.
+      //    Herdr panes wait for the first full frame instead.
 
-      // 8. Initial fit + resize PTY (measureAndResize re-measures the char size
-      //    first if xterm's cached cell width does not match the real font)
+      // 8. Initial fit. Do not resizePty until the owning backend is
+      //    attached — Herdr fail-closes helper_for before attach.
       measureAndResize(term, addonsResult.fitAddon, container);
-      resizePty({ sessionId, rows: term.rows, cols: term.cols });
 
       // 9. Font-settle refit — xterm measured cell width at open() time
       //    using whatever font was loaded; refit once the configured font settles.
@@ -518,11 +615,11 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         () => {
           const changed = measureAndResize(term, addonsResult.fitAddon, container);
           if (changed) {
-            resizePty({ sessionId, rows: term.rows, cols: term.cols });
+            sendSessionResize(term.rows, term.cols);
           }
           return changed;
         },
-        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+        () => sendSessionResize(term.rows, term.cols)
       );
 
       // 10. Debounced resize scheduler (75ms) with scroll position preservation
@@ -530,7 +627,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         term,
         addonsResult.fitAddon,
         () => container,
-        () => resizePty({ sessionId, rows: term.rows, cols: term.cols })
+        () => sendSessionResize(term.rows, term.cols)
       );
       const resizeObserver = new ResizeObserver(scheduler.observe);
       resizeObserver.observe(container);
@@ -603,27 +700,89 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         });
       }
 
-      // 12. Register PTY output channel + exit listener, then replay history.
+      // 12. Register output for the owning backend, then replay Local history.
       async function setupListenersAndReplayHistory() {
-        const outputChannel = new Channel<ArrayBuffer>();
-        outputChannel.onmessage = (payload) => {
-          const bytes = new Uint8Array(payload);
-          if (!isStreamReadyRef.current) {
-            pendingEventsRef.current.push(bytes);
+        const kind = await resolveTerminalTransportKind(sessionId);
+        if (disposed) return;
+        transportKind = kind;
+
+        if (kind === "herdr") {
+          cleanups.push(blockHerdrQueryReplies(term));
+          const cursor = new HerdrFrameCursor();
+          await attachPtyOutput({ sessionId, streamId });
+          if (disposed) {
+            void detachPtyOutput({ sessionId, streamId }).catch(() => {});
             return;
           }
-          writeLiveOutput(bytes);
-        };
+          resizeReadyRef.current = true;
+          sendSessionResize(term.rows, term.cols);
+          startHerdrFrameStream({
+            sessionId,
+            streamId,
+            onFrame: (frame) => {
+              const action = cursor.apply(frame);
+              if (!action || disposed) return;
+              applyHerdrFrameAction(term, action);
+            },
+            onError: (error) => {
+              consola.warn(
+                `[pty-terminal] failed to stream Herdr output for session ${sessionId}`,
+                error
+              );
+            }
+          });
+          isStreamReadyRef.current = true;
+          try {
+            const dto = await hydrateHerdrAgentStatus(sessionId);
+            if (!disposed) applyHerdrAgentDto(dto);
+          } catch (error) {
+            consola.warn(
+              `[pty-terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
+              error
+            );
+            if (!disposed) applyHerdrAgentDto(null);
+          }
+          if (disposed) return;
+          startHerdrAgentStream({
+            sessionId,
+            onUpdate: (dto) => {
+              if (!disposed) applyHerdrAgentDto(dto);
+            },
+            onError: (error) => {
+              consola.warn(
+                `[pty-terminal] failed to stream Herdr agent status for session ${sessionId}`,
+                error
+              );
+            }
+          });
+          return;
+        }
+
+        agentDetector = createAgentStatusDetector();
+        restoreBuffer(sessionId, term);
         await attachPtyOutput({ sessionId, streamId });
         if (disposed) {
           void detachPtyOutput({ sessionId, streamId }).catch(() => {});
           return;
         }
-        void streamPtyOutput({ sessionId, streamId, onOutput: outputChannel }).catch((error) => {
-          consola.warn(
-            `[pty-terminal] failed to stream output for session ${sessionId}`,
-            error
-          );
+        resizeReadyRef.current = true;
+        sendSessionResize(term.rows, term.cols);
+        startLocalByteStream({
+          sessionId,
+          streamId,
+          onBytes: (bytes) => {
+            if (!isStreamReadyRef.current) {
+              pendingEventsRef.current.push(bytes);
+              return;
+            }
+            writeLiveOutput(bytes);
+          },
+          onError: (error) => {
+            consola.warn(
+              `[pty-terminal] failed to stream output for session ${sessionId}`,
+              error
+            );
+          }
         });
         const unlistenExit = await listen(
           `pty-exit-${sessionId}`,
@@ -678,30 +837,44 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           );
         });
       });
+      const binaryDisposable = term.onBinary((data) => {
+        writeToPty({ sessionId, data }).catch((error) => {
+          consola.warn(
+            `[pty-terminal] failed to write binary input for session ${sessionId}`,
+            error
+          );
+        });
+      });
       const resizeDisposable = term.onResize(({ rows, cols }) => {
-        resizePty({ sessionId, rows, cols });
+        sendSessionResize(rows, cols);
       });
       cleanups.push(() => dataDisposable.dispose());
+      cleanups.push(() => binaryDisposable.dispose());
       cleanups.push(() => resizeDisposable.dispose());
 
       // 14. React 19 ref cleanup
       return () => {
         disposed = true;
+        resizeReadyRef.current = false;
 
         void detachPtyOutput({ sessionId, streamId }).catch(() => {});
 
-        // Flush buffered PTY output to DB before teardown (best-effort)
-        flushPtyOutput({ sessionId }).catch(() => {});
+        if (transportKind === "local") {
+          // Flush buffered PTY output to DB before teardown (best-effort)
+          flushPtyOutput({ sessionId }).catch(() => {});
+        }
 
         const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
           (profile) => profile.tabs.some((tab) => tab.id === sessionId)
         );
 
-        if (stillOpen) {
+        if (stillOpen && transportKind === "local") {
           // Persist buffer + dimensions for cold restart or live remount.
           if (serializeAddonRef.current) {
             persistBuffer(sessionId, serializeAddonRef.current);
           }
+          persistDimensions(sessionId, term.cols, term.rows);
+        } else if (stillOpen) {
           persistDimensions(sessionId, term.cols, term.rows);
         }
 
@@ -749,6 +922,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
     handleTerminalLinkOpen,
     increaseFontSize,
     profileId,
+    sendSessionResize,
     sessionId]
 
   );

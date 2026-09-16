@@ -130,6 +130,18 @@ pub fn list_branch_names_by_project(
 		.map_err(|e| AppError::DbError(e.to_string()))
 }
 
+pub fn list_by_project(
+	conn: &mut SqliteConnection,
+	project_id: &str,
+) -> Result<Vec<Profile>, AppError> {
+	profiles::table
+		.filter(profiles::project_id.eq(project_id))
+		.select(Profile::as_select())
+		.order(profiles::created_at.asc())
+		.load(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))
+}
+
 pub fn update_notes(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -139,6 +151,24 @@ pub fn update_notes(
 		.set(profiles::notes.eq(notes))
 		.execute(conn)
 		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	find_by_id(conn, id)
+}
+
+/// Persist a checkout path cache. Not Herdr workspace authority.
+pub fn set_worktree_path(
+	conn: &mut SqliteConnection,
+	id: &str,
+	worktree_path: &str,
+) -> Result<Profile, AppError> {
+	let updated = diesel::update(profiles::table.find(id))
+		.set(profiles::worktree_path.eq(worktree_path))
+		.execute(conn)
+		.map_err(|e| AppError::DbError(e.to_string()))?;
+
+	if updated == 0 {
+		return Err(AppError::NotFound(format!("Profile: {id}")));
+	}
 
 	find_by_id(conn, id)
 }
@@ -237,6 +267,19 @@ mod tests {
 	}
 
 	#[test]
+	fn list_by_project_returns_profiles_for_that_project() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test-1");
+		insert_test_project(&mut conn, "proj-2", "/tmp/test-2");
+		insert(&mut conn, "p1", "proj-1", "feature/login", "/w/p1").unwrap();
+
+		let listed = list_by_project(&mut conn, "proj-1").unwrap();
+		assert!(listed.iter().any(|profile| profile.id == "p1"));
+		assert!(listed.iter().any(|profile| profile.project_id == "proj-1"));
+		assert!(listed.iter().all(|profile| profile.project_id != "proj-2"));
+	}
+
+	#[test]
 	fn get_not_found() {
 		let mut conn = setup_db();
 		let result = find_by_id(&mut conn, "nonexistent");
@@ -314,5 +357,28 @@ mod tests {
 		let profile =
 			insert(&mut conn, "p1", "proj-1", "main", "/w/p1").unwrap();
 		assert_eq!(profile.notes, "");
+	}
+
+	#[test]
+	fn set_worktree_path_updates_only_the_cache() {
+		let mut conn = setup_db();
+		insert_test_project(&mut conn, "proj-1", "/tmp/test");
+		insert(&mut conn, "p1", "proj-1", "feat", "/stale").unwrap();
+
+		let profile = set_worktree_path(&mut conn, "p1", "/listed").unwrap();
+
+		assert_eq!(profile.worktree_path, "/listed");
+		assert_eq!(profile.branch_name, "feat");
+		assert_eq!(
+			find_by_id(&mut conn, "p1").unwrap().worktree_path,
+			"/listed"
+		);
+	}
+
+	#[test]
+	fn set_worktree_path_not_found() {
+		let mut conn = setup_db();
+		let result = set_worktree_path(&mut conn, "missing", "/listed");
+		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}
 }

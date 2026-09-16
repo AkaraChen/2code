@@ -41,8 +41,8 @@ export const queryKeys = {
 		installed: [queryNamespaces["browser-apps"]] as const,
 	},
 	git: {
-		branch: (folder: string) =>
-			[queryNamespaces["git-branch"], folder] as const,
+		branch: (profileId: string) =>
+			[queryNamespaces["git-branch"], profileId] as const,
 		branches: (profileId: string) =>
 			[queryNamespaces["git-branches"], profileId] as const,
 		diff: (profileId: string) =>

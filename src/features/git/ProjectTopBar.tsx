@@ -45,8 +45,8 @@ const EMPTY_CONTROL_OPTIONS: Record<string, unknown> = {};
 const IS_WINDOWS_PLATFORM = isWindowsPlatform();
 const IS_MAC_PLATFORM = isMacPlatform();
 
-function GitBranchLabel({ cwd }: { cwd: string }) {
-	const { data: branch } = useGitBranch(cwd);
+function GitBranchLabel({ profileId }: { profileId: string }) {
+	const { data: branch } = useGitBranch(profileId);
 	if (!branch) return null;
 	return (
 		<span className="flex select-none items-center gap-1">
@@ -57,7 +57,6 @@ function GitBranchLabel({ cwd }: { cwd: string }) {
 }
 
 function GitDiffDialogWithBranch({
-	cwd,
 	isOpen,
 	isActive,
 	onClose,
@@ -66,7 +65,6 @@ function GitDiffDialogWithBranch({
 	state,
 	dispatch,
 }: {
-	cwd: string;
 	isOpen: boolean;
 	isActive: boolean;
 	onClose: () => void;
@@ -75,7 +73,7 @@ function GitDiffDialogWithBranch({
 	state: GitDiffState;
 	dispatch: Dispatch<GitDiffAction>;
 }) {
-	const { data: branch } = useGitBranch(cwd, isOpen && isActive);
+	const { data: branch } = useGitBranch(profileId, isOpen && isActive);
 	return (
 		<GitDiffDialog
 			isOpen={isOpen}
@@ -231,7 +229,7 @@ export default function ProjectTopBar({
 			>
 				{profile.is_default ? (
 					isActive ? (
-						<GitBranchLabel cwd={profile.worktree_path} />
+						<GitBranchLabel profileId={profile.id} />
 					) : null
 				) : (
 					<span className="flex select-none items-center gap-1">
@@ -306,7 +304,6 @@ export default function ProjectTopBar({
 
 			{profile.is_default ? (
 				<GitDiffDialogWithBranch
-					cwd={profile.worktree_path}
 					isOpen={gitDiffOpen}
 					isActive={isActive}
 					onClose={closeGitDiffDialog}
