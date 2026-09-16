@@ -7,18 +7,25 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
 import { useTerminalStore } from "@/features/terminal/store";
-import type { ProjectWithProfiles } from "@/generated";
+import type { Profile, ProjectWithProfiles } from "@/generated";
 import { queryKeys } from "@/shared/lib/queryKeys";
-import { useCreateProfile, useDeleteProfile, useProfileDeleteCheck } from "./hooks";
+import {
+	liveProfileMatchingCreate,
+	useCreateProfile,
+	useDeleteProfile,
+	useProfileDeleteCheck,
+} from "./hooks";
 
 const {
 	createProfileMock,
 	deleteProfileMock,
 	getProfileDeleteCheckMock,
+	listProjectsMock,
 } = vi.hoisted(() => ({
 	createProfileMock: vi.fn(),
 	deleteProfileMock: vi.fn(),
 	getProfileDeleteCheckMock: vi.fn(),
+	listProjectsMock: vi.fn(),
 }));
 
 vi.mock("@/generated", async () => {
@@ -30,6 +37,7 @@ vi.mock("@/generated", async () => {
 		createProfile: createProfileMock,
 		deleteProfile: deleteProfileMock,
 		getProfileDeleteCheck: getProfileDeleteCheckMock,
+		listProjects: listProjectsMock,
 	};
 });
 
@@ -60,6 +68,8 @@ describe("profile hooks", () => {
 		createProfileMock.mockReset();
 		deleteProfileMock.mockReset();
 		getProfileDeleteCheckMock.mockReset();
+		listProjectsMock.mockReset();
+		listProjectsMock.mockResolvedValue([]);
 		useWorktreeSettingsStore.setState({ defaultWorktreeDir: "" });
 		useTerminalStore.setState({
 			profiles: {},
@@ -131,6 +141,117 @@ describe("profile hooks", () => {
 				defaultWorktreeDir: null,
 			});
 		});
+
+		it("does not inject the sqlite create result into the projects cache", async () => {
+			const queryClient = createQueryClient();
+			const herdrList: ProjectWithProfiles[] = [
+				{
+					id: "project-1",
+					name: "Project 1",
+					folder: "/projects/one",
+					created_at: "2026-01-01T00:00:00Z",
+					sort_order: 1000,
+					profiles: [
+						{
+							id: "w1",
+							project_id: "project-1",
+							branch_name: "main",
+							worktree_path: "/projects/one",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: true,
+							notes: "",
+						},
+						{
+							id: "w2",
+							project_id: "project-1",
+							branch_name: "feature/worktree",
+							worktree_path: "/tmp/worktrees/profile-1",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: false,
+							notes: "",
+						},
+					],
+				},
+			];
+			queryClient.setQueryData(queryKeys.projects.all, [
+				{
+					...herdrList[0],
+					profiles: [herdrList[0].profiles[0]],
+				},
+			]);
+			createProfileMock.mockResolvedValue({
+				id: "sqlite-uuid",
+				project_id: "project-1",
+				branch_name: "feature/worktree",
+				worktree_path: "/tmp/worktrees/profile-1",
+				created_at: "now",
+				is_default: false,
+				notes: "",
+			});
+			listProjectsMock.mockResolvedValue(herdrList);
+
+			const { result } = renderHook(() => useCreateProfile(), {
+				wrapper: createWrapperWithClient(queryClient),
+			});
+
+			await act(async () => {
+				await result.current.mutateAsync({
+					projectId: "project-1",
+					branchName: "feature/worktree",
+				});
+			});
+
+			expect(
+				queryClient
+					.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all)?.[0]
+					.profiles.map((profile) => profile.id),
+			).toEqual(["w1", "w2"]);
+		});
+	});
+
+	it("matches a created sqlite row to the live workspace_id by path", () => {
+		const created: Profile = {
+			id: "sqlite-uuid",
+			project_id: "project-1",
+			branch_name: "feature/worktree",
+			worktree_path: "/tmp/worktrees/profile-1",
+			created_at: "now",
+			is_default: false,
+			notes: "",
+		};
+		const live = liveProfileMatchingCreate(
+			[
+				{
+					id: "project-1",
+					name: "Project 1",
+					folder: "/projects/one",
+					created_at: "2026-01-01T00:00:00Z",
+					sort_order: 1000,
+					profiles: [
+						{
+							id: "w1",
+							project_id: "project-1",
+							branch_name: "main",
+							worktree_path: "/projects/one",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: true,
+							notes: "",
+						},
+						{
+							id: "w2",
+							project_id: "project-1",
+							branch_name: "feature/worktree",
+							worktree_path: "/tmp/worktrees/profile-1",
+							created_at: "2026-01-01T00:00:00Z",
+							is_default: false,
+							notes: "",
+						},
+					],
+				},
+			],
+			created,
+		);
+		expect(live?.id).toBe("w2");
 	});
 
 	it("reports local changes and unpushed commits before profile deletion", async () => {
