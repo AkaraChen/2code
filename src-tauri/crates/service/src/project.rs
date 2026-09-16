@@ -14,8 +14,7 @@ use model::project::{
 	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
-use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
-use model::runtime_mapping::ProfileRuntimeMapping;
+use model::runtime::RuntimeBackend;
 
 use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
 
@@ -62,32 +61,16 @@ pub fn list_with_runtime(
 	db: &DbPool,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
 	if runtime.selected_backend() == RuntimeBackend::Local {
-		return list_sqlite_with_reconcile(runtime, db);
+		return list_sqlite_profiles(db);
 	}
 	list_herdr_derived(runtime, db)
 }
 
-fn list_sqlite_with_reconcile(
-	runtime: &RuntimeRouter,
+fn list_sqlite_profiles(
 	db: &DbPool,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	let mut projects = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::project::list_all_with_profiles(conn)?
-	};
-
-	for project in &mut projects {
-		for profile in &mut project.profiles {
-			match reconcile_local_profile_checkout(runtime, db, &profile.id) {
-				Ok(path) => profile.worktree_path = path,
-				Err(AppError::RuntimeMappingMissing(_))
-				| Err(AppError::HerdrUncertainOutcome(_)) => {}
-				Err(err) => return Err(err),
-			}
-		}
-	}
-
-	Ok(projects)
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	repo::project::list_all_with_profiles(conn)
 }
 
 fn list_herdr_derived(
@@ -369,7 +352,7 @@ pub fn reconcile_profile_checkout(
 	profile_id: &str,
 ) -> Result<String, AppError> {
 	if runtime.selected_backend() == RuntimeBackend::Local {
-		return reconcile_local_profile_checkout(runtime, db, profile_id);
+		return reconcile_local_profile_checkout(db, profile_id);
 	}
 	live_herdr_profile_checkout(runtime, profile_id)
 }
@@ -449,36 +432,12 @@ fn snapshot_workspace_cwd(
 }
 
 fn reconcile_local_profile_checkout(
-	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	let (cache, mapping) = {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let profile = repo::profile::find_by_id(conn, profile_id)?;
-		let mapping =
-			match repo::runtime_mapping::find_profile_mapping(conn, profile_id)
-			{
-				Ok(mapping) => Some(mapping),
-				Err(AppError::NotFound(_)) => None,
-				Err(err) => return Err(err),
-			};
-		(profile.worktree_path, mapping)
-	};
-
-	let Some(mapping) = mapping else {
-		return Ok(cache);
-	};
-	if mapping.namespace != HERDR_NAMESPACE {
-		return Err(AppError::DbError(format!(
-			"runtime mappings must use the {HERDR_NAMESPACE} namespace"
-		)));
-	}
-	let Some(worktrees) = runtime.herdr_worktrees_optional() else {
-		return Ok(cache);
-	};
-
-	persist_listed_checkout(worktrees, db, profile_id, &mapping, &cache)
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	Ok(profile.worktree_path)
 }
 
 /// Leftover sqlite profile whose checkout path matches live Herdr cwd.
@@ -497,51 +456,6 @@ pub fn sqlite_profile_id_for_checkout(
 		}
 	}
 	Ok(None)
-}
-
-fn persist_listed_checkout(
-	worktrees: &dyn HerdrWorktreeClient,
-	db: &DbPool,
-	profile_id: &str,
-	mapping: &ProfileRuntimeMapping,
-	cache: &str,
-) -> Result<String, AppError> {
-	let listed =
-		match worktrees.worktree_list(None, Some(&mapping.workspace_id)) {
-			Ok(listed) => listed,
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				return Err(AppError::HerdrUncertainOutcome(
-					"worktree.list is uncertain; not replaying".into(),
-				));
-			}
-			Err(err) => return Err(err),
-		};
-
-	let matches: Vec<_> = listed
-		.iter()
-		.filter(|entry| {
-			entry.workspace_id.as_deref() == Some(mapping.workspace_id.as_str())
-		})
-		.collect();
-	let Some(entry) = matches.first() else {
-		return Err(AppError::RuntimeMappingMissing(format!(
-			"workspace {} is unavailable",
-			mapping.workspace_id
-		)));
-	};
-	if matches.len() != 1 || entry.path.is_empty() {
-		return Err(AppError::RuntimeMappingMissing(format!(
-			"workspace {} is unavailable",
-			mapping.workspace_id
-		)));
-	}
-
-	if entry.path != cache {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::set_worktree_path(conn, profile_id, &entry.path)?;
-	}
-
-	Ok(entry.path.clone())
 }
 
 pub fn update(
@@ -1288,6 +1202,9 @@ mod tests {
 			.next()
 			.unwrap();
 		assert!(!local.contains("session_snapshot"));
+		assert!(!local.contains("worktree_list"));
+		assert!(!local.contains("find_profile_mapping"));
+		assert!(!src.contains("set_worktree_path"));
 		assert!(!src.contains("workspace.list"));
 		let lib = include_str!("../../../src/lib.rs");
 		assert!(!lib.contains("ensure_herdr_listener"));
@@ -1342,7 +1259,7 @@ mod tests {
 	}
 
 	#[test]
-	fn mapped_profile_persists_listed_path_for_workspace_id() {
+	fn mapped_leftover_does_not_write_listed_path_or_call_herdr() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
@@ -1361,22 +1278,21 @@ mod tests {
 		let runtime = local_router(&db, Some(fake.clone()));
 
 		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("listed path");
+			.expect("sqlite cache");
 
-		assert_eq!(path, "/listed");
-		assert_eq!(fake.calls(), vec![(None, Some("w1".into()))]);
-		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		assert_eq!(path, "/stale");
+		assert!(fake.methods().is_empty());
 		let conn = &mut *db.lock().unwrap();
 		assert_eq!(
 			repo::profile::find_by_id(conn, &profile_id)
 				.unwrap()
 				.worktree_path,
-			"/listed"
+			"/stale"
 		);
 	}
 
 	#[test]
-	fn mapped_unavailable_workspace_does_not_fall_back() {
+	fn mapped_unavailable_workspace_keeps_sqlite_cache() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
@@ -1394,12 +1310,11 @@ mod tests {
 		]);
 		let runtime = local_router(&db, Some(fake.clone()));
 
-		let err = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect_err("unavailable");
+		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect("sqlite cache");
 
-		assert!(matches!(err, AppError::RuntimeMappingMissing(_)), "{err}");
-		assert!(err.to_string().contains("w1"));
-		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		assert_eq!(path, "/stale");
+		assert!(fake.methods().is_empty());
 		let conn = &mut *db.lock().unwrap();
 		assert_eq!(
 			repo::profile::find_by_id(conn, &profile_id)
@@ -1410,7 +1325,7 @@ mod tests {
 	}
 
 	#[test]
-	fn uncertain_worktree_list_is_not_replayed() {
+	fn leftover_mapping_does_not_consult_herdr_on_uncertain_list() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
@@ -1426,11 +1341,11 @@ mod tests {
 		fake.fail_list(AppError::HerdrUncertainOutcome("dropped".into()));
 		let runtime = local_router(&db, Some(fake.clone()));
 
-		let err = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect_err("uncertain");
+		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
+			.expect("sqlite cache");
 
-		assert!(matches!(err, AppError::HerdrUncertainOutcome(_)), "{err}");
-		assert_eq!(fake.methods(), vec!["worktree.list".to_string()]);
+		assert_eq!(path, "/stale");
+		assert!(fake.methods().is_empty());
 		let conn = &mut *db.lock().unwrap();
 		assert_eq!(
 			repo::profile::find_by_id(conn, &profile_id)
@@ -1441,7 +1356,7 @@ mod tests {
 	}
 
 	#[test]
-	fn list_with_runtime_returns_reconciled_worktree_path() {
+	fn list_with_runtime_local_keeps_sqlite_worktree_path() {
 		let mut conn = setup_db();
 		let (project_id, profile_id) =
 			insert_catalog(&mut conn, "/repo", "/stale");
@@ -1477,9 +1392,9 @@ mod tests {
 			.iter()
 			.find(|profile| profile.id == unmapped.id)
 			.unwrap();
-		assert_eq!(mapped.worktree_path, "/listed");
+		assert_eq!(mapped.worktree_path, "/stale");
 		assert_eq!(local.worktree_path, "/local-wt");
-		assert_eq!(fake.calls(), vec![(None, Some("w1".into()))]);
+		assert!(fake.methods().is_empty());
 	}
 
 	#[test]
