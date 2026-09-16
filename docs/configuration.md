@@ -11,38 +11,28 @@
 | `tsconfig.json`                | Root             | TypeScript config: path aliases (`@/` → `src/`), `allowJs: true` for Paraglide              |
 | `eslint.config.js`             | Root             | ESLint config (flat config format)                                                          |
 | `knip.config.ts`               | Root             | Dead code detection config                                                                  |
-| `justfile`                     | Root             | Build recipes: `fmt`, `build-helper`, `build-helper-dev`, `start`                           |
+| `justfile`                     | Root             | Build recipes: `fmt`, `coverage`, `start`                                                   |
 | `project.inlang/settings.json` | Root             | Paraglide.js i18n config, must include message format plugin module                         |
-| `2code.json`                   | Per-project root | Project-level setup/teardown scripts                                                        |
+| `2code.json`                   | Per-project root | Project-level setup/teardown/init scripts and terminal templates                            |
 
 ## Build Commands
 
 | Command                        | What it does                                                                                    |
 | ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `bun tauri dev`                | Full dev server (frontend + Rust hot-reload). Runs `just build-helper-dev && bun run dev` first |
-| `bun tauri build`              | Production build. Runs `just build-helper && bun run build` first                               |
+| `bun tauri dev`                | Full dev server (frontend + Rust hot-reload). Runs `scripts/tauri-before.mjs` (Herdr sidecar) then Vite |
+| `bun tauri build`              | Production build. Same sidecar install, then `bun run build`                                    |
 | `bun run dev`                  | Frontend-only Vite dev server on port 1420                                                      |
 | `bun run build`                | `paraglide-js compile` → `tsc` → `vite build`                                                   |
 | `just fmt`                     | Run `fama` code formatter                                                                       |
-| `just build-helper`            | Build sidecar in release mode, copy to `binaries/`                                              |
-| `just build-helper-dev`        | Build sidecar in debug mode, copy to `binaries/`                                                |
+| `bun ./scripts/herdr-sidecar.mjs` | Fetch/verify pinned Herdr v0.9.0 into `src-tauri/binaries/herdr-<triple>`                    |
 | `cargo test`                   | Run all Rust tests (from `src-tauri/`)                                                          |
 | `cargo tauri-typegen generate` | Regenerate TypeScript IPC bindings                                                              |
 
 ## Environment Variables
 
-### PTY Session Environment
+There is no Local PTY env injection from `infra/pty.rs` (`TERM`, `_2CODE_HELPER`, `ZDOTDIR`, `TWOCODE_RUNTIME`). Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md).
 
-Injected into every PTY session by `infra/pty.rs`:
-
-| Variable              | Value                            | Purpose                                               |
-| --------------------- | -------------------------------- | ----------------------------------------------------- |
-| `TERM`                | `xterm-256color`                 | Terminal type for color support                       |
-| `_2CODE_HELPER_URL`   | `http://127.0.0.1:{port}`        | URL for sidecar → app HTTP communication              |
-| `_2CODE_HELPER`       | `/path/to/2code-helper-{target}` | Path to sidecar binary                                |
-| `_2CODE_SESSION_ID`   | UUID                             | Session identifier for notification routing           |
-| `ZDOTDIR`             | Temp directory path              | Overrides zsh init directory for shell init injection |
-| `_2CODE_ORIG_ZDOTDIR` | Original `$ZDOTDIR`              | Preserved original ZDOTDIR for restoration            |
+`2code.json` `init_script` and New Tab `startup_commands` are sent once after Herdr `tab.create` via `pane.send_input`.
 
 ### Build-time Environment
 
@@ -54,57 +44,52 @@ Injected into every PTY session by `infra/pty.rs`:
 
 ## Database Schema
 
-SQLite database stored at `{app_data_dir}/app.db`. Pragmas: `journal_mode=WAL`, `foreign_keys=ON`.
+SQLite database stored at `{app_data_dir}/app.db`. Pragmas: `journal_mode=WAL`, `foreign_keys=ON`. Live schema: [`src-tauri/crates/model/src/schema.rs`](../src-tauri/crates/model/src/schema.rs).
+
+sqlite `profiles`, `pty_sessions`, `pty_output_chunks`, and mapping tables are **DROPped**. They are not live. Profile identity is Herdr `workspace_id`. Sessions are live `pane_id`s.
 
 ### Tables
 
 #### `projects`
 
+| Column         | Type      | Constraints                    |
+| -------------- | --------- | ------------------------------ |
+| `id`           | TEXT      | PRIMARY KEY                    |
+| `name`         | TEXT      | NOT NULL                       |
+| `folder`       | TEXT      | NOT NULL                       |
+| `created_at`   | TIMESTAMP | NOT NULL                       |
+| `group_id`     | TEXT      | NULLABLE, FK → project_groups  |
+| `sort_order`   | INTEGER   | NOT NULL                       |
+| `pinned_at`    | TIMESTAMP | NULLABLE                       |
+| `pinned_order` | INTEGER   | NULLABLE                       |
+
+#### `project_groups`
+
 | Column       | Type      | Constraints |
 | ------------ | --------- | ----------- |
 | `id`         | TEXT      | PRIMARY KEY |
 | `name`       | TEXT      | NOT NULL    |
-| `folder`     | TEXT      | NOT NULL    |
 | `created_at` | TIMESTAMP | NOT NULL    |
+| `sort_order` | INTEGER   | NOT NULL    |
 
-#### `profiles`
+#### `checkout_notes`
 
 | Column          | Type      | Constraints                                   |
 | --------------- | --------- | --------------------------------------------- |
-| `id`            | TEXT      | PRIMARY KEY                                   |
-| `project_id`    | TEXT      | NOT NULL, FK → projects(id) ON DELETE CASCADE |
-| `branch_name`   | TEXT      | NOT NULL                                      |
-| `worktree_path` | TEXT      | NOT NULL                                      |
+| `project_id`    | TEXT      | NOT NULL, FK → projects(id)                   |
+| `checkout_path` | TEXT      | NOT NULL                                      |
+| `notes`         | TEXT      | NOT NULL                                      |
 | `created_at`    | TIMESTAMP | NOT NULL                                      |
-| `is_default`    | BOOLEAN   | NOT NULL                                      |
 
-#### `pty_sessions`
-
-| Column       | Type      | Constraints                                   |
-| ------------ | --------- | --------------------------------------------- |
-| `id`         | TEXT      | PRIMARY KEY                                   |
-| `profile_id` | TEXT      | NOT NULL, FK → profiles(id) ON DELETE CASCADE |
-| `title`      | TEXT      | NOT NULL                                      |
-| `shell`      | TEXT      | NOT NULL                                      |
-| `cwd`        | TEXT      | NOT NULL                                      |
-| `created_at` | TIMESTAMP | NOT NULL                                      |
-| `closed_at`  | TIMESTAMP | NULLABLE                                      |
-
-#### `pty_output_chunks`
-
-| Column       | Type    | Constraints                                       |
-| ------------ | ------- | ------------------------------------------------- |
-| `id`         | INTEGER | PRIMARY KEY (nullable for auto-increment)         |
-| `session_id` | TEXT    | NOT NULL, FK → pty_sessions(id) ON DELETE CASCADE |
-| `data`       | BLOB    | NOT NULL                                          |
+Primary key: `(project_id, checkout_path)`. Notes overlay the live Herdr catalog; they are not stored in Herdr.
 
 ### Relationships
 
 ```
-projects 1──* profiles 1──* pty_sessions 1──* pty_output_chunks
+project_groups 1──* projects 1──* checkout_notes
 ```
 
-All foreign keys use `ON DELETE CASCADE`.
+`projects.group_id` is nullable. Deleting a project forgets the catalog row and retains Herdr worktrees/panes.
 
 ## Project Configuration (`2code.json`)
 
@@ -120,11 +105,12 @@ Optional file in project root folder:
 
 | Field             | Type       | When Executed                                            |
 | ----------------- | ---------- | -------------------------------------------------------- |
-| `setup_script`    | `string[]` | On profile creation, in worktree directory               |
-| `teardown_script` | `string[]` | On profile deletion, in worktree directory               |
-| `init_script`     | `string[]` | On every new PTY session, injected via ZDOTDIR `.zshenv` |
+| `setup_script`    | `string[]` | On profile creation, in the live checkout directory      |
+| `teardown_script` | `string[]` | On profile deletion, in the live checkout directory      |
+| `init_script`     | `string[]` | Once after Herdr `tab.create`, via `pane.send_input`     |
+| `worktree_dir`    | `string`   | Optional override for git New Profile checkout path      |
 
-Scripts execute via `sh -c` in the project/worktree directory.
+Scripts execute via `sh -c` in the project/checkout directory.
 
 ## Tauri Plugins
 
@@ -153,8 +139,7 @@ The notification store dual-writes to both localStorage (for Zustand persist) an
 | ----------------- | --------------------------------- |
 | Window size       | 1440 x 900, centered              |
 | Title bar         | macOS overlay style, hidden title |
-| Traffic lights    | Positioned at (16, 18)            |
+| Traffic lights    | Positioned at (16, 24)            |
 | Dev URL           | `http://localhost:1420`           |
-| CSP               | Disabled (null)                   |
-| External binaries | `binaries/2code-helper`           |
+| External binaries | `binaries/herdr` (pinned v0.9.0)  |
 | Bundle targets    | All platforms                     |

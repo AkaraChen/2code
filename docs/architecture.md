@@ -1,5 +1,7 @@
 # Architecture
 
+Herdr is the production runtime. sqlite `profiles` / `pty_sessions` and Local PTY are gone. Probe contract: [Herdr integration](herdr-integration.md).
+
 ## Architecture Diagram
 
 ```mermaid
@@ -16,69 +18,78 @@ graph TD
         H[Handler Layer<br/>Tauri Commands]
         S[Service Layer<br/>Business Logic]
         R[Repo Layer<br/>Diesel ORM]
-        I[Infrastructure<br/>PTY, Git, DB, FS]
+        I[Infrastructure<br/>Herdr, Git, DB, FS]
+        RR[RuntimeRouter<br/>Herdr-only]
     end
 
     subgraph External ["External"]
-        DB[(SQLite)]
+        DB[(SQLite<br/>projects / groups / notes)]
         FS[File System]
         Git[Git CLI]
-        Shell[User Shell<br/>zsh/bash]
+        Herdr[Pinned Herdr v0.9.0 sidecar]
     end
 
     App --> Gen
     Gen -->|IPC| H
     H --> S
     S --> R
-    S --> I
+    S --> RR
+    RR --> Herdr
     R --> DB
-    I -->|portable-pty| Shell
     I -->|git commands| Git
     I -->|notify crate| FS
-    I -->|per-session Channel<ArrayBuffer>| XT
+    RR -->|Channel HerdrTerminalFrame| XT
     XT -->|agent status| ZS
 ```
 
 ## Architecture Pattern
 
-**Layered architecture** with 4 backend layers and a feature-based frontend. The backend enforces strict dependency direction: Handler → Service → Repo/Infrastructure. The frontend uses feature modules with co-located hooks, components, and stores.
+**Layered architecture** with 4 backend layers and a feature-based frontend. The backend enforces strict dependency direction: Handler → Service → Repo/Infrastructure. The frontend uses feature modules with co-located hooks, components, and stores. Session/profile/git paths go through Herdr-only `RuntimeRouter`; sqlite is the project catalog.
 
 ## Backend Layers
 
 ### 1. Handler (`src-tauri/src/handler/`)
 
-Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `PtySessionMap`), acquires DB lock, delegates to service layer. No business logic.
+Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `RuntimeHandle`), acquires the DB lock only when sqlite is needed, delegates to the service layer. No business logic. Existing IPC names stay (`create_pty_session`, `create_profile`, `delete_project`, …).
 
 | File         | Commands                                                                                                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_git_branch`, `get_git_diff`, `get_git_log`, `get_commit_diff` |
-| `pty.rs`     | `create_pty_session`, `write_to_pty`, `resize_pty`, `close_pty_session`, `list_project_sessions`, `get_pty_session_history`, `delete_pty_session_record`                          |
-| `profile.rs` | `create_profile`, `delete_profile`                                                                                                                                                |
+| `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, git helpers (`get_git_branch`, `get_git_diff`, `get_git_log`, …) |
+| `pty.rs`     | `create_pty_session`, `write_to_pty`, `resize_pty`, `scroll_pty`, `close_pty_session`, `list_project_sessions`, `attach_pty_output`, `stream_herdr_output`, `detach_pty_output` |
+| `profile.rs` | `create_profile`, `delete_profile`, `get_profile_delete_check`, `update_profile_notes`                                                                                            |
 | `watcher.rs` | `watch_projects`                                                                                                                                                                  |
 | `font.rs`    | `list_system_fonts`                                                                                                                                                               |
 | `sound.rs`   | `list_system_sounds`, `play_system_sound`                                                                                                                                         |
 | `debug.rs`   | `start_debug_log`, `stop_debug_log`                                                                                                                                               |
 
+`delete_project` is catalog-forget + retain: drop the sqlite `projects` row and release Herdr attachments without `pane.close` / `worktree.remove`.
+
 ### 2. Service (`src-tauri/crates/service/`)
 
-Business logic and orchestration. Coordinates between repo and infrastructure layers.
+Business logic and orchestration. Coordinates between repo, infrastructure, and Herdr.
 
-| File         | Responsibility                                                                                                         |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `project.rs` | Project CRUD, git branch/diff/log resolution via context ID                                                            |
-| `profile.rs` | Profile creation (git worktree + setup script), deletion (teardown + cleanup), branch name sanitization                |
-| `pty.rs`     | Session lifecycle, read loop, output persistence to per-session log files, orphan-log GC, session cleanup             |
-| `watcher.rs` | File system watch orchestration                                                                                        |
+| File              | Responsibility                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `project.rs`      | Project CRUD; `list_with_runtime` / `adopt_existing_checkouts`; `reconcile_profile_checkout` (live Herdr cwd)          |
+| `profile.rs`      | Create via Herdr `worktree.create` / `workspace.create`; delete via `worktree.remove` / `workspace.close`              |
+| `runtime.rs`      | Herdr-only `RuntimeRouter` (create/list/close/write/resize; restore reattaches a live `pane_id`)                       |
+| `runtime/herdr.rs`| Herdr adapter: `pane_id` sessions, frame stream, snapshot list                                                         |
+| `runtime_sync.rs` | `HerdrRuntimeSync` started from GUI connect (`connect_gui_herdr`); `lib.rs` does not name it                           |
+| `watcher.rs`      | File system watch orchestration from live checkout roots                                                               |
+
+There is no `service::pty` Local spawn, no orphan-log GC, and no `TWOCODE_RUNTIME`.
 
 ### 3. Repository (`src-tauri/crates/repo/`)
 
-Direct database access via Diesel ORM. Pure CRUD plus composite queries.
+Direct database access via Diesel ORM. Pure CRUD plus composite queries. sqlite tables: `projects`, `project_groups`, `checkout_notes`.
 
-| File         | Responsibility                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| `project.rs` | Project CRUD, `resolve_context_folder()` (profile ID → worktree path, project ID → folder) |
-| `profile.rs` | Profile CRUD, project folder lookup                                                        |
-| `pty.rs`     | Session metadata CRUD (insert/list/dimensions/mark-closed/delete); output bytes live in files via `infra::pty_log` |
+| File                | Responsibility                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `project.rs`        | Project CRUD                                                                               |
+| `project_group.rs`  | Sidebar group CRUD                                                                         |
+| `checkout_notes.rs` | Notes keyed by `project_id` + canonical checkout path                                      |
+
+There is no repo `profile.rs` / `pty.rs`. Checkout paths for Git / the file tree come from live Herdr, not a sqlite `profiles` table.
 
 ### 4. Infrastructure (`src-tauri/crates/infra/`)
 
@@ -87,16 +98,16 @@ Cross-cutting concerns and external system integrations.
 | File            | Responsibility                                                                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | `db.rs`         | SQLite init, WAL + FK pragmas, embedded migrations. Type: `DbPool = Arc<Mutex<SqliteConnection>>`            |
-| `pty.rs`        | PTY session map, `create_session()` / `write_to_pty()` / `resize_pty()` / `close_session()` via portable-pty |
-| `pty_log.rs`    | Per-session output log files: append/read/clear/remove plus startup orphan GC                               |
+| `herdr/`        | Pinned v0.9.0 sidecar resolve, dedicated `2code` namespace, NDJSON transport, CLI terminal attach            |
 | `git.rs`        | Git CLI execution: branch, diff, log, show. Commit parsing, shortstat parsing                                |
-| `shell_init.rs` | Prepares ZDOTDIR temp directory with `.zshenv` for shell init script injection                               |
 | `filesystem.rs` | File-tree operations: list/rename/move/delete/create/search with worktree containment                        |
 | `config.rs`     | Loads `2code.json` project config, executes setup/teardown scripts                                           |
 | `no_window.rs`  | No-window label helper for startup/background flows                                                          |
 | `slug.rs`       | CJK-aware slug generation (pinyin crate)                                                                     |
 | `logger.rs`     | Tracing channel layer for debug log streaming                                                                |
 | `watcher.rs`    | File system watching via `notify` crate, shutdown flag                                                       |
+
+There is no `infra::pty` / `pty_log.rs` / `shell_init.rs`. Shell init is Herdr `init_script` / `startup_commands` after `tab.create`.
 
 ## Frontend Architecture
 
@@ -115,11 +126,13 @@ QueryClientProvider → ThemeProvider → TooltipProvider → BrowserRouter → 
 | `/settings`                         | `SettingsPage`      |
 | `*`                                 | Redirect to `/`     |
 
+`profileId` in the route is a Herdr `workspace_id`.
+
 ### State Management
 
 | Store                 | Type              | Location                                            | Persistence                       |
 | --------------------- | ----------------- | --------------------------------------------------- | --------------------------------- |
-| Terminal tabs         | Zustand + immer   | `features/terminal/store.ts`                        | Rebuilt from DB on startup        |
+| Terminal tabs         | Zustand + immer   | `features/terminal/store.ts`                        | Rebuilt from live Herdr panes     |
 | Terminal settings     | Zustand + persist | `features/settings/stores/terminalSettingsStore.ts` | localStorage                      |
 | Notification settings | Zustand + persist | `features/settings/stores/notificationStore.ts`     | localStorage + tauri-plugin-store |
 | Theme settings        | Zustand + persist | `features/settings/stores/themeStore.ts`            | localStorage                      |
@@ -129,7 +142,7 @@ QueryClientProvider → ThemeProvider → TooltipProvider → BrowserRouter → 
 
 ### Terminal Architecture
 
-Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`) renders as a persistent absolute-positioned overlay. Tab switches use CSS `display: none` to preserve xterm.js state. Each terminal instance wraps xterm.js and receives live PTY output over a per-session Tauri channel (`Channel<ArrayBuffer>`); session exit remains a Tauri event (`pty-exit-{id}`).
+Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`) renders as a persistent absolute-positioned overlay. Tab switches use CSS `display: none` to preserve xterm.js state. Each terminal instance wraps xterm.js and receives live Herdr frames over `stream_herdr_output` (`Channel<HerdrTerminalFrame>`). Tab ids are live `pane_id`s.
 
 ## Workspace Crates
 
@@ -137,10 +150,10 @@ Terminals never unmount. `TerminalLayer` (`features/terminal/TerminalLayer.tsx`)
 src-tauri/
 ├── Cargo.toml          # workspace root
 ├── crates/
-│   ├── infra/          # DB, PTY, logs, git, filesystem, watcher, config
+│   ├── infra/          # DB, Herdr sidecar/transport, git, filesystem, watcher, config
 │   ├── model/          # DTOs, Diesel models, error types
-│   ├── repo/           # Diesel repositories
-│   └── service/        # Business logic
+│   ├── repo/           # Diesel repositories (projects, groups, checkout_notes)
+│   └── service/        # Business logic + Herdr-only RuntimeRouter
 └── src/                # Tauri app shell, handlers, bridge implementations
 ```
 
@@ -149,9 +162,9 @@ src-tauri/
 | Decision                                | Rationale                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single SQLite connection (`Arc<Mutex>`) | Desktop app with single user; pool overhead unnecessary                                     |
+| sqlite `projects` stay in 2code         | Project catalog is 2code-owned; Herdr is the profile/session authority                      |
+| Herdr-only `RuntimeRouter`              | Local PTY / `TWOCODE_RUNTIME` deleted; fail closed if the sidecar is absent                 |
 | CSS display for terminal visibility     | xterm.js loses state on unmount; display toggle preserves it                                |
 | tauri-typegen for IPC bindings          | Eliminates manual TS wrappers, type-safe end-to-end                                         |
 | Frontend-driven agent notifications     | Terminal output detection owns running/waiting state; waiting transitions can play the configured system sound |
-| ZDOTDIR injection for shell init        | Non-destructive way to inject init scripts into zsh without modifying user dotfiles         |
-| immer `enableMapSet()`                  | Terminal store uses `Set<string>` for notification tracking; requires explicit immer plugin |
 | Feature-based frontend structure        | Co-locates hooks, components, and stores per domain for cohesion                            |
