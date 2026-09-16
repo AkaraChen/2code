@@ -1096,6 +1096,68 @@ fn herdr_workspace_listed_absent(
 	}
 }
 
+fn git_common_dir(path: &str) -> Option<PathBuf> {
+	if !Path::new(path).exists() {
+		return None;
+	}
+	let output = infra::no_window::command_without_windows_console("git")
+		.args(["rev-parse", "--git-common-dir"])
+		.current_dir(path)
+		.output()
+		.ok()?;
+	if !output.status.success() {
+		return None;
+	}
+	let raw = String::from_utf8_lossy(&output.stdout);
+	let trimmed = raw.trim();
+	if trimmed.is_empty() {
+		return None;
+	}
+	let resolved = Path::new(trimmed);
+	if resolved.is_absolute() {
+		resolved.canonicalize().ok()
+	} else {
+		Path::new(path).join(resolved).canonicalize().ok()
+	}
+}
+
+fn git_repo_folder_for_checkout(checkout: &str) -> Option<String> {
+	let common = git_common_dir(checkout)?;
+	let folder = if common.file_name().is_some_and(|name| name == ".git") {
+		common.parent()?.to_path_buf()
+	} else {
+		common
+	};
+	folder.to_str().map(str::to_string)
+}
+
+/// Repo for `git branch -D` after Herdr `worktree.remove`. Listed checkout
+/// first; `projects.folder` only as a live path join, never sqlite `profiles`.
+fn repo_folder_for_linked_checkout(
+	db: &DbPool,
+	checkout: &str,
+) -> Option<String> {
+	if let Some(repo) = git_repo_folder_for_checkout(checkout) {
+		return Some(repo);
+	}
+	let projects = {
+		let mut conn = db.lock().ok()?;
+		repo::project::list_all(&mut conn).ok()?
+	};
+	let checkout_path = Path::new(checkout);
+	let checkout_common = git_common_dir(checkout);
+	projects.into_iter().find_map(|project| {
+		if same_worktree_path(Path::new(&project.folder), checkout_path) {
+			return Some(project.folder);
+		}
+		let project_common = git_common_dir(&project.folder)?;
+		checkout_common
+			.as_ref()
+			.filter(|common| *common == &project_common)
+			.map(|_| project.folder)
+	})
+}
+
 fn run_teardown_script(profile: &Profile, project_folder: &str) {
 	let worktree_path = PathBuf::from(&profile.worktree_path);
 	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
@@ -1268,13 +1330,15 @@ fn delete_sqlite_identity(
 
 fn delete_herdr_identity(
 	runtime: &RuntimeRouter,
-	_db: &DbPool,
+	db: &DbPool,
 	id: &str,
 	force: Option<bool>,
 ) -> Result<(), AppError> {
 	let worktrees = runtime.herdr_worktrees()?;
 	match worktrees.worktree_list(None, Some(id)) {
-		Ok(listed) => delete_herdr_git_workspace(worktrees, id, &listed, force),
+		Ok(listed) => {
+			delete_herdr_git_workspace(worktrees, db, id, &listed, force)
+		}
 		Err(err) if is_not_git_worktree(&err) => {
 			delete_herdr_nongit_workspace(worktrees, id)
 		}
@@ -1290,6 +1354,7 @@ fn delete_herdr_identity(
 
 fn delete_herdr_git_workspace(
 	worktrees: &dyn HerdrWorktreeClient,
+	db: &DbPool,
 	workspace_id: &str,
 	listed: &[infra::herdr::transport::WorktreeListEntry],
 	force: Option<bool>,
@@ -1303,6 +1368,17 @@ fn delete_herdr_git_workspace(
 
 	let checkout = entry.path.clone();
 	let checkout_exists = Path::new(&checkout).exists();
+	let branch_name = entry
+		.branch
+		.clone()
+		.filter(|branch| !branch.is_empty())
+		.or_else(|| {
+			infra::git::worktree_current_branch(&checkout)
+				.ok()
+				.flatten()
+		})
+		.unwrap_or_default();
+	let repo = repo_folder_for_linked_checkout(db, &checkout);
 	run_teardown_script_at(&checkout);
 	let force = match force {
 		Some(force) => force,
@@ -1328,6 +1404,11 @@ fn delete_herdr_git_workspace(
 		return Err(AppError::GitError(
 			"worktree.remove left the checkout in place; not using git worktree remove".into(),
 		));
+	}
+	if let Some(repo) = repo.filter(|folder| !folder.is_empty()) {
+		if !branch_name.is_empty() {
+			infra::git::branch_delete(&repo, &branch_name)?;
+		}
 	}
 	Ok(())
 }
@@ -2141,6 +2222,9 @@ mod tests {
 		let path = state.listed[index].path.clone();
 		state.listed.remove(index);
 		if !path.is_empty() {
+			if let Some(repo) = git_repo_folder_for_checkout(&path) {
+				let _ = infra::git::worktree_remove(&repo, &path);
+			}
 			let _ = std::fs::remove_dir_all(&path);
 		}
 		Ok(WorktreeRemoveResult {
@@ -2448,7 +2532,7 @@ mod tests {
 	#[test]
 	fn confirmed_dirty_herdr_delete_passes_force() {
 		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let (project, _dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
@@ -2472,16 +2556,60 @@ mod tests {
 		assert_eq!(fake.removes().len(), 1);
 		assert!(fake.last_remove().force);
 		assert!(!Path::new(&profile.worktree_path).exists());
-		let branches = infra::no_window::command_without_windows_console("git")
-			.args(["branch", "--list", "feat/force"])
-			.current_dir(dir.path())
-			.output()
-			.unwrap();
-		assert!(
-			!String::from_utf8_lossy(&branches.stdout).contains("feat/force")
-		);
 		let conn = &mut *db.lock().unwrap();
 		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
+	}
+
+	#[test]
+	fn herdr_delete_removes_git_branch_so_create_can_reuse_name() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let global_base = TempDir::new().expect("worktree base");
+		let checkout = global_base.path().join("feat-reuse");
+		let checkout_path = checkout.to_string_lossy().into_owned();
+		run_git(
+			dir.path(),
+			["worktree", "add", "-b", "feat/reuse", &checkout_path],
+		);
+		assert!(infra::git::local_branch_exists(&folder, "feat/reuse").unwrap());
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: checkout
+					.canonicalize()
+					.unwrap()
+					.to_string_lossy()
+					.into_owned(),
+				branch: Some("feat/reuse".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		delete_with_runtime(&router, &db, "w2").unwrap();
+
+		assert_eq!(fake.removes().len(), 1);
+		assert!(!checkout.exists());
+		assert!(
+			!infra::git::local_branch_exists(&folder, "feat/reuse").unwrap()
+		);
+
+		let created = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/reuse",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(created.branch_name, "feat/reuse");
+		assert_eq!(fake.creates(), 1);
+		assert!(sqlite_extras(&db, &project.id).is_empty());
 	}
 
 	#[test]
@@ -3374,7 +3502,7 @@ mod tests {
 		);
 		assert!(!identity.contains("repo::profile::delete_record"));
 		assert!(!identity.contains("infra::git::worktree_remove"));
-		assert!(!identity.contains("branch_delete"));
+		assert!(identity.contains("branch_delete"));
 		assert!(!identity.contains("git::worktree_remove"));
 		let handler = include_str!("../../../src/handler/profile.rs");
 		let create = handler
