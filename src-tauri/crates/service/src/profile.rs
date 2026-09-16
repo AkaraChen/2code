@@ -1175,6 +1175,18 @@ fn delete_with_runtime_force(
 	id: &str,
 	force: Option<bool>,
 ) -> Result<(), AppError> {
+	if runtime.selected_backend() == RuntimeBackend::Herdr {
+		return delete_herdr_identity(runtime, db, id, force);
+	}
+	delete_sqlite_identity(runtime, db, id, force)
+}
+
+fn delete_sqlite_identity(
+	runtime: &RuntimeRouter,
+	db: &infra::db::DbPool,
+	id: &str,
+	force: Option<bool>,
+) -> Result<(), AppError> {
 	let (profile, project_folder, session_ids, mapping) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let (profile, project_folder) =
@@ -1212,6 +1224,106 @@ fn delete_with_runtime_force(
 		repo::pty::mark_closed(conn, session_id);
 	}
 	repo::profile::delete_record(conn, id)
+}
+
+fn delete_herdr_identity(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	id: &str,
+	force: Option<bool>,
+) -> Result<(), AppError> {
+	if let Some(sqlite_id) = crate::project::mapped_sqlite_profile_id(db, id)? {
+		return delete_sqlite_identity(runtime, db, &sqlite_id, force);
+	}
+
+	let sqlite_exists = {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		repo::profile::find_by_id(conn, id).is_ok()
+	};
+	if sqlite_exists {
+		return delete_sqlite_identity(runtime, db, id, force);
+	}
+
+	delete_unmapped_herdr_workspace(runtime, id, force)
+}
+
+fn delete_unmapped_herdr_workspace(
+	runtime: &RuntimeRouter,
+	workspace_id: &str,
+	force: Option<bool>,
+) -> Result<(), AppError> {
+	let worktrees = runtime.herdr_worktrees()?;
+	let listed = match worktrees.worktree_list(None, Some(workspace_id)) {
+		Ok(listed) => listed,
+		Err(AppError::HerdrTransport(message))
+			if message.contains("not_git_worktree") =>
+		{
+			return Ok(());
+		}
+		Err(AppError::NotFound(_)) => return Ok(()),
+		Err(err) => return Err(err),
+	};
+	let Some(entry) = listed_workspace(&listed, workspace_id) else {
+		return Ok(());
+	};
+	if !entry.is_linked_worktree {
+		return Err(refuse_primary_checkout());
+	}
+	let force = force.unwrap_or(false);
+	match worktrees.worktree_remove(workspace_id, force) {
+		Ok(_) => Ok(()),
+		Err(AppError::HerdrUncertainOutcome(_)) => Ok(()),
+		Err(err) => Err(err),
+	}
+}
+
+pub fn update_notes_with_runtime(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	id: &str,
+	notes: &str,
+) -> Result<Profile, AppError> {
+	if runtime.selected_backend() == RuntimeBackend::Local {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		return repo::profile::update_notes(conn, id, notes);
+	}
+
+	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
+	if let Some(sqlite_id) = crate::project::mapped_sqlite_profile_id(db, id)? {
+		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+		let mut profile = repo::profile::update_notes(conn, &sqlite_id, notes)?;
+		profile.id = id.to_string();
+		profile.worktree_path = path;
+		return Ok(profile);
+	}
+
+	Ok(Profile {
+		id: id.to_string(),
+		project_id: project_id_for_checkout(db, &path)?.unwrap_or_default(),
+		branch_name: infra::git::branch(&path).unwrap_or_default(),
+		worktree_path: path,
+		created_at: String::new(),
+		is_default: false,
+		notes: String::new(),
+	})
+}
+
+fn project_id_for_checkout(
+	db: &DbPool,
+	path: &str,
+) -> Result<Option<String>, AppError> {
+	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+	Ok(repo::project::list_all(conn)?
+		.into_iter()
+		.find(|project| {
+			project.folder == path
+				|| Path::new(&project.folder)
+					.canonicalize()
+					.ok()
+					.zip(Path::new(path).canonicalize().ok())
+					.is_some_and(|(left, right)| left == right)
+		})
+		.map(|project| project.id))
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {

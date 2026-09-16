@@ -246,13 +246,12 @@ pub async fn search_file(
 	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let _ = service::project::reconcile_profile_checkout(
+		service::filesystem::search_file_for_profile(
 			&runtime,
 			&db,
 			&profile_id,
-		)?;
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::search_file(conn, &profile_id, &query)
+			&query,
+		)
 	})
 	.await
 }
@@ -267,13 +266,11 @@ pub async fn get_file_tree_git_status(
 	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let _ = service::project::reconcile_profile_checkout(
+		service::filesystem::get_file_tree_git_status_for_profile(
 			&runtime,
 			&db,
 			&profile_id,
-		)?;
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		service::filesystem::get_file_tree_git_status(conn, &profile_id)
+		)
 	})
 	.await
 }

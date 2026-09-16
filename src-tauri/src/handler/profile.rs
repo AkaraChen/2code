@@ -56,23 +56,21 @@ pub async fn delete_profile(
 #[tracing::instrument(skip_all)]
 pub async fn get_profile_delete_check(
 	id: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<ProfileDeleteCheck, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let profile = {
-			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-			repo::profile::find_by_id(conn, &id)?
-		};
-		let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
-		let unpushed_commits = infra::git::branch_unique_commits(
-			&profile.worktree_path,
-			&profile.branch_name,
-		)?;
-		let unpushed_commit_diff = infra::git::commit_diff_stats(
-			&profile.worktree_path,
-			&unpushed_commits,
-		)?;
+		let worktree_path =
+			service::project::reconcile_profile_checkout(&runtime, &db, &id)?;
+		let branch_name =
+			infra::git::branch(&worktree_path).unwrap_or_default();
+		let working_tree_diff = infra::git::diff_stats(&worktree_path)?;
+		let unpushed_commits =
+			infra::git::branch_unique_commits(&worktree_path, &branch_name)?;
+		let unpushed_commit_diff =
+			infra::git::commit_diff_stats(&worktree_path, &unpushed_commits)?;
 
 		Ok(ProfileDeleteCheck {
 			total_diff: add_diff_stats(
@@ -92,12 +90,13 @@ pub async fn get_profile_delete_check(
 pub async fn update_profile_notes(
 	id: String,
 	notes: String,
+	runtime: State<'_, RuntimeHandle>,
 	state: State<'_, DbPool>,
 ) -> Result<Profile, AppError> {
+	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		repo::profile::update_notes(conn, &id, &notes)
+		service::profile::update_notes_with_runtime(&runtime, &db, &id, &notes)
 	})
 	.await
 }

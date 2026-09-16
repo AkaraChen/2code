@@ -715,11 +715,17 @@ impl HerdrLifecycle {
 		let mapping = self.with_db(|conn| {
 			match repo::runtime_mapping::find_profile_mapping(conn, profile_id)
 			{
-				Ok(mapping) => Ok(mapping),
+				Ok(mapping) => Ok(Some(mapping)),
 				Err(AppError::NotFound(_)) => {
-					Err(AppError::RuntimeMappingMissing(format!(
-						"profile {profile_id} has no Herdr workspace"
-					)))
+					match repo::runtime_mapping::find_profile_by_workspace(
+						conn,
+						HERDR_NAMESPACE,
+						profile_id,
+					) {
+						Ok(mapping) => Ok(Some(mapping)),
+						Err(AppError::NotFound(_)) => Ok(None),
+						Err(err) => Err(err),
+					}
 				}
 				Err(err) => Err(err),
 			}
@@ -727,35 +733,105 @@ impl HerdrLifecycle {
 		let snapshot = self.client.session_snapshot()?;
 		let mut projection = RuntimeProjection::new();
 		projection.apply_snapshot(&snapshot)?;
-		match workspace_identity_state(&mapping, &projection) {
-			RuntimeIdentityState::Bound => Ok(mapping.workspace_id),
-			RuntimeIdentityState::Missing => {
-				Err(AppError::RuntimeMappingMissing(format!(
-					"workspace {} is missing",
-					mapping.workspace_id
-				)))
-			}
-			RuntimeIdentityState::Replaced => {
-				Err(AppError::RuntimeMappingReplaced(format!(
-					"workspace {}",
-					mapping.workspace_id
-				)))
-			}
+		if let Some(mapping) = mapping {
+			return match workspace_identity_state(&mapping, &projection) {
+				RuntimeIdentityState::Bound => Ok(mapping.workspace_id),
+				RuntimeIdentityState::Missing => {
+					Err(AppError::RuntimeMappingMissing(format!(
+						"workspace {} is missing",
+						mapping.workspace_id
+					)))
+				}
+				RuntimeIdentityState::Replaced => {
+					Err(AppError::RuntimeMappingReplaced(format!(
+						"workspace {}",
+						mapping.workspace_id
+					)))
+				}
+			};
 		}
+		if projection.workspace(profile_id).is_some() {
+			return Ok(profile_id.to_string());
+		}
+		Err(AppError::RuntimeMappingMissing(format!(
+			"profile {profile_id} has no Herdr workspace"
+		)))
 	}
 
 	fn profile_checkout(&self, profile_id: &str) -> Result<String, AppError> {
-		self.with_db(|conn| {
-			Ok(repo::profile::find_by_id(conn, profile_id)?.worktree_path)
-		})
+		if let Ok(path) = self.live_checkout(profile_id) {
+			if !path.is_empty() {
+				return Ok(path);
+			}
+		}
+		match self.with_db(|conn| {
+			if let Ok(profile) = repo::profile::find_by_id(conn, profile_id) {
+				return Ok(profile.worktree_path);
+			}
+			match repo::runtime_mapping::find_profile_by_workspace(
+				conn,
+				HERDR_NAMESPACE,
+				profile_id,
+			) {
+				Ok(mapping) => {
+					Ok(repo::profile::find_by_id(conn, &mapping.profile_id)?
+						.worktree_path)
+				}
+				Err(AppError::NotFound(_)) => {
+					Err(AppError::NotFound(format!("Profile: {profile_id}")))
+				}
+				Err(err) => Err(err),
+			}
+		}) {
+			Ok(path) => Ok(path),
+			Err(AppError::NotFound(_)) => Ok(String::new()),
+			Err(err) => Err(err),
+		}
+	}
+
+	fn live_checkout(&self, profile_id: &str) -> Result<String, AppError> {
+		let workspace_id = self.bound_workspace(profile_id)?;
+		let snapshot = self.client.session_snapshot()?;
+		let snap = if snapshot.get("type").and_then(Value::as_str)
+			== Some("session_snapshot")
+		{
+			snapshot.get("snapshot").unwrap_or(&snapshot)
+		} else {
+			&snapshot
+		};
+		let panes = snap
+			.get("panes")
+			.and_then(Value::as_array)
+			.map(Vec::as_slice)
+			.unwrap_or(&[]);
+		Ok(panes
+			.iter()
+			.find_map(|pane| {
+				if pane.get("workspace_id").and_then(Value::as_str)
+					== Some(workspace_id.as_str())
+				{
+					pane.get("cwd")
+						.and_then(Value::as_str)
+						.filter(|cwd| !cwd.is_empty())
+						.or_else(|| {
+							pane.get("foreground_cwd")
+								.and_then(Value::as_str)
+								.filter(|cwd| !cwd.is_empty())
+						})
+						.map(str::to_string)
+				} else {
+					None
+				}
+			})
+			.unwrap_or_default())
 	}
 
 	fn project_init_script(&self, profile_id: &str) -> Vec<String> {
-		let folder = self.with_db(|conn| {
-			let profile = repo::profile::find_by_id(conn, profile_id)?;
-			repo::profile::get_project_folder(conn, &profile.project_id)
-		});
-		let Ok(folder) = folder else {
+		let folder = self
+			.profile_checkout(profile_id)
+			.ok()
+			.filter(|path| !path.is_empty());
+		let Some(folder) = folder else {
 			return Vec::new();
 		};
 		infra::config::load_project_config(&folder)
@@ -792,12 +868,17 @@ impl HerdrLifecycle {
 		pane_id: &str,
 	) -> Result<CreateSessionResult, AppError> {
 		let session_id = Uuid::new_v4().to_string();
+		let sqlite_profile_id = self.sqlite_profile_id_for_session(
+			&meta.profile_id,
+			workspace_id,
+			&config.cwd,
+		)?;
 		self.with_db(|conn| {
 			repo::pty::insert_session(
 				conn,
 				&NewPtySessionRecord {
 					id: &session_id,
-					profile_id: &meta.profile_id,
+					profile_id: &sqlite_profile_id,
 					title: &meta.title,
 					shell: &config.shell,
 					cwd: &config.cwd,
@@ -818,6 +899,48 @@ impl HerdrLifecycle {
 			Ok(())
 		})?;
 		Ok(CreateSessionResult { session_id })
+	}
+
+	fn sqlite_profile_id_for_session(
+		&self,
+		profile_id: &str,
+		workspace_id: &str,
+		cwd: &str,
+	) -> Result<String, AppError> {
+		self.with_db(|conn| {
+			if let Ok(mapping) =
+				repo::runtime_mapping::find_profile_by_workspace(
+					conn,
+					HERDR_NAMESPACE,
+					workspace_id,
+				) {
+				return Ok(mapping.profile_id);
+			}
+			if repo::profile::find_by_id(conn, profile_id).is_ok() {
+				return Ok(profile_id.to_string());
+			}
+			for project in repo::project::list_all(conn)? {
+				let same = project.folder == cwd
+					|| Path::new(&project.folder)
+						.canonicalize()
+						.ok()
+						.zip(Path::new(cwd).canonicalize().ok())
+						.is_some_and(|(left, right)| left == right);
+				if !same {
+					continue;
+				}
+				if let Some(profile) =
+					repo::profile::list_by_project(conn, &project.id)?
+						.into_iter()
+						.find(|profile| profile.is_default)
+				{
+					return Ok(profile.id);
+				}
+			}
+			Err(AppError::NotFound(format!(
+				"Profile for workspace {workspace_id}"
+			)))
+		})
 	}
 
 	fn persist_created_pane(
@@ -982,21 +1105,31 @@ impl HerdrLifecycle {
 		let (mapped_sessions, profile_workspaces) = catalog;
 		let mut listed = Vec::new();
 		let mut bound_panes = HashSet::new();
-		for (session, mapping) in mapped_sessions {
+		let mut workspace_ids = HashSet::new();
+		for (mut session, mapping) in mapped_sessions {
 			if pane_identity_state(&mapping, &projection)
 				== RuntimeIdentityState::Bound
 			{
 				bound_panes.insert(mapping.pane_id);
+				workspace_ids.insert(mapping.workspace_id.clone());
+				session.profile_id = mapping.workspace_id;
 				listed.push(session);
 			}
 		}
-		for (profile, mapping) in profile_workspaces {
+		for (_profile, mapping) in profile_workspaces {
 			if workspace_identity_state(&mapping, &projection)
-				!= RuntimeIdentityState::Bound
+				== RuntimeIdentityState::Bound
 			{
+				workspace_ids.insert(mapping.workspace_id);
+			}
+		}
+		for workspace_id in workspace_ids {
+			if projection.workspace(&workspace_id).is_none() {
 				continue;
 			}
-			for pane in projection.panes_in_workspace(&mapping.workspace_id) {
+			let checkout =
+				self.profile_checkout(&workspace_id).unwrap_or_default();
+			for pane in projection.panes_in_workspace(&workspace_id) {
 				if !bound_panes.insert(pane.pane_id.clone()) {
 					continue;
 				}
@@ -1008,22 +1141,24 @@ impl HerdrLifecycle {
 					.to_string();
 				let created = self.persist_session(
 					&PtySessionMeta {
-						profile_id: profile.id.clone(),
+						profile_id: workspace_id.clone(),
 						title,
 					},
 					&PtyConfig {
 						shell: "/bin/sh".into(),
-						cwd: profile.worktree_path.clone(),
+						cwd: checkout.clone(),
 						rows: 24,
 						cols: 80,
 						startup_commands: Vec::new(),
 					},
-					&mapping.workspace_id,
+					&workspace_id,
 					&pane.pane_id,
 				)?;
-				listed.push(self.with_db(|conn| {
+				let mut record = self.with_db(|conn| {
 					repo::pty::find_by_id(conn, &created.session_id)
-				})?);
+				})?;
+				record.profile_id = workspace_id.clone();
+				listed.push(record);
 			}
 		}
 		Ok(listed)
@@ -1785,6 +1920,29 @@ time.sleep(30)
 		let mut bound = HashSet::new();
 		bound.insert("w1:p1".into());
 		assert_eq!(unbound_adopted_root_pane("w1", &panes, &bound), None);
+	}
+
+	#[test]
+	fn create_session_accepts_live_workspace_id() {
+		let fx = Fixture::new();
+		let created = fx
+			.adapter
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "w1".to_string(),
+					title: "shell".to_string(),
+				},
+				&fx.config(),
+			)
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		let row = {
+			let mut conn = fx.db.lock().unwrap();
+			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
+		};
+		assert_eq!(row.profile_id, "pr1");
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert_eq!(listed[0].profile_id, "w1");
 	}
 
 	#[test]
@@ -2657,7 +2815,7 @@ time.sleep(30)
 			.find(|session| session.id != root.session_id)
 			.unwrap();
 		assert_eq!(fx.mapping(&extra.id), "w1:p2");
-		assert_eq!(extra.profile_id, "pr1");
+		assert_eq!(extra.profile_id, "w1");
 		assert_eq!(extra.cwd, fx.cwd.path().to_string_lossy());
 		let again = fx.adapter.list_project_sessions("p1").unwrap();
 		assert_eq!(again.len(), 2);

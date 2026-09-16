@@ -19,12 +19,31 @@ pub fn search_file(
 	infra::filesystem::search_files(root, query)
 }
 
+pub fn search_file_for_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	profile_id: &str,
+	query: &str,
+) -> Result<Vec<FileSearchResult>, AppError> {
+	let root = get_profile_worktree_path(runtime, db, profile_id)?;
+	infra::filesystem::search_files(&root, query)
+}
+
 pub fn get_file_tree_git_status(
 	conn: &mut SqliteConnection,
 	profile_id: &str,
 ) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
 	let profile = repo::profile::find_by_id(conn, profile_id)?;
 	infra::git::status(&profile.worktree_path)
+}
+
+pub fn get_file_tree_git_status_for_profile(
+	runtime: &RuntimeRouter,
+	db: &DbPool,
+	profile_id: &str,
+) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
+	let root = get_profile_worktree_path(runtime, db, profile_id)?;
+	infra::git::status(&root.to_string_lossy())
 }
 
 /// Resolve profile ID to its reconciled worktree path (short DB lock).
