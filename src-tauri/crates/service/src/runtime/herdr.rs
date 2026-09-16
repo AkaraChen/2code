@@ -23,9 +23,9 @@ use infra::herdr::terminal::{
 	BufferLimits, TerminalAttachRequest, TerminalSessionHelper,
 };
 use infra::herdr::transport::{
-	HerdrClient, PaneView, TabCreateResult, WorktreeCreateRequest,
-	WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
-	WorktreeRemoveResult,
+	HerdrClient, PaneView, TabCreateResult, WorkspaceCreateRequest,
+	WorkspaceCreateResult, WorktreeCreateRequest, WorktreeCreateResult,
+	WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
 };
 use model::error::AppError;
 use model::pty::{
@@ -97,6 +97,13 @@ pub trait HerdrWorktreeClient: Send + Sync {
 		workspace_id: &str,
 		force: bool,
 	) -> Result<WorktreeRemoveResult, AppError>;
+
+	fn workspace_create(
+		&self,
+		request: WorkspaceCreateRequest<'_>,
+	) -> Result<WorkspaceCreateResult, AppError>;
+
+	fn workspace_close(&self, workspace_id: &str) -> Result<(), AppError>;
 
 	fn session_snapshot(&self) -> Result<Value, AppError>;
 }
@@ -187,6 +194,21 @@ impl HerdrWorktreeClient for HerdrJsonTerminals {
 	) -> Result<WorktreeRemoveResult, AppError> {
 		self.client
 			.worktree_remove(workspace_id, force)
+			.map_err(AppError::from)
+	}
+
+	fn workspace_create(
+		&self,
+		request: WorkspaceCreateRequest<'_>,
+	) -> Result<WorkspaceCreateResult, AppError> {
+		self.client
+			.workspace_create(request)
+			.map_err(AppError::from)
+	}
+
+	fn workspace_close(&self, workspace_id: &str) -> Result<(), AppError> {
+		self.client
+			.workspace_close(workspace_id)
 			.map_err(AppError::from)
 	}
 
@@ -1835,6 +1857,21 @@ mod tests {
 			))
 		}
 
+		fn workspace_create(
+			&self,
+			_request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			Err(AppError::PtyError(
+				"fake terminals do not create workspaces".into(),
+			))
+		}
+
+		fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
+			Err(AppError::PtyError(
+				"fake terminals do not close workspaces".into(),
+			))
+		}
+
 		fn session_snapshot(&self) -> Result<Value, AppError> {
 			self.snapshot_json()
 		}
@@ -2758,7 +2795,8 @@ time.sleep(30)
 		assert!(
 			src.contains("worktree.remove") || src.contains("worktree_remove")
 		);
-		assert!(!src.contains("workspace.create"));
+		assert!(!create_session.contains("workspace.create"));
+		assert!(!close_session.contains("workspace.close"));
 		assert!(!src.contains("pane.split"));
 		assert!(!src.contains("server.stop"));
 		assert!(!src.contains("herdr-client.sock"));
@@ -2778,6 +2816,13 @@ time.sleep(30)
 			src.contains("worktree.create") || src.contains("worktree_create")
 		);
 		assert!(src.contains("HerdrWorktreeClient"));
+		assert!(
+			src.contains("workspace_create")
+				|| src.contains("workspace.create")
+		);
+		assert!(
+			src.contains("workspace_close") || src.contains("workspace.close")
+		);
 		let list_sessions = src
 			.split("fn list_project_sessions")
 			.nth(1)

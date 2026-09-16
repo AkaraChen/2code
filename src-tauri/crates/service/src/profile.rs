@@ -1370,10 +1370,11 @@ mod tests {
 	use diesel::RunQueryDsl;
 	use diesel_migrations::MigrationHarness;
 	use infra::herdr::transport::{
-		WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
+		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeListEntry,
+		WorktreeOpenResult, WorktreeRemoveResult,
 	};
 	use model::runtime::RuntimeBackend;
-	use serde_json::json;
+	use serde_json::{json, Value};
 	use std::path::Path;
 	use std::sync::{Arc, Mutex};
 	use tempfile::TempDir;
@@ -1730,15 +1731,25 @@ mod tests {
 		force: bool,
 	}
 
+	struct RecordedWorkspaceCreate {
+		cwd: String,
+		label: Option<String>,
+	}
+
 	struct FakeWorktreeState {
 		methods: Vec<String>,
 		creates: Vec<RecordedCreate>,
+		workspace_creates: Vec<RecordedWorkspaceCreate>,
 		removes: Vec<RecordedRemove>,
+		workspace_closes: Vec<String>,
 		create_error: Option<AppError>,
+		workspace_create_error: Option<AppError>,
 		remove_error: Option<AppError>,
+		workspace_close_error: Option<AppError>,
 		list_error: Option<AppError>,
 		land_on_error: bool,
 		dirty: bool,
+		not_git: bool,
 		listed: Vec<WorktreeListEntry>,
 		snapshot: serde_json::Value,
 		next_workspace: u32,
@@ -1754,12 +1765,17 @@ mod tests {
 				state: Mutex::new(FakeWorktreeState {
 					methods: Vec::new(),
 					creates: Vec::new(),
+					workspace_creates: Vec::new(),
 					removes: Vec::new(),
+					workspace_closes: Vec::new(),
 					create_error: None,
+					workspace_create_error: None,
 					remove_error: None,
+					workspace_close_error: None,
 					list_error: None,
 					land_on_error: false,
 					dirty: false,
+					not_git: false,
 					listed: Vec::new(),
 					snapshot: json!({
 						"type": "session_snapshot",
@@ -1801,6 +1817,26 @@ mod tests {
 				workspace_id: last.workspace_id.clone(),
 				force: last.force,
 			}
+		}
+
+		fn workspace_creates(&self) -> usize {
+			self.state.lock().unwrap().workspace_creates.len()
+		}
+
+		fn last_workspace_create(&self) -> RecordedWorkspaceCreate {
+			let state = self.state.lock().unwrap();
+			let last = state
+				.workspace_creates
+				.last()
+				.expect("workspace create recorded");
+			RecordedWorkspaceCreate {
+				cwd: last.cwd.clone(),
+				label: last.label.clone(),
+			}
+		}
+
+		fn workspace_closes(&self) -> Vec<String> {
+			self.state.lock().unwrap().workspace_closes.clone()
 		}
 	}
 
@@ -1855,6 +1891,11 @@ mod tests {
 		) -> Result<Vec<WorktreeListEntry>, AppError> {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("worktree.list".into());
+			if state.not_git {
+				return Err(AppError::HerdrTransport(
+					"Herdr RPC not_git_worktree (wtlst): Herdr worktree actions require a path inside a Git work tree".into(),
+				));
+			}
 			if let Some(err) = state.list_error.take() {
 				return Err(err);
 			}
@@ -1902,6 +1943,37 @@ mod tests {
 			apply_listed_remove(&mut state, workspace_id, force)
 		}
 
+		fn workspace_create(
+			&self,
+			request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("workspace.create".into());
+			let cwd = request.cwd.to_string_lossy().into_owned();
+			state.workspace_creates.push(RecordedWorkspaceCreate {
+				cwd: cwd.clone(),
+				label: request.label.map(str::to_string),
+			});
+			if let Some(err) = state.workspace_create_error.take() {
+				return Err(err);
+			}
+			let workspace_id = format!("w{}", state.next_workspace);
+			state.next_workspace += 1;
+			push_snapshot_workspace(&mut state, &workspace_id, &cwd);
+			Ok(WorkspaceCreateResult { workspace_id })
+		}
+
+		fn workspace_close(&self, workspace_id: &str) -> Result<(), AppError> {
+			let mut state = self.state.lock().unwrap();
+			state.methods.push("workspace.close".into());
+			state.workspace_closes.push(workspace_id.to_string());
+			if let Some(err) = state.workspace_close_error.take() {
+				return Err(err);
+			}
+			remove_snapshot_workspace(&mut state, workspace_id);
+			Ok(())
+		}
+
 		fn session_snapshot(&self) -> Result<serde_json::Value, AppError> {
 			let mut state = self.state.lock().unwrap();
 			state.methods.push("session.snapshot".into());
@@ -1944,6 +2016,44 @@ mod tests {
 			path,
 			forced: force,
 		})
+	}
+
+	fn snapshot_panes_mut(state: &mut FakeWorktreeState) -> &mut Vec<Value> {
+		let snap = if state.snapshot.get("type").and_then(Value::as_str)
+			== Some("session_snapshot")
+		{
+			state.snapshot.get_mut("snapshot").unwrap()
+		} else {
+			&mut state.snapshot
+		};
+		if snap.get("panes").is_none() {
+			snap.as_object_mut()
+				.unwrap()
+				.insert("panes".into(), json!([]));
+		}
+		snap.get_mut("panes").unwrap().as_array_mut().unwrap()
+	}
+
+	fn push_snapshot_workspace(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+		cwd: &str,
+	) {
+		snapshot_panes_mut(state).push(json!({
+			"pane_id": format!("{workspace_id}:p1"),
+			"workspace_id": workspace_id,
+			"cwd": cwd,
+		}));
+	}
+
+	fn remove_snapshot_workspace(
+		state: &mut FakeWorktreeState,
+		workspace_id: &str,
+	) {
+		snapshot_panes_mut(state).retain(|pane| {
+			pane.get("workspace_id").and_then(Value::as_str)
+				!= Some(workspace_id)
+		});
 	}
 
 	fn git_worktree_list(dir: &Path) -> String {

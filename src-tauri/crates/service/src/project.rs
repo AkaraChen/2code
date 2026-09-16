@@ -864,8 +864,9 @@ mod tests {
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::herdr::transport::{
-		WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
-		WorktreeOpenResult, WorktreeRemoveResult,
+		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeCreateRequest,
+		WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
+		WorktreeRemoveResult,
 	};
 	use model::runtime::HERDR_NAMESPACE;
 
@@ -1042,6 +1043,31 @@ mod tests {
 				.push("worktree.remove".into());
 			Err(AppError::PtyError(
 				"path reconcile does not remove worktrees".into(),
+			))
+		}
+
+		fn workspace_create(
+			&self,
+			_request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			self.state
+				.lock()
+				.unwrap()
+				.methods
+				.push("workspace.create".into());
+			Err(AppError::PtyError(
+				"path reconcile does not create workspaces".into(),
+			))
+		}
+
+		fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
+			self.state
+				.lock()
+				.unwrap()
+				.methods
+				.push("workspace.close".into());
+			Err(AppError::PtyError(
+				"path reconcile does not close workspaces".into(),
 			))
 		}
 
