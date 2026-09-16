@@ -520,13 +520,23 @@ fn create_herdr_nongit(
 		}
 		Some(sanitized)
 	};
+	let before_ids = match worktrees.session_snapshot() {
+		Ok(snapshot) => Some(snapshot_workspace_ids_for_cwd(&snapshot, cwd)),
+		Err(_) => None,
+	};
 	let created = match worktrees.workspace_create(WorkspaceCreateRequest {
 		cwd,
 		label: label.as_deref(),
 	}) {
 		Ok(created) => created,
 		Err(AppError::HerdrUncertainOutcome(_)) => {
-			recover_nongit_workspace(worktrees, cwd)?
+			let Some(before_ids) = before_ids else {
+				return Err(AppError::HerdrUncertainOutcome(
+					"workspace.create outcome is uncertain; not replaying"
+						.into(),
+				));
+			};
+			recover_nongit_workspace(worktrees, cwd, &before_ids)?
 		}
 		Err(err) => return Err(err),
 	};
@@ -545,13 +555,17 @@ fn create_herdr_nongit(
 fn recover_nongit_workspace(
 	worktrees: &dyn HerdrWorktreeClient,
 	cwd: &Path,
+	before_ids: &[String],
 ) -> Result<WorkspaceCreateResult, AppError> {
 	let snapshot = worktrees.session_snapshot().map_err(|_| {
 		AppError::HerdrUncertainOutcome(
 			"workspace.create outcome is uncertain; not replaying".into(),
 		)
 	})?;
-	let mut ids: Vec<String> = snapshot_workspace_ids_for_cwd(&snapshot, cwd);
+	let mut ids: Vec<String> = snapshot_workspace_ids_for_cwd(&snapshot, cwd)
+		.into_iter()
+		.filter(|id| !before_ids.iter().any(|before| before == id))
+		.collect();
 	ids.sort();
 	ids.into_iter()
 		.next_back()
@@ -2068,6 +2082,11 @@ mod tests {
 				label: request.label.map(str::to_string),
 			});
 			if let Some(err) = state.workspace_create_error.take() {
+				if state.land_on_error {
+					let workspace_id = format!("w{}", state.next_workspace);
+					state.next_workspace += 1;
+					push_snapshot_workspace(&mut state, &workspace_id, &cwd);
+				}
 				return Err(err);
 			}
 			let workspace_id = format!("w{}", state.next_workspace);
@@ -2922,6 +2941,75 @@ mod tests {
 		assert!(sqlite_extras(&db, &project.id).is_empty());
 		no_profile_mapping(&db, &profile.id);
 		assert!(!fake.methods().contains(&"worktree.create".to_string()));
+	}
+
+	#[test]
+	fn uncertain_nongit_create_does_not_adopt_existing_workspace() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+		let first = create_with_runtime(&router, &db, &project.id, "one", None)
+			.unwrap();
+		assert_eq!(first.id, "w2");
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.workspace_create_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+			state.land_on_error = false;
+		}
+
+		let err = create_with_runtime(&router, &db, &project.id, "two", None)
+			.err()
+			.expect("uncertain create must not adopt the existing workspace");
+
+		assert!(err.to_string().contains("uncertain"), "{err}");
+		assert_eq!(fake.workspace_creates(), 2);
+		assert!(sqlite_extras(&db, &project.id).is_empty());
+	}
+
+	#[test]
+	fn uncertain_nongit_create_reconciles_new_workspace_without_replay() {
+		let mut conn = setup_db();
+		let dir = TempDir::new().expect("nongit");
+		std::fs::write(dir.path().join("notes.txt"), "hi\n").unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let project =
+			crate::project::create_from_folder(&mut conn, "Notes", &folder)
+				.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			fake.state.lock().unwrap().not_git = true;
+		}
+		let router = herdr_router(&db, fake.clone());
+		let first = create_with_runtime(&router, &db, &project.id, "one", None)
+			.unwrap();
+		assert_eq!(first.id, "w2");
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.workspace_create_error =
+				Some(AppError::HerdrUncertainOutcome("dropped".into()));
+			state.land_on_error = true;
+		}
+
+		let profile =
+			create_with_runtime(&router, &db, &project.id, "two", None)
+				.unwrap();
+
+		assert_eq!(profile.id, "w3");
+		assert_eq!(fake.workspace_creates(), 2);
+		assert!(sqlite_extras(&db, &project.id).is_empty());
+		no_profile_mapping(&db, &profile.id);
 	}
 
 	#[test]
