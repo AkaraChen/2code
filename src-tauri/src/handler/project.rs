@@ -47,6 +47,7 @@ pub async fn list_projects(
 	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
+		service::project::adopt_existing_checkouts(&runtime, &db)?;
 		service::project::list_with_runtime(&runtime, &db)
 	})
 	.await
@@ -530,6 +531,18 @@ mod tests {
 		assert!(cmd.contains("get_branch_for_profile"));
 		assert!(!cmd.contains("folder"));
 		assert!(src.contains("list_with_runtime"));
+		assert!(src.contains("adopt_existing_checkouts"));
 		assert!(!cmd.contains("ensure_herdr_listener"));
+		let list = src
+			.split("pub async fn list_projects")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn update_project")
+			.next()
+			.unwrap();
+		assert!(list.contains("adopt_existing_checkouts"));
+		assert!(list.contains("list_with_runtime"));
+		assert!(!list.contains("ensure_herdr_listener"));
+		assert!(!list.contains("HerdrRuntimeSync"));
 	}
 }

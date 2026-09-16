@@ -69,7 +69,9 @@ export default function CreateProjectDialog({
 		onSuccess: (project) => {
 			handleClose();
 			if (project.profiles.length > 0) {
-				const defaultProfile = project.profiles[0];
+				const defaultProfile =
+					project.profiles.find((p) => p.is_default) ??
+					project.profiles[0];
 				navigate(`/projects/${project.id}/profiles/${defaultProfile.id}`);
 			}
 		},

@@ -4,15 +4,15 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use notify::{recommended_watcher, Event, EventKind, RecursiveMode, Watcher};
+use notify::{Event, EventKind, RecursiveMode, Watcher, recommended_watcher};
 
 use infra::db::DbPool;
 use infra::watcher::WatcherShutdownFlag;
 use model::project::ProjectWithProfiles;
 use model::watcher::WatchEvent;
 
-use crate::runtime::RuntimeHandle;
 use crate::WatchEventSender;
+use crate::runtime::RuntimeHandle;
 
 const DB_POLL_INTERVAL: Duration = Duration::from_secs(3);
 const RECV_TIMEOUT: Duration = Duration::from_millis(100);
@@ -494,5 +494,21 @@ mod tests {
 			relative_event_path(root, Path::new("/other/main.rs")),
 			None
 		);
+	}
+
+	#[test]
+	fn watcher_poll_uses_live_list_without_adopt() {
+		let src = include_str!("watcher.rs");
+		let reconcile = src
+			.split("fn reconcile_watchers")
+			.nth(1)
+			.unwrap()
+			.split("pub(crate) fn watcher_targets")
+			.next()
+			.unwrap();
+		assert!(reconcile.contains("list_with_runtime"));
+		assert!(!reconcile.contains("adopt_existing_checkouts"));
+		assert!(!reconcile.contains("worktree_open"));
+		assert!(!reconcile.contains("workspace_create"));
 	}
 }

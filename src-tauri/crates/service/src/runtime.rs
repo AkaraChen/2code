@@ -587,7 +587,6 @@ impl TerminalRuntime for RuntimeRouter {
 	}
 }
 
-
 #[cfg(test)]
 mod tests {
 	use std::path::{Path, PathBuf};
@@ -876,10 +875,7 @@ mod tests {
 	fn herdr_pane_id_is_not_restored_as_local() {
 		let cwd = tempfile::tempdir().unwrap();
 		let router = RuntimeRouter::new(HerdrStubAdapter::new());
-		assert_eq!(
-			router.backend_for("w1:p1").unwrap(),
-			RuntimeBackend::Herdr
-		);
+		assert_eq!(router.backend_for("w1:p1").unwrap(), RuntimeBackend::Herdr);
 		assert_eq!(router.owner("w1:p1").unwrap(), None);
 		let err = router
 			.restore_session("w1:p1", &meta(), &config(cwd.path()))
@@ -954,6 +950,10 @@ mod tests {
 			"launch/adopt stays out of lib.rs setup"
 		);
 		assert!(
+			!lib.contains("adopt_existing_checkouts"),
+			"launch/adopt stays out of lib.rs setup"
+		);
+		assert!(
 			!lib.contains("import_leftover_sqlite_profiles"),
 			"leftover extra import is gone"
 		);
@@ -976,11 +976,8 @@ mod tests {
 		assert!(!production.contains("--twocode-runtime"));
 		assert!(!production.contains("native_pty_system"));
 		assert!(!production.contains("INSERT INTO pty_sessions"));
-		let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-			.join("src/runtime/local.rs");
-		assert!(
-			!local_path.exists(),
-			"LocalAdapter module must be deleted"
-		);
+		let local_path =
+			Path::new(env!("CARGO_MANIFEST_DIR")).join("src/runtime/local.rs");
+		assert!(!local_path.exists(), "LocalAdapter module must be deleted");
 	}
 }
