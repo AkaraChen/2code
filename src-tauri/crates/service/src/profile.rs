@@ -13,7 +13,6 @@ use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
 use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
-use model::runtime_mapping::ProfileRuntimeMapping;
 
 use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
 use serde_json::Value;
@@ -1058,14 +1057,6 @@ fn is_dirty_worktree_error(err: &AppError) -> bool {
 	}
 }
 
-fn is_primary_checkout(profile: &Profile, project_folder: &str) -> bool {
-	profile.is_default
-		|| same_worktree_path(
-			Path::new(&profile.worktree_path),
-			Path::new(project_folder),
-		)
-}
-
 fn refuse_primary_checkout() -> AppError {
 	AppError::GitError(
 		"refusing to worktree.remove a default/primary checkout".into(),
@@ -1158,98 +1149,6 @@ fn repo_folder_for_linked_checkout(
 	})
 }
 
-fn run_teardown_script(profile: &Profile, project_folder: &str) {
-	let worktree_path = PathBuf::from(&profile.worktree_path);
-	if let Ok(cfg) = infra::config::load_project_config(project_folder) {
-		infra::config::execute_scripts(&cfg.teardown_script, &worktree_path);
-	}
-}
-
-fn delete_herdr_mapped(
-	runtime: &RuntimeRouter,
-	db: &DbPool,
-	profile: &Profile,
-	project_folder: &str,
-	session_ids: &[String],
-	mapping: &ProfileRuntimeMapping,
-	force: Option<bool>,
-) -> Result<(), AppError> {
-	if mapping.namespace != HERDR_NAMESPACE {
-		return Err(AppError::DbError(format!(
-			"runtime mappings must use the {HERDR_NAMESPACE} namespace"
-		)));
-	}
-	if is_primary_checkout(profile, project_folder) {
-		return Err(refuse_primary_checkout());
-	}
-
-	let worktrees = runtime.herdr_worktrees()?;
-	let listed =
-		match worktrees.worktree_list(None, Some(&mapping.workspace_id)) {
-			Ok(listed) => listed,
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				return Err(AppError::HerdrUncertainOutcome(
-					"worktree.list is uncertain; not removing".into(),
-				));
-			}
-			Err(err) => return Err(err),
-		};
-	if let Some(entry) = listed_workspace(&listed, &mapping.workspace_id) {
-		if !entry.is_linked_worktree {
-			return Err(refuse_primary_checkout());
-		}
-	}
-
-	for session_id in session_ids {
-		runtime.release_herdr_session(session_id)?;
-	}
-
-	let checkout_exists = Path::new(&profile.worktree_path).exists();
-	let already_gone = listed_workspace(&listed, &mapping.workspace_id)
-		.is_none()
-		&& !checkout_exists;
-	if !already_gone {
-		run_teardown_script(profile, project_folder);
-		let force = match force {
-			Some(force) => force,
-			None => working_tree_is_dirty(&profile.worktree_path)?,
-		};
-		match worktrees.worktree_remove(&mapping.workspace_id, force) {
-			Ok(_) => {}
-			Err(err) if is_dirty_worktree_error(&err) => return Err(err),
-			Err(AppError::HerdrUncertainOutcome(_)) => {
-				if !herdr_workspace_listed_absent(
-					worktrees,
-					&mapping.workspace_id,
-					&profile.worktree_path,
-				)? {
-					return Err(AppError::HerdrUncertainOutcome(format!(
-						"worktree.remove {} is uncertain; not replaying",
-						mapping.workspace_id
-					)));
-				}
-			}
-			Err(err) => return Err(err),
-		}
-		if Path::new(&profile.worktree_path).exists() {
-			return Err(AppError::GitError(
-				"worktree.remove left the checkout in place; not using git worktree remove".into(),
-			));
-		}
-	}
-
-	let branch_name =
-		infra::git::worktree_current_branch(&profile.worktree_path)?
-			.unwrap_or_else(|| profile.branch_name.clone());
-	infra::git::branch_delete(project_folder, &branch_name)?;
-
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	for session_id in session_ids {
-		repo::pty::mark_closed(conn, session_id);
-	}
-	repo::profile::delete_record(conn, &profile.id)
-}
-
 pub fn delete_with_db(db: &DbPool, id: &str) -> Result<(), AppError> {
 	let (profile, project_folder) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
@@ -1287,33 +1186,15 @@ fn delete_sqlite_identity(
 	runtime: &RuntimeRouter,
 	db: &infra::db::DbPool,
 	id: &str,
-	force: Option<bool>,
+	_force: Option<bool>,
 ) -> Result<(), AppError> {
-	let (profile, project_folder, session_ids, mapping) = {
+	let (profile, project_folder, session_ids) = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		let (profile, project_folder) =
 			repo::profile::get_delete_target(conn, id)?;
 		let session_ids = repo::pty::list_ids_by_profile(conn, id)?;
-		let mapping =
-			match repo::runtime_mapping::find_profile_mapping(conn, id) {
-				Ok(mapping) => Some(mapping),
-				Err(AppError::NotFound(_)) => None,
-				Err(err) => return Err(err),
-			};
-		(profile, project_folder, session_ids, mapping)
+		(profile, project_folder, session_ids)
 	};
-
-	if let Some(mapping) = mapping {
-		return delete_herdr_mapped(
-			runtime,
-			db,
-			&profile,
-			&project_folder,
-			&session_ids,
-			&mapping,
-			force,
-		);
-	}
 
 	for session_id in &session_ids {
 		runtime.teardown_session(session_id)?;
@@ -2443,52 +2324,40 @@ mod tests {
 	}
 
 	#[test]
-	fn mapped_delete_on_local_backend_still_uses_herdr_remove() {
+	fn leftover_mapping_does_not_route_local_delete_through_herdr() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let checkout = TempDir::new().expect("herdr checkout");
-		let checkout_path = checkout.path().to_string_lossy().into_owned();
-		std::fs::write(checkout.path().join("keep"), "x\n").unwrap();
-		let created = repo::profile::insert(
-			&mut conn,
-			"sqlite-local-mapped",
-			&project.id,
-			"feat/bound-local",
-			&checkout_path,
-		)
-		.unwrap();
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&created.id,
-			HERDR_NAMESPACE,
-			"w9",
-		)
-		.unwrap();
+		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
+		let router = local_router(&db, fake.clone());
+		let profile = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feat/bound-local",
+			Some(global_base.path().to_str().unwrap()),
+		)
+		.unwrap();
 		{
-			let mut state = fake.state.lock().unwrap();
-			state.listed.push(WorktreeListEntry {
-				path: checkout_path.clone(),
-				branch: Some("feat/bound-local".into()),
-				workspace_id: Some("w9".into()),
-				is_linked_worktree: true,
-			});
+			let conn = &mut *db.lock().unwrap();
+			repo::runtime_mapping::bind_profile_workspace(
+				conn,
+				&profile.id,
+				HERDR_NAMESPACE,
+				"w9",
+			)
+			.unwrap();
 		}
-		let local = local_router(&db, fake.clone());
-		assert_eq!(local.selected_backend(), RuntimeBackend::Local);
+		let checkout = profile.worktree_path.clone();
 
-		delete_with_runtime(&local, &db, &created.id).unwrap();
+		delete_with_runtime(&router, &db, &profile.id).unwrap();
 
-		assert_eq!(fake.removes().len(), 1);
-		assert_eq!(fake.last_remove().workspace_id, "w9");
-		assert!(!Path::new(&checkout_path).exists());
-		assert_eq!(
-			git_worktree_list(dir.path()).matches("worktree ").count(),
-			1
-		);
+		assert!(fake.removes().is_empty());
+		assert!(!Path::new(&checkout).exists());
+		assert!(!git_worktree_list(dir.path()).contains(&checkout));
 		let conn = &mut *db.lock().unwrap();
-		assert!(repo::profile::find_by_id(conn, &created.id).is_err());
+		assert!(repo::profile::find_by_id(conn, &profile.id).is_err());
 	}
 
 	#[test]
@@ -3526,19 +3395,19 @@ mod tests {
 	fn herdr_profile_delete_does_not_use_forbidden_ops() {
 		let src = include_str!("profile.rs");
 		let herdr = src
-			.split("fn delete_herdr_mapped")
+			.split("fn delete_herdr_git_workspace")
 			.nth(1)
 			.unwrap()
-			.split("pub fn delete_with_db")
+			.split("fn delete_herdr_nongit_workspace")
 			.next()
 			.unwrap();
 		assert!(
 			herdr.contains("worktree.remove")
 				|| herdr.contains("worktree_remove")
 		);
-		assert!(herdr.contains("teardown_script"));
+		assert!(herdr.contains("run_teardown_script_at"));
 		assert!(herdr.contains("branch_delete"));
-		assert!(herdr.contains("release_herdr_session"));
+		assert!(!herdr.contains("release_herdr_session"));
 		assert!(!herdr.contains("infra::git::worktree_remove"));
 		assert!(!herdr.contains("teardown_session"));
 		assert!(!herdr.contains("pane.close"));

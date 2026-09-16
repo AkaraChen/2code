@@ -40,7 +40,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::runtime_agent::mapped_agent_for_session;
-use crate::runtime_mapping::{pane_identity_state, workspace_identity_state};
+use crate::runtime_mapping::pane_identity_state;
 use crate::runtime_sync::RuntimeProjection;
 
 use super::TerminalRuntime;
@@ -610,6 +610,41 @@ fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+fn snapshot_workspace_id_for_cwd(
+	snapshot: &Value,
+	checkout: &str,
+) -> Option<String> {
+	let snap = if snapshot.get("type").and_then(Value::as_str)
+		== Some("session_snapshot")
+	{
+		snapshot.get("snapshot").unwrap_or(snapshot)
+	} else {
+		snapshot
+	};
+	snap.get("panes")
+		.and_then(Value::as_array)
+		.into_iter()
+		.flatten()
+		.find_map(|pane| {
+			let workspace_id =
+				pane.get("workspace_id").and_then(Value::as_str)?;
+			if workspace_id.is_empty() {
+				return None;
+			}
+			let cwd = pane
+				.get("cwd")
+				.and_then(Value::as_str)
+				.filter(|cwd| !cwd.is_empty())
+				.or_else(|| {
+					pane.get("foreground_cwd")
+						.and_then(Value::as_str)
+						.filter(|cwd| !cwd.is_empty())
+				})?;
+			same_checkout_path(Path::new(cwd), Path::new(checkout))
+				.then(|| workspace_id.to_string())
+		})
+}
+
 fn snapshot_pane_cwd(snapshot: &Value, workspace_id: &str) -> Option<String> {
 	let snap = if snapshot.get("type").and_then(Value::as_str)
 		== Some("session_snapshot")
@@ -779,16 +814,6 @@ fn pane_is_absent(
 	Ok(projection.pane(pane_id).is_none())
 }
 
-fn workspace_is_absent(
-	client: &dyn HerdrTerminalClient,
-	workspace_id: &str,
-) -> Result<bool, AppError> {
-	let snapshot = client.session_snapshot()?;
-	let mut projection = RuntimeProjection::new();
-	projection.apply_snapshot(&snapshot)?;
-	Ok(projection.workspace(workspace_id).is_none())
-}
-
 impl HerdrLifecycle {
 	fn with_db<T>(
 		&self,
@@ -815,50 +840,57 @@ impl HerdrLifecycle {
 	}
 
 	fn bound_workspace(&self, profile_id: &str) -> Result<String, AppError> {
-		let mapping = self.with_db(|conn| {
-			match repo::runtime_mapping::find_profile_mapping(conn, profile_id)
-			{
-				Ok(mapping) => Ok(Some(mapping)),
-				Err(AppError::NotFound(_)) => {
-					match repo::runtime_mapping::find_profile_by_workspace(
-						conn,
-						HERDR_NAMESPACE,
-						profile_id,
-					) {
-						Ok(mapping) => Ok(Some(mapping)),
-						Err(AppError::NotFound(_)) => Ok(None),
-						Err(err) => Err(err),
-					}
-				}
-				Err(err) => Err(err),
-			}
-		})?;
 		let snapshot = self.client.session_snapshot()?;
 		let mut projection = RuntimeProjection::new();
 		projection.apply_snapshot(&snapshot)?;
-		if let Some(mapping) = mapping {
-			return match workspace_identity_state(&mapping, &projection) {
-				RuntimeIdentityState::Bound => Ok(mapping.workspace_id),
-				RuntimeIdentityState::Missing => {
-					Err(AppError::RuntimeMappingMissing(format!(
-						"workspace {} is missing",
-						mapping.workspace_id
-					)))
-				}
-				RuntimeIdentityState::Replaced => {
-					Err(AppError::RuntimeMappingReplaced(format!(
-						"workspace {}",
-						mapping.workspace_id
-					)))
-				}
-			};
-		}
 		if projection.workspace(profile_id).is_some() {
 			return Ok(profile_id.to_string());
+		}
+		if let Some(workspace_id) =
+			self.live_workspace_for_sqlite_profile(profile_id)?
+		{
+			if projection.workspace(&workspace_id).is_some() {
+				return Ok(workspace_id);
+			}
 		}
 		Err(AppError::RuntimeMappingMissing(format!(
 			"profile {profile_id} has no Herdr workspace"
 		)))
+	}
+
+	fn live_workspace_for_sqlite_profile(
+		&self,
+		profile_id: &str,
+	) -> Result<Option<String>, AppError> {
+		let checkout = self.with_db(|conn| match repo::profile::find_by_id(
+			conn, profile_id,
+		) {
+			Ok(profile) => Ok(Some(profile.worktree_path)),
+			Err(AppError::NotFound(_)) => Ok(None),
+			Err(err) => Err(err),
+		})?;
+		let Some(checkout) = checkout else {
+			return Ok(None);
+		};
+		if let Some(worktrees) = &self.worktrees {
+			if let Ok(listed) = worktrees.worktree_list(None, None) {
+				if let Some(workspace_id) = listed.iter().find_map(|entry| {
+					let id = entry
+						.workspace_id
+						.as_deref()
+						.filter(|id| !id.is_empty())?;
+					same_checkout_path(
+						Path::new(&entry.path),
+						Path::new(&checkout),
+					)
+					.then(|| id.to_string())
+				}) {
+					return Ok(Some(workspace_id));
+				}
+			}
+		}
+		let snapshot = self.client.session_snapshot()?;
+		Ok(snapshot_workspace_id_for_cwd(&snapshot, &checkout))
 	}
 
 	fn profile_checkout(&self, profile_id: &str) -> Result<String, AppError> {
@@ -966,14 +998,6 @@ impl HerdrLifecycle {
 		cwd: &str,
 	) -> Result<String, AppError> {
 		self.with_db(|conn| {
-			if let Ok(mapping) =
-				repo::runtime_mapping::find_profile_by_workspace(
-					conn,
-					HERDR_NAMESPACE,
-					workspace_id,
-				) {
-				return Ok(mapping.profile_id);
-			}
 			if repo::profile::find_by_id(conn, profile_id).is_ok() {
 				return Ok(profile_id.to_string());
 			}
@@ -1135,9 +1159,6 @@ impl HerdrLifecycle {
 	}
 
 	fn finish_close(&self, session_id: &str) -> Result<(), AppError> {
-		let mapping = self.with_db(|conn| {
-			repo::runtime_mapping::find_session_mapping(conn, session_id)
-		})?;
 		self.with_db(|conn| {
 			match repo::runtime_mapping::unbind_session_pane(conn, session_id) {
 				Ok(()) | Err(AppError::NotFound(_)) => {}
@@ -1145,29 +1166,7 @@ impl HerdrLifecycle {
 			}
 			repo::pty::mark_closed(conn, session_id);
 			Ok(())
-		})?;
-		if workspace_is_absent(self.client.as_ref(), &mapping.workspace_id)? {
-			self.with_db(|conn| {
-				let profile =
-					match repo::runtime_mapping::find_profile_by_workspace(
-						conn,
-						HERDR_NAMESPACE,
-						&mapping.workspace_id,
-					) {
-						Ok(profile) => profile,
-						Err(AppError::NotFound(_)) => return Ok(()),
-						Err(err) => return Err(err),
-					};
-				match repo::runtime_mapping::unbind_profile_workspace(
-					conn,
-					&profile.profile_id,
-				) {
-					Ok(()) | Err(AppError::NotFound(_)) => Ok(()),
-					Err(err) => Err(err),
-				}
-			})?;
-		}
-		Ok(())
+		})
 	}
 
 	fn list_project_sessions(
@@ -1177,7 +1176,7 @@ impl HerdrLifecycle {
 		let snapshot = self.client.session_snapshot()?;
 		let mut projection = RuntimeProjection::new();
 		projection.apply_snapshot(&snapshot)?;
-		let catalog = self.with_db(|conn| {
+		let mapped_sessions = self.with_db(|conn| {
 			let sessions = repo::pty::list_by_project(conn, project_id)?;
 			let mut mapped = Vec::new();
 			for session in sessions {
@@ -1188,19 +1187,8 @@ impl HerdrLifecycle {
 					mapped.push((session, mapping));
 				}
 			}
-			let profiles = repo::profile::list_by_project(conn, project_id)?;
-			let mut workspaces = Vec::new();
-			for profile in profiles {
-				if let Ok(mapping) = repo::runtime_mapping::find_profile_mapping(
-					conn,
-					&profile.id,
-				) {
-					workspaces.push((profile, mapping));
-				}
-			}
-			Ok((mapped, workspaces))
+			Ok(mapped)
 		})?;
-		let (mapped_sessions, profile_workspaces) = catalog;
 		let mut listed = Vec::new();
 		let mut bound_panes = HashSet::new();
 		let mut workspace_ids = HashSet::new();
@@ -1212,13 +1200,6 @@ impl HerdrLifecycle {
 				workspace_ids.insert(mapping.workspace_id.clone());
 				session.profile_id = mapping.workspace_id;
 				listed.push(session);
-			}
-		}
-		for (_profile, mapping) in profile_workspaces {
-			if workspace_identity_state(&mapping, &projection)
-				== RuntimeIdentityState::Bound
-			{
-				workspace_ids.insert(mapping.workspace_id);
 			}
 		}
 		for workspace_id in workspace_ids {
@@ -2187,7 +2168,13 @@ time.sleep(30)
 		}
 		let created = fx
 			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "w1".to_string(),
+					title: "shell".to_string(),
+				},
+				&fx.config(),
+			)
 			.unwrap();
 		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
@@ -2844,6 +2831,11 @@ time.sleep(30)
 			.unwrap();
 		assert!(!restore.contains("pane.send_input"));
 		assert!(!restore.contains("pane_send_input"));
+		assert!(!src.contains("bind_profile_workspace"));
+		assert!(!src.contains("unbind_profile_workspace"));
+		assert!(!src.contains("replace_profile_workspace"));
+		assert!(!src.contains("find_profile_mapping"));
+		assert!(!src.contains("find_profile_by_workspace"));
 	}
 
 	#[test]
@@ -2926,24 +2918,28 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn missing_workspace_mapping_fails_closed_without_tab_create() {
+	fn leftover_profile_mapping_is_not_required_for_create() {
 		let fx = Fixture::new();
 		{
 			let mut conn = fx.db.lock().unwrap();
 			repo::runtime_mapping::unbind_profile_workspace(&mut conn, "pr1")
 				.unwrap();
 		}
-		let err = fx
+		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap_err();
-		assert!(err.to_string().contains("missing"));
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		let row = {
+			let mut conn = fx.db.lock().unwrap();
+			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
+		};
+		assert_eq!(row.profile_id, "pr1");
 	}
 
 	#[test]
-	fn missing_projected_workspace_fails_closed() {
+	fn stale_profile_mapping_does_not_win_over_live_checkout() {
 		let fx = Fixture::new();
 		{
 			let mut conn = fx.db.lock().unwrap();
@@ -2957,13 +2953,12 @@ time.sleep(30)
 			)
 			.unwrap();
 		}
-		let err = fx
+		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap_err();
-		assert!(err.to_string().contains("missing"));
+			.unwrap();
+		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[test]
@@ -3040,7 +3035,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn last_pane_close_unbinds_vanished_workspace_and_keeps_checkout() {
+	fn last_pane_close_does_not_unbind_leftover_profile_mapping() {
 		let fx = Fixture::new();
 		std::fs::write(fx.cwd.path().join("keep"), b"checkout").unwrap();
 		let first = fx
@@ -3055,7 +3050,7 @@ time.sleep(30)
 		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
 		assert!(fx.cwd.path().join("keep").exists());
 		fx.adapter.close_session(&first.session_id).unwrap();
-		assert!(fx.profile_workspace_id().is_none());
+		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
 		assert!(fx.cwd.path().join("keep").exists());
 		assert!(!fx.fake.calls().iter().any(|m| {
 			m.contains("worktree.remove")
