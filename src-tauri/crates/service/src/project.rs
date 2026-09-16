@@ -130,30 +130,45 @@ fn project_without_profiles(project: Project) -> ProjectWithProfiles {
 	}
 }
 
+struct LeftoverNotes {
+	rows: Vec<(String, String, String)>,
+}
+
+impl LeftoverNotes {
+	fn for_checkout(&self, checkout: &str) -> (String, String) {
+		self.rows
+			.iter()
+			.find(|(path, _, _)| same_checkout_path(path, checkout))
+			.map(|(_, notes, created_at)| (notes.clone(), created_at.clone()))
+			.unwrap_or_else(|| (String::new(), String::new()))
+	}
+}
+
+/// Leftover sqlite notes keyed by checkout path. Mapping rows are ignored.
 fn notes_overlay(
 	conn: &mut SqliteConnection,
-) -> Result<HashMap<String, (String, String)>, AppError> {
-	let mappings = repo::runtime_mapping::list_profile_mappings(conn)?;
-	let mut overlay = HashMap::new();
-	for mapping in mappings {
-		if mapping.namespace != HERDR_NAMESPACE
-			|| mapping.workspace_id.is_empty()
-		{
-			continue;
+) -> Result<LeftoverNotes, AppError> {
+	let projects = repo::project::list_all_with_profiles(conn)?;
+	let mut rows = Vec::new();
+	for project in projects {
+		for profile in project.profiles {
+			if profile.worktree_path.is_empty() {
+				continue;
+			}
+			rows.push((
+				profile.worktree_path,
+				profile.notes,
+				profile.created_at,
+			));
 		}
-		let Ok(row) = repo::profile::find_by_id(conn, &mapping.profile_id)
-		else {
-			continue;
-		};
-		overlay.insert(mapping.workspace_id, (row.notes, row.created_at));
 	}
-	Ok(overlay)
+	Ok(LeftoverNotes { rows })
 }
 
 fn derive_project_profiles(
 	worktrees: &dyn HerdrWorktreeClient,
 	project: &ProjectWithProfiles,
-	notes: &HashMap<String, (String, String)>,
+	notes: &LeftoverNotes,
 	snapshot: &mut Option<Value>,
 ) -> Result<Vec<Profile>, AppError> {
 	let cwd = project_cwd(&project.folder);
@@ -194,7 +209,7 @@ fn empty_session_snapshot() -> Value {
 fn profiles_from_worktree_list(
 	project: &ProjectWithProfiles,
 	listed: &[WorktreeListEntry],
-	notes: &HashMap<String, (String, String)>,
+	notes: &LeftoverNotes,
 ) -> Vec<Profile> {
 	let mut profiles: Vec<Profile> = listed
 		.iter()
@@ -219,7 +234,7 @@ fn profiles_from_worktree_list(
 fn profiles_from_snapshot(
 	project: &ProjectWithProfiles,
 	snapshot: &Value,
-	notes: &HashMap<String, (String, String)>,
+	notes: &LeftoverNotes,
 ) -> Vec<Profile> {
 	let mut by_workspace: HashMap<String, String> = HashMap::new();
 	for pane in snapshot_panes(snapshot) {
@@ -265,12 +280,9 @@ fn derived_profile(
 	branch_name: String,
 	worktree_path: &str,
 	is_default: bool,
-	notes: &HashMap<String, (String, String)>,
+	notes: &LeftoverNotes,
 ) -> Profile {
-	let (notes, created_at) = notes
-		.get(workspace_id)
-		.cloned()
-		.unwrap_or_else(|| (String::new(), String::new()));
+	let (notes, created_at) = notes.for_checkout(worktree_path);
 	Profile {
 		id: workspace_id.to_string(),
 		project_id: project.id.clone(),
@@ -469,20 +481,22 @@ fn reconcile_local_profile_checkout(
 	persist_listed_checkout(worktrees, db, profile_id, &mapping, &cache)
 }
 
-pub fn mapped_sqlite_profile_id(
+/// Leftover sqlite profile whose checkout path matches live Herdr cwd.
+/// Mapping rows are not consulted.
+pub fn sqlite_profile_id_for_checkout(
 	db: &DbPool,
-	workspace_id: &str,
+	checkout: &str,
 ) -> Result<Option<String>, AppError> {
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	match repo::runtime_mapping::find_profile_by_workspace(
-		conn,
-		HERDR_NAMESPACE,
-		workspace_id,
-	) {
-		Ok(mapping) => Ok(Some(mapping.profile_id)),
-		Err(AppError::NotFound(_)) => Ok(None),
-		Err(err) => Err(err),
+	let projects = repo::project::list_all_with_profiles(conn)?;
+	for project in projects {
+		for profile in project.profiles {
+			if same_checkout_path(&profile.worktree_path, checkout) {
+				return Ok(Some(profile.id));
+			}
+		}
 	}
+	Ok(None)
 }
 
 fn persist_listed_checkout(
@@ -1694,15 +1708,15 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_list_overlays_notes_from_mapping_not_membership() {
+	fn herdr_list_overlays_notes_from_checkout_path_not_mapping() {
 		let mut conn = setup_db();
 		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
+			insert_catalog(&mut conn, "/repo", "/repo");
 		repo::runtime_mapping::bind_profile_workspace(
 			&mut conn,
 			&profile_id,
 			HERDR_NAMESPACE,
-			"w1",
+			"w2",
 		)
 		.unwrap();
 		repo::profile::update_notes(&mut conn, &profile_id, "hello notes")

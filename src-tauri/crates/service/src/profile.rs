@@ -1497,7 +1497,9 @@ pub fn update_notes_with_runtime(
 	}
 
 	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
-	if let Some(sqlite_id) = crate::project::mapped_sqlite_profile_id(db, id)? {
+	if let Some(sqlite_id) =
+		crate::project::sqlite_profile_id_for_checkout(db, &path)?
+	{
 		let mut profile = {
 			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 			let mut profile =
@@ -3570,17 +3572,10 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_notes_update_mapped_workspace_id_persists_sqlite_notes() {
+	fn herdr_notes_update_persists_sqlite_notes_by_checkout_path() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let default_id = format!("default-{}", project.id);
-		repo::runtime_mapping::bind_profile_workspace(
-			&mut conn,
-			&default_id,
-			HERDR_NAMESPACE,
-			"w1",
-		)
-		.unwrap();
 		let folder = dir.path().to_string_lossy().into_owned();
 		let db = pool_from(conn);
 		let fake = FakeWorktrees::new();
@@ -3609,7 +3604,7 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_notes_update_unmapped_workspace_id_does_not_stub_default() {
+	fn herdr_notes_update_unmapped_linked_does_not_stub_sqlite() {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let default_id = format!("default-{}", project.id);
@@ -3633,11 +3628,11 @@ mod tests {
 		}
 		let router = herdr_router(&db, fake);
 
-		let primary = update_notes_with_runtime(&router, &db, "w1", "nope")
-			.expect("primary notes no-op");
+		let primary = update_notes_with_runtime(&router, &db, "w1", "kept")
+			.expect("primary notes persist on leftover checkout");
 		assert_eq!(primary.id, "w1");
 		assert!(primary.is_default);
-		assert_eq!(primary.notes, "");
+		assert_eq!(primary.notes, "kept");
 
 		let linked = update_notes_with_runtime(&router, &db, "w2", "nope")
 			.expect("linked notes no-op");
@@ -3648,7 +3643,7 @@ mod tests {
 		let conn = &mut *db.lock().unwrap();
 		assert_eq!(
 			repo::profile::find_by_id(conn, &default_id).unwrap().notes,
-			""
+			"kept"
 		);
 		assert!(repo::profile::find_by_id(conn, "w2").is_err());
 		assert_eq!(
