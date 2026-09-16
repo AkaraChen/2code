@@ -263,28 +263,88 @@ pub fn resolve_terminal_file_path(
 
 #[cfg(test)]
 mod tests {
+	use std::path::Path;
 	use std::sync::{Arc, Mutex};
 
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
+	use infra::herdr::transport::{
+		WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
+		WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
+		WorkspaceCreateResult,
+	};
 	use model::error::AppError;
-	use model::runtime::RuntimeBackend;
+	use serde_json::Value;
 	use tempfile::tempdir;
 
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
-	use crate::PtyEventEmitter;
+	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
 
-	struct TestEmitter;
+	struct FolderWorktrees {
+		folder: std::path::PathBuf,
+	}
 
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
+	impl HerdrWorktreeClient for FolderWorktrees {
+		fn worktree_create(
+			&self,
+			_request: WorktreeCreateRequest<'_>,
+		) -> Result<WorktreeCreateResult, AppError> {
+			Err(AppError::PtyError("fs tests do not create".into()))
 		}
 
-		fn emit_exit(&self, _session_id: &str) {}
+		fn worktree_list(
+			&self,
+			_cwd: Option<&Path>,
+			workspace_id: Option<&str>,
+		) -> Result<Vec<WorktreeListEntry>, AppError> {
+			if workspace_id.is_some_and(|id| id != "w1") {
+				return Ok(Vec::new());
+			}
+			Ok(vec![WorktreeListEntry {
+				path: self.folder.to_string_lossy().into_owned(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			}])
+		}
+
+		fn worktree_open(
+			&self,
+			_cwd: &Path,
+			_path: &Path,
+		) -> Result<WorktreeOpenResult, AppError> {
+			Err(AppError::PtyError("fs tests do not open".into()))
+		}
+
+		fn worktree_remove(
+			&self,
+			_workspace_id: &str,
+			_force: bool,
+		) -> Result<WorktreeRemoveResult, AppError> {
+			Err(AppError::PtyError("fs tests do not remove".into()))
+		}
+
+		fn workspace_create(
+			&self,
+			_request: WorkspaceCreateRequest<'_>,
+		) -> Result<WorkspaceCreateResult, AppError> {
+			Err(AppError::PtyError("fs tests do not create workspaces".into()))
+		}
+
+		fn workspace_close(
+			&self,
+			_workspace_id: &str,
+		) -> Result<(), AppError> {
+			Ok(())
+		}
+
+		fn session_snapshot(&self) -> Result<Value, AppError> {
+			Ok(serde_json::json!({
+				"type": "session_snapshot",
+				"snapshot": { "workspaces": [], "tabs": [], "panes": [] }
+			}))
+		}
 	}
 
 	fn setup_db() -> SqliteConnection {
@@ -299,31 +359,16 @@ mod tests {
 		Arc::new(Mutex::new(conn))
 	}
 
-	fn local_router(db: &DbPool) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-fs-runtime-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		RuntimeRouter::with_backend(
-			RuntimeBackend::Local,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::new(),
-		)
+	fn herdr_router(folder: &Path) -> RuntimeRouter {
+		let worktrees: Arc<dyn HerdrWorktreeClient> = Arc::new(FolderWorktrees {
+			folder: folder.to_path_buf(),
+		});
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees))
 	}
 
-	fn insert_project(
-		conn: &mut SqliteConnection,
-		worktree_path: &str,
-	) -> String {
+	fn insert_project(conn: &mut SqliteConnection, worktree_path: &str) {
 		repo::project::insert(conn, "proj-1", "Project", worktree_path)
 			.expect("insert project");
-		model::profile::Profile::local_default_id("proj-1")
 	}
 
 	#[test]
@@ -341,7 +386,7 @@ mod tests {
 	}
 
 	#[test]
-	fn search_file_for_profile_uses_local_sqlite_worktree() {
+	fn search_file_for_profile_uses_live_herdr_worktree() {
 		let dir = tempdir().expect("tempdir");
 		std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
 		std::fs::write(dir.path().join("src/main.rs"), "fn main() {}")
@@ -350,14 +395,12 @@ mod tests {
 			.expect("write readme");
 
 		let mut conn = setup_db();
-		let profile_id =
-			insert_project(&mut conn, &dir.path().to_string_lossy());
+		insert_project(&mut conn, &dir.path().to_string_lossy());
 		let db = pool_from(conn);
-		let runtime = local_router(&db);
+		let runtime = herdr_router(dir.path());
 
-		let results =
-			search_file_for_profile(&runtime, &db, &profile_id, "main")
-				.expect("search files");
+		let results = search_file_for_profile(&runtime, &db, "w1", "main")
+			.expect("search files");
 
 		assert_eq!(results.len(), 1);
 		assert_eq!(results[0].name, "main.rs");
@@ -365,9 +408,12 @@ mod tests {
 	}
 
 	#[test]
-	fn search_file_for_profile_returns_not_found_for_unknown_local_profiles() {
-		let db = pool_from(setup_db());
-		let runtime = local_router(&db);
+	fn search_file_for_profile_returns_not_found_for_unknown_workspaces() {
+		let dir = tempdir().expect("tempdir");
+		let mut conn = setup_db();
+		insert_project(&mut conn, &dir.path().to_string_lossy());
+		let db = pool_from(conn);
+		let runtime = herdr_router(dir.path());
 
 		let result =
 			search_file_for_profile(&runtime, &db, "missing-profile", "main");

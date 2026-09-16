@@ -1,27 +1,107 @@
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
+use serde_json::Value;
 
 use infra::db::{DbPool, MIGRATIONS};
+use infra::herdr::transport::{
+	WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
+	WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
+	WorkspaceCreateResult,
+};
 use infra::no_window::command_without_windows_console;
+use model::error::AppError;
 use model::profile::Profile;
 use model::project::Project;
-use model::runtime::RuntimeBackend;
-use service::pty::{create_flush_senders, PtyContext};
-use service::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
-use service::PtyEventEmitter;
+use service::runtime::{
+	HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter,
+};
 
-struct TestEmitter;
+/// Lists a single open Herdr workspace `w1` at the given folder.
+struct FolderWorktrees {
+	folder: PathBuf,
+}
 
-impl PtyEventEmitter for TestEmitter {
-	fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-		true
+impl FolderWorktrees {
+	fn entry(&self) -> WorktreeListEntry {
+		WorktreeListEntry {
+			path: self.folder.to_string_lossy().into_owned(),
+			branch: Some("main".into()),
+			workspace_id: Some("w1".into()),
+			is_linked_worktree: false,
+		}
+	}
+}
+
+impl HerdrWorktreeClient for FolderWorktrees {
+	fn worktree_create(
+		&self,
+		_request: WorktreeCreateRequest<'_>,
+	) -> Result<WorktreeCreateResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not create".into(),
+		))
 	}
 
-	fn emit_exit(&self, _session_id: &str) {}
+	fn worktree_list(
+		&self,
+		_cwd: Option<&Path>,
+		workspace_id: Option<&str>,
+	) -> Result<Vec<WorktreeListEntry>, AppError> {
+		if let Some(workspace_id) = workspace_id {
+			if workspace_id != "w1" {
+				return Ok(Vec::new());
+			}
+		}
+		Ok(vec![self.entry()])
+	}
+
+	fn worktree_open(
+		&self,
+		_cwd: &Path,
+		_path: &Path,
+	) -> Result<WorktreeOpenResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not open".into(),
+		))
+	}
+
+	fn worktree_remove(
+		&self,
+		_workspace_id: &str,
+		_force: bool,
+	) -> Result<WorktreeRemoveResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not remove".into(),
+		))
+	}
+
+	fn workspace_create(
+		&self,
+		_request: WorkspaceCreateRequest<'_>,
+	) -> Result<WorkspaceCreateResult, AppError> {
+		Err(AppError::PtyError(
+			"integration FolderWorktrees does not create workspaces".into(),
+		))
+	}
+
+	fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
+		Ok(())
+	}
+
+	fn session_snapshot(&self) -> Result<Value, AppError> {
+		Ok(serde_json::json!({
+			"type": "session_snapshot",
+			"snapshot": {
+				"workspaces": [],
+				"tabs": [],
+				"panes": []
+			}
+		}))
+	}
 }
 
 /// Create an in-memory SQLite connection with migrations and foreign keys enabled.
@@ -37,32 +117,20 @@ pub fn setup_db() -> SqliteConnection {
 }
 
 pub fn pool_from(conn: SqliteConnection) -> DbPool {
-	Arc::new(Mutex::new(conn))
+	Arc::new(std::sync::Mutex::new(conn))
 }
 
-/// Local-flag runtime over the given sqlite pool. Local lists only the
-/// synthetic `projects.folder` default after sqlite `profiles` DROP.
-pub fn local_runtime(db: &DbPool) -> RuntimeRouter {
-	let logs = std::env::temp_dir().join("2code-integ-local-runtime");
-	std::fs::create_dir_all(&logs).ok();
-	let ctx = PtyContext {
-		db: db.clone(),
-		sessions: infra::pty::create_session_map(),
-		flush_senders: create_flush_senders(),
-		read_threads: infra::pty::create_thread_tracker(),
-		emitter: Arc::new(TestEmitter),
-		output_dir: logs,
-	};
-	RuntimeRouter::with_backend(
-		RuntimeBackend::Local,
-		LocalAdapter::new(ctx),
-		HerdrStubAdapter::new(),
-	)
-}
-
-pub fn local_from(conn: SqliteConnection) -> (RuntimeRouter, DbPool) {
+/// Herdr-only runtime whose catalog lists `w1` at `folder`.
+pub fn herdr_from(
+	conn: SqliteConnection,
+	folder: &Path,
+) -> (RuntimeRouter, DbPool) {
 	let db = pool_from(conn);
-	let runtime = local_runtime(&db);
+	let worktrees: Arc<dyn HerdrWorktreeClient> = Arc::new(FolderWorktrees {
+		folder: folder.to_path_buf(),
+	});
+	let runtime =
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees));
 	(runtime, db)
 }
 
@@ -115,8 +183,8 @@ pub fn cleanup(dir: &std::path::Path) {
 	let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Create a git repo, insert a project + default profile into the DB, and return all three.
-/// The project folder points to the temp git repo.
+/// Create a git repo, insert a sqlite project, and return a live Herdr
+/// profile DTO (`w1`) for the folder. sqlite `profiles` is not a table.
 pub fn create_project_with_git_repo(
 	conn: &mut SqliteConnection,
 ) -> (Project, Profile, PathBuf) {
@@ -128,17 +196,15 @@ pub fn create_project_with_git_repo(
 		service::project::create_from_folder(conn, "Test Project", &folder)
 			.expect("create project from folder");
 
-	let projects_with_profiles =
-		service::project::list(conn).expect("list projects");
-	let pwp = projects_with_profiles
-		.into_iter()
-		.find(|p| p.id == project.id)
-		.expect("find project");
-	let default_profile = pwp
-		.profiles
-		.into_iter()
-		.find(|p| p.is_default)
-		.expect("find default profile");
+	let profile = Profile {
+		id: "w1".to_string(),
+		project_id: project.id.clone(),
+		branch_name: "main".to_string(),
+		worktree_path: folder,
+		created_at: String::new(),
+		is_default: true,
+		notes: String::new(),
+	};
 
-	(project, default_profile, dir)
+	(project, profile, dir)
 }

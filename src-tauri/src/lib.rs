@@ -10,13 +10,6 @@ pub fn run() {
 
 	let (channel_layer, layer_handle) = infra::logger::ChannelLayer::new();
 
-	let sessions = infra::pty::create_session_map();
-	let sessions_for_exit = sessions.clone();
-	let read_threads = infra::pty::create_thread_tracker();
-	let read_threads_for_exit = read_threads.clone();
-	let flush_senders = service::pty::create_flush_senders();
-	let output_sinks = bridge::create_output_sinks();
-	let output_receivers = bridge::create_output_receivers();
 	let shutdown_flag = infra::watcher::create_shutdown_flag();
 	let shutdown_for_exit = shutdown_flag.clone();
 	let herdr_clients = service::runtime::HerdrClientGuard::new();
@@ -31,11 +24,6 @@ pub fn run() {
 		.plugin(tauri_plugin_shell::init())
 		.plugin(tauri_plugin_store::Builder::default().build())
 		.plugin(tauri_plugin_clipboard_manager::init())
-		.manage(sessions)
-		.manage(read_threads)
-		.manage(flush_senders)
-		.manage(output_sinks)
-		.manage(output_receivers)
 		.manage(shutdown_flag)
 		.manage(herdr_clients)
 		.manage(layer_handle)
@@ -62,16 +50,6 @@ pub fn run() {
 			let pool = infra::db::init_db(&app_data_dir)
 				.expect("failed to initialize database");
 
-			// Mark any orphaned sessions (from previous unclean shutdown) as closed
-			service::pty::mark_all_closed(&pool);
-			tracing::info!(target: "pty", "startup: marked orphaned sessions closed");
-
-			// Reap output log files with no matching session row (crash
-			// leftovers + profile/project cascade-delete orphans).
-			let log_dir = infra::pty_log::logs_dir(&app_data_dir);
-			service::pty::gc_orphan_logs(&pool, &log_dir);
-			app.manage(service::pty::PtyLogDir(log_dir));
-
 			app.manage(pool);
 			app.manage(crate::bridge::build_runtime(app.handle()));
 
@@ -84,18 +62,14 @@ pub fn run() {
 			handler::pty::scroll_pty,
 			handler::pty::close_pty_session,
 			handler::pty::list_project_sessions,
-			handler::pty::get_pty_session_history,
-			handler::pty::delete_pty_session_record,
-			handler::pty::flush_pty_output,
-			handler::pty::clear_pty_output,
-			handler::pty::restore_pty_session,
 			handler::pty::get_session_backend,
 			handler::pty::get_session_agent_status,
 			handler::pty::stream_session_agent_status,
 			handler::pty::attach_pty_output,
-			handler::pty::stream_pty_output,
 			handler::pty::stream_herdr_output,
 			handler::pty::detach_pty_output,
+			handler::pty::flush_pty_output,
+			handler::pty::clear_pty_output,
 			handler::project::create_project_from_folder,
 			handler::project::list_projects,
 			handler::project::update_project,
@@ -173,14 +147,6 @@ pub fn run() {
 				app_handle.try_state::<service::runtime::RuntimeHandle>()
 			{
 				runtime.release_attachments();
-			}
-			infra::pty::close_all_sessions(&sessions_for_exit);
-			tracing::info!(target: "pty", "exit: joining read threads...");
-			infra::pty::join_all_read_threads(&read_threads_for_exit);
-			tracing::info!(target: "pty", "exit: all read threads joined");
-
-			if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
-				service::pty::mark_all_closed(&db);
 			}
 			if let Some(profile) =
 				app_handle.try_state::<profiler::DevProfileState>()

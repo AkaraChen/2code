@@ -19,13 +19,12 @@ pub enum RuntimeIdentityState {
 /// Which terminal backend is selected for new sessions.
 ///
 /// Application-level only: Herdr protocol/wire types do not belong here.
-/// Production default is Herdr. Local is an explicit fallback only.
+/// Production is Herdr-only.
 #[derive(
 	Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize,
 )]
 #[serde(rename_all = "camelCase")]
 pub enum RuntimeBackend {
-	Local,
 	#[default]
 	Herdr,
 }
@@ -33,7 +32,6 @@ pub enum RuntimeBackend {
 impl std::fmt::Display for RuntimeBackend {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Local => f.write_str("local"),
 			Self::Herdr => f.write_str("herdr"),
 		}
 	}
@@ -143,13 +141,7 @@ mod tests {
 	}
 
 	#[test]
-	fn local_is_not_the_default_backend() {
-		assert_ne!(RuntimeBackend::default(), RuntimeBackend::Local);
-	}
-
-	#[test]
-	fn backend_display_is_herdr_agnostic() {
-		assert_eq!(RuntimeBackend::Local.to_string(), "local");
+	fn backend_display_is_herdr() {
 		assert_eq!(RuntimeBackend::Herdr.to_string(), "herdr");
 	}
 
@@ -160,11 +152,7 @@ mod tests {
 		})
 		.unwrap();
 		assert_eq!(json["selectedBackend"], "herdr");
-		let local = serde_json::to_value(RuntimeDiscovery {
-			selected_backend: RuntimeBackend::Local,
-		})
-		.unwrap();
-		assert_eq!(local["selectedBackend"], "local");
+		assert!(json.get("local").is_none());
 	}
 
 	#[test]

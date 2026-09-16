@@ -55,7 +55,7 @@ fn create_from_folder_nonexistent_returns_error() {
 }
 
 #[test]
-fn create_from_folder_creates_default_profile() {
+fn create_from_folder_does_not_synthesize_profiles() {
 	let mut conn = setup_db();
 	let dir = create_temp_git_repo();
 	add_commit(&dir, "a.txt", "hi", "init");
@@ -67,8 +67,7 @@ fn create_from_folder_creates_default_profile() {
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	assert_eq!(pwp.profiles.len(), 1);
-	assert!(pwp.profiles[0].is_default);
+	assert!(pwp.profiles.is_empty());
 
 	cleanup(&dir);
 }
@@ -181,15 +180,7 @@ fn list_returns_project_with_profiles_shape() {
 	assert_eq!(pwp.name, project.name);
 	assert_eq!(pwp.folder, project.folder);
 	assert!(!pwp.created_at.is_empty());
-	assert!(!pwp.profiles.is_empty());
-
-	let profile = &pwp.profiles[0];
-	assert!(!profile.id.is_empty());
-	assert_eq!(profile.project_id, project.id);
-	assert!(!profile.branch_name.is_empty());
-	assert!(!profile.worktree_path.is_empty());
-	assert!(!profile.created_at.is_empty());
-	assert!(profile.is_default);
+	assert!(pwp.profiles.is_empty());
 
 	cleanup(&dir);
 }
@@ -210,8 +201,7 @@ fn list_multiple_projects_each_with_profiles() {
 	let list = service::project::list(&mut conn).unwrap();
 	assert_eq!(list.len(), 2);
 	for pwp in &list {
-		assert!(!pwp.profiles.is_empty());
-		assert!(pwp.profiles.iter().any(|p| p.is_default));
+		assert!(pwp.profiles.is_empty());
 	}
 
 	cleanup(&dir1);
@@ -258,39 +248,15 @@ fn update_nonexistent_returns_error() {
 // ============================================================
 
 #[test]
-fn delete_cascades_to_profiles_and_sessions() {
+fn delete_cascades_project_row() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) =
+	let (project, _default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	// Insert a PTY session on the default profile
-	let session_record = model::pty::NewPtySessionRecord {
-		id: "sess-1",
-		project_id: &project.id,
-		profile_id: &default_profile.id,
-		title: "bash",
-		shell: "/bin/bash",
-		cwd: &project.folder,
-		cols: 80,
-		rows: 24,
-	};
-	repo::pty::insert_session(&mut conn, &session_record).unwrap();
-
-	// Verify session exists
-	let sessions =
-		service::pty::list_project_sessions(&mut conn, &project.id).unwrap();
-	assert_eq!(sessions.len(), 1);
-
-	// Delete project — should cascade to profiles and sessions
 	service::project::delete(&mut conn, &project.id).unwrap();
 
 	let list = service::project::list(&mut conn).unwrap();
 	assert!(list.is_empty());
-
-	// Session row should be gone via FK cascade. (Its output log file, if any,
-	// is a separate concern reaped by the startup orphan-log GC.)
-	let remaining = repo::pty::all_session_ids(&mut conn).unwrap();
-	assert!(!remaining.contains(&"sess-1".to_string()));
 
 	cleanup(&dir);
 }
@@ -444,7 +410,7 @@ fn startup_cleanup_deletes_existing_empty_groups() {
 #[test]
 fn local_extras_create_fails_closed_without_git_worktree() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) =
+	let (project, _default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 	let before = command_without_windows_console("git")
 		.args(["worktree", "list", "--porcelain"])
@@ -455,7 +421,10 @@ fn local_extras_create_fails_closed_without_git_worktree() {
 	let err =
 		service::profile::create(&mut conn, &project.id, "feature-branch")
 			.unwrap_err();
-	assert!(err.to_string().contains("no longer creates extra"), "{err}");
+	assert!(
+		err.to_string().contains("Herdr runtime is required"),
+		"{err}"
+	);
 
 	let after = command_without_windows_console("git")
 		.args(["worktree", "list", "--porcelain"])
@@ -466,9 +435,7 @@ fn local_extras_create_fails_closed_without_git_worktree() {
 
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	assert_eq!(pwp.profiles.len(), 1);
-	assert_eq!(pwp.profiles[0].id, default_profile.id);
-	assert!(pwp.profiles[0].is_default);
+	assert!(pwp.profiles.is_empty());
 
 	cleanup(&dir);
 }
@@ -485,10 +452,16 @@ fn local_extras_delete_fails_closed_without_git_worktree_remove() {
 		.unwrap();
 
 	let err = service::profile::delete(&mut conn, "extra-id").unwrap_err();
-	assert!(err.to_string().contains("no longer deletes extra"), "{err}");
+	assert!(
+		err.to_string().contains("Herdr runtime is required"),
+		"{err}"
+	);
 	let err =
 		service::profile::delete(&mut conn, &default_profile.id).unwrap_err();
-	assert!(err.to_string().contains("Cannot delete default"), "{err}");
+	assert!(
+		err.to_string().contains("Herdr runtime is required"),
+		"{err}"
+	);
 
 	let after = command_without_windows_console("git")
 		.args(["worktree", "list", "--porcelain"])
@@ -501,14 +474,12 @@ fn local_extras_delete_fails_closed_without_git_worktree_remove() {
 }
 
 #[test]
-fn local_list_is_only_the_folder_default() {
+fn local_list_has_empty_profiles_without_herdr() {
 	let mut conn = setup_db();
-	let (project, default_profile, dir) =
+	let (project, _default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 	let list = service::project::list(&mut conn).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
-	assert_eq!(pwp.profiles.len(), 1);
-	assert_eq!(pwp.profiles[0].id, default_profile.id);
-	assert_eq!(pwp.profiles[0].worktree_path, project.folder);
+	assert!(pwp.profiles.is_empty());
 	cleanup(&dir);
 }

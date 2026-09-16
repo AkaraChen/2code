@@ -2,7 +2,7 @@ mod common;
 
 use common::{
 	add_commit, cleanup, create_project_with_git_repo, create_temp_git_repo,
-	local_from, setup_db,
+	herdr_from, setup_db,
 };
 use infra::no_window::command_without_windows_console;
 
@@ -29,7 +29,7 @@ fn diff_resolves_profile_to_folder() {
 	// Modify a file to create a diff
 	std::fs::write(dir.join("README.md"), "# Modified").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(diff.contains("README.md"), "diff should contain filename");
@@ -55,7 +55,7 @@ fn diff_captures_staged_and_unstaged() {
 	// Unstaged change
 	std::fs::write(dir.join("README.md"), "# Unstaged change").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(
@@ -78,7 +78,7 @@ fn diff_includes_untracked_files() {
 
 	std::fs::write(dir.join("new_file.txt"), "new content").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(
@@ -116,10 +116,12 @@ fn diff_snapshot_includes_untracked_files() {
 #[test]
 fn diff_nonexistent_profile_returns_error() {
 	let conn = setup_db();
-	let (runtime, db) = local_from(conn);
+	let dir = create_temp_git_repo();
+	let (runtime, db) = herdr_from(conn, &dir);
 	let result =
 		service::project::get_diff(&runtime, &db, "nonexistent-profile");
 	assert!(result.is_err());
+	cleanup(&dir);
 }
 
 // ============================================================
@@ -136,10 +138,10 @@ fn diff_empty_repo_returns_empty_string() {
 		service::project::create_from_folder(&mut conn, "Empty", &folder)
 			.unwrap();
 
-	let list = service::project::list(&mut conn).unwrap();
+	let (runtime, db) = herdr_from(conn, &dir);
+	let list = service::project::list_with_runtime(&runtime, &db).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
 	let profile_id = pwp.profiles[0].id.clone();
-	let (runtime, db) = local_from(conn);
 
 	let diff = service::project::get_diff(&runtime, &db, &profile_id).unwrap();
 	assert_eq!(diff, "");
@@ -154,7 +156,7 @@ fn diff_no_changes_returns_empty_string() {
 		create_project_with_git_repo(&mut conn);
 
 	// No changes after initial commit
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert_eq!(diff, "");
@@ -187,7 +189,7 @@ fn diff_deleted_file() {
 	// Delete the tracked file
 	std::fs::remove_file(dir.join("README.md")).unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(diff.contains("README.md"), "diff should show deleted file");
@@ -268,7 +270,7 @@ fn diff_binary_file_change() {
 	let binary_data: Vec<u8> = (0..=255).collect();
 	std::fs::write(dir.join("image.bin"), &binary_data).unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(
@@ -289,7 +291,7 @@ fn log_returns_commit_shape() {
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 10)
 			.unwrap();
@@ -317,7 +319,7 @@ fn log_respects_limit() {
 	add_commit(&dir, "b.txt", "b", "Second commit");
 	add_commit(&dir, "c.txt", "c", "Third commit");
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 2)
 			.unwrap();
@@ -338,10 +340,10 @@ fn log_empty_repo_returns_empty_vec() {
 		service::project::create_from_folder(&mut conn, "Empty", &folder)
 			.unwrap();
 
-	let list = service::project::list(&mut conn).unwrap();
+	let (runtime, db) = herdr_from(conn, &dir);
+	let list = service::project::list_with_runtime(&runtime, &db).unwrap();
 	let pwp = list.iter().find(|p| p.id == project.id).unwrap();
 	let profile_id = pwp.profiles[0].id.clone();
-	let (runtime, db) = local_from(conn);
 
 	let commits =
 		service::project::get_log(&runtime, &db, &profile_id, 10).unwrap();
@@ -361,7 +363,7 @@ fn log_limit_zero() {
 		create_project_with_git_repo(&mut conn);
 
 	// git log -0 shows all commits (no limit)
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 0)
 			.unwrap();
@@ -380,7 +382,7 @@ fn log_commit_with_cjk_message() {
 
 	add_commit(&dir, "cjk.txt", "content", "添加中文文件");
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 10)
 			.unwrap();
@@ -411,7 +413,7 @@ fn log_multiple_files_in_commit() {
 		.output()
 		.unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 1)
 			.unwrap();
@@ -431,7 +433,7 @@ fn commit_diff_returns_patch() {
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commits =
 		service::project::get_log(&runtime, &db, &default_profile.id, 1)
 			.unwrap();
@@ -456,7 +458,7 @@ fn commit_diff_invalid_hash_returns_error() {
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	// Non-hex characters (injection attempt)
 	let result = service::project::get_commit_diff(
 		&runtime,
@@ -475,7 +477,7 @@ fn commit_diff_too_short_hash_returns_error() {
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let result = service::project::get_commit_diff(
 		&runtime,
 		&db,
@@ -493,7 +495,7 @@ fn commit_diff_nonexistent_hash_returns_error() {
 	let (_project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let result = service::project::get_commit_diff(
 		&runtime,
 		&db,
@@ -518,7 +520,7 @@ fn commit_changes_commits_only_selected_files() {
 	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
 	std::fs::write(dir.join("notes.txt"), "keep me for later").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let commit_hash = service::project::commit_changes(
 		&runtime,
 		&db,
@@ -568,7 +570,7 @@ fn commit_changes_supports_body_and_untracked_files() {
 
 	std::fs::write(dir.join("new-file.txt"), "new file").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	service::project::commit_changes(
 		&runtime,
 		&db,
@@ -604,7 +606,7 @@ fn commit_changes_empty_message_returns_error() {
 
 	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let result = service::project::commit_changes(
 		&runtime,
 		&db,
@@ -627,7 +629,7 @@ fn commit_changes_requires_selected_files() {
 	std::fs::write(dir.join("README.md"), "# Updated").unwrap();
 
 	let files: Vec<String> = Vec::new();
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let result = service::project::commit_changes(
 		&runtime,
 		&db,
@@ -664,14 +666,14 @@ fn get_branch_returns_correct_branch() {
 // ============================================================
 
 #[test]
-fn diff_on_local_default_uses_projects_folder() {
+fn diff_on_herdr_workspace_uses_projects_folder() {
 	let mut conn = setup_db();
 	let (project, default_profile, dir) =
 		create_project_with_git_repo(&mut conn);
 
 	std::fs::write(dir.join("folder-file.txt"), "folder content").unwrap();
 
-	let (runtime, db) = local_from(conn);
+	let (runtime, db) = herdr_from(conn, &dir);
 	let diff =
 		service::project::get_diff(&runtime, &db, &default_profile.id).unwrap();
 	assert!(

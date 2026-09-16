@@ -76,7 +76,7 @@ mod tests {
 		let row: CountRow = diesel::sql_query(
 			"SELECT COUNT(*) AS count \
 			 FROM sqlite_master \
-			 WHERE type = 'table' AND name IN ('projects', 'checkout_notes', 'pty_sessions')",
+			 WHERE type = 'table' AND name IN ('projects', 'checkout_notes', 'project_groups')",
 		)
 		.get_result(&mut *conn)
 		.expect("read sqlite_master");
@@ -143,7 +143,8 @@ mod tests {
 			.collect();
 		dirs.sort();
 		for dir in dirs {
-			if dir.file_name().and_then(|n| n.to_str()) == Some(skip) {
+			let name = dir.file_name().and_then(|n| n.to_str());
+			if name.is_some_and(|name| name >= skip) {
 				continue;
 			}
 			apply_up_sql(conn, &dir);
@@ -184,21 +185,13 @@ mod tests {
 			column_names(&mut conn, "checkout_notes"),
 			["project_id", "checkout_path", "notes", "created_at"]
 		);
-		assert_eq!(
-			column_names(&mut conn, "pty_sessions"),
-			[
-				"id",
-				"project_id",
-				"profile_id",
-				"title",
-				"shell",
-				"cwd",
-				"created_at",
-				"closed_at",
-				"cols",
-				"rows"
-			]
-		);
+		let pty: Vec<NameRow> = diesel::sql_query(
+			"SELECT name FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'pty_sessions'",
+		)
+		.load(&mut *conn)
+		.expect("pty_sessions");
+		assert!(pty.is_empty());
 	}
 
 	#[test]
@@ -258,5 +251,52 @@ mod tests {
 		.get_result(&mut conn)
 		.expect("dropped tables");
 		assert_eq!(dropped.count, 0);
+	}
+
+	#[test]
+	fn drop_pty_sessions_keeps_projects_and_notes() {
+		let dir = tempdir().expect("tempdir");
+		let pool = init_db(dir.path()).expect("init db");
+		let mut conn = pool.lock().expect("lock db");
+		diesel::sql_query(
+			"INSERT INTO projects (id, name, folder, created_at, sort_order) \
+			 VALUES ('proj-keep', 'Keep', '/repo', datetime('now'), 42)",
+		)
+		.execute(&mut *conn)
+		.expect("seed project");
+		diesel::sql_query(
+			"INSERT INTO checkout_notes (project_id, checkout_path, notes) \
+			 VALUES ('proj-keep', '/repo', 'keep-notes')",
+		)
+		.execute(&mut *conn)
+		.expect("seed notes");
+
+		let after: CatalogRow = diesel::sql_query(
+			"SELECT projects.id AS id, checkout_notes.notes AS notes, \
+			        projects.sort_order AS sort_order, projects.folder AS folder \
+			 FROM projects \
+			 JOIN checkout_notes ON checkout_notes.project_id = projects.id \
+			 WHERE projects.id = 'proj-keep'",
+		)
+		.get_result(&mut *conn)
+		.expect("catalog after");
+		assert_eq!(after.id, "proj-keep");
+		assert_eq!(after.notes, "keep-notes");
+		assert_eq!(after.folder, "/repo");
+
+		let pty: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'pty_sessions'",
+		)
+		.get_result(&mut *conn)
+		.expect("pty_sessions");
+		assert_eq!(pty.count, 0);
+		let profiles: CountRow = diesel::sql_query(
+			"SELECT COUNT(*) AS count FROM sqlite_master \
+			 WHERE type = 'table' AND name = 'profiles'",
+		)
+		.get_result(&mut *conn)
+		.expect("profiles");
+		assert_eq!(profiles.count, 0);
 	}
 }

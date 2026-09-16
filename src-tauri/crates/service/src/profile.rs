@@ -12,9 +12,7 @@ use uuid::Uuid;
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
-use model::runtime::RuntimeBackend;
-
-use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
+use crate::runtime::{HerdrWorktreeClient, RuntimeRouter};
 use serde_json::Value;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
@@ -308,15 +306,9 @@ pub fn create_with_db(
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		repo::project::find_by_id(conn, project_id)?;
 	}
-	Err(local_extras_create_closed())
-}
-
-fn local_extras_create_closed() -> AppError {
-	AppError::GitError("Local runtime no longer creates extra profiles".into())
-}
-
-fn local_extras_delete_closed() -> AppError {
-	AppError::GitError("Local runtime no longer deletes extra profiles".into())
+	Err(AppError::PtyError(
+		"Herdr runtime is required to create profiles".into(),
+	))
 }
 
 pub fn create_with_runtime(
@@ -326,21 +318,14 @@ pub fn create_with_runtime(
 	branch_name: &str,
 	default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
-	match runtime.selected_backend() {
-		RuntimeBackend::Local => {
-			create_with_db(db, project_id, branch_name, default_worktree_dir)
-		}
-		RuntimeBackend::Herdr => {
-			let worktrees = runtime.herdr_worktrees()?;
-			create_herdr_with_db(
-				worktrees,
-				db,
-				project_id,
-				branch_name,
-				default_worktree_dir,
-			)
-		}
-	}
+	let worktrees = runtime.herdr_worktrees()?;
+	create_herdr_with_db(
+		worktrees,
+		db,
+		project_id,
+		branch_name,
+		default_worktree_dir,
+	)
 }
 
 fn create_herdr_with_db(
@@ -817,7 +802,9 @@ pub fn create_with_default_worktree_dir(
 	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
 	repo::project::find_by_id(conn, project_id)?;
-	Err(local_extras_create_closed())
+	Err(AppError::PtyError(
+		"Herdr runtime is required to create profiles".into(),
+	))
 }
 
 pub fn create(
@@ -943,7 +930,10 @@ fn repo_folder_for_linked_checkout(
 }
 
 pub fn delete_with_db(_db: &DbPool, id: &str) -> Result<(), AppError> {
-	delete_local_identity(id)
+	let _ = id;
+	Err(AppError::PtyError(
+		"Herdr runtime is required to delete profiles".into(),
+	))
 }
 
 pub fn delete_with_runtime(
@@ -960,37 +950,7 @@ fn delete_with_runtime_force(
 	id: &str,
 	force: Option<bool>,
 ) -> Result<(), AppError> {
-	if runtime.selected_backend() == RuntimeBackend::Herdr {
-		return delete_herdr_identity(runtime, db, id, force);
-	}
-	delete_sqlite_identity(runtime, db, id, force)
-}
-
-fn delete_sqlite_identity(
-	_runtime: &RuntimeRouter,
-	db: &infra::db::DbPool,
-	id: &str,
-	_force: Option<bool>,
-) -> Result<(), AppError> {
-	{
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		if let Some(project_id) = Profile::project_id_from_local_default(id) {
-			repo::project::find_by_id(conn, project_id)?;
-			return Err(AppError::DbError(
-				"Cannot delete default profile".to_string(),
-			));
-		}
-	}
-	Err(local_extras_delete_closed())
-}
-
-fn delete_local_identity(id: &str) -> Result<(), AppError> {
-	if Profile::project_id_from_local_default(id).is_some() {
-		return Err(AppError::DbError(
-			"Cannot delete default profile".to_string(),
-		));
-	}
-	Err(local_extras_delete_closed())
+	delete_herdr_identity(runtime, db, id, force)
 }
 
 fn delete_herdr_identity(
@@ -1156,10 +1116,6 @@ pub fn update_notes_with_runtime(
 	id: &str,
 	notes: &str,
 ) -> Result<Profile, AppError> {
-	if runtime.selected_backend() == RuntimeBackend::Local {
-		return update_local_notes(db, id, notes);
-	}
-
 	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
 	let live = live_catalog_profile(runtime, db, id)?
 		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))?;
@@ -1169,33 +1125,6 @@ pub fn update_notes_with_runtime(
 	}
 	live_catalog_profile(runtime, db, id)?
 		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))
-}
-
-fn update_local_notes(
-	db: &DbPool,
-	id: &str,
-	notes: &str,
-) -> Result<Profile, AppError> {
-	let Some(project_id) = Profile::project_id_from_local_default(id) else {
-		return Err(AppError::NotFound(format!("Profile: {id}")));
-	};
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let project = repo::project::find_by_id(conn, project_id)?;
-	let stored = repo::checkout_notes::upsert(
-		conn,
-		&project.id,
-		&project.folder,
-		notes,
-	)?;
-	Ok(Profile {
-		id: id.to_string(),
-		project_id: project.id,
-		branch_name: infra::git::branch(&project.folder).unwrap_or_default(),
-		worktree_path: project.folder,
-		created_at: stored.created_at,
-		is_default: true,
-		notes: stored.notes,
-	})
 }
 
 fn live_catalog_profile(
@@ -1210,13 +1139,11 @@ fn live_catalog_profile(
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
-	if let Some(project_id) = Profile::project_id_from_local_default(id) {
-		repo::project::find_by_id(conn, project_id)?;
-		return Err(AppError::DbError(
-			"Cannot delete default profile".to_string(),
-		));
-	}
-	Err(local_extras_delete_closed())
+	let _ = conn;
+	let _ = id;
+	Err(AppError::PtyError(
+		"Herdr runtime is required to delete profiles".into(),
+	))
 }
 
 pub fn delete_check(
@@ -1252,19 +1179,20 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
-	use crate::PtyEventEmitter;
+	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
 	use diesel::Connection;
 	use diesel::RunQueryDsl;
+	use diesel::sqlite::SqliteConnection;
 	use diesel_migrations::MigrationHarness;
+	use infra::db::DbPool;
 	use infra::herdr::transport::{
-		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeListEntry,
-		WorktreeOpenResult, WorktreeRemoveResult,
+		WorktreeCreateRequest, WorktreeCreateResult, WorkspaceCreateRequest,
+		WorkspaceCreateResult, WorktreeListEntry, WorktreeOpenResult,
+		WorktreeRemoveResult,
 	};
-	use model::runtime::RuntimeBackend;
+	use model::error::AppError;
 	use serde_json::{json, Value};
-	use std::path::Path;
+	use std::path::{Path, PathBuf};
 	use std::sync::{Arc, Mutex};
 	use tempfile::TempDir;
 
@@ -1303,262 +1231,6 @@ mod tests {
 		dir
 	}
 
-	fn create_project_with_git_repo(
-		conn: &mut SqliteConnection,
-	) -> (model::project::Project, TempDir) {
-		let dir = create_temp_git_repo();
-		let folder = dir.path().to_string_lossy().to_string();
-		let project =
-			crate::project::create_from_folder(conn, "Test Project", &folder)
-				.expect("create project from folder");
-		(project, dir)
-	}
-
-	// --- worktree base resolution ---
-
-	#[test]
-	fn resolve_worktree_base_returns_valid_path() {
-		let base = resolve_worktree_base("/tmp/project", None, None).unwrap();
-		assert!(base.ends_with(".2code/workspace"));
-	}
-
-	#[test]
-	fn resolve_worktree_base_uses_project_config_before_default() {
-		let project_folder = std::env::temp_dir().join("repo").join("app");
-		let project_base = project_folder.parent().unwrap().join(".worktrees");
-		let default_base = std::env::temp_dir().join("global-worktrees");
-
-		let base = resolve_worktree_base(
-			project_folder.to_str().unwrap(),
-			Some("../.worktrees"),
-			Some(default_base.to_str().unwrap()),
-		)
-		.unwrap();
-
-		assert_eq!(base, project_base);
-	}
-
-	#[test]
-	fn resolve_worktree_base_uses_default_when_project_config_blank() {
-		let project_folder = std::env::temp_dir().join("repo").join("app");
-		let default_base = project_folder.join("default-worktrees");
-
-		let base = resolve_worktree_base(
-			project_folder.to_str().unwrap(),
-			Some("  "),
-			Some("default-worktrees"),
-		)
-		.unwrap();
-
-		assert_eq!(base, default_base);
-	}
-
-	#[test]
-	fn resolve_worktree_base_expands_home_dir() {
-		let home = home_dir().unwrap();
-
-		let base = resolve_worktree_base(
-			"/tmp/project",
-			Some("~/.2code-worktrees"),
-			None,
-		)
-		.unwrap();
-
-		assert_eq!(base, home.join(".2code-worktrees"));
-	}
-
-	#[test]
-	fn build_worktree_dir_name_includes_project_branch_and_short_id() {
-		let name = build_worktree_dir_name(
-			"/tmp/My Project",
-			"feat/用户 auth",
-			"12345678-1234-4000-8000-000000000000",
-		);
-
-		assert_eq!(name, "my-project-feat-yong-hu-auth-12345678");
-	}
-
-	#[test]
-	fn build_worktree_dir_name_caps_readable_segments() {
-		let long_branch = std::iter::once("feature".to_string())
-			.chain((0..30).map(|index| format!("segment-{index:02}")))
-			.collect::<Vec<_>>()
-			.join("/");
-
-		let name = build_worktree_dir_name(
-			"/tmp/My Extraordinarily Long Project Name That Keeps Going",
-			&long_branch,
-			"12345678-1234-4000-8000-000000000000",
-		);
-
-		assert!(name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
-		assert!(name.ends_with("-12345678"));
-	}
-
-	#[test]
-	fn create_profile_accepts_long_valid_branch_name_with_bounded_dir_name() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let before = git_worktree_list(dir.path());
-		let long_branch = std::iter::once("feature".to_string())
-			.chain((0..30).map(|index| format!("segment-{index:02}")))
-			.collect::<Vec<_>>()
-			.join("/");
-
-		let err = create_with_default_worktree_dir(
-			&mut conn,
-			&project.id,
-			&long_branch,
-			None,
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
-
-	#[test]
-	fn create_profile_returns_invalid_project_config_errors() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
-
-		let err = create_with_default_worktree_dir(
-			&mut conn,
-			&project.id,
-			"feature/broken-config",
-			None,
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-	}
-
-	#[test]
-	fn create_profile_uses_project_configured_worktree_dir() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let before = git_worktree_list(dir.path());
-		let err = create_with_default_worktree_dir(
-			&mut conn,
-			&project.id,
-			"feature/worktree",
-			None,
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
-
-	#[test]
-	fn create_profile_uses_default_worktree_dir_without_project_config() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let before = git_worktree_list(dir.path());
-		let err = create_with_default_worktree_dir(
-			&mut conn,
-			&project.id,
-			"feature/global",
-			None,
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
-
-	// --- branch name sanitization ---
-
-	#[test]
-	fn sanitize_simple_english() {
-		assert_eq!(sanitize_branch_name("feature/auth"), "feature/auth");
-	}
-
-	#[test]
-	fn sanitize_with_spaces() {
-		assert_eq!(sanitize_branch_name("my feature"), "my-feature");
-	}
-
-	#[test]
-	fn sanitize_chinese() {
-		assert_eq!(
-			sanitize_branch_name("新功能/登录"),
-			"xin-gong-neng/deng-lu"
-		);
-	}
-
-	#[test]
-	fn sanitize_mixed() {
-		assert_eq!(
-			sanitize_branch_name("feat/用户认证"),
-			"feat/yong-hu-ren-zheng"
-		);
-	}
-
-	#[test]
-	fn sanitize_special_chars() {
-		assert_eq!(sanitize_branch_name("fix: bug #123"), "fix-bug-123");
-	}
-
-	#[test]
-	fn sanitize_empty_segments() {
-		assert_eq!(sanitize_branch_name("feature//auth"), "feature/auth");
-	}
-
-	#[test]
-	fn sanitize_empty_input() {
-		assert_eq!(sanitize_branch_name(""), "");
-	}
-
-	#[test]
-	fn extract_auto_branch_city_reads_generated_branch() {
-		assert_eq!(
-			extract_auto_branch_city("pr/chiang-mai-deadbeef"),
-			Some("chiang-mai")
-		);
-	}
-
-	#[test]
-	fn extract_auto_branch_city_ignores_non_generated_branch() {
-		assert_eq!(extract_auto_branch_city("feature/auth"), None);
-	}
-
-	#[test]
-	fn build_auto_branch_name_avoids_used_cities() {
-		let existing = vec![
-			"pr/tokyo-11111111".to_string(),
-			"pr/osaka-22222222".to_string(),
-		];
-		let seed =
-			Uuid::parse_str("00000000-0000-4000-8000-000000000000").unwrap();
-
-		let branch_name = build_auto_branch_name(&existing, &seed);
-
-		assert!(branch_name.starts_with("pr/"));
-		assert!(!branch_name.starts_with("pr/tokyo-"));
-		assert!(!branch_name.starts_with("pr/osaka-"));
-		assert!(branch_name.ends_with("-00000000"));
-	}
-
-	#[test]
-	fn local_extras_create_fails_closed_without_git_worktree_add() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let before = git_worktree_list(dir.path());
-		let result = create(&mut conn, &project.id, "feat/extra");
-		assert!(result
-			.err()
-			.map(|err| err.to_string().contains("no longer creates extra"))
-			.unwrap_or(false));
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
-
-	struct TestEmitter;
-
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
-		}
-
-		fn emit_exit(&self, _session_id: &str) {}
-	}
 
 	struct RecordedCreate {
 		branch: String,
@@ -1917,45 +1589,10 @@ mod tests {
 	}
 
 	fn herdr_router(
-		db: &DbPool,
+		_db: &DbPool,
 		worktrees: Arc<FakeWorktrees>,
 	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-profile-herdr-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::with_worktree_client(worktrees),
-		)
-	}
-
-	fn local_router(
-		db: &DbPool,
-		worktrees: Arc<FakeWorktrees>,
-	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-profile-local-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		RuntimeRouter::with_backend(
-			RuntimeBackend::Local,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::with_worktree_client(worktrees),
-		)
+		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees))
 	}
 
 	fn pool_from(conn: SqliteConnection) -> DbPool {
@@ -1988,6 +1625,254 @@ mod tests {
 			.map(|row| row.notes)
 			.unwrap_or_default()
 	}
+
+	fn create_project_with_git_repo(
+		conn: &mut SqliteConnection,
+	) -> (model::project::Project, TempDir) {
+		let dir = create_temp_git_repo();
+		let folder = dir.path().to_string_lossy().to_string();
+		let project =
+			crate::project::create_from_folder(conn, "Test Project", &folder)
+				.expect("create project from folder");
+		(project, dir)
+	}
+
+	// --- worktree base resolution ---
+
+	#[test]
+	fn resolve_worktree_base_returns_valid_path() {
+		let base = resolve_worktree_base("/tmp/project", None, None).unwrap();
+		assert!(base.ends_with(".2code/workspace"));
+	}
+
+	#[test]
+	fn resolve_worktree_base_uses_project_config_before_default() {
+		let project_folder = std::env::temp_dir().join("repo").join("app");
+		let project_base = project_folder.parent().unwrap().join(".worktrees");
+		let default_base = std::env::temp_dir().join("global-worktrees");
+
+		let base = resolve_worktree_base(
+			project_folder.to_str().unwrap(),
+			Some("../.worktrees"),
+			Some(default_base.to_str().unwrap()),
+		)
+		.unwrap();
+
+		assert_eq!(base, project_base);
+	}
+
+	#[test]
+	fn resolve_worktree_base_uses_default_when_project_config_blank() {
+		let project_folder = std::env::temp_dir().join("repo").join("app");
+		let default_base = project_folder.join("default-worktrees");
+
+		let base = resolve_worktree_base(
+			project_folder.to_str().unwrap(),
+			Some("  "),
+			Some("default-worktrees"),
+		)
+		.unwrap();
+
+		assert_eq!(base, default_base);
+	}
+
+	#[test]
+	fn resolve_worktree_base_expands_home_dir() {
+		let home = home_dir().unwrap();
+
+		let base = resolve_worktree_base(
+			"/tmp/project",
+			Some("~/.2code-worktrees"),
+			None,
+		)
+		.unwrap();
+
+		assert_eq!(base, home.join(".2code-worktrees"));
+	}
+
+	#[test]
+	fn build_worktree_dir_name_includes_project_branch_and_short_id() {
+		let name = build_worktree_dir_name(
+			"/tmp/My Project",
+			"feat/用户 auth",
+			"12345678-1234-4000-8000-000000000000",
+		);
+
+		assert_eq!(name, "my-project-feat-yong-hu-auth-12345678");
+	}
+
+	#[test]
+	fn build_worktree_dir_name_caps_readable_segments() {
+		let long_branch = std::iter::once("feature".to_string())
+			.chain((0..30).map(|index| format!("segment-{index:02}")))
+			.collect::<Vec<_>>()
+			.join("/");
+
+		let name = build_worktree_dir_name(
+			"/tmp/My Extraordinarily Long Project Name That Keeps Going",
+			&long_branch,
+			"12345678-1234-4000-8000-000000000000",
+		);
+
+		assert!(name.len() <= WORKTREE_DIR_NAME_MAX_BYTES);
+		assert!(name.ends_with("-12345678"));
+	}
+
+	#[test]
+	fn create_profile_accepts_long_valid_branch_name_with_bounded_dir_name() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let long_branch = std::iter::once("feature".to_string())
+			.chain((0..30).map(|index| format!("segment-{index:02}")))
+			.collect::<Vec<_>>()
+			.join("/");
+
+		let err = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			&long_branch,
+			None,
+		)
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
+	}
+
+	#[test]
+	fn create_profile_returns_invalid_project_config_errors() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		std::fs::write(dir.path().join("2code.json"), "{").unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		let router = herdr_router(&db, fake);
+
+		let err = create_with_runtime(
+			&router,
+			&db,
+			&project.id,
+			"feature/broken-config",
+			None,
+		)
+		.unwrap_err();
+		assert!(err.to_string().contains("Failed to parse 2code.json"), "{err}");
+	}
+
+	#[test]
+	fn create_profile_uses_project_configured_worktree_dir() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/worktree",
+			None,
+		)
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
+	}
+
+	#[test]
+	fn create_profile_uses_default_worktree_dir_without_project_config() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let before = git_worktree_list(dir.path());
+		let err = create_with_default_worktree_dir(
+			&mut conn,
+			&project.id,
+			"feature/global",
+			None,
+		)
+		.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is required"),
+			"{err}"
+		);
+		assert_eq!(git_worktree_list(dir.path()), before);
+	}
+
+	// --- branch name sanitization ---
+
+	#[test]
+	fn sanitize_simple_english() {
+		assert_eq!(sanitize_branch_name("feature/auth"), "feature/auth");
+	}
+
+	#[test]
+	fn sanitize_with_spaces() {
+		assert_eq!(sanitize_branch_name("my feature"), "my-feature");
+	}
+
+	#[test]
+	fn sanitize_chinese() {
+		assert_eq!(
+			sanitize_branch_name("新功能/登录"),
+			"xin-gong-neng/deng-lu"
+		);
+	}
+
+	#[test]
+	fn sanitize_mixed() {
+		assert_eq!(
+			sanitize_branch_name("feat/用户认证"),
+			"feat/yong-hu-ren-zheng"
+		);
+	}
+
+	#[test]
+	fn sanitize_special_chars() {
+		assert_eq!(sanitize_branch_name("fix: bug #123"), "fix-bug-123");
+	}
+
+	#[test]
+	fn sanitize_empty_segments() {
+		assert_eq!(sanitize_branch_name("feature//auth"), "feature/auth");
+	}
+
+	#[test]
+	fn sanitize_empty_input() {
+		assert_eq!(sanitize_branch_name(""), "");
+	}
+
+	#[test]
+	fn extract_auto_branch_city_reads_generated_branch() {
+		assert_eq!(
+			extract_auto_branch_city("pr/chiang-mai-deadbeef"),
+			Some("chiang-mai")
+		);
+	}
+
+	#[test]
+	fn extract_auto_branch_city_ignores_non_generated_branch() {
+		assert_eq!(extract_auto_branch_city("feature/auth"), None);
+	}
+
+	#[test]
+	fn build_auto_branch_name_avoids_used_cities() {
+		let existing = vec![
+			"pr/tokyo-11111111".to_string(),
+			"pr/osaka-22222222".to_string(),
+		];
+		let seed =
+			Uuid::parse_str("00000000-0000-4000-8000-000000000000").unwrap();
+
+		let branch_name = build_auto_branch_name(&existing, &seed);
+
+		assert!(branch_name.starts_with("pr/"));
+		assert!(!branch_name.starts_with("pr/tokyo-"));
+		assert!(!branch_name.starts_with("pr/osaka-"));
+		assert!(branch_name.ends_with("-00000000"));
+	}
+
 
 	#[test]
 	fn herdr_worktree_client_records_remove_without_replay() {
@@ -2062,37 +1947,7 @@ mod tests {
 		assert!(fake.workspace_closes().is_empty());
 	}
 
-	#[test]
-	fn local_extras_delete_fails_closed_without_git_worktree_remove() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		let before = git_worktree_list(dir.path());
-		let extra = format!("extra-{}", project.id);
 
-		let err = delete_with_runtime(&router, &db, &extra).unwrap_err();
-		assert!(err.to_string().contains("no longer deletes extra"), "{err}");
-		assert!(fake.removes().is_empty());
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
-
-	#[test]
-	fn local_default_delete_is_refused_without_git_remove() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		let before = git_worktree_list(dir.path());
-		let default_id = Profile::local_default_id(&project.id);
-
-		let err = delete_with_runtime(&router, &db, &default_id).unwrap_err();
-		assert!(err.to_string().contains("Cannot delete default"), "{err}");
-		assert!(fake.removes().is_empty());
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
 
 	#[test]
 	fn dirty_herdr_remove_without_force_keeps_checkout() {
@@ -2303,16 +2158,6 @@ mod tests {
 		assert!(Path::new(&profile.worktree_path).exists());
 	}
 
-	#[test]
-	fn local_delete_without_runtime_fails_closed() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let before = git_worktree_list(dir.path());
-		let err = delete(&mut conn, "extra-id").unwrap_err();
-		assert!(err.to_string().contains("no longer deletes extra"), "{err}");
-		assert_eq!(git_worktree_list(dir.path()), before);
-		let _ = project;
-	}
 
 	#[test]
 	fn project_delete_forgets_mapped_herdr_worktrees() {
@@ -2332,31 +2177,12 @@ mod tests {
 		.unwrap();
 		let checkout = PathBuf::from(&profile.worktree_path);
 		assert!(checkout.exists());
-		let default_id = format!("default-{}", project.id);
-		{
-			let conn = &mut *db.lock().unwrap();
-			let session = model::pty::NewPtySessionRecord {
-				id: "sess-herdr-forget",
-				project_id: &project.id,
-				profile_id: &default_id,
-				title: "herdr",
-				shell: "/bin/sh",
-				cwd: &profile.worktree_path,
-				cols: 80,
-				rows: 24,
-			};
-			repo::pty::insert_session(conn, &session).unwrap();
-		}
-		router
-			.bind_session("sess-herdr-forget", RuntimeBackend::Herdr)
-			.unwrap();
 
 		crate::project::delete_with_runtime(&router, &db, &project.id).unwrap();
 
 		assert!(fake.removes().is_empty());
 		assert!(!fake.methods().contains(&"worktree.remove".to_string()));
 		assert!(checkout.exists());
-		assert_eq!(router.owner("sess-herdr-forget").unwrap(), None);
 		{
 			let conn = &mut *db.lock().unwrap();
 			assert!(repo::project::find_by_id(conn, &project.id).is_err());
@@ -2418,11 +2244,6 @@ mod tests {
 		assert!(!fake.methods().contains(&"tab.create".to_string()));
 		assert!(!fake.methods().contains(&"pane.close".to_string()));
 		assert!(!fake.methods().contains(&"workspace.create".to_string()));
-		let sessions = {
-			let conn = &mut *db.lock().unwrap();
-			repo::pty::list_ids_by_profile(conn, &profile.id).unwrap()
-		};
-		assert!(sessions.is_empty());
 	}
 
 	#[test]
@@ -2851,29 +2672,6 @@ mod tests {
 		no_sqlite_profiles(&db);
 	}
 
-	#[test]
-	fn local_extras_create_with_runtime_fails_closed() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		let before = git_worktree_list(dir.path());
-
-		let err = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local-dup",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-		assert_eq!(fake.creates(), 0);
-		assert_eq!(git_worktree_list(dir.path()), before);
-		no_sqlite_profiles(&db);
-	}
 
 	#[test]
 	fn herdr_without_client_does_not_spawn_local_worktree() {
@@ -2881,21 +2679,7 @@ mod tests {
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let global_base = TempDir::new().expect("worktree base");
 		let db = pool_from(conn);
-		let logs = std::env::temp_dir().join("2code-profile-missing-herdr");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		let router = RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::new(),
-		);
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
 		let before = git_worktree_list(dir.path());
 
 		let err = create_with_runtime(
@@ -2917,21 +2701,7 @@ mod tests {
 		let mut conn = setup_db();
 		let (project, dir) = create_project_with_git_repo(&mut conn);
 		let db = pool_from(conn);
-		let logs = std::env::temp_dir().join("2code-profile-missing-herdr-del");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		let router = RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			HerdrStubAdapter::new(),
-		);
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
 		let before = git_worktree_list(dir.path());
 
 		let err = delete_with_runtime(&router, &db, "w2")
@@ -2944,29 +2714,6 @@ mod tests {
 		let _ = project;
 	}
 
-	#[test]
-	fn local_create_with_runtime_fails_closed_without_git_worktree_add() {
-		let mut conn = setup_db();
-		let (project, dir) = create_project_with_git_repo(&mut conn);
-		let global_base = TempDir::new().expect("worktree base");
-		let db = pool_from(conn);
-		let fake = FakeWorktrees::new();
-		let router = local_router(&db, fake.clone());
-		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
-		let before = git_worktree_list(dir.path());
-
-		let err = create_with_runtime(
-			&router,
-			&db,
-			&project.id,
-			"feat/local",
-			Some(global_base.path().to_str().unwrap()),
-		)
-		.unwrap_err();
-		assert!(err.to_string().contains("no longer creates extra"), "{err}");
-		assert_eq!(fake.creates(), 0);
-		assert_eq!(git_worktree_list(dir.path()), before);
-	}
 
 	#[test]
 	fn herdr_profile_create_does_not_use_forbidden_ops() {
@@ -3037,7 +2784,10 @@ mod tests {
 
 	#[test]
 	fn herdr_profile_delete_does_not_use_forbidden_ops() {
-		let src = include_str!("profile.rs");
+		let src = include_str!("profile.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
 		let herdr = src
 			.split("fn delete_herdr_git_workspace")
 			.nth(1)
@@ -3073,16 +2823,8 @@ mod tests {
 		assert!(delete.contains("delete_with_runtime"));
 		assert!(!delete.contains("cleanup_profile"));
 		assert!(!delete.contains("git::worktree_remove"));
-		let sqlite = src
-			.split("fn delete_sqlite_identity")
-			.nth(1)
-			.unwrap()
-			.split("fn delete_herdr_identity")
-			.next()
-			.unwrap();
-		assert!(sqlite.contains("local_extras_delete_closed"));
-		assert!(!sqlite.contains("worktree.remove"));
-		assert!(!sqlite.contains("worktree_remove"));
+		assert!(!src.contains("delete_sqlite_identity"));
+		assert!(!src.contains("local_extras_delete_closed"));
 	}
 
 	#[test]
@@ -3091,7 +2833,7 @@ mod tests {
 			.split("#[cfg(test)]")
 			.next()
 			.unwrap();
-		assert!(src.contains("synthetic_local_profile"));
+		assert!(!src.contains("synthetic_local_profile"));
 		assert!(!src.contains("insert_default"));
 		assert!(!src.contains("worktree.create"));
 		assert!(!src.contains("create_herdr_with_db"));
@@ -3238,7 +2980,7 @@ mod tests {
 		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
 		let stale_dir = create_temp_git_repo();
 		let listed_path = listed_dir.path().to_string_lossy().into_owned();
-		let default_id = Profile::local_default_id(&project.id);
+		let default_id = format!("default-{}", project.id);
 		let _ = stale_dir;
 		std::fs::write(
 			listed_dir.path().join("listed-only.txt"),
@@ -3272,21 +3014,5 @@ mod tests {
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 	}
 
-	#[test]
-	fn local_delete_check_uses_projects_folder() {
-		let mut conn = setup_db();
-		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
-		std::fs::write(
-			listed_dir.path().join("listed-only.txt"),
-			"listed dirty",
-		)
-		.unwrap();
-		let db = pool_from(conn);
-		let router = local_router(&db, FakeWorktrees::new());
-		let default_id = Profile::local_default_id(&project.id);
 
-		let check =
-			delete_check(&router, &db, &default_id).expect("folder check");
-		assert_eq!(check.working_tree_diff.files_changed, 1);
-	}
 }

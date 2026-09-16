@@ -14,7 +14,6 @@ use model::project::{
 	ProjectSidebarLayoutUpdate, ProjectWithProfiles,
 };
 use model::project_group::ProjectGroup;
-use model::runtime::RuntimeBackend;
 
 use crate::runtime::{HerdrWorktreeClient, RuntimeRouter, TerminalRuntime};
 
@@ -34,72 +33,22 @@ pub fn create_from_folder(
 pub fn list(
 	conn: &mut SqliteConnection,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	list_synthetic_local_profiles(conn)
+	Ok(repo::project::list_all(conn)?
+		.into_iter()
+		.map(project_without_profiles)
+		.collect())
 }
 
 /// Return the project catalog with nested profiles.
 ///
-/// Local synthesizes at most the `projects.folder` default. Herdr
-/// replaces each project's profile array from live `worktree.list` /
-/// `session.snapshot`. sqlite `profiles` is gone. A missing Herdr
-/// client yields empty profiles, not a sqlite fallback.
+/// Profiles are replaced from live `worktree.list` / `session.snapshot`.
+/// sqlite `profiles` is gone. A missing Herdr client yields empty
+/// profiles, not a synthetic Local catalog.
 pub fn list_with_runtime(
 	runtime: &RuntimeRouter,
 	db: &DbPool,
 ) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	if runtime.selected_backend() == RuntimeBackend::Local {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		return list_synthetic_local_profiles(conn);
-	}
 	list_herdr_derived(runtime, db)
-}
-
-fn list_synthetic_local_profiles(
-	conn: &mut SqliteConnection,
-) -> Result<Vec<ProjectWithProfiles>, AppError> {
-	let notes = notes_overlay(conn)?;
-	Ok(repo::project::list_all(conn)?
-		.into_iter()
-		.map(|project| project_with_synthetic_local(project, &notes))
-		.collect())
-}
-
-fn project_with_synthetic_local(
-	project: Project,
-	notes: &CheckoutNotesOverlay,
-) -> ProjectWithProfiles {
-	let profile = synthetic_local_profile(&project, notes);
-	ProjectWithProfiles {
-		id: project.id,
-		name: project.name,
-		folder: project.folder,
-		created_at: project.created_at,
-		group_id: project.group_id,
-		sort_order: project.sort_order,
-		pinned_at: project.pinned_at,
-		pinned_order: project.pinned_order,
-		profiles: vec![profile],
-	}
-}
-
-fn synthetic_local_profile(
-	project: &Project,
-	notes: &CheckoutNotesOverlay,
-) -> Profile {
-	let (notes, created_at) = notes.for_checkout(&project.id, &project.folder);
-	Profile {
-		id: Profile::local_default_id(&project.id),
-		project_id: project.id.clone(),
-		branch_name: infra::git::branch(&project.folder).unwrap_or_default(),
-		worktree_path: project.folder.clone(),
-		created_at: if created_at.is_empty() {
-			project.created_at.clone()
-		} else {
-			created_at
-		},
-		is_default: true,
-		notes,
-	}
 }
 
 fn list_herdr_derived(
@@ -368,16 +317,13 @@ fn same_checkout_path(left: &str, right: &str) -> bool {
 /// Resolve the checkout used by Git, filesystem, watcher, and
 /// terminal-link consumers.
 ///
-/// Herdr-selected ids are live `workspace_id` values. Local keeps sqlite
-/// `find_by_id` plus the mapped `worktree.list` cache.
+/// Profile ids are live Herdr `workspace_id` values.
 pub fn reconcile_profile_checkout(
 	runtime: &RuntimeRouter,
 	db: &DbPool,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	if runtime.selected_backend() == RuntimeBackend::Local {
-		return reconcile_local_profile_checkout(db, profile_id);
-	}
+	let _ = db;
 	live_herdr_profile_checkout(runtime, profile_id)
 }
 
@@ -515,19 +461,6 @@ fn snapshot_workspace_cwd(
 	})
 }
 
-fn reconcile_local_profile_checkout(
-	db: &DbPool,
-	profile_id: &str,
-) -> Result<String, AppError> {
-	let Some(project_id) = Profile::project_id_from_local_default(profile_id)
-	else {
-		return Err(AppError::NotFound(format!("Profile: {profile_id}")));
-	};
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	let project = repo::project::find_by_id(conn, project_id)?;
-	Ok(project.folder)
-}
-
 pub fn update(
 	conn: &mut SqliteConnection,
 	id: &str,
@@ -549,24 +482,22 @@ pub fn delete_with_runtime(
 	db: &infra::db::DbPool,
 	id: &str,
 ) -> Result<(), AppError> {
-	let (project, session_ids) = {
+	let project = {
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let project = repo::project::find_by_id(conn, id)?;
-		let session_ids = repo::pty::list_by_project(conn, id)?
-			.into_iter()
-			.map(|session| session.id)
-			.collect::<Vec<_>>();
-		(project, session_ids)
+		repo::project::find_by_id(conn, id)?
 	};
 
+	let session_ids = runtime
+		.list_project_sessions(id)
+		.unwrap_or_default()
+		.into_iter()
+		.map(|session| session.id)
+		.collect::<Vec<_>>();
 	for session_id in &session_ids {
 		runtime.forget_project_session(session_id)?;
 	}
 
 	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	for session_id in &session_ids {
-		repo::pty::mark_closed(conn, session_id);
-	}
 	repo::project::delete(conn, id)?;
 	cleanup_empty_group(conn, project.group_id)?;
 	Ok(())
@@ -863,9 +794,7 @@ mod tests {
 	use std::sync::{Arc, Mutex};
 
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::runtime::{HerdrStubAdapter, LocalAdapter};
-	use crate::PtyEventEmitter;
+	use crate::runtime::HerdrStubAdapter;
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::herdr::transport::{
@@ -873,16 +802,6 @@ mod tests {
 		WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
 		WorktreeRemoveResult,
 	};
-
-	struct TestEmitter;
-
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
-		}
-
-		fn emit_exit(&self, _session_id: &str) {}
-	}
 
 	struct ListCall {
 		cwd: Option<String>,
@@ -961,6 +880,7 @@ mod tests {
 				.collect()
 		}
 
+		#[allow(dead_code)]
 		fn fail_list(&self, err: AppError) {
 			self.state.lock().unwrap().list_error = Some(err);
 		}
@@ -1095,67 +1015,24 @@ mod tests {
 		Arc::new(Mutex::new(conn))
 	}
 
-	fn local_router(
-		db: &DbPool,
-		worktrees: Option<Arc<FakeList>>,
-	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-project-path-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		let herdr = match worktrees {
-			Some(client) => HerdrStubAdapter::with_worktree_client(client),
-			None => HerdrStubAdapter::new(),
-		};
-		RuntimeRouter::with_backend(
-			model::runtime::RuntimeBackend::Local,
-			LocalAdapter::new(ctx),
-			herdr,
-		)
-	}
-
 	fn herdr_router(
-		db: &DbPool,
 		worktrees: Option<Arc<FakeList>>,
 	) -> RuntimeRouter {
-		let logs = std::env::temp_dir().join("2code-project-herdr-list-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
 		let herdr = match worktrees {
 			Some(client) => HerdrStubAdapter::with_worktree_client(client),
 			None => HerdrStubAdapter::new(),
 		};
-		RuntimeRouter::with_backend(
-			model::runtime::RuntimeBackend::Herdr,
-			LocalAdapter::new(ctx),
-			herdr,
-		)
+		RuntimeRouter::new(herdr)
 	}
 
 	fn insert_catalog(
 		conn: &mut SqliteConnection,
 		folder: &str,
 		_worktree_path: &str,
-	) -> (String, String) {
-		let project = repo::project::insert(conn, "proj-1", "Project", folder)
-			.expect("insert project");
-		(
-			project.id.clone(),
-			model::profile::Profile::local_default_id(&project.id),
-		)
+	) -> String {
+		repo::project::insert(conn, "proj-1", "Project", folder)
+			.expect("insert project")
+			.id
 	}
 
 	fn listed(
@@ -1312,16 +1189,9 @@ mod tests {
 				|| reconcile.contains("session.snapshot"),
 			"Herdr live resolve joins non-git pane cwd via session.snapshot"
 		);
-		let local = src
-			.split("fn reconcile_local_profile_checkout")
-			.nth(1)
-			.unwrap()
-			.split("pub fn update")
-			.next()
-			.unwrap();
-		assert!(!local.contains("session_snapshot"));
-		assert!(!local.contains("worktree_list"));
-		assert!(!local.contains("find_profile_mapping"));
+		assert!(!src.contains("reconcile_local_profile_checkout"));
+		assert!(!src.contains("list_synthetic_local_profiles"));
+		assert!(!src.contains("default-{"));
 		assert!(!src.contains("set_worktree_path"));
 		assert!(!src.contains("workspace.list"));
 		let lib = include_str!("../../../src/lib.rs");
@@ -1329,56 +1199,8 @@ mod tests {
 		assert!(src.contains("herdr_worktrees_optional"));
 	}
 
-	#[test]
-	fn local_default_checkout_uses_projects_folder() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/ignored");
-		let db = pool_from(conn);
-		let fake =
-			FakeList::new(vec![listed("/other", Some("w1"), Some("feat/x"))]);
-		let runtime = local_router(&db, Some(fake.clone()));
 
-		let path = reconcile_profile_checkout(&runtime, &db, &profile_id)
-			.expect("synthetic folder");
 
-		assert_eq!(path, "/repo");
-		assert!(fake.methods().is_empty());
-		assert_eq!(
-			runtime.selected_backend(),
-			model::runtime::RuntimeBackend::Local
-		);
-	}
-
-	#[test]
-	fn local_unknown_profile_id_is_not_found() {
-		let db = pool_from(setup_db());
-		let runtime = local_router(&db, None);
-		let err = reconcile_profile_checkout(&runtime, &db, "prof-1")
-			.expect_err("extras gone");
-		assert!(matches!(err, AppError::NotFound(_)), "{err}");
-	}
-
-	#[test]
-	fn local_flag_list_is_synthetic_folder_default_only() {
-		let mut conn = setup_db();
-		let (project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		repo::checkout_notes::upsert(&mut conn, &project_id, "/repo", "hello")
-			.unwrap();
-		let db = pool_from(conn);
-		let fake = FakeList::new(vec![listed("/listed", Some("w1"), None)]);
-		let runtime = local_router(&db, Some(fake.clone()));
-
-		let listed = list_with_runtime(&runtime, &db).expect("list");
-
-		assert_eq!(listed[0].profiles.len(), 1);
-		assert_eq!(listed[0].profiles[0].id, profile_id);
-		assert!(listed[0].profiles[0].is_default);
-		assert_eq!(listed[0].profiles[0].worktree_path, "/repo");
-		assert_eq!(listed[0].profiles[0].notes, "hello");
-		assert!(fake.methods().is_empty());
-	}
 
 	#[test]
 	fn herdr_list_ignores_sqlite_rows_and_disk_only_checkouts() {
@@ -1389,7 +1211,7 @@ mod tests {
 			primary("/repo", None, Some("main")),
 			listed("/repo/disk", None, Some("wt/disk")),
 		]);
-		let runtime = herdr_router(&db, Some(fake.clone()));
+		let runtime = herdr_router(Some(fake.clone()));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 
@@ -1409,7 +1231,7 @@ mod tests {
 			listed("/repo/disk", None, Some("wt/disk")),
 			listed("/repo/linked", Some("w2"), Some("feat/x")),
 		]);
-		let runtime = herdr_router(&db, Some(fake.clone()));
+		let runtime = herdr_router(Some(fake.clone()));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		let profiles = &listed[0].profiles;
@@ -1446,7 +1268,7 @@ mod tests {
 			"/repo-b",
 			vec![primary("/repo-b", Some("w3"), Some("main"))],
 		);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		let project_a = listed.iter().find(|p| p.id == "proj-a").unwrap();
@@ -1500,7 +1322,7 @@ mod tests {
 				]
 			}
 		}));
-		let runtime = herdr_router(&db, Some(fake.clone()));
+		let runtime = herdr_router(Some(fake.clone()));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		assert_eq!(listed[0].profiles.len(), 1);
@@ -1551,7 +1373,7 @@ mod tests {
 		let db = pool_from(conn);
 		let fake = FakeList::new(Vec::new());
 		fake.fail_not_git("/nongit");
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		assert!(listed[0].profiles.is_empty());
@@ -1565,7 +1387,7 @@ mod tests {
 		let fake = FakeList::new(Vec::new());
 		fake.fail_not_git("/nongit");
 		fake.fail_snapshot(AppError::HerdrServerAbsent("down".into()));
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		assert!(listed[0].profiles.is_empty());
@@ -1576,7 +1398,7 @@ mod tests {
 		let mut conn = setup_db();
 		insert_catalog(&mut conn, "/repo", "/stale");
 		let db = pool_from(conn);
-		let runtime = herdr_router(&db, None);
+		let runtime = herdr_router(None);
 
 		let listed = list_with_runtime(&runtime, &db).expect("catalog");
 
@@ -1589,7 +1411,7 @@ mod tests {
 	#[test]
 	fn herdr_list_overlays_notes_from_checkout_path_not_workspace_id() {
 		let mut conn = setup_db();
-		let (project_id, _profile_id) =
+		let project_id =
 			insert_catalog(&mut conn, "/repo", "/repo");
 		repo::checkout_notes::upsert(
 			&mut conn,
@@ -1603,7 +1425,7 @@ mod tests {
 			primary("/repo", Some("w1"), Some("main")),
 			listed("/repo/linked", Some("w2"), Some("feat")),
 		]);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		let w1 = listed[0].profiles.iter().find(|p| p.id == "w1").unwrap();
@@ -1619,7 +1441,7 @@ mod tests {
 			primary("/repo", Some("w1"), Some("main")),
 			listed("/repo/linked", Some("w2"), Some("feat")),
 		]);
-		let runtime = herdr_router(&db, Some(fake.clone()));
+		let runtime = herdr_router(Some(fake.clone()));
 
 		let path =
 			reconcile_profile_checkout(&runtime, &db, "w2").expect("live path");
@@ -1630,58 +1452,21 @@ mod tests {
 	#[test]
 	fn herdr_live_checkout_does_not_resolve_sqlite_uuid() {
 		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
+		insert_catalog(&mut conn, "/repo", "/stale");
 		let db = pool_from(conn);
 		let fake =
 			FakeList::new(vec![primary("/repo", Some("w1"), Some("main"))]);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
-		let err = reconcile_profile_checkout(&runtime, &db, &profile_id)
+		let err = reconcile_profile_checkout(&runtime, &db, "default-proj-1")
 			.expect_err("stale uuid");
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 	}
 
-	#[test]
-	fn explicit_local_router_stays_local_for_path_reconcile() {
-		let db = pool_from(setup_db());
-		let runtime = local_router(&db, None);
-		assert_eq!(
-			runtime.selected_backend(),
-			model::runtime::RuntimeBackend::Local
-		);
-	}
-
-	#[test]
-	fn local_flag_list_is_only_the_folder_default() {
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, "/repo", "/stale");
-		let db = pool_from(conn);
-		let runtime = local_router(&db, None);
-
-		let listed = list_with_runtime(&runtime, &db).expect("list");
-
-		assert_eq!(listed[0].profiles.len(), 1);
-		assert_eq!(listed[0].profiles[0].id, profile_id);
-		assert_eq!(listed[0].profiles[0].worktree_path, "/repo");
-	}
 
 	#[test]
 	fn production_router_new_selects_herdr_for_path_reconcile() {
-		let db = pool_from(setup_db());
-		let logs = std::env::temp_dir().join("2code-project-herdr-logs");
-		std::fs::create_dir_all(&logs).ok();
-		let ctx = PtyContext {
-			db: db.clone(),
-			sessions: infra::pty::create_session_map(),
-			flush_senders: create_flush_senders(),
-			read_threads: infra::pty::create_thread_tracker(),
-			emitter: Arc::new(TestEmitter),
-			output_dir: logs,
-		};
-		let runtime =
-			RuntimeRouter::new(LocalAdapter::new(ctx), HerdrStubAdapter::new());
+		let runtime = RuntimeRouter::new(HerdrStubAdapter::new());
 		assert_eq!(
 			runtime.selected_backend(),
 			model::runtime::RuntimeBackend::Herdr
@@ -1731,7 +1516,7 @@ mod tests {
 		let db = pool_from(conn);
 		let fake =
 			FakeList::new(vec![listed(&listed_path, Some("w1"), Some("main"))]);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let diff = get_diff(&runtime, &db, "w1").expect("listed diff");
 		assert!(diff.contains("listed.txt"), "{diff}");
@@ -1826,12 +1611,12 @@ mod tests {
 		let db = pool_from(conn);
 		let fake =
 			FakeList::new(vec![listed(&listed_path, Some("w1"), Some("main"))]);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let err = get_diff(&runtime, &db, "w-missing").expect_err("unknown");
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 
-		let down = herdr_router(&db, None);
+		let down = herdr_router(None);
 		let err = get_diff(&down, &db, "w1").expect_err("herdr down");
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 		let stale_diff = infra::git::diff(&stale_path).expect("stale exists");
@@ -1843,29 +1628,6 @@ mod tests {
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 	}
 
-	#[test]
-	fn local_git_helpers_use_projects_folder() {
-		let listed_repo = init_git_repo("listed.txt", "listed-clean\n");
-		let stale_repo = init_git_repo("stale.txt", "stale-clean\n");
-		std::fs::write(listed_repo.path().join("listed.txt"), "listed-dirty\n")
-			.expect("dirty listed");
-		std::fs::write(stale_repo.path().join("stale.txt"), "stale-dirty\n")
-			.expect("dirty stale");
-		let listed_path = listed_repo.path().to_string_lossy().into_owned();
-		let stale_path = stale_repo.path().to_string_lossy().into_owned();
-
-		let mut conn = setup_db();
-		let (_project_id, profile_id) =
-			insert_catalog(&mut conn, &listed_path, &stale_path);
-		let db = pool_from(conn);
-		let runtime = local_router(&db, None);
-
-		let diff =
-			get_diff(&runtime, &db, &profile_id).expect("folder local diff");
-		assert!(diff.contains("listed.txt"), "{diff}");
-		assert!(diff.contains("listed-dirty"), "{diff}");
-		assert!(!diff.contains("stale.txt"), "{diff}");
-	}
 
 	#[test]
 	fn herdr_watcher_targets_omit_leftover_sqlite_stale() {
@@ -1876,7 +1638,7 @@ mod tests {
 			primary("/repo", Some("w1"), Some("main")),
 			listed("/listed", Some("w2"), Some("feat")),
 		]);
-		let runtime = herdr_router(&db, Some(fake));
+		let runtime = herdr_router(Some(fake));
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		let targets = crate::watcher::watcher_targets(&listed);
@@ -1897,7 +1659,7 @@ mod tests {
 		let mut conn = setup_db();
 		insert_catalog(&mut conn, "/repo", "/stale");
 		let db = pool_from(conn);
-		let runtime = herdr_router(&db, None);
+		let runtime = herdr_router(None);
 
 		let listed = list_with_runtime(&runtime, &db).expect("list");
 		assert!(listed[0].profiles.is_empty());
@@ -1909,22 +1671,6 @@ mod tests {
 		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
 	}
 
-	#[test]
-	fn local_watcher_targets_use_projects_folder() {
-		let mut conn = setup_db();
-		insert_catalog(&mut conn, "/repo", "/stale");
-		let db = pool_from(conn);
-		let runtime = local_router(&db, None);
-
-		let listed = list_with_runtime(&runtime, &db).expect("list");
-		let targets = crate::watcher::watcher_targets(&listed);
-
-		assert!(targets.iter().any(|target| {
-			target.root_path == "/repo"
-				&& target.profile_id.as_deref() == Some("default-proj-1")
-		}));
-		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
-	}
 
 	#[test]
 	fn create_from_folder_does_not_insert_a_profile_row() {

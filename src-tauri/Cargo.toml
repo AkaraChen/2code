@@ -62,4 +62,3 @@ tauri-plugin-updater = "2"
 diesel = { version = "2", features = ["sqlite"] }
 diesel_migrations = "2"
 uuid = { version = "1", features = ["v4"] }
-portable-pty = "0.9"

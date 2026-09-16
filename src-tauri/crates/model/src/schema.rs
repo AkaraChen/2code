@@ -31,28 +31,11 @@ diesel::table! {
 	}
 }
 
-diesel::table! {
-	pty_sessions (id) {
-		id -> Text,
-		project_id -> Text,
-		profile_id -> Text,
-		title -> Text,
-		shell -> Text,
-		cwd -> Text,
-		created_at -> Timestamp,
-		closed_at -> Nullable<Timestamp>,
-		cols -> Integer,
-		rows -> Integer,
-	}
-}
-
 diesel::joinable!(checkout_notes -> projects (project_id));
 diesel::joinable!(projects -> project_groups (group_id));
-diesel::joinable!(pty_sessions -> projects (project_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
 	checkout_notes,
 	project_groups,
 	projects,
-	pty_sessions,
 );

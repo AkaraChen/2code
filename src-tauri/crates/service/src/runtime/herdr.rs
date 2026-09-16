@@ -415,6 +415,7 @@ impl HerdrStubAdapter {
 		self.runtime_sync.is_some()
 	}
 
+	#[allow(dead_code)]
 	pub(crate) fn has_terminal_client(&self) -> bool {
 		self.lifecycle.is_some()
 	}
@@ -1103,27 +1104,20 @@ mod tests {
 	use std::sync::{Arc, Mutex};
 
 	use diesel::prelude::*;
+	use diesel::QueryableByName;
 	use diesel_migrations::MigrationHarness;
-	use infra::pty::{PtyReadThreads, PtySessionMap};
 	use serde_json::json;
 
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
 	use crate::runtime::{
-		HerdrCliAttach, LocalAdapter, RuntimeRouter, RuntimeSelector,
+		HerdrCliAttach, RuntimeRouter, RuntimeSelector,
 	};
-	use crate::PtyEventEmitter;
-	use model::pty::NewPtySessionRecord;
 	use model::runtime::RuntimeBackend;
 
-	struct TestEmitter;
-
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
-		}
-
-		fn emit_exit(&self, _session_id: &str) {}
+	#[derive(QueryableByName)]
+	struct SqliteCountRow {
+		#[diesel(sql_type = diesel::sql_types::Integer)]
+		count: i32,
 	}
 
 	fn setup_db() -> DbPool {
@@ -1580,8 +1574,6 @@ mod tests {
 		db: DbPool,
 		fake: Arc<FakeTerminals>,
 		adapter: HerdrStubAdapter,
-		sessions: PtySessionMap,
-		read_threads: PtyReadThreads,
 		cwd: tempfile::TempDir,
 		fake_cli: PathBuf,
 		namespace: infra::herdr::process::HerdrNamespace,
@@ -1675,14 +1667,10 @@ time.sleep(30)
 					extra_env: extra_env.clone(),
 				},
 			);
-			let sessions = infra::pty::create_session_map();
-			let read_threads = infra::pty::create_thread_tracker();
 			Self {
 				db,
 				fake,
 				adapter,
-				sessions,
-				read_threads,
 				cwd,
 				fake_cli,
 				namespace,
@@ -1717,29 +1705,7 @@ time.sleep(30)
 		}
 
 		fn router(&self) -> RuntimeRouter {
-			self.router_with_default(RuntimeBackend::Herdr)
-		}
-
-		fn local_default_router(&self) -> RuntimeRouter {
-			self.router_with_default(RuntimeBackend::Local)
-		}
-
-		fn router_with_default(
-			&self,
-			default_backend: RuntimeBackend,
-		) -> RuntimeRouter {
-			let logs = self.cwd.path().join("pty-logs");
-			std::fs::create_dir_all(&logs).unwrap();
-			RuntimeRouter::with_backend(
-				default_backend,
-				LocalAdapter::new(PtyContext {
-					db: self.db.clone(),
-					sessions: self.sessions.clone(),
-					flush_senders: create_flush_senders(),
-					read_threads: self.read_threads.clone(),
-					emitter: Arc::new(TestEmitter),
-					output_dir: logs,
-				}),
+			RuntimeRouter::new(
 				HerdrStubAdapter::with_terminal_worktree_and_cli(
 					self.db.clone(),
 					self.fake.clone(),
@@ -1768,36 +1734,14 @@ time.sleep(30)
 
 		fn sqlite_session_ids(&self) -> Vec<String> {
 			let mut conn = self.db.lock().unwrap();
-			repo::pty::list_by_project(&mut conn, "p1")
-				.unwrap()
-				.into_iter()
-				.map(|session| session.id)
-				.collect()
-		}
-
-		fn insert_session_row(&self, session_id: &str) {
-			let mut conn = self.db.lock().unwrap();
-			repo::pty::insert_session(
-				&mut conn,
-				&NewPtySessionRecord {
-					id: session_id,
-					project_id: "p1",
-					profile_id: "w1",
-					title: "steal",
-					shell: "/bin/sh",
-					cwd: "/tmp",
-					cols: 80,
-					rows: 24,
-				},
+			let row: SqliteCountRow = diesel::sql_query(
+				"SELECT COUNT(*) AS count FROM sqlite_master \
+				 WHERE type = 'table' AND name = 'pty_sessions'",
 			)
+			.get_result(&mut *conn)
 			.unwrap();
-		}
-	}
-
-	impl Drop for Fixture {
-		fn drop(&mut self) {
-			infra::pty::close_all_sessions(&self.sessions);
-			infra::pty::join_all_read_threads(&self.read_threads);
+			assert_eq!(row.count, 0, "pty_sessions must be dropped");
+			Vec::new()
 		}
 	}
 
@@ -1920,7 +1864,6 @@ time.sleep(30)
 		);
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
 		assert!(fx.fake.send_input_calls().is_empty());
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		assert_ne!(first.session_id, "term_live");
 	}
 
@@ -1942,7 +1885,6 @@ time.sleep(30)
 			Some(config.cwd.as_str())
 		);
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[test]
@@ -1966,7 +1908,6 @@ time.sleep(30)
 			.unwrap_err();
 		assert!(err.to_string().contains("absolute"), "{err}");
 		assert_eq!(fx.fake.tab_create_calls(), 0);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		assert!(fx.fake.send_input_calls().is_empty());
 	}
 
@@ -2084,7 +2025,6 @@ time.sleep(30)
 		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.send_input_calls().len(), 1);
 		assert_eq!(fx.fake.pane_close_calls(), 0);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[test]
@@ -2236,7 +2176,6 @@ time.sleep(30)
 			)
 			.is_err());
 		assert!(!fx.fake.calls().iter().any(|m| m.contains("send")));
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[cfg(unix)]
@@ -2250,7 +2189,6 @@ time.sleep(30)
 		fx.adapter
 			.attach_output(&created.session_id, "stream-a")
 			.unwrap();
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		let frame = fx
 			.adapter
 			.recv_terminal_frame(&created.session_id, "stream-a")
@@ -2304,7 +2242,6 @@ time.sleep(30)
 			.unwrap();
 		fx.adapter.close_session(&created.session_id).unwrap();
 		assert_eq!(fx.fake.pane_close_calls(), 1);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[cfg(unix)]
@@ -2363,9 +2300,7 @@ time.sleep(30)
 			router.owner(&created.session_id).unwrap(),
 			Some(RuntimeBackend::Herdr)
 		);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		assert!(router.write(&created.session_id, b"x").is_err());
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[cfg(unix)]
@@ -2377,9 +2312,7 @@ time.sleep(30)
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		router.attach_output(&created.session_id, "s1").unwrap();
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		router.write(&created.session_id, b"x\n").unwrap();
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		router.detach_output(&created.session_id, "s1").unwrap();
 	}
 
@@ -2510,6 +2443,10 @@ time.sleep(30)
 		assert!(pty.contains("get_session_agent_status"));
 		assert!(pty.contains("stream_session_agent_status"));
 		assert!(pty.contains("scroll_pty"));
+		assert!(!pty.contains("stream_pty_output"));
+		assert!(!pty.contains("get_pty_session_history"));
+		assert!(!pty.contains("restore_pty_session"));
+		assert!(!pty.contains("delete_pty_session_record"));
 		assert!(!pty.contains("pane.send_text"));
 		assert!(!pty.contains("pane.report_agent"));
 		assert!(!pty.contains("agent.start"));
@@ -2526,7 +2463,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn session_backend_ipc_uses_backend_for_not_discovery() {
+	fn session_backend_ipc_is_herdr_only() {
 		let pty = include_str!("../../../../src/handler/pty.rs");
 		let cmd = pty
 			.split("pub fn get_session_backend")
@@ -2535,7 +2472,8 @@ time.sleep(30)
 			.split("pub fn get_session_agent_status")
 			.next()
 			.unwrap();
-		assert!(cmd.contains("backend_for"));
+		assert!(cmd.contains("RuntimeBackend::Herdr"));
+		assert!(!cmd.contains("backend_for"));
 		assert!(!cmd.contains("selected_backend"));
 		assert!(!cmd.contains("discovery"));
 		assert!(!cmd.contains("RuntimeRouter::new"));
@@ -2556,10 +2494,9 @@ time.sleep(30)
 			.split("pub fn attach_pty_output")
 			.next()
 			.unwrap();
-		assert!(stream.contains("backend_for"));
-		assert!(stream.contains("RuntimeBackend::Herdr"));
 		assert!(stream.contains("pump_session_agent_status"));
 		assert!(!stream.contains("selected_backend"));
+		assert!(!stream.contains("discovery"));
 	}
 
 	#[test]
@@ -2599,22 +2536,19 @@ time.sleep(30)
 	#[test]
 	fn create_does_not_write_sqlite_session_or_mapping_rows() {
 		let fx = Fixture::new();
-		fx.insert_session_row("leftover-sess");
 		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		assert_eq!(created.session_id, "w1:p2");
 		let ids = fx.sqlite_session_ids();
-		assert!(ids.contains(&"leftover-sess".to_string()));
+		assert!(ids.is_empty());
 		assert!(!ids.contains(&created.session_id));
-		assert!(!fx.sqlite_session_ids().contains(&created.session_id));
 	}
 
 	#[test]
 	fn leftover_sqlite_mapping_does_not_block_or_close_live_root() {
 		let fx = Fixture::new();
-		fx.insert_session_row("sess-steal");
 		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
@@ -2659,7 +2593,6 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		fx.insert_session_row("local-only");
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
 		assert!(listed.iter().any(|session| session.id == "w1:p1"));
 		assert!(listed
@@ -2713,15 +2646,15 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn local_default_reopen_lists_bound_herdr_without_local_pty() {
+	fn herdr_reopen_lists_bound_panes_without_local_pty() {
 		let fx = Fixture::new();
 		let created = fx
 			.router()
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		let creates_before = fx.fake.tab_create_calls();
-		let router = fx.local_default_router();
-		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
+		let router = fx.router();
+		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
 		assert_eq!(
 			router.backend_for(&created.session_id).unwrap(),
 			RuntimeBackend::Herdr
@@ -2735,14 +2668,6 @@ time.sleep(30)
 			router.owner(&created.session_id).unwrap(),
 			Some(RuntimeBackend::Herdr)
 		);
-		assert!(router
-			.restore_session(
-				&created.session_id,
-				&Fixture::meta(),
-				&fx.config()
-			)
-			.is_err());
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 		assert_eq!(fx.fake.tab_create_calls(), creates_before);
 	}
 
@@ -2759,7 +2684,6 @@ time.sleep(30)
 		);
 		router.close_session(&created.session_id).unwrap();
 		assert_eq!(router.owner(&created.session_id).unwrap(), None);
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
 	}
 
 	#[test]
@@ -2814,30 +2738,6 @@ time.sleep(30)
 			.session_agent_status(&created.session_id)
 			.unwrap()
 			.is_none());
-	}
-
-	#[test]
-	fn router_local_owned_id_never_reads_herdr_agent_status() {
-		let fx = Fixture::new();
-		let router = fx.local_default_router();
-		let created = router
-			.create_session(
-				&PtySessionMeta {
-					profile_id: "default-p1".to_string(),
-					title: "shell".to_string(),
-				},
-				&fx.config(),
-			)
-			.unwrap();
-		assert_eq!(
-			router.owner(&created.session_id).unwrap(),
-			Some(RuntimeBackend::Local)
-		);
-		assert!(router
-			.session_agent_status(&created.session_id)
-			.unwrap()
-			.is_none());
-		assert!(!fx.fake.calls().iter().any(|m| m == "session.snapshot"));
 	}
 
 	#[test]

@@ -1,14 +1,12 @@
 //! Terminal runtime boundary: lifecycle, transport, and discovery.
 //!
-//! Handlers talk to [`RuntimeRouter`]. The Local adapter wraps the current
-//! PTY implementation. Herdr create/list/close use pane identities when a
-//! client is injected; write/resize require an attached CLI helper.
-//! Herdr restore stays fail-closed: reopen attaches Bound panes instead
-//! of spawning a Local PTY. Production default is Herdr. Local is only
-//! an explicit `TWOCODE_RUNTIME=local` fallback.
+//! Handlers talk to [`RuntimeRouter`]. The router is Herdr-only: GUI
+//! startup always attaches Herdr (`ensure_herdr_listener` + JSON
+//! clients). Create/list/close use pane identities; write/resize require
+//! an attached CLI helper. Restore reattaches Bound panes. There is no
+//! Local adapter, env flag, or portable-pty fallback.
 
 mod herdr;
-mod local;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -31,7 +29,6 @@ pub use herdr::{
 pub use infra::herdr::process::{
 	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
 };
-pub use local::LocalAdapter;
 
 pub type RuntimeHandle = Arc<RuntimeRouter>;
 
@@ -188,11 +185,7 @@ impl Default for RuntimeSelector {
 	}
 }
 
-pub const LOCAL_RUNTIME_ENV: &str = "TWOCODE_RUNTIME";
-pub const LOCAL_RUNTIME_FLAG: &str = "--twocode-runtime=local";
-
-/// Live Herdr session ids are `workspace_id:pane` (`wN:pK`). sqlite UUID
-/// leftover rows never match this shape.
+/// Live Herdr session ids are `workspace_id:pane` (`wN:pK`).
 pub(crate) fn is_herdr_pane_id(session_id: &str) -> bool {
 	let Some((workspace, pane)) = session_id.split_once(':') else {
 		return false;
@@ -209,39 +202,9 @@ pub(crate) fn is_herdr_pane_id(session_id: &str) -> bool {
 		&& pane_n.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Explicit Local opt-in. Anything else (unset, `herdr`, garbage) is Herdr.
-pub fn parse_runtime_env(value: Option<&str>) -> RuntimeBackend {
-	match value {
-		Some(value) if value.eq_ignore_ascii_case("local") => {
-			RuntimeBackend::Local
-		}
-		_ => RuntimeBackend::Herdr,
-	}
-}
-
-pub fn parse_runtime_args<I, S>(args: I) -> RuntimeBackend
-where
-	I: IntoIterator<Item = S>,
-	S: AsRef<str>,
-{
-	if args
-		.into_iter()
-		.any(|arg| arg.as_ref().eq_ignore_ascii_case(LOCAL_RUNTIME_FLAG))
-	{
-		RuntimeBackend::Local
-	} else {
-		RuntimeBackend::Herdr
-	}
-}
-
-/// GUI backend: Herdr unless `TWOCODE_RUNTIME=local` or `--twocode-runtime=local`.
+/// GUI backend is always Herdr. There is no Local env or flag.
 pub fn select_gui_backend() -> RuntimeBackend {
-	if parse_runtime_env(std::env::var(LOCAL_RUNTIME_ENV).ok().as_deref())
-		== RuntimeBackend::Local
-	{
-		return RuntimeBackend::Local;
-	}
-	parse_runtime_args(std::env::args())
+	RuntimeBackend::Herdr
 }
 
 /// Inputs for GUI Herdr attach. Missing sidecar/namespace fails closed.
@@ -255,27 +218,17 @@ pub struct GuiHerdrConnect<'a> {
 	pub binaries_dir: Option<PathBuf>,
 }
 
-/// Routes terminal operations to exactly one backend per session identity.
+/// Routes terminal operations to the Herdr adapter.
 pub struct RuntimeRouter {
 	selector: RuntimeSelector,
-	local: LocalAdapter,
 	herdr: HerdrStubAdapter,
 }
 
 impl RuntimeRouter {
-	/// Production constructor: Herdr is the default runtime.
-	pub fn new(local: LocalAdapter, herdr: HerdrStubAdapter) -> Self {
-		Self::with_backend(RuntimeBackend::Herdr, local, herdr)
-	}
-
-	pub fn with_backend(
-		default_backend: RuntimeBackend,
-		local: LocalAdapter,
-		herdr: HerdrStubAdapter,
-	) -> Self {
+	/// Production constructor: Herdr is the only runtime.
+	pub fn new(herdr: HerdrStubAdapter) -> Self {
 		Self {
-			selector: RuntimeSelector::new(default_backend),
-			local,
+			selector: RuntimeSelector::new(RuntimeBackend::Herdr),
 			herdr,
 		}
 	}
@@ -310,16 +263,10 @@ impl RuntimeRouter {
 	}
 
 	/// Drop GUI ownership of a Herdr session without `pane.close`.
-	/// Live Local PTYs are refused so both runtimes cannot own the id.
 	pub fn release_herdr_session(
 		&self,
 		session_id: &str,
 	) -> Result<(), AppError> {
-		if self.local.has_live_session(session_id) {
-			return Err(AppError::PtyError(format!(
-				"refusing to kill a Local PTY for Herdr-owned session {session_id}"
-			)));
-		}
 		self.herdr.release_session(session_id);
 		let _ = self.selector.unbind(session_id);
 		Ok(())
@@ -332,7 +279,7 @@ impl RuntimeRouter {
 		self.route_backend(session_id)
 	}
 
-	/// Owner, else a live Herdr `pane_id`, else the default.
+	/// Owner, else a live Herdr `pane_id`, else Herdr.
 	fn route_backend(
 		&self,
 		session_id: &str,
@@ -343,7 +290,7 @@ impl RuntimeRouter {
 		if is_herdr_pane_id(session_id) {
 			return Ok(RuntimeBackend::Herdr);
 		}
-		Ok(self.selector.default_backend())
+		Ok(RuntimeBackend::Herdr)
 	}
 
 	fn bind_listed_herdr(
@@ -362,7 +309,7 @@ impl RuntimeRouter {
 		self.herdr.release_attachments();
 	}
 
-	/// Herdr-selected profile create. Missing client is fail-closed.
+	/// Herdr profile create. Missing client is fail-closed.
 	pub fn herdr_worktrees(
 		&self,
 	) -> Result<&dyn HerdrWorktreeClient, AppError> {
@@ -375,82 +322,40 @@ impl RuntimeRouter {
 		self.herdr.worktrees().ok()
 	}
 
-	/// Herdr-owned ids only. Local-owned ids never read Herdr agent state.
 	pub fn session_agent_status(
 		&self,
 		session_id: &str,
 	) -> Result<Option<SessionAgentStatus>, AppError> {
-		if self.backend_for(session_id)? != RuntimeBackend::Herdr {
-			return Ok(None);
-		}
 		self.herdr.session_agent_status(session_id)
 	}
 
-	/// Forget a project session: terminate Local PTYs, release Herdr
-	/// attachments without `pane.close` / `worktree.remove`.
+	/// Forget a project session: release Herdr attachments without
+	/// `pane.close` / `worktree.remove`.
 	pub fn forget_project_session(
 		&self,
 		session_id: &str,
 	) -> Result<(), AppError> {
-		let herdr_owned = self.selector.owner(session_id)?
-			== Some(RuntimeBackend::Herdr)
-			|| is_herdr_pane_id(session_id);
-		if herdr_owned {
-			self.release_herdr_session(session_id)
-		} else {
-			self.teardown_session(session_id)
-		}
+		self.release_herdr_session(session_id)
 	}
 
-	/// Terminate a bound session on its owner. Unbound live Local PTYs
-	/// and Herdr-owned Local PTYs are refused (#403).
+	/// Close a bound Herdr session.
 	pub fn teardown_session(&self, session_id: &str) -> Result<(), AppError> {
-		match self.selector.owner(session_id)? {
-			Some(RuntimeBackend::Local) => {
-				self.local.teardown_session(session_id)?;
-			}
-			Some(RuntimeBackend::Herdr) => {
-				if self.local.has_live_session(session_id) {
-					return Err(AppError::PtyError(format!(
-						"refusing to kill a Local PTY for Herdr-owned session {session_id}"
-					)));
-				}
-				self.herdr.close_session(session_id)?;
-			}
-			None => {
-				if self.local.has_live_session(session_id) {
-					return Err(AppError::PtyError(format!(
-						"refusing to kill a Local PTY for unbound session {session_id}"
-					)));
-				}
-			}
-		}
+		self.herdr.close_session(session_id)?;
 		let _ = self.selector.unbind(session_id);
 		Ok(())
 	}
 
-	fn adapter(&self, backend: RuntimeBackend) -> &dyn TerminalRuntime {
-		match backend {
-			RuntimeBackend::Local => &self.local,
-			RuntimeBackend::Herdr => &self.herdr,
-		}
-	}
-
-	fn bind_created(
-		&self,
-		session_id: &str,
-		backend: RuntimeBackend,
-	) -> Result<(), AppError> {
-		if let Err(err) = self.selector.bind(session_id, backend) {
-			let _ = self.adapter(backend).close_session(session_id);
+	fn bind_created(&self, session_id: &str) -> Result<(), AppError> {
+		if let Err(err) = self.selector.bind(session_id, RuntimeBackend::Herdr)
+		{
+			let _ = self.herdr.close_session(session_id);
 			return Err(err);
 		}
 		Ok(())
 	}
 }
 
-/// Resolve the dedicated 2code Herdr listener. Called from Herdr-default
-/// GUI startup. The `TWOCODE_RUNTIME=local` path must not call this.
+/// Resolve the dedicated 2code Herdr listener. Called from GUI startup.
 pub fn ensure_herdr_listener(
 	guard: &HerdrClientGuard,
 	executable: &Path,
@@ -499,7 +404,7 @@ fn resolve_gui_sidecar(
 
 /// Resolve the pinned sidecar, ensure the 2code namespace, inject JSON
 /// terminal + worktree + CLI attach clients, and start
-/// `HerdrRuntimeSync`. `TWOCODE_RUNTIME=local` does not call this.
+/// `HerdrRuntimeSync`.
 pub fn connect_gui_herdr(
 	opts: GuiHerdrConnect<'_>,
 ) -> Result<HerdrStubAdapter, AppError> {
@@ -549,39 +454,23 @@ pub fn build_gui_herdr_adapter(opts: GuiHerdrConnect<'_>) -> HerdrStubAdapter {
 	}
 }
 
-/// Local env/flag skips attach. Herdr default always keeps Herdr selected.
-pub fn herdr_adapter_for_gui_backend(
-	backend: RuntimeBackend,
-	opts: GuiHerdrConnect<'_>,
-) -> HerdrStubAdapter {
-	if backend == RuntimeBackend::Local {
-		HerdrStubAdapter::new()
-	} else {
-		build_gui_herdr_adapter(opts)
-	}
-}
-
-/// GUI production runtime. Local only for the explicit env/flag.
+/// GUI production runtime. Always Herdr; fail-closed if sidecar/namespace
+/// is absent.
 pub fn build_gui_runtime(
-	local: LocalAdapter,
 	db: DbPool,
 	guard: &HerdrClientGuard,
 	xdg_config_home: PathBuf,
 ) -> RuntimeRouter {
-	let backend = select_gui_backend();
-	let herdr = herdr_adapter_for_gui_backend(
-		backend,
-		GuiHerdrConnect {
-			db,
-			guard,
-			xdg_config_home,
-			extra_env: &[],
-			sidecar: None,
-			exe_dir: None,
-			binaries_dir: None,
-		},
-	);
-	RuntimeRouter::with_backend(backend, local, herdr)
+	let herdr = build_gui_herdr_adapter(GuiHerdrConnect {
+		db,
+		guard,
+		xdg_config_home,
+		extra_env: &[],
+		sidecar: None,
+		exe_dir: None,
+		binaries_dir: None,
+	});
+	RuntimeRouter::new(herdr)
 }
 
 /// GUI exit: drop client helpers only. Does not stop the Herdr server.
@@ -591,7 +480,7 @@ pub fn release_herdr_client_helpers(guard: &HerdrClientGuard) {
 
 impl TerminalRuntime for RuntimeRouter {
 	fn selected_backend(&self) -> RuntimeBackend {
-		self.selector.default_backend()
+		RuntimeBackend::Herdr
 	}
 
 	fn create_session(
@@ -599,9 +488,8 @@ impl TerminalRuntime for RuntimeRouter {
 		meta: &PtySessionMeta,
 		config: &PtyConfig,
 	) -> Result<CreateSessionResult, AppError> {
-		let backend = self.selector.default_backend();
-		let created = self.adapter(backend).create_session(meta, config)?;
-		self.bind_created(&created.session_id, backend)?;
+		let created = self.herdr.create_session(meta, config)?;
+		self.bind_created(&created.session_id)?;
 		Ok(created)
 	}
 
@@ -611,26 +499,11 @@ impl TerminalRuntime for RuntimeRouter {
 		meta: &PtySessionMeta,
 		config: &PtyConfig,
 	) -> Result<RestoreResult, AppError> {
-		let backend = self.route_backend(old_session_id)?;
-		if backend == RuntimeBackend::Herdr {
-			return self.herdr.restore_session(old_session_id, meta, config);
-		}
-		let restored =
-			self.local.restore_session(old_session_id, meta, config)?;
-		let _ = self.selector.unbind(old_session_id);
-		if let Err(err) = self
-			.selector
-			.bind(&restored.new_session_id, RuntimeBackend::Local)
-		{
-			let _ = self.local.close_session(&restored.new_session_id);
-			return Err(err);
-		}
-		Ok(restored)
+		self.herdr.restore_session(old_session_id, meta, config)
 	}
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).close_session(session_id)?;
+		self.herdr.close_session(session_id)?;
 		let _ = self.selector.unbind(session_id);
 		Ok(())
 	}
@@ -639,31 +512,19 @@ impl TerminalRuntime for RuntimeRouter {
 		&self,
 		project_id: &str,
 	) -> Result<Vec<PtySessionRecord>, AppError> {
-		if self.selector.default_backend() == RuntimeBackend::Herdr {
-			let listed = self.herdr.list_project_sessions(project_id)?;
-			self.bind_listed_herdr(&listed)?;
-			return Ok(listed);
-		}
-		let mut local = self.local.list_project_sessions(project_id)?;
-		if !self.herdr.has_terminal_client() {
-			return Ok(local);
-		}
-		let herdr = self.herdr.list_project_sessions(project_id)?;
-		self.bind_listed_herdr(&herdr)?;
-		local.extend(herdr);
-		Ok(local)
+		let listed = self.herdr.list_project_sessions(project_id)?;
+		self.bind_listed_herdr(&listed)?;
+		Ok(listed)
 	}
 
 	fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).delete_session(session_id)?;
+		self.herdr.delete_session(session_id)?;
 		let _ = self.selector.unbind(session_id);
 		Ok(())
 	}
 
 	fn write(&self, session_id: &str, data: &[u8]) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).write(session_id, data)
+		self.herdr.write(session_id, data)
 	}
 
 	fn resize(
@@ -672,23 +533,19 @@ impl TerminalRuntime for RuntimeRouter {
 		rows: u16,
 		cols: u16,
 	) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).resize(session_id, rows, cols)
+		self.herdr.resize(session_id, rows, cols)
 	}
 
 	fn history(&self, session_id: &str) -> Result<Vec<u8>, AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).history(session_id)
+		self.herdr.history(session_id)
 	}
 
 	fn flush(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).flush(session_id)
+		self.herdr.flush(session_id)
 	}
 
 	fn clear(&self, session_id: &str) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend).clear(session_id)
+		self.herdr.clear(session_id)
 	}
 
 	fn scroll(
@@ -698,9 +555,7 @@ impl TerminalRuntime for RuntimeRouter {
 		lines: u16,
 		source: model::runtime::TerminalScrollSource,
 	) -> Result<(), AppError> {
-		let backend = self.route_backend(session_id)?;
-		self.adapter(backend)
-			.scroll(session_id, direction, lines, source)
+		self.herdr.scroll(session_id, direction, lines, source)
 	}
 
 	fn attach_output(
@@ -708,17 +563,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<(), AppError> {
-		match self.route_backend(session_id)? {
-			RuntimeBackend::Local => Ok(()),
-			RuntimeBackend::Herdr => {
-				if self.local.has_live_session(session_id) {
-					return Err(AppError::PtyError(format!(
-						"session {session_id} is owned by local; refusing Herdr helper"
-					)));
-				}
-				self.herdr.attach_output(session_id, stream_id)
-			}
-		}
+		self.herdr.attach_output(session_id, stream_id)
 	}
 
 	fn detach_output(
@@ -726,12 +571,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<(), AppError> {
-		match self.route_backend(session_id)? {
-			RuntimeBackend::Local => Ok(()),
-			RuntimeBackend::Herdr => {
-				self.herdr.detach_output(session_id, stream_id)
-			}
-		}
+		self.herdr.detach_output(session_id, stream_id)
 	}
 
 	fn recv_terminal_frame(
@@ -739,14 +579,7 @@ impl TerminalRuntime for RuntimeRouter {
 		session_id: &str,
 		stream_id: &str,
 	) -> Result<model::runtime::HerdrTerminalFrame, AppError> {
-		match self.route_backend(session_id)? {
-			RuntimeBackend::Local => {
-				Err(AppError::PtyError("not a Herdr session".into()))
-			}
-			RuntimeBackend::Herdr => {
-				self.herdr.recv_terminal_frame(session_id, stream_id)
-			}
-		}
+		self.herdr.recv_terminal_frame(session_id, stream_id)
 	}
 
 	fn release_attachments(&self) {
@@ -754,31 +587,18 @@ impl TerminalRuntime for RuntimeRouter {
 	}
 }
 
+
 #[cfg(test)]
 mod tests {
 	use std::path::{Path, PathBuf};
 	use std::sync::Arc;
-	use std::time::Duration;
 
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
-	use infra::pty::{PtyReadThreads, PtySessionMap};
 	use model::pty::{PtyConfig, PtySessionMeta};
 
 	use super::*;
-	use crate::pty::{create_flush_senders, PtyContext};
-	use crate::PtyEventEmitter;
-
-	struct TestEmitter;
-
-	impl PtyEventEmitter for TestEmitter {
-		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
-			true
-		}
-
-		fn emit_exit(&self, _session_id: &str) {}
-	}
 
 	fn setup_db() -> DbPool {
 		let mut conn =
@@ -791,7 +611,7 @@ mod tests {
 		Arc::new(Mutex::new(conn))
 	}
 
-	fn insert_project_and_profile(db: &DbPool, folder: &str) {
+	fn insert_project(db: &DbPool, folder: &str) {
 		let mut conn = db.lock().unwrap();
 		diesel::sql_query(format!(
 			"INSERT INTO projects (id, name, folder, created_at) VALUES ('p1', 'Test', '{folder}', datetime('now'))"
@@ -808,214 +628,34 @@ mod tests {
 		}
 	}
 
-	struct Fixture {
-		router: RuntimeRouter,
-		sessions: PtySessionMap,
-		read_threads: PtyReadThreads,
-		cwd: tempfile::TempDir,
-		_db: DbPool,
-		_logs: PathBuf,
-	}
-
-	impl Fixture {
-		fn new(default_backend: RuntimeBackend) -> Self {
-			let cwd = tempfile::tempdir().unwrap();
-			let folder = cwd.path().to_string_lossy().replace('\'', "");
-			let db = setup_db();
-			insert_project_and_profile(&db, &folder);
-			let sessions = infra::pty::create_session_map();
-			let read_threads = infra::pty::create_thread_tracker();
-			let logs = cwd.path().join("pty-logs");
-			std::fs::create_dir_all(&logs).unwrap();
-			let ctx = PtyContext {
-				db: db.clone(),
-				sessions: sessions.clone(),
-				flush_senders: create_flush_senders(),
-				read_threads: read_threads.clone(),
-				emitter: Arc::new(TestEmitter),
-				output_dir: logs.clone(),
-			};
-			let router = RuntimeRouter::with_backend(
-				default_backend,
-				LocalAdapter::new(ctx),
-				HerdrStubAdapter::new(),
-			);
-			Self {
-				router,
-				sessions,
-				read_threads,
-				cwd,
-				_db: db,
-				_logs: logs,
-			}
-		}
-
-		fn live_count(&self) -> usize {
-			self.sessions.lock().unwrap().len()
-		}
-
-		fn meta() -> PtySessionMeta {
-			PtySessionMeta {
-				profile_id: "default-p1".to_string(),
-				title: "test".to_string(),
-			}
-		}
-
-		fn config(&self) -> PtyConfig {
-			PtyConfig {
-				shell: test_shell(),
-				cwd: self.cwd.path().to_string_lossy().into_owned(),
-				rows: 24,
-				cols: 80,
-				startup_commands: Vec::new(),
-			}
-		}
-
-		fn git_worktree_list(&self) -> String {
-			let output = std::process::Command::new("git")
-				.args(["worktree", "list", "--porcelain"])
-				.current_dir(self.cwd.path())
-				.output()
-				.expect("git worktree list");
-			String::from_utf8_lossy(&output.stdout).into_owned()
-		}
-
-		fn init_git_repo(&self) {
-			let _ = std::process::Command::new("git")
-				.args(["init"])
-				.current_dir(self.cwd.path())
-				.output();
-			std::fs::write(self.cwd.path().join("marker"), b"keep").unwrap();
+	fn meta() -> PtySessionMeta {
+		PtySessionMeta {
+			profile_id: "w1".to_string(),
+			title: "test".to_string(),
 		}
 	}
 
-	impl Drop for Fixture {
-		fn drop(&mut self) {
-			infra::pty::close_all_sessions(&self.sessions);
-			infra::pty::join_all_read_threads(&self.read_threads);
+	fn config(cwd: &Path) -> PtyConfig {
+		PtyConfig {
+			shell: test_shell(),
+			cwd: cwd.to_string_lossy().into_owned(),
+			rows: 24,
+			cols: 80,
+			startup_commands: Vec::new(),
 		}
 	}
 
-	#[test]
-	fn selector_defaults_to_herdr() {
-		let selector = RuntimeSelector::default();
-		assert_eq!(selector.default_backend(), RuntimeBackend::Herdr);
-		assert_ne!(selector.default_backend(), RuntimeBackend::Local);
-	}
-
-	#[test]
-	fn selector_rejects_dual_backend_ownership() {
-		let selector = RuntimeSelector::new(RuntimeBackend::Local);
-		selector.bind("sess-1", RuntimeBackend::Local).unwrap();
-		let err = selector.bind("sess-1", RuntimeBackend::Herdr).unwrap_err();
-		assert!(err.to_string().contains("owned by local"));
-		assert!(err.to_string().contains("herdr"));
-		assert_eq!(
-			selector.owner("sess-1").unwrap(),
-			Some(RuntimeBackend::Local)
-		);
-	}
-
-	#[test]
-	fn selector_backend_for_unbound_uses_default() {
-		assert_eq!(
-			RuntimeSelector::default().backend_for("unknown").unwrap(),
-			RuntimeBackend::Herdr
-		);
-		let herdr = RuntimeSelector::new(RuntimeBackend::Herdr);
-		assert_eq!(
-			herdr.backend_for("unknown").unwrap(),
-			RuntimeBackend::Herdr
-		);
-		let local = RuntimeSelector::new(RuntimeBackend::Local);
-		assert_eq!(
-			local.backend_for("unknown").unwrap(),
-			RuntimeBackend::Local
-		);
-	}
-
-	#[test]
-	fn router_production_constructor_selects_herdr() {
-		let cwd = tempfile::tempdir().unwrap();
-		let sessions = infra::pty::create_session_map();
-		let read_threads = infra::pty::create_thread_tracker();
-		let router = RuntimeRouter::new(
-			LocalAdapter::new(PtyContext {
-				db: setup_db(),
-				sessions: sessions.clone(),
-				flush_senders: create_flush_senders(),
-				read_threads: read_threads.clone(),
-				emitter: Arc::new(TestEmitter),
-				output_dir: cwd.path().to_path_buf(),
-			}),
-			HerdrStubAdapter::new(),
-		);
-		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
-		assert_eq!(router.discovery().selected_backend, RuntimeBackend::Herdr);
-		assert_ne!(router.selected_backend(), RuntimeBackend::Local);
-		let err = router
-			.create_session(
-				&PtySessionMeta {
-					profile_id: "default-p1".into(),
-					title: "t".into(),
-				},
-				&PtyConfig {
-					shell: test_shell(),
-					cwd: cwd.path().to_string_lossy().into_owned(),
-					rows: 24,
-					cols: 80,
-					startup_commands: Vec::new(),
-				},
-			)
-			.unwrap_err();
-		assert!(
-			err.to_string().contains("Herdr runtime is not available"),
-			"{err}"
-		);
-		assert!(sessions.lock().unwrap().is_empty());
-		infra::pty::join_all_read_threads(&read_threads);
-	}
-
-	#[test]
-	fn explicit_local_router_uses_local() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		assert_eq!(fx.router.selected_backend(), RuntimeBackend::Local);
-		assert_eq!(
-			fx.router.discovery().selected_backend,
-			RuntimeBackend::Local
-		);
-	}
-
-	#[test]
-	fn parse_runtime_env_only_local_is_the_fallback() {
-		assert_eq!(parse_runtime_env(Some("local")), RuntimeBackend::Local);
-		assert_eq!(parse_runtime_env(Some("LOCAL")), RuntimeBackend::Local);
-		assert_eq!(parse_runtime_env(Some("herdr")), RuntimeBackend::Herdr);
-		assert_eq!(parse_runtime_env(None), RuntimeBackend::Herdr);
-		assert_eq!(parse_runtime_env(Some("nope")), RuntimeBackend::Herdr);
-	}
-
-	#[test]
-	fn herdr_pane_id_shape_is_not_a_sqlite_uuid() {
-		assert!(is_herdr_pane_id("w1:p1"));
-		assert!(is_herdr_pane_id("w12:p10"));
-		assert!(!is_herdr_pane_id("pr1"));
-		assert!(!is_herdr_pane_id("w1"));
-		assert!(!is_herdr_pane_id("w1:t1"));
-		assert!(!is_herdr_pane_id("sess-1"));
-	}
-
-	#[test]
-	fn parse_runtime_args_only_the_twocode_flag_selects_local() {
-		assert_eq!(
-			parse_runtime_args(["2code", LOCAL_RUNTIME_FLAG]),
-			RuntimeBackend::Local
-		);
-		assert_eq!(
-			parse_runtime_args(["2code", "--twocode-runtime=HERDR"]),
-			RuntimeBackend::Herdr
-		);
-		assert_eq!(parse_runtime_args(["2code"]), RuntimeBackend::Herdr);
+	fn dir_names(path: &Path) -> Vec<String> {
+		let mut names: Vec<String> = std::fs::read_dir(path)
+			.unwrap()
+			.filter_map(|entry| {
+				entry
+					.ok()
+					.map(|e| e.file_name().to_string_lossy().into_owned())
+			})
+			.collect();
+		names.sort();
+		names
 	}
 
 	fn gui_connect<'a>(
@@ -1038,10 +678,54 @@ mod tests {
 	}
 
 	#[test]
-	fn missing_sidecar_fails_closed_absent_without_flipping_or_local_pty() {
+	fn selector_defaults_to_herdr() {
+		let selector = RuntimeSelector::default();
+		assert_eq!(selector.default_backend(), RuntimeBackend::Herdr);
+	}
+
+	#[test]
+	fn selector_backend_for_unbound_uses_herdr() {
+		assert_eq!(
+			RuntimeSelector::default().backend_for("unknown").unwrap(),
+			RuntimeBackend::Herdr
+		);
+	}
+
+	#[test]
+	fn herdr_pane_id_shape_is_not_a_sqlite_uuid() {
+		assert!(is_herdr_pane_id("w1:p1"));
+		assert!(is_herdr_pane_id("w12:p10"));
+		assert!(!is_herdr_pane_id("pr1"));
+		assert!(!is_herdr_pane_id("w1"));
+		assert!(!is_herdr_pane_id("w1:t1"));
+		assert!(!is_herdr_pane_id("sess-1"));
+	}
+
+	#[test]
+	fn router_production_constructor_selects_herdr() {
+		let cwd = tempfile::tempdir().unwrap();
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
+		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
+		assert_eq!(router.discovery().selected_backend, RuntimeBackend::Herdr);
+		let err = router
+			.create_session(&meta(), &config(cwd.path()))
+			.unwrap_err();
+		assert!(
+			err.to_string().contains("Herdr runtime is not available"),
+			"{err}"
+		);
+	}
+
+	#[test]
+	fn select_gui_backend_is_always_herdr() {
+		assert_eq!(select_gui_backend(), RuntimeBackend::Herdr);
+	}
+
+	#[test]
+	fn missing_sidecar_fails_closed_absent_without_local_pty() {
 		let cwd = tempfile::tempdir().unwrap();
 		let db = setup_db();
-		insert_project_and_profile(&db, &cwd.path().to_string_lossy());
+		insert_project(&db, &cwd.path().to_string_lossy());
 		let guard = HerdrClientGuard::new();
 		let err = match connect_gui_herdr(gui_connect(
 			db.clone(),
@@ -1055,45 +739,18 @@ mod tests {
 		assert!(matches!(err, AppError::HerdrServerAbsent(_)), "{err}");
 		assert!(err.to_string().contains("sidecar not found"), "{err}");
 
-		let sessions = infra::pty::create_session_map();
-		let read_threads = infra::pty::create_thread_tracker();
-		let router = RuntimeRouter::with_backend(
-			RuntimeBackend::Herdr,
-			LocalAdapter::new(PtyContext {
-				db,
-				sessions: sessions.clone(),
-				flush_senders: create_flush_senders(),
-				read_threads: read_threads.clone(),
-				emitter: Arc::new(TestEmitter),
-				output_dir: cwd.path().to_path_buf(),
-			}),
-			build_gui_herdr_adapter(gui_connect(
-				setup_db(),
-				&guard,
-				cwd.path().join("xdg-2"),
-				Some(cwd.path().join("missing-herdr")),
-			)),
-		);
+		let router = RuntimeRouter::new(build_gui_herdr_adapter(gui_connect(
+			setup_db(),
+			&guard,
+			cwd.path().join("xdg-2"),
+			Some(cwd.path().join("missing-herdr")),
+		)));
 		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
-		let created = router.create_session(
-			&PtySessionMeta {
-				profile_id: "default-p1".into(),
-				title: "t".into(),
-			},
-			&PtyConfig {
-				shell: test_shell(),
-				cwd: cwd.path().to_string_lossy().into_owned(),
-				rows: 24,
-				cols: 80,
-				startup_commands: Vec::new(),
-			},
-		);
+		let created = router.create_session(&meta(), &config(cwd.path()));
 		assert!(
 			matches!(created, Err(AppError::HerdrServerAbsent(_))),
 			"{created:?}"
 		);
-		assert!(sessions.lock().unwrap().is_empty());
-		infra::pty::join_all_read_threads(&read_threads);
 	}
 
 	#[test]
@@ -1125,66 +782,10 @@ mod tests {
 	}
 
 	#[test]
-	fn explicit_local_gui_adapter_skips_ensure_and_creates_local_pty() {
-		let cwd = tempfile::tempdir().unwrap();
-		let db = setup_db();
-		insert_project_and_profile(&db, &cwd.path().to_string_lossy());
-		let guard = HerdrClientGuard::new();
-		let xdg = cwd.path().join("xdg-local");
-		let herdr = herdr_adapter_for_gui_backend(
-			RuntimeBackend::Local,
-			gui_connect(
-				db.clone(),
-				&guard,
-				xdg.clone(),
-				Some(cwd.path().join("would-fail-if-ensured")),
-			),
-		);
-		assert!(herdr.recorded_ops().is_empty());
-		assert!(!xdg.join("herdr").exists());
-		let sessions = infra::pty::create_session_map();
-		let read_threads = infra::pty::create_thread_tracker();
-		let router = RuntimeRouter::with_backend(
-			RuntimeBackend::Local,
-			LocalAdapter::new(PtyContext {
-				db,
-				sessions: sessions.clone(),
-				flush_senders: create_flush_senders(),
-				read_threads: read_threads.clone(),
-				emitter: Arc::new(TestEmitter),
-				output_dir: cwd.path().to_path_buf(),
-			}),
-			herdr,
-		);
-		let created = router
-			.create_session(
-				&PtySessionMeta {
-					profile_id: "default-p1".into(),
-					title: "local".into(),
-				},
-				&PtyConfig {
-					shell: test_shell(),
-					cwd: cwd.path().to_string_lossy().into_owned(),
-					rows: 24,
-					cols: 80,
-					startup_commands: Vec::new(),
-				},
-			)
-			.unwrap();
-		assert_eq!(
-			router.owner(&created.session_id).unwrap(),
-			Some(RuntimeBackend::Local)
-		);
-		assert_eq!(sessions.lock().unwrap().len(), 1);
-		router.close_session(&created.session_id).unwrap();
-		infra::pty::close_all_sessions(&sessions);
-		infra::pty::join_all_read_threads(&read_threads);
-	}
-
-	#[test]
-	fn herdr_gui_startup_wires_sidecar_namespace_and_local_skip() {
+	fn herdr_gui_startup_wires_sidecar_without_local_fallback() {
 		let runtime = include_str!("runtime.rs");
-		let connect = runtime
+		let production = runtime.split("#[cfg(test)]").next().unwrap();
+		let connect = production
 			.split("pub fn connect_gui_herdr")
 			.nth(1)
 			.unwrap()
@@ -1201,263 +802,102 @@ mod tests {
 		assert!(connect.contains("HerdrCliAttach"));
 		assert!(connect.contains("resolve_namespace"));
 		assert!(!connect.contains("import_leftover_sqlite_profiles"));
-		assert!(!connect.contains("log_failed_import_outcomes"));
 		assert!(connect.contains("attach_runtime_sync"));
-		assert!(
-			connect.contains("HerdrRuntimeSync")
-				|| connect.contains("attach_runtime_sync")
-		);
-		let local_branch = runtime
-			.split("pub fn herdr_adapter_for_gui_backend")
-			.nth(1)
-			.unwrap()
-			.split("pub fn build_gui_runtime")
-			.next()
-			.unwrap();
-		assert!(local_branch.contains("RuntimeBackend::Local"));
-		assert!(local_branch.contains("HerdrStubAdapter::new()"));
-		assert!(!local_branch.contains("ensure_herdr_listener"));
-		assert!(!local_branch.contains("connect_gui_herdr"));
-		assert!(!local_branch.contains("import_leftover_sqlite_profiles"));
-		assert!(!local_branch.contains("attach_runtime_sync"));
-		assert!(!local_branch.contains("HerdrRuntimeSync"));
-		assert!(runtime.contains("TWOCODE_RUNTIME"));
-		assert!(runtime.contains(LOCAL_RUNTIME_FLAG));
+		assert!(!production.contains("TWOCODE_RUNTIME"));
+		assert!(!production.contains("--twocode-runtime=local"));
+		assert!(!production.contains("LocalAdapter"));
+		assert!(!production.contains("mod local"));
+		assert!(!production.contains("RuntimeBackend::Local"));
 		let bridge = include_str!("../../../src/bridge.rs");
 		assert!(bridge.contains("build_gui_runtime"));
-		assert!(!bridge.contains("RuntimeRouter::new"));
-		assert!(bridge.contains("TWOCODE_RUNTIME"));
+		assert!(!bridge.contains("TWOCODE_RUNTIME"));
+		assert!(!bridge.contains("LocalAdapter"));
+		let lib = include_str!("../../../src/lib.rs");
+		assert!(!lib.contains("HerdrRuntimeSync"));
+		assert!(!lib.contains("events.subscribe"));
+		assert!(!lib.contains("TWOCODE_RUNTIME"));
 	}
 
 	#[test]
-	fn local_create_write_resize_close_behave_as_today() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = &created.session_id;
-		assert!(!id.is_empty());
-		assert_eq!(fx.live_count(), 1);
-		assert_eq!(fx.router.owner(id).unwrap(), Some(RuntimeBackend::Local));
-		assert_eq!(
-			fx.router.ownership_of(id).unwrap().unwrap().backend,
-			RuntimeBackend::Local
-		);
-
-		fx.router.write(id, b"echo ok\n").unwrap();
-		fx.router.resize(id, 30, 100).unwrap();
-		fx.router.attach_output(id, "stream-1").unwrap();
-		fx.router.write(id, b"echo still-local\n").unwrap();
-		assert_eq!(fx.live_count(), 1);
-
-		let listed = fx.router.list_project_sessions("p1").unwrap();
-		let record = listed.iter().find(|s| s.id == *id).unwrap();
-		assert_eq!(record.cols, 100);
-		assert_eq!(record.rows, 30);
-
-		fx.router.close_session(id).unwrap();
-		assert!(!fx.sessions.lock().unwrap().contains_key(id));
-		assert_eq!(fx.router.owner(id).unwrap(), None);
-	}
-
-	#[test]
-	fn herdr_stub_selection_does_not_spawn_local_pty_or_mutate_worktree() {
-		let fx = Fixture::new(RuntimeBackend::Herdr);
-		fx.init_git_repo();
-		let marker_before =
-			std::fs::read(fx.cwd.path().join("marker")).unwrap();
-		let worktrees_before = fx.git_worktree_list();
-		let entries_before = dir_names(fx.cwd.path());
-
-		assert_eq!(fx.router.selected_backend(), RuntimeBackend::Herdr);
-		let err = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
+	fn herdr_stub_create_does_not_spawn_local_pty_or_mutate_worktree() {
+		let cwd = tempfile::tempdir().unwrap();
+		insert_project(&setup_db(), &cwd.path().to_string_lossy());
+		std::fs::write(cwd.path().join("marker"), b"keep").unwrap();
+		let _ = std::process::Command::new("git")
+			.args(["init"])
+			.current_dir(cwd.path())
+			.output();
+		let worktrees_before = String::from_utf8_lossy(
+			&std::process::Command::new("git")
+				.args(["worktree", "list", "--porcelain"])
+				.current_dir(cwd.path())
+				.output()
+				.unwrap()
+				.stdout,
+		)
+		.into_owned();
+		let marker_before = std::fs::read(cwd.path().join("marker")).unwrap();
+		let entries_before = dir_names(cwd.path());
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
+		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
+		let err = router
+			.create_session(&meta(), &config(cwd.path()))
 			.unwrap_err();
 		assert!(err.to_string().contains("Herdr runtime is not available"));
-
-		assert_eq!(fx.live_count(), 0);
-		assert!(fx.router.list_project_sessions("p1").is_err());
+		assert!(router.list_project_sessions("p1").is_err());
 		assert_eq!(
-			session_row_count(&fx),
-			0,
-			"Herdr stub must not insert a local session row"
-		);
-		assert_eq!(
-			std::fs::read(fx.cwd.path().join("marker")).unwrap(),
+			std::fs::read(cwd.path().join("marker")).unwrap(),
 			marker_before
 		);
-		assert_eq!(fx.git_worktree_list(), worktrees_before);
-		assert_eq!(dir_names(fx.cwd.path()), entries_before);
-		assert!(fx.router.herdr.recorded_ops().contains(&"create"));
-	}
-
-	#[test]
-	fn local_session_is_not_handed_to_herdr() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = created.session_id;
-
-		let err = fx
-			.router
-			.selector
-			.bind(&id, RuntimeBackend::Herdr)
-			.unwrap_err();
-		assert!(err.to_string().contains("owned by local"));
-
-		fx.router.write(&id, b"echo still-local\n").unwrap();
-		fx.router.resize(&id, 24, 80).unwrap();
-		fx.router.attach_output(&id, "stream-local").unwrap();
-		let err = fx
-			.router
-			.recv_terminal_frame(&id, "stream-local")
-			.unwrap_err();
-		assert!(err.to_string().contains("not a Herdr"), "{err}");
-		assert!(fx.router.herdr.recorded_ops().is_empty());
-		assert_eq!(fx.router.owner(&id).unwrap(), Some(RuntimeBackend::Local));
-		assert_eq!(fx.live_count(), 1);
-	}
-
-	#[test]
-	fn herdr_attach_refuses_when_local_pty_is_live() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = created.session_id;
-		fx.router.unbind_session(&id).unwrap();
-		fx.router.bind_session(&id, RuntimeBackend::Herdr).unwrap();
-		let err = fx.router.attach_output(&id, "stream-1").unwrap_err();
-		assert!(err.to_string().contains("owned by local"), "{err}");
-		assert!(err.to_string().contains("Herdr helper"), "{err}");
-		assert_eq!(fx.live_count(), 1);
-		fx.router.unbind_session(&id).unwrap();
-		fx.router.bind_session(&id, RuntimeBackend::Local).unwrap();
-		fx.router.write(&id, b"echo still-local\n").unwrap();
+		assert_eq!(
+			String::from_utf8_lossy(
+				&std::process::Command::new("git")
+					.args(["worktree", "list", "--porcelain"])
+					.current_dir(cwd.path())
+					.output()
+					.unwrap()
+					.stdout
+			)
+			.into_owned(),
+			worktrees_before
+		);
+		assert_eq!(dir_names(cwd.path()), entries_before);
+		assert!(router.herdr.recorded_ops().contains(&"create"));
 	}
 
 	#[test]
 	fn herdr_write_for_unbound_identity_does_not_spawn_local_pty() {
-		let fx = Fixture::new(RuntimeBackend::Herdr);
-		let err = fx.router.write("sess-foreign", b"x").unwrap_err();
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
+		let err = router.write("sess-foreign", b"x").unwrap_err();
 		assert!(err.to_string().contains("Herdr runtime is not available"));
-		assert_eq!(fx.live_count(), 0);
-		assert!(fx.sessions.lock().unwrap().get("sess-foreign").is_none());
-	}
-
-	fn session_row_count(fx: &Fixture) -> usize {
-		fx.router.local.list_project_sessions("p1").unwrap().len()
-	}
-
-	fn dir_names(path: &Path) -> Vec<String> {
-		let mut names: Vec<String> = std::fs::read_dir(path)
-			.unwrap()
-			.filter_map(|entry| {
-				entry
-					.ok()
-					.map(|e| e.file_name().to_string_lossy().into_owned())
-			})
-			.collect();
-		names.sort();
-		names
-	}
-
-	#[test]
-	fn restore_and_close_do_not_start_both_backends() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		std::thread::sleep(Duration::from_millis(50));
-		let restored = fx
-			.router
-			.restore_session(
-				&created.session_id,
-				&Fixture::meta(),
-				&fx.config(),
-			)
-			.unwrap();
-		assert_ne!(restored.new_session_id, created.session_id);
-		assert_eq!(fx.router.owner(&created.session_id).unwrap(), None);
-		assert_eq!(
-			fx.router.owner(&restored.new_session_id).unwrap(),
-			Some(RuntimeBackend::Local)
-		);
-		assert!(fx.router.herdr.recorded_ops().is_empty());
-		fx.router.close_session(&restored.new_session_id).unwrap();
-		assert!(fx.router.herdr.recorded_ops().is_empty());
 	}
 
 	#[test]
 	fn herdr_pane_id_is_not_restored_as_local() {
-		let fx = Fixture::new(RuntimeBackend::Local);
+		let cwd = tempfile::tempdir().unwrap();
+		let router = RuntimeRouter::new(HerdrStubAdapter::new());
 		assert_eq!(
-			fx.router.backend_for("w1:p1").unwrap(),
+			router.backend_for("w1:p1").unwrap(),
 			RuntimeBackend::Herdr
 		);
-		assert_eq!(fx.router.owner("w1:p1").unwrap(), None);
-		let live_before = fx.live_count();
-		let err = fx
-			.router
-			.restore_session("w1:p1", &Fixture::meta(), &fx.config())
+		assert_eq!(router.owner("w1:p1").unwrap(), None);
+		let err = router
+			.restore_session("w1:p1", &meta(), &config(cwd.path()))
 			.map(|_| ())
 			.unwrap_err();
 		assert!(
 			err.to_string().contains("Herdr runtime is not available"),
 			"{err}"
 		);
-		assert_eq!(fx.live_count(), live_before);
-		assert!(fx.sessions.lock().unwrap().get("w1:p1").is_none());
-		assert!(fx.router.herdr.recorded_ops().contains(&"restore"));
-		let listed = fx.router.list_project_sessions("p1").unwrap();
-		assert!(listed.iter().all(|session| session.id != "w1:p1"));
+		assert!(router.herdr.recorded_ops().contains(&"restore"));
 	}
 
 	#[test]
-	fn unmapped_local_sessions_still_list_for_restore() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let listed = fx.router.list_project_sessions("p1").unwrap();
-		assert!(listed
-			.iter()
-			.any(|session| session.id == created.session_id));
-		assert!(listed.iter().all(|session| session.id != "w1:p1"));
-	}
-
-	#[test]
-	fn local_startup_does_not_ensure_herdr_and_errors_stay_distinct() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		assert_eq!(fx.router.selected_backend(), RuntimeBackend::Local);
+	fn herdr_errors_stay_distinct() {
 		assert_eq!(SESSION_NAME, "2code");
 		assert_ne!(SESSION_NAME, "default");
 		let guard = HerdrClientGuard::new();
 		release_herdr_client_helpers(&guard);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		assert_eq!(
-			fx.router.owner(&created.session_id).unwrap(),
-			Some(RuntimeBackend::Local)
-		);
-		assert_eq!(fx.live_count(), 1);
-		assert!(fx.router.herdr.recorded_ops().is_empty());
-		assert!(fx
-			.router
-			.session_agent_status(&created.session_id)
-			.unwrap()
-			.is_none());
-		assert!(fx.router.herdr.recorded_ops().is_empty());
-
 		let absent =
 			AppError::from(infra::herdr::process::HerdrProcessError::Absent {
 				socket: PathBuf::from("/tmp/2code.sock"),
@@ -1521,48 +961,26 @@ mod tests {
 			!lib.contains("runtime_adoption"),
 			"GUI setup must not call runtime_adoption from lib.rs"
 		);
+		assert!(
+			!lib.contains("LocalAdapter"),
+			"lib.rs must not construct a Local adapter"
+		);
 	}
 
 	#[test]
-	fn teardown_router_local_session_unbinds_and_kills_pty() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = created.session_id;
-		fx.router.teardown_session(&id).unwrap();
-		assert_eq!(fx.router.owner(&id).unwrap(), None);
-		assert_eq!(fx.live_count(), 0);
-	}
-
-	#[test]
-	fn teardown_refuses_unbound_live_local_pty() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = created.session_id;
-		fx.router.selector.unbind(&id).unwrap();
-		let err = fx.router.teardown_session(&id).unwrap_err();
-		assert!(err.to_string().contains("unbound"));
-		assert_eq!(fx.live_count(), 1);
-	}
-
-	#[test]
-	fn teardown_refuses_to_kill_local_pty_for_herdr_owned_id() {
-		let fx = Fixture::new(RuntimeBackend::Local);
-		let created = fx
-			.router
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		let id = created.session_id;
-		fx.router.selector.unbind(&id).unwrap();
-		fx.router.bind_session(&id, RuntimeBackend::Herdr).unwrap();
-		let err = fx.router.teardown_session(&id).unwrap_err();
-		assert!(err.to_string().contains("Herdr-owned"));
-		assert_eq!(fx.live_count(), 1);
-		assert_eq!(fx.router.owner(&id).unwrap(), Some(RuntimeBackend::Herdr));
+	fn production_source_has_no_local_pty_runtime() {
+		let runtime = include_str!("runtime.rs");
+		let production = runtime.split("#[cfg(test)]").next().unwrap();
+		assert!(!production.contains("LocalAdapter"));
+		assert!(!production.contains("TWOCODE_RUNTIME"));
+		assert!(!production.contains("--twocode-runtime"));
+		assert!(!production.contains("native_pty_system"));
+		assert!(!production.contains("INSERT INTO pty_sessions"));
+		let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+			.join("src/runtime/local.rs");
+		assert!(
+			!local_path.exists(),
+			"LocalAdapter module must be deleted"
+		);
 	}
 }

@@ -200,8 +200,7 @@ fn sidebar_timestamp() -> String {
 mod tests {
 	use super::*;
 	use crate::test_utils::setup_db;
-	use model::pty::NewPtySessionRecord;
-	use model::schema::{project_groups, pty_sessions};
+	use model::schema::project_groups;
 
 	#[test]
 	fn insert_and_fetch() {
@@ -335,33 +334,5 @@ mod tests {
 
 		let project = find_by_id(&mut conn, "p1").unwrap();
 		assert_eq!(project.group_id, None);
-	}
-
-	#[test]
-	fn cascade_delete_removes_sessions() {
-		let mut conn = setup_db();
-		insert(&mut conn, "p1", "Cascade", "/c").unwrap();
-
-		diesel::insert_into(pty_sessions::table)
-			.values(&NewPtySessionRecord {
-				id: "s1",
-				project_id: "p1",
-				profile_id: "default-p1",
-				title: "bash",
-				shell: "/bin/bash",
-				cwd: "/c",
-				cols: 80,
-				rows: 24,
-			})
-			.execute(&mut conn)
-			.unwrap();
-
-		delete(&mut conn, "p1").unwrap();
-
-		let sessions: Vec<String> = pty_sessions::table
-			.select(pty_sessions::id)
-			.load(&mut conn)
-			.unwrap();
-		assert!(sessions.is_empty());
 	}
 }

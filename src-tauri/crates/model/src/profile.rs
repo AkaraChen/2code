@@ -10,21 +10,11 @@ pub struct Profile {
 	pub id: String,
 	pub project_id: String,
 	pub branch_name: String,
-	/// Live checkout path (Herdr cwd or Local `projects.folder`).
+	/// Live checkout path (Herdr cwd / worktree path).
 	pub worktree_path: String,
 	pub created_at: String,
 	pub is_default: bool,
 	pub notes: String,
-}
-
-impl Profile {
-	pub fn local_default_id(project_id: &str) -> String {
-		format!("default-{project_id}")
-	}
-
-	pub fn project_id_from_local_default(profile_id: &str) -> Option<&str> {
-		profile_id.strip_prefix("default-")
-	}
 }
 
 /// Notes for one project checkout path. Not stored in Herdr.
