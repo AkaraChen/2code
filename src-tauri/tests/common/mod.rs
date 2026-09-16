@@ -1,13 +1,28 @@
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use diesel_migrations::MigrationHarness;
 
-use infra::db::MIGRATIONS;
+use infra::db::{DbPool, MIGRATIONS};
 use infra::no_window::command_without_windows_console;
 use model::profile::Profile;
 use model::project::Project;
+use model::runtime::RuntimeBackend;
+use service::pty::{create_flush_senders, PtyContext};
+use service::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
+use service::PtyEventEmitter;
+
+struct TestEmitter;
+
+impl PtyEventEmitter for TestEmitter {
+	fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
+		true
+	}
+
+	fn emit_exit(&self, _session_id: &str) {}
+}
 
 /// Create an in-memory SQLite connection with migrations and foreign keys enabled.
 pub fn setup_db() -> SqliteConnection {
@@ -19,6 +34,37 @@ pub fn setup_db() -> SqliteConnection {
 	conn.run_pending_migrations(MIGRATIONS)
 		.expect("run migrations");
 	conn
+}
+
+pub fn pool_from(conn: SqliteConnection) -> DbPool {
+	Arc::new(Mutex::new(conn))
+}
+
+/// Local-flag runtime over the given sqlite pool. Git/FS tests that still
+/// cover nested sqlite profiles use this; Herdr-selected leftover rows
+/// cannot win through these helpers.
+pub fn local_runtime(db: &DbPool) -> RuntimeRouter {
+	let logs = std::env::temp_dir().join("2code-integ-local-runtime");
+	std::fs::create_dir_all(&logs).ok();
+	let ctx = PtyContext {
+		db: db.clone(),
+		sessions: infra::pty::create_session_map(),
+		flush_senders: create_flush_senders(),
+		read_threads: infra::pty::create_thread_tracker(),
+		emitter: Arc::new(TestEmitter),
+		output_dir: logs,
+	};
+	RuntimeRouter::with_backend(
+		RuntimeBackend::Local,
+		LocalAdapter::new(ctx),
+		HerdrStubAdapter::new(),
+	)
+}
+
+pub fn local_from(conn: SqliteConnection) -> (RuntimeRouter, DbPool) {
+	let db = pool_from(conn);
+	let runtime = local_runtime(&db);
+	(runtime, db)
 }
 
 /// Create a temporary git repository with user config set.

@@ -695,59 +695,58 @@ pub fn get_branch_for_profile(
 }
 
 pub fn get_diff(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::diff(&profile.worktree_path)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::diff(&worktree_path)
 }
 
 pub fn get_diff_stats(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<GitDiffStats, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::diff_stats(&profile.worktree_path)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::diff_stats(&worktree_path)
 }
 
 pub fn get_log(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	limit: u32,
 ) -> Result<Vec<GitCommit>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::log(&profile.worktree_path, limit)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::log(&worktree_path, limit)
 }
 
 pub fn get_commit_diff(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	commit_hash: &str,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::show(&profile.worktree_path, commit_hash)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::show(&worktree_path, commit_hash)
 }
 
 pub fn get_binary_preview(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	cache_root: &Path,
 	path: &str,
 	source: &str,
 	commit_hash: Option<&str>,
 ) -> Result<Option<GitBinaryPreview>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
 	let file_path = match source {
-		"working_tree" => infra::git::read_worktree_file(
-			&profile.worktree_path,
-			cache_root,
-			path,
-		)?,
-		"head" => infra::git::read_head_file(
-			&profile.worktree_path,
-			cache_root,
-			path,
-		)?,
+		"working_tree" => {
+			infra::git::read_worktree_file(&worktree_path, cache_root, path)?
+		}
+		"head" => infra::git::read_head_file(&worktree_path, cache_root, path)?,
 		"commit" => {
 			let commit_hash = commit_hash.ok_or_else(|| {
 				AppError::GitError(
@@ -755,7 +754,7 @@ pub fn get_binary_preview(
 				)
 			})?;
 			infra::git::read_commit_file(
-				&profile.worktree_path,
+				&worktree_path,
 				cache_root,
 				commit_hash,
 				path,
@@ -768,7 +767,7 @@ pub fn get_binary_preview(
 				)
 			})?;
 			infra::git::read_parent_commit_file(
-				&profile.worktree_path,
+				&worktree_path,
 				cache_root,
 				commit_hash,
 				path,
@@ -785,39 +784,43 @@ pub fn get_binary_preview(
 }
 
 pub fn commit_changes(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	files: &[String],
 	message: &str,
 	body: Option<&str>,
 ) -> Result<String, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::commit(&profile.worktree_path, files, message, body)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::commit(&worktree_path, files, message, body)
 }
 
 pub fn discard_file_changes(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 	paths: &[String],
 ) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::discard_changes(&profile.worktree_path, paths)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::discard_changes(&worktree_path, paths)
 }
 
 pub fn get_ahead_count(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<u32, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	Ok(infra::git::ahead_count(&profile.worktree_path))
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	Ok(infra::git::ahead_count(&worktree_path))
 }
 
 pub fn push(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	profile_id: &str,
 ) -> Result<(), AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::push(&profile.worktree_path)
+	let worktree_path = reconcile_profile_checkout(runtime, db, profile_id)?;
+	infra::git::push(&worktree_path)
 }
 
 pub fn get_pull_request_status_for_folder(
@@ -1180,6 +1183,58 @@ mod tests {
 			workspace_id: workspace_id.map(str::to_string),
 			is_linked_worktree,
 		}
+	}
+
+	fn git(dir: &Path, args: &[&str]) {
+		let output = infra::no_window::command_without_windows_console("git")
+			.args(args)
+			.current_dir(dir)
+			.output()
+			.expect("git");
+		assert!(
+			output.status.success(),
+			"git {args:?} failed: {}",
+			String::from_utf8_lossy(&output.stderr)
+		);
+	}
+
+	fn init_git_repo(file: &str, content: &str) -> tempfile::TempDir {
+		let dir = tempfile::tempdir().expect("tempdir");
+		git(dir.path(), &["init"]);
+		git(dir.path(), &["config", "user.email", "test@test.com"]);
+		git(dir.path(), &["config", "user.name", "Test User"]);
+		std::fs::write(dir.path().join(file), content).expect("write");
+		git(dir.path(), &["add", file]);
+		git(dir.path(), &["commit", "-m", "init"]);
+		dir
+	}
+
+	fn leftover_git_helper_bodies(src: &str) -> Vec<(&'static str, String)> {
+		const NAMES: &[&str] = &[
+			"pub fn get_diff(",
+			"pub fn get_diff_stats(",
+			"pub fn get_log(",
+			"pub fn get_commit_diff(",
+			"pub fn get_binary_preview(",
+			"pub fn commit_changes(",
+			"pub fn discard_file_changes(",
+			"pub fn get_ahead_count(",
+			"pub fn push(",
+		];
+		NAMES
+			.iter()
+			.map(|name| {
+				let body = src
+					.split(name)
+					.nth(1)
+					.unwrap_or_else(|| panic!("missing {name}"))
+					.split("\npub fn ")
+					.next()
+					.unwrap()
+					.to_string();
+				(*name, body)
+			})
+			.collect()
 	}
 
 	#[test]
@@ -1818,5 +1873,242 @@ mod tests {
 			runtime.selected_backend(),
 			model::runtime::RuntimeBackend::Herdr
 		);
+	}
+
+	#[test]
+	fn leftover_git_helpers_reconcile_instead_of_sqlite_find() {
+		let src = include_str!("project.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		for (name, body) in leftover_git_helper_bodies(src) {
+			assert!(
+				body.contains("reconcile_profile_checkout"),
+				"{name} must use live reconcile"
+			);
+			assert!(
+				!body.contains("find_by_id"),
+				"{name} must not sqlite-resolve checkout"
+			);
+		}
+		let avatar = src
+			.split("pub fn get_github_avatar")
+			.nth(1)
+			.unwrap()
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(avatar.contains("project.folder"));
+		assert!(!avatar.contains("worktree_path"));
+	}
+
+	#[test]
+	fn herdr_git_helpers_use_listed_checkout_not_sqlite_stale() {
+		let listed_repo = init_git_repo("listed.txt", "listed-clean\n");
+		let stale_repo = init_git_repo("stale.txt", "stale-clean\n");
+		std::fs::write(listed_repo.path().join("listed.txt"), "listed-dirty\n")
+			.expect("dirty listed");
+		std::fs::write(stale_repo.path().join("stale.txt"), "stale-dirty\n")
+			.expect("dirty stale");
+		let listed_path = listed_repo.path().to_string_lossy().into_owned();
+		let stale_path = stale_repo.path().to_string_lossy().into_owned();
+
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, &listed_path, &stale_path);
+		let db = pool_from(conn);
+		let fake =
+			FakeList::new(vec![listed(&listed_path, Some("w1"), Some("main"))]);
+		let runtime = herdr_router(&db, Some(fake));
+
+		let diff = get_diff(&runtime, &db, "w1").expect("listed diff");
+		assert!(diff.contains("listed.txt"), "{diff}");
+		assert!(diff.contains("listed-dirty"), "{diff}");
+		assert!(!diff.contains("stale.txt"), "{diff}");
+		assert!(!diff.contains("stale-dirty"), "{diff}");
+
+		let stats = get_diff_stats(&runtime, &db, "w1").expect("stats");
+		assert_eq!(stats.files_changed, 1);
+
+		let log = get_log(&runtime, &db, "w1", 5).expect("log");
+		assert_eq!(log.len(), 1);
+		assert_eq!(log[0].message, "init");
+
+		let hash = log[0].full_hash.clone();
+		let show = get_commit_diff(&runtime, &db, "w1", &hash).expect("show");
+		assert!(show.contains("listed.txt"), "{show}");
+		assert!(!show.contains("stale.txt"), "{show}");
+
+		assert_eq!(get_ahead_count(&runtime, &db, "w1").expect("ahead"), 0);
+
+		commit_changes(
+			&runtime,
+			&db,
+			"w1",
+			&["listed.txt".into()],
+			"from herdr",
+			None,
+		)
+		.expect("commit listed");
+		let after = get_diff(&runtime, &db, "w1").expect("committed listed");
+		assert!(!after.contains("listed-dirty"), "{after}");
+		std::fs::write(listed_repo.path().join("listed.txt"), "listed-again\n")
+			.expect("dirty listed again");
+		discard_file_changes(&runtime, &db, "w1", &["listed.txt".into()])
+			.expect("discard listed");
+		let discarded =
+			get_diff(&runtime, &db, "w1").expect("discarded listed");
+		assert!(!discarded.contains("listed-again"), "{discarded}");
+		let stale_diff =
+			infra::git::diff(&stale_path).expect("stale untouched");
+		assert!(stale_diff.contains("stale-dirty"), "{stale_diff}");
+
+		let sqlite_id = "prof-1";
+		let err = get_diff(&runtime, &db, sqlite_id).expect_err("sqlite uuid");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+
+		std::fs::write(listed_repo.path().join("listed-only.rs"), "listed")
+			.expect("listed search file");
+		std::fs::write(stale_repo.path().join("stale-only.rs"), "stale")
+			.expect("stale search file");
+		let found = crate::filesystem::search_file_for_profile(
+			&runtime,
+			&db,
+			"w1",
+			"listed-only",
+		)
+		.expect("live search");
+		assert_eq!(found.len(), 1);
+		assert_eq!(found[0].name, "listed-only.rs");
+		assert!(crate::filesystem::search_file_for_profile(
+			&runtime,
+			&db,
+			"w1",
+			"stale-only",
+		)
+		.expect("no stale")
+		.is_empty());
+		let status = crate::filesystem::get_file_tree_git_status_for_profile(
+			&runtime, &db, "w1",
+		)
+		.expect("live status");
+		assert!(status
+			.iter()
+			.any(|entry| entry.path.contains("listed-only.rs")));
+		assert!(status
+			.iter()
+			.all(|entry| !entry.path.contains("stale-only.rs")));
+	}
+
+	#[test]
+	fn herdr_git_helpers_fail_closed_when_unknown_or_down() {
+		let listed_repo = init_git_repo("listed.txt", "listed\n");
+		let stale_repo = init_git_repo("stale.txt", "stale\n");
+		std::fs::write(stale_repo.path().join("stale.txt"), "stale-dirty\n")
+			.expect("dirty stale");
+		let listed_path = listed_repo.path().to_string_lossy().into_owned();
+		let stale_path = stale_repo.path().to_string_lossy().into_owned();
+
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, &listed_path, &stale_path);
+		let db = pool_from(conn);
+		let fake =
+			FakeList::new(vec![listed(&listed_path, Some("w1"), Some("main"))]);
+		let runtime = herdr_router(&db, Some(fake));
+
+		let err = get_diff(&runtime, &db, "w-missing").expect_err("unknown");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+
+		let down = herdr_router(&db, None);
+		let err = get_diff(&down, &db, "w1").expect_err("herdr down");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+		let stale_diff = infra::git::diff(&stale_path).expect("stale exists");
+		assert!(stale_diff.contains("stale-dirty"), "{stale_diff}");
+		let err = crate::filesystem::search_file_for_profile(
+			&down, &db, "w1", "main",
+		)
+		.expect_err("search herdr down");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+	}
+
+	#[test]
+	fn local_git_helpers_keep_sqlite_nested_path() {
+		let listed_repo = init_git_repo("listed.txt", "listed-clean\n");
+		let stale_repo = init_git_repo("stale.txt", "stale-clean\n");
+		std::fs::write(listed_repo.path().join("listed.txt"), "listed-dirty\n")
+			.expect("dirty listed");
+		std::fs::write(stale_repo.path().join("stale.txt"), "stale-dirty\n")
+			.expect("dirty stale");
+		let listed_path = listed_repo.path().to_string_lossy().into_owned();
+		let stale_path = stale_repo.path().to_string_lossy().into_owned();
+
+		let mut conn = setup_db();
+		let (_project_id, profile_id) =
+			insert_catalog(&mut conn, &listed_path, &stale_path);
+		let db = pool_from(conn);
+		let runtime = local_router(&db, None);
+
+		let diff =
+			get_diff(&runtime, &db, &profile_id).expect("sqlite local diff");
+		assert!(diff.contains("stale.txt"), "{diff}");
+		assert!(diff.contains("stale-dirty"), "{diff}");
+		assert!(!diff.contains("listed.txt"), "{diff}");
+	}
+
+	#[test]
+	fn herdr_watcher_targets_omit_leftover_sqlite_stale() {
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, "/repo", "/stale");
+		let db = pool_from(conn);
+		let fake = FakeList::new(vec![
+			primary("/repo", Some("w1"), Some("main")),
+			listed("/listed", Some("w2"), Some("feat")),
+		]);
+		let runtime = herdr_router(&db, Some(fake));
+
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		let targets = crate::watcher::watcher_targets(&listed);
+
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/repo"
+				&& target.profile_id.as_deref() == Some("w1")
+		}));
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/listed"
+				&& target.profile_id.as_deref() == Some("w2")
+		}));
+		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
+	}
+
+	#[test]
+	fn herdr_empty_watcher_targets_fall_back_to_project_folder() {
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, "/repo", "/stale");
+		let db = pool_from(conn);
+		let runtime = herdr_router(&db, None);
+
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		assert!(listed[0].profiles.is_empty());
+		let targets = crate::watcher::watcher_targets(&listed);
+
+		assert_eq!(targets.len(), 1);
+		assert_eq!(targets[0].root_path, "/repo");
+		assert_eq!(targets[0].profile_id, None);
+		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
+	}
+
+	#[test]
+	fn local_watcher_targets_keep_sqlite_nested_paths() {
+		let mut conn = setup_db();
+		insert_catalog(&mut conn, "/repo", "/stale");
+		let db = pool_from(conn);
+		let runtime = local_router(&db, None);
+
+		let listed = list_with_runtime(&runtime, &db).expect("list");
+		let targets = crate::watcher::watcher_targets(&listed);
+
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/stale"
+				&& target.profile_id.as_deref() == Some("prof-1")
+		}));
 	}
 }

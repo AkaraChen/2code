@@ -1423,19 +1423,18 @@ pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 }
 
 pub fn delete_check(
-	conn: &mut SqliteConnection,
+	runtime: &RuntimeRouter,
+	db: &DbPool,
 	id: &str,
 ) -> Result<ProfileDeleteCheck, AppError> {
-	let profile = repo::profile::find_by_id(conn, id)?;
-	let working_tree_diff = infra::git::diff_stats(&profile.worktree_path)?;
-	let unpushed_commits = infra::git::branch_unique_commits(
-		&profile.worktree_path,
-		&profile.branch_name,
-	)?;
-	let unpushed_commit_diff = infra::git::commit_diff_stats(
-		&profile.worktree_path,
-		&unpushed_commits,
-	)?;
+	let worktree_path =
+		crate::project::reconcile_profile_checkout(runtime, db, id)?;
+	let branch_name = infra::git::branch(&worktree_path).unwrap_or_default();
+	let working_tree_diff = infra::git::diff_stats(&worktree_path)?;
+	let unpushed_commits =
+		infra::git::branch_unique_commits(&worktree_path, &branch_name)?;
+	let unpushed_commit_diff =
+		infra::git::commit_diff_stats(&worktree_path, &unpushed_commits)?;
 
 	Ok(ProfileDeleteCheck {
 		total_diff: add_diff_stats(&working_tree_diff, &unpushed_commit_diff),
@@ -3574,5 +3573,114 @@ mod tests {
 			before
 		);
 		assert!(repo::profile::find_by_id(conn, "w2").is_err());
+	}
+
+	#[test]
+	fn delete_check_reconciles_instead_of_sqlite_find() {
+		let src = include_str!("profile.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		let body = src
+			.split("pub fn delete_check(")
+			.nth(1)
+			.unwrap()
+			.split("fn add_diff_stats")
+			.next()
+			.unwrap();
+		assert!(body.contains("reconcile_profile_checkout"));
+		assert!(!body.contains("find_by_id"));
+		let handler = include_str!("../../../src/handler/profile.rs");
+		let check = handler
+			.split("pub async fn get_profile_delete_check")
+			.nth(1)
+			.unwrap()
+			.split("pub async fn update_profile_notes")
+			.next()
+			.unwrap();
+		assert!(check.contains("delete_check"));
+		assert!(!check.contains("find_by_id"));
+	}
+
+	#[test]
+	fn herdr_delete_check_uses_listed_checkout_not_sqlite_stale() {
+		let mut conn = setup_db();
+		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
+		let stale_dir = create_temp_git_repo();
+		let listed_path = listed_dir.path().to_string_lossy().into_owned();
+		let stale_path = stale_dir.path().to_string_lossy().into_owned();
+		let default_id = repo::profile::list_by_project(&mut conn, &project.id)
+			.unwrap()
+			.into_iter()
+			.find(|profile| profile.is_default)
+			.unwrap()
+			.id;
+		repo::profile::insert(
+			&mut conn,
+			"leftover",
+			&project.id,
+			"stale",
+			&stale_path,
+		)
+		.unwrap();
+		std::fs::write(
+			listed_dir.path().join("listed-only.txt"),
+			"listed dirty",
+		)
+		.unwrap();
+		std::fs::write(stale_dir.path().join("stale-only.txt"), "stale dirty")
+			.unwrap();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: listed_path,
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let check = delete_check(&router, &db, "w1").expect("live check");
+		assert_eq!(check.working_tree_diff.files_changed, 1);
+
+		let err = delete_check(&router, &db, &default_id)
+			.expect_err("sqlite default id");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+		let err = delete_check(&router, &db, "leftover").expect_err("stale id");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+		let err = delete_check(&router, &db, "w-missing").expect_err("unknown");
+		assert!(matches!(err, AppError::NotFound(_)), "{err}");
+	}
+
+	#[test]
+	fn local_delete_check_keeps_sqlite_nested_path() {
+		let mut conn = setup_db();
+		let (project, listed_dir) = create_project_with_git_repo(&mut conn);
+		let stale_dir = create_temp_git_repo();
+		let stale_path = stale_dir.path().to_string_lossy().into_owned();
+		let leftover = repo::profile::insert(
+			&mut conn,
+			"leftover",
+			&project.id,
+			"stale",
+			&stale_path,
+		)
+		.unwrap();
+		std::fs::write(
+			listed_dir.path().join("listed-only.txt"),
+			"listed dirty",
+		)
+		.unwrap();
+		std::fs::write(stale_dir.path().join("stale-only.txt"), "stale dirty")
+			.unwrap();
+		let db = pool_from(conn);
+		let router = local_router(&db, FakeWorktrees::new());
+
+		let check =
+			delete_check(&router, &db, &leftover.id).expect("sqlite check");
+		assert_eq!(check.working_tree_diff.files_changed, 1);
 	}
 }

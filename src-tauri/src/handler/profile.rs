@@ -3,16 +3,7 @@ use tauri::State;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
-use model::project::GitDiffStats;
 use service::runtime::RuntimeHandle;
-
-fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
-	GitDiffStats {
-		files_changed: left.files_changed + right.files_changed,
-		insertions: left.insertions + right.insertions,
-		deletions: left.deletions + right.deletions,
-	}
-}
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
@@ -62,25 +53,7 @@ pub async fn get_profile_delete_check(
 	let runtime = runtime.inner().clone();
 	let db = state.inner().clone();
 	super::run_blocking(move || {
-		let worktree_path =
-			service::project::reconcile_profile_checkout(&runtime, &db, &id)?;
-		let branch_name =
-			infra::git::branch(&worktree_path).unwrap_or_default();
-		let working_tree_diff = infra::git::diff_stats(&worktree_path)?;
-		let unpushed_commits =
-			infra::git::branch_unique_commits(&worktree_path, &branch_name)?;
-		let unpushed_commit_diff =
-			infra::git::commit_diff_stats(&worktree_path, &unpushed_commits)?;
-
-		Ok(ProfileDeleteCheck {
-			total_diff: add_diff_stats(
-				&working_tree_diff,
-				&unpushed_commit_diff,
-			),
-			working_tree_diff,
-			unpushed_commit_count: unpushed_commits.len() as u32,
-			unpushed_commit_diff,
-		})
+		service::profile::delete_check(&runtime, &db, &id)
 	})
 	.await
 }
@@ -103,7 +76,18 @@ pub async fn update_profile_notes(
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+	use model::project::GitDiffStats;
+
+	fn add_diff_stats(
+		left: &GitDiffStats,
+		right: &GitDiffStats,
+	) -> GitDiffStats {
+		GitDiffStats {
+			files_changed: left.files_changed + right.files_changed,
+			insertions: left.insertions + right.insertions,
+			deletions: left.deletions + right.deletions,
+		}
+	}
 
 	#[test]
 	fn add_diff_stats_sums_fields() {

@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use diesel::SqliteConnection;
 use infra::db::DbPool;
 use model::error::AppError;
 use model::filesystem::{
@@ -8,16 +7,6 @@ use model::filesystem::{
 };
 
 use crate::runtime::RuntimeRouter;
-
-pub fn search_file(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-	query: &str,
-) -> Result<Vec<FileSearchResult>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	let root = std::path::Path::new(&profile.worktree_path);
-	infra::filesystem::search_files(root, query)
-}
 
 pub fn search_file_for_profile(
 	runtime: &RuntimeRouter,
@@ -27,14 +16,6 @@ pub fn search_file_for_profile(
 ) -> Result<Vec<FileSearchResult>, AppError> {
 	let root = get_profile_worktree_path(runtime, db, profile_id)?;
 	infra::filesystem::search_files(&root, query)
-}
-
-pub fn get_file_tree_git_status(
-	conn: &mut SqliteConnection,
-	profile_id: &str,
-) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
-	let profile = repo::profile::find_by_id(conn, profile_id)?;
-	infra::git::status(&profile.worktree_path)
 }
 
 pub fn get_file_tree_git_status_for_profile(
@@ -282,12 +263,29 @@ pub fn resolve_terminal_file_path(
 
 #[cfg(test)]
 mod tests {
+	use std::sync::{Arc, Mutex};
+
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
+	use infra::db::DbPool;
 	use model::error::AppError;
+	use model::runtime::RuntimeBackend;
 	use tempfile::tempdir;
 
-	use super::search_file;
+	use super::*;
+	use crate::pty::{create_flush_senders, PtyContext};
+	use crate::runtime::{HerdrStubAdapter, LocalAdapter, RuntimeRouter};
+	use crate::PtyEventEmitter;
+
+	struct TestEmitter;
+
+	impl PtyEventEmitter for TestEmitter {
+		fn emit_output(&self, _session_id: &str, _bytes: &[u8]) -> bool {
+			true
+		}
+
+		fn emit_exit(&self, _session_id: &str) {}
+	}
 
 	fn setup_db() -> SqliteConnection {
 		let mut conn =
@@ -295,6 +293,28 @@ mod tests {
 		conn.run_pending_migrations(infra::db::MIGRATIONS)
 			.expect("run migrations");
 		conn
+	}
+
+	fn pool_from(conn: SqliteConnection) -> DbPool {
+		Arc::new(Mutex::new(conn))
+	}
+
+	fn local_router(db: &DbPool) -> RuntimeRouter {
+		let logs = std::env::temp_dir().join("2code-fs-runtime-logs");
+		std::fs::create_dir_all(&logs).ok();
+		let ctx = PtyContext {
+			db: db.clone(),
+			sessions: infra::pty::create_session_map(),
+			flush_senders: create_flush_senders(),
+			read_threads: infra::pty::create_thread_tracker(),
+			emitter: Arc::new(TestEmitter),
+			output_dir: logs,
+		};
+		RuntimeRouter::with_backend(
+			RuntimeBackend::Local,
+			LocalAdapter::new(ctx),
+			HerdrStubAdapter::new(),
+		)
 	}
 
 	fn insert_profile(
@@ -315,7 +335,21 @@ mod tests {
 	}
 
 	#[test]
-	fn search_file_uses_the_profiles_worktree() {
+	fn sqlite_search_helpers_are_gone() {
+		let src = include_str!("filesystem.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.unwrap();
+		assert!(!src.contains("pub fn search_file("));
+		assert!(!src.contains("pub fn get_file_tree_git_status("));
+		assert!(src.contains("search_file_for_profile"));
+		assert!(src.contains("get_file_tree_git_status_for_profile"));
+		assert!(src.contains("reconcile_profile_checkout"));
+		assert!(!src.contains("find_by_id"));
+	}
+
+	#[test]
+	fn search_file_for_profile_uses_local_sqlite_worktree() {
 		let dir = tempdir().expect("tempdir");
 		std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
 		std::fs::write(dir.path().join("src/main.rs"), "fn main() {}")
@@ -326,9 +360,12 @@ mod tests {
 		let mut conn = setup_db();
 		let profile_id =
 			insert_profile(&mut conn, &dir.path().to_string_lossy());
+		let db = pool_from(conn);
+		let runtime = local_router(&db);
 
 		let results =
-			search_file(&mut conn, &profile_id, "main").expect("search files");
+			search_file_for_profile(&runtime, &db, &profile_id, "main")
+				.expect("search files");
 
 		assert_eq!(results.len(), 1);
 		assert_eq!(results[0].name, "main.rs");
@@ -336,10 +373,12 @@ mod tests {
 	}
 
 	#[test]
-	fn search_file_returns_a_not_found_error_for_unknown_profiles() {
-		let mut conn = setup_db();
+	fn search_file_for_profile_returns_not_found_for_unknown_local_profiles() {
+		let db = pool_from(setup_db());
+		let runtime = local_router(&db);
 
-		let result = search_file(&mut conn, "missing-profile", "main");
+		let result =
+			search_file_for_profile(&runtime, &db, "missing-profile", "main");
 
 		assert!(matches!(result, Err(AppError::NotFound(_))));
 	}

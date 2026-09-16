@@ -25,11 +25,11 @@ struct ProjectWatcher {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct WatchTarget {
-	key: String,
-	project_id: String,
-	profile_id: Option<String>,
-	root_path: String,
+pub(crate) struct WatchTarget {
+	pub(crate) key: String,
+	pub(crate) project_id: String,
+	pub(crate) profile_id: Option<String>,
+	pub(crate) root_path: String,
 }
 
 pub fn start(
@@ -174,7 +174,9 @@ fn reconcile_watchers(
 	}
 }
 
-fn watcher_targets(projects: &[ProjectWithProfiles]) -> Vec<WatchTarget> {
+pub(crate) fn watcher_targets(
+	projects: &[ProjectWithProfiles],
+) -> Vec<WatchTarget> {
 	let mut targets = Vec::new();
 
 	for project in projects {
@@ -350,7 +352,7 @@ mod tests {
 		let listed = vec![project_with_profiles(
 			"project-1",
 			"/repo",
-			vec![profile("profile-1", "project-1", "/listed", false)],
+			vec![profile("w1", "project-1", "/listed", false)],
 		)];
 
 		let old = watcher_targets(&stale);
@@ -358,7 +360,29 @@ mod tests {
 
 		assert_ne!(old[0].key, new[0].key);
 		assert_eq!(new[0].root_path, "/listed");
-		assert_eq!(new[0].profile_id.as_deref(), Some("profile-1"));
+		assert_eq!(new[0].profile_id.as_deref(), Some("w1"));
+		assert!(!new.iter().any(|target| target.root_path == "/stale"));
+	}
+
+	#[test]
+	fn watcher_targets_omit_unlisted_leftover_sqlite_stale() {
+		let projects = vec![project_with_profiles(
+			"project-1",
+			"/repo",
+			vec![profile("w1", "project-1", "/listed", false)],
+		)];
+
+		let targets = watcher_targets(&projects);
+
+		assert_eq!(targets.len(), 2);
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/listed"
+				&& target.profile_id.as_deref() == Some("w1")
+		}));
+		assert!(targets.iter().any(|target| {
+			target.root_path == "/repo" && target.profile_id.is_none()
+		}));
+		assert!(!targets.iter().any(|target| target.root_path == "/stale"));
 	}
 
 	#[test]
