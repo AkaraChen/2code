@@ -1,7 +1,7 @@
 # AGENTS.md — src/features/git
 
 ## OVERVIEW
-Git diff viewer, commit history browser, and top bar with branch display. Uses context ID resolution to work with both projects and profiles.
+Git diff viewer, commit history browser, and top bar with branch display. Checkout paths come from live Herdr cwd (`profileId` = `workspace_id`).
 
 ## FILES
 | File | Role |
@@ -20,14 +20,14 @@ Git diff viewer, commit history browser, and top bar with branch display. Uses c
 
 ## KEY PATTERNS
 
-**Context ID**: All git commands accept `contextId` — either a project ID or profile ID. Backend resolves polymorphically via `repo::project::resolve_context_folder`. Frontend passes `profileId` or `projectId` without needing to know which folder it maps to.
+**Context ID**: Git commands accept `profileId` — a Herdr `workspace_id`. Backend resolves the checkout via `service::project::reconcile_profile_checkout` (live Herdr cwd). Frontend passes `profileId` without needing to know which folder it maps to.
 
 **Query keys**: Use `queryKeys.git.diff(contextId)`, `queryKeys.git.log(contextId)` from `@/shared/lib/queryKeys.ts`.
 
 ## WHERE TO LOOK
 | Task | Location |
 |------|----------|
-| Backend git resolution | `src-tauri/crates/repo/src/project.rs::resolve_context_folder` |
+| Backend git resolution | `src-tauri/crates/service/src/project.rs::reconcile_profile_checkout` |
 | Git command execution | `src-tauri/crates/infra/src/git.rs` |
 | IPC bindings | `src/generated/` — `getGitDiff`, `getGitLog`, `getCommitDiff`, `getGitBranch` |
 | Diff state management | `gitDiffReducer.ts` |
