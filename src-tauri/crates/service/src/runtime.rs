@@ -191,6 +191,24 @@ impl Default for RuntimeSelector {
 pub const LOCAL_RUNTIME_ENV: &str = "TWOCODE_RUNTIME";
 pub const LOCAL_RUNTIME_FLAG: &str = "--twocode-runtime=local";
 
+/// Live Herdr session ids are `workspace_id:pane` (`wN:pK`). sqlite UUID
+/// leftover rows never match this shape.
+pub(crate) fn is_herdr_pane_id(session_id: &str) -> bool {
+	let Some((workspace, pane)) = session_id.split_once(':') else {
+		return false;
+	};
+	let Some(workspace_n) = workspace.strip_prefix('w') else {
+		return false;
+	};
+	let Some(pane_n) = pane.strip_prefix('p') else {
+		return false;
+	};
+	!workspace_n.is_empty()
+		&& workspace_n.chars().all(|c| c.is_ascii_digit())
+		&& !pane_n.is_empty()
+		&& pane_n.chars().all(|c| c.is_ascii_digit())
+}
+
 /// Explicit Local opt-in. Anything else (unset, `herdr`, garbage) is Herdr.
 pub fn parse_runtime_env(value: Option<&str>) -> RuntimeBackend {
 	match value {
@@ -314,14 +332,18 @@ impl RuntimeRouter {
 		self.route_backend(session_id)
 	}
 
-	/// Owner, else a persisted Herdr pane mapping, else the default.
-	/// Mapped Herdr ids are never routed to Local restore.
+	/// Owner, else a live Herdr `pane_id`, else a leftover sqlite pane
+	/// mapping (dual-ownership lock), else the default. Leftover
+	/// `session_runtime_mappings` must not win over a live `pane_id`.
 	fn route_backend(
 		&self,
 		session_id: &str,
 	) -> Result<RuntimeBackend, AppError> {
 		if let Some(owner) = self.selector.owner(session_id)? {
 			return Ok(owner);
+		}
+		if is_herdr_pane_id(session_id) {
+			return Ok(RuntimeBackend::Herdr);
 		}
 		if self.local.herdr_mapping(session_id)?.is_some() {
 			return Ok(RuntimeBackend::Herdr);
@@ -377,6 +399,7 @@ impl RuntimeRouter {
 	) -> Result<(), AppError> {
 		let herdr_owned = self.selector.owner(session_id)?
 			== Some(RuntimeBackend::Herdr)
+			|| is_herdr_pane_id(session_id)
 			|| self.local.herdr_mapping(session_id)?.is_some();
 		if herdr_owned {
 			self.release_herdr_session(session_id)
@@ -481,8 +504,9 @@ fn resolve_gui_sidecar(
 }
 
 /// Resolve the pinned sidecar, ensure the 2code namespace, inject JSON
-/// terminal + worktree + CLI attach clients, and import leftover sqlite
-/// extras via `worktree.open` without writing mapping rows.
+/// terminal + worktree + CLI attach clients, import leftover sqlite
+/// extras via `worktree.open` without writing mapping rows, and start
+/// `HerdrRuntimeSync`. `TWOCODE_RUNTIME=local` does not call this.
 pub fn connect_gui_herdr(
 	opts: GuiHerdrConnect<'_>,
 ) -> Result<HerdrStubAdapter, AppError> {
@@ -514,7 +538,7 @@ pub fn connect_gui_herdr(
 			);
 		}
 	}
-	Ok(HerdrStubAdapter::with_json_clients(
+	let mut adapter = HerdrStubAdapter::with_json_clients(
 		opts.db,
 		json,
 		HerdrCliAttach {
@@ -522,7 +546,14 @@ pub fn connect_gui_herdr(
 			namespace,
 			extra_env: opts.extra_env.to_vec(),
 		},
-	))
+	);
+	if let Err(err) = adapter.attach_runtime_sync(&endpoint) {
+		tracing::warn!(
+			target: "herdr",
+			"HerdrRuntimeSync failed: {err}"
+		);
+	}
+	Ok(adapter)
 }
 
 /// Herdr stays selected even when sidecar/namespace attach fails.
@@ -999,6 +1030,16 @@ mod tests {
 	}
 
 	#[test]
+	fn herdr_pane_id_shape_is_not_a_sqlite_uuid() {
+		assert!(is_herdr_pane_id("w1:p1"));
+		assert!(is_herdr_pane_id("w12:p10"));
+		assert!(!is_herdr_pane_id("pr1"));
+		assert!(!is_herdr_pane_id("w1"));
+		assert!(!is_herdr_pane_id("w1:t1"));
+		assert!(!is_herdr_pane_id("sess-1"));
+	}
+
+	#[test]
 	fn parse_runtime_args_only_the_twocode_flag_selects_local() {
 		assert_eq!(
 			parse_runtime_args(["2code", LOCAL_RUNTIME_FLAG]),
@@ -1195,6 +1236,11 @@ mod tests {
 		assert!(connect.contains("resolve_namespace"));
 		assert!(connect.contains("import_leftover_sqlite_profiles"));
 		assert!(connect.contains("log_failed_import_outcomes"));
+		assert!(connect.contains("attach_runtime_sync"));
+		assert!(
+			connect.contains("HerdrRuntimeSync")
+				|| connect.contains("attach_runtime_sync")
+		);
 		let local_branch = runtime
 			.split("pub fn herdr_adapter_for_gui_backend")
 			.nth(1)
@@ -1207,6 +1253,8 @@ mod tests {
 		assert!(!local_branch.contains("ensure_herdr_listener"));
 		assert!(!local_branch.contains("connect_gui_herdr"));
 		assert!(!local_branch.contains("import_leftover_sqlite_profiles"));
+		assert!(!local_branch.contains("attach_runtime_sync"));
+		assert!(!local_branch.contains("HerdrRuntimeSync"));
 		assert!(runtime.contains("TWOCODE_RUNTIME"));
 		assert!(runtime.contains(LOCAL_RUNTIME_FLAG));
 		let bridge = include_str!("../../../src/bridge.rs");

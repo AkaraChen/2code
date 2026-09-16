@@ -8,11 +8,7 @@ use infra::db::DbPool;
 use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
-use service::runtime::{
-	HerdrClientGuard, HerdrEndpoint, HerdrStubAdapter, LocalAdapter,
-	RuntimeHandle,
-};
-use service::runtime_sync::HerdrRuntimeSync;
+use service::runtime::{HerdrClientGuard, LocalAdapter, RuntimeHandle};
 use service::{PtyEventEmitter, WatchEventSender};
 
 pub struct PtyOutputSink {
@@ -112,13 +108,4 @@ pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
 		guard.inner(),
 		infra::herdr::process::default_xdg_config_home(),
 	))
-}
-
-/// Read-only Herdr projection. Not started from GUI runtime setup;
-/// snapshot-as-session-store is a later task.
-#[allow(dead_code)]
-pub fn herdr_runtime_sync(
-	endpoint: &HerdrEndpoint,
-) -> Result<HerdrRuntimeSync, model::error::AppError> {
-	HerdrStubAdapter::open_runtime_sync(endpoint)
 }

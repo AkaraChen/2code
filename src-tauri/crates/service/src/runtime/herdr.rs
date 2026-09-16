@@ -1,22 +1,21 @@
 //! Herdr terminal lifecycle and live CLI attach.
 //!
-//! Create/list/close use pane identities when a client is injected.
-//! Create binds `cwd` on `tab.create` and may inject `init_script` plus
-//! `startup_commands` once via `pane.send_input`. List/restore/close never
-//! replay that input. Write/resize go through an attached CLI control
-//! helper.
-//! Restore stays fail-closed: reopen lists Bound panes from the
-//! namespace snapshot and attaches them. History/flush/clear stay
-//! fail-closed. A missing
-//! client keeps the Task 2 stub behavior. Identities are `pane_id` in
-//! namespace `2code`. `terminal_id` is never persisted.
+//! Create/list/close use live `pane_id` identities (`wN:pK`) from
+//! `session.snapshot` or `HerdrRuntimeSync`. They do not INSERT / UPDATE
+//! / DELETE sqlite `pty_sessions` or `session_runtime_mappings`. List
+//! returns every live pane in the project's open workspaces; leftover
+//! sqlite rows are not merged. New Tab returns the created `pane_id`.
+//! Write/resize go through an attached CLI control helper.
+//! Restore stays fail-closed: reopen lists live panes and attaches them.
+//! History/flush/clear stay fail-closed. A missing client keeps the
+//! Task 2 stub behavior. `terminal_id` is never persisted.
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use diesel::SqliteConnection;
 use infra::db::DbPool;
 use infra::herdr::process::{HerdrNamespace, HerdrProcessEnv};
 use infra::herdr::terminal::{
@@ -28,20 +27,16 @@ use infra::herdr::transport::{
 	WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
 };
 use model::error::AppError;
-use model::pty::{
-	NewPtySessionRecord, PtyConfig, PtySessionMeta, PtySessionRecord,
-	RestoreResult,
-};
+use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
-	CreateSessionResult, HerdrTerminalFrame, RuntimeBackend,
-	RuntimeIdentityState, SessionAgentStatus, HERDR_NAMESPACE,
+	CreateSessionResult, HerdrTerminalFrame, RuntimeBackend, SessionAgentStatus,
 };
 use serde_json::Value;
-use uuid::Uuid;
 
-use crate::runtime_agent::mapped_agent_for_session;
-use crate::runtime_mapping::pane_identity_state;
-use crate::runtime_sync::RuntimeProjection;
+use crate::runtime_agent::session_agent_from_pane;
+use crate::runtime_sync::{
+	ApplyOutcome, HerdrRuntimeSync, ProjectedPane, RuntimeProjection,
+};
 
 use super::TerminalRuntime;
 
@@ -280,6 +275,7 @@ pub struct HerdrStubAdapter {
 	cli: Option<HerdrCliAttach>,
 	attachments: Mutex<HashMap<String, HerdrAttachment>>,
 	startup_error: Option<HerdrStartupFailure>,
+	runtime_sync: Option<Mutex<HerdrRuntimeSync>>,
 }
 
 impl HerdrStubAdapter {
@@ -302,6 +298,7 @@ impl HerdrStubAdapter {
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
 			startup_error: None,
+			runtime_sync: None,
 		}
 	}
 
@@ -330,6 +327,7 @@ impl HerdrStubAdapter {
 			cli: Some(cli),
 			attachments: Mutex::new(HashMap::new()),
 			startup_error: None,
+			runtime_sync: None,
 		}
 	}
 
@@ -341,6 +339,7 @@ impl HerdrStubAdapter {
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
 			startup_error: None,
+			runtime_sync: None,
 		}
 	}
 
@@ -360,6 +359,7 @@ impl HerdrStubAdapter {
 			cli: Some(cli),
 			attachments: Mutex::new(HashMap::new()),
 			startup_error: None,
+			runtime_sync: None,
 		}
 	}
 
@@ -397,8 +397,22 @@ impl HerdrStubAdapter {
 	/// Does not create, close, or attach terminals.
 	pub fn open_runtime_sync(
 		endpoint: &super::HerdrEndpoint,
-	) -> Result<crate::runtime_sync::HerdrRuntimeSync, AppError> {
-		crate::runtime_sync::HerdrRuntimeSync::connect(endpoint)
+	) -> Result<HerdrRuntimeSync, AppError> {
+		HerdrRuntimeSync::connect(endpoint)
+	}
+
+	pub(crate) fn attach_runtime_sync(
+		&mut self,
+		endpoint: &super::HerdrEndpoint,
+	) -> Result<(), AppError> {
+		let sync = Self::open_runtime_sync(endpoint)?;
+		self.runtime_sync = Some(Mutex::new(sync));
+		Ok(())
+	}
+
+	#[allow(dead_code)]
+	pub(crate) fn has_runtime_sync(&self) -> bool {
+		self.runtime_sync.is_some()
 	}
 
 	pub(crate) fn has_terminal_client(&self) -> bool {
@@ -415,37 +429,32 @@ impl HerdrStubAdapter {
 		self.lifecycle.as_ref().ok_or_else(|| self.unavailable())
 	}
 
-	fn resolve_pane_id(&self, session_id: &str) -> Result<String, AppError> {
-		let lifecycle = self.lifecycle()?;
-		let mapping = lifecycle.with_db(|conn| {
-			match repo::runtime_mapping::find_session_mapping(conn, session_id)
-			{
-				Ok(mapping) => Ok(mapping),
-				Err(AppError::NotFound(_)) => {
-					Err(AppError::RuntimeMappingMissing(format!(
-						"session {session_id} has no Herdr pane"
-					)))
+	fn live_projection(&self) -> Result<RuntimeProjection, AppError> {
+		if let Some(sync) = &self.runtime_sync {
+			let mut sync = sync.lock().map_err(|_| AppError::LockError)?;
+			loop {
+				match sync.poll(Duration::ZERO) {
+					Ok(ApplyOutcome::Ignored) => break,
+					Ok(_) => continue,
+					Err(err) => return Err(err),
 				}
-				Err(err) => Err(err),
 			}
-		})?;
-		let snapshot = lifecycle.client.session_snapshot()?;
+			return Ok(sync.projection().clone());
+		}
+		let snapshot = self.lifecycle()?.client.session_snapshot()?;
 		let mut projection = RuntimeProjection::new();
 		projection.apply_snapshot(&snapshot)?;
-		match pane_identity_state(&mapping, &projection) {
-			RuntimeIdentityState::Bound => Ok(mapping.pane_id),
-			RuntimeIdentityState::Missing => {
-				Err(AppError::RuntimeMappingMissing(format!(
-					"pane {} is missing",
-					mapping.pane_id
-				)))
-			}
-			RuntimeIdentityState::Replaced => {
-				Err(AppError::RuntimeMappingReplaced(format!(
-					"pane {}",
-					mapping.pane_id
-				)))
-			}
+		Ok(projection)
+	}
+
+	fn resolve_pane_id(&self, session_id: &str) -> Result<String, AppError> {
+		let projection = self.live_projection()?;
+		if projection.pane(session_id).is_some() {
+			Ok(session_id.to_string())
+		} else {
+			Err(AppError::RuntimeMappingMissing(format!(
+				"pane {session_id} is missing"
+			)))
 		}
 	}
 
@@ -551,23 +560,21 @@ impl HerdrStubAdapter {
 		}
 	}
 
-	/// Current projected agent state for a mapped Herdr session.
-	/// Missing/replaced panes fail closed (`None`).
+	/// Current projected agent state for a live Herdr pane.
+	/// Missing panes fail closed (`None`). sqlite mappings are not
+	/// consulted.
 	pub fn session_agent_status(
 		&self,
 		session_id: &str,
 	) -> Result<Option<SessionAgentStatus>, AppError> {
 		self.record("agent_status");
-		let lifecycle = match self.lifecycle() {
-			Ok(lifecycle) => lifecycle,
-			Err(_) => return Ok(None),
-		};
-		let snapshot = lifecycle.client.session_snapshot()?;
-		let mut projection = RuntimeProjection::new();
-		projection.apply_snapshot(&snapshot)?;
-		lifecycle.with_db(|conn| {
-			mapped_agent_for_session(conn, &projection, session_id)
-		})
+		if self.lifecycle.is_none() && self.runtime_sync.is_none() {
+			return Ok(None);
+		}
+		let projection = self.live_projection()?;
+		Ok(projection
+			.pane(session_id)
+			.map(|pane| session_agent_from_pane(session_id, pane)))
 	}
 
 	fn helper_for(
@@ -583,24 +590,6 @@ impl HerdrStubAdapter {
 				)
 			})
 	}
-}
-
-/// Adopted workspace root is `{workspace_id}:p1`. Splits are not reused
-/// for extra 2code terminals; those use `tab.create`. Template
-/// subdirectory cwds also skip this reuse so Herdr starts in that path.
-pub(crate) fn unbound_adopted_root_pane(
-	workspace_id: &str,
-	panes: &[PaneView],
-	bound: &HashSet<String>,
-) -> Option<String> {
-	let root_id = format!("{workspace_id}:p1");
-	panes.iter().find_map(|pane| {
-		if pane.pane_id == root_id && !bound.contains(&pane.pane_id) {
-			Some(pane.pane_id.clone())
-		} else {
-			None
-		}
-	})
 }
 
 fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
@@ -674,36 +663,6 @@ fn snapshot_pane_cwd(snapshot: &Value, workspace_id: &str) -> Option<String> {
 				None
 			}
 		})
-}
-
-fn git_common_dir(path: &str) -> Option<PathBuf> {
-	let output = infra::no_window::command_without_windows_console("git")
-		.args(["rev-parse", "--git-common-dir"])
-		.current_dir(path)
-		.output()
-		.ok()?;
-	if !output.status.success() {
-		return None;
-	}
-	let raw = String::from_utf8_lossy(&output.stdout);
-	let trimmed = raw.trim();
-	if trimmed.is_empty() {
-		return None;
-	}
-	let resolved = Path::new(trimmed);
-	if resolved.is_absolute() {
-		resolved.canonicalize().ok()
-	} else {
-		Path::new(path).join(resolved).canonicalize().ok()
-	}
-}
-
-fn leftover_sqlite_id(profiles: &[model::profile::Profile]) -> Option<String> {
-	profiles
-		.iter()
-		.find(|profile| profile.is_default)
-		.or_else(|| profiles.first())
-		.map(|profile| profile.id.clone())
 }
 
 fn same_checkout_path(left: &Path, right: &Path) -> bool {
@@ -814,6 +773,56 @@ fn pane_is_absent(
 	Ok(projection.pane(pane_id).is_none())
 }
 
+fn snapshot_workspace_ids_for_folder(
+	projection: &RuntimeProjection,
+	folder: &str,
+) -> Vec<String> {
+	let mut ids: Vec<String> = projection
+		.pane_ids()
+		.into_iter()
+		.filter_map(|id| {
+			let pane = projection.pane(&id)?;
+			if pane.cwd.is_empty() {
+				return None;
+			}
+			same_checkout_path(Path::new(&pane.cwd), Path::new(folder))
+				.then(|| pane.workspace_id.clone())
+		})
+		.collect();
+	ids.sort();
+	ids.dedup();
+	ids
+}
+
+fn session_record_from_pane(
+	projection: &RuntimeProjection,
+	pane: &ProjectedPane,
+	checkout: &str,
+) -> PtySessionRecord {
+	let title = projection
+		.tab(&pane.tab_id)
+		.map(|tab| tab.label.as_str())
+		.filter(|label| !label.is_empty())
+		.unwrap_or(&pane.pane_id)
+		.to_string();
+	let cwd = if pane.cwd.is_empty() {
+		checkout.to_string()
+	} else {
+		pane.cwd.clone()
+	};
+	PtySessionRecord {
+		id: pane.pane_id.clone(),
+		profile_id: pane.workspace_id.clone(),
+		title,
+		shell: "/bin/sh".into(),
+		cwd,
+		created_at: String::new(),
+		closed_at: None,
+		cols: 80,
+		rows: 24,
+	}
+}
+
 impl HerdrLifecycle {
 	fn with_db<T>(
 		&self,
@@ -821,22 +830,6 @@ impl HerdrLifecycle {
 	) -> Result<T, AppError> {
 		let mut conn = self.db.lock().map_err(|_| AppError::LockError)?;
 		f(&mut conn)
-	}
-
-	fn bound_pane_ids(
-		&self,
-		workspace_id: &str,
-	) -> Result<HashSet<String>, AppError> {
-		self.with_db(|conn| {
-			Ok(repo::runtime_mapping::list_session_mappings_for_workspace(
-				conn,
-				HERDR_NAMESPACE,
-				workspace_id,
-			)?
-			.into_iter()
-			.map(|mapping| mapping.pane_id)
-			.collect())
-		})
 	}
 
 	fn bound_workspace(&self, profile_id: &str) -> Result<String, AppError> {
@@ -862,13 +855,14 @@ impl HerdrLifecycle {
 		&self,
 		profile_id: &str,
 	) -> Result<Option<String>, AppError> {
-		let checkout = self.with_db(|conn| match repo::profile::find_by_id(
-			conn, profile_id,
-		) {
-			Ok(profile) => Ok(Some(profile.worktree_path)),
-			Err(AppError::NotFound(_)) => Ok(None),
-			Err(err) => Err(err),
-		})?;
+		let checkout =
+			self.with_db(|conn| {
+				match repo::profile::find_by_id(conn, profile_id) {
+					Ok(profile) => Ok(Some(profile.worktree_path)),
+					Err(AppError::NotFound(_)) => Ok(None),
+					Err(err) => Err(err),
+				}
+			})?;
 		let Some(checkout) = checkout else {
 			return Ok(None);
 		};
@@ -950,139 +944,6 @@ impl HerdrLifecycle {
 		}
 	}
 
-	fn persist_session(
-		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
-		workspace_id: &str,
-		pane_id: &str,
-	) -> Result<CreateSessionResult, AppError> {
-		let session_id = Uuid::new_v4().to_string();
-		let sqlite_profile_id = self.sqlite_profile_id_for_session(
-			&meta.profile_id,
-			workspace_id,
-			&config.cwd,
-		)?;
-		self.with_db(|conn| {
-			repo::pty::insert_session(
-				conn,
-				&NewPtySessionRecord {
-					id: &session_id,
-					profile_id: &sqlite_profile_id,
-					title: &meta.title,
-					shell: &config.shell,
-					cwd: &config.cwd,
-					cols: config.cols as i32,
-					rows: config.rows as i32,
-				},
-			)?;
-			if let Err(err) = repo::runtime_mapping::bind_session_pane(
-				conn,
-				&session_id,
-				HERDR_NAMESPACE,
-				workspace_id,
-				pane_id,
-			) {
-				let _ = repo::pty::delete_session(conn, &session_id);
-				return Err(err);
-			}
-			Ok(())
-		})?;
-		Ok(CreateSessionResult { session_id })
-	}
-
-	fn sqlite_profile_id_for_session(
-		&self,
-		profile_id: &str,
-		workspace_id: &str,
-		cwd: &str,
-	) -> Result<String, AppError> {
-		self.with_db(|conn| {
-			if repo::profile::find_by_id(conn, profile_id).is_ok() {
-				return Ok(profile_id.to_string());
-			}
-			for project in repo::project::list_all(conn)? {
-				if !self.project_owns_live_workspace(
-					conn,
-					&project,
-					workspace_id,
-					cwd,
-				)? {
-					continue;
-				}
-				let profiles =
-					repo::profile::list_by_project(conn, &project.id)?;
-				if let Some(id) = leftover_sqlite_id(&profiles) {
-					return Ok(id);
-				}
-			}
-			Err(AppError::NotFound(format!(
-				"Profile for workspace {workspace_id}"
-			)))
-		})
-	}
-
-	fn project_owns_live_workspace(
-		&self,
-		conn: &mut SqliteConnection,
-		project: &model::project::Project,
-		workspace_id: &str,
-		cwd: &str,
-	) -> Result<bool, AppError> {
-		if same_checkout_path(Path::new(&project.folder), Path::new(cwd)) {
-			return Ok(true);
-		}
-		let profiles = repo::profile::list_by_project(conn, &project.id)?;
-		if profiles.iter().any(|profile| {
-			same_checkout_path(
-				Path::new(&profile.worktree_path),
-				Path::new(cwd),
-			)
-		}) {
-			return Ok(true);
-		}
-		if git_common_dir(&project.folder)
-			.zip(git_common_dir(cwd))
-			.is_some_and(|(left, right)| left == right)
-		{
-			return Ok(true);
-		}
-		let Some(worktrees) = &self.worktrees else {
-			return Ok(false);
-		};
-		let listed = match worktrees
-			.worktree_list(Some(Path::new(&project.folder)), None)
-		{
-			Ok(listed) => listed,
-			Err(_) => return Ok(false),
-		};
-		Ok(listed
-			.iter()
-			.any(|entry| entry.workspace_id.as_deref() == Some(workspace_id)))
-	}
-
-	fn persist_created_pane(
-		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
-		workspace_id: &str,
-		pane_id: &str,
-		close_on_bind_failure: bool,
-	) -> Result<CreateSessionResult, AppError> {
-		match self.persist_session(meta, config, workspace_id, pane_id) {
-			Ok(created) => {
-				self.send_create_startup(meta, config, pane_id);
-				Ok(created)
-			}
-			Err(err) => {
-				if close_on_bind_failure {
-					let _ = self.client.pane_close(pane_id);
-				}
-				Err(err)
-			}
-		}
-	}
-
 	fn create_session(
 		&self,
 		meta: &PtySessionMeta,
@@ -1090,26 +951,7 @@ impl HerdrLifecycle {
 	) -> Result<CreateSessionResult, AppError> {
 		require_absolute_cwd(&config.cwd)?;
 		let workspace_id = self.bound_workspace(&meta.profile_id)?;
-		let bound = self.bound_pane_ids(&workspace_id)?;
 		let listed = self.client.pane_list(&workspace_id)?;
-		let checkout = match self.profile_checkout(&meta.profile_id) {
-			Ok(path) => path,
-			Err(AppError::NotFound(_)) => config.cwd.clone(),
-			Err(err) => return Err(err),
-		};
-		if same_checkout_path(Path::new(&config.cwd), Path::new(&checkout)) {
-			if let Some(pane_id) =
-				unbound_adopted_root_pane(&workspace_id, &listed, &bound)
-			{
-				return self.persist_created_pane(
-					meta,
-					config,
-					&workspace_id,
-					&pane_id,
-					false,
-				);
-			}
-		}
 		let pane_id = match self.client.tab_create(
 			&workspace_id,
 			&meta.title,
@@ -1120,37 +962,44 @@ impl HerdrLifecycle {
 				self.client.as_ref(),
 				&workspace_id,
 				&listed,
-				&bound,
+				&HashSet::new(),
 			)?,
 			Err(err) => return Err(err),
 		};
-		let already = listed.iter().any(|pane| pane.pane_id == pane_id);
-		self.persist_created_pane(
-			meta,
-			config,
-			&workspace_id,
-			&pane_id,
-			!already,
-		)
+		if listed.iter().any(|pane| pane.pane_id == pane_id) {
+			return Err(AppError::PtyError(format!(
+				"pane {pane_id} is already live; not replaying"
+			)));
+		}
+		self.send_create_startup(meta, config, &pane_id);
+		Ok(CreateSessionResult {
+			session_id: pane_id,
+		})
 	}
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError> {
-		let mapping = self.with_db(|conn| {
-			repo::runtime_mapping::find_session_mapping(conn, session_id)
-		})?;
-		match self.client.pane_close(&mapping.pane_id) {
-			Ok(()) => self.finish_close(session_id),
+		let workspace_id = self
+			.client
+			.pane_get(session_id)?
+			.map(|pane| pane.workspace_id)
+			.unwrap_or_else(|| {
+				session_id
+					.split_once(':')
+					.map(|(workspace, _)| workspace.to_string())
+					.unwrap_or_default()
+			});
+		match self.client.pane_close(session_id) {
+			Ok(()) => Ok(()),
 			Err(AppError::HerdrUncertainOutcome(_)) => {
 				if pane_is_absent(
 					self.client.as_ref(),
-					&mapping.workspace_id,
-					&mapping.pane_id,
+					&workspace_id,
+					session_id,
 				)? {
-					self.finish_close(session_id)
+					Ok(())
 				} else {
 					Err(AppError::HerdrUncertainOutcome(format!(
-						"pane.close {} is uncertain; not replaying",
-						mapping.pane_id
+						"pane.close {session_id} is uncertain; not replaying"
 					)))
 				}
 			}
@@ -1158,99 +1007,41 @@ impl HerdrLifecycle {
 		}
 	}
 
-	fn finish_close(&self, session_id: &str) -> Result<(), AppError> {
-		self.with_db(|conn| {
-			match repo::runtime_mapping::unbind_session_pane(conn, session_id) {
-				Ok(()) | Err(AppError::NotFound(_)) => {}
-				Err(err) => return Err(err),
-			}
-			repo::pty::mark_closed(conn, session_id);
-			Ok(())
-		})
-	}
-
 	fn list_project_sessions(
 		&self,
 		project_id: &str,
+		projection: &RuntimeProjection,
 	) -> Result<Vec<PtySessionRecord>, AppError> {
-		let snapshot = self.client.session_snapshot()?;
-		let mut projection = RuntimeProjection::new();
-		projection.apply_snapshot(&snapshot)?;
-		let mapped_sessions = self.with_db(|conn| {
-			let sessions = repo::pty::list_by_project(conn, project_id)?;
-			let mut mapped = Vec::new();
-			for session in sessions {
-				if let Ok(mapping) = repo::runtime_mapping::find_session_mapping(
-					conn,
-					&session.id,
-				) {
-					mapped.push((session, mapping));
-				}
-			}
-			Ok(mapped)
+		let folder = self.with_db(|conn| {
+			repo::project::find_by_id(conn, project_id).map(|p| p.folder)
 		})?;
+		let workspace_ids = if let Some(worktrees) = &self.worktrees {
+			crate::project::live_open_workspace_ids(
+				worktrees.as_ref(),
+				&folder,
+			)?
+		} else {
+			snapshot_workspace_ids_for_folder(projection, &folder)
+		};
 		let mut listed = Vec::new();
-		let mut bound_panes = HashSet::new();
-		let mut workspace_ids = HashSet::new();
-		for (mut session, mapping) in mapped_sessions {
-			if pane_identity_state(&mapping, &projection)
-				== RuntimeIdentityState::Bound
-			{
-				bound_panes.insert(mapping.pane_id);
-				workspace_ids.insert(mapping.workspace_id.clone());
-				session.profile_id = mapping.workspace_id;
-				listed.push(session);
-			}
-		}
 		for workspace_id in workspace_ids {
 			if projection.workspace(&workspace_id).is_none() {
 				continue;
 			}
-			let checkout =
-				self.profile_checkout(&workspace_id).unwrap_or_default();
+			let checkout = self
+				.live_workspace_checkout(&workspace_id)
+				.unwrap_or_default();
 			for pane in projection.panes_in_workspace(&workspace_id) {
-				if !bound_panes.insert(pane.pane_id.clone()) {
-					continue;
-				}
-				let title = projection
-					.tab(&pane.tab_id)
-					.map(|tab| tab.label.as_str())
-					.filter(|label| !label.is_empty())
-					.unwrap_or(&pane.pane_id)
-					.to_string();
-				let created = self.persist_session(
-					&PtySessionMeta {
-						profile_id: workspace_id.clone(),
-						title,
-					},
-					&PtyConfig {
-						shell: "/bin/sh".into(),
-						cwd: checkout.clone(),
-						rows: 24,
-						cols: 80,
-						startup_commands: Vec::new(),
-					},
-					&workspace_id,
-					&pane.pane_id,
-				)?;
-				let mut record = self.with_db(|conn| {
-					repo::pty::find_by_id(conn, &created.session_id)
-				})?;
-				record.profile_id = workspace_id.clone();
-				listed.push(record);
+				listed.push(session_record_from_pane(
+					projection, &pane, &checkout,
+				));
 			}
 		}
 		Ok(listed)
 	}
 
-	fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
-		self.with_db(|conn| {
-			match repo::runtime_mapping::unbind_session_pane(conn, session_id) {
-				Ok(()) | Err(AppError::NotFound(_)) => {}
-				Err(err) => return Err(err),
-			}
-			repo::pty::delete_session(conn, session_id)
-		})
+	fn delete_session(&self, _session_id: &str) -> Result<(), AppError> {
+		Ok(())
 	}
 }
 
@@ -1288,7 +1079,9 @@ impl TerminalRuntime for HerdrStubAdapter {
 		project_id: &str,
 	) -> Result<Vec<PtySessionRecord>, AppError> {
 		self.record("list");
-		self.lifecycle()?.list_project_sessions(project_id)
+		let projection = self.live_projection()?;
+		self.lifecycle()?
+			.list_project_sessions(project_id, &projection)
 	}
 
 	fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
@@ -1396,7 +1189,8 @@ mod tests {
 		HerdrCliAttach, LocalAdapter, RuntimeRouter, RuntimeSelector,
 	};
 	use crate::PtyEventEmitter;
-	use model::runtime::RuntimeBackend;
+	use model::pty::NewPtySessionRecord;
+	use model::runtime::{RuntimeBackend, HERDR_NAMESPACE};
 
 	struct TestEmitter;
 
@@ -2060,11 +1854,13 @@ time.sleep(30)
 			}
 		}
 
-		fn mapping(&self, session_id: &str) -> String {
+		fn sqlite_session_ids(&self) -> Vec<String> {
 			let mut conn = self.db.lock().unwrap();
-			repo::runtime_mapping::find_session_mapping(&mut conn, session_id)
+			repo::pty::list_by_project(&mut conn, "p1")
 				.unwrap()
-				.pane_id
+				.into_iter()
+				.map(|session| session.id)
+				.collect()
 		}
 
 		fn insert_session_row(&self, session_id: &str) {
@@ -2112,27 +1908,15 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn unbound_root_pane_is_workspace_p1_not_a_split() {
-		let panes = vec![
-			PaneView {
-				pane_id: "w1:p1".into(),
-				tab_id: "w1:t1".into(),
-				workspace_id: "w1".into(),
-			},
-			PaneView {
-				pane_id: "w1:p2".into(),
-				tab_id: "w1:t1".into(),
-				workspace_id: "w1".into(),
-			},
-		];
-		let empty = HashSet::new();
-		assert_eq!(
-			unbound_adopted_root_pane("w1", &panes, &empty).as_deref(),
-			Some("w1:p1")
-		);
-		let mut bound = HashSet::new();
-		bound.insert("w1:p1".into());
-		assert_eq!(unbound_adopted_root_pane("w1", &panes, &bound), None);
+	fn list_includes_every_live_pane_without_create() {
+		let fx = Fixture::new();
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert_eq!(listed.len(), 1);
+		assert_eq!(listed[0].id, "w1:p1");
+		assert_eq!(listed[0].profile_id, "w1");
+		assert_eq!(listed[0].cwd, fx.cwd.path().to_string_lossy());
+		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert!(fx.sqlite_session_ids().is_empty());
 	}
 
 	#[test]
@@ -2148,14 +1932,19 @@ time.sleep(30)
 				&fx.config(),
 			)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		let row = {
-			let mut conn = fx.db.lock().unwrap();
-			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
-		};
-		assert_eq!(row.profile_id, "pr1");
+		assert_eq!(created.session_id, "w1:p2");
+		assert!(fx.sqlite_session_ids().is_empty());
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
-		assert_eq!(listed[0].profile_id, "w1");
+		assert!(listed.iter().any(|session| session.id == "w1:p1"));
+		assert!(listed.iter().any(|session| session.id == "w1:p2"));
+		assert_eq!(
+			listed
+				.iter()
+				.find(|session| session.id == "w1:p2")
+				.unwrap()
+				.profile_id,
+			"w1"
+		);
 	}
 
 	#[test]
@@ -2176,13 +1965,14 @@ time.sleep(30)
 				&fx.config(),
 			)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(created.session_id, "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
 		assert!(fx.fake.calls().iter().any(|m| m == "worktree.list"));
+		assert!(fx.sqlite_session_ids().is_empty());
 	}
 
 	#[test]
-	fn create_session_unmapped_linked_uses_leftover_sqlite_fk() {
+	fn create_session_unmapped_linked_returns_pane_id_not_sqlite_fk() {
 		let fx = Fixture::new();
 		let linked = fx.cwd.path().join("linked");
 		std::fs::create_dir_all(&linked).unwrap();
@@ -2214,14 +2004,11 @@ time.sleep(30)
 				},
 			)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w2:p1");
-		let row = {
-			let mut conn = fx.db.lock().unwrap();
-			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
-		};
-		assert_eq!(row.profile_id, "pr1");
-		assert_eq!(row.cwd, linked.to_string_lossy());
+		assert_eq!(created.session_id, "w2:p2");
+		assert!(fx.sqlite_session_ids().is_empty());
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert!(listed.iter().any(|session| session.id == "w2:p1"));
+		assert!(listed.iter().any(|session| session.id == "w2:p2"));
 		assert!(listed.iter().any(|session| session.profile_id == "w2"));
 		let mut conn = fx.db.lock().unwrap();
 		assert_eq!(
@@ -2239,28 +2026,6 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn create_reuses_unbound_adopted_root_pane() {
-		let fx = Fixture::new();
-		let created = fx
-			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), 0);
-		assert!(fx.fake.send_input_calls().is_empty());
-		let row = {
-			let mut conn = fx.db.lock().unwrap();
-			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
-		};
-		assert_eq!(row.shell, "/bin/sh");
-		assert_eq!(row.cwd, fx.config().cwd);
-		assert!(fx.fake.calls().contains(&"pane.list".to_string()));
-		assert!(!fx.fake.calls().contains(&"tab.create".to_string()));
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
-		assert_ne!(fx.mapping(&created.session_id), "term_live");
-	}
-
-	#[test]
 	fn extra_terminals_use_tab_create_not_split() {
 		let fx = Fixture::new();
 		let first = fx
@@ -2271,9 +2036,9 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
-		assert_eq!(fx.mapping(&second.session_id), "w1:p2");
-		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(first.session_id, "w1:p2");
+		assert_eq!(second.session_id, "w1:p3");
+		assert_eq!(fx.fake.tab_create_calls(), 2);
 		let expected_cwd = fx.cwd.path().to_string_lossy().into_owned();
 		assert_eq!(
 			fx.fake.last_tab_create_cwd().as_deref(),
@@ -2282,6 +2047,7 @@ time.sleep(30)
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
 		assert!(fx.fake.send_input_calls().is_empty());
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		assert_ne!(first.session_id, "term_live");
 	}
 
 	#[test]
@@ -2295,7 +2061,7 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &config)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p2");
+		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.tab_create_calls(), 1);
 		assert_eq!(
 			fx.fake.last_tab_create_cwd().as_deref(),
@@ -2344,15 +2110,15 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &config)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(
 			fx.fake.send_input_calls(),
-			vec![("w1:p1".into(), "echo init\necho start\n".into())]
+			vec![("w1:p2".into(), "echo init\necho start\n".into())]
 		);
-		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(fx.fake.tab_create_calls(), 1);
 
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
-		assert_eq!(listed.len(), 1);
+		assert_eq!(listed.len(), 2);
 		assert_eq!(fx.fake.send_input_calls().len(), 1);
 		assert!(fx
 			.adapter
@@ -2364,7 +2130,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn root_reuse_with_startup_still_sends_once() {
+	fn create_sends_startup_after_tab_create() {
 		let fx = Fixture::new();
 		let mut config = fx.config();
 		config.startup_commands = vec!["bun dev".into()];
@@ -2372,11 +2138,11 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &config)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(created.session_id, "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
 		assert_eq!(
 			fx.fake.send_input_calls(),
-			vec![("w1:p1".into(), "bun dev\n".into())]
+			vec![("w1:p2".into(), "bun dev\n".into())]
 		);
 	}
 
@@ -2392,7 +2158,7 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &config)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p2");
+		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.tab_create_calls(), 1);
 		assert_eq!(
 			fx.fake.send_input_calls(),
@@ -2411,17 +2177,19 @@ time.sleep(30)
 			.unwrap();
 		assert_eq!(fx.fake.send_input_calls().len(), 1);
 		fx.fake.push_pane(PaneView {
-			pane_id: "w1:p2".into(),
-			tab_id: "w1:t1".into(),
+			pane_id: "w1:p3".into(),
+			tab_id: "w1:t3".into(),
 			workspace_id: "w1".into(),
 		});
+		let creates_before = fx.fake.tab_create_calls();
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
-		assert_eq!(listed.len(), 2);
+		assert_eq!(listed.len(), 3);
 		assert!(listed
 			.iter()
 			.any(|session| session.id == created.session_id));
+		assert!(listed.iter().any(|session| session.id == "w1:p3"));
 		assert_eq!(fx.fake.send_input_calls().len(), 1);
-		assert!(!fx.fake.calls().iter().any(|m| m == "tab.create"));
+		assert_eq!(fx.fake.tab_create_calls(), creates_before);
 	}
 
 	#[test]
@@ -2439,7 +2207,7 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &config)
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
+		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.send_input_calls().len(), 1);
 		assert_eq!(fx.fake.pane_close_calls(), 0);
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
@@ -2501,8 +2269,8 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		assert_eq!(fx.mapping(&extra.session_id), "w1:p2");
-		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(extra.session_id, "w1:p3");
+		assert_eq!(fx.fake.tab_create_calls(), 2);
 		assert!(fx.fake.calls().contains(&"pane.list".to_string()));
 	}
 
@@ -2524,7 +2292,7 @@ time.sleep(30)
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap_err();
 		assert!(err.to_string().contains("uncertain"));
-		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert_eq!(fx.fake.tab_create_calls(), 2);
 	}
 
 	#[test]
@@ -2563,12 +2331,10 @@ time.sleep(30)
 		let err = fx.adapter.close_session(&created.session_id).unwrap_err();
 		assert!(err.to_string().contains("uncertain"));
 		assert_eq!(fx.fake.pane_close_calls(), 1);
-		let mut conn = fx.db.lock().unwrap();
-		assert!(repo::runtime_mapping::find_session_mapping(
-			&mut conn,
-			&created.session_id
-		)
-		.is_ok());
+		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert!(listed
+			.iter()
+			.any(|session| session.id == created.session_id));
 	}
 
 	#[test]
@@ -2774,11 +2540,15 @@ time.sleep(30)
 			.split("fn close_session")
 			.nth(1)
 			.unwrap()
-			.split("fn finish_close")
+			.split("fn list_project_sessions")
 			.next()
 			.unwrap();
 		assert!(!close_session.contains("worktree.remove"));
 		assert!(!close_session.contains("worktree_remove"));
+		assert!(!create_session.contains("insert_session"));
+		assert!(!create_session.contains("bind_session_pane"));
+		assert!(!close_session.contains("unbind_session_pane"));
+		assert!(!close_session.contains("mark_closed"));
 		assert!(
 			src.contains("worktree.remove") || src.contains("worktree_remove")
 		);
@@ -2820,6 +2590,12 @@ time.sleep(30)
 		assert!(!list_sessions.contains("pane.send_input"));
 		assert!(!list_sessions.contains("pane_send_input"));
 		assert!(!list_sessions.contains("send_create_startup"));
+		assert!(!list_sessions.contains("insert_session"));
+		assert!(!list_sessions.contains("list_by_project"));
+		assert!(!list_sessions.contains("bind_session_pane"));
+		assert!(!src.contains("leftover_sqlite_id"));
+		assert!(!src.contains("bind_session_pane"));
+		assert!(!src.contains("unbind_session_pane"));
 		assert!(!close_session.contains("pane.send_input"));
 		assert!(!close_session.contains("pane_send_input"));
 		let restore = src
@@ -2929,13 +2705,9 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), 0);
-		let row = {
-			let mut conn = fx.db.lock().unwrap();
-			repo::pty::find_by_id(&mut conn, &created.session_id).unwrap()
-		};
-		assert_eq!(row.profile_id, "pr1");
+		assert_eq!(created.session_id, "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert!(fx.sqlite_session_ids().is_empty());
 	}
 
 	#[test]
@@ -2957,8 +2729,8 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), 0);
+		assert_eq!(created.session_id, "w1:p2");
+		assert_eq!(fx.fake.tab_create_calls(), 1);
 	}
 
 	#[test]
@@ -2976,62 +2748,47 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap_err();
-		assert!(err.to_string().contains("already bound"));
-		assert_eq!(fx.fake.tab_create_calls(), 1);
+		assert!(err.to_string().contains("already live"), "{err}");
+		assert_eq!(fx.fake.tab_create_calls(), 2);
 		assert_eq!(fx.fake.pane_close_calls(), 0);
-		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
-		assert_eq!(fx.fake.state.lock().unwrap().panes["w1"].len(), 1);
+		assert_eq!(first.session_id, "w1:p2");
+		assert!(fx.fake.state.lock().unwrap().panes["w1"].len() >= 2);
 	}
 
 	#[test]
-	fn bind_failure_after_tab_create_closes_the_new_pane() {
+	fn create_does_not_write_sqlite_session_or_mapping_rows() {
 		let fx = Fixture::new();
-		fx.insert_session_row("sess-steal");
-		fx.bind_pane("sess-steal", "w1:p2");
-		let first = fx
+		fx.insert_session_row("leftover-sess");
+		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		let err = fx
-			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap_err();
-		assert!(err.to_string().contains("already bound"));
-		assert_eq!(fx.fake.tab_create_calls(), 1);
-		assert_eq!(fx.fake.pane_close_calls(), 1);
-		assert_eq!(fx.mapping(&first.session_id), "w1:p1");
-		let panes = fx.fake.state.lock().unwrap().panes["w1"].clone();
-		assert!(panes.iter().all(|pane| pane.pane_id != "w1:p2"));
-		assert!(panes.iter().any(|pane| pane.pane_id == "w1:p1"));
+		assert_eq!(created.session_id, "w1:p2");
+		let ids = fx.sqlite_session_ids();
+		assert!(ids.contains(&"leftover-sess".to_string()));
+		assert!(!ids.contains(&created.session_id));
+		let mut conn = fx.db.lock().unwrap();
+		assert!(repo::runtime_mapping::find_session_mapping(
+			&mut conn,
+			&created.session_id
+		)
+		.is_err());
 	}
 
 	#[test]
-	fn bind_failure_after_root_reuse_does_not_close_the_pane() {
+	fn leftover_sqlite_mapping_does_not_block_or_close_live_root() {
 		let fx = Fixture::new();
 		fx.insert_session_row("sess-steal");
-		let db = fx.db.clone();
-		{
-			let mut state = fx.fake.state.lock().unwrap();
-			state.on_list = Some(Arc::new(move || {
-				let mut conn = db.lock().unwrap();
-				let _ = repo::runtime_mapping::bind_session_pane(
-					&mut conn,
-					"sess-steal",
-					HERDR_NAMESPACE,
-					"w1",
-					"w1:p1",
-				);
-			}));
-		}
-		let err = fx
+		fx.bind_pane("sess-steal", "w1:p1");
+		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap_err();
-		assert!(err.to_string().contains("already bound"));
-		assert_eq!(fx.fake.tab_create_calls(), 0);
+			.unwrap();
+		assert_eq!(created.session_id, "w1:p2");
 		assert_eq!(fx.fake.pane_close_calls(), 0);
 		let panes = fx.fake.state.lock().unwrap().panes["w1"].clone();
 		assert!(panes.iter().any(|pane| pane.pane_id == "w1:p1"));
+		assert!(panes.iter().any(|pane| pane.pane_id == "w1:p2"));
 	}
 
 	#[test]
@@ -3050,6 +2807,7 @@ time.sleep(30)
 		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
 		assert!(fx.cwd.path().join("keep").exists());
 		fx.adapter.close_session(&first.session_id).unwrap();
+		fx.adapter.close_session("w1:p1").unwrap();
 		assert_eq!(fx.profile_workspace_id().as_deref(), Some("w1"));
 		assert!(fx.cwd.path().join("keep").exists());
 		assert!(!fx.fake.calls().iter().any(|m| {
@@ -3057,18 +2815,20 @@ time.sleep(30)
 				|| m.contains("worktree.create")
 				|| m.contains("worktree.open")
 		}));
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		assert!(fx.sqlite_session_ids().is_empty());
 	}
 
 	#[test]
-	fn list_omits_sessions_without_pane_mappings() {
+	fn list_omits_leftover_sqlite_pty_sessions() {
 		let fx = Fixture::new();
 		let created = fx
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
 		fx.insert_session_row("local-only");
+		fx.bind_pane("local-only", "w1:p1");
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
+		assert!(listed.iter().any(|session| session.id == "w1:p1"));
 		assert!(listed
 			.iter()
 			.any(|session| session.id == created.session_id));
@@ -3076,41 +2836,27 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn list_reattaches_bound_pane_without_restore_or_tab_create() {
+	fn list_reattaches_live_pane_without_restore_or_tab_create() {
 		let fx = Fixture::new();
-		let created = fx
-			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		let creates_before = fx.fake.tab_create_calls();
 		let listed = fx.adapter.list_project_sessions("p1").unwrap();
 		assert_eq!(listed.len(), 1);
-		assert_eq!(listed[0].id, created.session_id);
-		assert_eq!(fx.mapping(&created.session_id), "w1:p1");
-		assert_eq!(fx.fake.tab_create_calls(), creates_before);
+		assert_eq!(listed[0].id, "w1:p1");
+		assert_eq!(listed[0].profile_id, "w1");
+		assert_eq!(fx.fake.tab_create_calls(), 0);
 		assert!(!fx.fake.calls().iter().any(|m| m == "tab.create"));
 		assert!(!fx.fake.calls().iter().any(|m| m.contains("pane.read")));
 		assert!(!fx.fake.calls().iter().any(|m| m.contains("pane.send")));
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
 		assert!(fx
 			.adapter
-			.restore_session(
-				&created.session_id,
-				&Fixture::meta(),
-				&fx.config()
-			)
+			.restore_session("w1:p1", &Fixture::meta(), &fx.config())
 			.is_err());
-		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
+		assert!(fx.sqlite_session_ids().is_empty());
 	}
 
 	#[test]
-	fn list_flattens_unmapped_panes_in_bound_workspaces() {
+	fn list_flattens_split_and_extra_tab_panes() {
 		let fx = Fixture::new();
-		let root = fx
-			.adapter
-			.create_session(&Fixture::meta(), &fx.config())
-			.unwrap();
 		fx.fake.push_pane(PaneView {
 			pane_id: "w1:p2".into(),
 			tab_id: "w1:t1".into(),
@@ -3122,12 +2868,10 @@ time.sleep(30)
 		assert!(!fx.fake.calls().iter().any(|m| m == "tab.create"));
 		assert!(!fx.fake.calls().iter().any(|m| m == "pane.split"));
 		assert_eq!(listed.len(), 2);
-		assert!(listed.iter().any(|session| session.id == root.session_id));
-		let extra = listed
-			.iter()
-			.find(|session| session.id != root.session_id)
-			.unwrap();
-		assert_eq!(fx.mapping(&extra.id), "w1:p2");
+		assert!(listed.iter().any(|session| session.id == "w1:p1"));
+		let extra =
+			listed.iter().find(|session| session.id == "w1:p2").unwrap();
+		assert_eq!(extra.id, "w1:p2");
 		assert_eq!(extra.profile_id, "w1");
 		assert_eq!(extra.cwd, fx.cwd.path().to_string_lossy());
 		let again = fx.adapter.list_project_sessions("p1").unwrap();
@@ -3142,6 +2886,7 @@ time.sleep(30)
 			.router()
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
+		let creates_before = fx.fake.tab_create_calls();
 		let router = fx.local_default_router();
 		assert_eq!(router.selected_backend(), RuntimeBackend::Local);
 		assert_eq!(
@@ -3152,6 +2897,7 @@ time.sleep(30)
 		assert!(listed
 			.iter()
 			.any(|session| session.id == created.session_id));
+		assert!(listed.iter().any(|session| session.id == "w1:p1"));
 		assert_eq!(
 			router.owner(&created.session_id).unwrap(),
 			Some(RuntimeBackend::Herdr)
@@ -3164,7 +2910,7 @@ time.sleep(30)
 			)
 			.is_err());
 		assert_eq!(fx.sessions.lock().unwrap().len(), 0);
-		assert!(!fx.fake.calls().iter().any(|m| m == "tab.create"));
+		assert_eq!(fx.fake.tab_create_calls(), creates_before);
 	}
 
 	#[test]
@@ -3207,9 +2953,8 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		let pane_id = fx.mapping(&created.session_id);
 		fx.fake.set_pane_agent(
-			&pane_id,
+			&created.session_id,
 			"working",
 			Some("claude"),
 			Some("Claude Code"),
@@ -3230,8 +2975,7 @@ time.sleep(30)
 			.adapter
 			.create_session(&Fixture::meta(), &fx.config())
 			.unwrap();
-		let pane_id = fx.mapping(&created.session_id);
-		fx.fake.pane_close(&pane_id).unwrap();
+		fx.fake.pane_close(&created.session_id).unwrap();
 		assert!(fx
 			.adapter
 			.session_agent_status(&created.session_id)
@@ -3298,6 +3042,8 @@ time.sleep(30)
 		);
 		assert!(with_json.worktrees().is_ok());
 		assert!(with_json.has_terminal_client());
+		assert!(!with_json.has_runtime_sync());
+		assert!(!stub.has_runtime_sync());
 		let absent = AppError::HerdrServerAbsent("/tmp/missing.sock".into());
 		let closed = HerdrStubAdapter::fail_closed(absent);
 		assert!(matches!(
