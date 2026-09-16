@@ -22,7 +22,8 @@ export function transportKindFromBackend(
 
 /**
  * Per-session ownership from `RuntimeRouter::backend_for`.
- * Unbound ids are Local. Never consult discovery's default-runtime field.
+ * Unbound ids follow the selected default (Herdr). Never consult
+ * discovery's default-runtime field.
  */
 export async function resolveTerminalTransportKind(
 	sessionId: string,

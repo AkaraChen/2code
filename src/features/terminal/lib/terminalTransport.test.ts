@@ -70,6 +70,13 @@ describe("resolveTerminalTransportKind", () => {
 			"local",
 		);
 	});
+
+	it("documents unbound ids as the selected Herdr default", () => {
+		expect(terminalTransportSrc).not.toContain("Unbound ids are Local");
+		expect(terminalTransportSrc).toContain(
+			"Unbound ids follow the selected default (Herdr)",
+		);
+	});
 });
 
 describe("byte vs frame streams", () => {
