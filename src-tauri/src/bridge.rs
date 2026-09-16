@@ -9,7 +9,8 @@ use infra::pty::{PtyReadThreads, PtySessionMap};
 use model::watcher::WatchEvent;
 use service::pty::{PtyContext, PtyFlushSenders, PtyLogDir};
 use service::runtime::{
-	HerdrEndpoint, HerdrStubAdapter, LocalAdapter, RuntimeHandle, RuntimeRouter,
+	HerdrClientGuard, HerdrEndpoint, HerdrStubAdapter, LocalAdapter,
+	RuntimeHandle,
 };
 use service::runtime_sync::HerdrRuntimeSync;
 use service::{PtyEventEmitter, WatchEventSender};
@@ -97,17 +98,24 @@ pub fn build_pty_context(app: &AppHandle) -> PtyContext {
 	}
 }
 
-/// Wire the Local adapter at startup. Herdr is not selected and terminal
-/// attach is not started from this constructor.
+/// Wire the production GUI runtime. Herdr is the default: resolve the
+/// pinned v0.9.0 sidecar, ensure the dedicated 2code namespace, and
+/// inject JSON terminal + worktree + CLI attach clients. Explicit
+/// `TWOCODE_RUNTIME=local` skips `ensure_herdr_listener` and uses Local.
 pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
-	Arc::new(RuntimeRouter::new(
-		LocalAdapter::new(build_pty_context(app)),
-		HerdrStubAdapter::new(),
+	let ctx = build_pty_context(app);
+	let db = ctx.db.clone();
+	let guard = app.state::<HerdrClientGuard>();
+	Arc::new(service::runtime::build_gui_runtime(
+		LocalAdapter::new(ctx),
+		db,
+		guard.inner(),
+		infra::herdr::process::default_xdg_config_home(),
 	))
 }
 
-/// Read-only Herdr projection. Must not be started from Local default
-/// startup in `lib.rs`.
+/// Read-only Herdr projection. Not started from GUI runtime setup;
+/// snapshot-as-session-store is a later task.
 #[allow(dead_code)]
 pub fn herdr_runtime_sync(
 	endpoint: &HerdrEndpoint,

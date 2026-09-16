@@ -214,6 +214,39 @@ struct HerdrAttachment {
 	helper: Arc<TerminalSessionHelper>,
 }
 
+#[derive(Clone, Debug)]
+enum HerdrStartupFailure {
+	Absent(String),
+	Incompatible(String),
+	Other(String),
+}
+
+impl HerdrStartupFailure {
+	fn from_app(err: &AppError) -> Self {
+		match err {
+			AppError::HerdrServerAbsent(message) => {
+				Self::Absent(message.clone())
+			}
+			AppError::HerdrServerIncompatible(message) => {
+				Self::Incompatible(message.clone())
+			}
+			other => Self::Other(other.to_string()),
+		}
+	}
+
+	fn to_app(&self) -> AppError {
+		match self {
+			Self::Absent(message) => {
+				AppError::HerdrServerAbsent(message.clone())
+			}
+			Self::Incompatible(message) => {
+				AppError::HerdrServerIncompatible(message.clone())
+			}
+			Self::Other(message) => AppError::PtyError(message.clone()),
+		}
+	}
+}
+
 /// Herdr adapter. Without a client, lifecycle stays fail-closed.
 #[derive(Default)]
 pub struct HerdrStubAdapter {
@@ -222,6 +255,7 @@ pub struct HerdrStubAdapter {
 	worktrees: Option<Arc<dyn HerdrWorktreeClient>>,
 	cli: Option<HerdrCliAttach>,
 	attachments: Mutex<HashMap<String, HerdrAttachment>>,
+	startup_error: Option<HerdrStartupFailure>,
 }
 
 impl HerdrStubAdapter {
@@ -239,6 +273,7 @@ impl HerdrStubAdapter {
 			worktrees: None,
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
+			startup_error: None,
 		}
 	}
 
@@ -253,6 +288,7 @@ impl HerdrStubAdapter {
 			worktrees: None,
 			cli: Some(cli),
 			attachments: Mutex::new(HashMap::new()),
+			startup_error: None,
 		}
 	}
 
@@ -263,12 +299,46 @@ impl HerdrStubAdapter {
 			worktrees: Some(client),
 			cli: None,
 			attachments: Mutex::new(HashMap::new()),
+			startup_error: None,
 		}
+	}
+
+	pub fn with_json_clients(
+		db: DbPool,
+		json: Arc<HerdrJsonTerminals>,
+		cli: HerdrCliAttach,
+	) -> Self {
+		Self {
+			ops: Mutex::new(Vec::new()),
+			lifecycle: Some(HerdrLifecycle {
+				db,
+				client: json.clone(),
+			}),
+			worktrees: Some(json),
+			cli: Some(cli),
+			attachments: Mutex::new(HashMap::new()),
+			startup_error: None,
+		}
+	}
+
+	/// Keep Herdr selected. Ops return the startup error instead of Local.
+	pub fn fail_closed(error: AppError) -> Self {
+		Self {
+			startup_error: Some(HerdrStartupFailure::from_app(&error)),
+			..Self::default()
+		}
+	}
+
+	fn unavailable(&self) -> AppError {
+		self.startup_error
+			.as_ref()
+			.map(HerdrStartupFailure::to_app)
+			.unwrap_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
 	}
 
 	fn fail(&self, op: &'static str) -> AppError {
 		self.record(op);
-		AppError::PtyError(UNAVAILABLE.to_string())
+		self.unavailable()
 	}
 
 	fn record(&self, op: &'static str) {
@@ -296,15 +366,11 @@ impl HerdrStubAdapter {
 	pub(crate) fn worktrees(
 		&self,
 	) -> Result<&dyn HerdrWorktreeClient, AppError> {
-		self.worktrees
-			.as_deref()
-			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
+		self.worktrees.as_deref().ok_or_else(|| self.unavailable())
 	}
 
 	fn lifecycle(&self) -> Result<&HerdrLifecycle, AppError> {
-		self.lifecycle
-			.as_ref()
-			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
+		self.lifecycle.as_ref().ok_or_else(|| self.unavailable())
 	}
 
 	fn resolve_pane_id(&self, session_id: &str) -> Result<String, AppError> {
@@ -359,10 +425,7 @@ impl HerdrStubAdapter {
 	) -> Result<(), AppError> {
 		self.record("attach");
 		let pane_id = self.resolve_pane_id(session_id)?;
-		let cli = self
-			.cli
-			.as_ref()
-			.ok_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))?;
+		let cli = self.cli.as_ref().ok_or_else(|| self.unavailable())?;
 		if let Some(previous) = self.take_attachment(session_id) {
 			drop(previous);
 		}
@@ -1022,7 +1085,7 @@ impl TerminalRuntime for HerdrStubAdapter {
 	fn write(&self, session_id: &str, data: &[u8]) -> Result<(), AppError> {
 		self.record("write");
 		if self.cli.is_none() {
-			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+			return Err(self.unavailable());
 		}
 		self.helper_for(session_id)?
 			.write_input(data)
@@ -1037,7 +1100,7 @@ impl TerminalRuntime for HerdrStubAdapter {
 	) -> Result<(), AppError> {
 		self.record("resize");
 		if self.cli.is_none() {
-			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+			return Err(self.unavailable());
 		}
 		self.helper_for(session_id)?
 			.resize(cols, rows)
@@ -1065,7 +1128,7 @@ impl TerminalRuntime for HerdrStubAdapter {
 	) -> Result<(), AppError> {
 		self.record("scroll");
 		if self.cli.is_none() {
-			return Err(AppError::PtyError(UNAVAILABLE.to_string()));
+			return Err(self.unavailable());
 		}
 		self.helper_for(session_id)?
 			.scroll(direction, lines, source)
@@ -2747,7 +2810,43 @@ time.sleep(30)
 			"/tmp/2code-ok.sock",
 		))
 		.unwrap();
-		let _ = HerdrJsonTerminals::new(client);
+		let json = Arc::new(HerdrJsonTerminals::new(client));
+		let xdg = tempfile::tempdir().unwrap();
+		std::fs::create_dir_all(xdg.path().join("herdr")).unwrap();
+		let namespace =
+			infra::herdr::process::resolve_namespace(xdg.path().to_path_buf())
+				.unwrap();
+		let with_json = HerdrStubAdapter::with_json_clients(
+			setup_db(),
+			json,
+			HerdrCliAttach {
+				executable: PathBuf::from("herdr"),
+				namespace,
+				extra_env: Vec::new(),
+			},
+		);
+		assert!(with_json.worktrees().is_ok());
+		assert!(with_json.has_terminal_client());
+		let absent = AppError::HerdrServerAbsent("/tmp/missing.sock".into());
+		let closed = HerdrStubAdapter::fail_closed(absent);
+		assert!(matches!(
+			closed
+				.create_session(
+					&PtySessionMeta {
+						profile_id: "pr1".into(),
+						title: "x".into(),
+					},
+					&PtyConfig {
+						shell: "/bin/sh".into(),
+						cwd: "/tmp".into(),
+						rows: 24,
+						cols: 80,
+						startup_commands: Vec::new(),
+					},
+				)
+				.unwrap_err(),
+			AppError::HerdrServerAbsent(_)
+		));
 		assert!(stub
 			.create_session(
 				&PtySessionMeta {

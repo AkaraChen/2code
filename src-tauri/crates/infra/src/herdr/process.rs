@@ -130,7 +130,8 @@ impl Drop for HerdrServerLease {
 }
 
 /// Process-wide holder so GUI exit can drop helpers without stopping
-/// the server. Default Local startup must not call [`Self::ensure`].
+/// the server. Herdr-default GUI startup calls [`Self::ensure`]. The
+/// explicit Local fallback must not.
 #[derive(Clone, Default)]
 pub struct HerdrClientGuard {
 	inner: std::sync::Arc<Mutex<Option<HerdrServerLease>>>,

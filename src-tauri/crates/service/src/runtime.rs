@@ -12,10 +12,11 @@ mod local;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use infra::db::DbPool;
 use model::error::AppError;
 use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
@@ -185,6 +186,55 @@ impl Default for RuntimeSelector {
 	fn default() -> Self {
 		Self::new(RuntimeBackend::Herdr)
 	}
+}
+
+pub const LOCAL_RUNTIME_ENV: &str = "TWOCODE_RUNTIME";
+pub const LOCAL_RUNTIME_FLAG: &str = "--twocode-runtime=local";
+
+/// Explicit Local opt-in. Anything else (unset, `herdr`, garbage) is Herdr.
+pub fn parse_runtime_env(value: Option<&str>) -> RuntimeBackend {
+	match value {
+		Some(value) if value.eq_ignore_ascii_case("local") => {
+			RuntimeBackend::Local
+		}
+		_ => RuntimeBackend::Herdr,
+	}
+}
+
+pub fn parse_runtime_args<I, S>(args: I) -> RuntimeBackend
+where
+	I: IntoIterator<Item = S>,
+	S: AsRef<str>,
+{
+	if args
+		.into_iter()
+		.any(|arg| arg.as_ref().eq_ignore_ascii_case(LOCAL_RUNTIME_FLAG))
+	{
+		RuntimeBackend::Local
+	} else {
+		RuntimeBackend::Herdr
+	}
+}
+
+/// GUI backend: Herdr unless `TWOCODE_RUNTIME=local` or `--twocode-runtime=local`.
+pub fn select_gui_backend() -> RuntimeBackend {
+	if parse_runtime_env(std::env::var(LOCAL_RUNTIME_ENV).ok().as_deref())
+		== RuntimeBackend::Local
+	{
+		return RuntimeBackend::Local;
+	}
+	parse_runtime_args(std::env::args())
+}
+
+/// Inputs for GUI Herdr attach. Missing sidecar/namespace fails closed.
+pub struct GuiHerdrConnect<'a> {
+	pub db: DbPool,
+	pub guard: &'a HerdrClientGuard,
+	pub xdg_config_home: PathBuf,
+	pub extra_env: &'a [(OsString, OsString)],
+	pub sidecar: Option<PathBuf>,
+	pub exe_dir: Option<PathBuf>,
+	pub binaries_dir: Option<PathBuf>,
 }
 
 /// Routes terminal operations to exactly one backend per session identity.
@@ -382,8 +432,8 @@ impl RuntimeRouter {
 	}
 }
 
-/// Resolve the dedicated 2code Herdr listener. Never called from the
-/// Local default startup path.
+/// Resolve the dedicated 2code Herdr listener. Called from Herdr-default
+/// GUI startup. The `TWOCODE_RUNTIME=local` path must not call this.
 pub fn ensure_herdr_listener(
 	guard: &HerdrClientGuard,
 	executable: &Path,
@@ -400,6 +450,113 @@ pub fn ensure_herdr_listener(
 			cli_timeout: Duration::from_secs(5),
 		})
 		.map_err(AppError::from)
+}
+
+fn resolve_gui_sidecar(
+	opts: &GuiHerdrConnect<'_>,
+) -> Result<PathBuf, AppError> {
+	if let Some(path) = &opts.sidecar {
+		return if path.is_file() {
+			Ok(path.clone())
+		} else {
+			Err(AppError::HerdrServerAbsent(format!(
+				"Herdr sidecar not found at {}",
+				path.display()
+			)))
+		};
+	}
+	let triple = infra::herdr::host_triple()
+		.map_err(|err| AppError::HerdrServerIncompatible(err.to_string()))?;
+	infra::herdr::try_resolve_sidecar(&infra::herdr::ResolveOptions {
+		triple,
+		exe_dir: opts.exe_dir.as_deref(),
+		binaries_dir: opts.binaries_dir.as_deref(),
+	})
+	.map_err(|err| AppError::HerdrServerIncompatible(err.to_string()))?
+	.ok_or_else(|| {
+		AppError::HerdrServerAbsent(format!(
+			"Herdr sidecar not found for {triple}"
+		))
+	})
+}
+
+/// Resolve the pinned sidecar, ensure the 2code namespace, and inject
+/// JSON terminal + worktree + CLI attach clients.
+pub fn connect_gui_herdr(
+	opts: GuiHerdrConnect<'_>,
+) -> Result<HerdrStubAdapter, AppError> {
+	let executable = resolve_gui_sidecar(&opts)?;
+	infra::herdr::report_version(&executable)
+		.map_err(|err| AppError::HerdrServerIncompatible(err.to_string()))?;
+	let namespace =
+		infra::herdr::process::resolve_namespace(opts.xdg_config_home)?;
+	let endpoint = ensure_herdr_listener(
+		opts.guard,
+		&executable,
+		namespace.xdg_config_home.clone(),
+		opts.extra_env,
+	)?;
+	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
+		.map_err(AppError::from)?;
+	let json = Arc::new(HerdrJsonTerminals::new(client));
+	Ok(HerdrStubAdapter::with_json_clients(
+		opts.db,
+		json,
+		HerdrCliAttach {
+			executable,
+			namespace,
+			extra_env: opts.extra_env.to_vec(),
+		},
+	))
+}
+
+/// Herdr stays selected even when sidecar/namespace attach fails.
+pub fn build_gui_herdr_adapter(opts: GuiHerdrConnect<'_>) -> HerdrStubAdapter {
+	match connect_gui_herdr(opts) {
+		Ok(adapter) => adapter,
+		Err(err) => {
+			tracing::error!(
+				target: "herdr",
+				"Herdr default runtime failed closed: {err}"
+			);
+			HerdrStubAdapter::fail_closed(err)
+		}
+	}
+}
+
+/// Local env/flag skips attach. Herdr default always keeps Herdr selected.
+pub fn herdr_adapter_for_gui_backend(
+	backend: RuntimeBackend,
+	opts: GuiHerdrConnect<'_>,
+) -> HerdrStubAdapter {
+	if backend == RuntimeBackend::Local {
+		HerdrStubAdapter::new()
+	} else {
+		build_gui_herdr_adapter(opts)
+	}
+}
+
+/// GUI production runtime. Local only for the explicit env/flag.
+pub fn build_gui_runtime(
+	local: LocalAdapter,
+	db: DbPool,
+	guard: &HerdrClientGuard,
+	xdg_config_home: PathBuf,
+) -> RuntimeRouter {
+	let backend = select_gui_backend();
+	let herdr = herdr_adapter_for_gui_backend(
+		backend,
+		GuiHerdrConnect {
+			db,
+			guard,
+			xdg_config_home,
+			extra_env: &[],
+			sidecar: None,
+			exe_dir: None,
+			binaries_dir: None,
+		},
+	);
+	RuntimeRouter::with_backend(backend, local, herdr)
 }
 
 /// GUI exit: drop client helpers only. Does not stop the Herdr server.
@@ -818,6 +975,229 @@ mod tests {
 	}
 
 	#[test]
+	fn parse_runtime_env_only_local_is_the_fallback() {
+		assert_eq!(parse_runtime_env(Some("local")), RuntimeBackend::Local);
+		assert_eq!(parse_runtime_env(Some("LOCAL")), RuntimeBackend::Local);
+		assert_eq!(parse_runtime_env(Some("herdr")), RuntimeBackend::Herdr);
+		assert_eq!(parse_runtime_env(None), RuntimeBackend::Herdr);
+		assert_eq!(parse_runtime_env(Some("nope")), RuntimeBackend::Herdr);
+	}
+
+	#[test]
+	fn parse_runtime_args_only_the_twocode_flag_selects_local() {
+		assert_eq!(
+			parse_runtime_args(["2code", LOCAL_RUNTIME_FLAG]),
+			RuntimeBackend::Local
+		);
+		assert_eq!(
+			parse_runtime_args(["2code", "--twocode-runtime=HERDR"]),
+			RuntimeBackend::Herdr
+		);
+		assert_eq!(parse_runtime_args(["2code"]), RuntimeBackend::Herdr);
+	}
+
+	fn gui_connect<'a>(
+		db: DbPool,
+		guard: &'a HerdrClientGuard,
+		xdg: PathBuf,
+		sidecar: Option<PathBuf>,
+	) -> GuiHerdrConnect<'a> {
+		let empty = xdg.join("empty-bins");
+		std::fs::create_dir_all(&empty).unwrap();
+		GuiHerdrConnect {
+			db,
+			guard,
+			xdg_config_home: xdg,
+			extra_env: &[],
+			sidecar,
+			exe_dir: Some(empty.clone()),
+			binaries_dir: Some(empty),
+		}
+	}
+
+	#[test]
+	fn missing_sidecar_fails_closed_absent_without_flipping_or_local_pty() {
+		let cwd = tempfile::tempdir().unwrap();
+		let db = setup_db();
+		insert_project_and_profile(&db, &cwd.path().to_string_lossy());
+		let guard = HerdrClientGuard::new();
+		let err = match connect_gui_herdr(gui_connect(
+			db.clone(),
+			&guard,
+			cwd.path().join("xdg"),
+			Some(cwd.path().join("missing-herdr")),
+		)) {
+			Ok(_) => panic!("missing sidecar must fail closed"),
+			Err(err) => err,
+		};
+		assert!(matches!(err, AppError::HerdrServerAbsent(_)), "{err}");
+		assert!(err.to_string().contains("sidecar not found"), "{err}");
+
+		let sessions = infra::pty::create_session_map();
+		let read_threads = infra::pty::create_thread_tracker();
+		let router = RuntimeRouter::with_backend(
+			RuntimeBackend::Herdr,
+			LocalAdapter::new(PtyContext {
+				db,
+				sessions: sessions.clone(),
+				flush_senders: create_flush_senders(),
+				read_threads: read_threads.clone(),
+				emitter: Arc::new(TestEmitter),
+				output_dir: cwd.path().to_path_buf(),
+			}),
+			build_gui_herdr_adapter(gui_connect(
+				setup_db(),
+				&guard,
+				cwd.path().join("xdg-2"),
+				Some(cwd.path().join("missing-herdr")),
+			)),
+		);
+		assert_eq!(router.selected_backend(), RuntimeBackend::Herdr);
+		let created = router.create_session(
+			&PtySessionMeta {
+				profile_id: "pr1".into(),
+				title: "t".into(),
+			},
+			&PtyConfig {
+				shell: test_shell(),
+				cwd: cwd.path().to_string_lossy().into_owned(),
+				rows: 24,
+				cols: 80,
+				startup_commands: Vec::new(),
+			},
+		);
+		assert!(
+			matches!(created, Err(AppError::HerdrServerAbsent(_))),
+			"{created:?}"
+		);
+		assert!(sessions.lock().unwrap().is_empty());
+		infra::pty::join_all_read_threads(&read_threads);
+	}
+
+	#[test]
+	fn incompatible_sidecar_fails_closed_without_flipping() {
+		let cwd = tempfile::tempdir().unwrap();
+		let fake = cwd.path().join("not-herdr");
+		std::fs::write(&fake, "#!/bin/sh\necho not-herdr\n").unwrap();
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt;
+			std::fs::set_permissions(
+				&fake,
+				std::fs::Permissions::from_mode(0o755),
+			)
+			.unwrap();
+		}
+		let db = setup_db();
+		let guard = HerdrClientGuard::new();
+		let err = match connect_gui_herdr(gui_connect(
+			db,
+			&guard,
+			cwd.path().join("xdg"),
+			Some(fake),
+		)) {
+			Ok(_) => panic!("incompatible sidecar must fail closed"),
+			Err(err) => err,
+		};
+		assert!(matches!(err, AppError::HerdrServerIncompatible(_)), "{err}");
+	}
+
+	#[test]
+	fn explicit_local_gui_adapter_skips_ensure_and_creates_local_pty() {
+		let cwd = tempfile::tempdir().unwrap();
+		let db = setup_db();
+		insert_project_and_profile(&db, &cwd.path().to_string_lossy());
+		let guard = HerdrClientGuard::new();
+		let xdg = cwd.path().join("xdg-local");
+		let herdr = herdr_adapter_for_gui_backend(
+			RuntimeBackend::Local,
+			gui_connect(
+				db.clone(),
+				&guard,
+				xdg.clone(),
+				Some(cwd.path().join("would-fail-if-ensured")),
+			),
+		);
+		assert!(herdr.recorded_ops().is_empty());
+		assert!(!xdg.join("herdr").exists());
+		let sessions = infra::pty::create_session_map();
+		let read_threads = infra::pty::create_thread_tracker();
+		let router = RuntimeRouter::with_backend(
+			RuntimeBackend::Local,
+			LocalAdapter::new(PtyContext {
+				db,
+				sessions: sessions.clone(),
+				flush_senders: create_flush_senders(),
+				read_threads: read_threads.clone(),
+				emitter: Arc::new(TestEmitter),
+				output_dir: cwd.path().to_path_buf(),
+			}),
+			herdr,
+		);
+		let created = router
+			.create_session(
+				&PtySessionMeta {
+					profile_id: "pr1".into(),
+					title: "local".into(),
+				},
+				&PtyConfig {
+					shell: test_shell(),
+					cwd: cwd.path().to_string_lossy().into_owned(),
+					rows: 24,
+					cols: 80,
+					startup_commands: Vec::new(),
+				},
+			)
+			.unwrap();
+		assert_eq!(
+			router.owner(&created.session_id).unwrap(),
+			Some(RuntimeBackend::Local)
+		);
+		assert_eq!(sessions.lock().unwrap().len(), 1);
+		router.close_session(&created.session_id).unwrap();
+		infra::pty::close_all_sessions(&sessions);
+		infra::pty::join_all_read_threads(&read_threads);
+	}
+
+	#[test]
+	fn herdr_gui_startup_wires_sidecar_namespace_and_local_skip() {
+		let runtime = include_str!("runtime.rs");
+		let connect = runtime
+			.split("pub fn connect_gui_herdr")
+			.nth(1)
+			.unwrap()
+			.split("pub fn build_gui_herdr_adapter")
+			.next()
+			.unwrap();
+		assert!(connect.contains("ensure_herdr_listener"));
+		assert!(
+			connect.contains("try_resolve_sidecar")
+				|| connect.contains("resolve_gui_sidecar")
+		);
+		assert!(connect.contains("report_version"));
+		assert!(connect.contains("HerdrJsonTerminals"));
+		assert!(connect.contains("HerdrCliAttach"));
+		assert!(connect.contains("resolve_namespace"));
+		let local_branch = runtime
+			.split("pub fn herdr_adapter_for_gui_backend")
+			.nth(1)
+			.unwrap()
+			.split("pub fn build_gui_runtime")
+			.next()
+			.unwrap();
+		assert!(local_branch.contains("RuntimeBackend::Local"));
+		assert!(local_branch.contains("HerdrStubAdapter::new()"));
+		assert!(!local_branch.contains("ensure_herdr_listener"));
+		assert!(!local_branch.contains("connect_gui_herdr"));
+		assert!(runtime.contains("TWOCODE_RUNTIME"));
+		assert!(runtime.contains(LOCAL_RUNTIME_FLAG));
+		let bridge = include_str!("../../../src/bridge.rs");
+		assert!(bridge.contains("build_gui_runtime"));
+		assert!(!bridge.contains("RuntimeRouter::new"));
+		assert!(bridge.contains("TWOCODE_RUNTIME"));
+	}
+
+	#[test]
 	fn local_create_write_resize_close_behave_as_today() {
 		let fx = Fixture::new(RuntimeBackend::Local);
 		let created = fx
@@ -1114,31 +1494,31 @@ mod tests {
 		);
 		assert!(
 			!lib.contains("ensure_herdr_listener"),
-			"Local default startup must not start a Herdr server"
-		);
-		assert!(
-			!lib.contains("herdr::transport"),
-			"Local default startup must not open a Herdr NDJSON client"
+			"lib.rs setup delegates ensure to the runtime builder"
 		);
 		assert!(
 			!lib.contains("HerdrClient::connect"),
-			"Local default startup must not connect a Herdr socket client"
+			"lib.rs must not open a Herdr NDJSON client"
 		);
 		assert!(
 			!lib.contains("runtime_sync"),
-			"Local default startup must not start Herdr snapshot sync"
+			"GUI setup must not start Herdr snapshot sync"
 		);
 		assert!(
 			!lib.contains("herdr_runtime_sync"),
-			"Local default startup must not construct a Herdr runtime sync"
+			"GUI setup must not construct a Herdr runtime sync"
 		);
 		assert!(
 			!lib.contains("HerdrRuntimeSync"),
-			"Local default startup must not start HerdrRuntimeSync"
+			"GUI setup must not start HerdrRuntimeSync"
 		);
 		assert!(
 			!lib.contains("events.subscribe"),
-			"Local default startup must not subscribe to Herdr events"
+			"GUI setup must not subscribe to Herdr events"
+		);
+		assert!(
+			!lib.contains("adopt_existing_profiles"),
+			"launch/adopt stays out of this task"
 		);
 	}
 

@@ -2,7 +2,7 @@
 //!
 //! Uses JSON `worktree.open` only. Does not create git worktrees, bind
 //! RuntimeRouter identities, write session→pane rows, or start from
-//! Local default startup.
+//! the explicit Local fallback.
 
 use std::path::{Path, PathBuf};
 
@@ -94,7 +94,7 @@ struct AdoptionTarget {
 }
 
 /// Resume-safe adoption. Persists after each successful profile bind.
-/// Not called from Local default startup.
+/// Not called from the explicit Local fallback.
 pub fn adopt_existing_profiles(
 	db: &DbPool,
 	projection: &RuntimeProjection,
