@@ -14,6 +14,7 @@ import {
 	useCreateProfile,
 	useDeleteProfile,
 	useProfileDeleteCheck,
+	useUpdateProfileNotes,
 } from "./hooks";
 
 const {
@@ -21,11 +22,13 @@ const {
 	deleteProfileMock,
 	getProfileDeleteCheckMock,
 	listProjectsMock,
+	updateProfileNotesMock,
 } = vi.hoisted(() => ({
 	createProfileMock: vi.fn(),
 	deleteProfileMock: vi.fn(),
 	getProfileDeleteCheckMock: vi.fn(),
 	listProjectsMock: vi.fn(),
+	updateProfileNotesMock: vi.fn(),
 }));
 
 vi.mock("@/generated", async () => {
@@ -38,6 +41,7 @@ vi.mock("@/generated", async () => {
 		deleteProfile: deleteProfileMock,
 		getProfileDeleteCheck: getProfileDeleteCheckMock,
 		listProjects: listProjectsMock,
+		updateProfileNotes: updateProfileNotesMock,
 	};
 });
 
@@ -69,6 +73,7 @@ describe("profile hooks", () => {
 		deleteProfileMock.mockReset();
 		getProfileDeleteCheckMock.mockReset();
 		listProjectsMock.mockReset();
+		updateProfileNotesMock.mockReset();
 		listProjectsMock.mockResolvedValue([]);
 		useWorktreeSettingsStore.setState({ defaultWorktreeDir: "" });
 		useTerminalStore.setState({
@@ -379,5 +384,57 @@ describe("profile hooks", () => {
 				.getQueryData<ProjectWithProfiles[]>(queryKeys.projects.all)?.[0]
 				.profiles.map((profile) => profile.id),
 		).toEqual(["profile-2"]);
+	});
+
+	it("does not cache-write an unmapped notes stub that clears is_default", async () => {
+		const queryClient = createQueryClient();
+		const projects: ProjectWithProfiles[] = [
+			{
+				id: "project-1",
+				name: "Project 1",
+				folder: "/projects/one",
+				created_at: "2026-01-01T00:00:00Z",
+				sort_order: 1000,
+				profiles: [
+					{
+						id: "w1",
+						project_id: "project-1",
+						branch_name: "main",
+						worktree_path: "/projects/one",
+						created_at: "2026-01-01T00:00:00Z",
+						is_default: true,
+						notes: "",
+					},
+				],
+			},
+		];
+		queryClient.setQueryData(queryKeys.projects.all, projects);
+		updateProfileNotesMock.mockResolvedValue({
+			id: "w1",
+			project_id: "project-1",
+			branch_name: "main",
+			worktree_path: "/projects/one",
+			created_at: "",
+			is_default: false,
+			notes: "",
+		});
+
+		const { result } = renderHook(() => useUpdateProfileNotes(), {
+			wrapper: createWrapperWithClient(queryClient),
+		});
+
+		await act(async () => {
+			await result.current.mutateAsync({
+				id: "w1",
+				notes: "typed notes",
+			});
+		});
+
+		const cached = queryClient.getQueryData<ProjectWithProfiles[]>(
+			queryKeys.projects.all,
+		)?.[0].profiles[0];
+		expect(cached?.id).toBe("w1");
+		expect(cached?.is_default).toBe(true);
+		expect(cached?.notes).toBe("");
 	});
 });

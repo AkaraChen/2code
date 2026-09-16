@@ -138,11 +138,14 @@ export function useUpdateProfileNotes() {
 			latestRevisionByProfileIdRef.current.set(id, revision);
 			return { revision };
 		},
-		onSuccess: (profile, { id }, context) => {
+		onSuccess: (profile, { id, notes }, context) => {
 			if (
 				!context ||
 				latestRevisionByProfileIdRef.current.get(id) !== context.revision
 			) {
+				return;
+			}
+			if (profile.notes !== notes) {
 				return;
 			}
 			queryClient.setQueryData<ProjectWithProfiles[]>(
@@ -151,10 +154,20 @@ export function useUpdateProfileNotes() {
 					projects?.map((project) => {
 						if (project.id !== profile.project_id) return project;
 						let changed = false;
-						const profiles = project.profiles.map((p) => {
-							if (p.id !== profile.id) return p;
+						const profiles = project.profiles.map((existing) => {
+							if (existing.id !== profile.id && existing.id !== id) {
+								return existing;
+							}
 							changed = true;
-							return profile;
+							return {
+								...existing,
+								notes: profile.notes,
+								worktree_path:
+									profile.worktree_path || existing.worktree_path,
+								branch_name:
+									profile.branch_name || existing.branch_name,
+								is_default: existing.is_default,
+							};
 						});
 						return changed ? { ...project, profiles } : project;
 					}),

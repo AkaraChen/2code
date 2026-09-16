@@ -1290,40 +1290,34 @@ pub fn update_notes_with_runtime(
 
 	let path = crate::project::reconcile_profile_checkout(runtime, db, id)?;
 	if let Some(sqlite_id) = crate::project::mapped_sqlite_profile_id(db, id)? {
-		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-		let mut profile = repo::profile::update_notes(conn, &sqlite_id, notes)?;
-		profile.id = id.to_string();
-		profile.worktree_path = path;
+		let mut profile = {
+			let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
+			let mut profile =
+				repo::profile::update_notes(conn, &sqlite_id, notes)?;
+			profile.id = id.to_string();
+			profile.worktree_path = path;
+			profile
+		};
+		if let Some(live) = live_catalog_profile(runtime, db, id)? {
+			profile.is_default = live.is_default;
+			profile.branch_name = live.branch_name;
+		}
 		return Ok(profile);
 	}
 
-	Ok(Profile {
-		id: id.to_string(),
-		project_id: project_id_for_checkout(db, &path)?.unwrap_or_default(),
-		branch_name: infra::git::branch(&path).unwrap_or_default(),
-		worktree_path: path,
-		created_at: String::new(),
-		is_default: false,
-		notes: String::new(),
-	})
+	live_catalog_profile(runtime, db, id)?
+		.ok_or_else(|| AppError::NotFound(format!("Profile: {id}")))
 }
 
-fn project_id_for_checkout(
+fn live_catalog_profile(
+	runtime: &RuntimeRouter,
 	db: &DbPool,
-	path: &str,
-) -> Result<Option<String>, AppError> {
-	let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
-	Ok(repo::project::list_all(conn)?
+	id: &str,
+) -> Result<Option<Profile>, AppError> {
+	Ok(crate::project::list_with_runtime(runtime, db)?
 		.into_iter()
-		.find(|project| {
-			project.folder == path
-				|| Path::new(&project.folder)
-					.canonicalize()
-					.ok()
-					.zip(Path::new(path).canonicalize().ok())
-					.is_some_and(|(left, right)| left == right)
-		})
-		.map(|project| project.id))
+		.flat_map(|project| project.profiles)
+		.find(|profile| profile.id == id))
 }
 
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
@@ -3111,5 +3105,136 @@ mod tests {
 		assert!(!src.contains("worktree.create"));
 		assert!(!src.contains("create_herdr_with_db"));
 		assert!(!src.contains("create_with_runtime"));
+	}
+
+	#[test]
+	fn herdr_notes_update_mapped_workspace_id_persists_sqlite_notes() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let default_id = format!("default-{}", project.id);
+		repo::runtime_mapping::bind_profile_workspace(
+			&mut conn,
+			&default_id,
+			HERDR_NAMESPACE,
+			"w1",
+		)
+		.unwrap();
+		let folder = dir.path().to_string_lossy().into_owned();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let updated = update_notes_with_runtime(&router, &db, "w1", "hello")
+			.expect("notes");
+		assert_eq!(updated.id, "w1");
+		assert_eq!(updated.notes, "hello");
+		assert!(updated.is_default);
+
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::find_by_id(conn, &default_id).unwrap().notes,
+			"hello"
+		);
+	}
+
+	#[test]
+	fn herdr_notes_update_unmapped_workspace_id_does_not_stub_default() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let default_id = format!("default-{}", project.id);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+			state.listed.push(WorktreeListEntry {
+				path: format!("{folder}/linked"),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake);
+
+		let primary = update_notes_with_runtime(&router, &db, "w1", "nope")
+			.expect("primary notes no-op");
+		assert_eq!(primary.id, "w1");
+		assert!(primary.is_default);
+		assert_eq!(primary.notes, "");
+
+		let linked = update_notes_with_runtime(&router, &db, "w2", "nope")
+			.expect("linked notes no-op");
+		assert_eq!(linked.id, "w2");
+		assert!(!linked.is_default);
+		assert_eq!(linked.notes, "");
+
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::find_by_id(conn, &default_id).unwrap().notes,
+			""
+		);
+		assert!(repo::profile::find_by_id(conn, "w2").is_err());
+		assert_eq!(
+			repo::profile::list_by_project(conn, &project.id)
+				.unwrap()
+				.len(),
+			1
+		);
+	}
+
+	#[test]
+	fn herdr_delete_unmapped_workspace_id_does_not_insert_sqlite_profile() {
+		let mut conn = setup_db();
+		let (project, dir) = create_project_with_git_repo(&mut conn);
+		let folder = dir.path().to_string_lossy().into_owned();
+		let before = repo::profile::list_by_project(&mut conn, &project.id)
+			.unwrap()
+			.len();
+		let db = pool_from(conn);
+		let fake = FakeWorktrees::new();
+		{
+			let mut state = fake.state.lock().unwrap();
+			state.listed.push(WorktreeListEntry {
+				path: folder.clone(),
+				branch: Some("main".into()),
+				workspace_id: Some("w1".into()),
+				is_linked_worktree: false,
+			});
+			state.listed.push(WorktreeListEntry {
+				path: format!("{folder}/linked"),
+				branch: Some("feat/x".into()),
+				workspace_id: Some("w2".into()),
+				is_linked_worktree: true,
+			});
+		}
+		let router = herdr_router(&db, fake.clone());
+
+		delete_with_runtime(&router, &db, "w2").unwrap();
+
+		assert_eq!(fake.removes().len(), 1);
+		assert_eq!(fake.last_remove().workspace_id, "w2");
+		let conn = &mut *db.lock().unwrap();
+		assert_eq!(
+			repo::profile::list_by_project(conn, &project.id)
+				.unwrap()
+				.len(),
+			before
+		);
+		assert!(repo::profile::find_by_id(conn, "w2").is_err());
 	}
 }
