@@ -8,6 +8,10 @@ Herdr is the **production default** runtime ([#436 Task 2](https://github.com/Ak
 
 The sidebar / profile-switcher list is derived from live Herdr ([#436 Task 3](https://github.com/AkaraChen/2code/issues/441)). [`list_projects`](../src-tauri/src/handler/project.rs) / [`list_with_runtime`](../src-tauri/crates/service/src/project.rs) still load sqlite **projects** (and groups). When Herdr is selected, each project's `profiles` array is **replaced** from JSON `worktree.list` (git, `cwd` = canonical `projects.folder`, membership = non-empty `open_workspace_id`) or `session.snapshot` pane `cwd` / `foreground_cwd` (non-git `not_git_worktree`). `workspace.list` is not a path join. Profile `id` is the Herdr `workspace_id` (`wN`); route ids are `wN`. sqlite `profiles` rows are not merged and are not written back from the list. Empty Herdr, disk git checkouts without `open_workspace_id`, or an absent/incompatible sidecar yield `profiles: []` for that project until **#436 Task 10**. `TWOCODE_RUNTIME=local` still lists sqlite nested profiles. Notes overlay via `profile_runtime_mappings` is not list membership. No `HerdrRuntimeSync` / `events.subscribe`.
 
+Create and delete go through Herdr when that backend is selected ([#436 Task 4](https://github.com/AkaraChen/2code/issues/443)). [`create_profile`](../src-tauri/src/handler/profile.rs) / [`create_with_runtime`](../src-tauri/crates/service/src/profile.rs) does **not** INSERT sqlite `profiles`. Git New Profile is JSON `worktree.create` (parent `workspace_id` from the live primary `worktree.list` row, not a sqlite mapping). Non-git New Profile is JSON `workspace.create` with absolute `--cwd` (the project folder). The returned `Profile.id` is the Herdr `workspace_id`. [`delete_profile`](../src-tauri/src/handler/profile.rs) / [`delete_with_runtime`](../src-tauri/crates/service/src/profile.rs) does **not** DELETE sqlite `profiles`. Linked git delete is `worktree.remove`; non-git extra profiles are `workspace.close`. The primary / project-folder checkout is still refused. Herdr-down fails closed: no `git worktree add` / `git worktree remove`, no sqlite profile write. `TWOCODE_RUNTIME=local` keeps today's sqlite create/delete. Dual-backend bind still refuses: a leftover Local same-branch sqlite extra is not adopted into Herdr `worktree.create`. Uncertain JSON mutations are never auto-replayed.
+
+GUI clicks and labels stay **New Profile** / **Delete Profile**. Named exceptions Herdr cannot back with the old meaning: route ids are `workspace_id` (`wN`); non-git New Profile opens a folder workspace instead of failing git-only; notes stay empty on unmapped Herdr-only profiles (overlay still uses leftover `profile_runtime_mappings` until **#436 Task 5**).
+
 macOS Unix sockets and `terminal session` attach are **documented** by Herdr and have release assets, but this probe did **not** execute on the primary shipping OS — [#401](https://github.com/AkaraChen/2code/issues/401) (**#394 leftover, not this plan**).
 
 **Blocked (#436 on Linux):** none. v0.9.0 can join a 2code project folder to live Herdr state by path (see join key). Do not invent a sqlite cache to paper over a hole that is not there.
@@ -40,7 +44,7 @@ A 2code **project** stays a sqlite row (`projects.id`, canonical `projects.folde
 
 Listing, creating, deleting, and restoring profiles go through Herdr. sqlite `profiles` is **not** source of truth. After a one-shot import in **#436 Task 5 or 6**, leftover `profiles` rows are ignored.
 
-Production default is Herdr. Local is only an explicit env/flag fallback. sqlite `profiles` remains writable until **#436 Tasks 4/5/8**; it is **not** source of truth.
+Production default is Herdr. Local is only an explicit env/flag fallback. sqlite `profiles` is **not** written on the Herdr create/delete path ([#436 Task 4](https://github.com/AkaraChen/2code/issues/443)). The table remains until **#436 Task 8**; Local (`TWOCODE_RUNTIME=local`) still writes it. It is **not** source of truth.
 
 ## Project ↔ Herdr binding (join key)
 
@@ -97,8 +101,8 @@ One-shot import of existing sqlite profiles into Herdr is allowed in **#436 Task
 | #436 task | Status | Gate |
 | --- | --- | --- |
 | 2. Make Herdr the default runtime | **done** (`task-2-herdr-default-runtime`) | No new Herdr capability. Local is explicit fallback (`TWOCODE_RUNTIME=local`) until **#436 Task 9**. Fail closed if sidecar/namespace is absent. |
-| 3. Derive the profile list from Herdr | **done (this branch)** | JSON `worktree.list` (git, repo-scoped) + `session.snapshot` pane `cwd` (including non-git). Profile id is `workspace_id`. Empty Herdr → empty list. Route ids are `wN`. `workspace.list` is not a path join. |
-| 4. Create/delete profile through Herdr only | **proceed** | `worktree.create` / `worktree.remove` (git linked); `workspace.create` / `workspace.close` (including non-git). Do not INSERT/DELETE `profiles`. |
+| 3. Derive the profile list from Herdr | **done** (`task-3-herdr-profile-list`) | JSON `worktree.list` (git, repo-scoped) + `session.snapshot` pane `cwd` (including non-git). Profile id is `workspace_id`. Empty Herdr → empty list. Route ids are `wN`. `workspace.list` is not a path join. |
+| 4. Create/delete profile through Herdr only | **done (this branch)** | `worktree.create` / `worktree.remove` (git linked); `workspace.create` / `workspace.close` (non-git extras). Do not INSERT/DELETE `profiles`. Returned id is `workspace_id`. Primary checkout refused. Herdr-down fails closed. Local sqlite create/delete only behind `TWOCODE_RUNTIME=local`. |
 | 5. Stop persisting profile mappings | **proceed** | 2code-only. Import then ignore sqlite `profiles` / `profile_runtime_mappings`. |
 | 6. Sessions from Herdr snapshot, not `pty_sessions` | **proceed** | `session.snapshot` **verified**. CLI `terminal session` frames **verified** (#394 leftover, shipped). |
 | 7. Git, file tree, watchers at live Herdr cwd | **proceed** | `worktree.list` `path` and snapshot pane `cwd` **verified**. |
