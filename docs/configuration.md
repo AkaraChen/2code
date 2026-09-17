@@ -30,7 +30,7 @@
 
 ## Environment Variables
 
-There is no Local PTY env injection from `infra/pty.rs` (`TERM`, `_2CODE_HELPER`, `ZDOTDIR`, `TWOCODE_RUNTIME`). Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md).
+There is no Local PTY env injection from `infra/pty.rs` (`TERM`, `_2CODE_HELPER`, `ZDOTDIR`). Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md). No environment variable or CLI flag selects a runtime backend.
 
 `2code.json` `init_script` and New Tab `startup_commands` are sent once after Herdr `tab.create` via `pane.send_input`.
 

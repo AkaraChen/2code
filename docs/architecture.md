@@ -77,7 +77,7 @@ Business logic and orchestration. Coordinates between repo, infrastructure, and 
 | `runtime_sync.rs` | `HerdrRuntimeSync` started from GUI connect (`connect_gui_herdr`); `lib.rs` does not name it                           |
 | `watcher.rs`      | File system watch orchestration from live checkout roots                                                               |
 
-There is no `service::pty` Local spawn, no orphan-log GC, and no `TWOCODE_RUNTIME`.
+There is no `service::pty` Local spawn, no orphan-log GC, and no env or CLI flag that selects a runtime backend.
 
 ### 3. Repository (`src-tauri/crates/repo/`)
 
@@ -163,7 +163,7 @@ src-tauri/
 | --------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single SQLite connection (`Arc<Mutex>`) | Desktop app with single user; pool overhead unnecessary                                     |
 | sqlite `projects` stay in 2code         | Project catalog is 2code-owned; Herdr is the profile/session authority                      |
-| Herdr-only `RuntimeRouter`              | Local PTY / `TWOCODE_RUNTIME` deleted; fail closed if the sidecar is absent                 |
+| Herdr-only `RuntimeRouter`              | Local PTY deleted; no env or CLI flag selects a runtime backend; fail closed if the sidecar is absent |
 | CSS display for terminal visibility     | xterm.js loses state on unmount; display toggle preserves it                                |
 | tauri-typegen for IPC bindings          | Eliminates manual TS wrappers, type-safe end-to-end                                         |
 | Frontend-driven agent notifications     | Terminal output detection owns running/waiting state; waiting transitions can play the configured system sound |
