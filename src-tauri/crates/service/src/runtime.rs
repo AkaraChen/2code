@@ -8,6 +8,9 @@
 
 mod herdr;
 
+#[cfg(all(test, unix))]
+mod sharing_proof;
+
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
