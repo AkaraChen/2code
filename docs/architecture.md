@@ -1,6 +1,6 @@
 # Architecture
 
-Herdr is the production runtime. sqlite `profiles` / `pty_sessions` and Local PTY are gone. Probe contract: [Herdr integration](herdr-integration.md).
+Herdr is the production runtime. sqlite profile/session tables are gone. Sessions are live `pane_id`s. Probe contract: [Herdr integration](herdr-integration.md).
 
 ## Architecture Diagram
 
@@ -77,7 +77,7 @@ Business logic and orchestration. Coordinates between repo, infrastructure, and 
 | `runtime_sync.rs` | `HerdrRuntimeSync` started from GUI connect (`connect_gui_herdr`); `lib.rs` does not name it                           |
 | `watcher.rs`      | File system watch orchestration from live checkout roots                                                               |
 
-There is no `service::pty` Local spawn, no orphan-log GC, and no env or CLI flag that selects a runtime backend.
+There is no Local spawn adapter, no orphan-log GC, and no env or CLI flag that selects a runtime backend.
 
 ### 3. Repository (`src-tauri/crates/repo/`)
 
@@ -89,7 +89,7 @@ Direct database access via Diesel ORM. Pure CRUD plus composite queries. sqlite 
 | `project_group.rs`  | Sidebar group CRUD                                                                         |
 | `checkout_notes.rs` | Notes keyed by `project_id` + canonical checkout path                                      |
 
-There is no repo `profile.rs` / `pty.rs`. Checkout paths for Git / the file tree come from live Herdr, not a sqlite `profiles` table.
+There is no sqlite profile or session repo. Checkout paths for Git / the file tree come from live Herdr, not a sqlite `profiles` table.
 
 ### 4. Infrastructure (`src-tauri/crates/infra/`)
 
@@ -107,7 +107,7 @@ Cross-cutting concerns and external system integrations.
 | `logger.rs`     | Tracing channel layer for debug log streaming                                                                |
 | `watcher.rs`    | File system watching via `notify` crate, shutdown flag                                                       |
 
-There is no `infra::pty` / `pty_log.rs` / `shell_init.rs`. Shell init is Herdr `init_script` / `startup_commands` after `tab.create`.
+There is no local spawn or session-log infra. Shell init is Herdr `init_script` / `startup_commands` after `tab.create`.
 
 ## Frontend Architecture
 
@@ -163,7 +163,7 @@ src-tauri/
 | --------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Single SQLite connection (`Arc<Mutex>`) | Desktop app with single user; pool overhead unnecessary                                     |
 | sqlite `projects` stay in 2code         | Project catalog is 2code-owned; Herdr is the profile/session authority                      |
-| Herdr-only `RuntimeRouter`              | Local PTY deleted; no env or CLI flag selects a runtime backend; fail closed if the sidecar is absent |
+| Herdr-only `RuntimeRouter`              | No Local adapter; no env or CLI flag selects a runtime backend; GUI backend is always Herdr (fail closed); sqlite profile/session tables are not authority; live identifiers do not use Local session-layer names |
 | CSS display for terminal visibility     | xterm.js loses state on unmount; display toggle preserves it                                |
 | tauri-typegen for IPC bindings          | Eliminates manual TS wrappers, type-safe end-to-end                                         |
 | Frontend-driven agent notifications     | Terminal output detection owns running/waiting state; waiting transitions can play the configured system sound |

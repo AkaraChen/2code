@@ -19,11 +19,11 @@ src-tauri/
 │   ├── repo/           # Diesel CRUD: project, project_group, checkout_notes
 │   └── model/          # Diesel models, DTOs, error types, schema
 ├── migrations/         # Diesel SQL migrations (embedded via embed_migrations!())
-├── tests/              # Integration tests: git, project, filesystem, migrations, pty_db (dropped-table assert)
+├── tests/              # Integration tests: git, project, filesystem, migrations, sqlite schema (catalog allowlist)
 └── capabilities/       # Tauri plugin permission definitions
 ```
 
-There is no repo/service `pty.rs` Local spawn, no sqlite `profiles` / `pty_sessions`, and no orphan-log GC.
+There is no Local spawn adapter, no sqlite profile/session tables, and no orphan-log GC.
 
 ## MANAGED STATE (passed to handlers)
 - `Arc<Mutex<SqliteConnection>>` (`DbPool`) — single DB connection; acquire/release fast
@@ -63,4 +63,4 @@ Tests colocated in `#[cfg(test)]` modules. Integration tests in `tests/`.
 - Business logic in handlers — delegate to service layer
 - Long-held `Mutex` locks across async operations — causes deadlocks
 - Editing `src/schema.rs` / `crates/model/src/schema.rs` manually — Diesel generated
-- Reintroducing Local PTY, an env-or-CLI runtime-backend switch, or sqlite `profiles` as authority
+- Reintroducing a Local adapter, an env-or-CLI runtime-backend switch, sqlite profile/session tables as authority, or Local session-layer names in live identifiers

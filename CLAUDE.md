@@ -90,11 +90,11 @@ Rust application with Tauri 2. Entry: `main.rs` → `lib.rs`.
 
 **Model** (`model/`) — Diesel models and DTOs: Queryable structs (`Project`, `ProjectGroup`, `CheckoutNote`), derived GUI DTOs (`Profile` with `id` = Herdr `workspace_id`, `TerminalSessionRecord` from `session.snapshot`), Insertable structs (`NewProject`, `NewCheckoutNote`), AsChangeset structs (`UpdateProject`), and non-DB types (`GitCommit`, `GitAuthor`, `WatchEvent`, `LogEntry`).
 
-**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `project_groups`, `checkout_notes`. sqlite `profiles` and `pty_sessions` are DROPped. Herdr is the profile/session authority.
+**Database:** SQLite via Diesel ORM, single connection wrapped in `Arc<Mutex<SqliteConnection>>` (not a pool). Stored at `app_data_dir()/app.db`. Pragmas: WAL journal mode, foreign keys ON. Tables: `projects`, `project_groups`, `checkout_notes`. sqlite profile/session tables are DROPped. Herdr is the profile/session authority.
 
 **Database migrations:** Diesel migrations in `src-tauri/migrations/`, embedded at compile time via `diesel_migrations::embed_migrations!()` and run on app startup in `infra::db::init_db()`. Schema auto-generated in `crates/model/src/schema.rs`.
 
-**Herdr output streaming:** `attach_terminal_output(sessionId, streamId)` registers the active sink; `stream_herdr_output` owns a `tauri::ipc::Channel<HerdrTerminalFrame>`. `detach_terminal_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session. `Terminal.tsx` attaches the Herdr frame stream and writes into xterm. There is no sqlite history, `pty_logs`, or `gc_orphan_logs`. Session id is a live `pane_id`. GUI connect starts `HerdrRuntimeSync`; `lib.rs` does not name it.
+**Herdr output streaming:** `attach_terminal_output(sessionId, streamId)` registers the active sink; `stream_herdr_output` owns a `tauri::ipc::Channel<HerdrTerminalFrame>`. `detach_terminal_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session. `Terminal.tsx` attaches the Herdr frame stream and writes into xterm. There is no sqlite history or session-log GC. Session id is a live `pane_id`. GUI connect starts `HerdrRuntimeSync`; `lib.rs` does not name it.
 
 **Workspace crates:** `model/`, `repo/`, `service/`, and `infra/`.
 

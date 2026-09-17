@@ -85,7 +85,7 @@ Terminal output uses `attach_terminal_output(sessionId, streamId)` to register t
 | `watch-event`    | `WatchEvent` | `infra/watcher.rs`             | File system change detected            |
 | `debug-log`      | `LogEntry`   | `infra/logger.rs`              | Tracing log entry for debug panel      |
 
-There is no `2code-helper` HTTP sidecar and no `pty-notify` helper endpoint. Agent waiting uses frontend detection plus `play_system_sound`.
+There is no `2code-helper` HTTP sidecar and no helper notify endpoint. Agent waiting uses frontend detection plus `play_system_sound`.
 
 ## Key Types
 

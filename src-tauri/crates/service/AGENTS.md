@@ -24,7 +24,7 @@ Business logic layer. Orchestrates between repo (DB) and infra (OS/IO). No direc
 6. Run `setup_script` from `2code.json` in the checkout dir
 7. On delete: `teardown_script` → Herdr `worktree.remove` (linked git) then 2code `git branch -D`, or `workspace.close` (non-git extras). Primary checkout is refused. No `git worktree remove` fallback
 
-**Herdr sessions**: create/list/close/write/resize go through `RuntimeRouter` (Herdr-only). Restore reattaches a live `pane_id`. There is no Local portable-pty spawn or sqlite `pty_sessions` scrollback.
+**Herdr sessions**: create/list/close/write/resize go through `RuntimeRouter` (Herdr-only). Restore reattaches a live `pane_id`. There is no Local spawn or sqlite session scrollback.
 
 **Worktree path**: Project `2code.json` `worktree_dir` wins, then the global Settings default, then `~/.2code/workspace`. Relative paths and `~` are resolved before Herdr `worktree.create`. Git / file-tree cwd comes from `reconcile_profile_checkout`, not sqlite `profiles.worktree_path`.
 

@@ -33,7 +33,7 @@ Session, profile, and git commands go through Herdr-only [`RuntimeRouter`](../sr
 
 ## Terminal Session Lifecycle
 
-Session IPC uses terminal/session names (`create_terminal_session`, `write_to_terminal`, `list_project_sessions`, …). The runtime is Herdr-only: session id is a live `pane_id` (`wN:pK`); `profile_id` is `workspace_id`. There is no Local portable-pty spawn, no `pty_sessions` INSERT, and no `pty_logs` / `gc_orphan_logs`.
+Session IPC uses terminal/session names (`create_terminal_session`, `write_to_terminal`, `list_project_sessions`, …). The runtime is Herdr-only: session id is a live `pane_id` (`wN:pK`); `profile_id` is `workspace_id`. There is no Local spawn, no sqlite session INSERT, and no session-log GC.
 
 ### Creation
 
