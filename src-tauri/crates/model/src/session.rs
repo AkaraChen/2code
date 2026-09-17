@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Derived GUI session DTO from live Herdr `session.snapshot`.
-/// Not a sqlite `pty_sessions` row.
+/// Not a sqlite session row.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct TerminalSessionRecord {
 	pub id: String,

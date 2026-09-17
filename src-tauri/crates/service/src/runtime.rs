@@ -4,7 +4,7 @@
 //! startup always attaches Herdr (`ensure_herdr_listener` + JSON
 //! clients). Create/list/close use pane identities; write/resize require
 //! an attached CLI helper. Restore reattaches Bound panes. There is no
-//! Local adapter, env flag, or portable-pty fallback.
+//! Local adapter, env flag, or local spawn fallback.
 
 mod herdr;
 

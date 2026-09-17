@@ -1,10 +1,10 @@
 //! Herdr terminal lifecycle and live CLI attach.
 //!
 //! Create/list/close use live `pane_id` identities (`wN:pK`) from
-//! `session.snapshot` or `HerdrRuntimeSync`. They do not INSERT / UPDATE
-//! / DELETE sqlite `pty_sessions` or `session_runtime_mappings`. List
-//! returns every live pane in the project's open workspaces; leftover
-//! sqlite rows are not merged. New Tab returns the created `pane_id`.
+//! `session.snapshot` or `HerdrRuntimeSync`. They do not write sqlite
+//! session or mapping tables. List returns every live pane in the
+//! project's open workspaces; leftover sqlite rows are not merged.
+//! New Tab returns the created `pane_id`.
 //! Write/resize go through an attached CLI control helper.
 //! Restore stays fail-closed: reopen lists live panes and attaches them.
 //! History/flush/clear stay fail-closed. A missing client keeps the
