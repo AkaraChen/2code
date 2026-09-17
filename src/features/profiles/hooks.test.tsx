@@ -23,12 +23,21 @@ const {
 	getProfileDeleteCheckMock,
 	listProjectsMock,
 	updateProfileNotesMock,
+	toastErrorMock,
 } = vi.hoisted(() => ({
 	createProfileMock: vi.fn(),
 	deleteProfileMock: vi.fn(),
 	getProfileDeleteCheckMock: vi.fn(),
 	listProjectsMock: vi.fn(),
 	updateProfileNotesMock: vi.fn(),
+	toastErrorMock: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+	toast: {
+		error: toastErrorMock,
+		success: vi.fn(),
+	},
 }));
 
 vi.mock("@/generated", async () => {
@@ -74,6 +83,7 @@ describe("profile hooks", () => {
 		getProfileDeleteCheckMock.mockReset();
 		listProjectsMock.mockReset();
 		updateProfileNotesMock.mockReset();
+		toastErrorMock.mockReset();
 		listProjectsMock.mockResolvedValue([]);
 		useWorktreeSettingsStore.setState({ defaultWorktreeDir: "" });
 		useTerminalStore.setState({
@@ -145,6 +155,27 @@ describe("profile hooks", () => {
 				branchName: "feature/worktree",
 				defaultWorktreeDir: null,
 			});
+		});
+
+		it("toasts the fail-closed Herdr error when New Profile cannot attach", async () => {
+			const message =
+				"Herdr server is incompatible: found Herdr 0.8.2 protocol 20; required Herdr >= 0.9.0 / protocol >= 22; run `herdr update`";
+			createProfileMock.mockRejectedValue(message);
+
+			const { result } = renderHook(() => useCreateProfile(), {
+				wrapper: createWrapper(),
+			});
+
+			await act(async () => {
+				await result.current
+					.mutateAsync({
+						projectId: "project-1",
+						branchName: "feature/worktree",
+					})
+					.catch(() => undefined);
+			});
+
+			expect(toastErrorMock).toHaveBeenCalledWith(message);
 		});
 
 		it("does not inject the create result into the projects cache", async () => {

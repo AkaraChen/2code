@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
+import { toast } from "sonner";
 import { useWorktreeSettingsStore } from "@/features/settings/stores/worktreeSettingsStore";
 import { useTerminalStore } from "@/features/terminal/store";
 import {
@@ -12,6 +13,7 @@ import {
 	type Profile,
 	type ProjectWithProfiles,
 } from "@/generated";
+import { getErrorMessage } from "@/shared/lib/errors";
 import { queryKeys } from "@/shared/lib/queryKeys";
 
 function hasDiffStats(stats: GitDiffStats | null) {
@@ -68,6 +70,9 @@ export function useCreateProfile() {
 				queryKey: queryKeys.projects.all,
 				queryFn: listProjects,
 			});
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
 		},
 	});
 }

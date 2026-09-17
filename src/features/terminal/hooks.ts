@@ -1,12 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
 import type { ITheme } from "@xterm/xterm";
 import { use } from "react";
+import { toast } from "sonner";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
 	closeTerminalSession,
 	createTerminalSession,
 } from "@/generated";
+import { getErrorMessage } from "@/shared/lib/errors";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { removeTerminalStorage } from "./lib";
 import { useTerminalStore } from "./store";
@@ -51,6 +53,9 @@ export function useCreateTerminalTab() {
 		onSuccess: ({ profileId, sessionId, title }) => {
 			useTerminalStore.getState().addTab(profileId, sessionId, title);
 			useFileViewerTabsStore.getState().setTerminalActive(profileId);
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
 		},
 	});
 }

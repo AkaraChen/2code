@@ -4,7 +4,7 @@ import {
 } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { Mock } from "vitest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
@@ -24,6 +24,17 @@ import { terminalThemes } from "./themes";
 
 const createTerminalSessionMock = createTerminalSession as unknown as Mock;
 const closeTerminalSessionMock = closeTerminalSession as unknown as Mock;
+
+const { toastErrorMock } = vi.hoisted(() => ({
+	toastErrorMock: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+	toast: {
+		error: toastErrorMock,
+		success: vi.fn(),
+	},
+}));
 
 function createWrapper(isDark = true) {
 	const queryClient = new QueryClient({
@@ -68,6 +79,7 @@ function resetStores() {
 	localStorage.clear();
 	createTerminalSessionMock.mockClear();
 	closeTerminalSessionMock.mockClear();
+	toastErrorMock.mockClear();
 }
 
 describe("terminal hooks", () => {
@@ -123,6 +135,25 @@ describe("terminal hooks", () => {
 		expect(
 			useFileViewerTabsStore.getState().profiles["profile-1"].fileTabActive,
 		).toBe(false);
+	});
+
+	it("toasts the fail-closed Herdr error when New Tab cannot attach", async () => {
+		const message =
+			"Herdr server is incompatible: found Herdr 0.8.2 protocol 20; required Herdr >= 0.9.0 / protocol >= 22; run `herdr update`";
+		createTerminalSessionMock.mockRejectedValue(message);
+
+		const { result } = renderHook(() => useCreateTerminalTab(), {
+			wrapper: createWrapper(),
+		});
+
+		await act(async () => {
+			await result.current.mutateAsync({
+				profileId: "profile-1",
+				cwd: "/repo",
+			}).catch(() => undefined);
+		});
+
+		expect(toastErrorMock).toHaveBeenCalledWith(message);
 	});
 
 	it("closes the last terminal tab and re-activates the current file tab when one exists", async () => {
