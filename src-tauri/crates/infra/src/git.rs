@@ -100,7 +100,9 @@ pub fn init(dir: &Path) -> Result<(), AppError> {
 
 	if !output.status.success() {
 		let stderr = String::from_utf8_lossy(&output.stderr);
-		return Err(AppError::PtyError(format!("git init failed: {stderr}")));
+		return Err(AppError::TerminalError(format!(
+			"git init failed: {stderr}"
+		)));
 	}
 	Ok(())
 }

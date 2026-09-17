@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// Derived GUI session DTO from live Herdr `session.snapshot`.
 /// Not a sqlite `pty_sessions` row.
 #[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct PtySessionRecord {
+pub struct TerminalSessionRecord {
 	pub id: String,
 	pub project_id: String,
 	pub profile_id: String,
@@ -18,14 +18,14 @@ pub struct PtySessionRecord {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PtySessionMeta {
+pub struct TerminalSessionMeta {
 	pub profile_id: String,
 	pub title: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct PtyConfig {
+pub struct TerminalConfig {
 	pub shell: String,
 	pub cwd: String,
 	pub rows: u16,

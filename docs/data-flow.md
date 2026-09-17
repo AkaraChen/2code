@@ -31,14 +31,14 @@ sequenceDiagram
 
 Session, profile, and git commands go through Herdr-only [`RuntimeRouter`](../src-tauri/crates/service/src/runtime.rs). sqlite still stores `projects` / `project_groups` / `checkout_notes`. Probe and pin details live in [Herdr integration](herdr-integration.md).
 
-## PTY Session Lifecycle
+## Terminal Session Lifecycle
 
-Handlers keep the existing IPC names (`create_pty_session`, `write_to_pty`, `list_project_sessions`, …). The runtime is Herdr-only: session id is a live `pane_id` (`wN:pK`); `profile_id` is `workspace_id`. There is no Local portable-pty spawn, no `pty_sessions` INSERT, and no `pty_logs` / `gc_orphan_logs`.
+Session IPC uses terminal/session names (`create_terminal_session`, `write_to_terminal`, `list_project_sessions`, …). The runtime is Herdr-only: session id is a live `pane_id` (`wN:pK`); `profile_id` is `workspace_id`. There is no Local portable-pty spawn, no `pty_sessions` INSERT, and no `pty_logs` / `gc_orphan_logs`.
 
 ### Creation
 
-1. Frontend calls `createPtySession({ meta, config })` via TanStack Query mutation
-2. Handler delegates to `RuntimeRouter::create_session` ([`handler/pty.rs`](../src-tauri/src/handler/pty.rs))
+1. Frontend calls `createTerminalSession({ meta, config })` via TanStack Query mutation
+2. Handler delegates to `RuntimeRouter::create_session` ([`handler/terminal.rs`](../src-tauri/src/handler/terminal.rs))
 3. Adapter requires a live Herdr `workspace_id` (`meta.profile_id`) and an absolute `config.cwd`
 4. New Tab is Herdr `tab.create` in that workspace; the returned session id is the live `pane_id`
 5. After create, `2code.json` `init_script` plus `startup_commands` are sent once via `pane.send_input`
@@ -52,18 +52,18 @@ sequenceDiagram
     participant R as RuntimeRouter
     participant FE as Frontend (xterm.js)
 
-    FE->>R: attach_pty_output(sessionId, streamId)
+    FE->>R: attach_terminal_output(sessionId, streamId)
     loop While attached
         H->>R: terminal frame
         R->>FE: stream_herdr_output Channel<HerdrTerminalFrame>
     end
-    FE->>R: detach_pty_output(sessionId, streamId)
+    FE->>R: detach_terminal_output(sessionId, streamId)
 ```
 
 Key details:
 
-- `attach_pty_output(sessionId, streamId)` registers the active sink; `stream_herdr_output` owns a `Channel<HerdrTerminalFrame>`
-- `detach_pty_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session
+- `attach_terminal_output(sessionId, streamId)` registers the active sink; `stream_herdr_output` owns a `Channel<HerdrTerminalFrame>`
+- `detach_terminal_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session
 - `Terminal.tsx` attaches the Herdr frame stream and writes into xterm; there is no sqlite history buffer
 - Write/resize/scroll go through the attached Herdr CLI helper. History/flush/clear stay fail-closed
 - Close is Herdr `pane.close`. There is no sqlite mark-closed and no orphan-log GC
@@ -82,7 +82,7 @@ sequenceDiagram
 
     loop For each project
         Store->>BE: listProjectSessions(projectId)
-        BE-->>Store: PtySessionRecord[] (live pane_id DTOs)
+        BE-->>Store: TerminalSessionRecord[] (live pane_id DTOs)
     end
 
     loop For each live pane

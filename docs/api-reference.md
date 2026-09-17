@@ -2,7 +2,7 @@
 
 ## Tauri Commands
 
-All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handler![]`. TypeScript bindings are auto-generated into `src/generated/` by tauri-typegen. Existing command **names** stay. Session/profile/git commands are Herdr-backed; see [Herdr integration](herdr-integration.md).
+All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handler![]`. TypeScript bindings are auto-generated into `src/generated/` by tauri-typegen. Session commands use terminal/session names. Session/profile/git commands are Herdr-backed; see [Herdr integration](herdr-integration.md).
 
 ### Project Commands (`handler/project.rs`)
 
@@ -21,26 +21,26 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 
 Git `profile_id` is a Herdr `workspace_id`. Paths come from `reconcile_profile_checkout`, not sqlite `profiles.worktree_path`.
 
-### PTY Commands (`handler/pty.rs`)
+### Terminal Commands (`handler/terminal.rs`)
 
-Handlers keep these names. The runtime is Herdr-only `RuntimeRouter`. Session id is live `pane_id` (`wN:pK`); `profile_id` on listed records is `workspace_id`. `PtySessionRecord` is a derived GUI DTO from `session.snapshot`, not a sqlite row.
+The runtime is Herdr-only `RuntimeRouter`. Session id is live `pane_id` (`wN:pK`); `profile_id` on listed records is `workspace_id`. `TerminalSessionRecord` is a derived GUI DTO from `session.snapshot`, not a sqlite row.
 
-| Command                     | Parameters                                 | Returns               | Description                                        |
-| --------------------------- | ------------------------------------------ | --------------------- | -------------------------------------------------- |
-| `create_pty_session`        | `meta: PtySessionMeta, config: PtyConfig`  | `string` (session ID) | Herdr `tab.create`; returns `pane_id`              |
-| `write_to_pty`              | `session_id: string, data: string`         | —                     | Write input to the attached Herdr pane             |
-| `resize_pty`                | `session_id: string, rows: u16, cols: u16` | —                     | Resize the attached Herdr pane                     |
-| `scroll_pty`                | `session_id`, direction, lines, source     | —                     | Scroll the attached Herdr pane                     |
-| `close_pty_session`         | `session_id: string`                       | —                     | Herdr `pane.close` (no sqlite mark-closed)         |
-| `list_project_sessions`     | `project_id: string`                       | `PtySessionRecord[]`  | Live panes for that project's open workspaces      |
-| `get_session_backend`       | `session_id: string`                       | `RuntimeBackend`      | Always `Herdr`                                     |
-| `attach_pty_output`         | `session_id, stream_id`                    | —                     | Register the active output sink                    |
-| `stream_herdr_output`       | `session_id, stream_id, on_output`         | —                     | Pump `HerdrTerminalFrame`s over a Tauri channel    |
-| `detach_pty_output`         | `session_id, stream_id`                    | —                     | Detach that `stream_id` only                       |
-| `flush_pty_output`          | `session_id: string`                       | —                     | Fail-closed on Herdr                               |
-| `clear_pty_output`          | `session_id: string`                       | —                     | Fail-closed on Herdr                               |
+| Command                     | Parameters                                           | Returns               | Description                                        |
+| --------------------------- | ---------------------------------------------------- | --------------------- | -------------------------------------------------- |
+| `create_terminal_session`   | `meta: TerminalSessionMeta, config: TerminalConfig`  | `string` (session ID) | Herdr `tab.create`; returns `pane_id`              |
+| `write_to_terminal`         | `session_id: string, data: string`                   | —                     | Write input to the attached Herdr pane             |
+| `resize_terminal`           | `session_id: string, rows: u16, cols: u16`           | —                     | Resize the attached Herdr pane                     |
+| `scroll_terminal`           | `session_id`, direction, lines, source               | —                     | Scroll the attached Herdr pane                     |
+| `close_terminal_session`    | `session_id: string`                                 | —                     | Herdr `pane.close` (no sqlite mark-closed)         |
+| `list_project_sessions`     | `project_id: string`                                 | `TerminalSessionRecord[]` | Live panes for that project's open workspaces |
+| `get_session_backend`       | `session_id: string`                                 | `RuntimeBackend`      | Always `Herdr`                                     |
+| `attach_terminal_output`    | `session_id, stream_id`                              | —                     | Register the active output sink                    |
+| `stream_herdr_output`       | `session_id, stream_id, on_output`                   | —                     | Pump `HerdrTerminalFrame`s over a Tauri channel    |
+| `detach_terminal_output`    | `session_id, stream_id`                              | —                     | Detach that `stream_id` only                       |
+| `flush_terminal_output`     | `session_id: string`                                 | —                     | Fail-closed on Herdr                               |
+| `clear_terminal_output`     | `session_id: string`                                 | —                     | Fail-closed on Herdr                               |
 
-There is no `get_pty_session_history` / `delete_pty_session_record`. Restore is reattach of a live `pane_id` from `list_project_sessions`. Herdr-down New Tab fail-closes (no Local PTY spawn).
+There is no sqlite history restore command. Restore is reattach of a live `pane_id` from `list_project_sessions`. Herdr-down New Tab fail-closes (no Local PTY spawn).
 
 ### Profile Commands (`handler/profile.rs`)
 
@@ -77,7 +77,7 @@ There is no `get_pty_session_history` / `delete_pty_session_record`. Restore is 
 
 ## Tauri Channels And Events
 
-PTY output uses `attach_pty_output(sessionId, streamId)` to register the active sink, then `stream_herdr_output` to pump `HerdrTerminalFrame`s over a Tauri IPC channel. `detach_pty_output` requires the same `streamId`, so stale frontend cleanup cannot remove a newer stream for the same session. Low-volume signals still use `app.emit()` / channels.
+Terminal output uses `attach_terminal_output(sessionId, streamId)` to register the active sink, then `stream_herdr_output` to pump `HerdrTerminalFrame`s over a Tauri IPC channel. `detach_terminal_output` requires the same `streamId`, so stale frontend cleanup cannot remove a newer stream for the same session. Low-volume signals still use `app.emit()` / channels.
 
 | Name             | Payload      | Source                         | Description                            |
 | ---------------- | ------------ | ------------------------------ | -------------------------------------- |
@@ -89,7 +89,7 @@ There is no `2code-helper` HTTP sidecar and no `pty-notify` helper endpoint. Age
 
 ## Key Types
 
-### `PtySessionMeta`
+### `TerminalSessionMeta`
 
 ```typescript
 { profileId: string; title: string }
@@ -97,7 +97,7 @@ There is no `2code-helper` HTTP sidecar and no `pty-notify` helper endpoint. Age
 
 `profileId` is a Herdr `workspace_id`.
 
-### `PtyConfig`
+### `TerminalConfig`
 
 ```typescript
 { shell: string; cwd: string; rows: number; cols: number; startup_commands?: string[] }

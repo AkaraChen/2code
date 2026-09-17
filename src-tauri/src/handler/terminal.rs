@@ -1,20 +1,22 @@
 use tauri::{ipc::Channel, State};
 
 use model::error::AppError;
-use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord};
 use model::runtime::{
 	HerdrTerminalFrame, RuntimeBackend, SessionAgentStatus,
 	TerminalScrollDirection, TerminalScrollSource,
+};
+use model::session::{
+	TerminalConfig, TerminalSessionMeta, TerminalSessionRecord,
 };
 use service::runtime::{RuntimeHandle, TerminalRuntime};
 use service::runtime_agent::pump_session_agent_status;
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub async fn create_pty_session(
+pub async fn create_terminal_session(
 	runtime: State<'_, RuntimeHandle>,
-	meta: PtySessionMeta,
-	config: PtyConfig,
+	meta: TerminalSessionMeta,
+	config: TerminalConfig,
 ) -> Result<String, AppError> {
 	let runtime = runtime.inner().clone();
 	super::run_blocking(move || {
@@ -25,7 +27,7 @@ pub async fn create_pty_session(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn write_to_pty(
+pub fn write_to_terminal(
 	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 	data: String,
@@ -35,7 +37,7 @@ pub fn write_to_pty(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn resize_pty(
+pub fn resize_terminal(
 	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 	rows: u16,
@@ -46,7 +48,7 @@ pub fn resize_pty(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn scroll_pty(
+pub fn scroll_terminal(
 	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 	direction: TerminalScrollDirection,
@@ -58,7 +60,7 @@ pub fn scroll_pty(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn close_pty_session(
+pub fn close_terminal_session(
 	runtime: State<'_, RuntimeHandle>,
 	session_id: String,
 ) -> Result<(), AppError> {
@@ -70,7 +72,7 @@ pub fn close_pty_session(
 pub async fn list_project_sessions(
 	project_id: String,
 	runtime: State<'_, RuntimeHandle>,
-) -> Result<Vec<PtySessionRecord>, AppError> {
+) -> Result<Vec<TerminalSessionRecord>, AppError> {
 	let runtime = runtime.inner().clone();
 	super::run_blocking(move || runtime.list_project_sessions(&project_id))
 		.await
@@ -114,7 +116,7 @@ pub async fn stream_session_agent_status(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn attach_pty_output(
+pub fn attach_terminal_output(
 	session_id: String,
 	stream_id: String,
 	runtime: State<'_, RuntimeHandle>,
@@ -151,7 +153,7 @@ pub async fn stream_herdr_output(
 fn herdr_stream_ended(err: &AppError) -> bool {
 	matches!(
 		err,
-		AppError::PtyError(message)
+		AppError::TerminalError(message)
 			if message.contains("not attached")
 				|| message.contains("closed")
 				|| message.contains("stale Herdr")
@@ -160,7 +162,7 @@ fn herdr_stream_ended(err: &AppError) -> bool {
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn detach_pty_output(
+pub fn detach_terminal_output(
 	session_id: String,
 	stream_id: String,
 	runtime: State<'_, RuntimeHandle>,
@@ -170,7 +172,7 @@ pub fn detach_pty_output(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn flush_pty_output(
+pub fn flush_terminal_output(
 	session_id: String,
 	runtime: State<'_, RuntimeHandle>,
 ) -> Result<(), AppError> {
@@ -179,7 +181,7 @@ pub fn flush_pty_output(
 
 #[tauri::command]
 #[tracing::instrument(skip_all)]
-pub fn clear_pty_output(
+pub fn clear_terminal_output(
 	session_id: String,
 	runtime: State<'_, RuntimeHandle>,
 ) -> Result<(), AppError> {

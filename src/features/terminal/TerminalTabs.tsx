@@ -28,7 +28,7 @@ import {
 	useFileViewerDirtyStore,
 	useFileViewerTabsStore,
 } from "@/features/projects/fileViewerTabsStore";
-import { writeToPty } from "@/generated";
+import { writeToTerminal } from "@/generated";
 import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import {
@@ -258,7 +258,7 @@ export default function TerminalTabs({
 
 		setActiveTab(profileId, tab.id);
 		setTerminalActive(profileId);
-		writeToPty({ sessionId: tab.id, data });
+		writeToTerminal({ sessionId: tab.id, data });
 	}, [profileId, setActiveTab, setTerminalActive]);
 
 	const createTerminalDropRef = useCallback((tab: { id: string }) => {

@@ -9,8 +9,8 @@ pub enum AppError {
 	#[error("Lock error: failed to acquire lock")]
 	LockError,
 
-	#[error("PTY error: {0}")]
-	PtyError(String),
+	#[error("Terminal error: {0}")]
+	TerminalError(String),
 
 	#[error("Database error: {0}")]
 	DbError(String),
@@ -97,9 +97,9 @@ mod tests {
 	}
 
 	#[test]
-	fn display_pty_error() {
-		let err = AppError::PtyError("spawn failed".into());
-		assert_eq!(err.to_string(), "PTY error: spawn failed");
+	fn display_terminal_error() {
+		let err = AppError::TerminalError("spawn failed".into());
+		assert_eq!(err.to_string(), "Terminal error: spawn failed");
 	}
 
 	#[test]
@@ -198,10 +198,10 @@ mod tests {
 
 	#[test]
 	fn serialize_to_json_string() {
-		let err = AppError::PtyError("test".into());
+		let err = AppError::TerminalError("test".into());
 		let val = serde_json::to_value(&err).unwrap();
 		assert!(val.is_string());
-		assert_eq!(val.as_str().unwrap(), "PTY error: test");
+		assert_eq!(val.as_str().unwrap(), "Terminal error: test");
 	}
 
 	#[test]

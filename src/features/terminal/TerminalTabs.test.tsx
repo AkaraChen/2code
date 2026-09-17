@@ -14,7 +14,7 @@ import {
 	createFileTreeTerminalDropPayload,
 	writeFileTreeTerminalDropPayload,
 } from "@/shared/lib/fileTreeTerminalDrop";
-import { writeToPty } from "@/generated";
+import { writeToTerminal } from "@/generated";
 import TerminalTabs from "./TerminalTabs";
 import { useTerminalStore } from "./store";
 
@@ -49,7 +49,7 @@ vi.mock("@/features/projects/UnsavedFileCloseDialog", () => ({
 	default: () => null,
 }));
 
-const writeToPtyMock = writeToPty as unknown as Mock;
+const writeToTerminalMock = writeToTerminal as unknown as Mock;
 const profileId = "profile-1";
 
 function createWrapper() {
@@ -136,8 +136,8 @@ describe("terminalTabs file tree drops", () => {
 			drafts: {},
 			savedValues: {},
 		});
-		writeToPtyMock.mockClear();
-		writeToPtyMock.mockResolvedValue(undefined);
+		writeToTerminalMock.mockClear();
+		writeToTerminalMock.mockResolvedValue(undefined);
 		restorePendingTerminalTabMock.mockReset();
 		restorePendingTerminalTabMock.mockReturnValue(new Promise(() => {}));
 	});
@@ -159,7 +159,7 @@ describe("terminalTabs file tree drops", () => {
 		fireEvent.drop(terminalTab, { dataTransfer });
 
 		await waitFor(() => {
-			expect(writeToPtyMock).toHaveBeenCalledWith({
+			expect(writeToTerminalMock).toHaveBeenCalledWith({
 				sessionId: "session-2",
 				data: "/root/src/index.ts /root/src/components",
 			});

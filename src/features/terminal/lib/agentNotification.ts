@@ -46,6 +46,6 @@ export async function sendAgentWaitingNotification({
 			body: m.agentWaitingNotificationBody({ tab: tabTitle }),
 		});
 	} catch (error) {
-		consola.warn("[pty-terminal] failed to send agent notification", error);
+		consola.warn("[terminal] failed to send agent notification", error);
 	}
 }

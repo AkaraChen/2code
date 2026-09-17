@@ -4,17 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listen } from "@tauri-apps/api/event";
 import type { HerdrTerminalFrame } from "@/generated";
 import {
-	attachPtyOutput,
-	clearPtyOutput,
-	detachPtyOutput,
+	attachTerminalOutput,
+	clearTerminalOutput,
+	detachTerminalOutput,
 	getSessionAgentStatus,
 	getSessionBackend,
 	playSystemSound,
-	resizePty,
-	scrollPty,
+	resizeTerminal,
+	scrollTerminal,
 	streamHerdrOutput,
 	streamSessionAgentStatus,
-	writeToPty,
+	writeToTerminal,
 } from "@/generated";
 import type { SessionAgentStatus } from "@/generated";
 import { useNotificationStore } from "@/features/settings/stores/notificationStore";
@@ -268,19 +268,19 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 }));
 
 vi.mock("@/generated", () => ({
-	attachPtyOutput: vi.fn(() => Promise.resolve()),
-	clearPtyOutput: vi.fn(() => Promise.resolve()),
-	detachPtyOutput: vi.fn(() => Promise.resolve()),
+	attachTerminalOutput: vi.fn(() => Promise.resolve()),
+	clearTerminalOutput: vi.fn(() => Promise.resolve()),
+	detachTerminalOutput: vi.fn(() => Promise.resolve()),
 	getSessionAgentStatus: vi.fn(() => Promise.resolve(null)),
 	getSessionBackend: vi.fn(() => Promise.resolve("herdr")),
 	listProjectSessions: vi.fn(() => Promise.resolve([])),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	playSystemSound: vi.fn(() => Promise.resolve()),
-	resizePty: vi.fn(() => Promise.resolve()),
-	scrollPty: vi.fn(() => Promise.resolve()),
+	resizeTerminal: vi.fn(() => Promise.resolve()),
+	scrollTerminal: vi.fn(() => Promise.resolve()),
 	streamHerdrOutput: vi.fn(() => Promise.resolve()),
 	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
-	writeToPty: vi.fn(() => Promise.resolve()),
+	writeToTerminal: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("sonner", () => ({
@@ -479,7 +479,7 @@ describe("terminal select to copy", () => {
 		expect(getSessionAgentStatus).toHaveBeenCalled();
 		expect(streamSessionAgentStatus).toHaveBeenCalled();
 		latestTerminal().fireData("ls\n");
-		expect(writeToPty).toHaveBeenCalledWith({
+		expect(writeToTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			data: "ls\n",
 		});
@@ -493,14 +493,14 @@ describe("herdr xterm transport", () => {
 		(getSessionBackend as unknown as Mock).mockResolvedValue("herdr");
 		(streamHerdrOutput as unknown as Mock).mockReset();
 		(streamHerdrOutput as unknown as Mock).mockResolvedValue(undefined);
-		(detachPtyOutput as unknown as Mock).mockClear();
-		(clearPtyOutput as unknown as Mock).mockClear();
-		(writeToPty as unknown as Mock).mockClear();
-		(resizePty as unknown as Mock).mockClear();
-		(attachPtyOutput as unknown as Mock).mockClear();
-		(attachPtyOutput as unknown as Mock).mockResolvedValue(undefined);
-		(scrollPty as unknown as Mock).mockReset();
-		(scrollPty as unknown as Mock).mockResolvedValue(undefined);
+		(detachTerminalOutput as unknown as Mock).mockClear();
+		(clearTerminalOutput as unknown as Mock).mockClear();
+		(writeToTerminal as unknown as Mock).mockClear();
+		(resizeTerminal as unknown as Mock).mockClear();
+		(attachTerminalOutput as unknown as Mock).mockClear();
+		(attachTerminalOutput as unknown as Mock).mockResolvedValue(undefined);
+		(scrollTerminal as unknown as Mock).mockReset();
+		(scrollTerminal as unknown as Mock).mockResolvedValue(undefined);
 		(getSessionAgentStatus as unknown as Mock).mockReset();
 		(getSessionAgentStatus as unknown as Mock).mockResolvedValue({
 			sessionId: "session-1",
@@ -553,7 +553,7 @@ describe("herdr xterm transport", () => {
 
 	it("resizes a Herdr session only after the control helper is attached", async () => {
 		let resolveAttach: (value: void | PromiseLike<void>) => void = () => {};
-		(attachPtyOutput as unknown as Mock).mockReturnValueOnce(
+		(attachTerminalOutput as unknown as Mock).mockReturnValueOnce(
 			new Promise<void>((resolve) => {
 				resolveAttach = resolve;
 			}),
@@ -562,27 +562,27 @@ describe("herdr xterm transport", () => {
 		renderTerminal();
 		const terminal = latestTerminal();
 		terminal.fireResize();
-		expect(resizePty).not.toHaveBeenCalled();
+		expect(resizeTerminal).not.toHaveBeenCalled();
 
 		await waitFor(() => {
-			expect(attachPtyOutput).toHaveBeenCalled();
+			expect(attachTerminalOutput).toHaveBeenCalled();
 		});
 		terminal.fireResize();
-		expect(resizePty).not.toHaveBeenCalled();
+		expect(resizeTerminal).not.toHaveBeenCalled();
 		expect(streamHerdrOutput).not.toHaveBeenCalled();
 
 		resolveAttach();
 
 		await waitFor(() => {
-			expect(resizePty).toHaveBeenCalledWith({
+			expect(resizeTerminal).toHaveBeenCalledWith({
 				sessionId: "session-1",
 				rows: terminal.rows,
 				cols: terminal.cols,
 			});
 		});
-		const attachOrder = (attachPtyOutput as unknown as Mock).mock
+		const attachOrder = (attachTerminalOutput as unknown as Mock).mock
 			.invocationCallOrder[0];
-		const resizeOrder = (resizePty as unknown as Mock).mock
+		const resizeOrder = (resizeTerminal as unknown as Mock).mock
 			.invocationCallOrder[0];
 		expect(attachOrder).toBeLessThan(resizeOrder);
 		expect(streamHerdrOutput).toHaveBeenCalled();
@@ -624,12 +624,12 @@ describe("herdr xterm transport", () => {
 			expect.arrayContaining([{ final: "n" }, { final: "c" }]),
 		);
 		terminal.fireData("echo hi\n");
-		expect(writeToPty).toHaveBeenCalledWith({
+		expect(writeToTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			data: "echo hi\n",
 		});
 		terminal.fireBinary("\x80");
-		expect(writeToPty).toHaveBeenCalledWith({
+		expect(writeToTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			data: "\x80",
 		});
@@ -637,7 +637,7 @@ describe("herdr xterm transport", () => {
 
 	it("keeps the Herdr stream attached when the tab is hidden", async () => {
 		const view = await renderHerdr(false);
-		expect(detachPtyOutput).not.toHaveBeenCalled();
+		expect(detachTerminalOutput).not.toHaveBeenCalled();
 		view.rerender(
 			<Terminal
 				profileId="profile-1"
@@ -645,7 +645,7 @@ describe("herdr xterm transport", () => {
 				isActive={true}
 			/>,
 		);
-		expect(detachPtyOutput).not.toHaveBeenCalled();
+		expect(detachTerminalOutput).not.toHaveBeenCalled();
 		expect(streamHerdrOutput).toHaveBeenCalledTimes(1);
 		expect(terminalInstances).toHaveLength(1);
 	});
@@ -656,7 +656,7 @@ describe("herdr xterm transport", () => {
 		expect(localStorage.getItem("terminal-buffer:session-1")).toBe(
 			"CACHED_SCROLLBACK",
 		);
-		expect(clearPtyOutput).not.toHaveBeenCalled();
+		expect(clearTerminalOutput).not.toHaveBeenCalled();
 	});
 
 	it("scrolls the attached Herdr pane with wheel and page keys", async () => {
@@ -664,7 +664,7 @@ describe("herdr xterm transport", () => {
 		const wrapper = latestTerminal().element;
 		expect(wrapper).toBeTruthy();
 		fireEvent.wheel(wrapper!, { deltaY: -80 });
-		expect(scrollPty).toHaveBeenCalledWith({
+		expect(scrollTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			direction: "up",
 			lines: 2,
@@ -672,7 +672,7 @@ describe("herdr xterm transport", () => {
 		});
 
 		latestTerminal().fireKey({ type: "keydown", key: "PageDown" });
-		expect(scrollPty).toHaveBeenCalledWith({
+		expect(scrollTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			direction: "down",
 			lines: latestTerminal().rows,
@@ -698,7 +698,7 @@ describe("herdr xterm transport", () => {
 
 		fireEvent.wheel(viewport, { deltaY: -80 });
 
-		expect(scrollPty).toHaveBeenCalledWith({
+		expect(scrollTerminal).toHaveBeenCalledWith({
 			sessionId: "session-1",
 			direction: "up",
 			lines: 2,

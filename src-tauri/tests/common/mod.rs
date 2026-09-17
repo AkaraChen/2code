@@ -8,17 +8,15 @@ use serde_json::Value;
 
 use infra::db::{DbPool, MIGRATIONS};
 use infra::herdr::transport::{
-	WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
-	WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
-	WorkspaceCreateResult,
+	WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeCreateRequest,
+	WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
+	WorktreeRemoveResult,
 };
 use infra::no_window::command_without_windows_console;
 use model::error::AppError;
 use model::profile::Profile;
 use model::project::Project;
-use service::runtime::{
-	HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter,
-};
+use service::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
 
 /// Lists a single open Herdr workspace `w1` at the given folder.
 struct FolderWorktrees {
@@ -41,7 +39,7 @@ impl HerdrWorktreeClient for FolderWorktrees {
 		&self,
 		_request: WorktreeCreateRequest<'_>,
 	) -> Result<WorktreeCreateResult, AppError> {
-		Err(AppError::PtyError(
+		Err(AppError::TerminalError(
 			"integration FolderWorktrees does not create".into(),
 		))
 	}
@@ -64,7 +62,7 @@ impl HerdrWorktreeClient for FolderWorktrees {
 		_cwd: &Path,
 		_path: &Path,
 	) -> Result<WorktreeOpenResult, AppError> {
-		Err(AppError::PtyError(
+		Err(AppError::TerminalError(
 			"integration FolderWorktrees does not open".into(),
 		))
 	}
@@ -74,7 +72,7 @@ impl HerdrWorktreeClient for FolderWorktrees {
 		_workspace_id: &str,
 		_force: bool,
 	) -> Result<WorktreeRemoveResult, AppError> {
-		Err(AppError::PtyError(
+		Err(AppError::TerminalError(
 			"integration FolderWorktrees does not remove".into(),
 		))
 	}
@@ -83,7 +81,7 @@ impl HerdrWorktreeClient for FolderWorktrees {
 		&self,
 		_request: WorkspaceCreateRequest<'_>,
 	) -> Result<WorkspaceCreateResult, AppError> {
-		Err(AppError::PtyError(
+		Err(AppError::TerminalError(
 			"integration FolderWorktrees does not create workspaces".into(),
 		))
 	}

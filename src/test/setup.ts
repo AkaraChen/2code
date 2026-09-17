@@ -102,9 +102,9 @@ vi.mock("@/generated", () => ({
 	appendFrontendProfileEvents: vi.fn(() => Promise.resolve()),
 	isPerformanceProfileEnabled: vi.fn(() => Promise.resolve(false)),
 	setPerformanceProfileEnabled: vi.fn(() => Promise.resolve(null)),
-	createPtySession: vi.fn(() => Promise.resolve("mock-session-id")),
-	writeToPty: vi.fn(() => Promise.resolve()),
-	closePtySession: vi.fn(() => Promise.resolve()),
+	createTerminalSession: vi.fn(() => Promise.resolve("mock-session-id")),
+	writeToTerminal: vi.fn(() => Promise.resolve()),
+	closeTerminalSession: vi.fn(() => Promise.resolve()),
 	listProjects: vi.fn(() => Promise.resolve([])),
 	getProjectGithubAvatar: vi.fn(() => Promise.resolve(null)),
 	openUpdatePage: vi.fn(() => Promise.resolve()),
@@ -112,7 +112,7 @@ vi.mock("@/generated", () => ({
 	getSessionBackend: vi.fn(() => Promise.resolve("herdr")),
 	getSessionAgentStatus: vi.fn(() => Promise.resolve(null)),
 	streamSessionAgentStatus: vi.fn(() => Promise.resolve()),
-	scrollPty: vi.fn(() => Promise.resolve()),
+	scrollTerminal: vi.fn(() => Promise.resolve()),
 }));
 
 // ─── Mock @/generated/types ───

@@ -1156,7 +1156,7 @@ mod tests {
 			_request: WorktreeCreateRequest<'_>,
 		) -> Result<WorktreeCreateResult, AppError> {
 			self.state.lock().unwrap().methods.push("create".into());
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"path reconcile does not create worktrees".into(),
 			))
 		}
@@ -1213,7 +1213,7 @@ mod tests {
 				path: path.clone(),
 			});
 			if state.failed_open_paths.contains(&path) {
-				return Err(AppError::PtyError(format!(
+				return Err(AppError::TerminalError(format!(
 					"worktree.open failed: {path}"
 				)));
 			}
@@ -1230,7 +1230,7 @@ mod tests {
 				.unwrap()
 				.methods
 				.push("worktree.remove".into());
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"path reconcile does not remove worktrees".into(),
 			))
 		}
@@ -1253,7 +1253,7 @@ mod tests {
 				.unwrap()
 				.methods
 				.push("workspace.close".into());
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"path reconcile does not close workspaces".into(),
 			))
 		}
@@ -1543,12 +1543,10 @@ mod tests {
 		assert!(!profiles[1].is_default);
 		assert_eq!(profiles[1].worktree_path, "/repo/linked");
 		assert_eq!(profiles[1].branch_name, "feat/x");
-		assert!(
-			!fake
-				.methods()
-				.iter()
-				.any(|method| method.contains("workspace.list"))
-		);
+		assert!(!fake
+			.methods()
+			.iter()
+			.any(|method| method.contains("workspace.list")));
 	}
 
 	#[test]
@@ -2101,30 +2099,24 @@ mod tests {
 		.expect("live search");
 		assert_eq!(found.len(), 1);
 		assert_eq!(found[0].name, "listed-only.rs");
-		assert!(
-			crate::filesystem::search_file_for_profile(
-				&runtime,
-				&db,
-				"w1",
-				"stale-only",
-			)
-			.expect("no stale")
-			.is_empty()
-		);
+		assert!(crate::filesystem::search_file_for_profile(
+			&runtime,
+			&db,
+			"w1",
+			"stale-only",
+		)
+		.expect("no stale")
+		.is_empty());
 		let status = crate::filesystem::get_file_tree_git_status_for_profile(
 			&runtime, &db, "w1",
 		)
 		.expect("live status");
-		assert!(
-			status
-				.iter()
-				.any(|entry| entry.path.contains("listed-only.rs"))
-		);
-		assert!(
-			status
-				.iter()
-				.all(|entry| !entry.path.contains("stale-only.rs"))
-		);
+		assert!(status
+			.iter()
+			.any(|entry| entry.path.contains("listed-only.rs")));
+		assert!(status
+			.iter()
+			.all(|entry| !entry.path.contains("stale-only.rs")));
 	}
 
 	#[test]

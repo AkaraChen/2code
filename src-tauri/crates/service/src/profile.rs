@@ -9,10 +9,10 @@ use infra::herdr::transport::{
 };
 use uuid::Uuid;
 
+use crate::runtime::{HerdrWorktreeClient, RuntimeRouter};
 use model::error::AppError;
 use model::profile::{Profile, ProfileDeleteCheck};
 use model::project::GitDiffStats;
-use crate::runtime::{HerdrWorktreeClient, RuntimeRouter};
 use serde_json::Value;
 
 const AUTO_BRANCH_PREFIX: &str = "pr/";
@@ -306,7 +306,7 @@ pub fn create_with_db(
 		let conn = &mut *db.lock().map_err(|_| AppError::LockError)?;
 		repo::project::find_by_id(conn, project_id)?;
 	}
-	Err(AppError::PtyError(
+	Err(AppError::TerminalError(
 		"Herdr runtime is required to create profiles".into(),
 	))
 }
@@ -809,7 +809,7 @@ pub fn create_with_default_worktree_dir(
 	_default_worktree_dir: Option<&str>,
 ) -> Result<Profile, AppError> {
 	repo::project::find_by_id(conn, project_id)?;
-	Err(AppError::PtyError(
+	Err(AppError::TerminalError(
 		"Herdr runtime is required to create profiles".into(),
 	))
 }
@@ -938,7 +938,7 @@ fn repo_folder_for_linked_checkout(
 
 pub fn delete_with_db(_db: &DbPool, id: &str) -> Result<(), AppError> {
 	let _ = id;
-	Err(AppError::PtyError(
+	Err(AppError::TerminalError(
 		"Herdr runtime is required to delete profiles".into(),
 	))
 }
@@ -1148,7 +1148,7 @@ fn live_catalog_profile(
 pub fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), AppError> {
 	let _ = conn;
 	let _ = id;
-	Err(AppError::PtyError(
+	Err(AppError::TerminalError(
 		"Herdr runtime is required to delete profiles".into(),
 	))
 }
@@ -1186,15 +1186,17 @@ fn add_diff_stats(left: &GitDiffStats, right: &GitDiffStats) -> GitDiffStats {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
+	use crate::runtime::{
+		HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter,
+	};
+	use diesel::sqlite::SqliteConnection;
 	use diesel::Connection;
 	use diesel::RunQueryDsl;
-	use diesel::sqlite::SqliteConnection;
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
 	use infra::herdr::transport::{
-		WorktreeCreateRequest, WorktreeCreateResult, WorkspaceCreateRequest,
-		WorkspaceCreateResult, WorktreeListEntry, WorktreeOpenResult,
+		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeCreateRequest,
+		WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
 		WorktreeRemoveResult,
 	};
 	use model::error::AppError;
@@ -1237,7 +1239,6 @@ mod tests {
 		run_git(dir.path(), ["commit", "-m", "Initial commit"]);
 		dir
 	}
-
 
 	struct RecordedCreate {
 		branch: String,
@@ -1766,7 +1767,10 @@ mod tests {
 			None,
 		)
 		.unwrap_err();
-		assert!(err.to_string().contains("Failed to parse 2code.json"), "{err}");
+		assert!(
+			err.to_string().contains("Failed to parse 2code.json"),
+			"{err}"
+		);
 	}
 
 	#[test]
@@ -1880,7 +1884,6 @@ mod tests {
 		assert!(branch_name.ends_with("-00000000"));
 	}
 
-
 	#[test]
 	fn herdr_worktree_client_records_remove_without_replay() {
 		let fake = FakeWorktrees::new();
@@ -1953,8 +1956,6 @@ mod tests {
 		no_sqlite_profiles(&db);
 		assert!(fake.workspace_closes().is_empty());
 	}
-
-
 
 	#[test]
 	fn dirty_herdr_remove_without_force_keeps_checkout() {
@@ -2164,7 +2165,6 @@ mod tests {
 		no_sqlite_profiles(&db);
 		assert!(Path::new(&profile.worktree_path).exists());
 	}
-
 
 	#[test]
 	fn project_delete_forgets_mapped_herdr_worktrees() {
@@ -2679,7 +2679,6 @@ mod tests {
 		no_sqlite_profiles(&db);
 	}
 
-
 	#[test]
 	fn herdr_without_client_does_not_spawn_local_worktree() {
 		let mut conn = setup_db();
@@ -2720,7 +2719,6 @@ mod tests {
 		no_sqlite_profiles(&db);
 		let _ = project;
 	}
-
 
 	#[test]
 	fn herdr_profile_create_does_not_use_forbidden_ops() {
@@ -3020,6 +3018,4 @@ mod tests {
 		let err = delete_check(&router, &db, "w-missing").expect_err("unknown");
 		assert!(matches!(err, AppError::NotFound(_)), "{err}");
 	}
-
-
 }

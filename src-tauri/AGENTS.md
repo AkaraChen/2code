@@ -33,7 +33,7 @@ There is no repo/service `pty.rs` Local spawn, no sqlite `profiles` / `pty_sessi
 GUI connect starts `HerdrRuntimeSync` inside `connect_gui_herdr`. `lib.rs` does not name `HerdrRuntimeSync`.
 
 ## COMMANDS EXPOSED (handler/mod.rs)
-PTY: `create_pty_session`, `write_to_pty`, `resize_pty`, `scroll_pty`, `close_pty_session`, `list_project_sessions`, `get_session_backend`, `get_session_agent_status`, `stream_session_agent_status`, `attach_pty_output`, `stream_herdr_output`, `detach_pty_output`, `flush_pty_output`, `clear_pty_output`
+Terminal: `create_terminal_session`, `write_to_terminal`, `resize_terminal`, `scroll_terminal`, `close_terminal_session`, `list_project_sessions`, `get_session_backend`, `get_session_agent_status`, `stream_session_agent_status`, `attach_terminal_output`, `stream_herdr_output`, `detach_terminal_output`, `flush_terminal_output`, `clear_terminal_output`
 
 Projects (6): `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config`
 

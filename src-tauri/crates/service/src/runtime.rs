@@ -16,10 +16,12 @@ use std::time::Duration;
 
 use infra::db::DbPool;
 use model::error::AppError;
-use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
 	CreateSessionResult, RuntimeBackend, RuntimeDiscovery, SessionAgentStatus,
 	SessionIdentity, SessionOwnership,
+};
+use model::session::{
+	RestoreResult, TerminalConfig, TerminalSessionMeta, TerminalSessionRecord,
 };
 
 pub use herdr::{
@@ -47,15 +49,15 @@ pub trait TerminalRuntime: Send + Sync {
 
 	fn create_session(
 		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<CreateSessionResult, AppError>;
 
 	fn restore_session(
 		&self,
 		old_session_id: &str,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<RestoreResult, AppError>;
 
 	fn close_session(&self, session_id: &str) -> Result<(), AppError>;
@@ -63,7 +65,7 @@ pub trait TerminalRuntime: Send + Sync {
 	fn list_project_sessions(
 		&self,
 		project_id: &str,
-	) -> Result<Vec<PtySessionRecord>, AppError>;
+	) -> Result<Vec<TerminalSessionRecord>, AppError>;
 
 	fn delete_session(&self, session_id: &str) -> Result<(), AppError>;
 
@@ -113,7 +115,7 @@ pub trait TerminalRuntime: Send + Sync {
 		_session_id: &str,
 		_stream_id: &str,
 	) -> Result<model::runtime::HerdrTerminalFrame, AppError> {
-		Err(AppError::PtyError("not a Herdr session".into()))
+		Err(AppError::TerminalError("not a Herdr session".into()))
 	}
 
 	fn release_attachments(&self) {}
@@ -160,7 +162,7 @@ impl RuntimeSelector {
 		let mut map = self.ownership.lock().map_err(|_| AppError::LockError)?;
 		match map.get(session_id) {
 			Some(existing) if *existing != backend => {
-				Err(AppError::PtyError(format!(
+				Err(AppError::TerminalError(format!(
 					"session {session_id} is owned by {existing}; refusing {backend} ownership"
 				)))
 			}
@@ -295,7 +297,7 @@ impl RuntimeRouter {
 
 	fn bind_listed_herdr(
 		&self,
-		sessions: &[PtySessionRecord],
+		sessions: &[TerminalSessionRecord],
 	) -> Result<(), AppError> {
 		for session in sessions {
 			if self.selector.owner(&session.id)?.is_none() {
@@ -509,8 +511,8 @@ impl TerminalRuntime for RuntimeRouter {
 
 	fn create_session(
 		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<CreateSessionResult, AppError> {
 		let created = self.herdr.create_session(meta, config)?;
 		self.bind_created(&created.session_id)?;
@@ -520,8 +522,8 @@ impl TerminalRuntime for RuntimeRouter {
 	fn restore_session(
 		&self,
 		old_session_id: &str,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<RestoreResult, AppError> {
 		self.herdr.restore_session(old_session_id, meta, config)
 	}
@@ -535,7 +537,7 @@ impl TerminalRuntime for RuntimeRouter {
 	fn list_project_sessions(
 		&self,
 		project_id: &str,
-	) -> Result<Vec<PtySessionRecord>, AppError> {
+	) -> Result<Vec<TerminalSessionRecord>, AppError> {
 		let listed = self.herdr.list_project_sessions(project_id)?;
 		self.bind_listed_herdr(&listed)?;
 		Ok(listed)
@@ -619,7 +621,7 @@ mod tests {
 	use diesel::prelude::*;
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
-	use model::pty::{PtyConfig, PtySessionMeta};
+	use model::session::{TerminalConfig, TerminalSessionMeta};
 
 	use super::*;
 
@@ -651,15 +653,15 @@ mod tests {
 		}
 	}
 
-	fn meta() -> PtySessionMeta {
-		PtySessionMeta {
+	fn meta() -> TerminalSessionMeta {
+		TerminalSessionMeta {
 			profile_id: "w1".to_string(),
 			title: "test".to_string(),
 		}
 	}
 
-	fn config(cwd: &Path) -> PtyConfig {
-		PtyConfig {
+	fn config(cwd: &Path) -> TerminalConfig {
+		TerminalConfig {
 			shell: test_shell(),
 			cwd: cwd.to_string_lossy().into_owned(),
 			rows: 24,

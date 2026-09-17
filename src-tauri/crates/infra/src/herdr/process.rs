@@ -209,7 +209,7 @@ impl From<HerdrProcessError> for AppError {
 				AppError::HerdrServerIncompatible(err.to_string())
 			}
 			HerdrProcessError::Lock => AppError::LockError,
-			other => AppError::PtyError(other.to_string()),
+			other => AppError::TerminalError(other.to_string()),
 		}
 	}
 }

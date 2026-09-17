@@ -50,12 +50,12 @@ graph TD
 
 ### 1. Handler (`src-tauri/src/handler/`)
 
-Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `RuntimeHandle`), acquires the DB lock only when sqlite is needed, delegates to the service layer. No business logic. Existing IPC names stay (`create_pty_session`, `create_profile`, `delete_project`, …).
+Tauri `#[tauri::command]` entry points. Extracts managed state (`DbPool`, `RuntimeHandle`), acquires the DB lock only when sqlite is needed, delegates to the service layer. No business logic. Session commands use terminal/session names (`create_terminal_session`, `create_profile`, `delete_project`, …).
 
 | File         | Commands                                                                                                                                                                          |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, git helpers (`get_git_branch`, `get_git_diff`, `get_git_log`, …) |
-| `pty.rs`     | `create_pty_session`, `write_to_pty`, `resize_pty`, `scroll_pty`, `close_pty_session`, `list_project_sessions`, `attach_pty_output`, `stream_herdr_output`, `detach_pty_output` |
+| `terminal.rs` | `create_terminal_session`, `write_to_terminal`, `resize_terminal`, `scroll_terminal`, `close_terminal_session`, `list_project_sessions`, `attach_terminal_output`, `stream_herdr_output`, `detach_terminal_output` |
 | `profile.rs` | `create_profile`, `delete_profile`, `get_profile_delete_check`, `update_profile_notes`                                                                                            |
 | `watcher.rs` | `watch_projects`                                                                                                                                                                  |
 | `font.rs`    | `list_system_fonts`                                                                                                                                                               |

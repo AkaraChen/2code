@@ -31,6 +31,15 @@ fn data_flow_does_not_document_local_pty_or_sqlite_restore_as_current() {
 	assert!(DATA_FLOW.contains("reattach pane_id"));
 	assert!(DATA_FLOW.contains("reconcile_profile_checkout"));
 	assert!(DATA_FLOW.contains("worktree.create"));
+	assert!(DATA_FLOW.contains("create_terminal_session"));
+	assert!(DATA_FLOW.contains("createTerminalSession"));
+	assert!(DATA_FLOW.contains("handler/terminal.rs"));
+	assert!(DATA_FLOW.contains("attach_terminal_output"));
+	assert!(DATA_FLOW.contains("TerminalSessionRecord"));
+	assert!(!DATA_FLOW.contains("Handlers keep the existing IPC names"));
+	assert!(!DATA_FLOW.contains("create_pty_session"));
+	assert!(!DATA_FLOW.contains("createPtySession"));
+	assert!(!DATA_FLOW.contains("attach_pty_output"));
 }
 
 #[test]
@@ -62,11 +71,23 @@ fn architecture_and_api_describe_herdr_only_runtime() {
 	assert!(!ARCHITECTURE.contains("PtySessionMap"));
 	assert!(ARCHITECTURE.contains("RuntimeRouter"));
 	assert!(ARCHITECTURE.contains("pane_id"));
+	assert!(ARCHITECTURE.contains("create_terminal_session"));
+	assert!(ARCHITECTURE.contains("`terminal.rs`"));
+	assert!(!ARCHITECTURE.contains("Existing IPC names stay"));
+	assert!(!ARCHITECTURE.contains("create_pty_session"));
 	assert!(!API.contains("cascade to profiles/sessions"));
 	assert!(API.contains("Forget the catalog row and retain"));
 	assert!(API.contains("Derived GUI DTO"));
 	assert!(API.contains("workspace_id"));
-	assert!(API.contains("There is no `get_pty_session_history`"));
+	assert!(API.contains("`create_terminal_session`"));
+	assert!(API.contains("TerminalSessionRecord"));
+	assert!(API.contains("handler/terminal.rs"));
+	assert!(API.contains("There is no sqlite history restore command"));
+	assert!(API.contains("Restore is reattach of a live `pane_id`"));
+	assert!(!API.contains("`get_pty_session_history`"));
+	assert!(!API.contains("`restore_pty_session`"));
+	assert!(!API.contains("`create_pty_session`"));
+	assert!(!API.contains("Handlers keep these names"));
 	assert!(!README.contains("2code-helper"));
 	assert!(!NOTIFY.contains("2code-helper"));
 }
@@ -78,12 +99,20 @@ fn agents_md_does_not_list_sqlite_profiles_or_pty_sessions_as_the_model() {
 	assert!(!ROOT_CLAUDE.contains("Orphan logs are reaped"));
 	assert!(!ROOT_CLAUDE.contains("service::pty::gc_orphan_logs"));
 	assert!(!SRC_TAURI_AGENTS.contains("Diesel CRUD: project, profile, pty"));
+	assert!(SRC_TAURI_AGENTS.contains("create_terminal_session"));
+	assert!(!SRC_TAURI_AGENTS.contains("create_pty_session"));
 	assert!(!SERVICE_AGENTS.contains("git worktree add {base}"));
 	assert!(SERVICE_AGENTS.contains("worktree.create"));
 	assert!(TERMINAL_KEY_PATTERNS.contains("reattaches each live `pane_id`"));
+	assert!(TERMINAL_KEY_PATTERNS.contains("attach_terminal_output"));
+	assert!(!TERMINAL_KEY_PATTERNS.contains("attach_pty_output"));
 	assert!(
 		!TERMINAL_KEY_PATTERNS.contains("Fetch closed session history from DB")
 	);
+	assert!(ROOT_CLAUDE.contains("TerminalSessionRecord"));
+	assert!(ROOT_CLAUDE.contains("attach_terminal_output"));
+	assert!(!ROOT_CLAUDE.contains("PtySessionRecord"));
+	assert!(!ROOT_CLAUDE.contains("attach_pty_output"));
 }
 
 #[test]

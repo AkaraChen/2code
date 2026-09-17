@@ -45,7 +45,7 @@ pub enum UpdateDownloadEvent {
 }
 
 fn updater_error(error: impl std::fmt::Display) -> AppError {
-	AppError::PtyError(format!("Updater error: {error}"))
+	AppError::TerminalError(format!("Updater error: {error}"))
 }
 
 fn encode_release_tag(tag: &str) -> String {

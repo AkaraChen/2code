@@ -270,16 +270,18 @@ mod tests {
 	use diesel_migrations::MigrationHarness;
 	use infra::db::DbPool;
 	use infra::herdr::transport::{
-		WorktreeCreateRequest, WorktreeCreateResult, WorktreeListEntry,
-		WorktreeOpenResult, WorktreeRemoveResult, WorkspaceCreateRequest,
-		WorkspaceCreateResult,
+		WorkspaceCreateRequest, WorkspaceCreateResult, WorktreeCreateRequest,
+		WorktreeCreateResult, WorktreeListEntry, WorktreeOpenResult,
+		WorktreeRemoveResult,
 	};
 	use model::error::AppError;
 	use serde_json::Value;
 	use tempfile::tempdir;
 
 	use super::*;
-	use crate::runtime::{HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter};
+	use crate::runtime::{
+		HerdrStubAdapter, HerdrWorktreeClient, RuntimeRouter,
+	};
 
 	struct FolderWorktrees {
 		folder: std::path::PathBuf,
@@ -290,7 +292,7 @@ mod tests {
 			&self,
 			_request: WorktreeCreateRequest<'_>,
 		) -> Result<WorktreeCreateResult, AppError> {
-			Err(AppError::PtyError("fs tests do not create".into()))
+			Err(AppError::TerminalError("fs tests do not create".into()))
 		}
 
 		fn worktree_list(
@@ -314,7 +316,7 @@ mod tests {
 			_cwd: &Path,
 			_path: &Path,
 		) -> Result<WorktreeOpenResult, AppError> {
-			Err(AppError::PtyError("fs tests do not open".into()))
+			Err(AppError::TerminalError("fs tests do not open".into()))
 		}
 
 		fn worktree_remove(
@@ -322,20 +324,19 @@ mod tests {
 			_workspace_id: &str,
 			_force: bool,
 		) -> Result<WorktreeRemoveResult, AppError> {
-			Err(AppError::PtyError("fs tests do not remove".into()))
+			Err(AppError::TerminalError("fs tests do not remove".into()))
 		}
 
 		fn workspace_create(
 			&self,
 			_request: WorkspaceCreateRequest<'_>,
 		) -> Result<WorkspaceCreateResult, AppError> {
-			Err(AppError::PtyError("fs tests do not create workspaces".into()))
+			Err(AppError::TerminalError(
+				"fs tests do not create workspaces".into(),
+			))
 		}
 
-		fn workspace_close(
-			&self,
-			_workspace_id: &str,
-		) -> Result<(), AppError> {
+		fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
 			Ok(())
 		}
 
@@ -360,9 +361,10 @@ mod tests {
 	}
 
 	fn herdr_router(folder: &Path) -> RuntimeRouter {
-		let worktrees: Arc<dyn HerdrWorktreeClient> = Arc::new(FolderWorktrees {
-			folder: folder.to_path_buf(),
-		});
+		let worktrees: Arc<dyn HerdrWorktreeClient> =
+			Arc::new(FolderWorktrees {
+				folder: folder.to_path_buf(),
+			});
 		RuntimeRouter::new(HerdrStubAdapter::with_worktree_client(worktrees))
 	}
 

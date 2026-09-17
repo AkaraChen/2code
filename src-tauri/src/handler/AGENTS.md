@@ -12,7 +12,7 @@ Tauri IPC entry points. Thin delegation layer — no business logic here.
 | `mod.rs` | `tauri::generate_handler![]` registration |
 | `profile.rs` | `create_profile`, `delete_profile` |
 | `project.rs` | `create_project_from_folder`, `list_projects`, `update_project`, `delete_project`, `get_project_config`, `save_project_config` |
-| `pty.rs` | `create_pty_session`, `write_to_pty`, `resize_pty`, `scroll_pty`, `close_pty_session`, `list_project_sessions`, `get_session_backend`, `get_session_agent_status`, `stream_session_agent_status`, `attach_pty_output`, `stream_herdr_output`, `detach_pty_output`, `flush_pty_output`, `clear_pty_output` |
+| `terminal.rs` | `create_terminal_session`, `write_to_terminal`, `resize_terminal`, `scroll_terminal`, `close_terminal_session`, `list_project_sessions`, `get_session_backend`, `get_session_agent_status`, `stream_session_agent_status`, `attach_terminal_output`, `stream_herdr_output`, `detach_terminal_output`, `flush_terminal_output`, `clear_terminal_output` |
 | `sound.rs` | `list_system_sounds`, `play_system_sound` (macOS only) |
 | `watcher.rs` | `watch_projects` |
 
