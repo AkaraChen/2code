@@ -52,6 +52,105 @@ Listing, creating, deleting, and restoring profiles go through Herdr. sqlite `pr
 
 Production is Herdr-only. sqlite `profiles` is DROPped. There is no Local env/flag fallback.
 
+## Sharing contract
+
+One Herdr server, shared. 2code attaches to the session the user's own `herdr` would ([#466](https://github.com/AkaraChen/2code/issues/466) Task 1): inherited `HERDR_SOCKET_PATH` / `HERDR_SESSION`, else `$XDG_CONFIG_HOME/herdr/herdr.sock`, else a running named session from `herdr session list`. If nothing is running, it starts **that same default socket**. There is never a private `2code` session, never `sessions/2code/`, and never a default-socket refusal. GUI/lease drop kills client helpers only; it does not `herdr server stop`. Compatible live servers are protocol >= 22 (Herdr >= 0.9.0); older servers fail closed naming `herdr update` ([#466](https://github.com/AkaraChen/2code/issues/466) Task 2). The sidecar pin stays **v0.9.0** as the no-install fallback and still starts on the shared default socket.
+
+This is **not** the contract-probe `/tmp/2c*.sock` isolation. That short-socket override is **test isolation** so a long fixture XDG cannot blow `sun_path`; it is not a production namespace. Production talks to the user's default session.
+
+**Verified** on Linux x86_64 against pinned **v0.9.0**, fixture `XDG_CONFIG_HOME` so the default socket is `$fixture_xdg/herdr/herdr.sock` (not the host `~/.config/herdr/herdr.sock`). The proof goes through [`connect_gui_herdr`](../src-tauri/crates/service/src/runtime.rs) / [`RuntimeRouter`](../src-tauri/crates/service/src/runtime.rs) with `GuiHerdrConnect.sidecar` + empty `path_dirs` (pinned binary, not PATH `herdr`). `HERDR_SESSION` is unset. `sessions/2code/` is absent. Live test: [`sharing_proof.rs`](../src-tauri/crates/service/src/runtime/sharing_proof.rs). Task 1's transport-level [`live_created_workspace_is_visible_on_default_socket`](../src-tauri/crates/infra/src/herdr/process.rs) is kept; it is not this proof.
+
+```bash
+cd src-tauri
+HERDR_SIDECAR_REQUIRED=1 cargo test -p service --lib \
+  live_runtime_sharing_is_visible_both_ways_on_default_socket \
+  -- --nocapture --test-threads=1
+```
+
+### Forward (2code → user `herdr`)
+
+sqlite `projects` row for a disposable non-git folder, then [`create_with_runtime`](../src-tauri/crates/service/src/profile.rs) (`workspace.create --cwd`) → `workspace_id` `w1`, then [`create_session`](../src-tauri/crates/service/src/runtime.rs) (`tab.create`) → `pane_id` `w1:p2`. Same default socket, **no** `HERDR_SESSION=2code`:
+
+```bash
+XDG_CONFIG_HOME=/tmp/…/xdg-config \
+HERDR_SOCKET_PATH=/tmp/…/xdg-config/herdr/herdr.sock \
+herdr api snapshot
+```
+
+Sanitized `session.snapshot` excerpt (CLI wraps JSON `session_snapshot`; JSON `session.snapshot` is the same `snapshot` object):
+
+```json
+{
+  "workspaces": [{ "workspace_id": "w1", "label": "forward", "pane_count": 2 }],
+  "panes": [
+    { "pane_id": "w1:p1", "workspace_id": "w1", "cwd": "/tmp/…/forward-project" },
+    { "pane_id": "w1:p2", "workspace_id": "w1", "cwd": "/tmp/…/forward-project" }
+  ]
+}
+```
+
+```bash
+XDG_CONFIG_HOME=/tmp/…/xdg-config \
+HERDR_SOCKET_PATH=/tmp/…/xdg-config/herdr/herdr.sock \
+herdr workspace list
+```
+
+v0.9.0 `herdr workspace list` prints JSON (`workspace_list`). That CLI is the parent-plan proof; JSON `workspace.list` is not a substitute.
+
+```json
+{
+  "type": "workspace_list",
+  "workspaces": [
+    { "workspace_id": "w1", "label": "forward", "pane_count": 2, "tab_count": 2 }
+  ]
+}
+```
+
+Dropping the GUI adapter / `HerdrClientGuard` leaves that default socket live.
+
+### Reverse (user `herdr` → 2code)
+
+On the same isolated default session, create a workspace **outside** 2code against a sqlite `projects.folder`. [`list_with_runtime`](../src-tauri/crates/service/src/project.rs) is a live read (not [`adopt_existing_checkouts`](../src-tauri/crates/service/src/project.rs)) and returns that `workspace_id`. Join key still filters by project folder (non-git: snapshot pane `cwd`). A second, private server does not appear.
+
+```bash
+XDG_CONFIG_HOME=/tmp/…/xdg-config \
+HERDR_SOCKET_PATH=/tmp/…/xdg-config/herdr/herdr.sock \
+herdr workspace create --cwd /tmp/…/reverse-project --label reverse
+```
+
+```json
+{
+  "type": "workspace_created",
+  "workspace": { "workspace_id": "w2", "label": "reverse" },
+  "root_pane": { "pane_id": "w2:p1", "cwd": "/tmp/…/reverse-project" }
+}
+```
+
+```bash
+XDG_CONFIG_HOME=/tmp/…/xdg-config \
+HERDR_SOCKET_PATH=/tmp/…/xdg-config/herdr/herdr.sock \
+herdr workspace list
+```
+
+```json
+{
+  "type": "workspace_list",
+  "workspaces": [
+    { "workspace_id": "w1", "label": "forward" },
+    { "workspace_id": "w2", "label": "reverse" },
+    { "workspace_id": "w3", "label": "other" }
+  ]
+}
+```
+
+Sanitized `list_with_runtime` ids (live read):
+
+```text
+forward-project  → workspace_id=w1  (pane_id=w1:p2 from create_session)
+reverse-project  → workspace_id=w2
+other (not a sqlite projects.folder) → w3 is in herdr workspace list, not listed
+```
+
 ## Project ↔ Herdr binding (join key)
 
 **Join key:** canonical absolute `projects.folder` ↔ live Herdr checkout path / workspace cwd.
@@ -226,7 +325,7 @@ HERDR_CONTRACT_REQUIRED=1 cargo test -p infra --test herdr_contract \
   -- --nocapture --test-threads=1
 ```
 
-Optional: `HERDR_CONTRACT_DUMP=1` prints **live** (unsanitized temp-path) JSON for empty / primary / linked / second-repo / non-git stages. Committed excerpts in `tests/fixtures/herdr/lists/join-key.json` replace those paths with `/tmp/contract-*`. The dump still uses the fixture socket, never the user default session.
+Optional: `HERDR_CONTRACT_DUMP=1` prints **live** (unsanitized temp-path) JSON for empty / primary / linked / second-repo / non-git stages. Committed excerpts in `tests/fixtures/herdr/lists/join-key.json` replace those paths with `/tmp/contract-*`. That dump is **test isolation**: it uses the probe's fixture socket (`HERDR_SOCKET_PATH=/tmp/2c*.sock` under a disposable XDG), not the host machine's `~/.config/herdr` session. It is not production policy. Production attaches to the user's default session (see [Sharing contract](#sharing-contract)).
 
 Without `HERDR_CONTRACT_REQUIRED=1`, live tests skip if the binary is absent. `cargo test --workspace --exclude code` is the crate-level suite on machines without GTK/`gdk-3.0`.
 

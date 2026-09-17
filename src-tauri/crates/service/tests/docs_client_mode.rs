@@ -102,3 +102,41 @@ fn herdr_pin_and_lib_constraints_hold() {
 	assert!(HERDR.contains("#394 treated Local as the production default"));
 	assert!(!LIB_RS.contains("HerdrRuntimeSync"));
 }
+
+#[test]
+fn herdr_docs_lock_sharing_contract() {
+	assert!(HERDR.contains("## Sharing contract"));
+	let sharing = HERDR
+		.split("## Sharing contract")
+		.nth(1)
+		.expect("Sharing contract")
+		.split("\n## ")
+		.next()
+		.expect("sharing body");
+	assert!(sharing.contains("One Herdr server, shared"));
+	assert!(sharing.contains("herdr api snapshot"));
+	assert!(sharing.contains("herdr workspace list"));
+	assert!(sharing.contains("list_with_runtime"));
+	assert!(sharing.contains("create_with_runtime"));
+	assert!(sharing.contains("create_session"));
+	assert!(sharing.contains("herdr update"));
+	assert!(sharing.contains("protocol >= 22"));
+	assert!(sharing.contains("never a private `2code` session"));
+	assert!(sharing.contains("does not `herdr server stop`"));
+	assert!(sharing.contains("$XDG_CONFIG_HOME/herdr/herdr.sock"));
+	assert!(!sharing.contains("dedicated `2code` namespace"));
+	assert!(!sharing.contains("never the user default session"));
+	assert!(!sharing.contains("refusing the user default"));
+	assert!(!HERDR.contains(
+		"The dump still uses the fixture socket, never the user default session"
+	));
+	assert!(HERDR.contains("That dump is **test isolation**"));
+	assert!(ARCHITECTURE.contains("User herdr or pinned v0.9.0 sidecar"));
+	assert!(CONFIGURATION.contains(
+		"attaches to the user's Herdr session (inherited `HERDR_SOCKET_PATH` / `HERDR_SESSION`, else `$XDG_CONFIG_HOME/herdr/herdr.sock`)"
+	));
+	assert!(!ARCHITECTURE.contains("dedicated `2code` namespace"));
+	assert!(!CONFIGURATION.contains("dedicated `2code` namespace"));
+	assert!(!ROOT_AGENTS.contains("dedicated `2code` namespace"));
+	assert!(!ROOT_CLAUDE.contains("dedicated `2code` namespace"));
+}
