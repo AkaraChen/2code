@@ -10,6 +10,7 @@ pub mod process;
 pub mod terminal;
 pub mod transport;
 
+use std::env;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -25,6 +26,9 @@ pub const PINNED_VERSION: &str = "0.9.0";
 pub const PINNED_TAG: &str = "v0.9.0";
 pub const PINNED_COMMIT: &str = "b99002ac99b09e00b4ca692436cb15a6b0d676f1";
 pub const EXPECTED_VERSION_LINE: &str = "herdr 0.9.0";
+/// Live-server / user-binary floor. The sidecar pin stays `PINNED_VERSION`.
+pub const MIN_VERSION: &str = PINNED_VERSION;
+pub const MIN_PROTOCOL: u64 = 22;
 pub const SIDECAR_STEM: &str = "herdr";
 
 const PIN_JSON: &str = include_str!("../../tests/fixtures/herdr/pin.json");
@@ -284,6 +288,72 @@ pub fn sidecar_required() -> bool {
 	std::env::var_os("HERDR_SIDECAR_REQUIRED").is_some()
 }
 
+fn herdr_path_names() -> &'static [&'static str] {
+	#[cfg(windows)]
+	{
+		&["herdr.exe", "herdr"]
+	}
+	#[cfg(not(windows))]
+	{
+		&["herdr"]
+	}
+}
+
+/// Look up a user-installed `herdr` in the given PATH directories.
+pub fn find_herdr_in_dirs<I, P>(dirs: I) -> Option<PathBuf>
+where
+	I: IntoIterator<Item = P>,
+	P: AsRef<Path>,
+{
+	for dir in dirs {
+		for name in herdr_path_names() {
+			let candidate = dir.as_ref().join(name);
+			if candidate.is_file() {
+				return Some(candidate);
+			}
+		}
+	}
+	None
+}
+
+/// Look up `herdr` on the process PATH. Sidecar fallback is separate.
+pub fn find_herdr_on_path() -> Option<PathBuf> {
+	let path = env::var_os("PATH")?;
+	find_herdr_in_dirs(env::split_paths(&path))
+}
+
+pub fn parse_herdr_semver(text: &str) -> Option<(u64, u64, u64)> {
+	let trimmed = text.trim();
+	let rest = trimmed
+		.strip_prefix("herdr")
+		.map(str::trim)
+		.unwrap_or(trimmed);
+	let token = rest
+		.split(|c: char| !(c.is_ascii_digit() || c == '.'))
+		.find(|part| !part.is_empty())?;
+	let mut parts = token.split('.');
+	let major = parts.next()?.parse().ok()?;
+	let minor = parts.next()?.parse().ok()?;
+	let patch = parts.next().unwrap_or("0").parse().unwrap_or(0);
+	Some((major, minor, patch))
+}
+
+pub fn herdr_version_meets_floor(text: &str) -> bool {
+	parse_herdr_semver(text).is_some_and(|ver| ver >= (0, 9, 0))
+}
+
+pub fn old_binary_upgrade_message(found_version: &str) -> String {
+	format!(
+		"found Herdr {found_version}; required Herdr >= {MIN_VERSION} / protocol >= {MIN_PROTOCOL}; run `herdr update`"
+	)
+}
+
+fn version_token_from_line(line: &str) -> Option<&str> {
+	let rest = line.trim().strip_prefix("herdr")?.trim();
+	rest.split(|c: char| c.is_whitespace() || c == '-' || c == '+')
+		.find(|part| !part.is_empty())
+}
+
 #[cfg(test)]
 pub(crate) fn lock_live_herdr_tests() -> std::sync::MutexGuard<'static, ()> {
 	static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -307,12 +377,16 @@ pub fn report_version(executable: &Path) -> Result<String, AppError> {
 		.map(str::trim)
 		.find(|line| !line.is_empty())
 		.unwrap_or("");
-	if line != EXPECTED_VERSION_LINE {
-		return Err(err(format!(
-			"unexpected herdr --version: {line:?} (expected {EXPECTED_VERSION_LINE})"
-		)));
+	if herdr_version_meets_floor(line) {
+		return Ok(line.to_string());
 	}
-	Ok(line.to_string())
+	if parse_herdr_semver(line).is_some() {
+		let found = version_token_from_line(line).unwrap_or(line);
+		return Err(err(old_binary_upgrade_message(found)));
+	}
+	Err(err(format!(
+		"unexpected herdr --version: {line:?} (required Herdr >= {MIN_VERSION})"
+	)))
 }
 
 pub fn locate_cached_host_binary() -> Result<Option<PathBuf>, AppError> {
@@ -585,5 +659,73 @@ mod tests {
 		assert!(notice.contains(PINNED_COMMIT));
 		assert!(notice.contains(PINNED_VERSION));
 		assert!(!notice.contains("/releases/latest"));
+	}
+
+	#[test]
+	fn version_floor_accepts_newer_herdr_and_rejects_older() {
+		assert_eq!(parse_herdr_semver("herdr 0.9.0"), Some((0, 9, 0)));
+		assert_eq!(parse_herdr_semver("0.10.0"), Some((0, 10, 0)));
+		assert_eq!(parse_herdr_semver("herdr 0.8.2"), Some((0, 8, 2)));
+		assert!(herdr_version_meets_floor("herdr 0.9.0"));
+		assert!(herdr_version_meets_floor("herdr 0.9.1"));
+		assert!(herdr_version_meets_floor("herdr 0.10.0"));
+		assert!(!herdr_version_meets_floor("herdr 0.8.2"));
+		assert!(!herdr_version_meets_floor("not-herdr"));
+		let upgrade = old_binary_upgrade_message("0.8.2");
+		assert!(upgrade.contains("0.8.2"), "{upgrade}");
+		assert!(upgrade.contains(MIN_VERSION), "{upgrade}");
+		assert!(upgrade.contains(&MIN_PROTOCOL.to_string()), "{upgrade}");
+		assert!(upgrade.contains("herdr update"), "{upgrade}");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn report_version_accepts_newer_user_binary_and_names_update_for_old() {
+		let tmp = tempfile::tempdir().unwrap();
+		let newer = tmp.path().join("herdr-newer");
+		write_executable(&newer, "#!/bin/sh\necho 'herdr 0.10.0'\n");
+		assert_eq!(report_version(&newer).unwrap(), "herdr 0.10.0");
+
+		let patch = tmp.path().join("herdr-patch");
+		write_executable(&patch, "#!/bin/sh\necho 'herdr 0.9.1'\n");
+		assert_eq!(report_version(&patch).unwrap(), "herdr 0.9.1");
+
+		let old = tmp.path().join("herdr-old");
+		write_executable(&old, "#!/bin/sh\necho 'herdr 0.8.2'\n");
+		let err = report_version(&old).unwrap_err().to_string();
+		assert!(err.contains("0.8.2"), "{err}");
+		assert!(err.contains(MIN_VERSION), "{err}");
+		assert!(err.contains("herdr update"), "{err}");
+		assert!(!err.contains("absent"), "{err}");
+
+		let junk = tmp.path().join("not-herdr");
+		write_executable(&junk, "#!/bin/sh\necho not-herdr\n");
+		let junk_err = report_version(&junk).unwrap_err().to_string();
+		assert!(
+			junk_err.contains("unexpected herdr --version"),
+			"{junk_err}"
+		);
+		assert!(!junk_err.contains("herdr update"), "{junk_err}");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn path_lookup_prefers_user_herdr_and_ignores_missing_dirs() {
+		let tmp = tempfile::tempdir().unwrap();
+		let path_dir = tmp.path().join("bin");
+		let other = tmp.path().join("other");
+		fs::create_dir_all(&path_dir).unwrap();
+		fs::create_dir_all(&other).unwrap();
+		write_executable(
+			&path_dir.join("herdr"),
+			"#!/bin/sh\necho 'herdr 0.9.1'\n",
+		);
+		write_executable(
+			&other.join("herdr"),
+			"#!/bin/sh\necho 'herdr 0.9.0'\n",
+		);
+		let found = find_herdr_in_dirs([&path_dir, &other]).unwrap();
+		assert_eq!(found, path_dir.join("herdr"));
+		assert_eq!(find_herdr_in_dirs([tmp.path().join("missing")]), None);
 	}
 }
