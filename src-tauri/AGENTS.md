@@ -63,4 +63,4 @@ Tests colocated in `#[cfg(test)]` modules. Integration tests in `tests/`.
 - Business logic in handlers — delegate to service layer
 - Long-held `Mutex` locks across async operations — causes deadlocks
 - Editing `src/schema.rs` / `crates/model/src/schema.rs` manually — Diesel generated
-- Reintroducing a Local adapter, an env-or-CLI runtime-backend switch, sqlite profile/session tables as authority, or Local session-layer names in live identifiers
+- Reintroducing a Local adapter, an env-or-CLI runtime-backend switch, sqlite profile/session tables as authority, or Local session-layer names in live identifiers. Enforced by `src-tauri/crates/service/tests/herdr_only_audit.rs`.

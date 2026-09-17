@@ -2227,7 +2227,7 @@ mod tests {
 		assert!(!src.contains("import_leftover_sqlite_profiles"));
 		assert!(!src.contains("git::worktree"));
 		assert!(!src.contains("setup_script"));
-		assert!(!src.contains("INSERT INTO profiles"));
+		assert!(!src.contains(&format!("INSERT INTO {}", "profiles")));
 	}
 
 	#[test]

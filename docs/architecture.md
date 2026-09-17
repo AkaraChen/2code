@@ -168,3 +168,5 @@ src-tauri/
 | tauri-typegen for IPC bindings          | Eliminates manual TS wrappers, type-safe end-to-end                                         |
 | Frontend-driven agent notifications     | Terminal output detection owns running/waiting state; waiting transitions can play the configured system sound |
 | Feature-based frontend structure        | Co-locates hooks, components, and stores per domain for cohesion                            |
+
+The Herdr-only `RuntimeRouter` invariant is enforced by `herdr_only_live_tree_stays_locked` in `src-tauri/crates/service/tests/herdr_only_audit.rs`.
