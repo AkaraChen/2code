@@ -454,7 +454,7 @@ This task has **no UX**. Sidebar/profile switcher changes are **#436 Tasks 3–4
 | Environment | `--env CONTRACT_ENV=from_probe` on `workspace.create` **verified** (`printenv` returns `from_probe`). Herdr-injected `HERDR_*` variables are **documented**. |
 | Startup command | **Not** a create parameter. Workaround after create: JSON `pane.send_input` with `text` ending in a newline, or CLI `herdr pane run` (not a schema method). #394 leftover: [#397](https://github.com/AkaraChen/2code/issues/397). `layout.apply` argv is **documented**, not probed. |
 | Agent state | Idle shells **verified** `agent_status: "unknown"` via JSON `pane.get` (and empty `snapshot.agents`) before any command. Live agent CLIs **unverified**. #394 leftover (was Task 13): [#398](https://github.com/AkaraChen/2code/issues/398). |
-| Subscriptions | `events.subscribe` ack + live `tab.created` **verified**. Full bootstrap race (subscribe → snapshot → drain) is **documented** by Herdr, not separately race-tested. |
+| Subscriptions | `events.subscribe` ack + live `tab.created` **verified**. Subscribe → snapshot → drain is unit-tested in [`runtime_sync.rs`](../src-tauri/crates/service/src/runtime_sync.rs) (`bootstrap_applies_events_that_arrive_during_snapshot`, `disconnect_rebuilds_and_drops_stale_events`). Not a live Herdr race probe. |
 | Scrollback search | `pane.read` snapshots **verified**; live search is a 2code UI concern. |
 
 ## Gaps (not silently “passing”)

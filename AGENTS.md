@@ -3,7 +3,7 @@
 **Generated:** 2026-04-09 | **Commit:** 93661da | **Branch:** dev
 
 ## OVERVIEW
-Tauri 2 desktop app for managing code projects with integrated PTY terminals. React 19 + TS frontend, Rust workspace backend, SQLite via Diesel.
+Tauri 2 desktop app for managing code projects with integrated Herdr terminals. React 19 + TS frontend, Rust workspace backend, SQLite via Diesel. Herdr (pinned v0.9.0) is the profile/session authority; sqlite stores `projects` / `project_groups` / `checkout_notes`.
 
 ## STRUCTURE
 ```
@@ -16,9 +16,9 @@ Tauri 2 desktop app for managing code projects with integrated PTY terminals. Re
 │   └── paraglide/              # AUTO-GENERATED i18n messages (DO NOT EDIT, gitignored)
 ├── src-tauri/
 │   ├── src/handler/            # #[tauri::command] entry points (8 files)
-│   ├── crates/infra/src/       # DB, PTY, git, shell init, watcher, logger, slug
-│   ├── crates/service/src/     # Business logic: project, profile, pty, watcher
-│   ├── crates/repo/src/        # Diesel CRUD: project, profile, pty
+│   ├── crates/infra/src/       # DB, Herdr sidecar/transport, git, watcher, logger, slug
+│   ├── crates/service/src/     # Business logic: project, profile, RuntimeRouter, watcher
+│   ├── crates/repo/src/        # Diesel CRUD: project, project_group, checkout_notes
 │   ├── crates/model/src/       # DTOs, Diesel models, error types
 │   └── migrations/             # Diesel SQL migrations (embedded at compile time)
 ├── messages/                   # i18n source: en.json zh.json
@@ -33,14 +33,14 @@ Tauri 2 desktop app for managing code projects with integrated PTY terminals. Re
 | Consume IPC in frontend | Import from `@/generated` → wrap in TanStack Query hook |
 | Query keys | `src/shared/lib/queryKeys.ts` — always use this, never inline strings |
 | Terminal tabs/state | `src/features/terminal/store.ts` (Zustand + Immer) |
-| PTY session lifecycle | `src-tauri/crates/infra/src/pty.rs` + `crates/service/src/pty.rs` |
+| Session lifecycle | `src-tauri/crates/service/src/runtime.rs` + `runtime/herdr.rs` (live `pane_id`) |
 | DB migrations | `src-tauri/migrations/` (Diesel; auto-applied on startup) |
-| Git operations | `src-tauri/crates/infra/src/git.rs` + `src-tauri/src/handler/debug.rs` |
-| Context ID resolution | `crates/repo/src/project.rs::resolve_context_folder` (polymorphic project/profile) |
-| Worktree profiles | `crates/service/src/profile.rs` — creates `~/.2code/workspace/{id}` |
+| Git operations | `src-tauri/crates/infra/src/git.rs` + `src-tauri/src/handler/project.rs` |
+| Checkout path resolution | `crates/service/src/project.rs::reconcile_profile_checkout` (live Herdr cwd) |
+| Worktree profiles | `crates/service/src/profile.rs` — Herdr `worktree.create` / `workspace.create`; id = `workspace_id` |
 | Agent status detection | `src/features/terminal/detector/` → `Terminal.tsx` → terminalStore |
 | i18n messages | `messages/en.json` + `messages/zh.json` → `import * as m from "@/paraglide/messages.js"` |
-| Shell init injection | `infra/shell_init.rs` (ZDOTDIR-based) |
+| Herdr sidecar | `infra::herdr` + `scripts/herdr-sidecar.mjs` (pinned v0.9.0) |
 
 ## COMMANDS
 ```bash
@@ -55,34 +55,33 @@ just coverage                    # llvm-cov HTML report
 
 ## STATE PATTERNS
 - **Server state**: TanStack Query — always invalidate on mutations
-- **Client state**: Zustand with Immer — terminal store uses `Set` (requires `enableMapSet()`)
+- **Client state**: Zustand with Immer/mutative — terminal tabs and agent status live in `terminalStore`
 - **Persist**: `terminalSettingsStore`, `notificationStore`, `themeStore` use localStorage via `persist` middleware
 - **Outside React**: `useTerminalStore.getState().addTab(...)` (direct access, no hook)
 
 ## KEY PATTERNS
 - **IPC flow**: Rust `#[tauri::command]` → `tauri-typegen` → `src/generated/` → TanStack Query hook
 - **Terminal persistence**: CSS `display: none` on tab switch — NEVER unmount or conditionally render terminals
-- **Context ID**: git handlers accept project ID or profile ID — backend resolves via `resolve_context_folder`
+- **Checkout path**: git handlers accept a Herdr `workspace_id` (`profile_id`) — backend uses `reconcile_profile_checkout` (live cwd)
 - **Rust test setup**: in-memory SQLite + `conn.run_pending_migrations(MIGRATIONS)` in `setup_db()`
 - **DB lock**: single `Arc<Mutex<SqliteConnection>>` — acquire/release quickly, never hold across awaits
 
 ## ANTI-PATTERNS
 - `src/api/` — forbidden; all IPC via `src/generated/` auto-gen
 - `src/generated/` or `src/paraglide/` — DO NOT EDIT (gitignored, regenerated)
-- `src-tauri/src/schema.rs` — DO NOT EDIT (Diesel generated)
+- `src-tauri/src/schema.rs` / `crates/model/src/schema.rs` — DO NOT EDIT (Diesel generated)
 - Conditional rendering of `<Terminal>` — breaks xterm.js state
 - Legacy UI-library APIs/components — removed; use shadcn/ui primitives from `src/components/ui`
 - Long-held DB mutex locks — causes deadlocks
-- Font listing / sound APIs without macOS platform guard (macOS-only)
+- Reintroducing Local PTY, `TWOCODE_RUNTIME`, or sqlite `profiles` as authority
 
 ## GOTCHAS
 - `src-tauri/src/main.rs:1` — `#![cfg_attr(…, windows_subsystem = "windows")]` has `DO NOT REMOVE!!`
 - `topbar` feature is NOT part of `git` feature despite CLAUDE.md proximity — it's a separate customizable control bar system
-- Immer `MapSet` plugin must be enabled before any store using `Set`/`Map` (already done in `store.ts`)
 - `noUnusedLocals` + `noUnusedParameters` enforced in tsconfig — TS will error on unused vars
 - CI: `.github/workflows/tauri-smoke.yml` — smoke test on `ubuntu-24.04` using `xvfb-run` (virtual display) + `webkit2gtk-driver` + Tauri driver. Not a full test suite.
 - E2E: `e2e-tests/` uses Mocha + Selenium WebDriver via Tauri driver (not Playwright/Cypress)
 - Frontend uses Vitest (`npm test` = `vitest run`); test files colocated as `*.test.ts` — Zustand store tests use `resetStore()` helper pattern
 - ESLint uses `@antfu/eslint-config` with React flat config — configuration lives in `eslint.config.js` at the repo root
 - `openspec/` dir at root is OpenSpec workflow tooling — not application code
-- `src-tauri/src/bridge.rs` — trait impls (`TauriPtyEmitter`, `TauriWatchSender`) that decouple service layer from Tauri
+- `src-tauri/src/bridge.rs` — trait impls (`TauriWatchSender`, `build_runtime`) that decouple service from Tauri

@@ -1,10 +1,10 @@
 # 2code Architecture Documentation
 
-> Auto-generated structural documentation for the **2code** Tauri 2 desktop application.
+> Structural documentation for the **2code** Tauri 2 desktop application.
 
 ## Overview
 
-**2code** is a macOS desktop app for managing code projects with integrated persistent terminal sessions. It pairs a React 19 frontend with a Rust backend, connected via Tauri 2 IPC with auto-generated TypeScript bindings.
+**2code** is a desktop app for managing code projects with integrated Herdr terminal sessions. It pairs a React 19 frontend with a Rust backend, connected via Tauri 2 IPC with auto-generated TypeScript bindings. Herdr (pinned **v0.9.0**) is the production runtime and profile authority. sqlite stores `projects` / `project_groups` / `checkout_notes`.
 
 ### Tech Stack
 
@@ -19,7 +19,7 @@
 | Database       | SQLite via Diesel ORM                      |
 | IPC codegen    | tauri-typegen                              |
 | i18n           | Paraglide.js v2                            |
-| Sidecar        | `2code-helper` CLI (Rust, clap + ureq)     |
+| Sidecar        | Pinned Herdr v0.9.0 (`binaries/herdr`)     |
 
 ### Module Structure
 
@@ -46,19 +46,17 @@
 │   ├── src/
 │   │   ├── lib.rs              # App setup: plugins, state, commands, lifecycle
 │   │   ├── handler/            # Tauri command entry points (thin delegation)
-│   │   ├── service/            # Business logic and orchestration
-│   │   ├── repo/               # Diesel ORM database access
-│   │   ├── infra/              # Infrastructure: DB, PTY, git, HTTP server, etc.
-│   │   ├── model/              # Diesel models, DTOs, non-DB types
-│   │   ├── error.rs            # AppError enum (thiserror)
-│   │   └── schema.rs           # Diesel-generated schema (do not edit)
-│   ├── shared/                 # Shared types crate (server ↔ sidecar)
-│   ├── 2code-helper/           # CLI sidecar binary
+│   │   └── bridge.rs           # Trait impls decoupling service from Tauri
+│   ├── crates/
+│   │   ├── service/            # Business logic + Herdr-only RuntimeRouter
+│   │   ├── repo/               # Diesel ORM: projects, groups, checkout_notes
+│   │   ├── infra/              # DB, Herdr sidecar/transport, git, watcher
+│   │   └── model/              # Diesel models, DTOs, error types
 │   └── migrations/             # Diesel SQL migrations
 │
 ├── messages/                   # i18n source files (en.json, zh.json)
 ├── project.inlang/             # Paraglide.js config
-└── justfile                    # Build recipes (fmt, build-helper, etc.)
+└── justfile                    # Build recipes (fmt, coverage, etc.)
 ```
 
 ## Documentation Index
@@ -66,8 +64,8 @@
 | Document                          | Contents                                                                  |
 | --------------------------------- | ------------------------------------------------------------------------- |
 | [Architecture](architecture.md)   | Layer diagram, component map, design decisions                            |
-| [Data Flow](data-flow.md)         | IPC lifecycle, PTY streaming, notification pipeline, terminal restoration |
-| [API Reference](api-reference.md) | All Tauri commands, Tauri events, HTTP endpoints                          |
-| [Configuration](configuration.md) | Config files, environment variables, database schema                      |
+| [Data Flow](data-flow.md)         | IPC lifecycle, Herdr pane streaming, notification pipeline, reattach restore |
+| [API Reference](api-reference.md) | Tauri commands, channels, key types                                       |
+| [Configuration](configuration.md) | Config files, environment variables, live sqlite schema                   |
 | [Notification Behavior](notification-behavior.md) | Terminal unread-dot state machine and click behavior          |
 | [Herdr integration](herdr-integration.md) | Pinned Herdr v0.9.0 contract, protocol, and capability matrix |

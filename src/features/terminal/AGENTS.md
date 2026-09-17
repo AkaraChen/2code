@@ -28,9 +28,9 @@ PTY terminal management with xterm.js. The most complex frontend feature.
 - `WebLinksAddon`, `ClipboardAddon`, `ImageAddon`, `LigaturesAddon`, `ProgressAddon`
 
 **Session restoration flow**:
-1. Fetch closed session history from DB
-2. Pass old `session.id` as `restoreFrom` prop
-3. Terminal writes scrollback chunks, then deletes old record
+1. List live Herdr panes (`pane_id`); `profile_id` is `workspace_id`
+2. `restoration.ts` reattaches each live `pane_id` as a tab on the same identity
+3. `Terminal.tsx` attaches the Herdr frame stream — no sqlite history, no `restoreFrom`
 
 **Font measurement must use an attached canvas** — WebKit only resolves locally installed fonts for canvases that are in the document. A detached `document.createElement("canvas")` and every `OffscreenCanvas` measure against a fallback-only font environment. Measured in macOS WKWebView, SarasaNZSSlab NFM at 14px: detached/offscreen `8.401px` (0.6 em fallback) vs attached/DOM `7.000px` (the real 0.5 em font).
 

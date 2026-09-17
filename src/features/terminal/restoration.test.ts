@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionBackend } from "@/generated";
+import agentsMd from "./AGENTS.md?raw";
+import claudeMd from "./CLAUDE.md?raw";
 import {
 	hydrateRestorableSessions,
 	restorePendingTerminalTab,
@@ -135,5 +137,19 @@ describe("restorePendingTerminalTab", () => {
 		await restorePendingTerminalTab("profile-1", addPendingTab());
 
 		expect(useTerminalStore.getState().profiles["profile-1"]).toBeUndefined();
+	});
+});
+
+describe("terminal KEY PATTERNS", () => {
+	it("describes restore as reattach of a live Herdr pane_id", () => {
+		expect(agentsMd).toBe(claudeMd);
+		const keyPatterns = agentsMd
+			.split("## KEY PATTERNS")[1]
+			.split("## WHERE TO LOOK")[0];
+		expect(keyPatterns).not.toContain("Fetch closed session history from DB");
+		expect(keyPatterns).not.toContain(
+			"Pass old `session.id` as `restoreFrom` prop",
+		);
+		expect(keyPatterns).toContain("reattaches each live `pane_id`");
 	});
 });

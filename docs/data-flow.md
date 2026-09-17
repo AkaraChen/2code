@@ -29,58 +29,44 @@ sequenceDiagram
     TQ-->>C: Re-render with data
 ```
 
+Session, profile, and git commands go through Herdr-only [`RuntimeRouter`](../src-tauri/crates/service/src/runtime.rs). sqlite still stores `projects` / `project_groups` / `checkout_notes`. Probe and pin details live in [Herdr integration](herdr-integration.md).
+
 ## PTY Session Lifecycle
+
+Handlers keep the existing IPC names (`create_pty_session`, `write_to_pty`, `list_project_sessions`, …). The runtime is Herdr-only: session id is a live `pane_id` (`wN:pK`); `profile_id` is `workspace_id`. There is no Local portable-pty spawn, no `pty_sessions` INSERT, and no `pty_logs` / `gc_orphan_logs`.
 
 ### Creation
 
 1. Frontend calls `createPtySession({ meta, config })` via TanStack Query mutation
-2. Handler delegates to `service::pty::create_session()`
-3. Service loads project config (`2code.json`) for init scripts
-4. Service prepares ZDOTDIR temp directory with shell init script
-5. `infra::pty::create_session()` spawns PTY with env vars:
-   - `TERM=xterm-256color`
-   - `_2CODE_SESSION_ID={session_id}`
-   - `ZDOTDIR={init_dir}` (for shell init injection)
-6. Session metadata inserted into the `pty_sessions` table
-7. Background reader thread spawned for live output and persistence
+2. Handler delegates to `RuntimeRouter::create_session` ([`handler/pty.rs`](../src-tauri/src/handler/pty.rs))
+3. Adapter requires a live Herdr `workspace_id` (`meta.profile_id`) and an absolute `config.cwd`
+4. New Tab is Herdr `tab.create` in that workspace; the returned session id is the live `pane_id`
+5. After create, `2code.json` `init_script` plus `startup_commands` are sent once via `pane.send_input`
+6. Herdr-down New Tab fail-closes instead of spawning a Local PTY
 
 ### Output Streaming
 
 ```mermaid
 sequenceDiagram
-    participant PTY as PTY Process
-    participant RT as Reader Thread
-    participant PT as Persist Thread
+    participant H as Herdr pane
+    participant R as RuntimeRouter
     participant FE as Frontend (xterm.js)
-    participant LF as pty_logs/{id}.log
-    participant DB as SQLite
 
-    loop Every 4KB read
-        PTY->>RT: Raw bytes
-        RT->>FE: Channel<ArrayBuffer> output
-        RT->>PT: mpsc channel (raw bytes)
+    FE->>R: attach_pty_output(sessionId, streamId)
+    loop While attached
+        H->>R: terminal frame
+        R->>FE: stream_herdr_output Channel<HerdrTerminalFrame>
     end
-
-    loop Buffer >= 32KB
-        PT->>LF: Append raw bytes
-    end
-
-    PTY->>RT: EOF / Error
-    RT->>PT: Drop channel (signal flush)
-    PT->>LF: Flush remaining bytes
-    RT->>DB: Mark session closed
-    RT->>FE: emit("pty-exit-{id}")
+    FE->>R: detach_pty_output(sessionId, streamId)
 ```
 
 Key details:
 
-- Reader thread reads 4KB chunks from PTY
-- Live output is sent as raw `&[u8]` over a per-session `Channel<ArrayBuffer>`; xterm.js decodes UTF-8 across writes
-- Persistence runs on a separate thread via mpsc channel, so file writes do not block live output delivery
-- Persistence flushes raw bytes to `pty_logs/{session_id}.log` after 32KB batches, on the 250ms interval, on explicit flush, and at EOF
-- PTY output bytes never touch SQLite; the database stores session metadata and closed-state only
-- There is no byte cap. Logs live for one session, are removed on restore/close/delete, and orphan logs are reaped on startup by `service::pty::gc_orphan_logs`
-- Restored scrollback is bounded by the vt100 `sanitize_history` path at 10k lines
+- `attach_pty_output(sessionId, streamId)` registers the active sink; `stream_herdr_output` owns a `Channel<HerdrTerminalFrame>`
+- `detach_pty_output` must pass the same `streamId` so stale React cleanup cannot remove a newer stream for the same session
+- `Terminal.tsx` attaches the Herdr frame stream and writes into xterm; there is no sqlite history buffer
+- Write/resize/scroll go through the attached Herdr CLI helper. History/flush/clear stay fail-closed
+- Close is Herdr `pane.close`. There is no sqlite mark-closed and no orphan-log GC
 
 ### Session Restoration (App Startup)
 
@@ -89,43 +75,38 @@ sequenceDiagram
     participant Store as Terminal Store
     participant QO as QueryObserver
     participant BE as Backend
-    participant DB as SQLite
 
-    Note over BE: mark_all_open_sessions_closed()
     QO->>BE: listProjects()
-    BE-->>QO: ProjectWithProfiles[]
+    BE-->>QO: ProjectWithProfiles[] (profiles from live Herdr)
     QO->>Store: removeStaleProfiles()
 
     loop For each project
         Store->>BE: listProjectSessions(projectId)
-        BE-->>Store: PtySessionRecord[]
+        BE-->>Store: PtySessionRecord[] (live pane_id DTOs)
     end
 
-    loop For each old session
-        Store->>BE: restorePtySession(oldSessionId, meta, config)
-        BE-->>Store: {newSessionId, history}
-        Store->>Store: sessionHistory.set(newSessionId, history)
-        Store->>Store: addTab(profileId, newSessionId, title)
+    loop For each live pane
+        Store->>Store: reattach pane_id as tab (same identity)
     end
 
-    Note over Store: Terminal component consumes sessionHistory once,<br/>writes it to xterm, then clears the map entry
+    Note over Store: Terminal.tsx attaches the Herdr frame stream.<br/>No sqlite history, no restoreFrom
 ```
 
-This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/state.ts`.
+This runs once at startup via a module-level `QueryObserver` subscription in `features/terminal/state.ts`. `list_project_sessions` returns every live pane in that project's open workspaces from `session.snapshot` / `HerdrRuntimeSync`. Restore is reattach of that `pane_id`; `restore_session` itself is fail-closed.
 
 ## Notification Pipeline
 
 ```mermaid
 sequenceDiagram
-    participant PTY as PTY Output
+    participant H as Herdr frames / agent DTO
     participant Term as Terminal.tsx
     participant Detector as Agent Detector
     participant Store as Terminal Store
     participant Settings as Notification Store
     participant BE as playSystemSound
 
-    PTY->>Term: Raw bytes / OSC title / OSC progress
-    Term->>Detector: detect(screen, oscTitle, oscProgress)
+    H->>Term: HerdrTerminalFrame / projected agent status
+    Term->>Detector: detect(screen, oscTitle, oscProgress) or map Herdr DTO
     Detector-->>Term: running / waiting / idle
     Term->>Store: setAgentStatus(sessionId, status)
 
@@ -143,45 +124,48 @@ Clearing notifications:
 - `dismissAgentCompletion(sessionId)` clears the marker
 - `closeTab(profileId, tabId)` removes status and completion state for the closed tab
 
-## Git Operations & Context ID Resolution
+## Git Operations & Live Herdr cwd
 
-Git operations accept a `profileId` that resolves polymorphically:
+Git operations accept a `profile_id` that is a Herdr `workspace_id`. Paths come from [`reconcile_profile_checkout`](../src-tauri/crates/service/src/project.rs) (live `worktree.list` path / snapshot pane `cwd`), not sqlite `profiles.worktree_path`.
 
 ```mermaid
 sequenceDiagram
     participant FE as Frontend
+    participant H as Handler
     participant S as Service
-    participant R as Repo
+    participant Herdr as RuntimeRouter
 
-    FE->>S: get_git_diff(profileId)
-    S->>R: resolve_context_folder(profileId)
-
-    alt Profile found
-        R-->>S: profile.worktree_path
-    else Fallback to project
-        R-->>S: project.folder
-    end
-
-    S->>S: Execute git diff in resolved folder
+    FE->>H: get_git_diff(profileId)
+    H->>S: reconcile_profile_checkout(profileId)
+    S->>Herdr: live workspace cwd
+    Herdr-->>S: checkout path
+    S->>S: Execute git diff in live cwd
     S-->>FE: Diff string
 ```
 
+Unknown `workspace_id` or Herdr-down fail closed (`NotFound`). Watcher Herdr-down still falls back to `projects.folder`. See [Herdr integration](herdr-integration.md).
+
 ## File System Watching
 
-The `watch_projects` command starts a background watcher thread using the `notify` crate. It watches all project folders and emits `watch-event` Tauri events on file changes. The frontend `fileWatcher.ts` module subscribes and invalidates relevant TanStack Query cache entries.
+The `watch_projects` command starts a background watcher thread using the `notify` crate. Roots come from `list_with_runtime` (live Herdr checkouts; disk-only entries are not profiles). It emits `watch-event` Tauri events on file changes. The frontend `fileWatcher.ts` module subscribes and invalidates relevant TanStack Query cache entries.
 
-## Profile System (Git Worktrees)
+## Profile System (Herdr workspaces)
+
+GUI clicks and labels stay **New Profile** / **Delete Profile**. Profile `id` is the Herdr `workspace_id`. sqlite `profiles` is DROPped.
 
 ### Creation Flow
 
 1. Frontend calls `createProfile(projectId, branchName)`
 2. Service sanitizes branch name (CJK → pinyin via `slug.rs`)
-3. Service runs `git worktree add ~/.2code/workspace/{profile_id} -b {branch}`
-4. Profile record inserted into `profiles` table
-5. If `2code.json` has `setup_script`, execute in worktree directory
+3. Git New Profile: Herdr `worktree.create` at the resolved worktree path (`2code.json` `worktree_dir`, then Settings default, then `~/.2code/workspace`)
+4. Non-git New Profile: Herdr `workspace.create --cwd` (the project folder)
+5. Returned `Profile.id` is the live `workspace_id`. No sqlite `profiles` INSERT
+6. If `2code.json` has `setup_script`, execute in the checkout directory
+7. Herdr-down fail-closes; there is no `git worktree add` fallback
 
 ### Deletion Flow
 
-1. If `2code.json` has `teardown_script`, execute in worktree directory
-2. Run `git worktree remove` and `git branch -D`
-3. Delete profile record from DB (cascades to sessions)
+1. If `2code.json` has `teardown_script`, execute in the checkout directory
+2. Linked git extras: JSON `worktree.remove`, then 2code `git branch -D` on the repo so New Profile can reuse the name. Herdr does not delete the git branch. If `worktree.remove` leaves the checkout in place, fail closed — do not fall back to `git worktree remove`
+3. Non-git extras: JSON `workspace.close`. The primary / project-folder checkout is refused
+4. sqlite `profiles` is DROPped; there is no profile row to delete. Live tabs are Herdr `pane_id`s, not sqlite sessions

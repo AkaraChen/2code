@@ -4,7 +4,7 @@ This document defines the terminal notification state machine for unread green d
 
 ## State Model
 
-- Notification events are reported per `sessionId` from the PTY helper pipeline.
+- Notification events are reported per `sessionId` (live Herdr `pane_id`) from the terminal agent pipeline (`Terminal.tsx` / Herdr agent DTO), not a Local PTY helper.
 - Unread state is stored per terminal tab in `terminalStore.notifiedTabs`.
 - Sidebar profile dots are derived from tab unread state. Profiles do not store a separate unread flag.
 - The currently focused tab is the active tab for the profile in the current route:
@@ -22,10 +22,10 @@ This document defines the terminal notification state machine for unread green d
 
 | Event | Preconditions | State Transition | Result |
 | --- | --- | --- | --- |
-| PTY reports `notify(sessionId)` for focused tab | `sessionId` belongs to current route profile and equals its `activeTabId` | Remove `sessionId` from `notifiedTabs` | No green dot on tab or sidebar |
-| PTY reports `notify(sessionId)` for background tab in current profile | `sessionId` belongs to current route profile and is not the `activeTabId` | Add `sessionId` to `notifiedTabs` | Green dot on that tab and on the profile sidebar item |
-| PTY reports `notify(sessionId)` for tab in another profile | `sessionId` belongs to a non-focused profile | Add `sessionId` to `notifiedTabs` | Green dot on that tab and on that profile sidebar item |
-| PTY reports `notify(sessionId)` before the tab is mounted in the frontend | `sessionId` is not in `profiles[*].tabs` yet | Add `sessionId` to `notifiedTabs` | Notification survives startup races and appears once the tab is added |
+| Agent pipeline reports `notify(sessionId)` for focused tab | `sessionId` belongs to current route profile and equals its `activeTabId` | Remove `sessionId` from `notifiedTabs` | No green dot on tab or sidebar |
+| Agent pipeline reports `notify(sessionId)` for background tab in current profile | `sessionId` belongs to current route profile and is not the `activeTabId` | Add `sessionId` to `notifiedTabs` | Green dot on that tab and on the profile sidebar item |
+| Agent pipeline reports `notify(sessionId)` for tab in another profile | `sessionId` belongs to a non-focused profile | Add `sessionId` to `notifiedTabs` | Green dot on that tab and on that profile sidebar item |
+| Agent pipeline reports `notify(sessionId)` before the tab is mounted in the frontend | `sessionId` is not in `profiles[*].tabs` yet | Add `sessionId` to `notifiedTabs` | Notification survives startup races and appears once the tab is added |
 | User clicks a tab title | Target tab exists in the current profile | Set `activeTabId = tabId`, remove `tabId` from `notifiedTabs` | Only that tab is marked read |
 | User clicks a sidebar profile item | Profile exists in the sidebar | Remove all tabs in that profile from `notifiedTabs` | Entire profile is marked read |
 | Focused profile opens a new tab | `addTab(profileId, sessionId)` and route profile is `profileId` | Create tab, set it active, remove new active tab from `notifiedTabs` | New focused tab never starts with a green dot |
@@ -48,5 +48,7 @@ This document defines the terminal notification state machine for unread green d
   - `src/layout/sidebar/ProfileItem.tsx`
   - `src/layout/sidebar/ProjectMenuItem.tsx`
 - Backend event source:
-  - `src-tauri/src/helper.rs`
-  - `src-tauri/bins/2code-helper/src/main.rs`
+  - `src/features/terminal/Terminal.tsx` (Herdr frames + agent DTO)
+  - `src/features/terminal/lib/herdrAgent.ts`
+  - `src/features/terminal/lib/agentNotification.ts`
+  - `src-tauri/src/handler/sound.rs` (`play_system_sound`)

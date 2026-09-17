@@ -2,58 +2,71 @@
 
 ## Tauri Commands
 
-All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handler![]`. TypeScript bindings are auto-generated into `src/generated/` by tauri-typegen.
+All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handler![]`. TypeScript bindings are auto-generated into `src/generated/` by tauri-typegen. Existing command **names** stay. Session/profile/git commands are Herdr-backed; see [Herdr integration](herdr-integration.md).
 
 ### Project Commands (`handler/project.rs`)
 
 | Command                      | Parameters                                   | Returns                 | Description                                                         |
 | ---------------------------- | -------------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
-| `create_project_from_folder` | `name: string, folder: string`               | `Project`               | Create project from existing folder                                 |
-| `list_projects`              | —                                            | `ProjectWithProfiles[]` | List all projects with their profiles                               |
+| `create_project_from_folder` | `name: string, folder: string`               | `Project`               | Write a sqlite `projects` row (no Herdr mutate)                     |
+| `list_projects`              | —                                            | `ProjectWithProfiles[]` | Load sqlite projects, adopt Herdr checkouts, return live profiles   |
 | `update_project`             | `id: string, name?: string, folder?: string` | `Project`               | Update project name or folder                                       |
-| `delete_project`             | `id: string`                                 | —                       | Delete project and cascade to profiles/sessions                     |
-| `get_git_branch`             | `folder: string`                             | `string`                | Get current git branch for a folder                                 |
-| `get_git_diff`               | `profile_id: string`                         | `string`                | Get unified diff (staged + unstaged) for a profile's context folder |
-| `get_git_log`                | `profile_id: string, limit?: number`         | `GitCommit[]`           | Get commit log (default 50) for a profile's context folder          |
-| `get_commit_diff`            | `profile_id: string, commit_hash: string`    | `string`                | Get diff for a specific commit                                      |
+| `delete_project`             | `id: string`                                 | —                       | Forget the catalog row and retain Herdr worktrees/panes             |
+| `get_git_branch`             | `profile_id: string`                         | `string`                | Get current git branch at live Herdr cwd                            |
+| `get_git_diff`               | `profile_id: string`                         | `string`                | Get unified diff (staged + unstaged) at live Herdr cwd              |
+| `get_git_log`                | `profile_id: string, limit?: number`         | `GitCommit[]`           | Get commit log (default 50) at live Herdr cwd                       |
+| `get_commit_diff`            | `profile_id: string, commit_hash: string`    | `string`                | Get diff for a specific commit at live Herdr cwd                    |
+
+`delete_project` does **not** cascade-destroy sqlite profiles/sessions (those tables are DROPped). It deletes the `projects` row and `forget_project_session`s live panes without `pane.close` / `worktree.remove`.
+
+Git `profile_id` is a Herdr `workspace_id`. Paths come from `reconcile_profile_checkout`, not sqlite `profiles.worktree_path`.
 
 ### PTY Commands (`handler/pty.rs`)
 
+Handlers keep these names. The runtime is Herdr-only `RuntimeRouter`. Session id is live `pane_id` (`wN:pK`); `profile_id` on listed records is `workspace_id`. `PtySessionRecord` is a derived GUI DTO from `session.snapshot`, not a sqlite row.
+
 | Command                     | Parameters                                 | Returns               | Description                                        |
 | --------------------------- | ------------------------------------------ | --------------------- | -------------------------------------------------- |
-| `create_pty_session`        | `meta: PtySessionMeta, config: PtyConfig`  | `string` (session ID) | Create PTY session with shell, cwd, rows, cols     |
-| `write_to_pty`              | `session_id: string, data: string`         | —                     | Write input data to PTY                            |
-| `resize_pty`                | `session_id: string, rows: u16, cols: u16` | —                     | Resize PTY terminal                                |
-| `close_pty_session`         | `session_id: string`                       | —                     | Close PTY session and mark closed in DB            |
-| `list_project_sessions`     | `project_id: string`                       | `PtySessionRecord[]`  | List all sessions for a project (including closed) |
-| `get_pty_session_history`   | `session_id: string`                       | `Vec<u8>`             | Get session output history from its log file       |
-| `delete_pty_session_record` | `session_id: string`                       | —                     | Delete session record and its output log           |
+| `create_pty_session`        | `meta: PtySessionMeta, config: PtyConfig`  | `string` (session ID) | Herdr `tab.create`; returns `pane_id`              |
+| `write_to_pty`              | `session_id: string, data: string`         | —                     | Write input to the attached Herdr pane             |
+| `resize_pty`                | `session_id: string, rows: u16, cols: u16` | —                     | Resize the attached Herdr pane                     |
+| `scroll_pty`                | `session_id`, direction, lines, source     | —                     | Scroll the attached Herdr pane                     |
+| `close_pty_session`         | `session_id: string`                       | —                     | Herdr `pane.close` (no sqlite mark-closed)         |
+| `list_project_sessions`     | `project_id: string`                       | `PtySessionRecord[]`  | Live panes for that project's open workspaces      |
+| `get_session_backend`       | `session_id: string`                       | `RuntimeBackend`      | Always `Herdr`                                     |
+| `attach_pty_output`         | `session_id, stream_id`                    | —                     | Register the active output sink                    |
+| `stream_herdr_output`       | `session_id, stream_id, on_output`         | —                     | Pump `HerdrTerminalFrame`s over a Tauri channel    |
+| `detach_pty_output`         | `session_id, stream_id`                    | —                     | Detach that `stream_id` only                       |
+| `flush_pty_output`          | `session_id: string`                       | —                     | Fail-closed on Herdr                               |
+| `clear_pty_output`          | `session_id: string`                       | —                     | Fail-closed on Herdr                               |
+
+There is no `get_pty_session_history` / `delete_pty_session_record`. Restore is reattach of a live `pane_id` from `list_project_sessions`. Herdr-down New Tab fail-closes (no Local PTY spawn).
 
 ### Profile Commands (`handler/profile.rs`)
 
 | Command          | Parameters                                | Returns   | Description                          |
 | ---------------- | ----------------------------------------- | --------- | ------------------------------------ |
-| `create_profile` | `project_id: string, branch_name: string` | `Profile` | Create git worktree profile          |
-| `delete_profile` | `id: string`                              | —         | Delete profile, worktree, and branch |
+| `create_profile` | `project_id: string, branch_name: string` | `Profile` | Herdr `worktree.create` / `workspace.create`; returned `id` is `workspace_id` |
+| `delete_profile` | `id: string`                              | —         | Herdr `worktree.remove` / `workspace.close`; primary checkout refused |
 
 ### Watcher Commands (`handler/watcher.rs`)
 
 | Command          | Parameters | Returns | Description                                       |
 | ---------------- | ---------- | ------- | ------------------------------------------------- |
-| `watch_projects` | —          | —       | Start file system watcher for all project folders |
+| `watch_projects` | —          | —       | Watch live Herdr checkout roots (Herdr-down: `projects.folder`) |
 
 ### Font Commands (`handler/font.rs`)
 
 | Command             | Parameters | Returns    | Description                                             |
 | ------------------- | ---------- | ---------- | ------------------------------------------------------- |
-| `list_system_fonts` | —          | `string[]` | List available system fonts (macOS only, via core-text) |
+| `list_system_fonts` | —          | `string[]` | List available system fonts (macOS core-text; Linux/Windows fontdb) |
 
 ### Sound Commands (`handler/sound.rs`)
 
 | Command              | Parameters     | Returns    | Description                                       |
 | -------------------- | -------------- | ---------- | ------------------------------------------------- |
-| `list_system_sounds` | —              | `string[]` | List system sounds from `/System/Library/Sounds/` |
-| `play_system_sound`  | `name: string` | —          | Play a system sound via `afplay`                  |
+| `list_system_sounds` | —              | `string[]` | List system sounds (platform directories)         |
+| `play_system_sound`  | `name: string` | —          | Play a system sound                               |
 
 ### Debug Commands (`handler/debug.rs`)
 
@@ -64,24 +77,15 @@ All commands are registered in `src-tauri/src/lib.rs` via `tauri::generate_handl
 
 ## Tauri Channels And Events
 
-PTY output uses `attach_pty_output(sessionId, streamId)` to register the active sink, then `stream_pty_output` to pump raw `&[u8]` chunks over a Tauri IPC channel. `detach_pty_output` requires the same `streamId`, so stale frontend cleanup cannot remove a newer stream for the same session. Low-volume signals still use `app.emit()`.
+PTY output uses `attach_pty_output(sessionId, streamId)` to register the active sink, then `stream_herdr_output` to pump `HerdrTerminalFrame`s over a Tauri IPC channel. `detach_pty_output` requires the same `streamId`, so stale frontend cleanup cannot remove a newer stream for the same session. Low-volume signals still use `app.emit()` / channels.
 
 | Name             | Payload      | Source                         | Description                            |
 | ---------------- | ------------ | ------------------------------ | -------------------------------------- |
-| PTY output channel | `ArrayBuffer` | `service/pty.rs` reader thread | Terminal output for a specific session |
-| `pty-exit-{id}`  | `()`         | `service/pty.rs` reader thread | Session exited (EOF or error)          |
-| `pty-notify`     | `string`     | `infra/helper.rs` notify handler | Notification triggered from shell      |
+| Herdr frame channel | `HerdrTerminalFrame` | `stream_herdr_output` | Terminal frames for a live `pane_id` |
 | `watch-event`    | `WatchEvent` | `infra/watcher.rs`             | File system change detected            |
 | `debug-log`      | `LogEntry`   | `infra/logger.rs`              | Tracing log entry for debug panel      |
 
-## Sidecar HTTP API (`infra/helper.rs`)
-
-Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY child processes via env vars.
-
-| Endpoint  | Method | Parameters                     | Response           | Description                                      |
-| --------- | ------ | ------------------------------ | ------------------ | ------------------------------------------------ |
-| `/notify` | GET    | `?session_id={sid}` (optional) | `{"played": bool}` | Play notification sound, emit `pty-notify` event |
-| `/health` | GET    | —                              | `"ok"`             | Health check                                     |
+There is no `2code-helper` HTTP sidecar and no `pty-notify` helper endpoint. Agent waiting uses frontend detection plus `play_system_sound`.
 
 ## Key Types
 
@@ -91,34 +95,40 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 { profileId: string; title: string }
 ```
 
+`profileId` is a Herdr `workspace_id`.
+
 ### `PtyConfig`
 
 ```typescript
-{ shell: string; cwd: string; rows: number; cols: number }
+{ shell: string; cwd: string; rows: number; cols: number; startup_commands?: string[] }
 ```
 
 ### `Project`
 
 ```typescript
-{ id: string; name: string; folder: string; created_at: string }
+{ id: string; name: string; folder: string; created_at: string; group_id: string | null; sort_order: number; pinned_at: string | null; pinned_order: number | null }
 ```
 
 ### `ProjectWithProfiles`
 
 ```typescript
-{ id: string; name: string; folder: string; created_at: string; profiles: Profile[] }
+{ id: string; name: string; folder: string; created_at: string; group_id: string | null; sort_order: number; pinned_at: string | null; pinned_order: number | null; profiles: Profile[] }
 ```
+
+`profiles` is a live Herdr-derived catalog, not sqlite rows.
 
 ### `Profile`
 
+Derived GUI DTO. Not a sqlite `profiles` row. `id` is Herdr `workspace_id`. `worktree_path` is the live checkout path (Herdr cwd), not a sqlite column.
+
 ```typescript
-{ id: string; project_id: string; branch_name: string; worktree_path: string; created_at: string; is_default: boolean }
+{ id: string; project_id: string; branch_name: string; worktree_path: string; created_at: string; is_default: boolean; notes: string }
 ```
 
 ### `GitCommit`
 
 ```typescript
-{ hash: string; short_hash: string; subject: string; body: string; author: GitAuthor; date: string; files_changed: number; insertions: number; deletions: number }
+{ hash: string; full_hash: string; author: GitAuthor; date: string; message: string; files_changed: number; insertions: number; deletions: number }
 ```
 
 ## Query Keys (`shared/lib/queryKeys.ts`)
@@ -126,7 +136,7 @@ Internal HTTP server on `127.0.0.1:{ephemeral_port}`. Only accessible from PTY c
 | Key           | Pattern                                | Used By         |
 | ------------- | -------------------------------------- | --------------- |
 | Projects list | `["projects"]`                         | `listProjects`  |
-| Git branch    | `["git-branch", folder]`               | `getGitBranch`  |
+| Git branch    | `["git-branch", profileId]`            | `getGitBranch`  |
 | Git diff      | `["git-diff", profileId]`              | `getGitDiff`    |
 | Git log       | `["git-log", profileId]`               | `getGitLog`     |
 | Commit diff   | `["git-commit-diff", profileId, hash]` | `getCommitDiff` |
