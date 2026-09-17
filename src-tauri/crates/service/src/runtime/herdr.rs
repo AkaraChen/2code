@@ -422,6 +422,11 @@ impl HerdrStubAdapter {
 		self.lifecycle.is_some()
 	}
 
+	#[allow(dead_code)]
+	pub(crate) fn cli_attach_config(&self) -> Option<&HerdrCliAttach> {
+		self.cli.as_ref()
+	}
+
 	pub(crate) fn worktrees(
 		&self,
 	) -> Result<&dyn HerdrWorktreeClient, AppError> {

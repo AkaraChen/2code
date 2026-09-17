@@ -419,6 +419,7 @@ pub fn connect_gui_herdr(
 		namespace.xdg_config_home.clone(),
 		opts.extra_env,
 	)?;
+	let namespace = namespace.for_endpoint(&endpoint);
 	let client = infra::herdr::transport::HerdrClient::connect(&endpoint)
 		.map_err(AppError::from)?;
 	let json = Arc::new(HerdrJsonTerminals::new(client));
@@ -872,6 +873,206 @@ mod tests {
 		assert!(matches!(err, AppError::HerdrServerIncompatible(_)), "{err}");
 	}
 
+	#[cfg(unix)]
+	#[test]
+	fn connect_gui_herdr_cli_attach_uses_named_session_when_default_absent() {
+		use std::ffi::OsString;
+		use std::os::unix::fs::PermissionsExt;
+		use std::process::Command;
+		use std::time::Duration;
+
+		use serde_json::json;
+
+		assert!(
+			std::env::var_os("HERDR_SOCKET_PATH").is_none(),
+			"host HERDR_SOCKET_PATH would skip named-session discovery"
+		);
+		let session = std::env::var_os("HERDR_SESSION");
+		assert!(
+			session
+				.as_ref()
+				.is_none_or(|value| { value.is_empty() || value == "default" }),
+			"host HERDR_SESSION would skip named-session discovery"
+		);
+
+		let root = tempfile::tempdir().unwrap();
+		let xdg = root.path().join("xdg-config");
+		std::fs::create_dir_all(xdg.join("herdr")).unwrap();
+		let fake_dir = root.path().join("fake");
+		std::fs::create_dir_all(&fake_dir).unwrap();
+		let sidecar = fake_dir.join("herdr");
+		std::fs::write(
+			&sidecar,
+			r#"#!/bin/sh
+set -eu
+for arg in "$@"; do
+  if [ "$arg" = "--version" ]; then
+    echo 'herdr 0.9.0'
+    exit 0
+  fi
+done
+dir=${HERDR_FAKE_DIR:?}
+mkdir -p "$dir"
+printf '%s\n' "$*" >> "$dir/args.log"
+printf 'HERDR_SESSION=%s HERDR_SOCKET_PATH=%s\n' "${HERDR_SESSION-}" "${HERDR_SOCKET_PATH-}" >> "$dir/env.log"
+for arg in "$@"; do
+  if [ "$arg" = "list" ]; then
+    cat "$dir/sessions.json"
+    exit 0
+  fi
+done
+for arg in "$@"; do
+  if [ "$arg" = "status" ]; then
+    sock=${HERDR_SOCKET_PATH-}
+    case "$sock" in
+      */sessions/*) cat "$dir/named-status.json"; exit 0 ;;
+    esac
+    cat "$dir/status.json"
+    exit 0
+  fi
+done
+exit 1
+"#,
+		)
+		.unwrap();
+		std::fs::set_permissions(
+			&sidecar,
+			std::fs::Permissions::from_mode(0o755),
+		)
+		.unwrap();
+
+		let default_sock = xdg.join("herdr/herdr.sock");
+		let named_sock = xdg.join("herdr/sessions/work/herdr.sock");
+		let status = |running: bool,
+		              session: &str,
+		              socket: &std::path::Path| {
+			json!({
+				"client": {
+					"version": infra::herdr::PINNED_VERSION,
+					"protocol": 22,
+					"endpoint_protocol_generation": 1,
+					"session": session
+				},
+				"server": {
+					"status": if running { "running" } else { "not_running" },
+					"running": running,
+					"version": if running { json!(infra::herdr::PINNED_VERSION) } else { json!(null) },
+					"protocol": if running { json!(22) } else { json!(null) },
+					"capabilities": if running {
+						json!({ "endpoint_protocol_generation": 1 })
+					} else {
+						json!(null)
+					},
+					"compatible": if running { json!(true) } else { json!(null) },
+					"endpoint_compatible": if running { json!(true) } else { json!(null) },
+					"socket": socket,
+					"session": session,
+					"restart_needed": false,
+					"server_binary_stale": false
+				}
+			})
+		};
+		std::fs::write(
+			fake_dir.join("status.json"),
+			status(false, "default", &default_sock).to_string(),
+		)
+		.unwrap();
+		std::fs::write(
+			fake_dir.join("named-status.json"),
+			status(true, "work", &named_sock).to_string(),
+		)
+		.unwrap();
+		std::fs::write(
+			fake_dir.join("sessions.json"),
+			json!({
+				"sessions": [
+					{
+						"name": "default",
+						"default": true,
+						"running": false,
+						"socket_path": default_sock,
+						"session_dir": xdg.join("herdr")
+					},
+					{
+						"name": "work",
+						"default": false,
+						"running": true,
+						"socket_path": named_sock,
+						"session_dir": xdg.join("herdr/sessions/work")
+					}
+				]
+			})
+			.to_string(),
+		)
+		.unwrap();
+
+		let extra_env = vec![
+			(
+				OsString::from("HOME"),
+				root.path().join("home").into_os_string(),
+			),
+			(
+				OsString::from("XDG_STATE_HOME"),
+				root.path().join("xdg-state").into_os_string(),
+			),
+			(
+				OsString::from("XDG_CACHE_HOME"),
+				root.path().join("xdg-cache").into_os_string(),
+			),
+			(
+				OsString::from("HERDR_FAKE_DIR"),
+				fake_dir.as_os_str().to_os_string(),
+			),
+		];
+		let empty = xdg.join("empty-bins");
+		std::fs::create_dir_all(&empty).unwrap();
+		let guard = HerdrClientGuard::new();
+		let adapter = connect_gui_herdr(GuiHerdrConnect {
+			db: setup_db(),
+			guard: &guard,
+			xdg_config_home: xdg,
+			extra_env: &extra_env,
+			sidecar: Some(sidecar.clone()),
+			exe_dir: Some(empty.clone()),
+			binaries_dir: Some(empty),
+		})
+		.expect("GUI connect should attach to the running named session");
+		let cli = adapter
+			.cli_attach_config()
+			.expect("GUI connect must inject CLI attach");
+		assert_eq!(cli.namespace.session, "work");
+		assert_eq!(cli.namespace.socket_path, named_sock);
+		assert_eq!(cli.executable, sidecar);
+		assert!(!fake_dir.join("starts").exists());
+
+		std::fs::write(fake_dir.join("env.log"), "").unwrap();
+		let mut cmd = Command::new(&cli.executable);
+		infra::herdr::process::HerdrProcessEnv {
+			executable: &cli.executable,
+			namespace: &cli.namespace,
+			extra_env: &cli.extra_env,
+			ready_timeout: Duration::from_secs(3),
+			cli_timeout: Duration::from_secs(3),
+		}
+		.apply_to(&mut cmd);
+		cmd.args(["status", "--json"]);
+		let output = cmd.output().unwrap();
+		assert!(output.status.success(), "{output:?}");
+		let env_log =
+			std::fs::read_to_string(fake_dir.join("env.log")).unwrap();
+		let named = named_sock.to_string_lossy();
+		assert!(
+			env_log.contains(&format!(
+				"HERDR_SESSION=work HERDR_SOCKET_PATH={named}"
+			)),
+			"{env_log}"
+		);
+		assert!(
+			!env_log.contains("herdr/herdr.sock"),
+			"CLI attach must not keep the unresolved default socket: {env_log}"
+		);
+	}
+
 	#[test]
 	fn herdr_gui_startup_wires_sidecar_without_local_fallback() {
 		let production = production_runtime_src();
@@ -889,6 +1090,10 @@ mod tests {
 		assert!(connect.contains("HerdrJsonTerminals"));
 		assert!(connect.contains("HerdrCliAttach"));
 		assert!(connect.contains("resolve_namespace"));
+		assert!(
+			connect.contains("for_endpoint"),
+			"CLI attach must inherit the ensured endpoint socket/session"
+		);
 		assert!(!connect.contains("import_leftover_sqlite_profiles"));
 		assert!(connect.contains("attach_runtime_sync"));
 		assert!(connect.contains("adopt_existing_checkouts"));

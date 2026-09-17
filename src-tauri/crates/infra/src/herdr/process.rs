@@ -41,6 +41,18 @@ pub struct HerdrNamespace {
 	pub xdg_config_home: PathBuf,
 }
 
+impl HerdrNamespace {
+	/// CLI attach follows the listener `ensure_server` actually joined,
+	/// including a running named session when the default socket is absent.
+	pub fn for_endpoint(self, endpoint: &HerdrEndpoint) -> Self {
+		Self {
+			session: endpoint.session.clone(),
+			socket_path: endpoint.socket_path.clone(),
+			xdg_config_home: self.xdg_config_home,
+		}
+	}
+}
+
 /// Inputs for probe/start. Callers supply the sidecar path from Task 3.
 pub struct HerdrProcessEnv<'a> {
 	pub executable: &'a Path,
@@ -1109,7 +1121,8 @@ for arg in "$@"; do
       sleep "${HERDR_FAKE_START_SLEEP}"
     fi
     if [ -f "$dir/on_start_status.json" ]; then
-      cp "$dir/on_start_status.json" "$dir/status.json"
+      cp "$dir/on_start_status.json" "$dir/status.json.tmp"
+      mv "$dir/status.json.tmp" "$dir/status.json"
     fi
     sock=${HERDR_SOCKET_PATH-}
     if [ -n "$sock" ]; then
