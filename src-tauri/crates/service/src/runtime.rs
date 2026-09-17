@@ -207,13 +207,16 @@ pub fn select_gui_backend() -> RuntimeBackend {
 	RuntimeBackend::Herdr
 }
 
-/// Inputs for GUI Herdr attach. Missing sidecar/namespace fails closed.
+/// Inputs for GUI Herdr attach. Missing herdr/namespace fails closed.
 pub struct GuiHerdrConnect<'a> {
 	pub db: DbPool,
 	pub guard: &'a HerdrClientGuard,
 	pub xdg_config_home: PathBuf,
 	pub extra_env: &'a [(OsString, OsString)],
+	/// Test override. When set, PATH lookup and sidecar fallback are skipped.
 	pub sidecar: Option<PathBuf>,
+	/// Isolated PATH directories for tests. `None` uses the process PATH.
+	pub path_dirs: Option<&'a [PathBuf]>,
 	pub exe_dir: Option<PathBuf>,
 	pub binaries_dir: Option<PathBuf>,
 }
@@ -387,6 +390,12 @@ fn resolve_gui_sidecar(
 			)))
 		};
 	}
+	if let Some(path) = match opts.path_dirs {
+		Some(dirs) => infra::herdr::find_herdr_in_dirs(dirs.iter()),
+		None => infra::herdr::find_herdr_on_path(),
+	} {
+		return Ok(path);
+	}
 	let triple = infra::herdr::host_triple()
 		.map_err(|err| AppError::HerdrServerIncompatible(err.to_string()))?;
 	infra::herdr::try_resolve_sidecar(&infra::herdr::ResolveOptions {
@@ -397,14 +406,14 @@ fn resolve_gui_sidecar(
 	.map_err(|err| AppError::HerdrServerIncompatible(err.to_string()))?
 	.ok_or_else(|| {
 		AppError::HerdrServerAbsent(format!(
-			"Herdr sidecar not found for {triple}"
+			"Herdr is not installed (no herdr on PATH and sidecar not found for {triple})"
 		))
 	})
 }
 
-/// Resolve the pinned sidecar, ensure the user Herdr session, inject JSON
-/// terminal + worktree + CLI attach clients, and start
-/// `HerdrRuntimeSync`.
+/// Resolve PATH `herdr` (or the pinned sidecar if none is installed),
+/// ensure the user Herdr session, inject JSON terminal + worktree + CLI
+/// attach clients, and start `HerdrRuntimeSync`.
 pub fn connect_gui_herdr(
 	opts: GuiHerdrConnect<'_>,
 ) -> Result<HerdrStubAdapter, AppError> {
@@ -469,8 +478,8 @@ pub fn build_gui_herdr_adapter(opts: GuiHerdrConnect<'_>) -> HerdrStubAdapter {
 	}
 }
 
-/// GUI production runtime. Always Herdr; fail-closed if sidecar/namespace
-/// is absent.
+/// GUI production runtime. Always Herdr; fail-closed if PATH herdr and
+/// sidecar/namespace are absent.
 pub fn build_gui_runtime(
 	db: DbPool,
 	guard: &HerdrClientGuard,
@@ -483,6 +492,7 @@ pub fn build_gui_runtime(
 		xdg_config_home,
 		extra_env: &[],
 		sidecar: None,
+		path_dirs: None,
 		exe_dir: None,
 		binaries_dir: None,
 	});
@@ -696,6 +706,7 @@ mod tests {
 			xdg_config_home: xdg,
 			extra_env: &[],
 			sidecar,
+			path_dirs: None,
 			exe_dir: Some(empty.clone()),
 			binaries_dir: Some(empty),
 		}
@@ -871,6 +882,31 @@ mod tests {
 			Err(err) => err,
 		};
 		assert!(matches!(err, AppError::HerdrServerIncompatible(_)), "{err}");
+		assert!(!err.to_string().contains("herdr update"), "{err}");
+	}
+
+	#[test]
+	fn missing_path_and_sidecar_fails_closed_absent_without_update() {
+		let cwd = tempfile::tempdir().unwrap();
+		let empty = cwd.path().join("empty-bins");
+		std::fs::create_dir_all(&empty).unwrap();
+		let guard = HerdrClientGuard::new();
+		let err = match connect_gui_herdr(GuiHerdrConnect {
+			db: setup_db(),
+			guard: &guard,
+			xdg_config_home: cwd.path().join("xdg"),
+			extra_env: &[],
+			sidecar: None,
+			path_dirs: Some(&[]),
+			exe_dir: Some(empty.clone()),
+			binaries_dir: Some(empty),
+		}) {
+			Ok(_) => panic!("missing herdr must fail closed"),
+			Err(err) => err,
+		};
+		assert!(matches!(err, AppError::HerdrServerAbsent(_)), "{err}");
+		assert!(err.to_string().contains("not installed"), "{err}");
+		assert!(!err.to_string().contains("herdr update"), "{err}");
 	}
 
 	#[cfg(unix)]
@@ -1033,6 +1069,7 @@ exit 1
 			xdg_config_home: xdg,
 			extra_env: &extra_env,
 			sidecar: Some(sidecar.clone()),
+			path_dirs: Some(&[]),
 			exe_dir: Some(empty.clone()),
 			binaries_dir: Some(empty),
 		})
@@ -1073,6 +1110,243 @@ exit 1
 		);
 	}
 
+	#[cfg(unix)]
+	fn invoked_marker(bin: &Path) -> PathBuf {
+		let mut name = bin.as_os_str().to_os_string();
+		name.push(".invoked");
+		PathBuf::from(name)
+	}
+
+	#[cfg(unix)]
+	fn write_unix_executable(path: &Path, body: &str) {
+		use std::os::unix::fs::PermissionsExt;
+		if let Some(parent) = path.parent() {
+			std::fs::create_dir_all(parent).unwrap();
+		}
+		std::fs::write(path, body).unwrap();
+		std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+			.unwrap();
+	}
+
+	#[cfg(unix)]
+	fn write_tagged_fake_herdr(path: &Path, version_line: &str, tag: &str) {
+		write_unix_executable(
+			path,
+			&r#"#!/bin/sh
+set -eu
+printf '%s\n' "TAG" >> "$0.invoked"
+for arg in "$@"; do
+  if [ "$arg" = "--version" ]; then
+    echo 'VERSION_LINE'
+    exit 0
+  fi
+done
+dir=${HERDR_FAKE_DIR:?}
+mkdir -p "$dir"
+printf '%s\n' "TAG" >> "$dir/which.log"
+printf '%s\n' "$*" >> "$dir/args.log"
+for arg in "$@"; do
+  if [ "$arg" = "stop" ]; then
+    echo stop >> "$dir/stop.log"
+    exit 0
+  fi
+done
+for arg in "$@"; do
+  if [ "$arg" = "list" ]; then
+    printf '%s\n' '{"sessions":[]}'
+    exit 0
+  fi
+done
+for arg in "$@"; do
+  if [ "$arg" = "status" ]; then
+    cat "$dir/status.json"
+    exit 0
+  fi
+done
+for arg in "$@"; do
+  if [ "$arg" = "server" ]; then
+    n=0
+    if [ -f "$dir/starts" ]; then
+      n=$(cat "$dir/starts")
+    fi
+    n=$((n + 1))
+    printf '%s\n' "$n" > "$dir/starts"
+    exit 0
+  fi
+done
+exit 2
+"#
+			.replace("VERSION_LINE", version_line)
+			.replace("TAG", tag),
+		);
+	}
+
+	#[cfg(unix)]
+	fn compatible_status_json(version: &str, socket: &Path) -> String {
+		serde_json::json!({
+			"client": {
+				"version": version,
+				"protocol": 22,
+				"endpoint_protocol_generation": 1,
+				"session": "default"
+			},
+			"server": {
+				"status": "running",
+				"running": true,
+				"version": version,
+				"protocol": 22,
+				"capabilities": { "endpoint_protocol_generation": 1 },
+				"compatible": true,
+				"endpoint_compatible": true,
+				"socket": socket,
+				"session": "default",
+				"restart_needed": false,
+				"server_binary_stale": false
+			}
+		})
+		.to_string()
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn path_herdr_is_preferred_over_present_sidecar() {
+		let root = tempfile::tempdir().unwrap();
+		let xdg = root.path().join("xdg-config");
+		std::fs::create_dir_all(xdg.join("herdr")).unwrap();
+		let fake_dir = root.path().join("fake");
+		std::fs::create_dir_all(&fake_dir).unwrap();
+		let path_dir = root.path().join("path-bin");
+		let sidecar_dir = root.path().join("sidecar-bin");
+		let path_herdr = path_dir.join("herdr");
+		let sidecar = sidecar_dir.join("herdr");
+		write_tagged_fake_herdr(&path_herdr, "herdr 0.9.1", "path");
+		write_tagged_fake_herdr(&sidecar, "herdr 0.9.0", "sidecar");
+		let default_sock = xdg.join("herdr/herdr.sock");
+		std::fs::write(
+			fake_dir.join("status.json"),
+			compatible_status_json("0.9.1", &default_sock),
+		)
+		.unwrap();
+		let extra_env = vec![(
+			OsString::from("HERDR_FAKE_DIR"),
+			fake_dir.as_os_str().to_os_string(),
+		)];
+		let path_dirs = [path_dir];
+		let guard = HerdrClientGuard::new();
+		let adapter = connect_gui_herdr(GuiHerdrConnect {
+			db: setup_db(),
+			guard: &guard,
+			xdg_config_home: xdg,
+			extra_env: &extra_env,
+			sidecar: None,
+			path_dirs: Some(&path_dirs),
+			exe_dir: Some(sidecar_dir),
+			binaries_dir: Some(root.path().join("empty-bins")),
+		})
+		.expect("PATH herdr should be reused");
+		let cli = adapter.cli_attach_config().expect("CLI attach");
+		assert_eq!(cli.executable, path_herdr);
+		let path_invoked =
+			std::fs::read_to_string(invoked_marker(&path_herdr)).unwrap();
+		assert!(path_invoked.contains("path"), "{path_invoked}");
+		assert!(!invoked_marker(&sidecar).exists());
+		assert!(!fake_dir.join("starts").exists());
+		assert!(!fake_dir.join("stop.log").exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn missing_path_herdr_uses_sidecar_on_shared_socket() {
+		let root = tempfile::tempdir().unwrap();
+		let xdg = root.path().join("xdg-config");
+		std::fs::create_dir_all(xdg.join("herdr")).unwrap();
+		let fake_dir = root.path().join("fake");
+		std::fs::create_dir_all(&fake_dir).unwrap();
+		let sidecar_dir = root.path().join("sidecar-bin");
+		let sidecar = sidecar_dir.join("herdr");
+		write_tagged_fake_herdr(&sidecar, "herdr 0.9.0", "sidecar");
+		let default_sock = xdg.join("herdr/herdr.sock");
+		std::fs::write(
+			fake_dir.join("status.json"),
+			compatible_status_json("0.9.0", &default_sock),
+		)
+		.unwrap();
+		let extra_env = vec![(
+			OsString::from("HERDR_FAKE_DIR"),
+			fake_dir.as_os_str().to_os_string(),
+		)];
+		let empty_path = root.path().join("empty-path");
+		std::fs::create_dir_all(&empty_path).unwrap();
+		let path_dirs = [empty_path];
+		let guard = HerdrClientGuard::new();
+		let adapter = connect_gui_herdr(GuiHerdrConnect {
+			db: setup_db(),
+			guard: &guard,
+			xdg_config_home: xdg,
+			extra_env: &extra_env,
+			sidecar: None,
+			path_dirs: Some(&path_dirs),
+			exe_dir: Some(sidecar_dir),
+			binaries_dir: Some(root.path().join("empty-bins")),
+		})
+		.expect("sidecar should start only as no-install fallback");
+		let cli = adapter.cli_attach_config().expect("CLI attach");
+		assert_eq!(cli.executable, sidecar);
+		assert!(cli.namespace.socket_path.ends_with("herdr/herdr.sock"));
+		let sidecar_invoked =
+			std::fs::read_to_string(invoked_marker(&sidecar)).unwrap();
+		assert!(sidecar_invoked.contains("sidecar"), "{sidecar_invoked}");
+		assert!(!fake_dir.join("starts").exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn old_path_herdr_does_not_fall_through_to_sidecar_start() {
+		let root = tempfile::tempdir().unwrap();
+		let xdg = root.path().join("xdg-config");
+		std::fs::create_dir_all(xdg.join("herdr")).unwrap();
+		let fake_dir = root.path().join("fake");
+		std::fs::create_dir_all(&fake_dir).unwrap();
+		let path_dir = root.path().join("path-bin");
+		let sidecar_dir = root.path().join("sidecar-bin");
+		let path_herdr = path_dir.join("herdr");
+		let sidecar = sidecar_dir.join("herdr");
+		write_tagged_fake_herdr(&path_herdr, "herdr 0.8.2", "path");
+		write_tagged_fake_herdr(&sidecar, "herdr 0.9.0", "sidecar");
+		let extra_env = vec![(
+			OsString::from("HERDR_FAKE_DIR"),
+			fake_dir.as_os_str().to_os_string(),
+		)];
+		let path_dirs = [path_dir];
+		let guard = HerdrClientGuard::new();
+		let err = match connect_gui_herdr(GuiHerdrConnect {
+			db: setup_db(),
+			guard: &guard,
+			xdg_config_home: xdg.clone(),
+			extra_env: &extra_env,
+			sidecar: None,
+			path_dirs: Some(&path_dirs),
+			exe_dir: Some(sidecar_dir),
+			binaries_dir: Some(root.path().join("empty-bins")),
+		}) {
+			Ok(_) => panic!("old PATH herdr must fail closed"),
+			Err(err) => err,
+		};
+		assert!(matches!(err, AppError::HerdrServerIncompatible(_)), "{err}");
+		let message = err.to_string();
+		assert!(message.contains("0.8.2"), "{message}");
+		assert!(message.contains("0.9.0"), "{message}");
+		assert!(message.contains("herdr update"), "{message}");
+		assert!(!message.contains("absent"), "{message}");
+		let path_invoked =
+			std::fs::read_to_string(invoked_marker(&path_herdr)).unwrap();
+		assert!(path_invoked.contains("path"), "{path_invoked}");
+		assert!(!invoked_marker(&sidecar).exists());
+		assert!(!fake_dir.join("starts").exists());
+		assert!(!fake_dir.join("stop.log").exists());
+		assert!(!xdg.join("herdr/sessions/2code").exists());
+	}
+
 	#[test]
 	fn herdr_gui_startup_wires_sidecar_without_local_fallback() {
 		let production = production_runtime_src();
@@ -1094,6 +1368,17 @@ exit 1
 			connect.contains("for_endpoint"),
 			"CLI attach must inherit the ensured endpoint socket/session"
 		);
+		let resolve = slice_between(
+			production,
+			"fn resolve_gui_sidecar",
+			"pub fn connect_gui_herdr",
+		);
+		assert!(
+			resolve.contains("find_herdr_in_dirs")
+				|| resolve.contains("find_herdr_on_path"),
+			"{resolve}"
+		);
+		assert!(resolve.contains("try_resolve_sidecar"), "{resolve}");
 		assert!(!connect.contains("import_leftover_sqlite_profiles"));
 		assert!(connect.contains("attach_runtime_sync"));
 		assert!(connect.contains("adopt_existing_checkouts"));
