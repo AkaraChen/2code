@@ -1,8 +1,8 @@
 //! Pinned CLI `herdr terminal session` helper for live frames.
 //!
-//! Production attach is `control` without `--takeover` on namespace
-//! `2code`. GUI detach writes `terminal.release` and reaps the child;
-//! it does not `pane.close`. Windows attach is fail-closed (#396).
+//! Production attach is `control` without `--takeover` on the resolved
+//! shared socket. GUI detach writes `terminal.release` and reaps the
+//! child; it does not `pane.close`. Windows attach is fail-closed (#396).
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -21,7 +21,7 @@ use model::runtime::HerdrTerminalFrame;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::process::{HerdrProcessEnv, SESSION_NAME};
+use super::process::HerdrProcessEnv;
 use super::transport::endpoint_not_allowed;
 use crate::no_window::command_without_windows_console;
 
@@ -451,11 +451,6 @@ fn spawn_unix(
 			reason: "pane_id is required".into(),
 		});
 	}
-	if req.env.namespace.session != SESSION_NAME {
-		return Err(HerdrTerminalError::Refused {
-			reason: "refusing a Herdr session other than 2code".into(),
-		});
-	}
 	endpoint_not_allowed(&req.env.namespace.socket_path).map_err(|err| {
 		HerdrTerminalError::Refused {
 			reason: err.to_string(),
@@ -469,12 +464,7 @@ fn spawn_unix(
 
 	let mut cmd = command_without_windows_console(req.env.executable);
 	req.env.apply_to(&mut cmd);
-	cmd.arg("--session").arg(SESSION_NAME).args([
-		"terminal",
-		"session",
-		req.mode.as_arg(),
-		req.pane_id,
-	]);
+	cmd.args(["terminal", "session", req.mode.as_arg(), req.pane_id]);
 	if let Some(cols) = req.cols.filter(|cols| *cols > 0) {
 		cmd.args(["--cols", &cols.to_string()]);
 	}
@@ -852,9 +842,11 @@ mod tests {
 		assert!(src.contains("#396"));
 		#[cfg(windows)]
 		{
-			let ns = super::super::process::resolve_namespace(PathBuf::from(
-				"/tmp/xdg",
-			))
+			let ns = super::super::process::resolve_namespace_with(
+				PathBuf::from("/tmp/xdg"),
+				None,
+				None,
+			)
 			.unwrap();
 			let env = HerdrProcessEnv::new(Path::new("herdr"), &ns);
 			let err =
@@ -884,7 +876,8 @@ mod tests {
 			.unwrap();
 		assert!(src.contains("attach_control"));
 		assert!(src.contains("terminal session"));
-		assert!(src.contains("SESSION_NAME"));
+		assert!(!src.contains("SESSION_NAME"));
+		assert!(!src.contains("--session"));
 		assert!(src.contains("takeover: false"));
 		assert!(!src.contains("pane.send_text"));
 		assert!(!src.contains("pane.send_input"));
@@ -917,7 +910,7 @@ mod tests {
 
 #[cfg(all(test, unix))]
 mod unix_tests {
-	use super::super::process::{resolve_namespace, HerdrNamespace};
+	use super::super::process::{resolve_namespace_with, HerdrNamespace};
 	use super::*;
 	use std::ffi::OsString;
 	use std::fs;
@@ -940,7 +933,7 @@ mod unix_tests {
 			let fake_dir = root.path().join("fake");
 			fs::create_dir_all(&fake_dir).unwrap();
 			let executable = write_fake_cli(&fake_dir);
-			let namespace = resolve_namespace(xdg).unwrap();
+			let namespace = resolve_namespace_with(xdg, None, None).unwrap();
 			let extra_env = vec![
 				(OsString::from("HOME"), root.path().join("home").into()),
 				(
@@ -1075,7 +1068,7 @@ if (fake / "stay").exists():
 	}
 
 	#[test]
-	fn control_spawn_uses_2code_namespace_without_takeover() {
+	fn control_spawn_uses_shared_socket_without_takeover() {
 		let fx = Fixture::new();
 		fx.write_frames(
 			r#"{"type":"terminal.frame","seq":1,"encoding":"ansi","width":80,"height":24,"full":true,"bytes":"YQ=="}
@@ -1089,13 +1082,14 @@ if (fake / "stay").exists():
 		assert_eq!(frame.bytes, b"a");
 		drop(helper);
 		let args = fx.args();
-		assert!(args.contains("--session 2code"), "{args}");
+		assert!(!args.contains("--session"), "{args}");
+		assert!(!args.contains("2code"), "{args}");
 		assert!(args.contains("terminal session control w1:p1"), "{args}");
 		assert!(!args.contains("--takeover"), "{args}");
 		assert!(!args.contains("observe"), "{args}");
 		assert!(!args.contains("pane.close"), "{args}");
 		let env_log = fx.env_log();
-		assert!(env_log.contains("HERDR_SESSION=2code"), "{env_log}");
+		assert!(!env_log.contains("HERDR_SESSION=2code"), "{env_log}");
 		assert!(
 			env_log.contains(&format!(
 				"HERDR_SOCKET_PATH={}",
@@ -1103,7 +1097,10 @@ if (fake / "stay").exists():
 			)),
 			"{env_log}"
 		);
-		assert!(!env_log.contains("/herdr/herdr.sock"), "{env_log}");
+		assert!(
+			env_log.contains("/herdr/herdr.sock"),
+			"attach must target the default socket: {env_log}"
+		);
 	}
 
 	#[test]
@@ -1278,11 +1275,34 @@ if (fake / "stay").exists():
 	}
 
 	#[test]
-	fn default_session_socket_is_refused() {
+	fn default_json_socket_is_allowed_client_socket_is_refused() {
 		let fx = Fixture::new();
+		assert!(fx
+			.namespace
+			.socket_path
+			.to_string_lossy()
+			.ends_with("herdr/herdr.sock"));
+		fx.write_frames(
+			r#"{"type":"terminal.frame","seq":1,"encoding":"ansi","width":80,"height":24,"full":true,"bytes":"YQ=="}
+"#,
+		);
+		let env = fx.env();
+		let helper =
+			TerminalSessionHelper::attach_control(TerminalAttachRequest {
+				env: &env,
+				pane_id: "w1:p1",
+				mode: TerminalSessionMode::Control,
+				cols: None,
+				rows: None,
+				takeover: false,
+				limits: BufferLimits::default(),
+			})
+			.unwrap();
+		drop(helper);
+
 		let mut namespace = fx.namespace.clone();
 		namespace.socket_path =
-			fx.namespace.xdg_config_home.join("herdr/herdr.sock");
+			fx.namespace.xdg_config_home.join("herdr/herdr-client.sock");
 		let env = HerdrProcessEnv {
 			executable: &fx.executable,
 			namespace: &namespace,
@@ -1357,7 +1377,7 @@ if (fake / "stay").exists():
 				"onboarding = false\n\n[ui.sound]\nenabled = false\n",
 			)
 			.unwrap();
-			let namespace = resolve_namespace(xdg).unwrap();
+			let namespace = resolve_namespace_with(xdg, None, None).unwrap();
 			let extra_env = vec![
 				(
 					OsString::from("HOME"),
@@ -1443,7 +1463,7 @@ if (fake / "stay").exists():
 	impl Drop for Live {
 		fn drop(&mut self) {
 			let mut cmd = std::process::Command::new(&self.bin);
-			cmd.env("HERDR_SESSION", SESSION_NAME)
+			cmd.env_remove("HERDR_SESSION")
 				.env("HERDR_SOCKET_PATH", &self.namespace.socket_path)
 				.env("XDG_CONFIG_HOME", &self.namespace.xdg_config_home)
 				.env("HOME", self.root.path().join("home"))

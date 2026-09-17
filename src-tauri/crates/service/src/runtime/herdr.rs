@@ -223,7 +223,7 @@ struct HerdrLifecycle {
 	worktrees: Option<Arc<dyn HerdrWorktreeClient>>,
 }
 
-/// Sidecar + 2code namespace used to spawn one CLI helper per session.
+/// Sidecar + resolved Herdr session used to spawn one CLI helper per session.
 pub struct HerdrCliAttach {
 	pub executable: PathBuf,
 	pub namespace: HerdrNamespace,
@@ -1649,7 +1649,8 @@ time.sleep(30)
 			let xdg = cwd.path().join("xdg-config");
 			std::fs::create_dir_all(xdg.join("herdr")).unwrap();
 			let namespace =
-				infra::herdr::process::resolve_namespace(xdg).unwrap();
+				infra::herdr::process::resolve_namespace_with(xdg, None, None)
+					.unwrap();
 			let extra_env = vec![
 				(
 					OsString::from("HOME"),
@@ -2227,7 +2228,8 @@ time.sleep(30)
 		std::thread::sleep(std::time::Duration::from_millis(160));
 		let args = fx.args_log();
 		assert!(args.contains("terminal session control"), "{args}");
-		assert!(args.contains("--session 2code"), "{args}");
+		assert!(!args.contains("--session"), "{args}");
+		assert!(!args.contains("2code"), "{args}");
 		assert!(!args.contains("--takeover"), "{args}");
 		assert!(!args.contains("observe"), "{args}");
 		let stdin = fx.stdin_log();
@@ -2780,9 +2782,12 @@ time.sleep(30)
 		let json = Arc::new(HerdrJsonTerminals::new(client));
 		let xdg = tempfile::tempdir().unwrap();
 		std::fs::create_dir_all(xdg.path().join("herdr")).unwrap();
-		let namespace =
-			infra::herdr::process::resolve_namespace(xdg.path().to_path_buf())
-				.unwrap();
+		let namespace = infra::herdr::process::resolve_namespace_with(
+			xdg.path().to_path_buf(),
+			None,
+			None,
+		)
+		.unwrap();
 		let with_json = HerdrStubAdapter::with_json_clients(
 			setup_db(),
 			json,

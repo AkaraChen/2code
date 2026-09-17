@@ -28,9 +28,7 @@ pub use herdr::{
 	HerdrCliAttach, HerdrJsonTerminals, HerdrStubAdapter, HerdrTerminalClient,
 	HerdrWorktreeClient,
 };
-pub use infra::herdr::process::{
-	HerdrClientGuard, HerdrEndpoint, SESSION_NAME,
-};
+pub use infra::herdr::process::{HerdrClientGuard, HerdrEndpoint};
 
 pub type RuntimeHandle = Arc<RuntimeRouter>;
 
@@ -357,7 +355,7 @@ impl RuntimeRouter {
 	}
 }
 
-/// Resolve the dedicated 2code Herdr listener. Called from GUI startup.
+/// Resolve the user's shared Herdr listener. Called from GUI startup.
 pub fn ensure_herdr_listener(
 	guard: &HerdrClientGuard,
 	executable: &Path,
@@ -404,7 +402,7 @@ fn resolve_gui_sidecar(
 	})
 }
 
-/// Resolve the pinned sidecar, ensure the 2code namespace, inject JSON
+/// Resolve the pinned sidecar, ensure the user Herdr session, inject JSON
 /// terminal + worktree + CLI attach clients, and start
 /// `HerdrRuntimeSync`.
 pub fn connect_gui_herdr(
@@ -1031,8 +1029,6 @@ mod tests {
 
 	#[test]
 	fn herdr_errors_stay_distinct() {
-		assert_eq!(SESSION_NAME, "2code");
-		assert_ne!(SESSION_NAME, "default");
 		let guard = HerdrClientGuard::new();
 		release_herdr_client_helpers(&guard);
 		let absent =

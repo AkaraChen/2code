@@ -1,14 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-/// Dedicated 2code Herdr session namespace. Never the user default.
-pub const HERDR_NAMESPACE: &str = "2code";
-
 /// Whether a persisted runtime identity is currently present.
 ///
 /// Computed against the live projection by stored `workspace_id` /
 /// `pane_id` only. Labels, paths, and `terminal_id` are never keys.
 /// [`RuntimeIdentityState::Replaced`] is only for an explicit
-/// caller-supplied new id in namespace `2code`.
+/// caller-supplied new id.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeIdentityState {
 	Bound,
@@ -118,12 +115,6 @@ pub struct SessionAgentStatus {
 #[cfg(test)]
 mod tests {
 	use super::*;
-
-	#[test]
-	fn herdr_namespace_is_dedicated_2code() {
-		assert_eq!(HERDR_NAMESPACE, "2code");
-		assert_ne!(HERDR_NAMESPACE, "default");
-	}
 
 	#[test]
 	fn identity_states_are_explicit_and_distinct() {

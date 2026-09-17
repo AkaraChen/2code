@@ -17,7 +17,7 @@ impl WatchEventSender for TauriWatchSender {
 }
 
 /// Wire the production GUI runtime. Always Herdr: resolve the pinned
-/// v0.9.0 sidecar, ensure the dedicated 2code namespace, and inject JSON
+/// v0.9.0 sidecar, ensure the user's shared Herdr session, and inject JSON
 /// terminal + worktree + CLI attach clients. Missing sidecar fails closed.
 pub fn build_runtime(app: &AppHandle) -> RuntimeHandle {
 	let db = app.state::<DbPool>().inner().clone();

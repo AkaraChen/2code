@@ -613,11 +613,6 @@ fn strip_pipe_prefix(raw: &str) -> Option<&str> {
 }
 
 pub fn endpoint_not_allowed(path: &Path) -> Result<(), HerdrTransportError> {
-	if is_default_session_socket(path) {
-		return Err(HerdrTransportError::Refused {
-			reason: "refusing the user default Herdr session".into(),
-		});
-	}
 	let name = path
 		.file_name()
 		.and_then(|name| name.to_str())
@@ -628,14 +623,6 @@ pub fn endpoint_not_allowed(path: &Path) -> Result<(), HerdrTransportError> {
 		});
 	}
 	Ok(())
-}
-
-fn is_default_session_socket(path: &Path) -> bool {
-	path.file_name().is_some_and(|name| name == "herdr.sock")
-		&& path
-			.parent()
-			.and_then(|parent| parent.file_name())
-			.is_some_and(|name| name == "herdr")
 }
 
 #[derive(Serialize)]
@@ -1737,15 +1724,17 @@ mod tests {
 	}
 
 	#[test]
-	fn default_session_and_client_socket_are_refused() {
+	fn default_json_socket_is_allowed_client_socket_is_refused() {
 		let default = PathBuf::from("/home/me/.config/herdr/herdr.sock");
-		let err = endpoint_not_allowed(&default).unwrap_err();
-		assert!(err.to_string().contains("default Herdr session"));
+		endpoint_not_allowed(&default).unwrap();
+		let named =
+			PathBuf::from("/home/me/.config/herdr/sessions/work/herdr.sock");
+		endpoint_not_allowed(&named).unwrap();
 		let client = PathBuf::from("/tmp/2c1-client.sock");
 		let err = endpoint_not_allowed(&client).unwrap_err();
 		assert!(err.to_string().contains("herdr-client.sock"));
-		let ok = PathBuf::from("/tmp/2code-herdr-abcd.sock");
-		endpoint_not_allowed(&ok).unwrap();
+		let helper = PathBuf::from("/tmp/2c1.sock");
+		endpoint_not_allowed(&helper).unwrap();
 	}
 
 	#[test]
@@ -2022,8 +2011,12 @@ mod tests {
 	#[test]
 	fn server_stop_is_refused_without_a_socket() {
 		assert!(outcome_uncertain("server.stop"));
-		let err = HerdrClient::connect_path(Path::new(
+		HerdrClient::connect_path(Path::new(
 			"/home/me/.config/herdr/herdr.sock",
+		))
+		.unwrap();
+		let err = HerdrClient::connect_path(Path::new(
+			"/home/me/.config/herdr/herdr-client.sock",
 		))
 		.unwrap_err();
 		assert!(matches!(err, HerdrTransportError::Refused { .. }));
@@ -2339,7 +2332,8 @@ mod unix_tests {
 			)
 			.unwrap();
 			let namespace =
-				crate::herdr::process::resolve_namespace(xdg).unwrap();
+				crate::herdr::process::resolve_namespace_with(xdg, None, None)
+					.unwrap();
 			if let Some(parent) = namespace.socket_path.parent() {
 				std::fs::create_dir_all(parent).unwrap();
 			}
@@ -2351,9 +2345,9 @@ mod unix_tests {
 				.env("XDG_CONFIG_HOME", &namespace.xdg_config_home)
 				.env("XDG_STATE_HOME", root.path().join("xdg-state"))
 				.env("XDG_CACHE_HOME", root.path().join("xdg-cache"))
-				.env("HERDR_SESSION", crate::herdr::process::SESSION_NAME)
 				.env("HERDR_SOCKET_PATH", &namespace.socket_path)
 				.env("HERDR_DISABLE_SOUND", "1")
+				.env_remove("HERDR_SESSION")
 				.env_remove("HERDR_CLIENT_SOCKET_PATH")
 				.arg("server")
 				.stdin(std::process::Stdio::null())
@@ -2412,7 +2406,7 @@ mod unix_tests {
 	impl Drop for Live {
 		fn drop(&mut self) {
 			let mut cmd = std::process::Command::new(&self.bin);
-			cmd.env("HERDR_SESSION", crate::herdr::process::SESSION_NAME)
+			cmd.env_remove("HERDR_SESSION")
 				.env("HERDR_SOCKET_PATH", &self.namespace.socket_path)
 				.env("XDG_CONFIG_HOME", &self.namespace.xdg_config_home)
 				.env("HOME", self.root.path().join("home"))
@@ -2458,18 +2452,23 @@ mod unix_tests {
 	}
 
 	#[test]
-	fn live_ping_and_snapshot_on_2code_namespace() {
+	fn live_ping_and_snapshot_on_default_socket() {
 		let Some(live) = require_live() else {
 			return;
 		};
 		assert!(
-			!live
-				.namespace
+			live.namespace
 				.socket_path
 				.to_string_lossy()
 				.ends_with("herdr/herdr.sock"),
-			"must not use the default session"
+			"must use the default session: {}",
+			live.namespace.socket_path.display()
 		);
+		assert!(!live
+			.namespace
+			.socket_path
+			.to_string_lossy()
+			.contains("sessions/2code"));
 		let client = live.client();
 		let pong = client.ping().unwrap_or_else(|err| {
 			panic!("ping failed: {err}\n{}", live.server_log())
