@@ -30,7 +30,7 @@
 
 ## Environment Variables
 
-There is no Local env injection of `TERM` / `_2CODE_HELPER` / `ZDOTDIR`. Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md). No environment variable or CLI flag selects a runtime backend.
+There is no Local env injection of `TERM` / `_2CODE_HELPER` / `ZDOTDIR`. Herdr panes own their own session environment. GUI startup attaches to the user's Herdr session (inherited `HERDR_SOCKET_PATH` / `HERDR_SESSION`, else `$XDG_CONFIG_HOME/herdr/herdr.sock`); see [Herdr integration](herdr-integration.md). No environment variable or CLI flag selects a runtime backend.
 
 `2code.json` `init_script` and New Tab `startup_commands` are sent once after Herdr `tab.create` via `pane.send_input`.
 

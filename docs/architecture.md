@@ -98,7 +98,7 @@ Cross-cutting concerns and external system integrations.
 | File            | Responsibility                                                                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | `db.rs`         | SQLite init, WAL + FK pragmas, embedded migrations. Type: `DbPool = Arc<Mutex<SqliteConnection>>`            |
-| `herdr/`        | Pinned v0.9.0 sidecar resolve, dedicated `2code` namespace, NDJSON transport, CLI terminal attach            |
+| `herdr/`        | Pinned v0.9.0 sidecar resolve, user-session attach (default JSON socket), NDJSON transport, CLI terminal attach |
 | `git.rs`        | Git CLI execution: branch, diff, log, show. Commit parsing, shortstat parsing                                |
 | `filesystem.rs` | File-tree operations: list/rename/move/delete/create/search with worktree containment                        |
 | `config.rs`     | Loads `2code.json` project config, executes setup/teardown scripts                                           |
