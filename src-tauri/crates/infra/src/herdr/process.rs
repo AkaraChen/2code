@@ -25,6 +25,8 @@ use super::PINNED_VERSION;
 use crate::no_window::command_without_windows_console;
 
 const DEFAULT_SESSION: &str = "default";
+/// Minimum JSON protocol the GUI can talk (Herdr >= 0.9.0). Newer
+/// protocol-22+ servers are compatible; this is a floor, not an exact pin.
 const JSON_PROTOCOL: u64 = 22;
 const ENDPOINT_GENERATION: u64 = 1;
 const READY_TIMEOUT: Duration = Duration::from_secs(10);
@@ -53,7 +55,7 @@ impl HerdrNamespace {
 	}
 }
 
-/// Inputs for probe/start. Callers supply the sidecar path from Task 3.
+/// Inputs for probe/start. Callers supply the herdr executable (PATH or sidecar).
 pub struct HerdrProcessEnv<'a> {
 	pub executable: &'a Path,
 	pub namespace: &'a HerdrNamespace,
@@ -567,6 +569,12 @@ fn classify_status(
 	}))
 }
 
+fn old_server_upgrade_message(version: &str, protocol: u64) -> String {
+	format!(
+		"found Herdr {version} protocol {protocol}; required Herdr >= {PINNED_VERSION} / protocol >= {JSON_PROTOCOL}; run `herdr update`"
+	)
+}
+
 fn incompatibility_reasons(
 	version: &str,
 	protocol: u64,
@@ -575,11 +583,8 @@ fn incompatibility_reasons(
 	endpoint_compatible: Option<bool>,
 ) -> Vec<String> {
 	let mut reasons = Vec::new();
-	if version != PINNED_VERSION {
-		reasons.push(format!("version {version} (expected {PINNED_VERSION})"));
-	}
-	if protocol != JSON_PROTOCOL {
-		reasons.push(format!("protocol {protocol} (expected {JSON_PROTOCOL})"));
+	if protocol < JSON_PROTOCOL {
+		reasons.push(old_server_upgrade_message(version, protocol));
 	}
 	if generation != ENDPOINT_GENERATION {
 		reasons.push(format!(
@@ -826,6 +831,56 @@ mod tests {
 		assert!(!src.contains("dedicated 2code"));
 		assert!(!src.contains("native_session_socket"));
 		assert!(!src.contains("short_socket_path"));
+	}
+
+	#[test]
+	fn live_server_compatibility_is_protocol_floor_not_exact_pin() {
+		assert!(incompatibility_reasons(
+			PINNED_VERSION,
+			JSON_PROTOCOL,
+			ENDPOINT_GENERATION,
+			Some(true),
+			Some(true),
+		)
+		.is_empty());
+		assert!(incompatibility_reasons(
+			"0.9.1",
+			JSON_PROTOCOL,
+			ENDPOINT_GENERATION,
+			Some(true),
+			Some(true),
+		)
+		.is_empty());
+		assert!(incompatibility_reasons(
+			"0.10.0",
+			JSON_PROTOCOL + 1,
+			ENDPOINT_GENERATION,
+			Some(true),
+			Some(true),
+		)
+		.is_empty());
+
+		let old = incompatibility_reasons(
+			"0.8.2",
+			20,
+			ENDPOINT_GENERATION,
+			Some(true),
+			Some(true),
+		)
+		.join("; ");
+		assert!(old.contains("0.8.2"), "{old}");
+		assert!(old.contains("protocol 20"), "{old}");
+		assert!(old.contains(PINNED_VERSION), "{old}");
+		assert!(old.contains(&JSON_PROTOCOL.to_string()), "{old}");
+		assert!(old.contains("herdr update"), "{old}");
+
+		let absent = HerdrProcessError::Absent {
+			socket: PathBuf::from("/tmp/herdr.sock"),
+		}
+		.to_string();
+		assert!(absent.contains("absent"), "{absent}");
+		assert!(!absent.contains("herdr update"), "{absent}");
+		assert!(!absent.contains("incompatible"), "{absent}");
 	}
 
 	#[test]
@@ -1186,12 +1241,20 @@ exit 2
 			}
 
 			let mut incompatible = fx.compatible_status();
-			incompatible["server"]["version"] = json!("0.1.0");
 			incompatible["server"]["compatible"] = json!(false);
 			fx.write_status(incompatible);
 			match probe(&fx.env()).unwrap() {
 				Probe::Incompatible(info) => {
-					assert!(info.message.contains("0.1.0"), "{}", info.message);
+					assert!(
+						info.message.contains("compatible is false"),
+						"{}",
+						info.message
+					);
+					assert!(
+						!info.message.contains("herdr update"),
+						"{}",
+						info.message
+					);
 					assert_eq!(info.socket_path, fx.namespace.socket_path);
 				}
 				other => panic!("expected incompatible, got {other:?}"),
@@ -1384,12 +1447,74 @@ exit 2
 			match err {
 				HerdrProcessError::Incompatible { message, socket } => {
 					assert!(message.contains("protocol 1"), "{message}");
+					assert!(message.contains(PINNED_VERSION), "{message}");
+					assert!(message.contains("herdr update"), "{message}");
 					assert_eq!(socket, fx.namespace.socket_path);
 				}
 				other => panic!("expected incompatible, got {other:?}"),
 			}
 			assert_eq!(fx.starts(), 0);
 			assert_eq!(fx.stop_count(), 0);
+			assert!(!fx
+				.namespace
+				.xdg_config_home
+				.join("herdr/sessions/2code")
+				.exists());
+			assert!(!fx
+				.namespace
+				.socket_path
+				.to_string_lossy()
+				.contains("2code-herdr"));
+		}
+
+		#[test]
+		fn ensure_old_shared_server_fails_closed_without_private_spawn() {
+			let fx = Fixture::new();
+			let mut bad = fx.compatible_status();
+			bad["server"]["version"] = json!("0.8.2");
+			bad["server"]["protocol"] = json!(20);
+			fx.write_status(bad);
+			let err = match ensure_server(&fx.env()) {
+				Err(err) => err,
+				Ok(_) => panic!("old shared server must fail closed"),
+			};
+			let message = err.to_string();
+			assert!(message.contains("incompatible"), "{message}");
+			assert!(message.contains("0.8.2"), "{message}");
+			assert!(message.contains("protocol 20"), "{message}");
+			assert!(message.contains(PINNED_VERSION), "{message}");
+			assert!(message.contains("22"), "{message}");
+			assert!(message.contains("herdr update"), "{message}");
+			assert_eq!(fx.starts(), 0);
+			assert_eq!(fx.stop_count(), 0);
+			assert!(!fx.args_log().contains("server"));
+			assert!(!fx
+				.namespace
+				.xdg_config_home
+				.join("herdr/sessions/2code")
+				.exists());
+			assert!(!fx
+				.namespace
+				.socket_path
+				.to_string_lossy()
+				.contains("2code-herdr"));
+		}
+
+		#[test]
+		fn ensure_reuses_newer_compatible_server_without_starting() {
+			let fx = Fixture::new();
+			let mut newer = fx.compatible_status();
+			newer["server"]["version"] = json!("0.10.0");
+			newer["client"]["version"] = json!("0.10.0");
+			newer["server"]["protocol"] = json!(22);
+			fx.write_status(newer);
+			let lease = ensure_server(&fx.env()).unwrap();
+			assert!(lease.endpoint.reused);
+			assert_eq!(lease.endpoint.session, DEFAULT_SESSION);
+			assert_eq!(lease.endpoint.socket_path, fx.namespace.socket_path);
+			assert_eq!(fx.starts(), 0);
+			assert_eq!(fx.stop_count(), 0);
+			assert!(!fx.args_log().contains("server"));
 		}
 
 		#[test]
