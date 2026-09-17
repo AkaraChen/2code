@@ -702,6 +702,41 @@ mod tests {
 		}
 	}
 
+	fn production_runtime_src() -> &'static str {
+		include_str!("runtime.rs")
+			.split("#[cfg(test)]")
+			.next()
+			.expect("production runtime.rs before tests")
+	}
+
+	fn slice_between<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+		src.split(start)
+			.nth(1)
+			.unwrap_or_else(|| panic!("missing {start}"))
+			.split(end)
+			.next()
+			.unwrap_or_else(|| panic!("missing {end} after {start}"))
+	}
+
+	fn assert_no_env_or_argv_backend_selection(src: &str) {
+		assert!(
+			!src.contains("std::env::var"),
+			"runtime backend must not be selected from process env"
+		);
+		assert!(
+			!src.contains("std::env::var_os"),
+			"runtime backend must not be selected from process env"
+		);
+		assert!(
+			!src.contains("std::env::args"),
+			"runtime backend must not be selected from CLI args"
+		);
+		assert!(
+			!src.contains("use std::env"),
+			"runtime backend must not be selected from process env"
+		);
+	}
+
 	#[test]
 	fn selector_defaults_to_herdr() {
 		let selector = RuntimeSelector::default();
@@ -739,11 +774,32 @@ mod tests {
 			err.to_string().contains("Herdr runtime is not available"),
 			"{err}"
 		);
+		let ctor = slice_between(
+			production_runtime_src(),
+			"pub fn new(herdr: HerdrStubAdapter)",
+			"pub fn owner",
+		);
+		assert!(
+			ctor.contains("RuntimeSelector::new(RuntimeBackend::Herdr)"),
+			"{ctor}"
+		);
+		assert_no_env_or_argv_backend_selection(ctor);
 	}
 
 	#[test]
 	fn select_gui_backend_is_always_herdr() {
 		assert_eq!(select_gui_backend(), RuntimeBackend::Herdr);
+		assert_eq!(
+			RuntimeSelector::default().default_backend(),
+			RuntimeBackend::Herdr
+		);
+		let select = slice_between(
+			production_runtime_src(),
+			"pub fn select_gui_backend",
+			"pub struct GuiHerdrConnect",
+		);
+		assert!(select.contains("RuntimeBackend::Herdr"), "{select}");
+		assert_no_env_or_argv_backend_selection(select);
 	}
 
 	#[test]
@@ -808,15 +864,12 @@ mod tests {
 
 	#[test]
 	fn herdr_gui_startup_wires_sidecar_without_local_fallback() {
-		let runtime = include_str!("runtime.rs");
-		let production = runtime.split("#[cfg(test)]").next().unwrap();
-		let connect = production
-			.split("pub fn connect_gui_herdr")
-			.nth(1)
-			.unwrap()
-			.split("pub fn build_gui_herdr_adapter")
-			.next()
-			.unwrap();
+		let production = production_runtime_src();
+		let connect = slice_between(
+			production,
+			"pub fn connect_gui_herdr",
+			"pub fn build_gui_herdr_adapter",
+		);
 		assert!(connect.contains("ensure_herdr_listener"));
 		assert!(
 			connect.contains("try_resolve_sidecar")
@@ -836,27 +889,27 @@ mod tests {
 			adopt > attach,
 			"connect-time adopt runs after successful GUI Herdr attach"
 		);
-		let build = production
-			.split("pub fn build_gui_runtime")
-			.nth(1)
-			.unwrap()
-			.split("pub fn release_herdr_client_helpers")
-			.next()
-			.unwrap();
+		let build = slice_between(
+			production,
+			"pub fn build_gui_runtime",
+			"pub fn release_herdr_client_helpers",
+		);
 		assert!(build.contains("adopt_existing_checkouts"));
-		assert!(!production.contains("TWOCODE_RUNTIME"));
-		assert!(!production.contains("--twocode-runtime=local"));
+		assert!(build.contains("RuntimeRouter::new"));
+		assert_no_env_or_argv_backend_selection(connect);
+		assert_no_env_or_argv_backend_selection(build);
 		assert!(!production.contains("LocalAdapter"));
 		assert!(!production.contains("mod local"));
 		assert!(!production.contains("RuntimeBackend::Local"));
 		let bridge = include_str!("../../../src/bridge.rs");
 		assert!(bridge.contains("build_gui_runtime"));
-		assert!(!bridge.contains("TWOCODE_RUNTIME"));
 		assert!(!bridge.contains("LocalAdapter"));
+		assert_no_env_or_argv_backend_selection(bridge);
 		let lib = include_str!("../../../src/lib.rs");
+		assert!(lib.contains("bridge::build_runtime"));
 		assert!(!lib.contains("HerdrRuntimeSync"));
 		assert!(!lib.contains("events.subscribe"));
-		assert!(!lib.contains("TWOCODE_RUNTIME"));
+		assert_no_env_or_argv_backend_selection(lib);
 	}
 
 	#[test]
@@ -1045,13 +1098,21 @@ mod tests {
 
 	#[test]
 	fn production_source_has_no_local_pty_runtime() {
-		let runtime = include_str!("runtime.rs");
-		let production = runtime.split("#[cfg(test)]").next().unwrap();
+		let production = production_runtime_src();
 		assert!(!production.contains("LocalAdapter"));
-		assert!(!production.contains("TWOCODE_RUNTIME"));
-		assert!(!production.contains("--twocode-runtime"));
 		assert!(!production.contains("native_pty_system"));
 		assert!(!production.contains("INSERT INTO pty_sessions"));
+		assert_no_env_or_argv_backend_selection(production);
+		let selector = slice_between(
+			production,
+			"pub struct RuntimeSelector",
+			"pub(crate) fn is_herdr_pane_id",
+		);
+		assert!(
+			selector.contains("Self::new(RuntimeBackend::Herdr)"),
+			"{selector}"
+		);
+		assert_no_env_or_argv_backend_selection(selector);
 		let local_path =
 			Path::new(env!("CARGO_MANIFEST_DIR")).join("src/runtime/local.rs");
 		assert!(!local_path.exists(), "LocalAdapter module must be deleted");
