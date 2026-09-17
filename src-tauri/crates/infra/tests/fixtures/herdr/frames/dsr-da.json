@@ -4,7 +4,7 @@
     "bytes": "ESC[6n",
     "hex": "1b5b366e"
   },
-  "dsr_reply_to_pty_input": {
+  "dsr_reply_as_pane_input": {
     "example": "ESC[10;1R",
     "pattern": "ESC[<row>;<col>R"
   },
@@ -12,7 +12,7 @@
     "bytes": "ESC[c",
     "hex": "1b5b63"
   },
-  "da_reply_to_pty_input": {
+  "da_reply_as_pane_input": {
     "example": "ESC[?62;22c",
     "meaning": "VT220-level DA with ANSI color (22)"
   },

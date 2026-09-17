@@ -70,10 +70,12 @@ describe("resolveTerminalTransportKind", () => {
 
 describe("byte vs frame streams", () => {
 	it("never starts a Local byte stream", () => {
-		expect(terminalTransportSrc).not.toContain("streamPtyOutput");
+		expect(terminalTransportSrc).toContain("startHerdrFrameStream");
+		expect(terminalTransportSrc).toContain("streamHerdrOutput");
+		expect(terminalSrc).toContain("startHerdrFrameStream");
+		expect(terminalSrc).toContain("attachTerminalOutput");
 		expect(terminalTransportSrc).not.toContain("startLocalByteStream");
 		expect(terminalSrc).not.toContain("startLocalByteStream");
-		expect(terminalSrc).not.toContain("getPtySessionHistory");
 	});
 
 	it("starts a Herdr frame stream", () => {
@@ -178,9 +180,8 @@ describe("production GUI transport", () => {
 		expect(src).not.toContain("pane.report_agent");
 		expect(src).not.toContain("agent.start");
 		expect(src).not.toContain("agent.prompt");
-		expect(src).not.toContain("streamPtyOutput");
-		expect(src).not.toContain("restorePtySession");
-		expect(src).not.toContain("deletePtySessionRecord");
+		expect(src).toContain("streamHerdrOutput");
+		expect(restorationSrc).toContain("pane_id");
 		expect(addonsSrc).toContain("@xterm/addon-search");
 	});
 });

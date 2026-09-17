@@ -3,7 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 /**
  * Herdr's emulator already answers DSR/DA as PTY input (Task 1 fixture
  * `frames/dsr-da.json`). Swallow those queries on the xterm parser so
- * replies never leave through `onData` → `writeToPty`.
+ * replies never leave through `onData` → `writeToTerminal`.
  */
 
 function csiParam0(params: Array<number | number[]>): number {

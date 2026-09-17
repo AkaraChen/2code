@@ -73,15 +73,7 @@ mod tests {
 		assert!(db_path.exists());
 
 		let mut conn = pool.lock().expect("lock db");
-		let row: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count \
-			 FROM sqlite_master \
-			 WHERE type = 'table' AND name IN ('projects', 'checkout_notes', 'project_groups')",
-		)
-		.get_result(&mut *conn)
-		.expect("read sqlite_master");
-
-		assert_eq!(row.count, 3);
+		assert_live_catalog_tables(&mut conn);
 	}
 
 	#[test]
@@ -124,6 +116,30 @@ mod tests {
 		rows.into_iter().map(|row| row.name).collect()
 	}
 
+	fn user_table_names(conn: &mut SqliteConnection) -> Vec<String> {
+		let rows: Vec<NameRow> = diesel::sql_query(
+			"SELECT name FROM sqlite_master \
+			 WHERE type = 'table' \
+			 AND name NOT LIKE 'sqlite_%' \
+			 AND name != '__diesel_schema_migrations' \
+			 ORDER BY name",
+		)
+		.load(conn)
+		.expect("user tables");
+		rows.into_iter().map(|row| row.name).collect()
+	}
+
+	fn assert_live_catalog_tables(conn: &mut SqliteConnection) {
+		assert_eq!(
+			user_table_names(conn),
+			[
+				"checkout_notes".to_string(),
+				"project_groups".to_string(),
+				"projects".to_string(),
+			]
+		);
+	}
+
 	fn migrations_dir() -> PathBuf {
 		PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations")
 	}
@@ -156,17 +172,7 @@ mod tests {
 		let dir = tempdir().expect("tempdir");
 		let pool = init_db(dir.path()).expect("init db");
 		let mut conn = pool.lock().expect("lock db");
-
-		let tables: Vec<NameRow> = diesel::sql_query(
-			"SELECT name FROM sqlite_master \
-			 WHERE type = 'table' \
-			 AND name IN ('profiles', 'herdr_namespaces', \
-			              'profile_runtime_mappings', 'session_runtime_mappings') \
-			 ORDER BY name",
-		)
-		.load(&mut *conn)
-		.expect("list dropped tables");
-		assert!(tables.is_empty());
+		assert_live_catalog_tables(&mut conn);
 
 		assert_eq!(
 			column_names(&mut conn, "projects"),
@@ -185,13 +191,6 @@ mod tests {
 			column_names(&mut conn, "checkout_notes"),
 			["project_id", "checkout_path", "notes", "created_at"]
 		);
-		let pty: Vec<NameRow> = diesel::sql_query(
-			"SELECT name FROM sqlite_master \
-			 WHERE type = 'table' AND name = 'pty_sessions'",
-		)
-		.load(&mut *conn)
-		.expect("pty_sessions");
-		assert!(pty.is_empty());
 	}
 
 	#[test]
@@ -254,7 +253,7 @@ mod tests {
 	}
 
 	#[test]
-	fn drop_pty_sessions_keeps_projects_and_notes() {
+	fn embedded_migrations_keep_projects_and_notes() {
 		let dir = tempdir().expect("tempdir");
 		let pool = init_db(dir.path()).expect("init db");
 		let mut conn = pool.lock().expect("lock db");
@@ -283,20 +282,6 @@ mod tests {
 		assert_eq!(after.id, "proj-keep");
 		assert_eq!(after.notes, "keep-notes");
 		assert_eq!(after.folder, "/repo");
-
-		let pty: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM sqlite_master \
-			 WHERE type = 'table' AND name = 'pty_sessions'",
-		)
-		.get_result(&mut *conn)
-		.expect("pty_sessions");
-		assert_eq!(pty.count, 0);
-		let profiles: CountRow = diesel::sql_query(
-			"SELECT COUNT(*) AS count FROM sqlite_master \
-			 WHERE type = 'table' AND name = 'profiles'",
-		)
-		.get_result(&mut *conn)
-		.expect("profiles");
-		assert_eq!(profiles.count, 0);
+		assert_live_catalog_tables(&mut conn);
 	}
 }

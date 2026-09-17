@@ -4,8 +4,8 @@ import { use } from "react";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
-	closePtySession,
-	createPtySession,
+	closeTerminalSession,
+	createTerminalSession,
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import { removeTerminalStorage } from "./lib";
@@ -33,7 +33,7 @@ export function useCreateTerminalTab() {
 			const counter =
 				useTerminalStore.getState().profiles[profileId]?.counter ?? 0;
 			const nextTitle = title ?? `Terminal ${counter + 1}`;
-			const sessionId = await createPtySession({
+			const sessionId = await createTerminalSession({
 				meta: { profileId, title: nextTitle },
 				config: {
 					shell:
@@ -63,7 +63,7 @@ export function useCloseTerminalTab() {
 			profileId: string;
 			sessionId: string;
 		}) => {
-			await closePtySession({ sessionId });
+			await closeTerminalSession({ sessionId });
 		},
 		onSettled: (_data, _err, { profileId, sessionId }) => {
 			const terminalProfile = useTerminalStore.getState().profiles[profileId];

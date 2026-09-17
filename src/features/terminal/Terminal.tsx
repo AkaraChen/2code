@@ -11,13 +11,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNotificationStore } from "@/features/settings/stores/notificationStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
-  attachPtyOutput,
-  clearPtyOutput,
-  detachPtyOutput,
+  attachTerminalOutput,
+  clearTerminalOutput,
+  detachTerminalOutput,
   playSystemSound,
-  resizePty,
-  scrollPty,
-  writeToPty } from
+  resizeTerminal,
+  scrollTerminal,
+  writeToTerminal } from
 "@/generated";
 import type { SessionAgentStatus } from "@/generated";
 import { toast } from "sonner";
@@ -134,9 +134,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
     (rows: number, cols: number) => {
       if (!resizeReadyRef.current) return;
       if (rows <= 0 || cols <= 0) return;
-      void resizePty({ sessionId, rows, cols }).catch((error) => {
+      void resizeTerminal({ sessionId, rows, cols }).catch((error) => {
         consola.warn(
-          `[pty-terminal] failed to resize session ${sessionId}`,
+          `[terminal] failed to resize session ${sessionId}`,
           error
         );
       });
@@ -265,7 +265,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         if (!enabled || !sound) return;
         void playSystemSound({ name: sound }).catch((error) => {
           consola.warn(
-            `[pty-terminal] failed to play agent notification sound for session ${sessionId}`,
+            `[terminal] failed to play agent notification sound for session ${sessionId}`,
             error
           );
         });
@@ -399,14 +399,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         command: ReturnType<typeof herdrWheelScroll>,
       ) {
         if (!command) return;
-        void scrollPty({
+        void scrollTerminal({
           sessionId,
           direction: command.direction,
           lines: command.lines,
           source: command.source,
         }).catch((error) => {
           consola.warn(
-            `[pty-terminal] failed to scroll session ${sessionId}`,
+            `[terminal] failed to scroll session ${sessionId}`,
             error
           );
         });
@@ -522,14 +522,14 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           }
           if (action.type === "clear-screen") {
             if (transportKind === "herdr") {
-              void writeToPty({ sessionId, data: "\x0C" });
+              void writeToTerminal({ sessionId, data: "\x0C" });
               return false;
             }
             term.clear();
-            void clearPtyOutput({ sessionId }).
+            void clearTerminalOutput({ sessionId }).
             catch(() => {}).
             finally(() => {
-              void writeToPty({ sessionId, data: "\x0C" });
+              void writeToTerminal({ sessionId, data: "\x0C" });
             });
             return false;
           }
@@ -545,13 +545,13 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
             void readClipboardText().
             then((text) => {
               if (text) {
-                void writeToPty({ sessionId, data: text });
+                void writeToTerminal({ sessionId, data: text });
               }
             }).
             catch(() => {});
             return false;
           }
-          void writeToPty({ sessionId, data: action.sequence });
+          void writeToTerminal({ sessionId, data: action.sequence });
           return false;
         }
 
@@ -569,7 +569,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       // 7. Local cold-restart scrollback is restored after ownership is known.
       //    Herdr panes wait for the first full frame instead.
 
-      // 8. Initial fit. Do not resizePty until the owning backend is
+      // 8. Initial fit. Do not resizeTerminal until the owning backend is
       //    attached — Herdr fail-closes helper_for before attach.
       measureAndResize(term, addonsResult.fitAddon, container);
 
@@ -633,9 +633,9 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 
         cleanups.push(blockHerdrQueryReplies(term));
         const cursor = new HerdrFrameCursor();
-        await attachPtyOutput({ sessionId, streamId });
+        await attachTerminalOutput({ sessionId, streamId });
         if (disposed) {
-          void detachPtyOutput({ sessionId, streamId }).catch(() => {});
+          void detachTerminalOutput({ sessionId, streamId }).catch(() => {});
           return;
         }
         resizeReadyRef.current = true;
@@ -650,7 +650,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           },
           onError: (error) => {
             consola.warn(
-              `[pty-terminal] failed to stream Herdr output for session ${sessionId}`,
+              `[terminal] failed to stream Herdr output for session ${sessionId}`,
               error
             );
           }
@@ -661,7 +661,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           if (!disposed) applyHerdrAgentDto(dto);
         } catch (error) {
           consola.warn(
-            `[pty-terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
+            `[terminal] failed to hydrate Herdr agent status for session ${sessionId}`,
             error
           );
           if (!disposed) applyHerdrAgentDto(null);
@@ -674,7 +674,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
           },
           onError: (error) => {
             consola.warn(
-              `[pty-terminal] failed to stream Herdr agent status for session ${sessionId}`,
+              `[terminal] failed to stream Herdr agent status for session ${sessionId}`,
               error
             );
           }
@@ -682,24 +682,24 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
       }
       void setupListenersAndReplayHistory().catch((error) => {
         consola.warn(
-          `[pty-terminal] setup failed for session ${sessionId}`,
+          `[terminal] setup failed for session ${sessionId}`,
           error
         );
       });
 
       // 13. Sync handlers
       const dataDisposable = term.onData((data) => {
-        writeToPty({ sessionId, data }).catch((error) => {
+        writeToTerminal({ sessionId, data }).catch((error) => {
           consola.warn(
-            `[pty-terminal] failed to write input for session ${sessionId}`,
+            `[terminal] failed to write input for session ${sessionId}`,
             error
           );
         });
       });
       const binaryDisposable = term.onBinary((data) => {
-        writeToPty({ sessionId, data }).catch((error) => {
+        writeToTerminal({ sessionId, data }).catch((error) => {
           consola.warn(
-            `[pty-terminal] failed to write binary input for session ${sessionId}`,
+            `[terminal] failed to write binary input for session ${sessionId}`,
             error
           );
         });
@@ -716,7 +716,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
         disposed = true;
         resizeReadyRef.current = false;
 
-        void detachPtyOutput({ sessionId, streamId }).catch(() => {});
+        void detachTerminalOutput({ sessionId, streamId }).catch(() => {});
 
         const stillOpen = Object.values(useTerminalStore.getState().profiles).some(
           (profile) => profile.tabs.some((tab) => tab.id === sessionId)

@@ -84,6 +84,6 @@ async function loadRestorableTerminals(projects: ProjectWithProfiles[]) {
 	);
 	const removed = sweepTerminalStorage(liveSessionIds);
 	if (removed > 0) {
-		consola.debug(`[pty-restore] swept ${removed} stale terminal storage keys`);
+		consola.debug(`[session-restore] swept ${removed} stale terminal storage keys`);
 	}
 }

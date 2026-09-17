@@ -8,8 +8,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useFileViewerTabsStore } from "@/features/projects/fileViewerTabsStore";
 import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import {
-	closePtySession,
-	createPtySession,
+	closeTerminalSession,
+	createTerminalSession,
 } from "@/generated";
 import { ThemeContext } from "@/shared/providers/themeContext";
 import {
@@ -22,8 +22,8 @@ import {
 import { useTerminalStore } from "./store";
 import { terminalThemes } from "./themes";
 
-const createPtySessionMock = createPtySession as unknown as Mock;
-const closePtySessionMock = closePtySession as unknown as Mock;
+const createTerminalSessionMock = createTerminalSession as unknown as Mock;
+const closeTerminalSessionMock = closeTerminalSession as unknown as Mock;
 
 function createWrapper(isDark = true) {
 	const queryClient = new QueryClient({
@@ -66,15 +66,15 @@ function resetStores() {
 		syncTerminalTheme: false,
 	});
 	localStorage.clear();
-	createPtySessionMock.mockClear();
-	closePtySessionMock.mockClear();
+	createTerminalSessionMock.mockClear();
+	closeTerminalSessionMock.mockClear();
 }
 
 describe("terminal hooks", () => {
 	beforeEach(() => {
 		resetStores();
-		createPtySessionMock.mockResolvedValue("mock-session-id");
-		closePtySessionMock.mockResolvedValue(undefined);
+		createTerminalSessionMock.mockResolvedValue("mock-session-id");
+		closeTerminalSessionMock.mockResolvedValue(undefined);
 	});
 
 	it("creates terminal tabs with the next default title and stores them on success", async () => {
@@ -97,7 +97,7 @@ describe("terminal hooks", () => {
 			});
 		});
 
-		expect(createPtySessionMock).toHaveBeenCalledWith({
+		expect(createTerminalSessionMock).toHaveBeenCalledWith({
 			meta: {
 				profileId: "profile-1",
 				title: "Terminal 2",
@@ -145,7 +145,7 @@ describe("terminal hooks", () => {
 			});
 		});
 
-		expect(closePtySessionMock).toHaveBeenCalledWith({
+		expect(closeTerminalSessionMock).toHaveBeenCalledWith({
 			sessionId: "session-1",
 		});
 		expect(useTerminalStore.getState().profiles["profile-1"]).toBeUndefined();

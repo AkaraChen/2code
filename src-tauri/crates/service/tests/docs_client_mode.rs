@@ -1,5 +1,5 @@
-//! Source-string lock: `docs/` + `AGENTS.md` describe Herdr client-mode,
-//! not the deleted Local PTY / sqlite `profiles` world as current.
+//! Source-string lock: `docs/` + `AGENTS.md` describe Herdr client-mode
+//! and live `pane_id` sessions, not a Local spawn / sqlite-session world.
 
 const DATA_FLOW: &str = include_str!("../../../../docs/data-flow.md");
 const ARCHITECTURE: &str = include_str!("../../../../docs/architecture.md");
@@ -18,12 +18,7 @@ const PIN: &str = include_str!("../../infra/tests/fixtures/herdr/pin.json");
 const LIB_RS: &str = include_str!("../../../src/lib.rs");
 
 #[test]
-fn data_flow_does_not_document_local_pty_or_sqlite_restore_as_current() {
-	assert!(!DATA_FLOW
-		.contains("Session metadata inserted into the `pty_sessions` table"));
-	assert!(!DATA_FLOW.contains("service::pty::gc_orphan_logs"));
-	assert!(!DATA_FLOW.contains("infra::pty::create_session()"));
-	assert!(!DATA_FLOW.contains("pty_logs/{id}.log"));
+fn data_flow_documents_herdr_pane_reattach() {
 	assert!(!DATA_FLOW.contains("resolve_context_folder"));
 	assert!(!DATA_FLOW.contains("profile.worktree_path"));
 	assert!(!DATA_FLOW.contains("git worktree add ~/.2code/workspace"));
@@ -31,6 +26,12 @@ fn data_flow_does_not_document_local_pty_or_sqlite_restore_as_current() {
 	assert!(DATA_FLOW.contains("reattach pane_id"));
 	assert!(DATA_FLOW.contains("reconcile_profile_checkout"));
 	assert!(DATA_FLOW.contains("worktree.create"));
+	assert!(DATA_FLOW.contains("create_terminal_session"));
+	assert!(DATA_FLOW.contains("createTerminalSession"));
+	assert!(DATA_FLOW.contains("handler/terminal.rs"));
+	assert!(DATA_FLOW.contains("attach_terminal_output"));
+	assert!(DATA_FLOW.contains("TerminalSessionRecord"));
+	assert!(!DATA_FLOW.contains("Handlers keep the existing IPC names"));
 }
 
 #[test]
@@ -51,39 +52,46 @@ fn configuration_matches_live_sqlite_schema() {
 	assert!(CONFIGURATION.contains("#### `project_groups`"));
 	assert!(CONFIGURATION.contains("#### `checkout_notes`"));
 	assert!(!CONFIGURATION.contains("#### `profiles`"));
-	assert!(!CONFIGURATION.contains("#### `pty_sessions`"));
-	assert!(!CONFIGURATION.contains("#### `pty_output_chunks`"));
+	assert!(CONFIGURATION.contains("Sessions are live `pane_id`s"));
 	assert!(CONFIGURATION.contains("binaries/herdr"));
 }
 
 #[test]
 fn architecture_and_api_describe_herdr_only_runtime() {
-	assert!(!ARCHITECTURE.contains("portable-pty"));
-	assert!(!ARCHITECTURE.contains("PtySessionMap"));
 	assert!(ARCHITECTURE.contains("RuntimeRouter"));
 	assert!(ARCHITECTURE.contains("pane_id"));
+	assert!(ARCHITECTURE.contains("create_terminal_session"));
+	assert!(ARCHITECTURE.contains("`terminal.rs`"));
+	assert!(!ARCHITECTURE.contains("Existing IPC names stay"));
 	assert!(!API.contains("cascade to profiles/sessions"));
 	assert!(API.contains("Forget the catalog row and retain"));
 	assert!(API.contains("Derived GUI DTO"));
 	assert!(API.contains("workspace_id"));
-	assert!(API.contains("There is no `get_pty_session_history`"));
+	assert!(API.contains("`create_terminal_session`"));
+	assert!(API.contains("TerminalSessionRecord"));
+	assert!(API.contains("handler/terminal.rs"));
+	assert!(API.contains("There is no sqlite history restore command"));
+	assert!(API.contains("Restore is reattach of a live `pane_id`"));
+	assert!(!API.contains("Handlers keep these names"));
 	assert!(!README.contains("2code-helper"));
 	assert!(!NOTIFY.contains("2code-helper"));
 }
 
 #[test]
-fn agents_md_does_not_list_sqlite_profiles_or_pty_sessions_as_the_model() {
-	assert!(!ROOT_AGENTS.contains("projects, profiles, pty_sessions"));
-	assert!(!ROOT_CLAUDE.contains("`projects`, `profiles`, `pty_sessions`"));
+fn agents_md_lists_live_catalog_and_herdr_sessions() {
+	assert!(ROOT_AGENTS.contains("checkout_notes"));
+	assert!(ROOT_CLAUDE.contains("checkout_notes"));
 	assert!(!ROOT_CLAUDE.contains("Orphan logs are reaped"));
-	assert!(!ROOT_CLAUDE.contains("service::pty::gc_orphan_logs"));
-	assert!(!SRC_TAURI_AGENTS.contains("Diesel CRUD: project, profile, pty"));
+	assert!(SRC_TAURI_AGENTS.contains("create_terminal_session"));
 	assert!(!SERVICE_AGENTS.contains("git worktree add {base}"));
 	assert!(SERVICE_AGENTS.contains("worktree.create"));
 	assert!(TERMINAL_KEY_PATTERNS.contains("reattaches each live `pane_id`"));
+	assert!(TERMINAL_KEY_PATTERNS.contains("attach_terminal_output"));
 	assert!(
 		!TERMINAL_KEY_PATTERNS.contains("Fetch closed session history from DB")
 	);
+	assert!(ROOT_CLAUDE.contains("TerminalSessionRecord"));
+	assert!(ROOT_CLAUDE.contains("attach_terminal_output"));
 }
 
 #[test]

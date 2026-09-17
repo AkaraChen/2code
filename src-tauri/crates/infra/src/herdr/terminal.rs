@@ -196,9 +196,9 @@ impl From<HerdrTerminalError> for AppError {
 				"{pending_frames} frames, {pending_bytes} bytes"
 			)),
 			HerdrTerminalError::NotAttached => {
-				AppError::PtyError(err.to_string())
+				AppError::TerminalError(err.to_string())
 			}
-			other => AppError::PtyError(other.to_string()),
+			other => AppError::TerminalError(other.to_string()),
 		}
 	}
 }

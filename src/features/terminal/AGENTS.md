@@ -1,14 +1,14 @@
 # AGENTS.md — src/features/terminal
 
 ## OVERVIEW
-PTY terminal management with xterm.js. The most complex frontend feature.
+Terminal management with xterm.js. The most complex frontend feature.
 
 ## FILES
 | File | Role |
 |------|------|
 | `store.ts` | Zustand+Immer state: `profiles` (tabs per project), `agentStatuses` (session → running/waiting) |
 | `state.ts` | Terminal state types and tab lifecycle logic |
-| `Terminal.tsx` | xterm.js component (~305 lines) — connects PTY to xterm |
+| `Terminal.tsx` | xterm.js component (~305 lines) — connects the Herdr session to xterm |
 | `detector/` | Agent status detector; one manifest file per agent under `detector/rules/` |
 | `TerminalLayer.tsx` | Persistent overlay across all routes (CSS display:none) |
 | `TerminalTabs.tsx` | Tab bar with agent status dots |
@@ -43,7 +43,7 @@ xterm 6 measures through canvas but paints through the DOM, and both of its meas
 |------|----------|
 | Tab state shape | `store.ts` — `profiles[profileId].tabs`, `activeTabId`, `counter` |
 | xterm instance creation | `Terminal.tsx` lines ~145–297 (ref callback) |
-| PTY output streaming | `attach_pty_output(sessionId, streamId)` then `stream_herdr_output` owns `Channel<HerdrTerminalFrame>` in `Terminal.tsx`; `detach_pty_output` must use the same `streamId` so stale cleanup cannot remove a newer stream |
+| Terminal output streaming | `attach_terminal_output(sessionId, streamId)` then `stream_herdr_output` owns `Channel<HerdrTerminalFrame>` in `Terminal.tsx`; `detach_terminal_output` must use the same `streamId` so stale cleanup cannot remove a newer stream |
 | Scrollback restore | `restoration.ts` reattaches live Herdr `pane_id`; no sqlite history |
 | Agent rules | `detector/rules/*.ts` — keep one agent per manifest file |
 | Terminal not filling its width | `lib/xtermMetricsPatch.ts` — compare xterm's `dimensions.css.cell.width` against an attached-canvas `measureText("W")` |

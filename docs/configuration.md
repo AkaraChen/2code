@@ -30,7 +30,7 @@
 
 ## Environment Variables
 
-There is no Local PTY env injection from `infra/pty.rs` (`TERM`, `_2CODE_HELPER`, `ZDOTDIR`, `TWOCODE_RUNTIME`). Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md).
+There is no Local env injection of `TERM` / `_2CODE_HELPER` / `ZDOTDIR`. Herdr panes own their own session environment. GUI startup isolates the dedicated `2code` Herdr namespace (never the user default session); see [Herdr integration](herdr-integration.md). No environment variable or CLI flag selects a runtime backend.
 
 `2code.json` `init_script` and New Tab `startup_commands` are sent once after Herdr `tab.create` via `pane.send_input`.
 
@@ -46,7 +46,7 @@ There is no Local PTY env injection from `infra/pty.rs` (`TERM`, `_2CODE_HELPER`
 
 SQLite database stored at `{app_data_dir}/app.db`. Pragmas: `journal_mode=WAL`, `foreign_keys=ON`. Live schema: [`src-tauri/crates/model/src/schema.rs`](../src-tauri/crates/model/src/schema.rs).
 
-sqlite `profiles`, `pty_sessions`, `pty_output_chunks`, and mapping tables are **DROPped**. They are not live. Profile identity is Herdr `workspace_id`. Sessions are live `pane_id`s.
+sqlite profile/session and mapping tables are **DROPped**. They are not live. Profile identity is Herdr `workspace_id`. Sessions are live `pane_id`s.
 
 ### Tables
 

@@ -73,7 +73,7 @@ just coverage                    # llvm-cov HTML report
 - Conditional rendering of `<Terminal>` — breaks xterm.js state
 - Legacy UI-library APIs/components — removed; use shadcn/ui primitives from `src/components/ui`
 - Long-held DB mutex locks — causes deadlocks
-- Reintroducing Local PTY, `TWOCODE_RUNTIME`, or sqlite `profiles` as authority
+- Reintroducing a Local adapter, an env-or-CLI runtime-backend switch, sqlite profile/session tables as authority, or Local session-layer names in live identifiers. Enforced by `src-tauri/crates/service/tests/herdr_only_audit.rs`.
 
 ## GOTCHAS
 - `src-tauri/src/main.rs:1` — `#![cfg_attr(…, windows_subsystem = "windows")]` has `DO NOT REMOVE!!`

@@ -60,9 +60,9 @@ fn push_existing_shell(
 
 /// An App Execution Alias (`%LOCALAPPDATA%\Microsoft\WindowsApps\*.exe`) is a
 /// zero-byte reparse point whose `IO_REPARSE_TAG_APPEXECLINK` is only honored
-/// by the Windows shell/loader. portable_pty's ConPTY spawn path does not
-/// resolve it, so spawning the alias path produces no child and the terminal
-/// stays blank. We must skip these stubs in favor of the real binary.
+/// by the Windows shell/loader. ConPTY does not resolve that reparse tag, so
+/// spawning the alias path produces no child and the terminal stays blank.
+/// We must skip these stubs in favor of the real binary.
 #[cfg(windows)]
 fn is_app_exec_alias_stub(path: &str) -> bool {
 	let lower = path.to_lowercase().replace('/', "\\");

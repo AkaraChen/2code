@@ -30,7 +30,7 @@ export async function hydrateRestorableSessions(
 			await getSessionBackend({ sessionId: session.id });
 		} catch (error) {
 			consola.error(
-				`[pty-restore] failed to resolve backend for ${session.id}`,
+				`[session-restore] failed to resolve backend for ${session.id}`,
 				error,
 			);
 			continue;
@@ -63,7 +63,7 @@ export function restorePendingTerminalTab(
 
 	const promise = runRestore(profileId, restore.oldSessionId)
 		.catch((error) => {
-			consola.error(`[pty-restore] failed: ${restore.oldSessionId}`, error);
+			consola.error(`[session-restore] failed: ${restore.oldSessionId}`, error);
 			useTerminalStore.getState().closeTab(profileId, restore.oldSessionId);
 		})
 		.finally(() => {

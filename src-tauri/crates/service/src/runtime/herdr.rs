@@ -1,10 +1,10 @@
 //! Herdr terminal lifecycle and live CLI attach.
 //!
 //! Create/list/close use live `pane_id` identities (`wN:pK`) from
-//! `session.snapshot` or `HerdrRuntimeSync`. They do not INSERT / UPDATE
-//! / DELETE sqlite `pty_sessions` or `session_runtime_mappings`. List
-//! returns every live pane in the project's open workspaces; leftover
-//! sqlite rows are not merged. New Tab returns the created `pane_id`.
+//! `session.snapshot` or `HerdrRuntimeSync`. They do not write sqlite
+//! session or mapping tables. List returns every live pane in the
+//! project's open workspaces; leftover sqlite rows are not merged.
+//! New Tab returns the created `pane_id`.
 //! Write/resize go through an attached CLI control helper.
 //! Restore stays fail-closed: reopen lists live panes and attaches them.
 //! History/flush/clear stay fail-closed. A missing client keeps the
@@ -27,9 +27,11 @@ use infra::herdr::transport::{
 	WorktreeListEntry, WorktreeOpenResult, WorktreeRemoveResult,
 };
 use model::error::AppError;
-use model::pty::{PtyConfig, PtySessionMeta, PtySessionRecord, RestoreResult};
 use model::runtime::{
 	CreateSessionResult, HerdrTerminalFrame, RuntimeBackend, SessionAgentStatus,
+};
+use model::session::{
+	RestoreResult, TerminalConfig, TerminalSessionMeta, TerminalSessionRecord,
 };
 use serde_json::Value;
 
@@ -261,7 +263,7 @@ impl HerdrStartupFailure {
 			Self::Incompatible(message) => {
 				AppError::HerdrServerIncompatible(message.clone())
 			}
-			Self::Other(message) => AppError::PtyError(message.clone()),
+			Self::Other(message) => AppError::TerminalError(message.clone()),
 		}
 	}
 }
@@ -375,7 +377,7 @@ impl HerdrStubAdapter {
 		self.startup_error
 			.as_ref()
 			.map(HerdrStartupFailure::to_app)
-			.unwrap_or_else(|| AppError::PtyError(UNAVAILABLE.to_string()))
+			.unwrap_or_else(|| AppError::TerminalError(UNAVAILABLE.to_string()))
 	}
 
 	fn fail(&self, op: &'static str) -> AppError {
@@ -543,7 +545,7 @@ impl HerdrStubAdapter {
 				)
 			})?;
 			if attached.stream_id != stream_id {
-				return Err(AppError::PtyError(
+				return Err(AppError::TerminalError(
 					"stale Herdr attach stream_id".into(),
 				));
 			}
@@ -595,7 +597,9 @@ impl HerdrStubAdapter {
 
 fn require_absolute_cwd(cwd: &str) -> Result<(), AppError> {
 	if cwd.is_empty() || !Path::new(cwd).is_absolute() {
-		return Err(AppError::PtyError("cwd must be an absolute path".into()));
+		return Err(AppError::TerminalError(
+			"cwd must be an absolute path".into(),
+		));
 	}
 	Ok(())
 }
@@ -765,7 +769,7 @@ fn session_record_from_pane(
 	pane: &ProjectedPane,
 	checkout: &str,
 	project_id: &str,
-) -> PtySessionRecord {
+) -> TerminalSessionRecord {
 	let title = projection
 		.tab(&pane.tab_id)
 		.map(|tab| tab.label.as_str())
@@ -777,7 +781,7 @@ fn session_record_from_pane(
 	} else {
 		pane.cwd.clone()
 	};
-	PtySessionRecord {
+	TerminalSessionRecord {
 		id: pane.pane_id.clone(),
 		project_id: project_id.to_string(),
 		profile_id: pane.workspace_id.clone(),
@@ -850,8 +854,8 @@ impl HerdrLifecycle {
 
 	fn send_create_startup(
 		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 		pane_id: &str,
 	) {
 		let init_script = self.project_init_script(&meta.profile_id);
@@ -871,8 +875,8 @@ impl HerdrLifecycle {
 
 	fn create_session(
 		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<CreateSessionResult, AppError> {
 		require_absolute_cwd(&config.cwd)?;
 		let workspace_id = self.bound_workspace(&meta.profile_id)?;
@@ -892,7 +896,7 @@ impl HerdrLifecycle {
 			Err(err) => return Err(err),
 		};
 		if listed.iter().any(|pane| pane.pane_id == pane_id) {
-			return Err(AppError::PtyError(format!(
+			return Err(AppError::TerminalError(format!(
 				"pane {pane_id} is already live; not replaying"
 			)));
 		}
@@ -936,7 +940,7 @@ impl HerdrLifecycle {
 		&self,
 		project_id: &str,
 		projection: &RuntimeProjection,
-	) -> Result<Vec<PtySessionRecord>, AppError> {
+	) -> Result<Vec<TerminalSessionRecord>, AppError> {
 		let folder = self.with_db(|conn| {
 			repo::project::find_by_id(conn, project_id).map(|p| p.folder)
 		})?;
@@ -977,8 +981,8 @@ impl TerminalRuntime for HerdrStubAdapter {
 
 	fn create_session(
 		&self,
-		meta: &PtySessionMeta,
-		config: &PtyConfig,
+		meta: &TerminalSessionMeta,
+		config: &TerminalConfig,
 	) -> Result<CreateSessionResult, AppError> {
 		self.record("create");
 		self.lifecycle()?.create_session(meta, config)
@@ -987,8 +991,8 @@ impl TerminalRuntime for HerdrStubAdapter {
 	fn restore_session(
 		&self,
 		_old_session_id: &str,
-		_meta: &PtySessionMeta,
-		_config: &PtyConfig,
+		_meta: &TerminalSessionMeta,
+		_config: &TerminalConfig,
 	) -> Result<RestoreResult, AppError> {
 		Err(self.fail("restore"))
 	}
@@ -1002,7 +1006,7 @@ impl TerminalRuntime for HerdrStubAdapter {
 	fn list_project_sessions(
 		&self,
 		project_id: &str,
-	) -> Result<Vec<PtySessionRecord>, AppError> {
+	) -> Result<Vec<TerminalSessionRecord>, AppError> {
 		self.record("list");
 		let projection = self.live_projection()?;
 		self.lifecycle()?
@@ -1109,15 +1113,13 @@ mod tests {
 	use serde_json::json;
 
 	use super::*;
-	use crate::runtime::{
-		HerdrCliAttach, RuntimeRouter, RuntimeSelector,
-	};
+	use crate::runtime::{HerdrCliAttach, RuntimeRouter, RuntimeSelector};
 	use model::runtime::RuntimeBackend;
 
 	#[derive(QueryableByName)]
-	struct SqliteCountRow {
-		#[diesel(sql_type = diesel::sql_types::Integer)]
-		count: i32,
+	struct SqliteNameRow {
+		#[diesel(sql_type = diesel::sql_types::Text)]
+		name: String,
 	}
 
 	fn setup_db() -> DbPool {
@@ -1374,7 +1376,7 @@ mod tests {
 					.and_then(|panes| panes.first())
 					.cloned()
 					.ok_or_else(|| {
-						AppError::PtyError("no pane to reuse".into())
+						AppError::TerminalError("no pane to reuse".into())
 					})?;
 				return Ok(TabCreateResult {
 					workspace_id: workspace_id.to_string(),
@@ -1492,7 +1494,7 @@ mod tests {
 			&self,
 			_request: WorktreeCreateRequest<'_>,
 		) -> Result<WorktreeCreateResult, AppError> {
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"fake terminals do not create worktrees".into(),
 			))
 		}
@@ -1535,7 +1537,7 @@ mod tests {
 			_cwd: &Path,
 			_path: &Path,
 		) -> Result<WorktreeOpenResult, AppError> {
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"fake terminals do not open worktrees".into(),
 			))
 		}
@@ -1545,7 +1547,7 @@ mod tests {
 			_workspace_id: &str,
 			_force: bool,
 		) -> Result<WorktreeRemoveResult, AppError> {
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"fake terminals do not remove worktrees".into(),
 			))
 		}
@@ -1554,13 +1556,13 @@ mod tests {
 			&self,
 			_request: WorkspaceCreateRequest<'_>,
 		) -> Result<WorkspaceCreateResult, AppError> {
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"fake terminals do not create workspaces".into(),
 			))
 		}
 
 		fn workspace_close(&self, _workspace_id: &str) -> Result<(), AppError> {
-			Err(AppError::PtyError(
+			Err(AppError::TerminalError(
 				"fake terminals do not close workspaces".into(),
 			))
 		}
@@ -1715,15 +1717,15 @@ time.sleep(30)
 			)
 		}
 
-		fn meta() -> PtySessionMeta {
-			PtySessionMeta {
+		fn meta() -> TerminalSessionMeta {
+			TerminalSessionMeta {
 				profile_id: "w1".to_string(),
 				title: "shell".to_string(),
 			}
 		}
 
-		fn config(&self) -> PtyConfig {
-			PtyConfig {
+		fn config(&self) -> TerminalConfig {
+			TerminalConfig {
 				shell: "/bin/sh".into(),
 				cwd: self.cwd.path().to_string_lossy().into_owned(),
 				rows: 24,
@@ -1734,13 +1736,26 @@ time.sleep(30)
 
 		fn sqlite_session_ids(&self) -> Vec<String> {
 			let mut conn = self.db.lock().unwrap();
-			let row: SqliteCountRow = diesel::sql_query(
-				"SELECT COUNT(*) AS count FROM sqlite_master \
-				 WHERE type = 'table' AND name = 'pty_sessions'",
+			let tables: Vec<SqliteNameRow> = diesel::sql_query(
+				"SELECT name FROM sqlite_master \
+				 WHERE type = 'table' \
+				 AND name NOT LIKE 'sqlite_%' \
+				 AND name != '__diesel_schema_migrations' \
+				 ORDER BY name",
 			)
-			.get_result(&mut *conn)
+			.load(&mut *conn)
 			.unwrap();
-			assert_eq!(row.count, 0, "pty_sessions must be dropped");
+			let names: Vec<String> =
+				tables.into_iter().map(|row| row.name).collect();
+			assert_eq!(
+				names,
+				vec![
+					"checkout_notes".to_string(),
+					"project_groups".to_string(),
+					"projects".to_string(),
+				],
+				"live sqlite user tables must stay the catalog allowlist"
+			);
 			Vec::new()
 		}
 	}
@@ -1763,7 +1778,7 @@ time.sleep(30)
 		let created = fx
 			.adapter
 			.create_session(
-				&PtySessionMeta {
+				&TerminalSessionMeta {
 					profile_id: "w1".to_string(),
 					title: "shell".to_string(),
 				},
@@ -1791,7 +1806,7 @@ time.sleep(30)
 		let created = fx
 			.adapter
 			.create_session(
-				&PtySessionMeta {
+				&TerminalSessionMeta {
 					profile_id: "w1".to_string(),
 					title: "shell".to_string(),
 				},
@@ -1818,11 +1833,11 @@ time.sleep(30)
 		let created = fx
 			.adapter
 			.create_session(
-				&PtySessionMeta {
+				&TerminalSessionMeta {
 					profile_id: "w2".to_string(),
 					title: "shell".to_string(),
 				},
-				&PtyConfig {
+				&TerminalConfig {
 					shell: "/bin/sh".into(),
 					cwd: linked.to_string_lossy().into_owned(),
 					rows: 24,
@@ -2290,7 +2305,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn router_herdr_create_does_not_spawn_local_pty() {
+	fn router_herdr_create_does_not_spawn_local() {
 		let fx = Fixture::new();
 		let router = fx.router();
 		let created = router
@@ -2305,7 +2320,7 @@ time.sleep(30)
 
 	#[cfg(unix)]
 	#[test]
-	fn router_herdr_attach_does_not_spawn_local_pty() {
+	fn router_herdr_attach_does_not_spawn_local() {
 		let fx = Fixture::new();
 		let router = fx.router();
 		let created = router
@@ -2418,44 +2433,42 @@ time.sleep(30)
 
 	#[test]
 	fn gui_detach_is_not_pane_close() {
-		let pty = include_str!("../../../../src/handler/pty.rs");
-		let detach = pty
-			.split("pub fn detach_pty_output")
+		let handler = include_str!("../../../../src/handler/terminal.rs");
+		let detach = handler
+			.split("pub fn detach_terminal_output")
 			.nth(1)
 			.unwrap()
-			.split("pub fn flush_pty_output")
+			.split("pub fn flush_terminal_output")
 			.next()
 			.unwrap();
 		assert!(!detach.contains("close_session"));
 		assert!(!detach.contains("pane.close"));
 		assert!(detach.contains("detach_output"));
-		let close = pty
-			.split("pub fn close_pty_session")
+		let close = handler
+			.split("pub fn close_terminal_session")
 			.nth(1)
 			.unwrap()
 			.split("pub async fn list_project_sessions")
 			.next()
 			.unwrap();
 		assert!(close.contains("close_session"));
-		assert!(pty.contains("stream_herdr_output"));
-		assert!(pty.contains("HerdrTerminalFrame"));
-		assert!(pty.contains("get_session_backend"));
-		assert!(pty.contains("get_session_agent_status"));
-		assert!(pty.contains("stream_session_agent_status"));
-		assert!(pty.contains("scroll_pty"));
-		assert!(!pty.contains("stream_pty_output"));
-		assert!(!pty.contains("get_pty_session_history"));
-		assert!(!pty.contains("restore_pty_session"));
-		assert!(!pty.contains("delete_pty_session_record"));
-		assert!(!pty.contains("pane.send_text"));
-		assert!(!pty.contains("pane.report_agent"));
-		assert!(!pty.contains("agent.start"));
+		assert!(handler.contains("stream_herdr_output"));
+		assert!(handler.contains("HerdrTerminalFrame"));
+		assert!(handler.contains("get_session_backend"));
+		assert!(handler.contains("get_session_agent_status"));
+		assert!(handler.contains("stream_session_agent_status"));
+		assert!(handler.contains("scroll_terminal"));
+		assert!(handler.contains("create_terminal_session"));
+		assert!(handler.contains("attach_terminal_output"));
+		assert!(!handler.contains("pane.send_text"));
+		assert!(!handler.contains("pane.report_agent"));
+		assert!(!handler.contains("agent.start"));
 		let lib = include_str!("../../../../src/lib.rs");
 		assert!(lib.contains("stream_herdr_output"));
 		assert!(lib.contains("get_session_backend"));
 		assert!(lib.contains("get_session_agent_status"));
 		assert!(lib.contains("stream_session_agent_status"));
-		assert!(lib.contains("scroll_pty"));
+		assert!(lib.contains("scroll_terminal"));
 		assert!(lib.contains("release_attachments"));
 		assert!(!lib.contains("server.stop"));
 		assert!(!lib.contains("ensure_herdr_listener"));
@@ -2464,8 +2477,8 @@ time.sleep(30)
 
 	#[test]
 	fn session_backend_ipc_is_herdr_only() {
-		let pty = include_str!("../../../../src/handler/pty.rs");
-		let cmd = pty
+		let handler = include_str!("../../../../src/handler/terminal.rs");
+		let cmd = handler
 			.split("pub fn get_session_backend")
 			.nth(1)
 			.unwrap()
@@ -2477,7 +2490,7 @@ time.sleep(30)
 		assert!(!cmd.contains("selected_backend"));
 		assert!(!cmd.contains("discovery"));
 		assert!(!cmd.contains("RuntimeRouter::new"));
-		let agent = pty
+		let agent = handler
 			.split("pub fn get_session_agent_status")
 			.nth(1)
 			.unwrap()
@@ -2487,11 +2500,11 @@ time.sleep(30)
 		assert!(agent.contains("session_agent_status"));
 		assert!(!agent.contains("selected_backend"));
 		assert!(!agent.contains("discovery"));
-		let stream = pty
+		let stream = handler
 			.split("pub async fn stream_session_agent_status")
 			.nth(1)
 			.unwrap()
-			.split("pub fn attach_pty_output")
+			.split("pub fn attach_terminal_output")
 			.next()
 			.unwrap();
 		assert!(stream.contains("pump_session_agent_status"));
@@ -2587,7 +2600,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn list_omits_leftover_sqlite_pty_sessions() {
+	fn list_omits_ids_that_are_not_live_panes() {
 		let fx = Fixture::new();
 		let created = fx
 			.adapter
@@ -2646,7 +2659,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn herdr_reopen_lists_bound_panes_without_local_pty() {
+	fn herdr_reopen_lists_bound_panes_without_local_spawn() {
 		let fx = Fixture::new();
 		let created = fx
 			.router()
@@ -2788,11 +2801,11 @@ time.sleep(30)
 		assert!(matches!(
 			closed
 				.create_session(
-					&PtySessionMeta {
+					&TerminalSessionMeta {
 						profile_id: "w1".into(),
 						title: "x".into(),
 					},
-					&PtyConfig {
+					&TerminalConfig {
 						shell: "/bin/sh".into(),
 						cwd: "/tmp".into(),
 						rows: 24,
@@ -2805,11 +2818,11 @@ time.sleep(30)
 		));
 		assert!(stub
 			.create_session(
-				&PtySessionMeta {
+				&TerminalSessionMeta {
 					profile_id: "w1".into(),
 					title: "x".into(),
 				},
-				&PtyConfig {
+				&TerminalConfig {
 					shell: "/bin/sh".into(),
 					cwd: "/tmp".into(),
 					rows: 24,
