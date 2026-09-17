@@ -63,4 +63,4 @@ Tests colocated in `#[cfg(test)]` modules. Integration tests in `tests/`.
 - Business logic in handlers — delegate to service layer
 - Long-held `Mutex` locks across async operations — causes deadlocks
 - Editing `src/schema.rs` / `crates/model/src/schema.rs` manually — Diesel generated
-- Reintroducing Local PTY, `TWOCODE_RUNTIME`, or sqlite `profiles` as authority
+- Reintroducing Local PTY, an env-or-CLI runtime-backend switch, or sqlite `profiles` as authority
