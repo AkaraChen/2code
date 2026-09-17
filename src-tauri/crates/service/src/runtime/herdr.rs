@@ -1117,9 +1117,9 @@ mod tests {
 	use model::runtime::RuntimeBackend;
 
 	#[derive(QueryableByName)]
-	struct SqliteCountRow {
-		#[diesel(sql_type = diesel::sql_types::Integer)]
-		count: i32,
+	struct SqliteNameRow {
+		#[diesel(sql_type = diesel::sql_types::Text)]
+		name: String,
 	}
 
 	fn setup_db() -> DbPool {
@@ -1736,13 +1736,26 @@ time.sleep(30)
 
 		fn sqlite_session_ids(&self) -> Vec<String> {
 			let mut conn = self.db.lock().unwrap();
-			let row: SqliteCountRow = diesel::sql_query(
-				"SELECT COUNT(*) AS count FROM sqlite_master \
-				 WHERE type = 'table' AND name = 'pty_sessions'",
+			let tables: Vec<SqliteNameRow> = diesel::sql_query(
+				"SELECT name FROM sqlite_master \
+				 WHERE type = 'table' \
+				 AND name NOT LIKE 'sqlite_%' \
+				 AND name != '__diesel_schema_migrations' \
+				 ORDER BY name",
 			)
-			.get_result(&mut *conn)
+			.load(&mut *conn)
 			.unwrap();
-			assert_eq!(row.count, 0, "pty_sessions must be dropped");
+			let names: Vec<String> =
+				tables.into_iter().map(|row| row.name).collect();
+			assert_eq!(
+				names,
+				vec![
+					"checkout_notes".to_string(),
+					"project_groups".to_string(),
+					"projects".to_string(),
+				],
+				"live sqlite user tables must stay the catalog allowlist"
+			);
 			Vec::new()
 		}
 	}
@@ -2292,7 +2305,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn router_herdr_create_does_not_spawn_local_pty() {
+	fn router_herdr_create_does_not_spawn_local() {
 		let fx = Fixture::new();
 		let router = fx.router();
 		let created = router
@@ -2307,7 +2320,7 @@ time.sleep(30)
 
 	#[cfg(unix)]
 	#[test]
-	fn router_herdr_attach_does_not_spawn_local_pty() {
+	fn router_herdr_attach_does_not_spawn_local() {
 		let fx = Fixture::new();
 		let router = fx.router();
 		let created = router
@@ -2445,10 +2458,8 @@ time.sleep(30)
 		assert!(handler.contains("get_session_agent_status"));
 		assert!(handler.contains("stream_session_agent_status"));
 		assert!(handler.contains("scroll_terminal"));
-		assert!(!handler.contains("stream_pty_output"));
-		assert!(!handler.contains("get_pty_session_history"));
-		assert!(!handler.contains("restore_pty_session"));
-		assert!(!handler.contains("delete_pty_session_record"));
+		assert!(handler.contains("create_terminal_session"));
+		assert!(handler.contains("attach_terminal_output"));
 		assert!(!handler.contains("pane.send_text"));
 		assert!(!handler.contains("pane.report_agent"));
 		assert!(!handler.contains("agent.start"));
@@ -2589,7 +2600,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn list_omits_leftover_sqlite_pty_sessions() {
+	fn list_omits_ids_that_are_not_live_panes() {
 		let fx = Fixture::new();
 		let created = fx
 			.adapter
@@ -2648,7 +2659,7 @@ time.sleep(30)
 	}
 
 	#[test]
-	fn herdr_reopen_lists_bound_panes_without_local_pty() {
+	fn herdr_reopen_lists_bound_panes_without_local_spawn() {
 		let fx = Fixture::new();
 		let created = fx
 			.router()

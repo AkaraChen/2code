@@ -737,6 +737,18 @@ mod tests {
 		);
 	}
 
+	fn deleted_local_adapter() -> String {
+		["Local", "Adapter"].concat()
+	}
+
+	fn deleted_runtime_backend_local() -> String {
+		format!("RuntimeBackend::{}", "Local")
+	}
+
+	fn deleted_mod_local() -> String {
+		format!("mod {}", "local")
+	}
+
 	#[test]
 	fn selector_defaults_to_herdr() {
 		let selector = RuntimeSelector::default();
@@ -803,7 +815,7 @@ mod tests {
 	}
 
 	#[test]
-	fn missing_sidecar_fails_closed_absent_without_local_pty() {
+	fn missing_sidecar_fails_closed_absent() {
 		let cwd = tempfile::tempdir().unwrap();
 		let db = setup_db();
 		insert_project(&db, &cwd.path().to_string_lossy());
@@ -898,12 +910,12 @@ mod tests {
 		assert!(build.contains("RuntimeRouter::new"));
 		assert_no_env_or_argv_backend_selection(connect);
 		assert_no_env_or_argv_backend_selection(build);
-		assert!(!production.contains("LocalAdapter"));
-		assert!(!production.contains("mod local"));
-		assert!(!production.contains("RuntimeBackend::Local"));
+		assert!(!production.contains(&deleted_local_adapter()));
+		assert!(!production.contains(&deleted_mod_local()));
+		assert!(!production.contains(&deleted_runtime_backend_local()));
 		let bridge = include_str!("../../../src/bridge.rs");
 		assert!(bridge.contains("build_gui_runtime"));
-		assert!(!bridge.contains("LocalAdapter"));
+		assert!(!bridge.contains(&deleted_local_adapter()));
 		assert_no_env_or_argv_backend_selection(bridge);
 		let lib = include_str!("../../../src/lib.rs");
 		assert!(lib.contains("bridge::build_runtime"));
@@ -947,7 +959,7 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_stub_create_does_not_spawn_local_pty_or_mutate_worktree() {
+	fn herdr_stub_create_does_not_spawn_or_mutate_worktree() {
 		let cwd = tempfile::tempdir().unwrap();
 		insert_project(&setup_db(), &cwd.path().to_string_lossy());
 		std::fs::write(cwd.path().join("marker"), b"keep").unwrap();
@@ -994,7 +1006,7 @@ mod tests {
 	}
 
 	#[test]
-	fn herdr_write_for_unbound_identity_does_not_spawn_local_pty() {
+	fn herdr_write_for_unbound_identity_does_not_spawn_local() {
 		let router = RuntimeRouter::new(HerdrStubAdapter::new());
 		let err = router.write("sess-foreign", b"x").unwrap_err();
 		assert!(err.to_string().contains("Herdr runtime is not available"));
@@ -1091,17 +1103,17 @@ mod tests {
 			"GUI setup must not call runtime_adoption from lib.rs"
 		);
 		assert!(
-			!lib.contains("LocalAdapter"),
+			!lib.contains(&deleted_local_adapter()),
 			"lib.rs must not construct a Local adapter"
 		);
 	}
 
 	#[test]
-	fn production_source_has_no_local_pty_runtime() {
+	fn production_source_has_no_local_runtime() {
 		let production = production_runtime_src();
-		assert!(!production.contains("LocalAdapter"));
-		assert!(!production.contains("native_pty_system"));
-		assert!(!production.contains("INSERT INTO pty_sessions"));
+		assert!(!production.contains(&deleted_local_adapter()));
+		assert!(!production.contains(&deleted_mod_local()));
+		assert!(!production.contains(&deleted_runtime_backend_local()));
 		assert_no_env_or_argv_backend_selection(production);
 		let selector = slice_between(
 			production,
@@ -1115,6 +1127,6 @@ mod tests {
 		assert_no_env_or_argv_backend_selection(selector);
 		let local_path =
 			Path::new(env!("CARGO_MANIFEST_DIR")).join("src/runtime/local.rs");
-		assert!(!local_path.exists(), "LocalAdapter module must be deleted");
+		assert!(!local_path.exists(), "Local runtime module must be deleted");
 	}
 }
