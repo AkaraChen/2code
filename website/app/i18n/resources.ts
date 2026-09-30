@@ -74,6 +74,8 @@ export const resources = {
         kicker: 'Your next Agentic IDE',
         titleLineOne: 'Your agents need',
         titleLineTwo: 'a better terminal.',
+        titleHighlight: 'better',
+        sticker: 'for vibe coding',
         lede:
           'Normal terminals run commands. 2code also manages projects, worktrees, and agents.',
         supporting:
@@ -273,6 +275,8 @@ export const resources = {
         kicker: '你的下一个 Agentic IDE',
         titleLineOne: '你的 Agent',
         titleLineTwo: '需要更好的终端',
+        titleHighlight: '更好',
+        sticker: '为 Vibe Coding 而生',
         lede:
           '普通终端只管命令，2code 还管项目、worktree 和 Agent。',
         supporting:

@@ -1,52 +1,75 @@
 /*
-  2code site — "annotated engineering datasheet".
-  Warm paper monochrome, hairline rules do the structure, ink does the hierarchy,
-  and the chartreuse marker is the only loud thing on the page.
-  Corners are 2px everywhere; no pills, no glass, no gradients.
+  2code site — "Pop".
+  Deep violet and warm cream, a mint highlighter, tomato for the one action that
+  matters. Bricolage Grotesque does both display and text (weight is the
+  hierarchy), DM Mono handles labels and commands. Big radii, chunky borders,
+  colour-blocked sections; the product screenshots stay the hero.
 */
 
 :root {
   color-scheme: light;
 
-  --paper: #f6f6f3;
-  --surface-1: #edede8;
-  --surface-2: #e5e5e1;
-  --surface-code: #333333;
-  --beige: #f1ede1;
+  /* fixed brand colours, identical in both themes */
+  --pop-violet: #2a1670;
+  --pop-cream: #fff4e2;
+  --pop-mint: #79f2c0;
+  --pop-tomato: #f2481f;
+  --pop-lilac: #d8ccff;
+  --pop-sun: #ffd23f;
 
-  --ink: #222220;
-  --ink-2: #3d3d38;
-  --ink-3: #6b6b66;
-  --ink-4: #a7a7a0;
-  --on-ink: #f6f6f3;
+  /* semantic tokens */
+  --paper: #fff4e2;
+  --surface-1: #f8e7cc;
+  --surface-2: #f0dcbb;
+  --surface-code: #2a1670;
+  --beige: #ffe9c7;
 
-  --line: #cfcfc9;
-  --line-dash: #bebeb6;
-  --line-ink: #404039;
+  --ink: #2a1670;
+  --ink-2: #47388a;
+  --ink-3: #62579a;
+  --ink-4: #a79fce;
+  --on-ink: #fff4e2;
 
-  --marker: #fbff81;
-  --link: #4f39f6;
+  --line: #e6d3b6;
+  --line-dash: #d6bf9c;
+  --line-ink: #2a1670;
 
-  --keycap-fill: #403d391a;
+  --marker: #79f2c0;
+  --link: #5a2fe0;
 
-  --shadow-soft:
-    0 4px 8px 0 rgb(0 0 0 / 0.05),
-    0 4px 4px 0 rgb(0 0 0 / 0.03);
+  --keycap-fill: #2a16701a;
 
-  --radius: 2px;
-  --gutter: clamp(1.25rem, 5vw, 4rem);
-  --measure: 1200px;
+  --card-a-bg: #d8ccff;
+  --card-a-ink: #2a1670;
+  --card-b-bg: #79f2c0;
+  --card-b-ink: #2a1670;
+  --card-c-bg: #ff8f70;
+  --card-c-ink: #2a1670;
+  --card-frame: #2a1670;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Zilla Slab', 'Inter', ui-serif, serif;
-  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --shadow-soft: 0 3px 0 0 rgb(42 22 112 / 0.9);
+
+  --radius-s: 6px;
+  --radius: 14px;
+  --radius-l: 28px;
+  --radius-xl: 44px;
+  --gutter: clamp(1.25rem, 4vw, 3rem);
+  --measure: 1320px;
+
+  --font-sans:
+    'Bricolage Grotesque', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans CJK SC', ui-sans-serif, system-ui,
+    sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono:
+    'DM Mono', ui-monospace, 'SFMono-Regular', 'PingFang SC', monospace;
 
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /*
-  Dark keeps the warm cast on purpose: greenish-brown blacks, never neutral gray.
-  The marker drops to olive so it still reads as ink on paper instead of glowing.
+  Dark keeps the same palette but sinks the paper into deep violet and swaps the
+  pastel cards for saturated, darker versions so cream text still clears AA.
   Two entry points, same tokens: system preference (unless overridden to light),
   and an explicit data-theme="dark" set by the toggle.
 */
@@ -54,60 +77,70 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --paper: #171714;
-    --surface-1: #1e1e1b;
-    --surface-2: #252522;
-    --surface-code: #0e0e0c;
-    --beige: #22221d;
+    --paper: #140b33;
+    --surface-1: #1c1145;
+    --surface-2: #261a5c;
+    --surface-code: #0c0622;
+    --beige: #1f1450;
 
-    --ink: #e8e8e4;
-    --ink-2: #b4b4ae;
-    --ink-3: #7a7a74;
-    --ink-4: #4a4a45;
-    --on-ink: #171714;
+    --ink: #fff4e2;
+    --ink-2: #d9d0f2;
+    --ink-3: #ada3d6;
+    --ink-4: #5d509a;
+    --on-ink: #140b33;
 
-    --line: #2c2c29;
-    --line-dash: #3a3a36;
-    --line-ink: #b8b6a0;
+    --line: #32256b;
+    --line-dash: #43348a;
+    --line-ink: #d8ccff;
 
-    --marker: #4c4d23;
-    --link: #7b8ff8;
+    --link: #b3a6ff;
 
-    --keycap-fill: #e8e8e41a;
+    --keycap-fill: #fff4e21a;
 
-    --shadow-soft:
-      0 4px 8px 0 rgb(0 0 0 / 0.4),
-      0 4px 4px 0 rgb(0 0 0 / 0.24);
+    --card-a-bg: #3a2a8f;
+    --card-a-ink: #fff4e2;
+    --card-b-bg: #0c5a45;
+    --card-b-ink: #fff4e2;
+    --card-c-bg: #b13a1c;
+    --card-c-ink: #fff4e2;
+    --card-frame: #fff4e2;
+
+    --shadow-soft: 0 3px 0 0 rgb(255 244 226 / 0.9);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --paper: #171714;
-  --surface-1: #1e1e1b;
-  --surface-2: #252522;
-  --surface-code: #0e0e0c;
-  --beige: #22221d;
+  --paper: #140b33;
+  --surface-1: #1c1145;
+  --surface-2: #261a5c;
+  --surface-code: #0c0622;
+  --beige: #1f1450;
 
-  --ink: #e8e8e4;
-  --ink-2: #b4b4ae;
-  --ink-3: #7a7a74;
-  --ink-4: #4a4a45;
-  --on-ink: #171714;
+  --ink: #fff4e2;
+  --ink-2: #d9d0f2;
+  --ink-3: #ada3d6;
+  --ink-4: #5d509a;
+  --on-ink: #140b33;
 
-  --line: #2c2c29;
-  --line-dash: #3a3a36;
-  --line-ink: #b8b6a0;
+  --line: #32256b;
+  --line-dash: #43348a;
+  --line-ink: #d8ccff;
 
-  --marker: #4c4d23;
-  --link: #7b8ff8;
+  --link: #b3a6ff;
 
-  --keycap-fill: #e8e8e41a;
+  --keycap-fill: #fff4e21a;
 
-  --shadow-soft:
-    0 4px 8px 0 rgb(0 0 0 / 0.4),
-    0 4px 4px 0 rgb(0 0 0 / 0.24);
+  --card-a-bg: #3a2a8f;
+  --card-a-ink: #fff4e2;
+  --card-b-bg: #0c5a45;
+  --card-b-ink: #fff4e2;
+  --card-c-bg: #b13a1c;
+  --card-c-ink: #fff4e2;
+  --card-frame: #fff4e2;
+
+  --shadow-soft: 0 3px 0 0 rgb(255 244 226 / 0.9);
 }
 
 *,
@@ -127,8 +160,8 @@ body {
   min-height: 100vh;
   background: var(--paper);
   color: var(--ink);
-  font: 430 0.9375rem/1.65 var(--font-sans);
-  letter-spacing: -0.01em;
+  font: 500 1rem/1.6 var(--font-sans);
+  letter-spacing: -0.005em;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -154,8 +187,8 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--link);
-  outline-offset: 2px;
+  outline: 3px solid var(--link);
+  outline-offset: 3px;
 }
 
 h1,
@@ -163,12 +196,18 @@ h2,
 h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-weight: 500;
-  font-feature-settings: 'dlig' 1;
-  font-variant-numeric: ordinal;
-  letter-spacing: -0.015em;
+  font-weight: 800;
+  letter-spacing: -0.045em;
   text-wrap: balance;
   color: var(--ink);
+}
+
+/* Bricolage has no CJK glyphs; the system CJK face needs looser, lighter setting. */
+:lang(zh-CN) h1,
+:lang(zh-CN) h2,
+:lang(zh-CN) h3 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* ---------- shared primitives ---------- */
@@ -180,46 +219,39 @@ h3 {
   padding-inline: var(--gutter);
 }
 
-/* Hairline rules are the page's structure — one per section boundary. */
 .ruled-top {
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .label {
   margin: 0;
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 400;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  letter-spacing: 0;
 }
 
-/*
-  Highlighter motif: a marker swipe that deliberately covers only 60–92% of the
-  line box, so it reads as a physical pen stroke rather than a filled chip.
-*/
+/* Mint highlighter chip: fixed colours so it reads the same in both themes. */
 .marker {
-  padding: 0 0.25rem;
-  margin-left: -0.25rem;
-  background-image: linear-gradient(
-    transparent 60%,
-    color-mix(in oklab, var(--marker) 75%, transparent) 60% 92%,
-    transparent 92%
-  );
-  color: var(--ink);
+  display: inline-block;
+  padding: 0.1rem 0.75rem;
+  border-radius: 999px;
+  background: var(--pop-mint);
+  color: var(--pop-violet);
+  font-weight: 600;
 }
 
 .caption {
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.02em;
+  font-size: 0.75rem;
+  letter-spacing: 0;
 }
 
 .dashed-underline {
   padding-bottom: 0.2rem;
-  border-bottom: 1px dashed var(--line-dash);
+  border-bottom: 2px dashed var(--line-dash);
 }
 
 /* ---------- buttons ---------- */
@@ -227,21 +259,26 @@ h3 {
 .button {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 2.5rem;
-  padding: 0 0.75rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0 1.5rem;
+  border: 3px solid transparent;
+  border-radius: 999px;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 450;
-  letter-spacing: -0.005em;
+  font-size: 1.0625rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   text-decoration: none;
   cursor: pointer;
   transition:
+    transform 200ms var(--ease),
     background-color 180ms var(--ease),
     border-color 180ms var(--ease),
     color 180ms var(--ease);
+}
+
+.button:hover {
+  transform: translateY(-2px) rotate(-1deg);
 }
 
 .button-primary {
@@ -250,35 +287,27 @@ h3 {
   color: var(--on-ink);
 }
 
-.button-primary:hover {
-  background: var(--ink-2);
-  border-color: var(--ink-2);
-}
-
 .button-secondary {
-  border-color: var(--line);
-  background: var(--paper);
+  border-color: currentColor;
+  background: transparent;
   color: var(--ink);
-  box-shadow: var(--shadow-soft);
 }
 
 .button-secondary:hover {
-  border-color: var(--line-ink);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
-/* Keyboard-first affordance: every CTA shows the key that triggers it. */
 .keycap {
   display: inline-grid;
   place-items: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border: 1px solid currentColor;
-  border-radius: var(--radius);
-  background: var(--keycap-fill);
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid currentColor;
+  border-radius: var(--radius-s);
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   line-height: 1;
-  opacity: 0.72;
 }
 
 /* ---------- header ---------- */
@@ -287,7 +316,6 @@ h3 {
   position: sticky;
   top: 0;
   z-index: 20;
-  border-bottom: 1px solid var(--line);
   background: var(--paper);
 }
 
@@ -296,27 +324,27 @@ h3 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 3.25rem;
+  min-height: 4.25rem;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
   text-decoration: none;
   color: var(--ink);
 }
 
 .brand-icon {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .brand-name {
   font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
 }
 
 .topnav {
@@ -329,24 +357,28 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  min-height: 2rem;
-  padding: 0 0.55rem;
-  border-radius: var(--radius);
-  color: var(--ink-3);
-  font-size: 0.8125rem;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
   text-decoration: none;
-  transition: color 150ms var(--ease);
+  transition:
+    background-color 150ms var(--ease),
+    color 150ms var(--ease);
 }
 
 .topnav a:hover {
-  color: var(--ink);
+  background: var(--pop-lilac);
+  color: var(--pop-violet);
 }
 
 .nav-icon {
   width: 0.75rem;
   height: 0.75rem;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
@@ -355,30 +387,30 @@ h3 {
 .theme-toggle {
   display: inline-grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   margin-left: 0.25rem;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--paper);
-  color: var(--ink-3);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
   cursor: pointer;
   transition:
-    color 150ms var(--ease),
-    border-color 150ms var(--ease);
+    background-color 150ms var(--ease),
+    color 150ms var(--ease);
 }
 
 .theme-toggle:hover {
-  border-color: var(--line-ink);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 
 .theme-toggle svg {
-  width: 0.9375rem;
-  height: 0.9375rem;
+  width: 1rem;
+  height: 1rem;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
@@ -410,62 +442,144 @@ h3 {
 /* ---------- hero ---------- */
 
 .hero-section {
-  padding-top: clamp(3.5rem, 9vw, 6.5rem);
-  padding-bottom: clamp(2.5rem, 5vw, 4rem);
-  text-align: center;
+  padding-top: 0.5rem;
+  padding-bottom: clamp(1.5rem, 3vw, 2rem);
+}
+
+.hero-panel {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(2rem, 5vw, 4rem);
+  border-radius: var(--radius-xl);
+  background: var(--pop-violet);
+  color: var(--pop-cream);
 }
 
 .hero-copy {
   display: grid;
-  justify-items: center;
-  gap: 1.25rem;
+  justify-items: start;
+  gap: 1.5rem;
+}
+
+.hero-copy h1 {
+  max-width: 13ch;
+  color: var(--pop-cream);
+  font-size: clamp(3rem, 8.2vw, 7.75rem);
+  line-height: 0.88;
+  letter-spacing: -0.06em;
+  text-wrap: unset;
+}
+
+:lang(zh-CN) .hero-copy h1 {
+  max-width: 12ch;
+  font-size: clamp(2.75rem, 6.6vw, 6rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.hero-highlight {
+  display: inline-block;
+  padding: 0 0.12em 0.04em;
+  border-radius: var(--radius-l);
+  background: var(--pop-mint);
+  color: var(--pop-violet);
+  transform: rotate(-2.5deg);
+}
+
+.hero-sticker {
+  position: absolute;
+  top: clamp(1.5rem, 4vw, 3rem);
+  right: clamp(1.5rem, 4vw, 3.5rem);
+  display: grid;
+  place-items: center;
+  width: clamp(5.5rem, 11vw, 9.5rem);
+  aspect-ratio: 1;
+  padding: 0.5rem;
+  border-radius: 50%;
+  background: var(--pop-sun);
+  color: var(--pop-violet);
+  font-size: clamp(0.875rem, 1.6vw, 1.25rem);
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+  transform: rotate(12deg);
+}
+
+.hero-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: end;
+  margin-top: clamp(1.75rem, 4vw, 3rem);
 }
 
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  transform: rotate(-2deg);
 }
 
-.hero-copy h1 {
-  max-width: 22ch;
-  font-size: clamp(2.75rem, 6.2vw, 4.25rem);
-  line-height: 1.05;
-  letter-spacing: -0.025em;
+.hero-badge .marker {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .hero-lede {
-  max-width: 46ch;
-  color: var(--ink-2);
-  font-size: clamp(1rem, 1.4vw, 1.125rem);
-  line-height: 1.6;
+  max-width: 28ch;
+  color: var(--pop-cream);
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
 }
 
 .hero-supporting-copy {
-  max-width: 58ch;
-  color: var(--ink-3);
-  font-size: 0.875rem;
+  max-width: 46ch;
+  color: var(--pop-lilac);
+  font-size: 1rem;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin-top: 0.5rem;
 }
 
-/*
-  The product screenshot is the hero image. The source PNGs already carry macOS
-  window chrome, a baked drop shadow and transparent margins, so they get no
-  frame and no shadow of our own — adding either double-frames the window.
-*/
+.hero-panel .button-primary {
+  border-color: var(--pop-tomato);
+  background: var(--pop-tomato);
+  color: var(--pop-cream);
+  font-size: 1.1875rem;
+  min-height: 3.5rem;
+}
+
+.hero-panel .button-secondary {
+  border-color: var(--pop-cream);
+  color: var(--pop-cream);
+}
+
+.hero-panel .button-secondary:hover {
+  background: var(--pop-cream);
+  color: var(--pop-violet);
+}
+
 .hero-shot {
-  margin-top: clamp(1.5rem, 4vw, 2.75rem);
+  min-width: 0;
+  transform: rotate(1.5deg);
 }
 
 .shot-frame {
   margin: 0;
+  overflow: hidden;
+  border: 3px solid var(--card-frame);
+  border-radius: var(--radius-l);
+  background: #fff;
+}
+
+.hero-shot .shot-frame {
+  border-color: var(--pop-cream);
 }
 
 .shot-frame img {
@@ -476,19 +590,36 @@ h3 {
 /* ---------- features ---------- */
 
 .features-section {
-  padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  padding-block: 0 clamp(1.5rem, 3vw, 2rem);
 }
 
 .feature-list {
   display: grid;
-  gap: clamp(3rem, 7vw, 5.5rem);
+  gap: clamp(1rem, 2vw, 1.5rem);
 }
 
 .feature-row {
+  --tone-bg: var(--card-a-bg);
+  --tone-ink: var(--card-a-ink);
+
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  gap: clamp(1.75rem, 4vw, 3.5rem);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(1.75rem, 4vw, 4rem);
   align-items: center;
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+  border-radius: var(--radius-xl);
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+}
+
+.feature-row:nth-child(3n + 2) {
+  --tone-bg: var(--card-b-bg);
+  --tone-ink: var(--card-b-ink);
+}
+
+.feature-row:nth-child(3n + 3) {
+  --tone-bg: var(--card-c-bg);
+  --tone-ink: var(--card-c-ink);
 }
 
 .feature-row-reverse .feature-copy {
@@ -499,63 +630,65 @@ h3 {
   order: 1;
 }
 
+.feature-row .label {
+  display: inline-block;
+  padding: 0.2rem 0.85rem;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+}
+
 .feature-copy h3 {
-  max-width: 22ch;
-  margin-top: 0.75rem;
-  font-size: clamp(1.625rem, 2.6vw, 2.125rem);
-  line-height: 1.12;
+  max-width: 14ch;
+  margin-top: 1.25rem;
+  color: inherit;
+  font-size: clamp(2.25rem, 4.6vw, 4rem);
+  line-height: 0.95;
+}
+
+:lang(zh-CN) .feature-copy h3 {
+  max-width: 12ch;
+  line-height: 1.15;
 }
 
 .feature-body {
-  max-width: 42ch;
-  margin-top: 0.875rem;
-  color: var(--ink-2);
-  font-size: 0.9375rem;
-  line-height: 1.7;
+  max-width: 44ch;
+  margin-top: 1.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.6;
 }
 
 .feature-points {
   display: grid;
-  gap: 0.5rem;
-  max-width: 44ch;
-  margin: 1.25rem 0 0;
+  gap: 0.6rem;
+  max-width: 46ch;
+  margin: 1.5rem 0 0;
   padding: 0;
   list-style: none;
 }
 
-/* Pencil-markup separation between points, matching the document metaphor. */
 .feature-points li {
   position: relative;
-  padding: 0 0 0.5rem 1.25rem;
-  border-bottom: 1px dashed var(--line-dash);
-  color: var(--ink-2);
-  font-size: 0.875rem;
-  line-height: 1.6;
-}
-
-.feature-points li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+  padding: 0 0 0 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
 .feature-points li::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 0.7em;
-  width: 0.5rem;
-  height: 1px;
-  background: var(--ink-4);
+  top: 0.45em;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .feature-shot {
   min-width: 0;
 }
 
-/*
-  contain, not cover: the whole app window stays visible at every width.
-  The PNGs are trimmed to the window itself, so intrinsic sizing is enough.
-*/
 .feature-image {
   object-fit: contain;
 }
@@ -563,27 +696,49 @@ h3 {
 /* ---------- faq ---------- */
 
 .faq-section {
-  padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  padding-block: clamp(3rem, 7vw, 6rem) clamp(1.5rem, 3vw, 2rem);
 }
 
 .section-heading {
   display: grid;
-  gap: 0.75rem;
-  margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  justify-items: start;
+  gap: 1rem;
+  margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.section-heading .label {
+  padding: 0.2rem 0.85rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
 }
 
 .section-heading h2 {
-  max-width: 26ch;
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  line-height: 1.12;
+  max-width: 16ch;
+  font-size: clamp(2.5rem, 6vw, 5.25rem);
+  line-height: 0.93;
+}
+
+:lang(zh-CN) .section-heading h2 {
+  line-height: 1.15;
 }
 
 .faq-list {
-  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.75rem;
 }
 
 .faq-item {
-  border-bottom: 1px solid var(--line);
+  border: 3px solid var(--ink);
+  border-radius: var(--radius-l);
+  background: transparent;
+  transition: background-color 200ms var(--ease);
+}
+
+.faq-item[open] {
+  background: var(--card-b-bg);
+  border-color: var(--card-b-bg);
+  color: var(--card-b-ink);
 }
 
 .faq-item summary {
@@ -591,12 +746,13 @@ h3 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.875rem 0;
+  padding: 1.1rem 1.5rem;
   list-style: none;
   cursor: pointer;
-  color: var(--ink);
-  font-size: 0.9375rem;
-  font-weight: 580;
+  color: inherit;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -605,29 +761,49 @@ h3 {
 
 .faq-item summary::after {
   content: '+';
+  display: grid;
   flex: none;
-  color: var(--ink-3);
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--on-ink);
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
+  font-size: 1.125rem;
   font-weight: 400;
+  line-height: 1;
 }
 
 .faq-item[open] summary::after {
   content: '\2212';
+  background: var(--card-b-ink);
+  color: var(--card-b-bg);
 }
 
 .faq-item p {
   max-width: 68ch;
-  padding-bottom: 1rem;
-  color: var(--ink-2);
-  font-size: 0.875rem;
-  line-height: 1.75;
+  padding: 0 1.5rem 1.4rem;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+section.faq-item h2 {
+  padding: 1.1rem 1.5rem 0.25rem;
+  font-size: 1.1875rem;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.faq-list > p {
+  padding-top: 0.75rem;
 }
 
 /* ---------- closing cta ---------- */
 
 .cta-section {
-  padding-block: clamp(2.5rem, 6vw, 4rem);
+  padding-block: clamp(1.5rem, 3vw, 2rem) clamp(2rem, 4vw, 3rem);
 }
 
 .cta-panel {
@@ -635,23 +811,38 @@ h3 {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1.25rem;
-  padding: clamp(1.5rem, 3vw, 2.25rem);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--beige);
+  gap: 2rem;
+  padding: clamp(2rem, 5vw, 4.5rem);
+  border-radius: var(--radius-xl);
+  background: var(--pop-violet);
+  color: var(--pop-cream);
 }
 
 .cta-panel p {
-  max-width: 44ch;
-  color: var(--ink-2);
-  font-size: 0.9375rem;
+  max-width: 20ch;
+  font-size: clamp(1.75rem, 4.4vw, 3.5rem);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+:lang(zh-CN) .cta-panel p {
+  max-width: 16ch;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.cta-panel .button-primary {
+  border-color: var(--pop-tomato);
+  background: var(--pop-tomato);
+  color: var(--pop-cream);
+  font-size: 1.1875rem;
+  min-height: 3.5rem;
 }
 
 /* ---------- footer ---------- */
 
 .site-footer {
-  border-top: 1px solid var(--line);
   padding-block: 1.5rem 2.5rem;
 }
 
@@ -667,29 +858,33 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 1rem;
+  gap: 0.25rem 1.25rem;
 }
 
 .footer-links a {
-  color: var(--ink-3);
-  font-size: 0.8125rem;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
   text-decoration: none;
   transition: color 150ms var(--ease);
 }
 
 .footer-links a:hover {
-  color: var(--ink);
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .footer-links a[aria-current='true'] {
-  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 /* ---------- blog ---------- */
 
 /*
-  The blog reuses the datasheet grammar rather than introducing a second one:
-  hairlines separate entries, mono sets metadata, Zilla Slab sets headings, and
+  The blog reuses the site's tokens rather than introducing a second system:
+  hairlines separate entries, mono sets metadata, Bricolage sets headings, and
   the article column is capped at a reading measure instead of the page measure.
 */
 
@@ -777,7 +972,7 @@ h3 {
 .post-draft {
   padding: 0 0.35rem;
   border: 1px solid var(--line-dash);
-  border-radius: var(--radius);
+  border-radius: var(--radius-s);
   color: var(--ink-2);
 }
 
@@ -1002,7 +1197,7 @@ h3 {
 .prose kbd {
   padding: 0.1rem 0.35rem;
   border: 1px solid var(--line-dash);
-  border-radius: var(--radius);
+  border-radius: var(--radius-s);
   background: var(--keycap-fill);
   font-family: var(--font-mono);
   font-size: 0.8125em;
@@ -1011,7 +1206,7 @@ h3 {
 .prose code {
   padding: 0.1rem 0.3rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-s);
   background: var(--surface-1);
   font-family: var(--font-mono);
   font-size: 0.8125em;
@@ -1117,13 +1312,18 @@ h3 {
   margin-top: 2rem;
 }
 
+
 /* ---------- responsive ---------- */
 
 @media (max-width: 1000px) {
+  .hero-bottom {
+    grid-template-columns: 1fr;
+  }
+
   .feature-row,
   .feature-row-reverse {
     grid-template-columns: 1fr;
-    gap: 1.5rem;
+    gap: 1.75rem;
   }
 
   .feature-row-reverse .feature-copy,
@@ -1147,8 +1347,16 @@ h3 {
     width: 100%;
   }
 
+  .hero-sticker {
+    display: none;
+  }
+
   .topnav a[data-nav='features'] {
     display: none;
+  }
+
+  .topnav a {
+    padding: 0 0.6rem;
   }
 }
 
@@ -1165,7 +1373,12 @@ h3 {
 
   .button,
   .topnav a,
-  .theme-toggle {
+  .theme-toggle,
+  .faq-item {
     transition: none;
+  }
+
+  .button:hover {
+    transform: none;
   }
 }
