@@ -5,9 +5,8 @@
     "": {
       "name": "2code-site",
       "dependencies": {
-        "@fontsource/geist-mono": "^5.3.0",
-        "@fontsource/inter": "^5.3.0",
-        "@fontsource/zilla-slab": "^5.3.0",
+        "@fontsource/bricolage-grotesque": "^5.3.0",
+        "@fontsource/dm-mono": "^5.3.0",
         "gray-matter": "^4.0.3",
         "markdown-it": "^15.0.0",
         "markdown-it-footnote": "^4.0.0",
@@ -86,11 +85,9 @@
 
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.4.1", "", { "dependencies": { "@eslint/core": "^0.17.0", "levn": "^0.4.1" } }, "sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA=="],
 
-    "@fontsource/geist-mono": ["@fontsource/geist-mono@5.3.0", "", {}, "sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg=="],
+    "@fontsource/bricolage-grotesque": ["@fontsource/bricolage-grotesque@5.3.0", "", {}, "sha512-MdOVb/5in11IfN/IQJOExMuu6AroCIQbirl0yX7NUvKk+h0HYIKfGaVAXRS/gCPil4aFxWhjZnOw28tUwv7tFw=="],
 
-    "@fontsource/inter": ["@fontsource/inter@5.3.0", "", {}, "sha512-RofMylZmjlJEfELXeNHFWBRcSs75rGU/6bV2S2jfnvv/3rPXPGe0LgUJTklcHZ9lM4OZmAVFhcJPnACfb91A3g=="],
-
-    "@fontsource/zilla-slab": ["@fontsource/zilla-slab@5.3.0", "", {}, "sha512-xbdDx5OESJDQqp3GIp4pjBgI+qpcg4AxnHLN15ekfJbG+ZYaOXg3uBjDpYlkuPQpey91afxHBNaqZgzluJ2FWA=="],
+    "@fontsource/dm-mono": ["@fontsource/dm-mono@5.3.0", "", {}, "sha512-OINjI8C1S/wpchhQxl7njZdMn4+hnDCpQ4YtvvOpKNARo+0J8O1x1IcrChxNjHOhfVv1by8C/FQoy3hXK+C1Ug=="],
 
     "@humanfs/core": ["@humanfs/core@0.19.1", "", {}, "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="],
 

@@ -48,6 +48,9 @@ export function HomePageContent({
   messages,
 }: HomePageContentProps) {
   const t = messages
+  const [titleBefore, titleAfter = ''] = t.hero.titleLineTwo.split(
+    t.hero.titleHighlight,
+  )
 
   const pageUrl =
     locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url
@@ -136,63 +139,83 @@ export function HomePageContent({
 
       <main>
         <section className="hero-section shell" id="hero">
-          <div className="hero-copy">
-            <p className="label hero-badge">
-              <span className="marker">{t.hero.kicker}</span>
+          <div className="hero-panel">
+            <p className="hero-sticker" aria-hidden="true">
+              {t.hero.sticker}
             </p>
 
-            <h1>
-              {t.hero.titleLineOne}
-              <br />
-              {t.hero.titleLineTwo}
-            </h1>
+            <div className="hero-copy">
+              <p className="label hero-badge">
+                <span className="marker">{t.hero.kicker}</span>
+              </p>
 
-            <p className="hero-lede">{t.hero.lede}</p>
-            <p className="hero-supporting-copy">{t.hero.supporting}</p>
-
-            <div className="hero-actions">
-              <a
-                id="cta-download"
-                className="button button-primary"
-                href={siteConfig.githubReleaseUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-keyshortcuts="d"
-              >
-                <span>{t.hero.primaryCta}</span>
-                <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
-                  D
-                </kbd>
-              </a>
-              <a
-                id="cta-features"
-                className="button button-secondary"
-                href="#features"
-                aria-keyshortcuts="f"
-              >
-                <span>{t.hero.secondaryCta}</span>
-                <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
-                  F
-                </kbd>
-              </a>
+              <h1>
+                {t.hero.titleLineOne}
+                <br />
+                {titleBefore}
+                <span className="hero-highlight">{t.hero.titleHighlight}</span>
+                {titleAfter}
+              </h1>
             </div>
-          </div>
 
-          <div className="hero-shot reveal">
-            <figure className="shot-frame" data-markdown-ignore>
-              <img
-                src="/screenshots/terminal-tabs.png"
-                alt={t.hero.shotAlt}
-                width={SCREENSHOT_WIDTH}
-                height={SCREENSHOT_HEIGHT}
-                loading="eager"
-                decoding="async"
-              />
-            </figure>
+            <div className="hero-bottom">
+              <div className="hero-copy">
+                <p className="hero-lede">{t.hero.lede}</p>
+                <p className="hero-supporting-copy">{t.hero.supporting}</p>
+
+                <div className="hero-actions">
+                  <a
+                    id="cta-download"
+                    className="button button-primary"
+                    href={siteConfig.githubReleaseUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-keyshortcuts="d"
+                  >
+                    <span>{t.hero.primaryCta}</span>
+                    <kbd
+                      className="keycap"
+                      aria-hidden="true"
+                      data-markdown-ignore
+                    >
+                      D
+                    </kbd>
+                  </a>
+                  <a
+                    id="cta-features"
+                    className="button button-secondary"
+                    href="#features"
+                    aria-keyshortcuts="f"
+                  >
+                    <span>{t.hero.secondaryCta}</span>
+                    <kbd
+                      className="keycap"
+                      aria-hidden="true"
+                      data-markdown-ignore
+                    >
+                      F
+                    </kbd>
+                  </a>
+                </div>
+              </div>
+
+              <div className="hero-shot">
+                <figure className="shot-frame" data-markdown-ignore>
+                  <img
+                    src="/screenshots/terminal-tabs.png"
+                    alt={t.hero.shotAlt}
+                    width={SCREENSHOT_WIDTH}
+                    height={SCREENSHOT_HEIGHT}
+                    loading="eager"
+                    decoding="async"
+                  />
+                </figure>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="features-section shell ruled-top" id="features">
+        <section className="features-section shell" id="features">
           <div className="feature-list">
             {features.map((feature, index) => (
               <section
@@ -236,7 +259,7 @@ export function HomePageContent({
           </div>
         </section>
 
-        <section className="faq-section shell ruled-top" id="faq">
+        <section className="faq-section shell" id="faq">
           <div className="section-heading">
             <p className="label">{t.faq.kicker}</p>
             <h2>{t.faq.title}</h2>
