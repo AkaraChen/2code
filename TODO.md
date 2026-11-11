@@ -6,10 +6,10 @@
 
 ## 一、需要仓库所有者处理
 
-- [ ] **在 Netlify 触发一次官网构建。** 网站代码已经在 `main` 和 `dev` 上了，`dev` 已通过 #494 跟上 `main`，但线上仍是 `dev` 停在 `25b0439c` 时的那一版。Netlify 从未在 GitHub 的提交上留下构建状态，推送 `dev` 后也没有自动部署，所以需要在 Netlify 后台手动部署一次，或者检查自动构建是否被停掉。顺手把生产分支改成 `main`，以后官网改动就跟着 `main` 走。
 - [ ] （可选）在 GitHub Releases 上给旧桌面版用户发迁移公告。旧版的自动更新会读取“latest” release 里的 `latest.json`，所以新 release 不要标成 latest，否则旧版检查更新时会失败。
 
 已完成：
+- [x] Netlify 的生产分支已改为 `main`，官网跟着 `main` 部署。
 - [x] #494：已停用的 `dev` 跟上了 `main`，`dev` 原来的提交都保留在历史里和 `legacy-tauri-app` 上。
 - [x] 已关闭面向已删除目录的过时 Dependabot PR（#477–#486）。
 
