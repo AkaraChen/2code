@@ -19,7 +19,7 @@ Install [Herdr](https://herdr.dev/download/), then ask the agent in any Herdr
 terminal:
 
 ```
-Add the layout at github.com/AkaraChen/2code
+Add the Herdr layout at github.com/AkaraChen/2code
 ```
 
 Or copy it yourself from a clone of this repo:

@@ -8,7 +8,7 @@ export const siteConfig = {
     'https://github.com/AkaraChen/2code/releases/latest',
   installUrl: 'https://github.com/AkaraChen/2code#install',
   herdrDownloadUrl: 'https://herdr.dev/download/',
-  installPrompt: 'Add the layout at github.com/AkaraChen/2code',
+  installPrompt: 'Add the Herdr layout at github.com/AkaraChen/2code',
   installScript:
     'git clone https://github.com/AkaraChen/2code && cd 2code && ./scripts/install.sh',
   // The product window is the share image; there is no decorative hero art.

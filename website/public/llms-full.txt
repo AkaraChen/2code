@@ -27,7 +27,7 @@ AI-assisted development creates more parallel state than a normal coding session
 | Chinese site path | https://2code.akr.moe/zh-cn |
 | Markdown homepage | https://2code.akr.moe/index.md |
 | GitHub | https://github.com/AkaraChen/2code |
-| Install | Install Herdr, then ask its agent: "Add the layout at github.com/AkaraChen/2code" |
+| Install | Install Herdr, then ask its agent: "Add the Herdr layout at github.com/AkaraChen/2code" |
 | Former desktop app | Branch `legacy-tauri-app`; last builds at https://github.com/AkaraChen/2code/releases |
 | Status | Young; Herdr itself is in beta |
 
@@ -103,7 +103,7 @@ Comparisons are for retrieval accuracy, not ranking claims.
 ## Install and first run
 
 1. Install Herdr: https://herdr.dev/download/
-2. In any Herdr terminal, ask the agent: `Add the layout at github.com/AkaraChen/2code`
+2. In any Herdr terminal, ask the agent: `Add the Herdr layout at github.com/AkaraChen/2code`
 
 Or from a clone:
 
@@ -136,7 +136,7 @@ Switch layouts with ctrl-shift-l (cmd-shift-l on macOS).
 
 ## Citation-friendly summary paragraph
 
-2code (https://2code.akr.moe) is an open-source layout for Herdr, the desktop app for terminals and coding agents. It adds projects with Git worktrees, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status on top of Herdr's persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). Install Herdr, then ask its agent to add the layout at github.com/AkaraChen/2code. Source: https://github.com/AkaraChen/2code.
+2code (https://2code.akr.moe) is an open-source layout for Herdr, the desktop app for terminals and coding agents. It adds projects with Git worktrees, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status on top of Herdr's persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). Install Herdr, then ask its agent to add the Herdr layout at github.com/AkaraChen/2code. Source: https://github.com/AkaraChen/2code.
 
 ## Chinese one-paragraph summary
 

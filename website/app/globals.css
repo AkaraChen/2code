@@ -353,11 +353,11 @@ h3 {
   color: var(--ink-3);
 }
 
+/* A command is never ellipsised: it fits on one line where there is room, and
+   wraps where there is not. */
 .install-prompt code {
-  overflow: hidden;
   color: var(--ink);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .install-prompt code::before {
@@ -546,8 +546,8 @@ h3 {
 
 .hero-sub {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
-  gap: 1.5rem 4rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
+  gap: 1.5rem 3rem;
   align-items: end;
   margin-top: 1.875rem;
 }
@@ -1962,10 +1962,6 @@ section.faq-entry h2 {
 
   .install-prompt {
     flex-wrap: wrap;
-  }
-
-  .install-prompt code {
-    white-space: normal;
   }
 
   .topnav a {
