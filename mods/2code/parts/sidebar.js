@@ -6,7 +6,7 @@
 //   closed one opens a space there.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, run, theme, layout, pickFolder, openOverlay, shared, notify } from "herdr";
+import { spaces, panes, focused, run, theme, layout, pickFolder, openOverlay, shared, notify } from "herdr";
 import { t, resolveLocale } from "../lib/i18n.js";
 import { readProjectConfig, scriptArgv } from "../lib/config.js";
 import { place, repoOf } from "../lib/git.js";
@@ -31,7 +31,17 @@ export class SidebarHeader {
 }
 
 export class Sidebar {
+  static COMMANDS = ["focusSidebar"];
+
+  command(name) {
+    if (name === "focusSidebar") this.handle.focus();
+  }
+
   init(_props, cx) {
+    // Arrow keys move through the list while it has the keyboard (a click on
+    // the sidebar, or cmd-shift-e / ctrl-shift-j).
+    this.handle = cx.focus_handle();
+    this.cursor = null;
     this.repo = {};       // space id -> { at, main, top, name }
     this.checkouts = {};  // project key -> [{ path, branch, main }]
     this.avatars = {};    // project key -> image path | null
@@ -133,8 +143,9 @@ export class Sidebar {
     const hovered = this.hover === p.key;
     return h_flex().id(`project-${p.key}`).h(32).px(8).gap(8).items_center().rounded(6).cursor_pointer()
       .bg(active && !open ? th.selected : th.chrome).hover((s) => s.bg(th.hover))
+      .border_1().border_color(this.ring(p.key) ? th.accent : th.chrome + "00")
       .on_hover((h, cx) => { this.hover = h ? p.key : (this.hover === p.key ? null : this.hover); cx.notify(); })
-      .on_click(() => this.openProject(p))
+      .on_click(() => { this.cursor = p.key; this.openProject(p); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("project", p); })
       .child(this.avatar(p, th))
       .child(div().flex_1().min_w(0).truncate().text_color(th.foreground).child(p.name))
@@ -154,8 +165,9 @@ export class Sidebar {
     const color = active ? th.foreground : x.space ? th.muted : th.dim;
     return h_flex().id(`profile-${id}`).h(28).pl(36).pr(8).gap(7).items_center().rounded(6).cursor_pointer()
       .bg(active ? th.selected : th.chrome).hover((st) => st.bg(th.hover))
+      .border_1().border_color(this.ring(id) ? th.accent : th.chrome + "00")
       .on_hover((h, cx) => { this.hover = h ? id : (this.hover === id ? null : this.hover); cx.notify(); })
-      .on_click(() => this.openProfile(p, x))
+      .on_click(() => { this.cursor = id; this.openProfile(p, x); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("profile", p, x); })
       .child(icon("git-branch", 13).text_color(color))
       .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(color).child(label))
@@ -164,6 +176,43 @@ export class Sidebar {
         .text_color(th.dim).hover((st) => st.bg(th.raised).text_color(th.foreground))
         .on_click((_e, cx) => { cx.stop_propagation(); deleteProfile(p, x); })
         .child(icon("x", 12))));
+  }
+
+  ring(id) {
+    return this.cursor === id && this.handle.is_focused();
+  }
+
+  // The rows the arrow keys walk, in screen order.
+  navRows(projects) {
+    return projects.flatMap((p) => [
+      { id: p.key, p },
+      ...(this.closed[p.key] ? [] : p.profiles.map((x) => ({ id: `${p.key}:${x.path}`, p, x }))),
+    ]);
+  }
+
+  key(e, projects, cx) {
+    const rows = this.navRows(projects);
+    if (!rows.length) return;
+    let i = rows.findIndex((r) => r.id === this.cursor);
+    const row = rows[i];
+    const k = e.key;
+    if (k === "down") i = i < 0 ? 0 : Math.min(i + 1, rows.length - 1);
+    else if (k === "up") i = i < 0 ? 0 : Math.max(i - 1, 0);
+    else if (k === "right" && row && !row.x) {
+      if (this.closed[row.p.key]) this.toggle(row.p.key);
+      else if (rows[i + 1]?.x) i += 1;
+    } else if (k === "left" && row) {
+      if (row.x) i = rows.findIndex((r) => r.id === row.p.key);
+      else if (!this.closed[row.p.key]) this.toggle(row.p.key);
+    } else if ((k === "enter" || k === "space") && row) {
+      if (row.x) this.openProfile(row.p, row.x); else this.openProject(row.p);
+    } else if (k === "escape") {
+      const pane = focused()?.pane;
+      if (pane) run("pane.focus", { pane });
+    } else return;
+    this.cursor = rows[Math.max(0, i)]?.id ?? null;
+    cx.stop_propagation();
+    cx.notify();
   }
 
   rail(projects, th) {
@@ -183,7 +232,15 @@ export class Sidebar {
     shared("2code.locale"); shared("2code.projects");
     const projects = this.projects();
     const narrow = this.width < RAIL;
+    if (this.handle.is_focused() && !this.cursor) {
+      const p = projects.find((q) => q.profiles.some((x) => x.space?.active));
+      const x = p?.profiles.find((y) => y.space?.active);
+      this.cursor = p ? (x && !this.closed[p.key] ? `${p.key}:${x.path}` : p.key) : projects[0]?.key ?? null;
+    }
     return v_flex().id("sidebar-root").size_full().min_h(0).bg(th.chrome).text_size(13)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.key(e, projects, cx))
+      .on_mouse_down("left", (_e, cx) => { this.handle.focus(); cx.notify(); })
       .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) >= 1) { this.width = size.width; cx.notify(); } })
       .child(h_flex().h(30).px(narrow ? 0 : 16).items_center().when(narrow, (el) => el.justify_center())
         .when(!narrow, (el) => el.justify_between().child(div().text_size(12).text_color(th.dim).child(t("projects"))))

@@ -35,7 +35,7 @@ jobs:
 
       - name: Validate JSON
         run: |
-          for f in layouts/*.json themes/*.json mods/*/mod.json; do
+          for f in layouts/*.json themes/*.json mods/*/mod.json keys.json; do
             node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$f" || { echo "::error file=$f::invalid JSON"; exit 1; }
           done
 

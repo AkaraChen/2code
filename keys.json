@@ -18,6 +18,8 @@
     "alt-left": "send:\u001bb",
     "alt-right": "send:\u001bf",
     "cmd-g": "2code.diff",
-    "ctrl-shift-g": "2code.diff"
+    "ctrl-shift-g": "2code.diff",
+    "cmd-shift-e": "2code.focusSidebar",
+    "ctrl-shift-j": "2code.focusSidebar"
   }
 }

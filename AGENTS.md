@@ -31,6 +31,15 @@ bring its code back here.
   when it resolves.
 - `parts/files.js` and `parts/changes.js` derive from Herdr's shipped mods
   (Apache-2.0): keep `NOTICE` and `LICENSE-Herdr.txt` with them.
+- `lib/`: `i18n`, `git`, `config` (2code.json), `projects` (the saved project
+  list in shared `2code.projects`), `changes` (git status / diff / commit /
+  history), `terminal`, `os`, `ui`. Key commands (`2code.<name>` in
+  `keys.json`) reach parts that declare `static COMMANDS` and `command()`.
+- Herdr runtime gotchas we hit (details in RECIPE.md "Watch out"): popups'
+  tasks die on close; virtual list rows can't take `on_click` (use
+  `on_item_click`); nested flex needs `absolute().inset_0()` for full-size
+  children; `image()` only reads the app folder; `fetch()` is text-only;
+  Herdr's Remove worktree needs an open space.
 - Never keep a `cx`; use the one each callback gets. Start async work with
   `cx.spawn`, wait with `cx.sleep(ms)`, poll gently with `cx.timer.every`.
 - Git reads pass `--no-optional-locks -c core.fsmonitor=false` (`READ` in
