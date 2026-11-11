@@ -10,6 +10,12 @@ import { openTerminal } from "../lib/terminal.js";
 import { icon, dot } from "../lib/ui.js";
 
 export class Tabs {
+  static COMMANDS = ["newTerminal"];
+
+  command(name, cx) {
+    if (name === "newTerminal") this.newTerminal(cx);
+  }
+
   newTerminal(cx) {
     const { space, cwd, on } = here();
     cx.spawn(async (cx) => {

@@ -1,20 +1,28 @@
-// The 2code sidebar: projects (git repos) with their profiles (worktrees) nested.
-// A project is every space whose checkout belongs to the same repo; the space at
-// the repo's main checkout is the default profile, the others are worktrees.
-// Nothing is stored: projects come from Herdr's spaces and git.
-import { div } from "gpui-kit";
+// The 2code sidebar: projects with their profiles nested.
+// - Projects are the saved list (lib/projects.js); any space opened on a repo
+//   that isn't in it yet is added, so it stays after its terminals close.
+// - Profiles are the repo's checkouts (`git worktree list`): the main checkout
+//   first, then worktrees. Open ones show their space's status; picking a
+//   closed one opens a space there.
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, run, theme, pickFolder, openOverlay, shared, notify } from "herdr";
+import { spaces, panes, run, theme, layout, pickFolder, openOverlay, shared, notify } from "herdr";
 import { t, resolveLocale } from "../lib/i18n.js";
 import { readProjectConfig, scriptArgv } from "../lib/config.js";
 import { place, repoOf } from "../lib/git.js";
-import { icon, stop, dot, worst } from "../lib/ui.js";
+import { savedProjects, addProject, projectKey, projectName, checkouts } from "../lib/projects.js";
+import { githubOwner, githubAvatar } from "../lib/os.js";
+import { icon, stop, dot, worst, find } from "../lib/ui.js";
+
+const RAIL = 160; // narrower than this, the sidebar draws only project tiles
 
 export class SidebarHeader {
   render() {
     const th = theme();
-    return h_flex().size_full().px(16).items_center().justify_between().bg(th.chrome)
-      .child(div().text_size(15).font_semibold().text_color(th.foreground).child("2Code"))
+    const narrow = (find(layout(), "sidebar")?.size?.px ?? 250) < RAIL;
+    return h_flex().size_full().px(narrow ? 0 : 16).items_center().bg(th.chrome)
+      .when(narrow, (el) => el.justify_center())
+      .when(!narrow, (el) => el.justify_between().child(div().text_size(15).font_semibold().text_color(th.foreground).child("2Code")))
       .child(div().id("sidebar-toggle").size(24).flex().items_center().justify_center().rounded(6).text_color(th.dim)
         .hover((s) => s.bg(th.hover).text_color(th.foreground)).on_mouse_down("left", stop)
         .on_click(() => run("layout.toggle", { id: "sidebar" }))
@@ -24,9 +32,12 @@ export class SidebarHeader {
 
 export class Sidebar {
   init(_props, cx) {
-    this.repo = {}; // space id -> { at, main, top, name }
+    this.repo = {};       // space id -> { at, main, top, name }
+    this.checkouts = {};  // project key -> [{ path, branch, main }]
+    this.avatars = {};    // project key -> image path | null
     this.closed = JSON.parse(localStorage.getItem("closed") ?? "{}");
     this.hover = null;
+    this.width = 250;
     cx.spawn(async () => { await resolveLocale(); });
     this.refresh(cx);
     cx.timer.every(4000, (cx) => this.refresh(cx));
@@ -37,28 +48,46 @@ export class Sidebar {
     this.busy = true;
     cx.spawn(async (cx) => {
       try {
+        // Which repo every open space is in; new repos join the project list.
         const all = panes();
         for (const s of spaces()) {
           const at = place(s, all);
-          if (!at || this.repo[s.id]?.at === at) continue;
-          const r = await repoOf(at, s.machine);
-          this.repo[s.id] = r ? { at, ...r } : { at, main: at, top: at, name: at.split("/").pop() || at };
+          if (!at) continue;
+          if (this.repo[s.id]?.at !== at) {
+            const r = await repoOf(at, s.machine);
+            this.repo[s.id] = r ? { at, ...r } : { at, main: at, top: at, name: at.split("/").pop() || at };
+          }
+          addProject(this.repo[s.id].main, s.machine ?? null);
+        }
+        // Every project's checkouts, and its GitHub avatar once.
+        for (const p of savedProjects()) {
+          const key = projectKey(p);
+          this.checkouts[key] = await checkouts(p.path, p.machine);
+          if (!(key in this.avatars)) {
+            this.avatars[key] = null;
+            const owner = await githubOwner(p.path, p.machine).catch(() => null);
+            this.avatars[key] = await githubAvatar(owner);
+          }
         }
       } catch {}
       finally { this.busy = false; cx.notify(); }
     });
   }
 
+  // Projects in saved order, each with its profiles: a checkout and the open
+  // space showing it (if any).
   projects() {
-    const groups = new Map();
-    for (const s of spaces()) {
-      const r = this.repo[s.id] ?? { main: s.folder || s.id, top: s.folder, name: s.name };
-      const key = `${s.machine ?? ""}:${r.main}`;
-      if (!groups.has(key)) groups.set(key, { key, name: r.name, main: r.main, machine: s.machine ?? null, spaces: [] });
-      groups.get(key).spaces.push({ ...s, top: r.top, isDefault: r.top === r.main });
-    }
-    for (const g of groups.values()) g.spaces.sort((a, b) => b.isDefault - a.isDefault);
-    return [...groups.values()];
+    const open = spaces().map((s) => ({ s, r: this.repo[s.id] }));
+    return savedProjects().map((p) => {
+      const key = projectKey(p), on = p.machine ?? null;
+      const mine = open.filter(({ s, r }) => (s.machine ?? null) === on && r && r.main === p.path);
+      const list = this.checkouts[key] ?? [{ path: p.path, branch: null, main: true }];
+      const profiles = list.map((c) => ({ ...c, space: mine.find(({ r }) => r.top === c.path)?.s ?? null }));
+      // Spaces in this repo whose checkout git didn't list (yet): show them too.
+      for (const { s, r } of mine) if (!profiles.some((x) => x.space?.id === s.id)) profiles.push({ path: r.top, branch: s.branch, main: r.top === p.path, space: s });
+      for (const x of profiles) if (!x.branch && x.space?.branch) x.branch = x.space.branch;
+      return { path: p.path, machine: on, on, key, name: projectName(p), profiles, avatar: this.avatars[key] ?? null };
+    });
   }
 
   toggle(key) {
@@ -67,81 +96,128 @@ export class Sidebar {
   }
 
   addProject() {
-    pickFolder({ prompt: t("addProject") }).then((folder) => { if (folder) run("space.new", { folder }); });
-  }
-
-  // Herdr's own worktree dialog makes the checkout; 2code adds the project's
-  // setup script as the new space's first tab.
-  newProfile(p, cx) {
-    cx.spawn(async () => {
-      const config = await readProjectConfig(p.main, p.machine);
-      if (config.error) notify({ title: "2code", body: t("configError", { error: config.error }), level: "warning" });
-      const setup = config.setup_script.length ? { tab: t("setupTab"), argv: scriptArgv(config.setup_script) } : {};
-      openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { space: p.spaces[0].id, folder: p.main, action: "new", ...setup } });
+    pickFolder({ prompt: t("addProject") }).then(async (folder) => {
+      if (!folder) return;
+      const r = await repoOf(folder, null).catch(() => null);
+      addProject(r?.main ?? folder, null);
+      run("space.new", { folder: r?.top ?? folder });
     });
   }
 
-  deleteProfile(s, main) {
-    openOverlay({ mod: "2code", kind: "dialog", width: 460, height: 300, props: { part: "teardown", space: s.id, top: s.top, main, name: s.branch ?? s.name, on: s.machine ?? null } });
+  // Opens a profile: its space if it has one, else a new space on its checkout.
+  openProfile(p, x) {
+    if (x.space) run("space.select", { id: x.space.id });
+    else run("space.new", { folder: x.path, machine: p.on ?? "" });
+  }
+
+  openProject(p) {
+    const shown = p.profiles.find((x) => x.space?.active) ?? p.profiles.find((x) => x.space) ?? p.profiles[0];
+    if (shown) this.openProfile(p, shown);
+  }
+
+  menu(kind, p, x) {
+    const target = { path: p.path, machine: p.on, name: p.name, ...(x ? { top: x.path, branch: x.branch, main: x.main, space: x.space?.id ?? null } : {}) };
+    openOverlay({ mod: "2code", kind: "popup", width: 230, height: kind === "project" ? 196 : 124, props: { part: "menu", kind, target } });
+  }
+
+  avatar(p, th, size = 20) {
+    if (p.avatar) return image(p.avatar).size(size).flex_none().rounded(5);
+    return div().size(size).flex_none().flex().items_center().justify_center().rounded(5).bg(th.raised)
+      .text_size(size * 0.55).font_semibold().text_color(th.muted).child((p.name[0] ?? "?").toUpperCase());
   }
 
   projectRow(p, th) {
-    const active = p.spaces.some((s) => s.active);
+    const active = p.profiles.some((x) => x.space?.active);
     const open = !this.closed[p.key];
-    const status = worst(p.spaces.map((s) => s.status));
+    const status = worst(p.profiles.map((x) => x.space?.status));
     const hovered = this.hover === p.key;
     return h_flex().id(`project-${p.key}`).h(32).px(8).gap(8).items_center().rounded(6).cursor_pointer()
       .bg(active && !open ? th.selected : th.chrome).hover((s) => s.bg(th.hover))
       .on_hover((h, cx) => { this.hover = h ? p.key : (this.hover === p.key ? null : this.hover); cx.notify(); })
-      .on_click(() => run("space.select", { id: (p.spaces.find((s) => s.active) ?? p.spaces[0]).id }))
-      .child(div().size(20).flex_none().flex().items_center().justify_center().rounded(5).bg(th.raised)
-        .text_size(11).font_semibold().text_color(th.muted).child((p.name[0] ?? "?").toUpperCase()))
+      .on_click(() => this.openProject(p))
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("project", p); })
+      .child(this.avatar(p, th))
       .child(div().flex_1().min_w(0).truncate().text_color(th.foreground).child(p.name))
       .when(!hovered && Boolean(dot(status, th)), (el) => el.child(dot(status, th)))
       .when(hovered, (el) => el.child(div().id(`profile-new-${p.key}`).size(20).flex().items_center().justify_center().rounded(5)
         .text_color(th.dim).hover((s) => s.bg(th.raised).text_color(th.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.newProfile(p, cx); })
+        .on_click((_e, cx) => { cx.stop_propagation(); newProfile(p, cx); })
         .child(icon("plus", 13))))
       .child(div().id(`project-caret-${p.key}`).size(18).flex().items_center().justify_center().text_color(th.dim)
         .on_click((_e, cx) => { cx.stop_propagation(); this.toggle(p.key); cx.notify(); })
         .child(icon(open ? "chevron-down" : "chevron-right", 13)));
   }
 
-  profileRow(s, p, th) {
-    const label = s.branch ?? (s.isDefault ? t("defaultProfile") : s.name);
-    const hovered = this.hover === s.id;
-    return h_flex().id(`profile-${s.id}`).h(28).pl(36).pr(8).gap(7).items_center().rounded(6).cursor_pointer()
-      .bg(s.active ? th.selected : th.chrome).hover((st) => st.bg(th.hover))
-      .on_hover((h, cx) => { this.hover = h ? s.id : (this.hover === s.id ? null : this.hover); cx.notify(); })
-      .on_click(() => run("space.select", { id: s.id }))
-      .child(icon("git-branch", 13).text_color(s.active ? th.foreground : th.dim))
-      .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(s.active ? th.foreground : th.muted).child(label))
-      .when(!(hovered && !s.isDefault) && Boolean(dot(s.status, th)), (el) => el.child(dot(s.status, th)))
-      .when(hovered && !s.isDefault, (el) => el.child(div().id(`profile-delete-${s.id}`).size(18).flex().items_center().justify_center().rounded(5)
+  profileRow(p, x, th) {
+    const label = x.branch ?? (x.main ? t("defaultProfile") : x.path.split("/").pop());
+    const id = `${p.key}:${x.path}`, hovered = this.hover === id, active = Boolean(x.space?.active);
+    const color = active ? th.foreground : x.space ? th.muted : th.dim;
+    return h_flex().id(`profile-${id}`).h(28).pl(36).pr(8).gap(7).items_center().rounded(6).cursor_pointer()
+      .bg(active ? th.selected : th.chrome).hover((st) => st.bg(th.hover))
+      .on_hover((h, cx) => { this.hover = h ? id : (this.hover === id ? null : this.hover); cx.notify(); })
+      .on_click(() => this.openProfile(p, x))
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("profile", p, x); })
+      .child(icon("git-branch", 13).text_color(color))
+      .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(color).child(label))
+      .when(!(hovered && !x.main) && Boolean(dot(x.space?.status, th)), (el) => el.child(dot(x.space.status, th)))
+      .when(hovered && !x.main, (el) => el.child(div().id(`profile-delete-${id}`).size(18).flex().items_center().justify_center().rounded(5)
         .text_color(th.dim).hover((st) => st.bg(th.raised).text_color(th.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.deleteProfile(s, p.main); })
+        .on_click((_e, cx) => { cx.stop_propagation(); deleteProfile(p, x); })
         .child(icon("x", 12))));
+  }
+
+  rail(projects, th) {
+    return v_flex().id("project-rail").flex_1().min_h(0).py(2).gap(6).items_center().overflow_y_scrollbar()
+      .children(projects.map((p) => {
+        const active = p.profiles.some((x) => x.space?.active), status = worst(p.profiles.map((x) => x.space?.status));
+        return div().id(`rail-${p.key}`).relative().p(4).rounded(7).cursor_pointer().bg(active ? th.selected : th.chrome).hover((s) => s.bg(th.hover))
+          .on_click(() => this.openProject(p))
+          .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("project", p); })
+          .child(this.avatar(p, th, 24))
+          .when(Boolean(dot(status, th)), (el) => el.child(div().absolute().top(1).right(1).child(dot(status, th))));
+      }));
   }
 
   render() {
     const th = theme();
-    shared("2code.locale"); // re-render on language change
+    shared("2code.locale"); shared("2code.projects");
     const projects = this.projects();
-    return v_flex().size_full().min_h(0).bg(th.chrome).text_size(13)
-      .child(h_flex().h(30).px(16).items_center().justify_between()
-        .child(div().text_size(12).text_color(th.dim).child(t("projects")))
+    const narrow = this.width < RAIL;
+    return v_flex().id("sidebar-root").size_full().min_h(0).bg(th.chrome).text_size(13)
+      .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) >= 1) { this.width = size.width; cx.notify(); } })
+      .child(h_flex().h(30).px(narrow ? 0 : 16).items_center().when(narrow, (el) => el.justify_center())
+        .when(!narrow, (el) => el.justify_between().child(div().text_size(12).text_color(th.dim).child(t("projects"))))
         .child(div().id("project-new").size(22).flex().items_center().justify_center().rounded(5).text_color(th.dim)
           .hover((s) => s.bg(th.hover).text_color(th.foreground)).on_click(() => this.addProject())
           .child(icon("plus", 14))))
-      .child(v_flex().id("project-list").flex_1().min_h(0).px(8).gap(1).overflow_y_scrollbar()
+      .child(narrow ? this.rail(projects, th) : v_flex().id("project-list").flex_1().min_h(0).px(8).gap(1).overflow_y_scrollbar()
         .children(projects.flatMap((p) => [
           this.projectRow(p, th),
-          ...(this.closed[p.key] ? [] : p.spaces.map((s) => this.profileRow(s, p, th))),
+          ...(this.closed[p.key] ? [] : p.profiles.map((x) => this.profileRow(p, x, th))),
         ]))
         .when(!projects.length, (el) => el.child(div().p(8).text_color(th.dim).child(t("noProjects")))))
-      .child(h_flex().id("settings").h(32).mx(8).mb(10).px(8).gap(8).items_center().rounded(6).cursor_pointer()
+      .child(h_flex().id("settings").h(32).mx(8).mb(10).px(narrow ? 0 : 8).gap(8).items_center().rounded(6).cursor_pointer()
+        .when(narrow, (el) => el.justify_center())
         .text_color(th.muted).hover((s) => s.bg(th.hover).text_color(th.foreground))
         .on_click(() => run("app.settings"))
-        .child(icon("settings", 15)).child(t("settings")));
+        .child(icon("settings", 15)).when(!narrow, (el) => el.child(t("settings"))));
   }
+}
+
+// Herdr's own New worktree dialog makes the checkout; 2code adds the project's
+// setup script as the new space's first tab.
+export async function openNewProfile(p) {
+  const on = p.on ?? p.machine ?? null;
+  const config = await readProjectConfig(p.path, on);
+  if (config.error) notify({ title: "2code", body: t("configError", { error: config.error }), level: "warning" });
+  const setup = config.setup_script.length ? { tab: t("setupTab"), argv: scriptArgv(config.setup_script) } : {};
+  openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { folder: p.path, machine: on, action: "new", ...setup } });
+}
+
+export function newProfile(p, cx) {
+  cx.spawn(async () => { await openNewProfile(p); });
+}
+
+export function deleteProfile(p, x) {
+  openOverlay({ mod: "2code", kind: "dialog", width: 480, height: 340, props: { part: "deleteProfile", main: p.path, top: x.path, branch: x.branch ?? null, space: x.space?.id ?? null, on: p.on ?? p.machine ?? null } });
 }

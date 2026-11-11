@@ -2,7 +2,8 @@
 // project and branch in the middle, settings on the right.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { run, theme, layout, readTextFile, shared } from "herdr";
+import { run, theme, layout, readTextFile, shared, openOverlay } from "herdr";
+import { savedProjects, projectName } from "../lib/projects.js";
 import { t } from "../lib/i18n.js";
 import { git, repoOf, here, READ } from "../lib/git.js";
 import { icon, stop, find } from "../lib/ui.js";
@@ -88,9 +89,13 @@ export class Topbar {
         .child(div().font_semibold().text_size(14).text_color(th.foreground).truncate().child(name))
         .when(Boolean(branch), (el) => el.child(h_flex().gap(4).items_center().text_color(th.dim)
           .child(icon("git-branch", 13)).child(div().truncate().child(branch)))))
-      .child(div().id("app-settings").size(28).flex().items_center().justify_center().rounded(6)
+      // As in 2code, the gear is the project's settings (its 2code.json).
+      .child(div().id("project-settings").size(28).flex().items_center().justify_center().rounded(6)
         .bg(th.raised).text_color(th.muted).hover((s) => s.text_color(th.foreground)).on_mouse_down("left", stop)
-        .on_click(() => run("app.settings"))
+        .on_click(() => {
+          if (!current || !this.repo) return run("app.settings");
+          openOverlay({ mod: "2code", kind: "dialog", width: 640, height: 0.8, props: { part: "projectSettings", path: this.repo.main, machine: here().on, name: projectName({ path: this.repo.main, ...(savedProjects().find((p) => p.path === this.repo.main) ?? {}) }) } });
+        })
         .child(icon("settings", 15)));
   }
 }
