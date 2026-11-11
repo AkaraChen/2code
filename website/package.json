@@ -26,7 +26,7 @@
     "shiki": "^4.3.1"
   },
   "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.15.13",
+    "@netlify/plugin-nextjs": "^5.16.6",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
