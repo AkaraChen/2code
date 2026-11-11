@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import type { ReactNode } from 'react'
-import '@fontsource/zilla-slab/400.css'
-import '@fontsource/zilla-slab/500.css'
-import '@fontsource/inter/400.css'
-import '@fontsource/inter/500.css'
-import '@fontsource/inter/600.css'
-import '@fontsource/geist-mono/400.css'
+import '@fontsource/bricolage-grotesque/500.css'
+import '@fontsource/bricolage-grotesque/600.css'
+import '@fontsource/bricolage-grotesque/700.css'
+import '@fontsource/bricolage-grotesque/800.css'
+import '@fontsource/dm-mono/400.css'
 import './globals.css'
 import { defaultLocale } from './i18n/resources'
 import { siteConfig } from './site-config'
@@ -14,8 +13,9 @@ import { siteConfig } from './site-config'
 export const dynamic = 'error'
 
 // `lang` follows the path (not the browser) so the Chinese page is always
-// announced as zh-CN, and an explicit footer choice wins over the auto-redirect.
-const localeBootstrapScript = `(function(){var path=window.location.pathname;document.documentElement.lang=path.indexOf('/zh-cn')===0?'zh-CN':'en';var stored=null;try{stored=localStorage.getItem('2code-locale');}catch(e){}var lang=(navigator.languages&&navigator.languages[0])||navigator.language||'en';var prefersZh=stored?stored==='zh-cn':/^zh/i.test(lang);if(prefersZh&&(path==='/'||path==='/blog'||path==='/blog/')){window.location.replace(path==='/'?'/zh-cn':'/zh-cn/blog');}})();`
+// announced as zh-CN. Locale hops are HTTP 302s in middleware — do not
+// `location.replace` here; afdocs treats that as a JavaScript redirect.
+const localeBootstrapScript = `(function(){var path=window.location.pathname;document.documentElement.lang=path.indexOf('/zh-cn')===0?'zh-CN':'en';})();`
 
 // Runs before first paint so a stored preference never flashes the wrong theme.
 // No stored value means "follow the system", which CSS handles without JS.

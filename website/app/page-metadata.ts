@@ -26,6 +26,8 @@ export type PageMetadataOptions = Readonly<{
   keywords?: readonly string[]
   /** Root-relative `.md` alternate; `null` opts out, omitted falls back to the map. */
   markdownPath?: string | null
+  /** Root-relative RSS alternate, used on blog indexes. */
+  rssPath?: string
   /** hreflang map for this page; defaults to the two homepages. */
   languages?: Readonly<Record<string, string>>
   image?: Readonly<{
@@ -96,7 +98,16 @@ export function buildPageMetadata(
     alternates: {
       canonical: pathname,
       languages: { ...(options.languages ?? defaultLanguages) },
-      ...(markdownPath ? { types: { 'text/markdown': markdownPath } } : {}),
+      ...((markdownPath || options.rssPath)
+        ? {
+            types: {
+              ...(markdownPath ? { 'text/markdown': markdownPath } : {}),
+              ...(options.rssPath
+                ? { 'application/rss+xml': options.rssPath }
+                : {}),
+            },
+          }
+        : {}),
     },
     openGraph: options.article
       ? {

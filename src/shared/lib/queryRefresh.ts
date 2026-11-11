@@ -1,1 +1,0 @@
-export const GIT_LIGHT_REFRESH_INTERVAL_MS = 10_000;

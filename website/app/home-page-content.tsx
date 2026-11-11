@@ -1,5 +1,9 @@
+import { AgentDirective } from './agent-directive'
+import { blogListPath } from './blog/lib/routes'
 import { type AppLocale, type resources } from './i18n/resources'
+import { productPath } from './lib/product-pages'
 import { LocaleSwitch } from './locale-switch'
+import { htmlLang, organizationNode } from './structured-data'
 import { PageEffects } from './page-effects'
 import { SiteHeader } from './site-header'
 import { siteConfig } from './site-config'
@@ -29,8 +33,8 @@ const faqs = [
   'production',
 ] as const
 
-const SCREENSHOT_WIDTH = 2498
-const SCREENSHOT_HEIGHT = 1802
+const SCREENSHOT_WIDTH = 2560
+const SCREENSHOT_HEIGHT = 1640
 
 type Messages = (typeof resources)[AppLocale]
 
@@ -44,6 +48,9 @@ export function HomePageContent({
   messages,
 }: HomePageContentProps) {
   const t = messages
+  const [titleBefore, titleAfter = ''] = t.hero.titleLineTwo.split(
+    t.hero.titleHighlight,
+  )
 
   const pageUrl =
     locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url
@@ -56,20 +63,14 @@ export function HomePageContent({
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Organization',
-        '@id': `${siteConfig.url}/#organization`,
-        name: siteConfig.name,
-        url: siteConfig.url,
-        sameAs: [siteConfig.githubUrl],
-      },
+      organizationNode(),
       {
         '@type': 'WebSite',
         '@id': `${siteConfig.url}/#website`,
         name: siteConfig.name,
         url: pageUrl,
         description: t.metadata.description,
-        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+        inLanguage: htmlLang(locale),
         publisher: {
           '@id': `${siteConfig.url}/#organization`,
         },
@@ -82,7 +83,7 @@ export function HomePageContent({
         description: t.metadata.description,
         isPartOf: { '@id': `${siteConfig.url}/#website` },
         about: { '@id': `${siteConfig.url}/#software` },
-        inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
+        inLanguage: htmlLang(locale),
         // Machine-readable alternate (GEO: rel=alternate type=text/markdown)
         encodingFormat: 'text/html',
         relatedLink: [
@@ -96,19 +97,19 @@ export function HomePageContent({
         '@id': `${siteConfig.url}/#software`,
         name: siteConfig.name,
         applicationCategory: 'DeveloperApplication',
-        applicationSubCategory: 'Terminal workstation',
-        operatingSystem: 'macOS, Windows (experimental), Linux (experimental)',
+        applicationSubCategory: 'Herdr layout',
+        operatingSystem: 'macOS, Linux, Windows (with Herdr)',
         description: t.metadata.description,
         url: pageUrl,
-        downloadUrl: siteConfig.githubReleaseUrl,
-        installUrl: siteConfig.githubReleaseUrl,
+        downloadUrl: siteConfig.installUrl,
+        installUrl: siteConfig.installUrl,
         softwareVersion: 'latest',
         offers: {
           '@type': 'Offer',
           price: '0',
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
-          url: siteConfig.githubReleaseUrl,
+          url: siteConfig.installUrl,
         },
         screenshot: features.map(
           (feature) => `${siteConfig.url}${feature.screenshotSrc}`,
@@ -124,74 +125,95 @@ export function HomePageContent({
   }
 
   return (
-    <div className="page-shell">
+    <div className="page-shell" lang={htmlLang(locale)}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
 
-      <SiteHeader locale={locale} messages={t} />
+      <AgentDirective locale={locale} />
+      <div data-markdown-ignore>
+        <SiteHeader locale={locale} messages={t} />
+      </div>
       <PageEffects />
 
       <main>
         <section className="hero-section shell" id="hero">
-          <div className="hero-copy">
-            <p className="label hero-badge">
-              <span className="marker">{t.hero.kicker}</span>
+          <div className="hero-panel">
+            <p className="hero-sticker" aria-hidden="true">
+              {t.hero.sticker}
             </p>
 
-            <h1>
-              {t.hero.titleLineOne}
-              <br />
-              {t.hero.titleLineTwo}
-            </h1>
+            <div className="hero-copy">
+              <p className="label hero-badge">
+                <span className="marker">{t.hero.kicker}</span>
+              </p>
 
-            <p className="hero-lede">{t.hero.lede}</p>
-            <p className="hero-supporting-copy">{t.hero.supporting}</p>
-
-            <div className="hero-actions">
-              <a
-                id="cta-download"
-                className="button button-primary"
-                href={siteConfig.githubReleaseUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-keyshortcuts="d"
-              >
-                <span>{t.hero.primaryCta}</span>
-                <kbd className="keycap" aria-hidden="true">
-                  D
-                </kbd>
-              </a>
-              <a
-                id="cta-features"
-                className="button button-secondary"
-                href="#features"
-                aria-keyshortcuts="f"
-              >
-                <span>{t.hero.secondaryCta}</span>
-                <kbd className="keycap" aria-hidden="true">
-                  F
-                </kbd>
-              </a>
+              <h1>
+                {t.hero.titleLineOne}
+                <br />
+                {titleBefore}
+                <span className="hero-highlight">{t.hero.titleHighlight}</span>
+                {titleAfter}
+              </h1>
             </div>
-          </div>
 
-          <div className="hero-shot reveal">
-            <figure className="shot-frame">
-              <img
-                src="/screenshots/terminal-tabs.png"
-                alt={t.hero.shotAlt}
-                width={SCREENSHOT_WIDTH}
-                height={SCREENSHOT_HEIGHT}
-                loading="eager"
-                decoding="async"
-              />
-            </figure>
+            <div className="hero-bottom">
+              <div className="hero-copy">
+                <p className="hero-lede">{t.hero.lede}</p>
+                <p className="hero-supporting-copy">{t.hero.supporting}</p>
+
+                <div className="hero-actions">
+                  <a
+                    id="cta-download"
+                    className="button button-primary"
+                    href={productPath(locale, 'install')}
+                    aria-keyshortcuts="d"
+                  >
+                    <span>{t.hero.primaryCta}</span>
+                    <kbd
+                      className="keycap"
+                      aria-hidden="true"
+                      data-markdown-ignore
+                    >
+                      D
+                    </kbd>
+                  </a>
+                  <a
+                    id="cta-features"
+                    className="button button-secondary"
+                    href="#features"
+                    aria-keyshortcuts="f"
+                  >
+                    <span>{t.hero.secondaryCta}</span>
+                    <kbd
+                      className="keycap"
+                      aria-hidden="true"
+                      data-markdown-ignore
+                    >
+                      F
+                    </kbd>
+                  </a>
+                </div>
+              </div>
+
+              <div className="hero-shot">
+                <figure className="shot-frame" data-markdown-ignore>
+                  <img
+                    src="/screenshots/terminal-tabs.png"
+                    alt={t.hero.shotAlt}
+                    width={SCREENSHOT_WIDTH}
+                    height={SCREENSHOT_HEIGHT}
+                    loading="eager"
+                    decoding="async"
+                  />
+                </figure>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="features-section shell ruled-top" id="features">
+        <section className="features-section shell" id="features">
           <div className="feature-list">
             {features.map((feature, index) => (
               <section
@@ -218,7 +240,7 @@ export function HomePageContent({
                 </div>
 
                 <div className="feature-shot">
-                  <figure className="shot-frame">
+                  <figure className="shot-frame" data-markdown-ignore>
                     <img
                       className="feature-image"
                       src={feature.screenshotSrc}
@@ -235,7 +257,7 @@ export function HomePageContent({
           </div>
         </section>
 
-        <section className="faq-section shell ruled-top" id="faq">
+        <section className="faq-section shell" id="faq">
           <div className="section-heading">
             <p className="label">{t.faq.kicker}</p>
             <h2>{t.faq.title}</h2>
@@ -256,9 +278,7 @@ export function HomePageContent({
             <p>{t.faq.cta}</p>
             <a
               className="button button-primary"
-              href={siteConfig.githubReleaseUrl}
-              target="_blank"
-              rel="noreferrer"
+              href={productPath(locale, 'install')}
             >
               {t.hero.primaryCta}
             </a>
@@ -266,11 +286,17 @@ export function HomePageContent({
         </section>
       </main>
 
-      <footer className="site-footer">
+      <footer className="site-footer" data-markdown-ignore>
         <div className="shell footer-inner">
           <p className="caption">2code — {t.footer.tagline}</p>
 
           <div className="footer-links">
+            <a href={productPath(locale, 'faq')}>{t.nav.faq}</a>
+            <a href={productPath(locale, 'install')}>{t.footer.install}</a>
+            <a href={productPath(locale, 'getting-started')}>
+              {t.footer.gettingStarted}
+            </a>
+            <a href={blogListPath(locale)}>{t.nav.blog}</a>
             <a href={siteConfig.githubUrl} target="_blank" rel="noreferrer">
               {t.nav.github}
             </a>
