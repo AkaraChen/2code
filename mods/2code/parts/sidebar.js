@@ -178,7 +178,8 @@ export class Sidebar {
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("project", p); })
       .child(this.avatar(p, th))
       .child(div().flex_1().min_w(0).truncate().text_color(th.foreground).child(p.name))
-      .when(!hovered && Boolean(dot(status, th)), (el) => el.child(dot(status, th)))
+      // The project's dot sums up its worktrees, so it shows only while they're folded away.
+      .when(!open && !hovered && Boolean(dot(status, th)), (el) => el.child(dot(status, th)))
       .when(hovered, (el) => el.child(div().id(`profile-new-${p.key}`).size(20).flex().items_center().justify_center().rounded(5)
         .text_color(th.dim).hover((s) => s.bg(th.raised).text_color(th.foreground))
         .on_click((_e, cx) => { cx.stop_propagation(); newProfile(p, cx); })
@@ -200,11 +201,15 @@ export class Sidebar {
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu("profile", p, x); })
       .child(icon("git-branch", 13).text_color(color))
       .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(color).child(label))
-      .when(!(hovered && !x.main) && Boolean(dot(x.space?.status, th)), (el) => el.child(dot(x.space.status, th)))
-      .when(hovered && !x.main, (el) => el.child(div().id(`profile-delete-${id}`).size(18).flex().items_center().justify_center().rounded(5)
-        .text_color(th.dim).hover((st) => st.bg(th.raised).text_color(th.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); deleteProfile(p, x); })
-        .child(icon("x", 12))));
+      // An 18px slot like the project's caret, so dots line up under it;
+      // hovering a worktree swaps the dot for its delete button.
+      .child(hovered && !x.main
+        ? div().id(`profile-delete-${id}`).size(18).flex_none().flex().items_center().justify_center().rounded(5)
+          .text_color(th.dim).hover((st) => st.bg(th.raised).text_color(th.foreground))
+          .on_click((_e, cx) => { cx.stop_propagation(); deleteProfile(p, x); })
+          .child(icon("x", 12))
+        : div().w(18).flex_none().flex().items_center().justify_center()
+          .when(Boolean(dot(x.space?.status, th)), (el) => el.child(dot(x.space.status, th))));
   }
 
   ring(id) {

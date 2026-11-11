@@ -1,7 +1,7 @@
 # 2code
 
 2code's coding workstation inside Herdr: projects on the left with their git
-worktree profiles nested under them, a quiet top bar with the project, branch,
+worktrees nested under them, a quiet top bar with the project, branch,
 pull request and a Files / Git switch, flat Files and Changes panels, a large
 diff dialog with history and review comments, and line-style terminal tabs
 with a terminal-template menu. Neutral grays (shadcn style), light and dark,
@@ -21,9 +21,11 @@ Left to right:
     the 52px header and top bar); on the macOS rail the row is left to them.
   - "Projects" label (12px, `dim`) with a `+` that opens the system folder picker.
   - One 32px row per project: a 20px GitHub avatar (else a rounded letter tile),
-    the name, the most urgent agent dot, a caret. Under it, one 28px row per
-    profile (checkout): branch icon, branch name (main checkout first), agent
-    dot. Profiles without an open space are drawn in `dim`.
+    the name, the most urgent agent dot (only while folded: open, its
+    worktrees show their own), an 18px caret. Under it, one 28px row per
+    worktree (checkout): branch icon, branch name (main checkout first), and
+    an 18px slot with its agent dot, lined up under the caret. Worktrees
+    without an open space are drawn in `dim`.
   - Footer: Settings (Herdr's settings).
   - Narrower than 160px: only 24px project tiles with their dots.
 - **Work column**:
@@ -71,23 +73,24 @@ Left to right:
   (380ms / 260ms, ease-out, 70ms delay). Leaving rolls them back the same way.
   Native `transition` on `top` and `opacity`; `spring` on `top` didn't move.
 - Agent dots: `working` pulses green (`#34d399`, opacity loop 1.2s), `blocked`
-  yellow (`#facc15`), `done` green (`#22c55e`), `idle` nothing. A project
-  shows its most urgent profile's status.
+  yellow (`#facc15`), `done` green (`#22c55e`), `idle` nothing. A folded
+  project (and a rail tile) shows its most urgent worktree's status; an open
+  one shows none, since its worktrees show theirs.
 - Projects are the shared list `2code.projects` (`[{path, machine, name?}]`).
   Every 4s the sidebar adds the repo of each open space (its main checkout:
   `git rev-parse --git-common-dir`) and reads each project's
   `git worktree list --porcelain`. Names come from the folder ("app.git" →
   "app", "bare.git" → its parent) unless renamed.
-- Click a project: its shown, else first open, else main profile. Click a
-  profile: select its space, or `space.new {folder}` on its checkout. Caret
+- Click a project: its shown, else first open, else main worktree. Click a
+  worktree: select its space, or `space.new {folder}` on its checkout. Caret
   folds. Hover a project: `+` opens Herdr's `worktree` dialog (action `new`,
   folder = main checkout); if `2code.json` has `setup_script`, the new space's
-  first tab ("setup" / "安装") runs it. Hover a non-main profile: `×` opens
-  Delete profile.
-- Right-click a project: New Profile, Rename, Project Settings, Reveal in File
+  first tab ("setup" / "安装") runs it. Hover a non-main worktree: `×` opens
+  Delete worktree.
+- Right-click a project: New Worktree, Rename, Project Settings, Reveal in File
   Manager (local), Remove Project (closes its spaces, drops it from the list).
-  Right-click a profile: Open, Reveal, Delete Profile.
-- Delete profile: shows uncommitted file count and commits on no remote, the
+  Right-click a worktree: Open, Reveal, Delete Worktree.
+- Delete worktree: shows uncommitted file count and commits on no remote, the
   teardown lines; Run teardown and delete / Skip teardown / Cancel; closes the
   space, `git worktree remove [--force]`. The branch stays.
 - Project settings: tabs Scripts (setup / teardown / init, one per line),
@@ -176,7 +179,7 @@ Left to right:
 - A popup's tasks end when it closes: menus draw nothing while their action
   runs and close after.
 - Herdr's own Remove worktree needs an open space (without one it closes the
-  focused space), so Delete profile removes the worktree itself.
+  focused space), so Delete worktree removes the worktree itself.
 - Virtual list rows can't register `on_click`: use the list's
   `on_item_click(key)`; it carries no modifiers, hence click-then-click ranges.
 - Deeply nested flex leaves `size_full()` children with no height: pin the
@@ -199,9 +202,9 @@ Left to right:
 
 - `herdr-app check mods/2code` passes and `layout.switch {name: "2code"}` shows
   no `herdr-app status` errors.
-- Closing a project's last tab leaves it in the sidebar; clicking its profile
+- Closing a project's last tab leaves it in the sidebar; clicking its worktree
   opens a space there.
-- Two worktrees of one repo appear as profiles under one project row.
+- Two worktrees of one repo appear as worktrees under one project row.
 - `+` with a `setup_script` gives a worktree whose first tab ran it; `×` runs
   `teardown_script` and removes the worktree.
 - Project Settings saves templates into `2code.json` and they show in the

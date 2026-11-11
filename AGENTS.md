@@ -50,7 +50,7 @@ bring its code back here.
   `lib/git.js`) so they don't trigger folder watches.
 - 2code keeps only small shared state (`2code.projects`, `2code.editors`,
   `2code.dirty`, `2code.review`, `2code.locale`) and `localStorage` UI state;
-  profiles come from git, config from `2code.json` files, open files from
+  worktrees come from git, config from `2code.json` files, open files from
   Herdr's own tabs.
 
 ## Test

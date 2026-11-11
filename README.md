@@ -2,7 +2,7 @@
 
 2code's workstation, as a layout for [Herdr](https://herdr.dev).
 
-Projects on the left with their worktree profiles nested under them, a top bar
+Projects on the left with their worktrees nested under them, a top bar
 with the project, branch and a Files / Git switch, and line-style terminal tabs
 with project and global terminal templates. Herdr runs the terminals and
 agents; 2code is the look and the workflow on top.
@@ -33,15 +33,15 @@ herdr-app do layout.switch --name 2code
 
 ## What it adds to Herdr
 
-- **Projects and profiles.** Projects stay in the sidebar (only their paths
+- **Projects and worktrees.** Projects stay in the sidebar (only their paths
   are kept, in Herdr's shared state); a space opened on a new repo adds it.
-  Profiles are the repo's checkouts from `git worktree list`: the main one
-  first, then worktrees, open or not. Picking a closed one opens it.
-- **Project menu** (right-click): new profile, rename, project settings,
-  reveal in the file manager, remove. **Profile menu**: open, reveal, delete.
-- **New profile** (`+` on a project) opens Herdr's own New worktree dialog and
+  Under each project, its worktrees come from `git worktree list`: the main
+  checkout first, then the others, open or not. Picking a closed one opens it.
+- **Project menu** (right-click): new worktree, rename, project settings,
+  reveal in the file manager, remove. **Worktree menu**: open, reveal, delete.
+- **New worktree** (`+` on a project) opens Herdr's own New worktree dialog and
   runs the project's `setup_script` as the new space's first tab.
-- **Delete profile** (`×` on a profile) warns about uncommitted files and
+- **Delete worktree** (`×` on a worktree) warns about uncommitted files and
   unpushed commits, runs the project's `teardown_script`, then removes the
   worktree. The branch stays.
 - **Project settings** (the top bar gear): edit `2code.json` scripts and
@@ -113,7 +113,7 @@ Put it at the root of a project (its main checkout; worktrees use it too):
   `sh -c` in the worktree, stopping at the first failure.
 - `init_script`: typed into every terminal 2code opens (New Terminal and
   templates), before a template's own commands.
-- `terminal_templates[].cwd`: relative to the profile's checkout; empty means
+- `terminal_templates[].cwd`: relative to the worktree's checkout; empty means
   its root.
 
 Global templates go in `~/2code/2code.json`:

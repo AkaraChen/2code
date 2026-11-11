@@ -28,7 +28,7 @@ export async function renderLlmsTxt() {
     '',
     '> A Herdr layout for projects, worktrees, and AI coding agents.',
     '',
-    '2code is an open-source layout for Herdr (herdr.dev), the desktop app for terminals and coding agents. It adds projects with Git worktree profiles, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status to Herdr\'s persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). It used to be a standalone Tauri desktop app.',
+    '2code is an open-source layout for Herdr (herdr.dev), the desktop app for terminals and coding agents. It adds projects with Git worktrees, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status to Herdr\'s persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). It used to be a standalone Tauri desktop app.',
     '',
     `Markdown versions of every page below are served at the listed \`.md\` URL and also via \`Accept: text/markdown\` on the HTML URL. A longer product brief is at ${url}${siteConfig.llmsFullTxtPath}.`,
     '',

@@ -6,13 +6,13 @@
 
 ## One-line definition
 
-2code is a **layout for Herdr** (https://herdr.dev), the desktop app for terminals and coding agents: projects with Git worktree profiles, setup and teardown scripts, terminal templates, a file tree and editor, git review, and agent status, on top of Herdr's persistent terminals.
+2code is a **layout for Herdr** (https://herdr.dev), the desktop app for terminals and coding agents: projects with Git worktrees, setup and teardown scripts, terminal templates, a file tree and editor, git review, and agent status, on top of Herdr's persistent terminals.
 
 ## Product narrative
 
 AI-assisted development creates more parallel state than a normal coding session: long-running commands, multiple agents, branch experiments, diffs to review, and half-finished ideas that should not vanish when attention shifts.
 
-2code treats that state as the primary interface. It started as a standalone Tauri desktop app; it is now a Herdr layout, so Herdr hosts the terminals and agents (they keep running when the window closes) and 2code shapes the window and the workflow: each project lists its worktrees as profiles, each with its own terminals and context. The product is intentionally a workstation, not another LLM.
+2code treats that state as the primary interface. It started as a standalone Tauri desktop app; it is now a Herdr layout, so Herdr hosts the terminals and agents (they keep running when the window closes) and 2code shapes the window and the workflow: each project lists its worktrees as worktrees, each with its own terminals and context. The product is intentionally a workstation, not another LLM.
 
 ## Key facts
 
@@ -38,11 +38,11 @@ AI-assisted development creates more parallel state than a normal coding session
 - Real terminals hosted by herdr-core: closing, updating or restarting the window loses nothing.
 - Tabs for terminals and open files side by side; 2code keeps the project list and open files with them.
 
-### Projects and worktree profiles
+### Projects and worktrees
 
-- Projects stay in the sidebar; each lists its Git worktrees as profiles, open or not.
-- New profile: Herdr's New worktree dialog, then the project's `setup_script` (from `2code.json`) runs in the first tab.
-- Delete profile: warns about uncommitted files and unpushed commits, runs `teardown_script`, removes the worktree.
+- Projects stay in the sidebar; each lists its Git worktrees as worktrees, open or not.
+- New worktree: Herdr's New worktree dialog, then the project's `setup_script` (from `2code.json`) runs in the first tab.
+- Delete worktree: warns about uncommitted files and unpushed commits, runs `teardown_script`, removes the worktree.
 
 ### Templates
 
@@ -55,7 +55,7 @@ AI-assisted development creates more parallel state than a normal coding session
 
 ### AI agent awareness (not an agent itself)
 
-- Agents that report status through Herdr (OSC 7501) show working / needs-you / done dots on tabs, profiles and projects, with Herdr's sounds and alerts.
+- Agents that report status through Herdr (OSC 7501) show working / needs-you / done dots on tabs, worktrees and projects, with Herdr's sounds and alerts.
 - Works with agent CLIs the user already runs (for example Claude Code, Codex-class tools); 2code does not replace the model.
 
 ### Localization
@@ -117,7 +117,7 @@ Switch layouts with ctrl-shift-l (cmd-shift-l on macOS).
 
 - Host: Herdr (GPUI-native window; herdr-core runs terminals)
 - 2code: a Herdr layout (`layouts/2code.json`) and one JavaScript mod (`mods/2code/`) describing native GPUI elements
-- No database: projects are paths in Herdr's shared state; profiles come from `git worktree list`
+- No database: projects are paths in Herdr's shared state; worktrees come from `git worktree list`
 - Former desktop app (Tauri 2, React, Rust, SQLite) lives on the `legacy-tauri-app` branch
 
 ## Structured discovery assets on this domain
@@ -136,7 +136,7 @@ Switch layouts with ctrl-shift-l (cmd-shift-l on macOS).
 
 ## Citation-friendly summary paragraph
 
-2code (https://2code.akr.moe) is an open-source layout for Herdr, the desktop app for terminals and coding agents. It adds projects with Git worktree profiles, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status on top of Herdr's persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). Install Herdr, then ask its agent to add the layout at github.com/AkaraChen/2code. Source: https://github.com/AkaraChen/2code.
+2code (https://2code.akr.moe) is an open-source layout for Herdr, the desktop app for terminals and coding agents. It adds projects with Git worktrees, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status on top of Herdr's persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). Install Herdr, then ask its agent to add the layout at github.com/AkaraChen/2code. Source: https://github.com/AkaraChen/2code.
 
 ## Chinese one-paragraph summary
 

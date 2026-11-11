@@ -34,14 +34,14 @@
 
 ## 三、和旧版不一样、目前接受的行为
 
-- 新建 profile：
+- 新建 worktree：
   - 没有拼音分支名，也不再自动起名（`pr/<city>-xxxx`）；
   - worktree 固定放在 `~/.herdr/worktrees/<仓库>/<分支>`，`worktree_dir` 不再生效。
-- 删除 profile：
+- 删除 worktree：
   - 分支会保留，不再删除；
   - 如果从 Herdr 自己的菜单删除，不会执行 `teardown_script`。
 - `init_script` 只在三种情况下执行：2code 的“新建终端”、模板、⌘T / Ctrl+Shift+T。用 Herdr 其他方式开的终端不会执行。
-- 一个打开的 profile 至少要有一个 tab。关掉最后一个 tab，它对应的 space 也会关掉，profile 在侧栏里变成“未打开”状态。
+- 一个打开的 worktree 至少要有一个 tab。关掉最后一个 tab，它对应的 space 也会关掉，worktree 在侧栏里变成“未打开”状态。
 - 没有首页，也没有首次使用引导。
 - 顶栏按钮不能再自定义排序和显示/隐藏，换成了一个“用…打开”下拉菜单。
 - 设置统一用 Herdr 的设置页（字体、主题、提示音、默认 shell）。语言只跟随系统环境变量 `LC_ALL` / `LC_MESSAGES` / `LANG`，没有切换器。
@@ -64,7 +64,7 @@
 - [ ] 真机上 Shift 扩选能不能用。
 - [ ] Windows：setup、teardown、模板都依赖 `sh`；“在文件管理器中显示”走 `explorer.exe`，回收站走 PowerShell。
 - [ ] 远程机器（Herdr 的 machine）上的项目：
-  - [ ] 新建和删除 profile；
+  - [ ] 新建和删除 worktree；
   - [ ] 模板（用 `hc send` 输入命令）；
   - [ ] Changes 和 Diff 对话框；
   - [ ] 远程文件以只读方式打开；

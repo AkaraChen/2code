@@ -9,7 +9,7 @@ export const resources = {
       metadata: {
         title: '2code | A Herdr layout for projects, worktrees, and agents',
         description:
-          '2code is a workstation layout for Herdr: projects with git worktree profiles, setup and teardown scripts, terminal templates, file editing, git review, and agent status.',
+          '2code is a workstation layout for Herdr: projects with their git worktrees, setup and teardown scripts, terminal templates, file editing, git review, and agent status.',
         // Keyword set informed by nearby products (Orca / Superset-style agentic coding SEO)
         // without stuffing competitor brand names into visible page copy.
         keywords: [
@@ -82,7 +82,7 @@ export const resources = {
           'If you bounce between agents, dev servers, and multiple worktrees every day, add 2code to Herdr and keep them in one window.',
         primaryCta: 'Get 2code for Herdr',
         secondaryCta: 'Explore features',
-        shotAlt: '2code in Herdr: projects with worktree profiles, a file tree, and an agent at work in its tab',
+        shotAlt: '2code in Herdr: projects with their worktrees, a file tree, and an agent at work in its tab',
       },
       footer: {
         tagline: 'A Herdr layout for vibe coding.',
@@ -160,16 +160,16 @@ export const resources = {
             imageAlt: '2code git diff view',
           },
           profiles: {
-            eyebrow: 'Worktree profiles',
+            eyebrow: 'Worktrees',
             title: 'Keep each task in its own lane.',
             copy:
-              'Every git worktree of a project is a profile in the sidebar with its own terminals and context. New profiles run your setup script, deleted ones your teardown, so switching between tasks stays clear instead of turning into a tab hunt.',
+              'Every git worktree of a project sits in the sidebar with its own terminals and context. New worktrees run your setup script, deleted ones your teardown, so switching between tasks stays clear instead of turning into a tab hunt.',
             points: [
-              'Create a profile per feature, fix or experiment; setup runs for you.',
+              'Create a worktree per feature, fix or experiment; setup runs for you.',
               'Keep terminals from one task away from another task.',
               'Switch back later and see the same context you left there.',
             ],
-            imageAlt: '2code worktree profile view',
+            imageAlt: '2code worktree view',
           },
         },
       },
@@ -220,7 +220,7 @@ export const resources = {
       metadata: {
         title: '2code | 管项目、Worktree 和 Agent 的 Herdr 布局',
         description:
-          '2code 是 Herdr 的一个工作站布局：项目和 git worktree 配置、安装与清理脚本、终端模板、文件编辑、Git review 和 Agent 状态。',
+          '2code 是 Herdr 的一个工作站布局：项目和 git worktree、安装与清理脚本、终端模板、文件编辑、Git review 和 Agent 状态。',
         keywords: [
           '2code',
           '终端工作站',
@@ -288,7 +288,7 @@ export const resources = {
           '如果你每天都在终端、Agent、dev server 和多个 worktree 之间切来切去，把 2code 装进 Herdr，放在一个窗口里管。',
         primaryCta: '在 Herdr 中使用 2code',
         secondaryCta: '查看亮点',
-        shotAlt: 'Herdr 里的 2code：项目和 worktree 配置、文件树，以及正在 tab 里干活的 Agent',
+        shotAlt: 'Herdr 里的 2code：项目和 worktree、文件树，以及正在 tab 里干活的 Agent',
       },
       footer: {
         tagline: '为 vibe coding 而生的 Herdr 布局。',
@@ -365,16 +365,16 @@ export const resources = {
             imageAlt: '2code Git diff 视图',
           },
           profiles: {
-            eyebrow: 'Worktree 配置',
+            eyebrow: 'Worktree',
             title: '每条任务线都有自己的 worktree。',
             copy:
-              '项目的每个 git worktree 都是侧栏里的一个配置，有自己的终端和上下文。新建时自动跑安装脚本，删除时跑清理脚本，切换时不会混成一团。',
+              '项目的每个 git worktree 都会出现在侧栏里，有自己的终端和上下文。新建时自动跑安装脚本，删除时跑清理脚本，切换时不会混成一团。',
             points: [
-              '一个功能、一个修复、一个实验，各建一个配置，安装脚本自动执行。',
+              '一个功能、一个修复、一个实验，各建一个 worktree，安装脚本自动执行。',
               '不同窗口里的终端互不干扰，命令不会串到一起。',
               '切回某条任务线时，看到的就是上次离开时的现场。',
             ],
-            imageAlt: '2code worktree profile 视图',
+            imageAlt: '2code worktree 视图',
           },
         },
       },
