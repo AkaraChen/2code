@@ -6,7 +6,7 @@
     "test": "bunx mocha \"test/**/*.test.mjs\""
   },
   "dependencies": {
-    "chai": "^6.2.2",
+    "chai": "^6.3.0",
     "mocha": "^11.7.6",
     "selenium-webdriver": "^4.44.0"
   },
