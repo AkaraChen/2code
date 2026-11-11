@@ -4,7 +4,7 @@
   "titlebar": "none",
   "traffic_lights": [
     16,
-    24
+    19
   ],
   "theme": {
     "light": "2code-light",
@@ -67,7 +67,7 @@
           "id": "topbar",
           "type": "block",
           "size": {
-            "px": 44
+            "px": 52
           },
           "window_drag": true,
           "content": {
