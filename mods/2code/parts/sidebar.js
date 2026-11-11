@@ -6,7 +6,7 @@
 //   closed one opens a space there.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, run, theme, layout, pickFolder, openOverlay, shared, notify } from "herdr";
+import { spaces, panes, focused, run, theme, layout, window, pickFolder, openOverlay, shared, notify } from "herdr";
 import { t, resolveLocale } from "../lib/i18n.js";
 import { readProjectConfig, scriptArgv } from "../lib/config.js";
 import { place, repoOf } from "../lib/git.js";
@@ -16,13 +16,40 @@ import { icon, stop, dot, worst, find } from "../lib/ui.js";
 
 const RAIL = 160; // narrower than this, the sidebar draws only project tiles
 
+// The brand: Herdr's mark and name, and on hover a slot-machine flip to
+// 2code's: the shown one rolls out first, the other rolls in a beat later;
+// leaving rolls them back. Native transitions, no timers. (`spring` on `top`
+// didn't move here; `transition` does.)
 export class SidebarHeader {
+  init() {
+    this.hover = false;
+  }
+
+  layer(id, logo, text, shown, away, th) {
+    // The policy set with the new target is the one that runs: arriving
+    // layers wait a beat and ease out, leaving ones ease in right away.
+    const move = shown ? { duration: 380, delay: 70, easing: "ease-out" } : { duration: 260, easing: "ease-in" };
+    const fade = shown ? { duration: 260, delay: 70, easing: "ease-out" } : { duration: 180, easing: "ease-in" };
+    return h_flex().id(id).absolute().left(0).top(shown ? 0 : away).h(24).gap(8).items_center()
+      .opacity(shown ? 1 : 0)
+      .transition("top", move)
+      .transition("opacity", fade)
+      .child(image(logo).size(20).flex_none().rounded(5))
+      .child(div().text_size(15).font_semibold().text_color(th.foreground).child(text));
+  }
+
   render() {
-    const th = theme();
+    const th = theme(), w = window();
     const narrow = (find(layout(), "sidebar")?.size?.px ?? 250) < RAIL;
-    return h_flex().size_full().px(narrow ? 0 : 16).items_center().bg(th.chrome)
+    // macOS draws its window buttons at the layout's traffic_lights spot.
+    const lights = w?.platform === "macos" && !w?.fullscreen;
+    return h_flex().id("brand-row").size_full().px(narrow ? 0 : 16).items_center().bg(th.chrome)
+      .when(lights && !narrow, (el) => el.pl(76))
+      .on_hover((h, cx) => { if (this.hover !== h) { this.hover = h; cx.notify(); } })
       .when(narrow, (el) => el.justify_center())
-      .when(!narrow, (el) => el.justify_between().child(div().text_size(15).font_semibold().text_color(th.foreground).child("2Code")))
+      .when(!narrow, (el) => el.justify_between().child(div().relative().w(110).h(24).overflow_hidden()
+        .child(this.layer("brand-herdr", "frame/welcome/herdr.png", "Herdr", !this.hover, -26, th))
+        .child(this.layer("brand-2code", "mods/2code/icons/2code.png", "2Code", this.hover, 26, th))))
       .child(div().id("sidebar-toggle").size(24).flex().items_center().justify_center().rounded(6).text_color(th.dim)
         .hover((s) => s.bg(th.hover).text_color(th.foreground)).on_mouse_down("left", stop)
         .on_click(() => run("layout.toggle", { id: "sidebar" }))

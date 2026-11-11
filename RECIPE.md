@@ -14,7 +14,10 @@ English or 简体中文.
 Left to right:
 
 - **Sidebar**, 250px (min 44, max 420), `chrome` background.
-  - 52px header: "2Code" (15px semibold) and a sidebar-toggle icon. Drags the window.
+  - 52px header: Herdr's mark (`frame/welcome/herdr.png`, 20px) and "Herdr"
+    (15px semibold) in a 110×24 clipped slot, and a sidebar-toggle icon. Drags
+    the window. On macOS (not fullscreen) it starts at 76px, clear of the
+    window buttons.
   - "Projects" label (12px, `dim`) with a `+` that opens the system folder picker.
   - One 32px row per project: a 20px GitHub avatar (else a rounded letter tile),
     the name, the most urgent agent dot, a caret. Under it, one 28px row per
@@ -54,6 +57,11 @@ Left to right:
 
 ## How it behaves
 
+- Brand: hovering the header flips the slot like a slot machine: Herdr's row
+  rolls up to `top -26` and fades (260ms / 180ms, ease-in), 2code's row
+  (`mods/2code/icons/2code.png`, "2Code") rises from `top 26` a beat later
+  (380ms / 260ms, ease-out, 70ms delay). Leaving rolls them back the same way.
+  Native `transition` on `top` and `opacity`; `spring` on `top` didn't move.
 - Agent dots: `working` pulses green (`#34d399`, opacity loop 1.2s), `blocked`
   yellow (`#facc15`), `done` green (`#22c55e`), `idle` nothing. A project
   shows its most urgent profile's status.

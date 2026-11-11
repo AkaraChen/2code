@@ -58,7 +58,8 @@ herdr-app do layout.switch --name 2code
   switcher, the pull request shows with its state (`gh`), "Open in…" your
   editor, terminal or GitHub Desktop.
 - GitHub avatars for projects, a tile rail when the sidebar is dragged narrow,
-  arrow-key navigation in the sidebar.
+  arrow-key navigation in the sidebar. The corner says Herdr until you hover
+  it, then rolls over to 2code.
 - **English or 简体中文**, from the system's `LC_ALL` / `LC_MESSAGES` / `LANG`;
   English when none is Chinese or set.
 - 2code's light and dark themes (`2code-light`, `2code-dark`).
