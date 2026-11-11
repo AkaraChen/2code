@@ -6,15 +6,14 @@
 
 ## 一、需要仓库所有者处理
 
-这三件事超出了我这边能执行的权限，需要你来做：
-
-- [ ] **把官网发布出去。** 线上站点仍由 Netlify 从 `dev` 构建：线上有只存在于 `dev` 的页面，内容还是桌面版。两种做法任选其一：
-  - 合并 [#494](https://github.com/AkaraChen/2code/pull/494)。它把已停用的 `dev` 快进到一个内容和 `main` 完全一致的合并提交，不是强推，`dev` 的历史全部保留。
-  - 或者在 Netlify 后台把生产分支改成 `main`，然后关闭 #494。
-- [ ] **关闭 Dependabot PR #477–#486。** 它们已经自动改成指向 `main`，升级的是 `src-tauri/`、`e2e-tests/` 里的依赖，而这两个目录已经不存在了。我这边关闭被权限拦下，需要你手动关闭。
+- [ ] **在 Netlify 触发一次官网构建。** 网站代码已经在 `main` 和 `dev` 上了，`dev` 已通过 #494 跟上 `main`，但线上仍是 `dev` 停在 `25b0439c` 时的那一版。Netlify 从未在 GitHub 的提交上留下构建状态，推送 `dev` 后也没有自动部署，所以需要在 Netlify 后台手动部署一次，或者检查自动构建是否被停掉。顺手把生产分支改成 `main`，以后官网改动就跟着 `main` 走。
 - [ ] （可选）在 GitHub Releases 上给旧桌面版用户发迁移公告。旧版的自动更新会读取“latest” release 里的 `latest.json`，所以新 release 不要标成 latest，否则旧版检查更新时会失败。
 
-许可证：作者名下的其他仓库都没有 LICENSE 文件，这次也按惯例没有加。如果希望别人能合法复用 2code 的代码，需要补一个。借用的第三方代码已经在 `mods/2code/NOTICE` 中注明：Herdr 的 mod（Apache-2.0）、Lucide 图标（ISC）、material-icon-theme（MIT）。
+已完成：
+- [x] #494：已停用的 `dev` 跟上了 `main`，`dev` 原来的提交都保留在历史里和 `legacy-tauri-app` 上。
+- [x] 已关闭面向已删除目录的过时 Dependabot PR（#477–#486）。
+
+许可证：作者名下的其他仓库都没有 LICENSE 文件，这次也按惯例没有加。如果希望别人能合法复用 2code 的代码，需要补一个。借用的第三方代码已在 `mods/2code/NOTICE` 中注明：Herdr 的 mod（Apache-2.0）、Lucide 图标（ISC）、material-icon-theme（MIT）。
 
 ## 二、受 Herdr 限制，做不了或只能做一部分
 
