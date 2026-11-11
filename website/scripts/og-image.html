@@ -1,0 +1,284 @@
+<!doctype html>
+<!--
+  Source of the social share images, public/og/2code-en.png and 2code-zh.png
+  (1200×630, rendered at 2x). Same tokens and type as the site: a two-tone
+  headline, the install prompt, and 2code's sidebar with the status dots.
+
+  Render from website/ with any Chromium:
+
+    chrome --headless --hide-scrollbars --force-device-scale-factor=2 \
+      --window-size=1200,630 --screenshot=public/og/2code-en.png \
+      "file://$PWD/scripts/og-image.html?lang=en"
+
+  (and ?lang=zh for 2code-zh.png). Needs `bun install` for the fonts.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url(../node_modules/@fontsource-variable/instrument-sans/files/instrument-sans-latin-standard-normal.woff2) format('woff2-variations');
+  font-weight: 400 700;
+  font-stretch: 75% 100%;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url(../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2) format('woff2-variations');
+  font-weight: 100 800;
+}
+
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --raised: #f5f5f5;
+  --selected: #efefef;
+  --line: #e5e5e5;
+  --ink: #0a0a0a;
+  --ink-2: #525252;
+  --ink-3: #737373;
+  --ink-dim: #8a8a8a;
+  --ink-4: #b4b4b4;
+  --working: #34d399;
+  --blocked-ink: #854d0e;
+  --blocked-bg: #fef6c3;
+  --done: #22c55e;
+  --sans: 'Instrument Sans', 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
+  --mono: 'JetBrains Mono', 'Noto Sans Mono CJK SC', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  width: 1200px;
+  height: 630px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.frame {
+  position: relative;
+  width: 1200px;
+  height: 630px;
+  padding: 60px 64px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand img {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+
+.brand b {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.brand span {
+  color: var(--ink-3);
+  font-size: 20px;
+}
+
+h1 {
+  margin: 50px 0 0;
+  font-size: 84px;
+  font-stretch: 88%;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+h1 span { display: block; }
+h1 .dim { color: var(--ink-dim); }
+:lang(zh) h1 { letter-spacing: 0; line-height: 1.12; font-size: 80px; }
+
+.prompt {
+  position: absolute;
+  left: 64px;
+  bottom: 60px;
+  width: 600px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1.65;
+  font-variant-ligatures: none;
+}
+
+.prompt .c { color: var(--ink-3); }
+.prompt .p { color: var(--ink-4); }
+
+/* 2code's sidebar, bleeding off the bottom edge */
+.side {
+  position: absolute;
+  top: 58px;
+  right: 64px;
+  width: 400px;
+  height: 640px;
+  padding: 18px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--raised) 60%, var(--surface));
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.02), 0 24px 48px -26px rgb(0 0 0 / 0.25);
+  font-size: 19px;
+}
+
+.side-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 14px 14px;
+  color: var(--ink-3);
+  font-size: 17px;
+}
+
+.project {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  font-weight: 500;
+}
+
+.project .av {
+  width: 22px;
+  color: var(--ink-3);
+  font-size: 16px;
+  text-align: center;
+}
+
+.project.spaced { margin-top: 10px; }
+
+.wt {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  height: 48px;
+  padding: 0 14px 0 50px;
+  border-radius: 10px;
+  color: var(--ink-2);
+}
+
+.wt.on {
+  background: var(--selected);
+  color: var(--ink);
+}
+
+.wt svg { width: 18px; height: 18px; color: var(--ink-3); }
+
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.dot.done { background: var(--done); }
+.dot.working {
+  background: var(--working);
+  box-shadow: 0 0 0 5px rgb(52 211 153 / 0.22);
+}
+
+.needs {
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--blocked-bg);
+  color: var(--blocked-ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.lede {
+  margin-top: 26px;
+  max-width: 650px;
+  color: var(--ink-2);
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.lede b {
+  color: var(--ink);
+  font-weight: 500;
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+</svg>
+
+<div class="frame">
+  <div class="brand">
+    <img src="../public/app-icon.png" alt="">
+    <b>2code</b>
+    <span data-t="forHerdr"></span>
+  </div>
+
+  <h1><span data-t="lineOne"></span><span class="dim" data-t="lineTwo"></span></h1>
+  <p class="lede" data-html="lede"></p>
+
+  <div class="prompt">
+    <div class="c" data-t="comment"></div>
+    <div><span class="p">› </span>Add the Herdr layout at github.com/AkaraChen/2code</div>
+  </div>
+
+  <div class="side">
+    <div class="side-head"><span data-t="projects"></span><span>+</span></div>
+    <div class="project"><span class="av">A</span>acme-web</div>
+    <div class="wt"><svg><use href="#branch"/></svg>herdr-layout-port<span class="dot done"></span></div>
+    <div class="wt"><svg><use href="#branch"/></svg>feature/login<span class="dot working"></span></div>
+    <div class="wt"><svg><use href="#branch"/></svg>fix/sidebar<span class="needs" data-t="needsYou"></span></div>
+    <div class="wt on"><svg><use href="#branch"/></svg>feature/search<span class="dot working"></span></div>
+    <div class="project spaced"><span class="av">A</span>api-server</div>
+    <div class="wt"><svg><use href="#branch"/></svg>master<span></span></div>
+    <div class="wt"><svg><use href="#branch"/></svg>fix/rate-limit<span class="dot done"></span></div>
+    <div class="project spaced"><span class="av">2</span>2code</div>
+    <div class="wt"><svg><use href="#branch"/></svg>main<span class="dot working"></span></div>
+  </div>
+</div>
+
+<script>
+  const copy = {
+    en: {
+      forHerdr: 'for Herdr',
+      lineOne: 'Your agents need',
+      lineTwo: 'a better terminal.',
+      lede: '<b>Projects, worktrees and agents</b> in one Herdr window.',
+      comment: '# ask the agent in any Herdr terminal',
+      projects: 'Projects',
+      needsYou: 'Needs you',
+    },
+    zh: {
+      forHerdr: 'for Herdr',
+      lineOne: '你的 Agent',
+      lineTwo: '需要更好的终端',
+      lede: '<b>项目、worktree 和 Agent</b>，全在一个 Herdr 窗口里。',
+      comment: '# 在任意 Herdr 终端里对 Agent 说',
+      projects: '项目',
+      needsYou: '需要你',
+    },
+  }
+  const lang = new URLSearchParams(location.search).get('lang') === 'zh' ? 'zh' : 'en'
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+  for (const node of document.querySelectorAll('[data-t]')) {
+    node.textContent = copy[lang][node.dataset.t]
+  }
+  // Only the lede carries markup, and it is the literal strings above.
+  for (const node of document.querySelectorAll('[data-html]')) {
+    node.innerHTML = copy[lang][node.dataset.html]
+  }
+</script>
+</body>
+</html>

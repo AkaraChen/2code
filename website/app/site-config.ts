@@ -11,10 +11,10 @@ export const siteConfig = {
   installPrompt: 'Add the Herdr layout at github.com/AkaraChen/2code',
   installScript:
     'git clone https://github.com/AkaraChen/2code && cd 2code && ./scripts/install.sh',
-  // The product window is the share image; there is no decorative hero art.
-  ogImage: '/screenshots/terminal-tabs.png',
-  ogImageWidth: 2560,
-  ogImageHeight: 1640,
+  // Share images, one per locale, rendered at 2x from scripts/og-image.html.
+  ogImages: { en: '/og/2code-en.png', 'zh-cn': '/og/2code-zh.png' },
+  ogImageWidth: 2400,
+  ogImageHeight: 1260,
   llmsTxtPath: '/llms.txt',
   llmsFullTxtPath: '/llms-full.txt',
   markdownHomePath: '/index.md',

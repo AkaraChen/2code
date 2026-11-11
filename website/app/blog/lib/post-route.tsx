@@ -74,7 +74,7 @@ export async function generatePostMetadata(
     keywords: post.tags.length > 0 ? post.tags : undefined,
     markdownPath: blogPostMarkdownPath(locale, slug),
     languages: { en: enPath, 'zh-CN': zhPath, 'x-default': enPath },
-    // No cover image means the product screenshot, same as every other page.
+    // No cover image means the site's share image, same as every other page.
     image: image ? { url: image, alt: post.title } : undefined,
     article: { publishedTime: post.date, tags: post.tags },
     // Drafts and not-yet-published posts only render in preview builds, but

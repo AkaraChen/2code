@@ -62,7 +62,7 @@ export function buildPageMetadata(
     pathname === '/' ? siteConfig.url : `${siteConfig.url}${pathname}`
 
   const image = options.image ?? {
-    url: siteConfig.ogImage,
+    url: siteConfig.ogImages[locale],
     width: siteConfig.ogImageWidth,
     height: siteConfig.ogImageHeight,
     alt: title,

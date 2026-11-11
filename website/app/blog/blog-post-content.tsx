@@ -29,7 +29,7 @@ export function BlogPostContent({
 }: BlogPostContentProps) {
   const t = messages
   const postUrl = `${siteConfig.url}${blogPostPath(locale, post.slug)}`
-  const imageUrl = `${siteConfig.url}${post.coverImage ?? post.ogImage ?? siteConfig.ogImage}`
+  const imageUrl = `${siteConfig.url}${post.coverImage ?? post.ogImage ?? siteConfig.ogImages[locale]}`
 
   const structuredData = {
     '@context': 'https://schema.org',
