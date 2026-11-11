@@ -3,12 +3,18 @@ export const siteConfig = {
   domain: '2code.akr.moe',
   url: 'https://2code.akr.moe',
   githubUrl: 'https://github.com/AkaraChen/2code',
+  // The last desktop (Tauri) builds; 2code is a Herdr layout now.
   githubReleaseUrl:
     'https://github.com/AkaraChen/2code/releases/latest',
+  installUrl: 'https://github.com/AkaraChen/2code#install',
+  herdrDownloadUrl: 'https://herdr.dev/download/',
+  installPrompt: 'Add the layout at github.com/AkaraChen/2code',
+  installScript:
+    'git clone https://github.com/AkaraChen/2code && cd 2code && ./scripts/install.sh',
   // The product window is the share image; there is no decorative hero art.
   ogImage: '/screenshots/terminal-tabs.png',
-  ogImageWidth: 2498,
-  ogImageHeight: 1802,
+  ogImageWidth: 2560,
+  ogImageHeight: 1640,
   llmsTxtPath: '/llms.txt',
   llmsFullTxtPath: '/llms-full.txt',
   markdownHomePath: '/index.md',

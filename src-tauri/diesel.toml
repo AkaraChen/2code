@@ -1,2 +1,0 @@
-[print_schema]
-file = "crates/model/src/schema.rs"

@@ -1,0 +1,31 @@
+{
+  "layout:2code": {
+    "cmd-t": "2code.newTerminal",
+    "ctrl-shift-t": "2code.newTerminal",
+    "cmd-e": {
+      "command": "layout.toggle",
+      "args": {
+        "id": "panel"
+      }
+    },
+    "ctrl-shift-e": {
+      "command": "layout.toggle",
+      "args": {
+        "id": "panel"
+      }
+    },
+    "shift-enter": "send:\n",
+    "alt-left": "send:\u001bb",
+    "alt-right": "send:\u001bf",
+    "cmd-g": "2code.diff",
+    "ctrl-shift-g": "2code.diff",
+    "cmd-shift-e": "2code.focusSidebar",
+    "ctrl-shift-j": "2code.focusSidebar",
+    "cmd-k": "2code.find",
+    "ctrl-shift-k": "2code.find"
+  },
+  "mod:2code": {
+    "cmd-s": "2code.save",
+    "ctrl-s": "2code.save"
+  }
+}
