@@ -53,6 +53,8 @@ export class EditorPart {
       if (text === null) { this.kind = "missing"; return; }
       if (text.includes("\0")) { this.kind = "binary"; return; }
       this.saved = text;
+      // A tab closed while unsaved leaves its flag behind; a fresh load is clean.
+      setDirty(this.path, this.on, false);
       this.makeState(text);
       this.kind = MARKDOWN.test(this.path) ? "markdown" : "text";
       if (!this.readonly) {
