@@ -1,8 +1,9 @@
 <!doctype html>
 <!--
   Source of the social share images, public/og/2code-en.png and 2code-zh.png
-  (1200×630, rendered at 2x). Same tokens and type as the site: a two-tone
-  headline, the install prompt, and 2code's sidebar with the status dots.
+  (1200×630, rendered at 2x). Same tokens and type as the site: the two-tone
+  slogan (Herdr's line in gray, 2code's answer in ink), the install prompt, and
+  2code's sidebar with the status dots.
 
   Render from website/ with any Chromium:
 
@@ -91,8 +92,9 @@ html, body {
 }
 
 h1 {
-  margin: 50px 0 0;
-  font-size: 84px;
+  margin: 64px 0 0;
+  font-size: 72px;
+  white-space: nowrap;
   font-stretch: 88%;
   font-weight: 600;
   letter-spacing: -0.03em;
@@ -101,7 +103,7 @@ h1 {
 
 h1 span { display: block; }
 h1 .dim { color: var(--ink-dim); }
-:lang(zh) h1 { letter-spacing: 0; line-height: 1.12; font-size: 80px; }
+:lang(zh) h1 { letter-spacing: 0; line-height: 1.18; font-size: 68px; }
 
 .prompt {
   position: absolute;
@@ -125,8 +127,8 @@ h1 .dim { color: var(--ink-dim); }
 .side {
   position: absolute;
   top: 58px;
-  right: 64px;
-  width: 400px;
+  right: 56px;
+  width: 360px;
   height: 640px;
   padding: 18px 12px;
   border: 1px solid var(--line);
@@ -226,7 +228,7 @@ h1 .dim { color: var(--ink-dim); }
     <span data-t="forHerdr"></span>
   </div>
 
-  <h1><span data-t="lineOne"></span><span class="dim" data-t="lineTwo"></span></h1>
+  <h1><span class="dim" data-t="lineOne"></span><span data-t="lineTwo"></span></h1>
   <p class="lede" data-html="lede"></p>
 
   <div class="prompt">
@@ -253,18 +255,18 @@ h1 .dim { color: var(--ink-dim); }
   const copy = {
     en: {
       forHerdr: 'for Herdr',
-      lineOne: 'Your agents need',
-      lineTwo: 'a better terminal.',
-      lede: '<b>Projects, worktrees and agents</b> in one Herdr window.',
+      lineOne: 'No two Herdrs look alike.',
+      lineTwo: 'This one is organized.',
+      lede: '<b>Projects, worktrees and agents</b>, each in its place.',
       comment: '# ask the agent in any Herdr terminal',
       projects: 'Projects',
       needsYou: 'Needs you',
     },
     zh: {
       forHerdr: 'for Herdr',
-      lineOne: '你的 Agent',
-      lineTwo: '需要更好的终端',
-      lede: '<b>项目、worktree 和 Agent</b>，全在一个 Herdr 窗口里。',
+      lineOne: '每个 Herdr 都不一样，',
+      lineTwo: '这一个井井有条。',
+      lede: '<b>项目、worktree 和 Agent</b>，各就各位。',
       comment: '# 在任意 Herdr 终端里对 Agent 说',
       projects: '项目',
       needsYou: '需要你',

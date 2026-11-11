@@ -73,10 +73,11 @@ export const resources = {
       hero: {
         eyebrow: 'A layout for Herdr',
         eyebrowTags: ['open source', 'beta'],
-        titleLineOne: 'Your agents need',
-        titleLineTwo: 'a better terminal.',
+        // Line one quotes herdr.dev and is set in gray; line two is 2code's answer.
+        titleLineOne: 'No two Herdrs look alike.',
+        titleLineTwo: 'This one is organized.',
         lede:
-          'Normal terminals run commands. **2code also manages projects, worktrees and agents**, all in one Herdr window.',
+          'Herdr grows however you ask it to. **2code gives it a shape**: projects hold their worktrees, worktrees hold their terminals, and every agent shows whether it needs you.',
         primaryCta: 'Get 2code for Herdr',
         secondaryCta: 'Explore features',
         shotAlt: '2code in Herdr: projects with their worktrees, a file tree, and an agent at work in its tab',
@@ -309,10 +310,10 @@ export const resources = {
       hero: {
         eyebrow: 'Herdr 布局',
         eyebrowTags: ['开源', 'beta'],
-        titleLineOne: '你的 Agent',
-        titleLineTwo: '需要更好的终端',
+        titleLineOne: '每个 Herdr 都不一样，',
+        titleLineTwo: '这一个井井有条。',
         lede:
-          '普通终端只管跑命令，**2code 还帮你管项目、worktree 和 Agent**，全都在一个 Herdr 窗口里。',
+          'Herdr 随你怎么说就怎么长，**2code 给它定个形**：项目下是 worktree，worktree 里是终端，每个 Agent 都标着是不是在等你。',
         primaryCta: '在 Herdr 中使用 2code',
         secondaryCta: '查看亮点',
         shotAlt: 'Herdr 里的 2code：项目和 worktree、文件树，以及正在 tab 里干活的 Agent',

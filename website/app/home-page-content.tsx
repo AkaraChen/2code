@@ -26,7 +26,8 @@ type HomePageContentProps = Readonly<{
 
 /*
   "Lanes & Signals": the page reads like 2code's own window. A two-tone
-  headline over the real product, then chapters drawn as worktrees in a sidebar,
+  headline (Herdr's own line in gray, 2code's answer in ink) over the real
+  product, then chapters drawn as worktrees in a sidebar,
   each with a piece of the app drawn in HTML. The only colour on the page is
   the agent status palette from themes/2code-*.json.
 */
@@ -134,8 +135,8 @@ export function HomePageContent({ locale, messages }: HomePageContentProps) {
           </p>
 
           <h1 className="two-tone">
-            <span>{t.hero.titleLineOne}</span>{' '}
-            <span className="two-tone-dim">{t.hero.titleLineTwo}</span>
+            <span className="two-tone-dim">{t.hero.titleLineOne}</span>{' '}
+            <span>{t.hero.titleLineTwo}</span>
           </h1>
 
           <div className="hero-sub">
@@ -207,8 +208,8 @@ export function HomePageContent({ locale, messages }: HomePageContentProps) {
         <section className="closing" id="install">
           <div className="shell">
             <h2 className="two-tone reveal">
-              <span>{t.hero.titleLineOne}</span>{' '}
-              <span className="two-tone-dim">{t.hero.titleLineTwo}</span>
+              <span className="two-tone-dim">{t.hero.titleLineOne}</span>{' '}
+              <span>{t.hero.titleLineTwo}</span>
             </h2>
             <InstallSteps messages={t} />
           </div>
