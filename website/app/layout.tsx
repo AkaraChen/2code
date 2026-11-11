@@ -1,11 +1,10 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import type { ReactNode } from 'react'
-import '@fontsource/bricolage-grotesque/500.css'
-import '@fontsource/bricolage-grotesque/600.css'
-import '@fontsource/bricolage-grotesque/700.css'
-import '@fontsource/bricolage-grotesque/800.css'
-import '@fontsource/dm-mono/400.css'
+// Instrument Sans with its width axis (headlines run slightly condensed);
+// JetBrains Mono only for code, commands and keycaps.
+import '@fontsource-variable/instrument-sans/standard.css'
+import '@fontsource-variable/jetbrains-mono'
 import './globals.css'
 import { defaultLocale } from './i18n/resources'
 import { siteConfig } from './site-config'
