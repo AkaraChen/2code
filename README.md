@@ -127,5 +127,6 @@ Global templates go in `~/2code/2code.json`:
 | `themes/` | `2code-light` and `2code-dark` |
 | `keys.json` | the layout's keys, merged into yours by `install.sh` |
 | `RECIPE.md` | the brief to rebuild the layout from scratch (Herdr's sharing format) |
+| `TODO.md` | what still differs from the Tauri app (中文) |
 | `website/` | [2code's website](https://2code.akr.moe) (Next.js) |
 | `scripts/install.sh` | copy into a Herdr home and check |
