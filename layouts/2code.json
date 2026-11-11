@@ -99,14 +99,20 @@
                   "id": "files",
                   "type": "block",
                   "content": {
-                    "mod": "files"
+                    "mod": "2code",
+                    "props": {
+                      "part": "files"
+                    }
                   }
                 },
                 {
                   "id": "changes",
                   "type": "block",
                   "content": {
-                    "mod": "changes"
+                    "mod": "2code",
+                    "props": {
+                      "part": "changes"
+                    }
                   }
                 }
               ]

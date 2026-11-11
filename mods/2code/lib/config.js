@@ -4,7 +4,6 @@
 //                                               stopping at the first failure)
 //   init_script: string[]                      (typed into every terminal 2code opens)
 //   terminal_templates: { name, cwd?, commands: string[] }[]
-//   language (global only): "auto" | "en" | "zh"
 import { readTextFile, home } from "herdr";
 
 const lines = (v) => (Array.isArray(v) ? v.map(String).map((s) => s.trim()).filter(Boolean) : []);
@@ -18,7 +17,6 @@ function normalize(raw) {
     terminal_templates: (Array.isArray(c.terminal_templates) ? c.terminal_templates : [])
       .filter((x) => x && typeof x.name === "string" && x.name.trim())
       .map((x, i) => ({ id: x.id || `${i}:${x.name}`, name: x.name.trim(), cwd: typeof x.cwd === "string" ? x.cwd.trim() : "", commands: lines(x.commands) })),
-    language: typeof c.language === "string" ? c.language : "auto",
   };
 }
 

@@ -8,6 +8,8 @@ import { Topbar } from "./parts/topbar.js";
 import { Tabs } from "./parts/tabs.js";
 import { Templates } from "./parts/templates.js";
 import { Teardown } from "./parts/teardown.js";
+import { Files } from "./parts/files.js";
+import { Changes } from "./parts/changes.js";
 
 const PARTS = {
   header: SidebarHeader,
@@ -16,6 +18,8 @@ const PARTS = {
   tabs: Tabs,
   templates: Templates,
   teardown: Teardown,
+  files: Files,
+  changes: Changes,
 };
 
 class Missing {

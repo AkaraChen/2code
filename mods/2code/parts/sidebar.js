@@ -5,8 +5,8 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, run, theme, pickFolder, openOverlay, shared, notify } from "herdr";
-import { t, locale, setLanguage, resolveLocale } from "../lib/i18n.js";
-import { readGlobalConfig, readProjectConfig, scriptArgv } from "../lib/config.js";
+import { t, resolveLocale } from "../lib/i18n.js";
+import { readProjectConfig, scriptArgv } from "../lib/config.js";
 import { place, repoOf } from "../lib/git.js";
 import { icon, stop, dot, worst } from "../lib/ui.js";
 
@@ -27,10 +27,7 @@ export class Sidebar {
     this.repo = {}; // space id -> { at, main, top, name }
     this.closed = JSON.parse(localStorage.getItem("closed") ?? "{}");
     this.hover = null;
-    cx.spawn(async () => {
-      const global = await readGlobalConfig();
-      await resolveLocale(global.language);
-    });
+    cx.spawn(async () => { await resolveLocale(); });
     this.refresh(cx);
     cx.timer.every(4000, (cx) => this.refresh(cx));
   }
@@ -128,9 +125,8 @@ export class Sidebar {
 
   render() {
     const th = theme();
-    shared("2code.language"); shared("2code.locale"); // re-render on language change
+    shared("2code.locale"); // re-render on language change
     const projects = this.projects();
-    const lang = locale();
     return v_flex().size_full().min_h(0).bg(th.chrome).text_size(13)
       .child(h_flex().h(30).px(16).items_center().justify_between()
         .child(div().text_size(12).text_color(th.dim).child(t("projects")))
@@ -143,14 +139,9 @@ export class Sidebar {
           ...(this.closed[p.key] ? [] : p.spaces.map((s) => this.profileRow(s, p, th))),
         ]))
         .when(!projects.length, (el) => el.child(div().p(8).text_color(th.dim).child(t("noProjects")))))
-      .child(h_flex().h(44).mx(8).mb(6).gap(4).items_center()
-        .child(h_flex().id("settings").flex_1().h(32).px(8).gap(8).items_center().rounded(6).cursor_pointer()
-          .text_color(th.muted).hover((s) => s.bg(th.hover).text_color(th.foreground))
-          .on_click(() => run("app.settings"))
-          .child(icon("settings", 15)).child(t("settings")))
-        .child(h_flex().id("language").h(24).px(2).gap(1).items_center().rounded(6).bg(th.raised).text_size(11)
-          .children([["en", "EN"], ["zh", "中"]].map(([code, label]) => div().id(`lang-${code}`).h(20).px(6).flex().items_center().rounded(4).cursor_pointer()
-            .bg(lang === code ? th.background : th.raised).text_color(lang === code ? th.foreground : th.dim)
-            .on_click(() => setLanguage(code)).child(label)))));
+      .child(h_flex().id("settings").h(32).mx(8).mb(10).px(8).gap(8).items_center().rounded(6).cursor_pointer()
+        .text_color(th.muted).hover((s) => s.bg(th.hover).text_color(th.foreground))
+        .on_click(() => run("app.settings"))
+        .child(icon("settings", 15)).child(t("settings")));
   }
 }

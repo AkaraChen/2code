@@ -25,14 +25,18 @@ bring its code back here.
   `{"mod": "2code", "props": {"part": "<name>"}}`; parts are in `parts/` and
   registered in `main.js`.
 - All user-facing strings go through `t()` with both `en` and `zh` entries in
-  `lib/i18n.js`. Parts read `shared("2code.language")` / `shared("2code.locale")`
-  in `render` so they redraw on a language change.
+  `lib/i18n.js`. The locale comes only from the system's `LC_ALL` /
+  `LC_MESSAGES` / `LANG` (read with `exec`), falling back to English; there is
+  no switcher. Parts read `shared("2code.locale")` in `render` so they redraw
+  when it resolves.
+- `parts/files.js` and `parts/changes.js` derive from Herdr's shipped mods
+  (Apache-2.0): keep `NOTICE` and `LICENSE-Herdr.txt` with them.
 - Never keep a `cx`; use the one each callback gets. Start async work with
   `cx.spawn`, wait with `cx.sleep(ms)`, poll gently with `cx.timer.every`.
 - Git reads pass `--no-optional-locks -c core.fsmonitor=false` (`READ` in
   `lib/git.js`) so they don't trigger folder watches.
 - Nothing is persisted by 2code except `localStorage` UI state and the shared
-  language. Projects come from `spaces()` + git; config comes from
+  locale. Projects come from `spaces()` + git; config comes from
   `2code.json` files.
 
 ## Test

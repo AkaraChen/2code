@@ -65,7 +65,7 @@ export class Topbar {
 
   render(cx) {
     const th = theme();
-    shared("2code.language"); shared("2code.locale");
+    shared("2code.locale");
     const { space, branch } = here();
     const sidebar = find(layout(), "sidebar");
     // Another space or folder than the last refresh: refresh now, and show what

@@ -47,7 +47,7 @@ export class Tabs {
 
   render(cx) {
     const th = theme();
-    shared("2code.language"); shared("2code.locale");
+    shared("2code.locale");
     const tabs = here().space?.tabs ?? [];
     return h_flex().size_full().pl(4).gap(2).items_end().bg(th.background).border_b(1).border_color(th.border).text_size(13)
       // overflow_x_scrollbar() wraps the strip, so it takes the free width (flex_1) to scroll in.

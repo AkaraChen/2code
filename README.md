@@ -44,12 +44,14 @@ herdr-app do layout.switch --name 2code
 - **Terminal templates** from the project's `2code.json` and from
   `~/2code/2code.json`: the menu beside **New Terminal** opens a tab named
   after the template and types its commands into your shell.
-- **English and 简体中文**, following the system language, `~/2code/2code.json`,
-  or the EN / 中 switch in the sidebar.
+- **Files and Changes panels** in 2code's flat style. Changes commits only the
+  checked files, with a summary and an optional description.
+- **English or 简体中文**, from the system's `LC_ALL` / `LC_MESSAGES` / `LANG`;
+  English when none is Chinese or set.
 - 2code's light and dark themes (`2code-light`, `2code-dark`).
 
-Everything else (terminals that survive restarts, agent status, Files and
-Changes panels, settings, remote machines) is Herdr's.
+Everything else (terminals that survive restarts, agent status, worktree
+dialogs, settings, remote machines) is Herdr's.
 
 ## `2code.json`
 
@@ -73,18 +75,15 @@ Put it at the root of a project (its main checkout; worktrees use it too):
 - `terminal_templates[].cwd`: relative to the profile's checkout; empty means
   its root.
 
-Global templates and the language go in `~/2code/2code.json`:
+Global templates go in `~/2code/2code.json`:
 
 ```json
 {
-  "language": "auto",
   "terminal_templates": [
     { "name": "Git log", "commands": ["git log --oneline -20"] }
   ]
 }
 ```
-
-`language` is `auto` (the system's), `en` or `zh`.
 
 ## Repository
 
