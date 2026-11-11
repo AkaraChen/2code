@@ -6,9 +6,14 @@
 
 ## 一、需要仓库所有者处理
 
-- [ ] 把 Netlify 的生产分支从 `dev` 改成 `main`（在 Netlify 后台操作）。官网代码已经随 `main` 更新。
-- [ ] 决定仓库用什么许可证（目前没有 LICENSE 文件）。借用的第三方代码已在 `mods/2code/NOTICE` 中注明：Herdr 的 mod（Apache-2.0）、Lucide 图标（ISC）、material-icon-theme（MIT）。
+- [ ] **在 Netlify 触发一次官网构建。** 网站代码已经在 `main` 和 `dev` 上了，`dev` 已通过 #494 跟上 `main`，但线上仍是 `dev` 停在 `25b0439c` 时的那一版。Netlify 从未在 GitHub 的提交上留下构建状态，推送 `dev` 后也没有自动部署，所以需要在 Netlify 后台手动部署一次，或者检查自动构建是否被停掉。顺手把生产分支改成 `main`，以后官网改动就跟着 `main` 走。
 - [ ] （可选）在 GitHub Releases 上给旧桌面版用户发迁移公告。旧版的自动更新会读取“latest” release 里的 `latest.json`，所以新 release 不要标成 latest，否则旧版检查更新时会失败。
+
+已完成：
+- [x] #494：已停用的 `dev` 跟上了 `main`，`dev` 原来的提交都保留在历史里和 `legacy-tauri-app` 上。
+- [x] 已关闭面向已删除目录的过时 Dependabot PR（#477–#486）。
+
+许可证：作者名下的其他仓库都没有 LICENSE 文件，这次也按惯例没有加。如果希望别人能合法复用 2code 的代码，需要补一个。借用的第三方代码已在 `mods/2code/NOTICE` 中注明：Herdr 的 mod（Apache-2.0）、Lucide 图标（ISC）、material-icon-theme（MIT）。
 
 ## 二、受 Herdr 限制，做不了或只能做一部分
 
