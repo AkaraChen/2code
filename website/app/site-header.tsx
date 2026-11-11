@@ -20,9 +20,8 @@ function ExternalIcon() {
 }
 
 /*
-  A ruled bar pinned to the top of the document instead of a floating pill: the
-  hairline border is the same structural device every section below uses, so the
-  header reads as the document's header row. No scroll listener needed.
+  A ruled bar pinned to the top of the document, like the app's own top bar:
+  the brand, a few quiet links and the theme switch. No scroll listener needed.
 
   Section links are absolute (`/#features`, `/zh-cn#features`) rather than bare
   fragments: the same header renders on blog pages, where `#features` would
@@ -44,11 +43,12 @@ export function SiteHeader({ locale, messages }: SiteHeaderProps) {
             className="brand-icon"
             src="/app-icon.png"
             alt=""
-            width={24}
-            height={24}
+            width={26}
+            height={26}
             decoding="async"
           />
           <span className="brand-name">2code</span>
+          <span className="brand-for">{messages.nav.forHerdr}</span>
         </a>
 
         <nav className="topnav" aria-label={messages.nav.primary}>

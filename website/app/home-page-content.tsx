@@ -1,56 +1,37 @@
 import { AgentDirective } from './agent-directive'
-import { blogListPath } from './blog/lib/routes'
-import { type AppLocale, type resources } from './i18n/resources'
-import { productPath } from './lib/product-pages'
-import { LocaleSwitch } from './locale-switch'
-import { htmlLang, organizationNode } from './structured-data'
+import { ChapterRail } from './chapter-rail'
+import { CHAPTER_IDS, type AppLocale, type Messages } from './i18n/resources'
 import { PageEffects } from './page-effects'
+import { RichText } from './rich-text'
+import {
+  ChapterHeading,
+  FaqList,
+  FeatureChapters,
+  InstallPrompt,
+  InstallSteps,
+} from './sections'
+import { SiteFooter } from './site-footer'
 import { SiteHeader } from './site-header'
 import { siteConfig } from './site-config'
+import { htmlLang, organizationNode } from './structured-data'
 
-const features = [
-  {
-    id: 'terminals',
-    screenshotSrc: '/screenshots/terminal-tabs.png',
-  },
-  {
-    id: 'git',
-    screenshotSrc: '/screenshots/git-diff.png',
-  },
-  {
-    id: 'profiles',
-    screenshotSrc: '/screenshots/worktree.png',
-  },
-] as const
-
-const faqs = [
-  'audience',
-  'terminal',
-  'agents',
-  'templates',
-  'restore',
-  'platforms',
-  'production',
-] as const
-
+const HERO_SHOT = '/screenshots/terminal-tabs.png'
 const SCREENSHOT_WIDTH = 2560
 const SCREENSHOT_HEIGHT = 1640
-
-type Messages = (typeof resources)[AppLocale]
 
 type HomePageContentProps = Readonly<{
   locale: AppLocale
   messages: Messages
 }>
 
-export function HomePageContent({
-  locale,
-  messages,
-}: HomePageContentProps) {
+/*
+  "Lanes & Signals": the page reads like 2code's own window. A two-tone
+  headline over the real product, then chapters drawn as worktrees in a sidebar,
+  each with a piece of the app drawn in HTML. The only colour on the page is
+  the agent status palette from themes/2code-*.json.
+*/
+export function HomePageContent({ locale, messages }: HomePageContentProps) {
   const t = messages
-  const [titleBefore, titleAfter = ''] = t.hero.titleLineTwo.split(
-    t.hero.titleHighlight,
-  )
 
   const pageUrl =
     locale === 'zh-cn' ? `${siteConfig.url}/zh-cn` : siteConfig.url
@@ -111,18 +92,18 @@ export function HomePageContent({
           availability: 'https://schema.org/InStock',
           url: siteConfig.installUrl,
         },
-        screenshot: features.map(
-          (feature) => `${siteConfig.url}${feature.screenshotSrc}`,
-        ),
+        screenshot: [`${siteConfig.url}${HERO_SHOT}`],
         sameAs: [siteConfig.githubUrl],
-        featureList: [
-          t.features.items.terminals.title,
-          t.features.items.git.title,
-          t.features.items.profiles.title,
-        ],
+        featureList: CHAPTER_IDS.map((id) => t.chapters.items[id].title),
       },
     ],
   }
+
+  const lanes = [
+    ...CHAPTER_IDS.map((id) => ({ id, label: t.chapters.items[id].nav })),
+    { id: 'faq', label: t.faq.heading },
+    { id: 'install', label: t.footer.install, badge: t.mock.needsYou },
+  ]
 
   return (
     <div className="page-shell" lang={htmlLang(locale)}>
@@ -138,180 +119,103 @@ export function HomePageContent({
       <PageEffects />
 
       <main>
-        <section className="hero-section shell" id="hero">
-          <div className="hero-panel">
-            <p className="hero-sticker" aria-hidden="true">
-              {t.hero.sticker}
-            </p>
+        <section className="hero shell" id="hero">
+          <p className="hero-eyebrow">
+            <span className="status-dot is-working" aria-hidden="true" />
+            {t.hero.eyebrow}
+            {t.hero.eyebrowTags.map((tag) => (
+              <span key={tag}>
+                <span className="hero-eyebrow-sep" aria-hidden="true">
+                  ·
+                </span>
+                {tag}
+              </span>
+            ))}
+          </p>
 
-            <div className="hero-copy">
-              <p className="label hero-badge">
-                <span className="marker">{t.hero.kicker}</span>
+          <h1 className="two-tone">
+            <span>{t.hero.titleLineOne}</span>{' '}
+            <span className="two-tone-dim">{t.hero.titleLineTwo}</span>
+          </h1>
+
+          <div className="hero-sub">
+            <div>
+              <p className="hero-lede">
+                <RichText text={t.hero.lede} />
               </p>
-
-              <h1>
-                {t.hero.titleLineOne}
-                <br />
-                {titleBefore}
-                <span className="hero-highlight">{t.hero.titleHighlight}</span>
-                {titleAfter}
-              </h1>
-            </div>
-
-            <div className="hero-bottom">
-              <div className="hero-copy">
-                <p className="hero-lede">{t.hero.lede}</p>
-                <p className="hero-supporting-copy">{t.hero.supporting}</p>
-
-                <div className="hero-actions">
-                  <a
-                    id="cta-download"
-                    className="button button-primary"
-                    href={productPath(locale, 'install')}
-                    aria-keyshortcuts="d"
-                  >
-                    <span>{t.hero.primaryCta}</span>
-                    <kbd
-                      className="keycap"
-                      aria-hidden="true"
-                      data-markdown-ignore
-                    >
-                      D
-                    </kbd>
-                  </a>
-                  <a
-                    id="cta-features"
-                    className="button button-secondary"
-                    href="#features"
-                    aria-keyshortcuts="f"
-                  >
-                    <span>{t.hero.secondaryCta}</span>
-                    <kbd
-                      className="keycap"
-                      aria-hidden="true"
-                      data-markdown-ignore
-                    >
-                      F
-                    </kbd>
-                  </a>
-                </div>
-              </div>
-
-              <div className="hero-shot">
-                <figure className="shot-frame" data-markdown-ignore>
-                  <img
-                    src="/screenshots/terminal-tabs.png"
-                    alt={t.hero.shotAlt}
-                    width={SCREENSHOT_WIDTH}
-                    height={SCREENSHOT_HEIGHT}
-                    loading="eager"
-                    decoding="async"
-                  />
-                </figure>
+              <div className="hero-actions">
+                <a
+                  id="cta-download"
+                  className="button button-primary"
+                  href="#install"
+                  aria-keyshortcuts="d"
+                >
+                  {t.hero.primaryCta}
+                  <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
+                    D
+                  </kbd>
+                </a>
+                <a
+                  id="cta-features"
+                  className="button button-secondary"
+                  href="#features"
+                  aria-keyshortcuts="f"
+                >
+                  {t.hero.secondaryCta}
+                  <kbd className="keycap" aria-hidden="true" data-markdown-ignore>
+                    F
+                  </kbd>
+                </a>
               </div>
             </div>
+            <InstallPrompt messages={t} />
+          </div>
+
+          <figure className="hero-shot" data-markdown-ignore>
+            <img
+              src={HERO_SHOT}
+              alt={t.hero.shotAlt}
+              width={SCREENSHOT_WIDTH}
+              height={SCREENSHOT_HEIGHT}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+            />
+          </figure>
+        </section>
+
+        <section className="lanes shell" id="features">
+          <div data-markdown-ignore className="lanes-rail">
+            <ChapterRail
+              label={t.chapters.railLabel}
+              project={t.chapters.railProject}
+              lanes={lanes}
+              legend={t.chapters.legend}
+            />
+          </div>
+
+          <div className="chapters">
+            <FeatureChapters messages={t} />
+
+            <section className="chapter" id="faq">
+              <ChapterHeading>{t.faq.heading}</ChapterHeading>
+              <FaqList messages={t} />
+            </section>
           </div>
         </section>
 
-        <section className="features-section shell" id="features">
-          <div className="feature-list">
-            {features.map((feature, index) => (
-              <section
-                className={`feature-row ${
-                  index % 2 === 1 ? 'feature-row-reverse' : ''
-                } reveal`}
-                key={feature.id}
-              >
-                {/*
-                  Keep the page structure static and swap only the route-level
-                  content object so both locales export cleanly.
-                */}
-                <div className="feature-copy">
-                  <p className="label">{t.features.items[feature.id].eyebrow}</p>
-                  <h3>{t.features.items[feature.id].title}</h3>
-                  <p className="feature-body">
-                    {t.features.items[feature.id].copy}
-                  </p>
-                  <ul className="feature-points">
-                    {t.features.items[feature.id].points.map((point) => (
-                      <li key={point}>{point}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="feature-shot">
-                  <figure className="shot-frame" data-markdown-ignore>
-                    <img
-                      className="feature-image"
-                      src={feature.screenshotSrc}
-                      alt={t.features.items[feature.id].imageAlt}
-                      width={SCREENSHOT_WIDTH}
-                      height={SCREENSHOT_HEIGHT}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  </figure>
-                </div>
-              </section>
-            ))}
-          </div>
-        </section>
-
-        <section className="faq-section shell" id="faq">
-          <div className="section-heading">
-            <p className="label">{t.faq.kicker}</p>
-            <h2>{t.faq.title}</h2>
-          </div>
-
-          <div className="faq-list">
-            {faqs.map((id) => (
-              <details className="faq-item" key={id}>
-                <summary>{t.faq.items[id].question}</summary>
-                <p>{t.faq.items[id].answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section className="cta-section shell">
-          <div className="cta-panel">
-            <p>{t.faq.cta}</p>
-            <a
-              className="button button-primary"
-              href={productPath(locale, 'install')}
-            >
-              {t.hero.primaryCta}
-            </a>
+        <section className="closing" id="install">
+          <div className="shell">
+            <h2 className="two-tone reveal">
+              <span>{t.hero.titleLineOne}</span>{' '}
+              <span className="two-tone-dim">{t.hero.titleLineTwo}</span>
+            </h2>
+            <InstallSteps messages={t} />
           </div>
         </section>
       </main>
 
-      <footer className="site-footer" data-markdown-ignore>
-        <div className="shell footer-inner">
-          <p className="caption">2code — {t.footer.tagline}</p>
-
-          <div className="footer-links">
-            <a href={productPath(locale, 'faq')}>{t.nav.faq}</a>
-            <a href={productPath(locale, 'install')}>{t.footer.install}</a>
-            <a href={productPath(locale, 'getting-started')}>
-              {t.footer.gettingStarted}
-            </a>
-            <a href={blogListPath(locale)}>{t.nav.blog}</a>
-            <a href={siteConfig.githubUrl} target="_blank" rel="noreferrer">
-              {t.nav.github}
-            </a>
-            <a
-              href={siteConfig.githubReleaseUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t.footer.releases}
-            </a>
-          </div>
-
-          <LocaleSwitch locale={locale} messages={t} />
-        </div>
-      </footer>
+      <SiteFooter locale={locale} messages={t} />
     </div>
   )
 }

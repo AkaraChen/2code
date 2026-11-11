@@ -4,6 +4,11 @@ export const supportedLocales = ['en', 'zh-cn'] as const
 
 export type AppLocale = (typeof supportedLocales)[number]
 
+/*
+  Body strings may carry two inline marks, rendered by `RichText` on the page and
+  passed through verbatim to the Markdown alternates: **emphasis** (set brighter,
+  not heavier) and `code`.
+*/
 export const resources = {
   en: {
       metadata: {
@@ -33,12 +38,6 @@ export const resources = {
         ],
         faviconAlt: '2code favicon',
       },
-      announcement: {
-        regionLabel: 'Announcement',
-        badge: 'New',
-        copy: 'aghub is out, the smoothest agent manager in the world.',
-        dismiss: 'Dismiss announcement',
-      },
       nav: {
         home: '2code home',
         primary: 'Primary',
@@ -47,6 +46,7 @@ export const resources = {
         blog: 'Blog',
         github: 'GitHub',
         theme: 'Switch between light and dark',
+        forHerdr: 'for Herdr',
       },
       blog: {
         metadataTitle: '2code Blog | Terminals, worktrees, and coding agents',
@@ -71,21 +71,95 @@ export const resources = {
         emptyCta: 'Read the source on GitHub',
       },
       hero: {
-        kicker: 'Your next Agentic IDE',
+        eyebrow: 'A layout for Herdr',
+        eyebrowTags: ['open source', 'beta'],
         titleLineOne: 'Your agents need',
         titleLineTwo: 'a better terminal.',
-        titleHighlight: 'better',
-        sticker: 'for vibe coding',
         lede:
-          'Normal terminals run commands. 2code also manages projects, worktrees, and agents.',
-        supporting:
-          'If you bounce between agents, dev servers, and multiple worktrees every day, add 2code to Herdr and keep them in one window.',
+          'Normal terminals run commands. **2code also manages projects, worktrees and agents**, all in one Herdr window.',
         primaryCta: 'Get 2code for Herdr',
         secondaryCta: 'Explore features',
         shotAlt: '2code in Herdr: projects with their worktrees, a file tree, and an agent at work in its tab',
       },
+      chapters: {
+        railLabel: 'On this page',
+        railProject: 'Projects',
+        legend: {
+          working: 'Reading',
+          done: 'Read',
+          idle: 'Not yet',
+        },
+        items: {
+          worktrees: {
+            nav: 'Worktrees',
+            title: 'Keep each task in its own lane',
+            body:
+              'Every git worktree of a project sits in the sidebar **with its own terminals**. **+** on a project creates one and runs your `setup_script`; deleting one warns about unpushed work, runs `teardown_script` and keeps the branch.',
+            figure:
+              'The 2code sidebar: a project with four worktrees, and the setup script running for the newest one.',
+          },
+          status: {
+            nav: 'See who needs you',
+            title: 'See who needs you',
+            body:
+              "Agents that report their status light up their tab and their worktree: **a pulsing dot while they work, yellow when they need you, green when they finish**, with Herdr's sound and alert. Stop checking every terminal.",
+            figure:
+              'Terminal tabs with agent status dots: one agent waiting for an answer, one working, one done.',
+          },
+          review: {
+            nav: 'Review in place',
+            title: 'Review what changed, then hand it back',
+            body:
+              'Files open as tabs beside the terminals. The diff shows **Changes and History**, unified or split. Click a line, or two to make a range, and leave a comment; **2code collects them per repo and copies them for the agent in one go**.',
+            figure:
+              'The 2code diff view with a review comment on a range of added lines.',
+          },
+          templates: {
+            nav: 'Scripts & templates',
+            title: 'Scripts and templates, in one file',
+            body:
+              "A project's `2code.json` holds the scripts its worktrees run and the **terminal templates** you start every day: Claude, a dev server, the script you always forget. Global ones live in `~/2code/2code.json`.",
+            figure:
+              'A project 2code.json with setup and teardown scripts and two terminal templates, next to the New Terminal menu that lists them.',
+          },
+        },
+      },
+      // Labels inside the drawn app windows, worded like the app's own UI.
+      mock: {
+        projects: 'Projects',
+        newTerminal: 'New Terminal',
+        needsYou: 'Needs you',
+        changes: 'Changes',
+        history: 'History',
+        review: 'Review (1)',
+        unified: 'Unified',
+        split: 'Split',
+        changedFiles: '2 changed files',
+        addComment: 'Add comment',
+        comment: 'Extract this into a Badge component',
+        projectSettings: 'Project settings',
+        globalTemplates: 'Global',
+        agentTask: 'Add a loading state to the login form and cover it with a test',
+        setupDone: 'setup finished, opening claude…',
+      },
+      install: {
+        herdrTitle: 'Install Herdr',
+        herdrBody: 'macOS on Apple silicon, Linux and Windows.',
+        herdrCta: 'Download Herdr',
+        layoutTitle: 'Add the 2code layout',
+        promptComment: '# ask the agent in any Herdr terminal',
+        // {keys} and {macKey} become keycaps.
+        switchHint:
+          "Switch layouts with {keys} ({macKey} on macOS). Herdr's own layout stays one key away.",
+        copy: 'Copy',
+        copied: 'Copied',
+      },
       footer: {
         tagline: 'A Herdr layout for vibe coding.',
+        openSource: 'Open source.',
+        product: 'Product',
+        learn: 'Learn',
+        project: 'Project',
         releases: 'Legacy desktop app',
         languageLabel: 'Language',
         english: 'English',
@@ -101,9 +175,9 @@ export const resources = {
       pages: {
         features: {
           metadataTitle:
-            '2code Features | Persistent terminals, git, and worktrees',
+            '2code Features | Worktrees, agent status, and git review',
           metadataDescription:
-            'What 2code adds to a normal terminal: persistent sessions, in-app git review, and isolated worktree windows.',
+            'What 2code adds to Herdr: worktrees with setup scripts, agent status per task, git review with comments for agents, and terminal templates.',
         },
         faq: {
           metadataTitle: '2code FAQ | Terminal workstation questions',
@@ -133,48 +207,9 @@ export const resources = {
           lede: '2code is a Herdr layout for projects, worktrees, and AI coding agents.',
         },
       },
-      features: {
-        items: {
-          terminals: {
-            eyebrow: 'Persistent terminals',
-            title: 'Return to the terminal you left behind.',
-            copy:
-              '2code keeps terminal sessions, layouts, and history around after restarts. Reopen the app and get back to the same working state instead of rebuilding your setup.',
-            points: [
-              'Restore terminal history and workspace layout after restart.',
-              'Keep long-running sessions tied to the project they belong to.',
-              'Return to work without reopening every command by hand.',
-            ],
-            imageAlt: '2code persistent terminal tabs view',
-          },
-          git: {
-            eyebrow: 'Built-in tools',
-            title: 'Edit files and review changes in place.',
-            copy:
-              'A file tree and lightweight editor handle quick changes without an app switch. The simple git client keeps diffs and commit history close by, so reviewing what changed stays part of the terminal workflow.',
-            points: [
-              'Browse files beside the terminal and make small edits quickly.',
-              'Review diffs without jumping to a separate git app.',
-              'Open commit history when you need to check how a change evolved.',
-            ],
-            imageAlt: '2code git diff view',
-          },
-          profiles: {
-            eyebrow: 'Worktrees',
-            title: 'Keep each task in its own lane.',
-            copy:
-              'Every git worktree of a project sits in the sidebar with its own terminals and context. New worktrees run your setup script, deleted ones your teardown, so switching between tasks stays clear instead of turning into a tab hunt.',
-            points: [
-              'Create a worktree per feature, fix or experiment; setup runs for you.',
-              'Keep terminals from one task away from another task.',
-              'Switch back later and see the same context you left there.',
-            ],
-            imageAlt: '2code worktree view',
-          },
-        },
-      },
       faq: {
         kicker: 'FAQ',
+        heading: 'Questions',
         title: 'What 2code adds to a normal terminal.',
         items: {
           audience: {
@@ -242,12 +277,6 @@ export const resources = {
         ],
         faviconAlt: '2code 网站图标',
       },
-      announcement: {
-        regionLabel: '公告',
-        badge: '新',
-        copy: 'aghub 已发布，它是世界上最顺滑的 agent 管理器。',
-        dismiss: '关闭公告',
-      },
       nav: {
         home: '2code 首页',
         primary: '主导航',
@@ -256,6 +285,7 @@ export const resources = {
         blog: '博客',
         github: 'GitHub',
         theme: '切换浅色 / 深色',
+        forHerdr: 'for Herdr',
       },
       blog: {
         metadataTitle: '2code 博客 | 终端、Worktree 与编程 Agent',
@@ -277,21 +307,92 @@ export const resources = {
         emptyCta: '去 GitHub 看源码',
       },
       hero: {
-        kicker: '你的下一个 Agentic IDE',
+        eyebrow: 'Herdr 布局',
+        eyebrowTags: ['开源', 'beta'],
         titleLineOne: '你的 Agent',
         titleLineTwo: '需要更好的终端',
-        titleHighlight: '更好',
-        sticker: '为 Vibe Coding 而生',
         lede:
-          '普通终端只管命令，2code 还管项目、worktree 和 Agent。',
-        supporting:
-          '如果你每天都在终端、Agent、dev server 和多个 worktree 之间切来切去，把 2code 装进 Herdr，放在一个窗口里管。',
+          '普通终端只管跑命令，**2code 还帮你管项目、worktree 和 Agent**，全都在一个 Herdr 窗口里。',
         primaryCta: '在 Herdr 中使用 2code',
         secondaryCta: '查看亮点',
         shotAlt: 'Herdr 里的 2code：项目和 worktree、文件树，以及正在 tab 里干活的 Agent',
       },
+      chapters: {
+        railLabel: '本页目录',
+        railProject: '项目',
+        legend: {
+          working: '在读',
+          done: '已读',
+          idle: '未读',
+        },
+        items: {
+          worktrees: {
+            nav: 'Worktree',
+            title: '每个任务一条线',
+            body:
+              '项目的每个 git worktree 都会出现在侧栏里，**有自己的终端**。在项目上点 **+** 新建一个，会自动跑你的 `setup_script`；删除时会提醒还没推送的改动，跑 `teardown_script`，分支保留。',
+            figure:
+              '2code 侧栏：一个项目下有四个 worktree，最新的那个正在跑安装脚本。',
+          },
+          status: {
+            nav: '谁在等你',
+            title: '一眼看出谁在等你',
+            body:
+              '会上报状态的 Agent 会点亮它的 tab 和 worktree：**运行中是跳动的点，需要你时变黄，完成后变绿**，同时有 Herdr 的声音和提醒。不用再挨个盯终端。',
+            figure:
+              '带 Agent 状态点的终端 tab：一个在等你回答，一个在运行，一个已完成。',
+          },
+          review: {
+            nav: '原地 review',
+            title: '看完改动，再交回给 Agent',
+            body:
+              '文件在终端旁边以 tab 打开。diff 里能看**变更和历史**，统一或分栏都行。点一行（或点两行选一段）写评论，**2code 按仓库收集起来，一次复制给 Agent**。',
+            figure: '2code 的 diff 视图，一段新增代码上挂着一条评审意见。',
+          },
+          templates: {
+            nav: '脚本与模板',
+            title: '脚本和模板，一个文件搞定',
+            body:
+              '项目里的 `2code.json` 存着 worktree 要跑的脚本，以及你每天都要开的**终端模板**：Claude、dev server、那个总记不住的脚本。全局模板放在 `~/2code/2code.json`。',
+            figure:
+              '一个项目的 2code.json，含安装、清理脚本和两个终端模板；旁边是列出这些模板的「新建终端」菜单。',
+          },
+        },
+      },
+      mock: {
+        projects: '项目',
+        newTerminal: '新建终端',
+        needsYou: '需要你',
+        changes: '变更',
+        history: '历史',
+        review: '评审 (1)',
+        unified: '统一',
+        split: '分栏',
+        changedFiles: '2 个文件已变更',
+        addComment: '添加评论',
+        comment: '把这段抽成一个 Badge 组件',
+        projectSettings: '项目设置',
+        globalTemplates: '全局模板',
+        agentTask: '给登录表单加上 loading 状态，并补一个测试',
+        setupDone: '安装完成，正在打开 claude…',
+      },
+      install: {
+        herdrTitle: '安装 Herdr',
+        herdrBody: '支持 Apple 芯片的 macOS、Linux 和 Windows。',
+        herdrCta: '下载 Herdr',
+        layoutTitle: '添加 2code 布局',
+        promptComment: '# 在任意 Herdr 终端里对 Agent 说',
+        switchHint:
+          '用 {keys}（macOS 上是 {macKey}）切换布局，Herdr 自带的布局随时能切回去。',
+        copy: '复制',
+        copied: '已复制',
+      },
       footer: {
         tagline: '为 vibe coding 而生的 Herdr 布局。',
+        openSource: '开源。',
+        product: '产品',
+        learn: '了解',
+        project: '项目',
         releases: '旧版桌面应用',
         languageLabel: '语言',
         english: 'English',
@@ -306,9 +407,9 @@ export const resources = {
       },
       pages: {
         features: {
-          metadataTitle: '2code 亮点 | 持久终端、Git 与 Worktree',
+          metadataTitle: '2code 亮点 | Worktree、Agent 状态与 Git review',
           metadataDescription:
-            '2code 在普通终端之上加了持久会话、应用内 Git review，以及隔离的 worktree 窗口。',
+            '2code 给 Herdr 加了什么：带安装脚本的 worktree、按任务显示的 Agent 状态、能给 Agent 写评论的 Git review，以及终端模板。',
         },
         faq: {
           metadataTitle: '2code FAQ | 终端工作站常见问题',
@@ -338,48 +439,9 @@ export const resources = {
           lede: '2code 是面向项目、worktree 和 AI coding agent 的 Herdr 布局。',
         },
       },
-      features: {
-        items: {
-          terminals: {
-            eyebrow: '持久终端',
-            title: '重启以后，终端还在原地。',
-            copy:
-              '2code 会保留终端会话、窗口布局和历史记录。重新打开应用时，不用从零开始恢复工作现场。',
-            points: [
-              '恢复终端历史和上次的窗口布局。',
-              '长时间运行的会话会跟着所属项目保存。',
-              '回来以后不用手动重新打开每条命令。',
-            ],
-            imageAlt: '2code 持久终端标签页视图',
-          },
-          git: {
-            eyebrow: '文件与 Git',
-            title: '小改动和 review，不用离开终端。',
-            copy:
-              '内置文件树和轻量编辑器，临时改文件不用再切到别的应用。简单的 Git client 可以看 diff、回顾历史 commit，适合快速 review。',
-            points: [
-              '在终端旁边直接浏览文件，顺手改配置或小段代码。',
-              '打开 diff 看清这次到底改了什么。',
-              '需要追溯时，直接查看历史 commit 做 review。',
-            ],
-            imageAlt: '2code Git diff 视图',
-          },
-          profiles: {
-            eyebrow: 'Worktree',
-            title: '每条任务线都有自己的 worktree。',
-            copy:
-              '项目的每个 git worktree 都会出现在侧栏里，有自己的终端和上下文。新建时自动跑安装脚本，删除时跑清理脚本，切换时不会混成一团。',
-            points: [
-              '一个功能、一个修复、一个实验，各建一个 worktree，安装脚本自动执行。',
-              '不同窗口里的终端互不干扰，命令不会串到一起。',
-              '切回某条任务线时，看到的就是上次离开时的现场。',
-            ],
-            imageAlt: '2code worktree 视图',
-          },
-        },
-      },
       faq: {
         kicker: 'FAQ',
+        heading: '常见问题',
         title: '它不只是又一个终端。',
         items: {
           audience: {
@@ -422,6 +484,22 @@ export const resources = {
       },
   },
 } as const
+
+export const CHAPTER_IDS = ['worktrees', 'status', 'review', 'templates'] as const
+
+export type ChapterId = (typeof CHAPTER_IDS)[number]
+
+export const FAQ_IDS = [
+  'audience',
+  'terminal',
+  'agents',
+  'templates',
+  'restore',
+  'platforms',
+  'production',
+] as const
+
+export type Messages = (typeof resources)[AppLocale]
 
 export function detectPreferredLocale(
   language: string | readonly string[] | null | undefined,

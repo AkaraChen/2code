@@ -1,4 +1,10 @@
-import { getMessages, type AppLocale } from '../i18n/resources'
+import {
+  CHAPTER_IDS,
+  FAQ_IDS,
+  getMessages,
+  type AppLocale,
+  type Messages,
+} from '../i18n/resources'
 import { siteConfig } from '../site-config'
 import { listPosts } from '../blog/lib/posts'
 import {
@@ -15,17 +21,27 @@ import {
   type ProductPageId,
 } from './product-pages'
 
-const FEATURE_IDS = ['terminals', 'git', 'profiles'] as const
-const FAQ_IDS = [
-  'audience',
-  'terminal',
-  'agents',
-  'templates',
-  'restore',
-  'platforms',
-  'production',
-] as const
+/** The feature chapters, shared by the homepage and /features twins. */
+function chapterLines(t: Messages): string[] {
+  return CHAPTER_IDS.flatMap((id) => {
+    const item = t.chapters.items[id]
+    return [`### ${item.title}`, '', item.body, '']
+  })
+}
 
+function installLines(t: Messages): string[] {
+  return [
+    `1. **${t.install.herdrTitle}** — ${t.install.herdrBody} ${siteConfig.herdrDownloadUrl}`,
+    `2. **${t.install.layoutTitle}** — ${t.pages.install.layoutBody}`,
+    '',
+    '```',
+    siteConfig.installPrompt,
+    '```',
+    '',
+    t.pages.install.switchBody,
+    '',
+  ]
+}
 
 function directiveBlock(): string {
   return agentMarkdownDirective(`${siteConfig.url}${siteConfig.llmsTxtPath}`)
@@ -50,11 +66,8 @@ export function renderHomeMarkdown(locale: AppLocale): string {
     '',
     `> ${t.hero.lede}`,
     '',
-    t.hero.supporting,
-    '',
-    `- **${t.hero.kicker}**`,
-    `- ${t.hero.primaryCta}${t.hero.secondaryCta}`,
-    `- **${t.hero.primaryCta}:** ${siteConfig.installUrl}`,
+    `- **${[t.hero.eyebrow, ...t.hero.eyebrowTags].join(' · ')}**`,
+    `- **${t.hero.primaryCta}:** ${url}#install`,
     `- **${t.hero.secondaryCta}:** ${url}#features`,
     locale === 'zh-cn'
       ? `- **English:** ${otherHome}`
@@ -63,20 +76,8 @@ export function renderHomeMarkdown(locale: AppLocale): string {
     '',
     `## ${t.nav.features}`,
     '',
-    ...FEATURE_IDS.flatMap((id) => {
-      const item = t.features.items[id]
-      return [
-        `### ${item.eyebrow}`,
-        '',
-        `#### ${item.title}`,
-        '',
-        item.copy,
-        '',
-        ...item.points.map((point) => `- ${point}`),
-        '',
-      ]
-    }),
-    `## ${t.faq.title}`,
+    ...chapterLines(t),
+    `## ${t.faq.heading}`,
     '',
     ...FAQ_IDS.flatMap((id) => [
       `### ${t.faq.items[id].question}`,
@@ -84,10 +85,9 @@ export function renderHomeMarkdown(locale: AppLocale): string {
       t.faq.items[id].answer,
       '',
     ]),
-    t.faq.cta,
+    `## ${t.footer.install}`,
     '',
-    `[${t.hero.primaryCta}](${siteConfig.installUrl})`,
-    '',
+    ...installLines(t),
     `2code — ${t.footer.tagline}`,
     '',
   ].join('\n')
@@ -108,19 +108,7 @@ export function renderProductMarkdown(
           '',
           copy.lede,
           '',
-          ...FEATURE_IDS.flatMap((featureId) => {
-            const item = t.features.items[featureId]
-            return [
-              `### ${item.eyebrow}`,
-              '',
-              `#### ${item.title}`,
-              '',
-              item.copy,
-              '',
-              ...item.points.map((point) => `- ${point}`),
-              '',
-            ]
-          }),
+          ...chapterLines(t),
         ]
       case 'faq':
         return [

@@ -44,7 +44,7 @@ export function LocaleSwitch({
   }
 
   return (
-    <div className="footer-links" aria-label={messages.footer.languageLabel}>
+    <div className="locale-switch" aria-label={messages.footer.languageLabel}>
       <Link
         href={hrefs.en}
         onClick={() => remember('en')}
