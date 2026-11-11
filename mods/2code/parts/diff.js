@@ -229,7 +229,7 @@ export class Diff {
       .when(this.selected().length > 0, (el) => el.child(h_flex().p(10).gap(8).items_center().border_t(1).border_color(th.border).bg(th.raised)
         .child(icon("message", 14).text_color(th.muted))
         .child(v_flex().flex_none().max_w(260)
-          .child(div().truncate().text_size(12).text_color(th.muted).child(`${this.file.path}:${this.rangeLabel(this.selected())}`))
+          .child(div().truncate().text_size(12).text_color(th.muted).child(`${this.file.path.split("/").pop()}:${this.rangeLabel(this.selected())}`))
           .when(this.sel && this.sel.a === this.sel.b, (e) => e.child(div().text_size(10.5).text_color(th.dim).child(t("extendHint")))))
         .child(div().flex_1().px(10).rounded(6).border_1().border_color(th.accent).bg(th.background).on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .child(Input.new(this.comment).h(30).text_size(12.5).text_color(th.foreground)))

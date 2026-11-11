@@ -30,5 +30,8 @@ export function here() {
   const space = spaces().find((s) => s.active), f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   const cwd = pane?.cwd || f?.cwd || place(space) || null;
-  return { space, cwd, on: space?.machine ?? null, branch: pane?.branch ?? space?.branch ?? null };
+  // A file tab's pane has no branch: take the one its space's terminals report.
+  const tabs = new Set((space?.tabs ?? []).map((t) => t.id));
+  const branch = pane?.branch ?? panes().find((p) => tabs.has(p.tab) && p.branch)?.branch ?? space?.branch ?? null;
+  return { space, cwd, on: space?.machine ?? null, branch };
 }

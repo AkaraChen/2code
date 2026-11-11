@@ -6,7 +6,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea, Scrollbar, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, watchFolder, theme, settings, shared, openOverlay } from "herdr";
-import { t } from "../lib/i18n.js";
+import { t, locale } from "../lib/i18n.js";
 import { readChanges, fileDiff, unifiedRows, commit, discard, ahead, push } from "../lib/changes.js";
 import { ICON, icon } from "../lib/ui.js";
 
@@ -39,16 +39,25 @@ export function checkbox(id, state, th, onClick) {
 export class Changes {
   init(_props, cx) {
     this.files = []; this.rows = []; this.diffWidth = 0; this.excluded = new Set(); this.ahead = { count: 0, upstream: null };
-    this.summaryState = InputState.new({ placeholder: t("summaryPlaceholder") });
+    this.makeInputs();
+    this.refresh(cx);
+    cx.timer.every(10000, (cx) => this.refresh(cx));
+  }
+
+  // Placeholders are fixed when an input is made, so the inputs are made again
+  // (keeping what's typed) once the language is known or changes.
+  makeInputs() {
+    const summary = this.summaryState?.value() ?? "", body = this.bodyState?.value() ?? "";
+    this.summaryState?.release(); this.bodyState?.release();
+    this.inputLocale = locale();
+    this.summaryState = InputState.new({ placeholder: t("summaryPlaceholder"), value: summary });
     this.summaryState.on("change", (_e, cx) => this.typed(cx));
     this.summaryState.on("submit", (_e, cx) => this.commit(cx));
     this.summaryState.on("focus", (_e, cx) => { this.focus = "summary"; cx.notify(); });
     this.summaryState.on("blur", (_e, cx) => { if (this.focus === "summary") this.focus = null; cx.notify(); });
-    this.bodyState = TextareaState.new({ placeholder: t("descriptionPlaceholder"), rows: 3 });
+    this.bodyState = TextareaState.new({ placeholder: t("descriptionPlaceholder"), value: body, rows: 3 });
     this.bodyState.on("focus", (_e, cx) => { this.focus = "body"; cx.notify(); });
     this.bodyState.on("blur", (_e, cx) => { if (this.focus === "body") this.focus = null; cx.notify(); });
-    this.refresh(cx);
-    cx.timer.every(10000, (cx) => this.refresh(cx));
   }
 
   typed(cx) {
@@ -206,6 +215,7 @@ export class Changes {
     if (key() !== this.context) this.refresh(cx);
     const th = theme();
     shared("2code.locale");
+    if (locale() !== this.inputLocale) this.makeInputs();
     const add = this.files.reduce((n, f) => n + f.add, 0), del = this.files.reduce((n, f) => n + f.del, 0);
     const picked = this.included().length;
     const all = picked === this.files.length ? true : picked === 0 ? false : "some";

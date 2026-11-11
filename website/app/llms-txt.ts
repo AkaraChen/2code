@@ -7,7 +7,7 @@ function linkLine(title: string, markdownPath: string, description: string) {
 
 /** Body of `/llms.txt`. Built from the same page catalog as `sitemap.ts`. */
 export async function renderLlmsTxt() {
-  const { url, githubUrl, githubReleaseUrl, siblingProducts } = siteConfig
+  const { url, githubUrl, githubReleaseUrl, herdrDownloadUrl, installPrompt, installScript, siblingProducts } = siteConfig
   const pages = await listPublicPages()
 
   const homes = pages.filter((page) => page.kind === 'home')
@@ -26,9 +26,9 @@ export async function renderLlmsTxt() {
   return [
     '# 2code',
     '',
-    '> Terminal workstation for projects, worktrees, and AI coding agents.',
+    '> A Herdr layout for projects, worktrees, and AI coding agents.',
     '',
-    '2code is an open-source desktop app for developers who run terminals, Git, and AI coding agents together. It keeps persistent terminal sessions, project and Git worktree windows, agent-finish notifications, a lightweight file editor, and git review in one place. macOS is the primary platform; Windows and Linux support is experimental.',
+    '2code is an open-source layout for Herdr (herdr.dev), the desktop app for terminals and coding agents. It adds projects with Git worktree profiles, setup and teardown scripts, terminal templates, a file tree and editor, git review with comments for agents, and agent status to Herdr\'s persistent terminals. It runs wherever Herdr runs (macOS on Apple silicon, Linux, Windows). It used to be a standalone Tauri desktop app.',
     '',
     `Markdown versions of every page below are served at the listed \`.md\` URL and also via \`Accept: text/markdown\` on the HTML URL. A longer product brief is at ${url}${siteConfig.llmsFullTxtPath}.`,
     '',
@@ -38,7 +38,7 @@ export async function renderLlmsTxt() {
     '- They juggle **multiple projects or Git worktrees**, each needing its own terminals and context.',
     '- They run **CLI coding agents** (Claude Code, Codex, and similar) and want finish notifications without staring at every pane.',
     '- They want **git diffs, commit history, and quick file edits** without leaving the terminal workspace.',
-    '- They prefer a **local desktop app** over a browser-only or cloud agent orchestrator.',
+    '- They use, or are happy to use, **Herdr** as their local terminal and agent app, rather than a browser-only or cloud agent orchestrator.',
     '',
     '2code is **not** a coding model and does **not** proxy LLM API calls. It is the workstation agents and shells run inside.',
     '',
@@ -63,11 +63,19 @@ export async function renderLlmsTxt() {
     '',
     '## Install',
     '',
-    '```bash',
-    'brew install --cask akarachen/tap/2code',
+    `2code is a layout for [Herdr](${herdrDownloadUrl}). Install Herdr, then ask its agent:`,
+    '',
+    '```',
+    installPrompt,
     '```',
     '',
-    `DMG builds are also published on [GitHub Releases](${githubReleaseUrl}) (macOS primary). Source: ${githubUrl}.`,
+    'or, from a clone:',
+    '',
+    '```bash',
+    installScript,
+    '```',
+    '',
+    `Source: ${githubUrl}. The former desktop app's last builds: [GitHub Releases](${githubReleaseUrl}).`,
     '',
     '## Related products (for comparison context)',
     '',

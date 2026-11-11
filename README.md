@@ -48,9 +48,13 @@ herdr-app do layout.switch --name 2code
   project templates, and the global templates in `~/2code/2code.json`.
 - **Terminal templates**: the menu beside **New Terminal** opens a tab named
   after the template and types `init_script` and its commands into your shell.
-- **Files and Changes panels** in 2code's flat style. Changes commits only the
-  checked files (summary + description), discards a file (click twice) and
-  pushes.
+- **Files**: a tree with file icons, git colors and gitignored entries dimmed,
+  and a right-click menu (new, rename, delete to the trash, copy paths, reveal,
+  open in the default app). Files open in their own tab beside the terminals:
+  an editor with syntax highlighting, save, unsaved prompts, reload on disk
+  changes, markdown preview and images. `cmd-k` finds a file by name.
+- **Changes** in 2code's flat style: commits only the checked files (summary +
+  description), discards a file (click twice) and pushes.
 - **Diff dialog**: Changes and History, unified or split, image before/after,
   and review comments (click a line, click another to make a range) collected
   per repo and copied for an agent in one go.
@@ -77,6 +81,8 @@ sidebar, `cmd-,` settings, `cmd-f` searches a terminal.
 | macOS | Linux / Windows | |
 |---|---|---|
 | `cmd-t` | `ctrl-shift-t` | new terminal (runs `init_script`) |
+| `cmd-k` | `ctrl-shift-k` | find a file |
+| `cmd-s` | `ctrl-s` | save the file (in a file tab) |
 | `cmd-g` | `ctrl-shift-g` | diff dialog |
 | `cmd-e` | `ctrl-shift-e` | show / hide the Files / Changes panel |
 | `cmd-shift-e` | `ctrl-shift-j` | arrow keys in the sidebar (Esc returns) |
@@ -84,7 +90,8 @@ sidebar, `cmd-,` settings, `cmd-f` searches a terminal.
 | `alt-left` / `alt-right` | `alt-left` / `alt-right` | word left / right |
 
 Plain `ctrl-` letters stay with terminal programs on Linux and Windows, so
-2code's `ctrl-k` / `ctrl-g` / `ctrl-e` became `ctrl-shift-` keys there. Herdr
+2code's `ctrl-k` / `ctrl-g` / `ctrl-e` became `ctrl-shift-` keys there
+(`ctrl-s` only applies in a file tab). Herdr
 treats an edited `keys.json` as yours and stops updating its defaults in it.
 
 ## `2code.json`
@@ -131,3 +138,4 @@ Global templates go in `~/2code/2code.json`:
 | `TODO.md` | what still differs from the Tauri app (中文) |
 | `website/` | [2code's website](https://2code.akr.moe) (Next.js) |
 | `scripts/install.sh` | copy into a Herdr home and check |
+| `scripts/build-file-icons.mjs` | rebuild the file icon slice from material-icon-theme |

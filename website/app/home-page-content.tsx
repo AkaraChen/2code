@@ -33,8 +33,8 @@ const faqs = [
   'production',
 ] as const
 
-const SCREENSHOT_WIDTH = 2498
-const SCREENSHOT_HEIGHT = 1802
+const SCREENSHOT_WIDTH = 2560
+const SCREENSHOT_HEIGHT = 1640
 
 type Messages = (typeof resources)[AppLocale]
 
@@ -97,19 +97,19 @@ export function HomePageContent({
         '@id': `${siteConfig.url}/#software`,
         name: siteConfig.name,
         applicationCategory: 'DeveloperApplication',
-        applicationSubCategory: 'Terminal workstation',
-        operatingSystem: 'macOS, Windows (experimental), Linux (experimental)',
+        applicationSubCategory: 'Herdr layout',
+        operatingSystem: 'macOS, Linux, Windows (with Herdr)',
         description: t.metadata.description,
         url: pageUrl,
-        downloadUrl: siteConfig.githubReleaseUrl,
-        installUrl: siteConfig.githubReleaseUrl,
+        downloadUrl: siteConfig.installUrl,
+        installUrl: siteConfig.installUrl,
         softwareVersion: 'latest',
         offers: {
           '@type': 'Offer',
           price: '0',
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
-          url: siteConfig.githubReleaseUrl,
+          url: siteConfig.installUrl,
         },
         screenshot: features.map(
           (feature) => `${siteConfig.url}${feature.screenshotSrc}`,
@@ -167,9 +167,7 @@ export function HomePageContent({
                   <a
                     id="cta-download"
                     className="button button-primary"
-                    href={siteConfig.githubReleaseUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                    href={productPath(locale, 'install')}
                     aria-keyshortcuts="d"
                   >
                     <span>{t.hero.primaryCta}</span>
@@ -280,9 +278,7 @@ export function HomePageContent({
             <p>{t.faq.cta}</p>
             <a
               className="button button-primary"
-              href={siteConfig.githubReleaseUrl}
-              target="_blank"
-              rel="noreferrer"
+              href={productPath(locale, 'install')}
             >
               {t.hero.primaryCta}
             </a>

@@ -33,18 +33,23 @@ Left to right:
     `ansi5` / red), an "Open in…" button and a gear (project settings).
   - A row: a 260px side panel (stack of the `files` and `changes` parts,
     hidden until picked), then the terminal area.
-    - Files: 24px rows, 12px indent, names in `muted`; new files green
-      `ansi2`, modified blue `ansi4`, deleted red `ansi1`, a blue dot on
-      folders with changes, a letter at the right. Click a file: read-only
-      preview with a back arrow.
+    - Files: 24px rows, 12px indent, a 15px material file icon, names in
+      `muted`; new files green `ansi2`, modified blue `ansi4`, deleted red
+      `ansi1`, a blue dot on folders with changes, a letter at the right;
+      gitignored entries at 50% opacity.
     - Changes: 40px header (select-all checkbox, "N changed file(s)", `+a -d`,
       expand icon), 30px rows (checkbox, name, folder in `dim` or `← old` for
       a rename, an undo icon on hover, a 16px square status badge), the picked
       file's diff, and a commit box ("COMMIT", Summary, Description, "x of y
       files included", Push N when ahead, Commit).
-  - Terminal area: a 34px tab strip (2px underline on the active tab, program
-    icon, title, agent dot, ×), "+ New Terminal" and a chevron for templates;
+  - Terminal area: a 34px tab strip of terminals and files together (2px
+    underline on the active tab, program or file icon, title, agent dot, an
+    unsaved dot on files, ×), "+ New Terminal" and a chevron for templates;
     then the active tab's panes with 1px borders, no gaps, no rounding.
+  - A file tab: a 36px header (file icon, path from the checkout, unsaved dot,
+    Edit / Split / Preview for markdown, "Read-only" for other machines, Save),
+    a banner when needed, then Herdr's Editor (13px, theme syntax colors), a
+    split with the rendered markdown, or a centered image with its size.
 - **Diff dialog** (92% × 88%): header with branch, Changes / History segments,
   "Review (N)", Unified / Split, close. Left 360px: the changes (as in the
   panel) or the commits (subject, short hash, author · age) → a commit's files.
@@ -86,6 +91,24 @@ Left to right:
   Project Templates (name, folder, commands) and Global Templates; Save writes
   `<main>/2code.json` and `~/2code/2code.json` keeping unknown fields, and
   never creates an empty file.
+- Files: click a folder folds it; click a file opens it in a tab (or shows its
+  open tab); right-click: Open, Open in Default App, Reveal, New File, New
+  Folder, Rename (name dialogs), Copy Relative / Absolute Path, Refresh, Delete
+  (to the trash with `/usr/bin/trash` or `gio trash`; when the trash refuses,
+  the dialog shows why and offers Delete Permanently).
+- File tabs: each file is a Herdr tab whose only pane is the `editor` part
+  (`tab.new {mod, props: {part, path, on, root}}`); shared `2code.editors`
+  maps tab ids to files, `2code.dirty` marks unsaved ones. `cmd-s` /
+  `ctrl-s` (section `mod:2code`) saves with `writeTextFile(path, text,
+  savedSnapshot)`; a rejected snapshot offers Reload / Overwrite. Every 3s the
+  file is reread: taken silently when nothing is unsaved, else "changed on
+  disk" offers Keep Mine / Reload. While unsaved a copy sits in
+  `mods/2code/.cache/recovery/`; reopening offers Restore / Discard. × on an
+  unsaved tab selects it and asks Save / Don't Save / Cancel (answered by the
+  editor through shared `2code.editorRequest`). Markdown remembers its mode.
+- Finder (`cmd-k` / `ctrl-shift-k`): a dialog over `git ls-files --cached
+  --others --exclude-standard` (else `find`), fuzzy-ranked (in order, runs,
+  word starts and the file name score; shorter paths win ties), ↑↓ Enter.
 - Changes: click a row shows its diff (again hides it); checkboxes pick what
   Commit (or Enter in Summary) commits: `git add -A -- <checked>` then
   `git commit -m summary [-m description] -- <checked>`. The undo icon arms
@@ -105,6 +128,7 @@ Left to right:
   named after it in its `cwd` and types `init_script` then its `commands`.
 - Keys (section `layout:2code`): `cmd-t`/`ctrl-shift-t` new terminal,
   `cmd-g`/`ctrl-shift-g` diff dialog, `cmd-e`/`ctrl-shift-e` panel,
+  `cmd-k`/`ctrl-shift-k` find a file, `cmd-s`/`ctrl-s` save (in a file tab),
   `cmd-shift-e`/`ctrl-shift-j` sidebar keyboard (↑↓ move, → open/enter,
   ← close/parent, Enter opens, Esc back to the terminal), `shift-enter`
   newline, `alt-left/right` word.
@@ -120,9 +144,12 @@ Left to right:
   blocks) and `work` column (`topbar` block, `work-body` row → `panel` stack
   [`files`, `changes`] and `terminal-area` column [`tabs` block, `main` tab block]).
 - One mod, `mods/2code`, every block `{mod: "2code", props: {part}}`. Parts:
-  `header`, `sidebar`, `topbar`, `tabs`, `files`, `changes`, and overlays
-  `menu`, `templates`, `openIn` (popups), `rename`, `removeProject`,
-  `deleteProfile`, `projectSettings`, `diff`, `review`, `branches` (dialogs).
+  `header`, `sidebar`, `topbar`, `tabs`, `files`, `changes`, `editor` (a tab),
+  and overlays `menu`, `templates`, `openIn`, `fileMenu` (popups), `rename`,
+  `removeProject`, `deleteProfile`, `projectSettings`, `diff`, `review`,
+  `branches`, `finder`, `filePrompt`, `fileDelete`, `unsaved` (dialogs).
+  File icons: a 209-icon slice of material-icon-theme (MIT) built by
+  `scripts/build-file-icons.mjs` into `lib/fileIcons.js` + `icons/files/`.
   `lib/`: `i18n`, `git`, `config` (2code.json), `projects`, `changes` (git
   work), `terminal`, `os` (reveal, avatars), `ui`.
 - Shipped mods used: `worktree` (New worktree), `menu` (tab menu). `files` and
@@ -153,6 +180,14 @@ Left to right:
   diff list with `absolute().inset_0()` in a `relative()` box.
 - `image()` reads only the app's folder and has no fit option: images are
   copied into `mods/2code/.cache/` and sized from their headers.
+- `h_flex` centers its children vertically: a box holding only absolute
+  children needs `h_full()` there (the markdown split collapsed without it).
+- Inputs keep the placeholder they were made with: the Changes panel remakes
+  its inputs (keeping the text) when `2code.locale` resolves.
+- Herdr closes tabs without asking a mod: only 2code's own × can prompt, hence
+  the recovery copy.
+- `gio trash` refuses some mounts (e.g. `/tmp`): never fall back to deleting
+  silently.
 - `fetch()` reads text only; avatars download with `curl`.
 - No locale API (no `Intl`, no `navigator`). Herdr's own dialogs stay English.
 - Plain `ctrl-` letters belong to terminal programs on Linux and Windows.
@@ -173,4 +208,8 @@ Left to right:
   Copy for Agent puts the formatted text on the clipboard.
 - `cmd-g` / `ctrl-shift-g` opens the dialog; `cmd-t` / `ctrl-shift-t` opens a
   terminal that ran `init_script`.
+- Clicking a file opens a tab with its icon; typing shows the unsaved dot;
+  `ctrl-s` writes the file; an outside change appears within 3s; × on an
+  unsaved tab asks Save / Don't Save / Cancel.
+- `cmd-k` / `ctrl-shift-k`, typing part of a path and Enter opens that file.
 - With `LANG=zh_CN.UTF-8` every 2code label is Chinese; unset, English.
