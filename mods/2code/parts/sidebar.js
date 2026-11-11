@@ -41,8 +41,10 @@ export class SidebarHeader {
   render() {
     const th = theme(), w = window();
     const narrow = (find(layout(), "sidebar")?.size?.px ?? 250) < RAIL;
-    // macOS draws its window buttons at the layout's traffic_lights spot.
-    const lights = w?.platform === "macos" && !w?.fullscreen;
+    // macOS draws its window buttons at the layout's traffic_lights spot
+    // (vertically centered on this 52px row); on the rail they fill it.
+    const lights = w?.platform === "macos" && w?.titlebar === "none" && !w?.fullscreen;
+    if (lights && narrow) return div().size_full().bg(th.chrome);
     return h_flex().id("brand-row").size_full().px(narrow ? 0 : 16).items_center().bg(th.chrome)
       .when(lights && !narrow, (el) => el.pl(76))
       .on_hover((h, cx) => { if (this.hover !== h) { this.hover = h; cx.notify(); } })

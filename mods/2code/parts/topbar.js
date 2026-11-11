@@ -3,7 +3,7 @@
 // middle, then the pull request, "Open in…" and the project's settings.
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { run, theme, layout, readTextFile, shared, openOverlay, exec } from "herdr";
+import { run, theme, layout, readTextFile, shared, openOverlay, exec, window, settings } from "herdr";
 import { savedProjects, projectName } from "../lib/projects.js";
 import { t } from "../lib/i18n.js";
 import { git, repoOf, here, READ } from "../lib/git.js";
@@ -104,13 +104,24 @@ export class Topbar {
     const name = repo ? projectName(saved ?? { path: repo.main }) : space?.name ?? "";
     const stats = current ? this.stats : { add: 0, del: 0 };
     const pr = repo && branch ? this.prs[`${on ?? ""}:${repo.top}:${branch}`]?.pr : null;
+    // macOS draws its window buttons at the layout's traffic_lights over this
+    // bar when the sidebar is hidden or narrower than they are (as Herdr's own
+    // tab bar does). Lights are in window px; the layout's sizes scale with zoom.
+    const w = window(), root = layout();
+    const sidebarPx = sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0;
+    const narrow = !sidebar?.hidden && sidebarPx < 160;
+    const lightsPad = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
+      ? Math.max(12, (root.traffic_lights[0] + 64) / (settings().zoom ?? 1) - sidebarPx)
+      : 12;
     const ghost = (id, glyph, tip, click) => div().id(id).size(28).flex().items_center().justify_center().rounded(6)
       .bg(th.raised).text_color(th.muted).hover((s) => s.text_color(th.foreground)).on_mouse_down("left", stop).tooltip(tip)
       .on_click(click).child(icon(glyph, 15));
-    return h_flex().size_full().px(12).gap(8).items_center().bg(th.background).border_b(1).border_color(th.border).text_size(13)
-      .when(Boolean(sidebar?.hidden), (el) => el.child(div().id("sidebar-show").size(26).flex().items_center().justify_center().rounded(6)
+    return h_flex().size_full().px(12).pl(lightsPad).gap(8).items_center().bg(th.background).border_b(1).border_color(th.border).text_size(13)
+      // Hidden or folded to a rail: the way back is here.
+      .when(Boolean(sidebar?.hidden) || narrow, (el) => el.child(div().id("sidebar-show").size(26).flex().items_center().justify_center().rounded(6)
         .text_color(th.dim).hover((s) => s.bg(th.hover)).on_mouse_down("left", stop)
-        .on_click(() => run("layout.show", { id: "sidebar" })).child(icon("sidebar", 15))))
+        .on_click(() => (sidebar?.hidden ? run("layout.show", { id: "sidebar" }) : run("layout.resize", { id: "sidebar", px: 250 })))
+        .child(icon("sidebar", 15))))
       .child(h_flex().p(3).gap(2).rounded(8).bg(th.raised)
         .child(this.mode("files", th, icon("folder", 14)))
         .child(this.mode("changes", th, h_flex().gap(5).items_center()

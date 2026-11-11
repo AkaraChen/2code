@@ -17,7 +17,8 @@ Left to right:
   - 52px header: Herdr's mark (`frame/welcome/herdr.png`, 20px) and "Herdr"
     (15px semibold) in a 110×24 clipped slot, and a sidebar-toggle icon. Drags
     the window. On macOS (not fullscreen) it starts at 76px, clear of the
-    window buttons.
+    window buttons (`traffic_lights: [16, 19]`: their 14px row is centered on
+    the 52px header and top bar); on the macOS rail the row is left to them.
   - "Projects" label (12px, `dim`) with a `+` that opens the system folder picker.
   - One 32px row per project: a 20px GitHub avatar (else a rounded letter tile),
     the name, the most urgent agent dot, a caret. Under it, one 28px row per
@@ -26,7 +27,9 @@ Left to right:
   - Footer: Settings (Herdr's settings).
   - Narrower than 160px: only 24px project tiles with their dots.
 - **Work column**:
-  - 44px top bar (`background`, bottom border): a segmented switch (folder =
+  - 52px top bar (`background`, bottom border; on macOS, when the sidebar is
+    hidden or narrower than the window buttons, it pads left to
+    `traffic_lights.x + 64` like Herdr's tab bar): a segmented switch (folder =
     Files, branch icon with green `+N` / red `-N` = Changes); centered, the
     project name (14px semibold; hover shows the path) and the branch; then a
     pull request chip (`#12 Open|Draft|Merged|Closed`, colored green / dim /
@@ -139,7 +142,7 @@ Left to right:
 ## Built from
 
 - Layout `layouts/2code.json`: root `row` (`titlebar: none`, traffic lights
-  `[16, 24]`, theme `{light: 2code-light, dark: 2code-dark}`, JetBrains Mono
+  `[16, 19]`, theme `{light: 2code-light, dark: 2code-dark}`, JetBrains Mono
   13, terminal padding `[8, 10]`) → `sidebar` column (`brand`, `projects`
   blocks) and `work` column (`topbar` block, `work-body` row → `panel` stack
   [`files`, `changes`] and `terminal-area` column [`tabs` block, `main` tab block]).
