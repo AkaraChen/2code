@@ -3,7 +3,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { props, theme, spaces, run, closeOverlay } from "herdr";
 import { t } from "../lib/i18n.js";
-import { renameProject, removeProject } from "../lib/projects.js";
+import { renameProject, removeProject, projectName } from "../lib/projects.js";
 import { place, repoOf } from "../lib/git.js";
 import { button } from "../lib/ui.js";
 
@@ -20,7 +20,7 @@ function frame(th, title, body, actions) {
 export class Rename {
   init(p, cx) {
     this.p = p;
-    const derived = p.path.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const derived = projectName({ path: p.path });
     this.input = InputState.new({ value: p.name ?? "", placeholder: derived });
     this.input.on("submit", () => this.save());
     this.input.focus();
@@ -28,7 +28,7 @@ export class Rename {
   }
 
   save() {
-    const derived = this.p.path.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const derived = projectName({ path: this.p.path });
     const name = this.input.value().trim();
     renameProject(this.p.path, this.p.machine ?? null, name === derived ? "" : name);
     close();

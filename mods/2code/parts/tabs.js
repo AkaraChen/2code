@@ -8,12 +8,14 @@ import { readProjectConfig } from "../lib/config.js";
 import { repoOf, here } from "../lib/git.js";
 import { openTerminal } from "../lib/terminal.js";
 import { icon, dot } from "../lib/ui.js";
+import { openDiffDialog } from "./changes.js";
 
 export class Tabs {
-  static COMMANDS = ["newTerminal"];
+  static COMMANDS = ["newTerminal", "diff"];
 
   command(name, cx) {
     if (name === "newTerminal") this.newTerminal(cx);
+    if (name === "diff") openDiffDialog();
   }
 
   newTerminal(cx) {

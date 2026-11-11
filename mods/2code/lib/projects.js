@@ -8,7 +8,16 @@ import { git } from "./git.js";
 const KEY = "2code.projects";
 
 export const projectKey = (p) => `${p.machine ?? ""}:${p.path}`;
-export const projectName = (p) => p.name || p.path.split(/[\\/]/).filter(Boolean).pop() || p.path;
+// A bare repo's folder ("app.git", "bare.git", ".bare") says little: use "app"
+// or the folder around it.
+export function projectName(p) {
+  if (p.name) return p.name;
+  const parts = p.path.split(/[\\/]/).filter(Boolean);
+  const last = parts.pop() ?? p.path, stem = last.replace(/\.git$/, "");
+  if (stem && stem !== "bare" && stem !== ".bare" && stem !== last) return stem;
+  if (stem === "bare" || stem === ".bare" || stem === "") return parts.pop() ?? last;
+  return last;
+}
 const same = (a, b) => a.path === b.path && (a.machine ?? null) === (b.machine ?? null);
 
 export function savedProjects() {

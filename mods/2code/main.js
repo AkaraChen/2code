@@ -11,6 +11,10 @@ import { Menu } from "./parts/menu.js";
 import { Rename, RemoveProject } from "./parts/dialogs.js";
 import { DeleteProfile } from "./parts/deleteProfile.js";
 import { ProjectSettings } from "./parts/projectSettings.js";
+import { Diff } from "./parts/diff.js";
+import { Review } from "./parts/review.js";
+import { Branches } from "./parts/branches.js";
+import { OpenIn } from "./parts/openIn.js";
 import { Files } from "./parts/files.js";
 import { Changes } from "./parts/changes.js";
 
@@ -25,6 +29,10 @@ const PARTS = {
   removeProject: RemoveProject,
   deleteProfile: DeleteProfile,
   projectSettings: ProjectSettings,
+  diff: Diff,
+  review: Review,
+  branches: Branches,
+  openIn: OpenIn,
   files: Files,
   changes: Changes,
 };
