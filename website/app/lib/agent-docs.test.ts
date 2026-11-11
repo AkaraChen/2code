@@ -64,7 +64,8 @@ describe('generated surfaces', () => {
 
     expect(md.startsWith('> For AI agents:')).toBe(true)
     expect(md).toContain(t.faq.items.audience.question)
-    expect(md).toContain(t.features.items.terminals.points[0])
+    expect(md).toContain(t.chapters.items.profiles.body)
+    expect(md).toContain(siteConfig.installPrompt)
     expect(md).toContain('/llms.txt')
   })
 
