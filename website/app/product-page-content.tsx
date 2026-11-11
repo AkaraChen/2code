@@ -19,9 +19,8 @@ const FAQ_IDS = [
   'production',
 ] as const
 
-const BREW = 'brew install --cask akarachen/tap/2code'
-const SCREENSHOT_WIDTH = 2498
-const SCREENSHOT_HEIGHT = 1802
+const SCREENSHOT_WIDTH = 2560
+const SCREENSHOT_HEIGHT = 1640
 
 const FEATURE_SHOTS: Record<
   (typeof FEATURE_IDS)[number],
@@ -66,7 +65,7 @@ export function ProductPageContent({
         </header>
 
         {pageId === 'features' ? <FeaturesBody messages={t} /> : null}
-        {pageId === 'faq' ? <FaqBody messages={t} /> : null}
+        {pageId === 'faq' ? <FaqBody locale={locale} messages={t} /> : null}
         {pageId === 'install' ? <InstallBody messages={t} /> : null}
         {pageId === 'getting-started' ? (
           <GettingStartedBody locale={locale} messages={t} />
@@ -115,7 +114,13 @@ function FeaturesBody({ messages }: { messages: Messages }) {
   )
 }
 
-function FaqBody({ messages }: { messages: Messages }) {
+function FaqBody({
+  locale,
+  messages,
+}: {
+  locale: AppLocale
+  messages: Messages
+}) {
   const t = messages
 
   return (
@@ -128,12 +133,7 @@ function FaqBody({ messages }: { messages: Messages }) {
       ))}
       <p>{t.faq.cta}</p>
       <p>
-        <a
-          className="button button-primary"
-          href={siteConfig.githubReleaseUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
+        <a className="button button-primary" href={productPath(locale, 'install')}>
           {t.hero.primaryCta}
         </a>
       </p>
@@ -143,27 +143,39 @@ function FaqBody({ messages }: { messages: Messages }) {
 
 function InstallBody({ messages }: { messages: Messages }) {
   const t = messages
+  const install = t.pages.install
 
   return (
     <div className="prose">
-      <h2>{t.pages.install.brewHeading}</h2>
-      <pre>
-        <code>{BREW}</code>
-      </pre>
-      <h2>{t.pages.install.releasesHeading}</h2>
-      <p>{t.pages.install.releasesBody}</p>
+      <h2>{install.herdrHeading}</h2>
+      <p>{install.herdrBody}</p>
       <p>
         <a
           className="button button-primary"
-          href={siteConfig.githubReleaseUrl}
+          href={siteConfig.herdrDownloadUrl}
           target="_blank"
           rel="noreferrer"
         >
-          {t.hero.primaryCta}
+          {install.herdrCta}
         </a>
       </p>
+      <h2>{install.layoutHeading}</h2>
+      <p>{install.layoutBody}</p>
+      <pre>
+        <code>{siteConfig.installPrompt}</code>
+      </pre>
+      <h2>{install.scriptHeading}</h2>
+      <pre>
+        <code>{siteConfig.installScript}</code>
+      </pre>
+      <p>{install.switchBody}</p>
       <h2>{t.faq.items.platforms.question}</h2>
       <p>{t.faq.items.platforms.answer}</p>
+      <p>
+        <a href={siteConfig.githubReleaseUrl} target="_blank" rel="noreferrer">
+          {install.legacyNote}
+        </a>
+      </p>
     </div>
   )
 }
@@ -181,17 +193,15 @@ function GettingStartedBody({
     <div className="prose">
       <h2>{t.faq.items.audience.question}</h2>
       <p>{t.faq.items.audience.answer}</p>
-      <h2>{t.pages.install.brewHeading}</h2>
+      <h2>{t.pages.install.herdrHeading}</h2>
+      <p>{t.pages.install.herdrBody}</p>
+      <h2>{t.pages.install.layoutHeading}</h2>
+      <p>{t.pages.install.layoutBody}</p>
       <pre>
-        <code>{BREW}</code>
+        <code>{siteConfig.installPrompt}</code>
       </pre>
       <p>
-        <a
-          className="button button-primary"
-          href={siteConfig.githubReleaseUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
+        <a className="button button-primary" href={productPath(locale, 'install')}>
           {t.hero.primaryCta}
         </a>
       </p>

@@ -1,133 +1,141 @@
 # 2code
 
-Desktop software for vibe coding.
+2code's workstation, as a layout for [Herdr](https://herdr.dev).
 
-2code is a desktop workstation where terminals, AI coding agents, Git, and worktree-based project lanes live together. It is built for developers who want to stay inside one calm coding workspace instead of spreading a session across terminal windows, Git tools, editors, and agent panes.
+Projects on the left with their worktree profiles nested under them, a top bar
+with the project, branch and a Files / Git switch, and line-style terminal tabs
+with project and global terminal templates. Herdr runs the terminals and
+agents; 2code is the look and the workflow on top.
 
-> 2code is still early and under active construction. macOS is the primary supported platform; Windows and Linux builds are still experimental.
+![2code for Herdr](preview.png)
 
-## Install 2code
+> The original Tauri desktop app lives on the
+> [`legacy-tauri-app`](https://github.com/AkaraChen/2code/tree/legacy-tauri-app)
+> branch and is no longer developed.
 
-### macOS
+## Install
 
-```bash
-brew install --cask akarachen/tap/2code
+Install [Herdr](https://herdr.dev/download/), then ask the agent in any Herdr
+terminal:
+
+```
+Add the layout at github.com/AkaraChen/2code
 ```
 
-If you install from the DMG and macOS blocks opening the app, move `2code.app` to Applications and remove the quarantine attribute:
+Or copy it yourself from a clone of this repo:
 
-```bash
-sudo xattr -dr com.apple.quarantine /Applications/2code.app
+```sh
+./scripts/install.sh                         # copies into ~/.config/herdr-app and runs herdr-app check
+herdr-app do layout.switch --name 2code
 ```
 
-Windows and Linux support is still experimental.
+`ctrl-shift-l` cycles layouts, so Herdr's own stays one key away.
 
-## Why 2code
+## What it adds to Herdr
 
-AI-assisted development creates more parallel state than a normal coding session: long-running commands, multiple agents, branch experiments, diffs to review, and half-finished ideas that should not be lost when attention shifts.
+- **Projects and profiles.** Projects stay in the sidebar (only their paths
+  are kept, in Herdr's shared state); a space opened on a new repo adds it.
+  Profiles are the repo's checkouts from `git worktree list`: the main one
+  first, then worktrees, open or not. Picking a closed one opens it.
+- **Project menu** (right-click): new profile, rename, project settings,
+  reveal in the file manager, remove. **Profile menu**: open, reveal, delete.
+- **New profile** (`+` on a project) opens Herdr's own New worktree dialog and
+  runs the project's `setup_script` as the new space's first tab.
+- **Delete profile** (`×` on a profile) warns about uncommitted files and
+  unpushed commits, runs the project's `teardown_script`, then removes the
+  worktree. The branch stays.
+- **Project settings** (the top bar gear): edit `2code.json` scripts and
+  project templates, and the global templates in `~/2code/2code.json`.
+- **Terminal templates**: the menu beside **New Terminal** opens a tab named
+  after the template and types `init_script` and its commands into your shell.
+- **Files**: a tree with file icons, git colors and gitignored entries dimmed,
+  and a right-click menu (new, rename, delete to the trash, copy paths, reveal,
+  open in the default app). Files open in their own tab beside the terminals:
+  an editor with syntax highlighting, save, unsaved prompts, reload on disk
+  changes, markdown preview and images. `cmd-k` finds a file by name.
+- **Changes** in 2code's flat style: commits only the checked files (summary +
+  description), discards a file (click twice) and pushes.
+- **Diff dialog**: Changes and History, unified or split, image before/after,
+  and review comments (click a line, click another to make a range) collected
+  per repo and copied for an agent in one go.
+- **Top bar**: the project opens its folder, the branch opens a branch
+  switcher, the pull request shows with its state (`gh`), "Open in…" your
+  editor, terminal or GitHub Desktop.
+- GitHub avatars for projects, a tile rail when the sidebar is dragged narrow,
+  arrow-key navigation in the sidebar. The corner says Herdr until you hover
+  it, then rolls over to 2code.
+- **English or 简体中文**, from the system's `LC_ALL` / `LC_MESSAGES` / `LANG`;
+  English when none is Chinese or set.
+- 2code's light and dark themes (`2code-light`, `2code-dark`).
 
-2code treats that state as the primary interface. Terminals are persistent work surfaces, Git state stays close to the task, and each feature can live in its own isolated profile with its own worktree and terminal context.
+Everything else (terminals that survive restarts, agent status and alerts,
+worktree creation, settings, remote machines) is Herdr's.
 
-## Features
+## Keys
 
-- **Persistent terminals**: keep shell sessions, scrollback, and terminal layout close to where you left them.
-- **Git visibility**: review diffs, staged changes, history, and shipping state without leaving the workstation.
-- **Worktree profiles**: split features, bugfixes, and experiments into isolated lanes backed by Git worktrees.
-- **Project management**: organize local code projects and launch focused workspaces quickly.
-- **Agent status awareness**: detect running/waiting agent state from terminal output, titles, and progress sequences.
-- **Localized UI**: i18n message sources live in `messages/` and are generated into the frontend.
+These apply while the 2code layout shows (`keys.json`, section
+`layout:2code`; `install.sh` adds them to yours without replacing keys you
+set). Herdr's own keys keep working: `cmd-w` closes a tab, `cmd-b` the
+sidebar, `cmd-,` settings, `cmd-f` searches a terminal.
 
-## Tech Stack
+| macOS | Linux / Windows | |
+|---|---|---|
+| `cmd-t` | `ctrl-shift-t` | new terminal (runs `init_script`) |
+| `cmd-k` | `ctrl-shift-k` | find a file |
+| `cmd-s` | `ctrl-s` | save the file (in a file tab) |
+| `cmd-g` | `ctrl-shift-g` | diff dialog |
+| `cmd-e` | `ctrl-shift-e` | show / hide the Files / Changes panel |
+| `cmd-shift-e` | `ctrl-shift-j` | arrow keys in the sidebar (Esc returns) |
+| `shift-enter` | `shift-enter` | newline (for agent prompts) |
+| `alt-left` / `alt-right` | `alt-left` / `alt-right` | word left / right |
 
-- **Desktop shell**: Tauri 2
-- **Frontend**: React 19, TypeScript, Vite
-- **UI state**: Zustand + Immer
-- **Server state**: TanStack Query
-- **Backend**: Rust workspace
-- **Database**: SQLite via Diesel migrations
-- **Terminal runtime**: integrated PTY service
-- **Package manager**: Bun
+Plain `ctrl-` letters stay with terminal programs on Linux and Windows, so
+2code's `ctrl-k` / `ctrl-g` / `ctrl-e` became `ctrl-shift-` keys there
+(`ctrl-s` only applies in a file tab). Herdr
+treats an edited `keys.json` as yours and stops updating its defaults in it.
 
-## Getting Started
+## `2code.json`
 
-### Prerequisites
+Put it at the root of a project (its main checkout; worktrees use it too):
 
-- macOS
-- Bun
-- Rust stable toolchain
-- Tauri 2 development prerequisites
-- `just` for development helper commands
-- `fama` on `PATH` for `just fmt` TypeScript formatting
-
-### Install dependencies
-
-```bash
-bun install
+```json
+{
+  "setup_script": ["bun install"],
+  "teardown_script": ["rm -rf node_modules"],
+  "init_script": ["nvm use"],
+  "terminal_templates": [
+    { "name": "Dev server", "cwd": "apps/web", "commands": ["bun dev"] }
+  ]
+}
 ```
 
-### Run the desktop app
+- `setup_script` / `teardown_script`: one shell line each, run in order with
+  `sh -c` in the worktree, stopping at the first failure.
+- `init_script`: typed into every terminal 2code opens (New Terminal and
+  templates), before a template's own commands.
+- `terminal_templates[].cwd`: relative to the profile's checkout; empty means
+  its root.
 
-```bash
-bun tauri dev
+Global templates go in `~/2code/2code.json`:
+
+```json
+{
+  "terminal_templates": [
+    { "name": "Git log", "commands": ["git log --oneline -20"] }
+  ]
+}
 ```
 
-### Run only the frontend
+## Repository
 
-```bash
-bun run dev
-```
-
-### Build
-
-```bash
-bun tauri build
-```
-
-## Useful Commands
-
-| Command | Description |
-| --- | --- |
-| `bun tauri dev` | Run the full desktop app with frontend and Rust hot reload |
-| `bun run dev` | Run the Vite frontend only |
-| `bun tauri build` | Build the production desktop app |
-| `cd src-tauri && cargo test` | Run Rust tests |
-| `cargo tauri-typegen generate` | Regenerate frontend IPC bindings after Rust command changes |
-| `just fmt` | Format TypeScript and Rust |
-| `just coverage` | Generate Rust coverage report |
-
-## Project Structure
-
-```text
-2code/
-├── src/                        # React + Vite frontend
-│   ├── features/               # Feature-first app modules
-│   ├── shared/                 # Shared lib, providers, components, hooks
-│   ├── layout/                 # App shell and sidebar
-│   ├── generated/              # Generated Tauri IPC bindings
-│   └── paraglide/              # Generated i18n messages
-├── src-tauri/
-│   ├── src/handler/            # Tauri command entry points
-│   ├── crates/infra/           # DB, PTY, Git, watcher infrastructure
-│   ├── crates/service/         # Business logic
-│   ├── crates/repo/            # Diesel repositories
-│   ├── crates/model/           # DTOs, Diesel models, error types
-│   └── migrations/             # Embedded Diesel migrations
-├── messages/                   # i18n source messages
-└── justfile                    # Development helper commands
-```
-
-## Development Notes
-
-- Add Tauri commands in `src-tauri/src/handler/*.rs`, register them in `src-tauri/src/lib.rs`, then run `cargo tauri-typegen generate`.
-- Consume IPC from `src/generated/`; do not hand-write frontend API clients for Tauri commands.
-- Use `src/shared/lib/queryKeys.ts` for TanStack Query keys.
-- Keep terminal components mounted. Terminal tab switching should hide inactive terminals with CSS instead of unmounting them.
-- Database access uses a single `Arc<Mutex<SqliteConnection>>`; keep lock scopes short and never hold the lock across `await`.
-- Diesel migrations in `src-tauri/migrations/` are embedded and applied on startup.
-- Worktree profiles are created under `~/.2code/workspace/{id}`.
-
-## Links
-
-- Website: <https://2code.akr.moe/>
-- Repository: <https://github.com/akarachen/2code>
-- Latest release: <https://github.com/akarachen/2code/releases/latest>
+| Path | What |
+|---|---|
+| `layouts/2code.json` | the layout |
+| `mods/2code/` | the mod: one folder, parts chosen with `props.part` |
+| `themes/` | `2code-light` and `2code-dark` |
+| `keys.json` | the layout's keys, merged into yours by `install.sh` |
+| `RECIPE.md` | the brief to rebuild the layout from scratch (Herdr's sharing format) |
+| `TODO.md` | what still differs from the Tauri app (中文) |
+| `website/` | [2code's website](https://2code.akr.moe) (Next.js) |
+| `scripts/install.sh` | copy into a Herdr home and check |
+| `scripts/build-file-icons.mjs` | rebuild the file icon slice from material-icon-theme |
