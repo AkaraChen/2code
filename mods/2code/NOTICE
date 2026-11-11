@@ -8,3 +8,7 @@ status badges, selective commits with a description, and translated text.
 
 Icons in icons/ are from Lucide (https://lucide.dev), ISC license
 (icons/LICENSE-Lucide.txt), as shipped with Herdr's mods.
+
+File icons in icons/files/ and the lookup in lib/fileIcons.js come from
+material-icon-theme (MIT, icons/files/LICENSE-material-icon-theme.txt), by way
+of github.com/LaiqianDS/herdr-mods; regenerate with scripts/build-file-icons.mjs.

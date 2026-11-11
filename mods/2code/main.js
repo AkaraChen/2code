@@ -15,6 +15,9 @@ import { Diff } from "./parts/diff.js";
 import { Review } from "./parts/review.js";
 import { Branches } from "./parts/branches.js";
 import { OpenIn } from "./parts/openIn.js";
+import { EditorPart } from "./parts/editor.js";
+import { FileMenu, FilePrompt, FileDelete, Unsaved } from "./parts/fileMenu.js";
+import { Finder } from "./parts/finder.js";
 import { Files } from "./parts/files.js";
 import { Changes } from "./parts/changes.js";
 
@@ -33,6 +36,12 @@ const PARTS = {
   review: Review,
   branches: Branches,
   openIn: OpenIn,
+  editor: EditorPart,
+  fileMenu: FileMenu,
+  filePrompt: FilePrompt,
+  fileDelete: FileDelete,
+  unsaved: Unsaved,
+  finder: Finder,
   files: Files,
   changes: Changes,
 };

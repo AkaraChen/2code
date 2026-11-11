@@ -20,6 +20,12 @@
     "cmd-g": "2code.diff",
     "ctrl-shift-g": "2code.diff",
     "cmd-shift-e": "2code.focusSidebar",
-    "ctrl-shift-j": "2code.focusSidebar"
+    "ctrl-shift-j": "2code.focusSidebar",
+    "cmd-k": "2code.find",
+    "ctrl-shift-k": "2code.find"
+  },
+  "mod:2code": {
+    "cmd-s": "2code.save",
+    "ctrl-s": "2code.save"
   }
 }
