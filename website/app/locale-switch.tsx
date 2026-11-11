@@ -21,9 +21,8 @@ const LOCALE_STORAGE_KEY = '2code-locale'
 const homeHrefs = { en: '/', 'zh-cn': '/zh-cn' } as const
 
 /*
-  Picking a language has to be sticky. The boot script sends zh-CN browsers from
-  / to /zh-cn/, so without a stored choice an "English" link would bounce a
-  Chinese-locale visitor straight back to the Chinese page.
+  Picking a language has to be sticky. Middleware reads the same cookie to
+  issue a same-host 302, so an "English" click must win over Accept-Language.
 */
 export function LocaleSwitch({
   locale,
@@ -35,6 +34,12 @@ export function LocaleSwitch({
       window.localStorage.setItem(LOCALE_STORAGE_KEY, choice)
     } catch {
       // A blocked storage write only costs stickiness, not navigation.
+    }
+
+    try {
+      document.cookie = `${LOCALE_STORAGE_KEY}=${choice}; Path=/; Max-Age=31536000; SameSite=Lax`
+    } catch {
+      // Cookie write is best-effort; middleware then falls back to Accept-Language.
     }
   }
 

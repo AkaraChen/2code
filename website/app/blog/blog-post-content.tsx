@@ -1,5 +1,6 @@
 import { type AppLocale, type resources } from '../i18n/resources'
 import { siteConfig } from '../site-config'
+import { htmlLang } from '../structured-data'
 import { BlogShell } from './blog-shell'
 import type { BlogPost } from './lib/posts'
 import {
@@ -39,11 +40,18 @@ export function BlogPostContent({
     datePublished: post.date,
     dateModified: post.date,
     url: postUrl,
-    mainEntityOfPage: postUrl,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': postUrl,
+    },
     image: [imageUrl],
     keywords: [...post.tags],
-    inLanguage: locale === 'zh-cn' ? 'zh-CN' : 'en',
-    author: { '@type': 'Organization', name: siteConfig.name },
+    inLanguage: htmlLang(locale),
+    author: {
+      '@type': 'Organization',
+      '@id': `${siteConfig.url}/#organization`,
+      name: siteConfig.name,
+    },
     publisher: { '@id': `${siteConfig.url}/#organization` },
     isPartOf: { '@id': `${siteConfig.url}${blogListPath(locale)}#blog` },
   }

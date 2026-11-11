@@ -1,4 +1,5 @@
-import { renderPostMarkdown } from '../../../../blog/lib/markdown-alternates'
+import { renderBlogPostMarkdown } from '../../../../lib/page-markdown'
+import { textResponse } from '../../../../lib/text-response'
 import { getPost, listPosts } from '../../../../blog/lib/posts'
 import { supportedLocales } from '../../../../i18n/resources'
 import { parseLocale } from '../../locale'
@@ -8,7 +9,7 @@ import { parseLocale } from '../../locale'
   `middleware.ts`. Published posts are prerendered; a scheduled one renders on
   first request after its publishAt, exactly like its HTML page.
 */
-export const revalidate = 3600
+export const revalidate = 300
 
 export async function generateStaticParams() {
   const perLocale = await Promise.all(
@@ -33,7 +34,5 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return new Response('Not found', { status: 404 })
   }
 
-  return new Response(renderPostMarkdown(locale, post), {
-    headers: { 'Content-Type': 'text/markdown; charset=utf-8' },
-  })
+  return textResponse(renderBlogPostMarkdown(locale, post), 'text/markdown')
 }

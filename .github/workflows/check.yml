@@ -1,0 +1,63 @@
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  layout:
+    name: Herdr layout
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Herdr itself needs a GPU, so CI checks what it can without it:
+      # every mod file parses as an ES module and every JSON file is valid.
+      # `herdr-app check mods/2code` is the real check; run it locally.
+      - name: Parse mod sources
+        run: |
+          status=0
+          for f in $(find mods -name '*.js'); do
+            node --input-type=module --check < "$f" || { echo "::error file=$f::does not parse"; status=1; }
+          done
+          exit $status
+
+      - name: Validate JSON
+        run: |
+          for f in layouts/*.json themes/*.json mods/*/mod.json; do
+            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$f" || { echo "::error file=$f::invalid JSON"; exit 1; }
+          done
+
+  website:
+    name: Website
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install website dependencies
+        working-directory: website
+        run: bun install --frozen-lockfile
+
+      - name: Run website ESLint
+        working-directory: website
+        run: bun run lint
+
+      - name: Build website
+        working-directory: website
+        run: bun run build
