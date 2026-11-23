@@ -180,6 +180,10 @@ Left to right:
   runs and close after.
 - Herdr's own Remove worktree needs an open space (without one it closes the
   focused space), so Delete worktree removes the worktree itself.
+- `overflow_y_scrollbar()` wraps its element and leaves `absolute().inset_0()` on the
+  inner content, so such an area never scrolls. An absolute scroll area uses
+  `overflow_y_scroll()` and a `Scrollbar.vertical` with the same id (the Changes list,
+  the markdown preview), its content `flex_none()` so it keeps its full height.
 - Virtual list rows can't register `on_click`: use the list's
   `on_item_click(key)`; it carries no modifiers, hence click-then-click ranges.
 - Deeply nested flex leaves `size_full()` children with no height: pin the
