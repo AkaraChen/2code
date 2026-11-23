@@ -5,7 +5,7 @@
 // preview, and images. Uses Herdr's own Editor (no CodeMirror: there's no web
 // view); files on other machines open read-only (writeTextFile is local).
 import { div, image } from "gpui-kit";
-import { v_flex, h_flex, Editor, EditorState, TextView } from "gpui-base";
+import { v_flex, h_flex, Editor, EditorState, TextView, Scrollbar } from "gpui-base";
 import { theme, settings, shared, focused, readTextFile, writeTextFile, appHome, exec, run } from "herdr";
 import * as fs from "fs/promises";
 import { t } from "../lib/i18n.js";
@@ -175,8 +175,10 @@ export class EditorPart {
 
   body(th) {
     const code = () => Editor.new(this.state).id(`ed-${this.id}`).absolute().inset_0();
-    const preview = () => div().id(`md-${this.id}`).absolute().inset_0().p(20).overflow_y_scrollbar()
-      .child(TextView.markdown(`mdv-${this.id}`, this.state.value()).selectable().on_link_click((url, cx) => cx.open_url(url)));
+    const preview = () => div().absolute().inset_0()
+      .child(v_flex().id(`md-${this.id}`).absolute().inset_0().overflow_y_scroll()
+        .child(div().flex_none().p(20).child(TextView.markdown(`mdv-${this.id}`, this.state.value()).selectable().on_link_click((url, cx) => cx.open_url(url)))))
+      .child(Scrollbar.vertical(`md-${this.id}`).absolute().inset_0());
     const box = (child) => div().flex_1().min_w(0).min_h(0).relative().child(child);
     if (this.kind === "text") return box(code());
     if (this.kind === "markdown") {
